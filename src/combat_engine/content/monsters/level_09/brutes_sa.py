@@ -19,9 +19,11 @@ Conventions, inherited from the earlier sweeps:
 * a range band "X/Y" takes the larger number as the single `Ranged`/
   `MeleeOrRanged` value, matching the one precedent already in the tree
   (`m6492a0`'s "normal ranged 5/10" is written `MeleeOrRanged(1, 10)`);
-* "Requirement: must be in <form>" has no checker -- there is no way to
-  ask what shape a creature is in, only to put it in one. `c.in_form()`
-  is the dropped marker, the level-8 file's own convention;
+* "Requirement: must be in <form>" is a gate now. It had no checker when
+  this file was written -- there was no way to ask what shape a creature was
+  in, only to put it in one -- and `combat_engine.content.monsters.forms`
+  answers it: `c.form(name=)` records the shape and `_shapes`/`_not_in` read
+  it back, so these rows carry a `requires=` and no marker.;
 * several cards in this brief carry a flavour name where another entry's
   own ref happens to sit (a ray "launches a m1164", two trolls each
   printed as "m5798 or m5798") -- read as the spec tool's own extraction
@@ -39,6 +41,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapes, _strictly
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_01.brutes_sa import _crit_line
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
@@ -2611,7 +2614,8 @@ def m5798a3(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("", 10, kind=MINION),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid"),
+    requires_text="it must be in humanoid form",
 )
 def m5913a0(c: Cast) -> None:
     if c.strike():
@@ -2628,7 +2632,8 @@ def m5913a0(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("", 15, dtype=DamageType.FIRE, kind=MINION, half_on_miss=True),
-    dropped=("c.in_form()",),
+    requires=_strictly("transformed"),
+    requires_text="it must have transformed",
 )
 def m5913a1(c: Cast) -> None:
     if c.strike():
@@ -2656,7 +2661,8 @@ def m5913a2(c: Cast) -> None:
     this fires on the hit that would otherwise remove it."""
     me = c.me
     c.revives_unless(on=me)
-    c.form(label=f"{c.ref} form", until=When.ENCOUNTER, revert=None)
+    c.form(label=f"{c.ref} form", until=When.ENCOUNTER, revert=None,
+           name="transformed")
     c.reanimate(on=me, hp=1)
 
 

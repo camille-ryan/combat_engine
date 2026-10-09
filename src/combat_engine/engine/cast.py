@@ -3592,12 +3592,24 @@ class Cast:
         until: When = When.ENCOUNTER,
         revert: ActionType | None = ActionType.MINOR,
         label: str = "",
+        name: str = "",
     ) -> Effect:
         """Assume a shape: some conditions, some ways of moving, and a way out.
 
         A polymorph is not a stance -- you are not choosing between forms,
         you are in one and may step out of it -- so `revert` is what leaving
         costs rather than "taking another ends it".
+
+        `name` is the word the card prints for the shape -- "rat", "hybrid",
+        "guardian" -- and it is what makes the form *askable*. Without it a
+        form is identified only by the effect label, which is the ref of the
+        row that laid it, so "Requirement: must be in rat form" had nothing
+        to read. 43 rows print that sentence. `query.in_form` is the reader
+        and `c.in_form` the shorthand.
+
+        Several at once is the ordinary case, not an edge: a card printing
+        "human or hybrid form" on one row and "rat or hybrid form" on another
+        means hybrid is both, so the names go in a set.
         """
         effect = self.world.effects.apply(
             self.me,
@@ -3607,6 +3619,19 @@ class Cast:
             conditions=conditions,
             drop_cost=revert,
         )
+        if name:
+            from .components import Shapes
+
+            word = name.strip().lower()
+            shapes = self.world.get(self.me, Shapes) or self.world.add(
+                self.me, Shapes()
+            )
+            # Side state, so it lifts on a suspension and comes back -- the
+            # same contract `c.ignores_difficult` and `c.vulnerable` keep.
+            if word not in shapes.live:
+                shapes.live.add(word)
+                effect.on_suspend.append(lambda: shapes.live.discard(word))
+                effect.on_resume.append(lambda: shapes.live.add(word))
         for name, speed in (modes or {}).items():
             granted = self.mode(name, speed, until=until)
             if granted is not None:
@@ -6402,6 +6427,20 @@ class Cast:
         )
         holder.append(effect)
         return effect
+
+    def in_form(self, *names: str, on: int | None = None) -> bool:
+        """Is the creature in one of the named forms? See `query.in_form`."""
+        from .query import in_form
+
+        who = self._who(on)
+        return False if who is None else in_form(self.world, who, *names)
+
+    def shifted(self, *, on: int | None = None) -> bool:
+        """Has the creature taken a shape that is not its own?"""
+        from .query import shifted
+
+        who = self._who(on)
+        return False if who is None else shifted(self.world, who)
 
     def kill(self, *, on: int | None = None, critical: bool = False) -> bool:
         """Reduce a creature to 0 hit points outright. Returns whether it moved.

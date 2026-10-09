@@ -1206,6 +1206,91 @@ def crit_kill(out: Result) -> None:
 
 
 
+
+############################################################
+
+def forms(out: Result) -> None:
+    """"Requirement: it must be in beast or hybrid form" -- which shape is it?
+
+    58 rows across the tree print a Requirement naming a shape. `c.form`
+    identified a form only by the effect label it laid, which is the ref of
+    the row that laid it, so `level_04/brutes_sa.py` grew `_in_shapes` to
+    sniff those labels. This is the same question asked of a component
+    instead, which the policy and the wire can read as well.
+
+    **Permissive when nothing has been recorded**, and that is the half most
+    worth asserting because the decision is borrowed rather than mine:
+    `_in_shapes`' own note says a creature that has not changed shape is in
+    whatever shape it was found in, the block does not say which, so no
+    attack is ruled out. Choosing a starting form instead would silently
+    refuse half of every shapechanger's card on the strength of something
+    nobody printed.
+
+    **A set, not a current-form string**: a card printing "humanoid or
+    hybrid" on one row and "beast or hybrid" on another means hybrid has to
+    satisfy both at once.
+
+    The words are the 4e categories rather than the species the cards print,
+    because a species *is* a printed name -- five of them reached 32 rows of
+    mine before `leaks.py` caught the sixth.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import in_form, shifted
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:forms")
+
+    # Nothing recorded: a Requirement must not refuse.
+    out.that(in_form(world, caster, "humanoid", "hybrid"),
+             "with no shape recorded, a Requirement passes")
+    out.that(in_form(world, caster, "beast"),
+             "whichever shape it names -- nothing is ruled out")
+    out.that(not shifted(world, caster),
+             "but it has not SHIFTED, which is the other question")
+
+    beast = c.form(until=When.ENCOUNTER, name="beast")
+    out.that(in_form(world, caster, "beast"), "once in beast form, beast passes")
+    out.that(not in_form(world, caster, "humanoid", "hybrid"),
+             "and the shapes it is NOT now refuse -- the gate bites")
+    out.that(shifted(world, caster), "and it counts as shifted")
+
+    hybrid = c.form(until=When.ENCOUNTER, name="hybrid")
+    out.that(in_form(world, caster, "beast") and in_form(world, caster, "hybrid"),
+             "two at once, which one creature's two rows need")
+    out.that(in_form(world, caster, "humanoid", "hybrid"),
+             "and any one of several named shapes is enough")
+    out.that(in_form(world, caster, " Beast "),
+             "the word is matched loosely, since it comes off a card")
+
+    world.effects.end(beast, "driver")
+    out.that(not in_form(world, caster, "beast"), "ending a form takes it off")
+    out.that(in_form(world, caster, "hybrid"), "and leaves the other standing")
+
+    world.effects.end(hybrid, "driver")
+    out.that(not shifted(world, caster), "with both gone it is itself again")
+    out.that(in_form(world, caster, "beast"),
+             "and a Requirement is permissive once more")
+
+    # Suspension, because a form is side state like a terrain exemption.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:forms")
+    held = c.form(until=When.ENCOUNTER, name="beast")
+    out.that(shifted(world, caster), "laid")
+    world.effects.suspend(held)
+    out.that(not shifted(world, caster), "suspended, the form lifts")
+    world.effects.resume(held)
+    out.that(shifted(world, caster), "and comes back")
+
+    # The negative control: a form laid with no name records nothing, so the
+    # name is what does the work.
+    world, caster, _ = _board()
+    Cast(world=world, me=caster, ref="drivers:forms").form(until=When.ENCOUNTER)
+    out.that(not shifted(world, caster),
+             "a form laid with no name records no shape at all")
+
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1217,6 +1302,7 @@ DRIVERS = {
     "two_types": (two_types, "one roll that is two types, and resistance reads both"),
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
+    "forms": (forms, "which shape a creature is in, and two at once"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

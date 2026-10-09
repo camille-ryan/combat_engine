@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.minions_sa import _closes_ranks, _kin_within
 from combat_engine.content.monsters.level_02.soldiers_sa import _ref_of
@@ -56,6 +57,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Size,
     Target,
     Usage,
     When,
@@ -473,8 +475,8 @@ def m5589a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 5, kind=MINION),
+    requires=_shapes("hybrid"),
     requires_text="must be in its humanoid or hybrid shape",
-    dropped=("c.in_form()",),
 )
 def m5590a0(c: Cast) -> None:
     """The shape Requirement is the named gap: `c.form` holds one but nothing
@@ -494,8 +496,8 @@ def m5590a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 3, kind=MINION),
+    requires=_shapes("beast", "hybrid"),
     requires_text="must be in its beast or hybrid shape",
-    dropped=("c.in_form()",),
 )
 def m5590a1(c: Cast) -> None:
     """"Save ends both" is one effect carrying the burn and the penalty to saving
@@ -521,8 +523,8 @@ def m5590a1(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    requires=_shapes("beast"),
     requires_text="must be in its beast shape",
-    dropped=("c.in_form()",),
 )
 def m5590a2(c: Cast) -> None:
     c.shift(c.speed_of())
@@ -538,18 +540,27 @@ def m5590a2(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5590a3(c: Cast) -> None:
-    """Three shapes, chosen once per use. The size change is the half that has a
-    board consequence; "until it uses this again" is what `c.form`'s own
-    replacement does, and dropping to 0 hit points ends every effect on a corpse
-    anyway, so neither needs a watch."""
-    from combat_engine.engine import Size
+    """It alters its physical form: humanoid, hybrid, beast.
 
-    which = c.choose(["tiny", "medium", "small"], f"{c.ref}: which shape") or "medium"
-    size = {"tiny": Size.TINY, "medium": Size.MEDIUM, "small": Size.SMALL}[which]
-    c.form(label=f"{c.ref} {which}", until=When.ENCOUNTER, revert=MINOR)
-    c.resize(size, on=c.me, until=When.ENCOUNTER)
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
 
+    The card ties the size to the shape -- a Tiny beast, a Medium
+    humanoid -- so the resize follows whichever was taken rather than
+    being a choice of its own.
+    """
+    taken = _shapechange(c, "humanoid", "hybrid", "beast")
+    if taken:
+        c.resize(Size.TINY if taken == "beast" else Size.MEDIUM,
+                 on=c.me)
 _M5590_STRUCK = "it takes damage from an attack"
 
 

@@ -236,7 +236,7 @@ def m3453a1(c: Cast) -> None:
     action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="the hobgoblin becomes subject to an effect",
+    trigger="the creature becomes subject to an effect",
     on=Trigger(EffectApplied, targets_me, "it becomes subject to an effect"),
 )
 def m3453a2(c: Cast) -> None:

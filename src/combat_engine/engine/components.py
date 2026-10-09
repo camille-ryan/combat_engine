@@ -197,6 +197,26 @@ class Movement:
 
 
 @dataclass
+class Shapes:
+    """Which forms a creature is currently in, by the word its card prints.
+
+    `c.form` identifies a shape only by the effect label it lays, which is
+    the ref of the row that laid it -- so nothing could ask "is it in rat
+    form", and 43 rows print a Requirement that asks exactly that.
+
+    A **set**, because the cards stack: `m115824` prints "human or hybrid
+    form" on one row and "rat or hybrid form" on another, so hybrid is both
+    at once and a single current-form string could not say so.
+
+    Maintained by `c.form`, which adds the word and takes it off again when
+    the form ends. Side state, like `Movement.ignores`, so it lifts and
+    restores with a suspension too.
+    """
+
+    live: set[str] = field(default_factory=set)
+
+
+@dataclass
 class Undying:
     """This creature gets back up unless it is finished with one of `by`.
 

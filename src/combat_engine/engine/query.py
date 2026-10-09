@@ -22,6 +22,7 @@ from .components import (
     Mods,
     Movement,
     Position,
+    Shapes,
     Side,
     Stats,
 )
@@ -571,6 +572,45 @@ def can_react(world: World, eid: int, *, ignoring: Condition | None = None) -> b
     return can_act(world, eid, ignoring=ignoring) and not any(
         rules(c).no_reactions for c in active(world, eid) if c is not ignoring
     )
+
+
+def in_form(world: World, eid: int, *names: str) -> bool:
+    """Is this creature in one of the named forms?
+
+    "Requirement: it must be in beast or hybrid form" is 58 rows across the
+    tree, and the words are the 4e categories -- `humanoid`, `beast`,
+    `hybrid` -- rather than the species the card prints, because a species is
+    a printed name and `races/` already holds refs for that reason.
+
+    **Permissive when nothing has been recorded**, which is not a shortcut:
+    the convention is `_in_shapes`' and its note states the reasoning -- a
+    creature that has not changed shape is in whatever shape it was found in,
+    the stat block does not say which, so no attack is ruled out. Guessing a
+    starting form instead would silently refuse half of a shapechanger's
+    card on the strength of something nobody printed.
+
+    With no names it answers whether the creature is in *any* recorded form,
+    which is the other side of the same question -- see `shifted`.
+    """
+    held = world.get(eid, Shapes)
+    live = held.live if held is not None else set()
+    if not live:
+        return True
+    wanted = {n.strip().lower() for n in names if n.strip()}
+    return bool(live & wanted) if wanted else True
+
+
+def shifted(world: World, eid: int) -> bool:
+    """Has this creature taken a shape that is not its own?
+
+    "A +1 bonus to all defences against creatures not in their natural form"
+    asks this, and it is the complement of `in_form` rather than a call to it
+    with no arguments: that one is permissive about an unrecorded shape
+    because a Requirement should not refuse an attack, where this one has to
+    answer *no* for a creature nobody has transformed.
+    """
+    held = world.get(eid, Shapes)
+    return bool(held is not None and held.live)
 
 
 def takes_half(

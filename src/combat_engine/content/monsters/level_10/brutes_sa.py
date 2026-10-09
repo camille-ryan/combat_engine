@@ -2109,7 +2109,7 @@ def m5578a3(c: Cast) -> None:
 # m5596
 # ==========================================================================
 
-_M5596_WOLF = "m5596a7 wolf"
+_M5596_WOLF = "m5596a7 beast"
 _M5596_HYBRID = "m5596a7 hybrid"
 
 
@@ -2175,7 +2175,7 @@ def m5596a1(c: Cast) -> None:
     damage=Damage("2d10", 5),
 )
 def m5596a2(c: Cast) -> None:
-    """Requirement: wolf or hybrid form, asked in the body."""
+    """Requirement: beast or hybrid form, asked in the body."""
     if _m5596_form(c) == "human":
         return
     victim = c.target
@@ -2223,7 +2223,7 @@ def m5596a3(c: Cast) -> None:
     damage=Damage("2d10", 6),
 )
 def m5596a4(c: Cast) -> None:
-    """Requirement: human or hybrid form, asked in the body."""
+    """Requirement: humanoid or hybrid form, asked in the body."""
     if _m5596_form(c) == "wolf":
         return
     victim = c.target
@@ -2261,7 +2261,7 @@ def m5596a5(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m5596a6(c: Cast) -> None:
-    """Requirement: wolf form, asked in the body."""
+    """Requirement: beast form, asked in the body."""
     if _m5596_form(c) != "wolf":
         return
     c.shift(6)

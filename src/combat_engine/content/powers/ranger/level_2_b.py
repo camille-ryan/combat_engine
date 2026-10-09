@@ -94,22 +94,17 @@ def _has_beast(world: World, eid: int) -> bool:
 #: point. They were all gated on `_has_beast`, which asks only whether the
 #: ranger owns *a* companion, so **fielding any beast made all nine usable** and
 #: eight of them were wrong. Measured with a bear: 9 usable before, 1 after.
-_CATEGORY = {
-    "raptor": "comp:5",
-    "cat": "comp:3",
-    "simian": "comp:91",
-    "lizard": "comp:4",
-    "serpent": "comp:6",
-    "boar": "comp:2",
-    "bear": "comp:1",
-    "spider": "comp:7",
-    "wolf": "comp:8",
-}
 
 
-def _beast_is(category: str) -> Callable[[World, int], bool]:
-    """"You must have a **<species>** beast companion" -- the half that used to
-    be unaskable.
+def _beast_is(want: str) -> Callable[[World, int], bool]:
+    """"You must have a <ref> beast companion" -- the half that used to be
+    unaskable.
+
+    **Takes the ref, not a species word.** It used to take a word and look it
+    up in a nine-entry map whose only job was producing this ref, so the word
+    was a printed name sitting in content code -- and the same word was being
+    *displayed*, because `api/render.py` falls back to `requires_text` whenever
+    the localisation is absent. Passing the ref closes both halves.
 
     The module docstring of `beast_sb.py` says the species "belongs to a
     *species*, which this engine does not model", and that was true when it was
@@ -122,7 +117,6 @@ def _beast_is(category: str) -> Callable[[World, int], bool]:
     Refused when the ranger has no companion at all, and when the one it has is
     a different category. Both are the printed Requirement.
     """
-    want = _CATEGORY[category]
 
     def gate(world: World, eid: int) -> bool:
         return any(
@@ -164,8 +158,8 @@ def _shoved_us(world: World, me: int, ev: ForcedMove) -> bool:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("raptor"),
-    requires_text="you must have a raptor beast companion",
+    requires=_beast_is("comp:5"),
+    requires_text="you must have a comp:5 beast companion",
 )
 def p13696(c: Cast) -> None:
     """Only the fly half is a combat effect, and only for a ranger who flies.
@@ -190,8 +184,8 @@ def p13696(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("cat"),
-    requires_text="you must have a cat beast companion",
+    requires=_beast_is("comp:3"),
+    requires_text="you must have a comp:3 beast companion",
     trigger=_HIT_ON_AC_OR_REF,
     on=Trigger(AttackRolled, when=_hit_on_ac_or_ref, text=_HIT_ON_AC_OR_REF),
 )
@@ -226,8 +220,8 @@ def p13698(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("simian"),
-    requires_text="you must have a simian beast companion",
+    requires=_beast_is("comp:91"),
+    requires_text="you must have a comp:91 beast companion",
 )
 def p13699(c: Cast) -> None:
     """The Acrobatics bonus is a skill check and is dropped.
@@ -247,8 +241,8 @@ def p13699(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=MARTIAL,
-    requires=_beast_is("lizard"),
-    requires_text="you must have a lizard beast companion",
+    requires=_beast_is("comp:4"),
+    requires_text="you must have a comp:4 beast companion",
     trigger=_SHOVED,
     on=Trigger(ForcedMove, when=_shoved_us, text=_SHOVED, window=Window.BEFORE),
 )
@@ -277,8 +271,8 @@ def p13700(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("serpent"),
-    requires_text="you must have a serpent beast companion",
+    requires=_beast_is("comp:6"),
+    requires_text="you must have a comp:6 beast companion",
 )
 def p13701(c: Cast) -> None:
     """"You can shift 2 squares as a move action" is dropped: nothing grants
@@ -297,8 +291,8 @@ def p13701(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("boar"),
-    requires_text="you must have a boar beast companion",
+    requires=_beast_is("comp:2"),
+    requires_text="you must have a comp:2 beast companion",
     trigger=_MELEE_DAMAGE,
     on=Trigger(
         DamageRolled,
@@ -327,8 +321,8 @@ def p13702(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL_STANCE,
-    requires=_beast_is("bear"),
-    requires_text="you must have a bear beast companion",
+    requires=_beast_is("comp:1"),
+    requires_text="you must have a comp:1 beast companion",
 )
 def p13703(c: Cast) -> None:
     """The stance is the hold; the watcher is what it does, and it dies with
@@ -353,8 +347,8 @@ def p13703(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("spider"),
-    requires_text="you must have a spider beast companion",
+    requires=_beast_is("comp:7"),
+    requires_text="you must have a comp:7 beast companion",
     trigger=_CLIMB_OR_SAVE,
     on=Trigger(SkillCheck, _climbing_athletics, _A_CLIMB_CHECK, window=Window.BEFORE),
 )
@@ -386,8 +380,8 @@ def p13704(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    requires=_beast_is("wolf"),
-    requires_text="you must have a wolf beast companion",
+    requires=_beast_is("comp:8"),
+    requires_text="you must have a comp:8 beast companion",
     trigger=_MELEE_DAMAGE,
     on=Trigger(DamageApplied, when=both(targets_me, by_melee), text=_MELEE_DAMAGE),
 )

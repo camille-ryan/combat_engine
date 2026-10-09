@@ -125,7 +125,7 @@ def _melee_or_ranged_at_me(world: World, me: int, ev: AttackDeclared) -> bool:
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.NECROTIC, Keyword.PSYCHIC],
     requires=on_leg("dark"),
-    requires_text="needs the dark pact",
+    requires_text="needs the cf:warlock-f1s0 pact",
     trigger=_SWUNG_AT_ME,
     on=Trigger(AttackDeclared, _melee_or_ranged_at_me, _SWUNG_AT_ME),
 )

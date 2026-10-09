@@ -42,6 +42,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.forms import _not_in, _shapechange
 from combat_engine.content.monsters.level_06.brutes import DEFENCES, _same_row
 from combat_engine.engine import (
     AC,
@@ -164,6 +165,8 @@ def _by_spread(world: World, me: int, ev: Any) -> bool:
     attack=Attack(vs=AC, printed=0),
     damage=Damage("", 2, kind=MINION),
     dropped=("c.contract(ref)",),
+    requires=_not_in("humanoid"),
+    requires_text="it must not be in humanoid form",
 )
 def m1058a0(c: Cast) -> None:
     """The printed bonus really is +0 and is written as printed; the engine
@@ -184,18 +187,20 @@ def m1058a0(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.in_form()",),
 )
 def m1058a1(c: Cast) -> None:
-    """Changing shape costs it m1058a0, which is the only half of this with a
-    combat meaning. Nothing records *which* shape a creature is wearing, so
-    the row cannot be told from its own reverse and the bite does not come
-    back.
+    """It alters its physical form: beast, humanoid.
+
+    **Which attacks each shape forbids is on the attack rows**, not here. The
+    card states them as a loss ("it loses its bite attack in humanoid form"),
+    which is a Requirement on the bite; putting it here as a `c.forbid` would
+    have to be undone by hand every time the shape changed, and was not.
+
+    `beast` leads the list because that is the shape the block describes it
+    in, and one form replaces another -- which is what "until it uses this
+    power again" means.
     """
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
-    c.forbid("m1058a0", on=c.me, until=When.ENCOUNTER)
-
-
+    _shapechange(c, "beast", "humanoid")
 @power(
     "m1058a2",
     level=1,

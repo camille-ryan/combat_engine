@@ -31,15 +31,18 @@ Helpers are imported from `level_06/brutes.py` and the four levels below it
 rather than written twice. The ones written here are shapes this batch is
 the first to need: a forced-move interrupt that cancels the move outright,
 a "hasn't acted yet this encounter" gate, an aftereffect chained off an
-ongoing's own end, and a few shapeshifter rows that follow the established
-`c.in_form()` / `c.contract(ref)` markers rather than building shape
-tracking the engine has nowhere else.
+ongoing's own end, and and a few shapeshifter rows. Those carried
+`c.in_form()` markers rather than build shape tracking the engine had nowhere
+else; `combat_engine.content.monsters.forms` answers it: `c.form(name=)`
+records the shape and `_shapes`/`_not_in` read it back, so these rows carry a
+`requires=` and no marker. `c.contract(ref)` is still a marker.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
@@ -503,7 +506,8 @@ def m115825a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 3),
-    dropped=("c.in_form()",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m115825a1(c: Cast) -> None:
     """The Requirement names a shape nothing records -- the attack plays
@@ -528,7 +532,9 @@ def m115825a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 7),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m115825a2(c: Cast) -> None:
     if c.strike():
@@ -545,7 +551,8 @@ def m115825a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 4),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid", "hybrid"),
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m115825a3(c: Cast) -> None:
     if not c.strike():
@@ -564,7 +571,8 @@ def m115825a3(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.in_form()",),
+    requires=_shapes("hybrid"),
+    requires_text="it must be in hybrid form",
 )
 def m115825a4(c: Cast) -> None:
     """"Uses claw and bite" against whatever this creature is menacing;
@@ -584,14 +592,22 @@ def m115825a4(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m115825a5(c: Cast) -> None:
-    """Appearance only: the three shapes it can choose cost nothing and
-    change nothing a board reads -- the real split, which form gates which
-    attack, is already dropped on those rows for want of shape tracking."""
+    """It alters its physical form: humanoid, hybrid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "hybrid", "beast")
 # ==========================================================================
 # m115845
 # ==========================================================================
@@ -2117,7 +2133,8 @@ def m5215a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 9),
-    dropped=("c.in_form()",),
+    requires=_shapes("beast"),
+    requires_text="it must be in beast form",
 )
 def m5215a1(c: Cast) -> None:
     if c.strike():
@@ -2134,7 +2151,8 @@ def m5215a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 6),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid"),
+    requires_text="it must be in humanoid form",
 )
 def m5215a2(c: Cast) -> None:
     if c.strike():
@@ -2169,7 +2187,9 @@ def m5215a3(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=9),
     damage=Damage("3d8", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("c.in_form()", "c.borrow_row(seen=)"),
+    dropped=("c.borrow_row(seen=)",),
+    requires=_shapes("beast"),
+    requires_text="it must be in beast form",
 )
 def m5215a4(c: Cast) -> None:
     """The psychic half is exact; "gains a use of a power it has seen the
@@ -2189,12 +2209,22 @@ def m5215a4(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m5215a5(c: Cast) -> None:
-    """Appearance only; see `m5215a1`/`m5215a2`."""
+    """It alters its physical form: humanoid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "beast")
 # ==========================================================================
 # m5405
 # ==========================================================================
@@ -2241,7 +2271,8 @@ def m5405a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 6),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid"),
+    requires_text="it must be in humanoid form",
 )
 def m5405a2(c: Cast) -> None:
     if c.strike():
@@ -2257,7 +2288,9 @@ def m5405a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 6),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast"),
+    requires_text="it must be in beast form",
 )
 def m5405a3(c: Cast) -> None:
     if c.strike():
@@ -2276,7 +2309,8 @@ def m5405a3(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("3d6", 6, kind=LIMITED),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid"),
+    requires_text="it must be in humanoid form",
 )
 def m5405a4(c: Cast) -> None:
     """`Target.bloodied` is the target line, so the gate and the re-pick both
@@ -2295,12 +2329,22 @@ def m5405a4(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m5405a5(c: Cast) -> None:
-    """Appearance only; see `m5405a2`/`m5405a3`."""
+    """It alters its physical form: humanoid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "beast")
 _M5405_DOWN = "the m5405 drops to 0 hit points"
 
 
@@ -2454,7 +2498,9 @@ def m5591a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 6),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m5591a2(c: Cast) -> None:
     if c.strike():
@@ -2472,7 +2518,8 @@ def m5591a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 9),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid", "hybrid"),
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m5591a3(c: Cast) -> None:
     if c.strike():
@@ -2487,12 +2534,22 @@ def m5591a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m5591a4(c: Cast) -> None:
-    """Appearance only; see `m5591a2`/`m5591a3`."""
+    """It alters its physical form: humanoid, beast, hybrid.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "beast", "hybrid")
 _M5591_DOWN = "the m5591 drops to 0 hit points"
 
 
@@ -3686,7 +3743,9 @@ def m6550a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 6),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m6550a2(c: Cast) -> None:
     if c.strike():
@@ -3704,7 +3763,8 @@ def m6550a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 9),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid", "hybrid"),
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m6550a3(c: Cast) -> None:
     if c.strike():
@@ -3719,12 +3779,22 @@ def m6550a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m6550a4(c: Cast) -> None:
-    """Appearance only; see `m6550a2`/`m6550a3`."""
+    """It alters its physical form: humanoid, beast, hybrid.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "beast", "hybrid")
 _M6550_DOWN = "the m6550 drops to 0 hit points"
 
 

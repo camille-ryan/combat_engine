@@ -2780,7 +2780,7 @@ def m6574a3(c: Cast) -> None:
     reach=Melee(1),
     target=UpTo(2),
     requires=lambda world, eid: not _m6574_bat_form(world, eid),
-    requires_text="usable only while not in bat form",
+    requires_text="usable only while not in beast form",
 )
 def m6574a4(c: Cast) -> None:
     choice = c.choose(

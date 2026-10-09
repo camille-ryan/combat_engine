@@ -1688,13 +1688,18 @@ def i3190p2(c: Cast) -> None:
     target=SELF,
     trigger="you use your p5032 power to assume beast form",
     on=Trigger(PowerUsed, _used_by_me("p5032"), "you assume beast form"),
-    dropped=("c.in_beast_form()",),
+    dropped=("Keyword.BEAST_FORM",),
 )
 def i1093p1(c: Cast) -> None:
-    """The trigger is declared against the ref the spec prints. "Using
-    beast form powers" is the clause nothing gates: a form is not a
-    keyword and the damage context cannot be asked which form a power
-    belongs to, so the bonus rides every roll while the form lasts."""
+    """The trigger is declared against the ref the spec prints.
+
+    **The shape is readable now; this form is not one of them.** `c.in_form`
+    and `query.shifted` answer which shape a creature wears, and 32 monster
+    Requirements are gates on it. This row asks something else: whether a
+    *power* belongs to a class's form, which is a keyword on the power rather
+    than a state on the creature. 121 rows print one and nothing carries it,
+    so the marker names the keyword.
+    """
     c.resize(Size.LARGE, on=c.me, until=When.ENCOUNTER)
     c.bonus(
         "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER

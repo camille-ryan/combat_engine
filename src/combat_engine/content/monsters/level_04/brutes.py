@@ -244,7 +244,7 @@ _M2812_SHAPES = ("wolf", "bugbear")
     attack=Attack(vs=AC, printed=7),
     damage=Damage("2d8", 4),
     requires=_in_shape(_M2812_SHAPE, "wolf"),
-    requires_text="the m2812 must be in its wolf shape",
+    requires_text="the m2812 must be in its beast shape",
 )
 def m2812a0(c: Cast) -> None:
     if c.strike():
@@ -262,7 +262,7 @@ def m2812a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d10", 6),
     requires=_in_shape(_M2812_SHAPE, "bugbear"),
-    requires_text="the m2812 must be in its bugbear shape",
+    requires_text="the m2812 must be in its humanoid shape",
 )
 def m2812a1(c: Cast) -> None:
     if c.strike():
@@ -302,7 +302,7 @@ def m2812a2(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=5),
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
     requires=_in_shape(_M2812_SHAPE, "wolf"),
-    requires_text="the m2812 must be in its wolf shape",
+    requires_text="the m2812 must be in its beast shape",
     dropped=("c.learn()",),
 )
 def m2812a3(c: Cast) -> None:

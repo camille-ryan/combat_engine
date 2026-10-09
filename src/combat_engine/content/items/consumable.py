@@ -487,12 +487,21 @@ def i1420p1(c: Cast) -> None:
 
 @power("i2561p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("c.in_form()",))
+       dropped=("Keyword.BEAST_FORM",))
 def i2561p1(c: Cast) -> None:
-    """Nothing asks which shape a creature is in -- `c.form` labels its
-    hold with the ref that laid it and no two druid rows agree on a word
-    -- so the +1 has no gate to hang on and is left off rather than
-    applied to everything."""
+    """The +1 is gated on the power being a form power, not on the shape.
+
+    **The shape is readable now; this form is not one of them.** `c.in_form`
+    and `query.shifted` answer which shape a creature wears, and 32 monster
+    Requirements are gates on it. This row asks something else: whether a
+    *power* belongs to a class's form, which is a keyword on the power rather
+    than a state on the creature. 121 rows print one and nothing carries it,
+    so the marker names the keyword.
+
+    The self-damage half is written and runs; only the bonus is withheld,
+    because a damage bonus that pays against everything is worse than one
+    that pays against nothing.
+    """
     _soulfang(c)
 
 

@@ -1395,8 +1395,8 @@ def m4851a3(c: Cast) -> None:
 # -- m4925 ------------------------------------------------------------------
 
 #: The two shapes m4925a4 moves between, as the label on the form effect.
-_M4925_JACKAL = "m4925a4 jackal"
-_M4925_HUMAN = "m4925a4 human"
+_M4925_JACKAL = "m4925a4 beast"
+_M4925_HUMAN = "m4925a4 humanoid"
 
 #: What m4925a0 pays out against.
 _M4925_OPENINGS = (Condition.DAZED, Condition.HELPLESS, Condition.PRONE)
@@ -1449,7 +1449,7 @@ def m4925a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d6", 2),
     requires=_not_wearing(_M4925_HUMAN),
-    requires_text="the m4925 must be in jackal form",
+    requires_text="the m4925 must be in beast form",
 )
 def m4925a1(c: Cast) -> None:
     if c.strike():
@@ -1468,7 +1468,7 @@ def m4925a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=8),
     damage=Damage("4d4", 4),
     requires=_not_wearing(_M4925_JACKAL),
-    requires_text="the m4925 must be in human form",
+    requires_text="the m4925 must be in humanoid form",
 )
 def m4925a2(c: Cast) -> None:
     if c.strike():

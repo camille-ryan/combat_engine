@@ -1225,7 +1225,7 @@ def m3826a7(c: Cast) -> None:
     beneficiary is a specific other dragon, already fully written in
     `artillery.py`'s m492 block, found here by matching its ref rather than
     a name -- see the module docstring. `c.set_origin` is the exact verb for
-    "counts as a hobgoblin for the purpose of [another creature's] ability"."""
+    "counts as its allies' kind for the purpose of [another creature's] ability"."""
     me = c.me
     c.set_origin("hobgoblin", on=me, until=When.ENCOUNTER)
     for ally in c.allies():
@@ -2337,7 +2337,7 @@ def m5957a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 2),
     requires=_in_shapes(_M5957_SHAPE, "human", "hybrid"),
-    requires_text="it must be in human or hybrid form",
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m5957a1(c: Cast) -> None:
     if c.strike():
@@ -2355,7 +2355,7 @@ def m5957a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 2),
     requires=_in_shapes(_M5957_SHAPE, "wolf", "hybrid"),
-    requires_text="it must be in wolf or hybrid form",
+    requires_text="it must be in beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
 def m5957a2(c: Cast) -> None:

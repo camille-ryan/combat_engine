@@ -1830,7 +1830,7 @@ def m5598a0(c: Cast) -> None:
     target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12), damage=Damage("2d10", 4),
     requires=_in_shapes(_M5598_SHAPE, "human", "hybrid"),
-    requires_text="it must be in its human or hybrid form",
+    requires_text="it must be in its humanoid or hybrid form",
 )
 def m5598a1(c: Cast) -> None:
     if c.strike():
@@ -1843,7 +1843,7 @@ def m5598a1(c: Cast) -> None:
     target=ONE_CREATURE, keywords=[Keyword.POISON],
     attack=Attack(vs=REF, printed=12), damage=Damage("1d8", 6, dtype=DamageType.POISON),
     requires=_in_shapes(_M5598_SHAPE, "snake", "hybrid"),
-    requires_text="it must be in its snake or hybrid form",
+    requires_text="it must be in its beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
 def m5598a2(c: Cast) -> None:
@@ -1861,7 +1861,7 @@ def m5598a2(c: Cast) -> None:
     target=ONE_CREATURE, attack=Attack(vs=REF, printed=12),
     damage=Damage("1d8", 6, half_on_miss=True),
     requires=_m5598_free_to_grab,
-    requires_text="it must be in its snake or hybrid form and not grabbing a creature",
+    requires_text="it must be in its beast or hybrid form and not grabbing a creature",
 )
 def m5598a3(c: Cast) -> None:
     victim = c.target
@@ -1884,7 +1884,7 @@ def m5598a3(c: Cast) -> None:
 @power(
     "m5598a4", level=7, usage=AT_WILL, action=MOVE, reach=PERSONAL, target=NO_TARGET,
     requires=_m5598_holding,
-    requires_text="it must be in its snake or hybrid form and grabbing a creature",
+    requires_text="it must be in its beast or hybrid form and grabbing a creature",
 )
 def m5598a4(c: Cast) -> None:
     held = _holding(c)
@@ -2738,7 +2738,7 @@ def _just_rampaged(world: World, eid: int) -> bool:
     "m884a2", level=7, usage=AT_WILL, action=FREE, reach=CloseBurst(1),
     target=EACH_OTHER, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14), damage=Damage("1d12", 5),
-    requires=_just_rampaged, requires_text="it must have just used its rampage",
+    requires=_just_rampaged, requires_text="it must have just used m884a1",
 )
 def m884a2(c: Cast) -> None:
     if c.strike():

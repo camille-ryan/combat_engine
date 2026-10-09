@@ -455,15 +455,19 @@ def f1523(c: Cast) -> None:
 
 
 @power("f1555", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.in_form()",))
+       reach=PERSONAL, target=SELF, todo=("c.form(mimics=)",))
 def f1555(c: Cast) -> None:
-    """Re-aimed: the racial power is `p2472` and it is declared, so the
-    naming gap is closed. What it is declared as is the problem --
-    `out_of_combat=True`, because its whole printed effect is an
-    appearance and a Bluff check, so it is never offered in a fight and
-    never announces a use. And the clause is not "you use it" but
-    "whose face you are wearing", which is the shape question 14 other
-    rows want."""
+    """Combat advantage for wearing the face of the creature you are hunting.
+
+    **Not a question about which shape it is in.** `c.in_form` answers that
+    and would answer yes to any shape at all; what this needs is whether the
+    shape taken is *that particular creature's*, which `c.form` cannot be
+    told and nothing records.
+
+    The racial power is `p2472` and it is declared, so the naming half is
+    closed. It is declared `out_of_combat=True`, which is why this row has
+    nothing to read even once the appearance can be aimed.
+    """
 
 
 @power("f1768", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

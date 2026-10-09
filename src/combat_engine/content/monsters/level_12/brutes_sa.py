@@ -75,10 +75,11 @@ m115807a6 read the count, and a5's printed "Recharge when it loses a head"
 is `_recharge_on` watching the same damage.
 
 **A form that is asked about has to leave a label.** m4338a2's printed
-Requirement is "usable only in" the shape m4338a5 takes, and asking the
-engine what form a creature is in is the standing gap `c.in_form()` names.
-A label on the hold m4338a5 lays is the same question answered without it,
-and `requires=` reads it, so neither row carries a marker.
+Requirement is "usable only in" the shape m4338a5 takes, and when this was
+written there was no way to ask the engine what form a creature was in, so a
+label on the hold m4338a5 lays answered the same question and `requires=`
+read it. `monsters/forms.py` asks it directly now; this pair still reads its
+label, which is a third copy of one mechanism and wants folding in.
 
 **"Vulnerable to the m4307's attacks" is narrower than the verb.**
 `c.vulnerable` has no `when=`, so m4307a2 lays the vulnerability against
@@ -1697,9 +1698,9 @@ _M4338_BLED = "its attack bloodies an enemy"
 def _in_sludge(world: World, eid: int) -> bool:
     """The printed Requirement on m4338a2, asked of the hold m4338a5 lays.
 
-    Asking the engine what shape a creature is wearing is the standing gap
-    `c.in_form()` names; a label on the hold is the same question answered
-    without it, so neither row has to carry a marker.
+    Written before `monsters/forms.py` could be asked what shape a creature
+    is wearing; a label on the hold answers the same question, so neither row
+    carries a marker. It is a third copy of that one mechanism all the same.
     """
     return any(eff.label == _M4338_OOZE for eff in world.effects.of(eid))
 

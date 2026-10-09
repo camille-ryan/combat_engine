@@ -82,6 +82,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_05.skirmishers_sa import _edge_on_target
 from combat_engine.content.monsters.level_06.skirmishers import _after_moving, _renew
 from combat_engine.content.monsters.level_07.lurkers import _shift_beside
@@ -4206,8 +4207,8 @@ def m6192a0(c: Cast) -> None:
     target=NO_TARGET,
     attack=Attack(vs=REF, printed=15),
     damage=Damage("2d10", 9),
+    requires=_shapes("hybrid"),
     requires_text="the m6192 must be in its humanlike form",
-    dropped=("c.in_form()",),
 )
 def m6192a1(c: Cast) -> None:
     """Declared with no target: the leap comes first and changes who is in
@@ -4235,8 +4236,8 @@ def m6192a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=15),
     damage=Damage("3d8", 6, kind=LIMITED),
+    requires=_shapes("hybrid"),
     requires_text="the m6192 must be in its humanlike form",
-    dropped=("c.in_form()",),
 )
 def m6192a2(c: Cast) -> None:
     if c.strike():
@@ -4267,15 +4268,27 @@ def m6192a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m6192a4(c: Cast) -> None:
-    """The card's two shapes print their sizes, and size is the one part of
-    "appears as" a board reads -- a Tiny creature takes up less room and is
-    reached over differently. `c.form` is the hold and `c.resize` is what it
-    changes; `revert=MINOR` is the printed way back out."""
-    small = c.choose([True, False], f"{c.ref}: the small shape, or the tall one")
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
-    c.resize(Size.TINY if small else Size.MEDIUM, on=c.me, until=When.ENCOUNTER)
+    """It alters its physical form: humanoid, hybrid.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+
+    The card ties the size to the shape -- a Tiny beast, a Medium
+    humanoid -- so the resize follows whichever was taken rather than
+    being a choice of its own.
+    """
+    taken = _shapechange(c, "humanoid", "hybrid")
+    if taken:
+        c.resize(Size.TINY if taken == "beast" else Size.MEDIUM,
+                 on=c.me)
 @power(
     "m6192a5",
     level=12,

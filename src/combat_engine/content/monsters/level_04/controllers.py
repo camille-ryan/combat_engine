@@ -551,7 +551,7 @@ def _in_shape(word: str):  # noqa: ANN202
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d6", 4),
     requires=_in_shape("jackal"),
-    requires_text="the m4927 must be in its jackal shape",
+    requires_text="the m4927 must be in its beast shape",
 )
 def m4927a0(c: Cast) -> None:
     if c.strike():
@@ -570,7 +570,7 @@ def m4927a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
     requires=_in_shape("human"),
-    requires_text="the m4927 must be in its human shape",
+    requires_text="the m4927 must be in its humanoid shape",
 )
 def m4927a1(c: Cast) -> None:
     if c.strike():
@@ -588,7 +588,7 @@ def m4927a1(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d6", 3, dtype=DamageType.THUNDER),
     requires=_in_shape("jackal"),
-    requires_text="the m4927 must be in its jackal shape",
+    requires_text="the m4927 must be in its beast shape",
 )
 def m4927a2(c: Cast) -> None:
     if c.strike():

@@ -559,7 +559,7 @@ def ranger_nearest(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
     requires=_ON_HUNTER,
-    requires_text="needs the fighting style this replaces prime shot for",
+    requires_text="needs the fighting style this replaces cf:ranger-f2 for",
 )
 def ranger_running(c: Cast) -> None:
     """+1 on the swing at the end of a run, when the run covered ground.

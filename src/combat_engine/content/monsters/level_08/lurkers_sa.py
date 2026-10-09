@@ -1681,7 +1681,7 @@ def _icy_terrain(world: World, eid: int) -> bool:
     reach=PERSONAL,
     target=NO_TARGET,
     requires=_icy_terrain,
-    requires_text="it must be in icy or snowy terrain, or near a white dragon",
+    requires_text="it must be in icy or snowy terrain, or near a dragon with the cold keyword",
 )
 def m5632a3(c: Cast) -> None:
     """"Or within 10 squares of a white dragon" is dropped silently: the

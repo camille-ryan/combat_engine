@@ -103,6 +103,7 @@ from combat_engine.engine import (
 #: target" can be asked, so it is imported from the module it lives in
 #: rather than approximated off a single `Miss`.
 from combat_engine.engine.events import DamageRolled, PowerResolved
+from combat_engine.engine.query import shifted
 
 ITEM = "item"
 
@@ -1391,13 +1392,22 @@ def i1880p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.in_form()",),
 )
 def i2459x1(c: Cast) -> None:
-    """"Not in its natural form" is a question about a creature that
-    `c.form` can put into one and nothing can ask of."""
+    """+1 to every defence, but only against an attacker wearing a shape.
 
+    `shifted` rather than `in_form`: the card names no shape, it asks whether
+    the attacker is in its own one or not. A creature that has never changed
+    shape answers no, which is the right way round here -- a bonus must not
+    pay against everything merely because nothing was recorded.
 
+    The attacker is read off the attack's context, not off the board, so the
+    answer is taken at the moment the attack lands rather than when the
+    bonus was laid.
+    """
+    for d in _DEFENCES:
+        c.bonus(d, 1, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: shifted(c.world, ctx.get("attacker", -1)))
 @power(
     "i2459p1",
     level=9,
@@ -1408,7 +1418,7 @@ def i2459x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    todo=("c.in_form()", "c.forbid(keyword=)"),
+    todo=("c.end_forms(on=)", "c.forbid(keyword=)"),
 )
 def i2459p1(c: Cast) -> None:
     """Both halves are missing: nothing ends a form from outside it, and

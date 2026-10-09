@@ -2932,7 +2932,7 @@ def m4173a7(c: Cast) -> None:
 )
 def m4173a8(c: Cast) -> None:
     """A disguise and nothing else."""
-    c.note(f"{c.ref}: alters its form to appear as a unique human")
+    c.note(f"{c.ref}: alters its form to appear as a unique humanoid")
 
 
 # ==========================================================================

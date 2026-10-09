@@ -139,7 +139,7 @@ from combat_engine.engine.triggers import (
 def _in_shapes(prefix: str, *words: str):  # noqa: ANN202
     """`brutes._in_shape` for a Requirement that names **two** of the forms.
 
-    "It must be in human or hybrid form" is printed on five rows across the two
+    "It must be in humanoid or hybrid form" is printed on five rows across the two
     shapechangers here and the single-word gate cannot say it. Undeclared is
     still permissive, for the reason that one gives: a creature that has not
     changed shape yet is in whatever shape it was found in, which the stat

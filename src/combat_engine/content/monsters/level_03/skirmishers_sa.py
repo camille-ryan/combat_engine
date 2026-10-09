@@ -26,6 +26,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.forms import (
+    _shapechange,
+    _shapes,
+)
 from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.content.monsters.level_02.skirmishers import (
     _advantage_rider,
@@ -1206,7 +1210,8 @@ def m115824a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d6", 6),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid", "hybrid"),
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m115824a1(c: Cast) -> None:
     """"Or 2d6 + 6 with combat advantage" is two expressions, so the bigger
@@ -1235,7 +1240,9 @@ def m115824a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 4),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m115824a2(c: Cast) -> None:
     """The burn is gated on the target granting the drop, which is read off
@@ -1255,7 +1262,8 @@ def m115824a2(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.in_form()",),
+    requires=_shapes("beast"),
+    requires_text="it must be in beast form",
 )
 def m115824a3(c: Cast) -> None:
     """The shift plays; the form the Requirement names is not recorded."""
@@ -1270,17 +1278,29 @@ def m115824a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    narrative=("skill:bluff",),
 )
 def m115824a4(c: Cast) -> None:
-    """Three shapes, and the only one of the three differences a fight can
-    see is how big it is -- so the size is a choice the row makes and the
-    rest is a Bluff circumstance nothing on a board rolls against."""
-    taken = c.choose([Size.TINY, Size.MEDIUM], "which shape to take")
-    if taken is not None:
-        c.resize(taken, on=c.me)
+    """It alters its physical form: humanoid, hybrid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+
+    The card ties the size to the shape -- a Tiny beast, a Medium
+    humanoid -- so the resize follows whichever was taken rather than
+    being a choice of its own.
+    """
+    taken = _shapechange(c, "humanoid", "hybrid", "beast")
+    if taken:
+        c.resize(Size.TINY if taken == "beast" else Size.MEDIUM,
+                 on=c.me)
 # --------------------------------------------------------------------------
 # m1684
 # --------------------------------------------------------------------------
@@ -2016,7 +2036,9 @@ def m4616a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 4),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m4616a2(c: Cast) -> None:
     """The burn lands. The Requirement names a shape nothing records, and
@@ -2036,7 +2058,8 @@ def m4616a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d8", 4),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid"),
+    requires_text="it must be in humanoid form",
 )
 def m4616a3(c: Cast) -> None:
     """The swing plays; the shape the Requirement names is not recorded."""
@@ -2066,15 +2089,22 @@ def m4616a4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m4616a5(c: Cast) -> None:
-    """It keeps every statistic in the new shape and its gear does not
-    change, so the printed line leaves nothing for a fight to read. The two
-    attacks that care which shape it is in say so themselves."""
-    c.note(f"{c.ref}: it changes shape and keeps all of its own numbers")
+    """It alters its physical form: humanoid, hybrid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "hybrid", "beast")
 # --------------------------------------------------------------------------
 # m4623
 # --------------------------------------------------------------------------

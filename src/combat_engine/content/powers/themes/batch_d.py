@@ -1674,14 +1674,21 @@ def p16535b(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_bloodied,
     requires_text="you must have started this turn bloodied",
-    dropped=("c.in_form()",),
+    dropped=("Keyword.BEAST_FORM",),
 )
 def p16537(c: Cast) -> None:
-    """Both benefits are printed "while you are in beast form" and nothing
-    reads whether a creature is; the regeneration's own bloodied gate is
-    written. The Requirement is "started this turn bloodied" and the gate
-    asks whether you are bloodied now, which differs only for a creature
-    healed out of it mid-turn."""
+    """Both benefits are printed "while you are in beast form".
+
+    **The shape is readable now; this form is not one of them.** `c.in_form`
+    and `query.shifted` answer which shape a creature wears, and 32 monster
+    Requirements are gates on it. This row asks something else: whether a
+    *power* belongs to a class's form, which is a keyword on the power rather
+    than a state on the creature. 121 rows print one and nothing carries it,
+    so the marker names the keyword.
+
+    The Requirement -- "started this turn bloodied" -- is declared and does
+    refuse the row, so what is printed here plays no part yet.
+    """
     c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)
     c.regeneration(2, until=When.ENCOUNTER, on=c.me, while_bloodied=True)
 
@@ -1740,7 +1747,7 @@ def _hit_while_bloodied(world: World, me: int, ev: object) -> bool:
         Trigger(Bloodied, about_me, "an attack bloodies you"),
         Trigger(Hit, _hit_while_bloodied, "you are hit while bloodied"),
     ),
-    dropped=("Keyword.BEAST_FORM", "c.in_form()", "c.provoke(allies=)"),
+    dropped=("Keyword.BEAST_FORM", "c.provoke(allies=)"),
 )
 def p16539(c: Cast) -> None:
     """Both printed triggers are declared -- half of an "or" declared looks

@@ -416,7 +416,7 @@ def m3034a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d12", 3),
     requires=_in_shape(_M3034_SHAPE, "wolf"),
-    requires_text="the m3034 must be in its wolf form",
+    requires_text="the m3034 must be in its beast form",
 )
 def m3034a1(c: Cast) -> None:
     """The engine holds no diseases and no track to move along, so being
@@ -465,7 +465,7 @@ def m3034a2(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     requires=_in_shape(_M3034_SHAPE, "wolf"),
-    requires_text="the m3034 must be in its wolf form",
+    requires_text="the m3034 must be in its beast form",
 )
 def m3034a3(c: Cast) -> None:
     """The step comes before the bite, against the usual order, because here

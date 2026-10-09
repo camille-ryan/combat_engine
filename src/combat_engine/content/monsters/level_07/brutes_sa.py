@@ -40,6 +40,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
@@ -2432,7 +2433,8 @@ def m5956a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d10", 4),
-    dropped=("c.in_form()",),
+    requires=_shapes("humanoid", "hybrid"),
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m5956a1(c: Cast) -> None:
     if not c.strike():
@@ -2452,7 +2454,8 @@ def m5956a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=12),
     damage=Damage("3d6", 5),
-    dropped=("c.in_form()",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m5956a2(c: Cast) -> None:
     if not c.strike():
@@ -2472,7 +2475,9 @@ def m5956a2(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.in_form()", "c.basic(half_on_miss=)"),
+    dropped=("c.basic(half_on_miss=)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m5956a3(c: Cast) -> None:
     """"Makes a melee basic attack" is `c.basic()`, which rolls whichever
@@ -2499,14 +2504,22 @@ def m5956a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    out_of_combat=True,
 )
 def m5956a4(c: Cast) -> None:
-    """Appearance only: the form that gates which attack is already dropped
-    on those rows for want of shape tracking, so there is nothing combat
-    meaningful left for the shift itself to do."""
+    """It alters its physical form: humanoid, hybrid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "hybrid", "beast")
 # ==========================================================================
 # m5959
 # ==========================================================================

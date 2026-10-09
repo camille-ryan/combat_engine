@@ -523,7 +523,7 @@ def p12692(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL, Keyword.TELEPORTATION],
-    requires_text="you must be eladrin",
+    requires_text="you must be r3",
     trigger=_BREACH,
     on=[
         Trigger(MoveStart, _aura_foe_shifts, _BREACH),
@@ -555,7 +555,7 @@ def p13773(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL, Keyword.STANCE, Keyword.TELEPORTATION],
-    requires_text="you must be eladrin and must have the fey step power",
+    requires_text="you must be r3 and must have its racial teleport power",
 )
 def p13774(c: Cast) -> None:
     """The Prerequisite is prose for the reason given on p13773; the second

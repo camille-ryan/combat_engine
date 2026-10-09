@@ -368,7 +368,7 @@ def _m2813_in(word: str):  # noqa: ANN202
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d6", 4),
     requires=_m2813_in("wolf"),
-    requires_text="the m2813 must be in its wolf form",
+    requires_text="the m2813 must be in its beast form",
 )
 def m2813a0(c: Cast) -> None:
     """No range printed. A bite against AC is `Melee(1)`."""
@@ -388,7 +388,7 @@ def m2813a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d10", 5),
     requires=_m2813_in("hobgoblin"),
-    requires_text="the m2813 must be in its hobgoblin form",
+    requires_text="the m2813 must be in its humanoid form",
 )
 def m2813a1(c: Cast) -> None:
     """No range printed; a weapon attack against AC is `Melee(1)`.
@@ -445,7 +445,7 @@ def m2813a2(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("1d8", 1, dtype=DamageType.NECROTIC, kind=LIMITED),
     requires=_m2813_in("wolf"),
-    requires_text="the m2813 must be in its wolf form",
+    requires_text="the m2813 must be in its beast form",
 )
 def m2813a3(c: Cast) -> None:
     """The mending is keyed off the burning's own event: ongoing damage is

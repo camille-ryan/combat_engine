@@ -55,6 +55,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01.brutes_sa import _step_toward
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
@@ -4831,10 +4832,10 @@ def m6229a3(c: Cast) -> None:
     reach=Melee(2),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
+    requires=_shapes("hybrid"),
     requires_text="the m6523 must be in one of the two forms the card names",
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 11),
-    dropped=("c.in_form()",),
 )
 def m6523a0(c: Cast) -> None:
     """The swing and the choice play. The Requirement does not: `c.form`
@@ -4881,16 +4882,22 @@ def m6523a1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.in_form()",),
 )
 def m6523a2(c: Cast) -> None:
-    """A shape with no mechanical content of its own, which is what `c.form`
-    holds; nothing can ask afterwards which of the three it is wearing, and
-    that is the clause the two rows above wait on as well. "Until it uses
-    this again" is the revert `c.form` already carries."""
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{c.ref} shape")
+    """It alters its physical form: humanoid, hybrid.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "hybrid")
 _M6523_LOST = "an ally within 5 squares of the m6523 is killed by an enemy"
 
 

@@ -899,7 +899,7 @@ def m4926a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=8),
     damage=Damage(bonus=5, kind=MINION),
     requires=_in_shape("jackal"),
-    requires_text="the m4926 must be in its jackal shape",
+    requires_text="the m4926 must be in its beast shape",
 )
 def m4926a1(c: Cast) -> None:
     if c.strike():
@@ -917,7 +917,7 @@ def m4926a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=8),
     damage=Damage(bonus=3, kind=MINION),
     requires=_in_shape("human"),
-    requires_text="the m4926 must be in its human shape",
+    requires_text="the m4926 must be in its humanoid shape",
 )
 def m4926a2(c: Cast) -> None:
     """The opening is offered to everybody, not to the attacker alone, and it

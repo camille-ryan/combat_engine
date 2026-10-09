@@ -2259,11 +2259,18 @@ def i1820p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.in_form()",),
+    todo=("Keyword.GUARDIAN_FORM",),
 )
 def i1840x1(c: Cast) -> None:
-    """Pays out only while a particular kind of shape is held. `c.form`
-    installs one and nothing asks which one is on."""
+    """Pays out only while a particular kind of shape is held.
+
+    **The shape is readable now; this form is not one of them.** `c.in_form`
+    and `query.shifted` answer which shape a creature wears, and 32 monster
+    Requirements are gates on it. This row asks something else: whether a
+    *power* belongs to a class's form, which is a keyword on the power rather
+    than a state on the creature. 121 rows print one and nothing carries it,
+    so the marker names the keyword.
+    """
 
 
 @power(

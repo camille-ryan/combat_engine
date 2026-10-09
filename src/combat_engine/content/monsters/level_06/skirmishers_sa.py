@@ -2791,7 +2791,7 @@ def m5891a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 9),
     requires=_in_shapes("m5891a5", "human", "hybrid"),
-    requires_text="it must be in human or hybrid form",
+    requires_text="it must be in humanoid or hybrid form",
 )
 def m5891a1(c: Cast) -> None:
     if c.strike():
@@ -2808,7 +2808,7 @@ def m5891a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 3),
     requires=_in_shapes("m5891a5", "wolf", "hybrid"),
-    requires_text="it must be in wolf or hybrid form",
+    requires_text="it must be in beast or hybrid form",
 )
 def m5891a2(c: Cast) -> None:
     bloodied_foe = c.bloodied(on=c.target)
@@ -2828,7 +2828,7 @@ def m5891a2(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 9),
     requires=_in_shapes("m5891a5", "wolf", "hybrid"),
-    requires_text="it must be in wolf or hybrid form",
+    requires_text="it must be in beast or hybrid form",
     dropped=("c.disease()",),
 )
 def m5891a3(c: Cast) -> None:

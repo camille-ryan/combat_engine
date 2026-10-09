@@ -1217,7 +1217,7 @@ def m6191a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     requires=_in_shapes(_M6191_SHAPE, "human", "hybrid"),
-    requires_text="it must be in human or hybrid form",
+    requires_text="it must be in humanoid or hybrid form",
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d6", 5),
 )
@@ -1235,7 +1235,7 @@ def m6191a1(c: Cast) -> None:
     target=UpTo(2),
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT],
     requires=_in_shapes(_M6191_SHAPE, "human", "hybrid"),
-    requires_text="it must be in human or hybrid form",
+    requires_text="it must be in humanoid or hybrid form",
     attack=Attack(vs=REF, printed=12),
     damage=Damage("3d4", 4, dtype=DamageType.FIRE),
 )
@@ -1259,7 +1259,7 @@ def m6191a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.CHARM, Keyword.FIRE, Keyword.IMPLEMENT],
     requires=_in_shapes(_M6191_SHAPE, "human", "hybrid"),
-    requires_text="it must be in human or hybrid form",
+    requires_text="it must be in humanoid or hybrid form",
     attack=Attack(vs=WILL, printed=10),
 )
 def m6191a3(c: Cast) -> None:

@@ -1927,7 +1927,7 @@ def m5597a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 4),
     requires=_in_shapes(_M5597_SHAPE, "wolf", "hybrid"),
-    requires_text="it must be in its wolf or hybrid form",
+    requires_text="it must be in its beast or hybrid form",
 )
 def m5597a1(c: Cast) -> None:
     if c.strike():
@@ -1950,7 +1950,7 @@ def m5597a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d10", 6),
     requires=_in_shapes(_M5597_SHAPE, "wolf", "hybrid"),
-    requires_text="it must be in its wolf or hybrid form",
+    requires_text="it must be in its beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
 def m5597a2(c: Cast) -> None:
@@ -1969,7 +1969,7 @@ def m5597a2(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d6", 7),
     requires=_in_shapes(_M5597_SHAPE, "human", "hybrid"),
-    requires_text="it must be in its human or hybrid form",
+    requires_text="it must be in its humanoid or hybrid form",
 )
 def m5597a3(c: Cast) -> None:
     if c.strike():
@@ -1991,7 +1991,7 @@ def m5597a3(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d10", 6),
     requires=_in_shapes(_M5597_SHAPE, "wolf", "hybrid"),
-    requires_text="it must be in its wolf or hybrid form",
+    requires_text="it must be in its beast or hybrid form",
 )
 def m5597a4(c: Cast) -> None:
     if c.strike():
@@ -2045,7 +2045,7 @@ def m5599a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d4", 6),
     requires=_in_shapes(_M5599_SHAPE, "human", "hybrid"),
-    requires_text="it must be in its human or hybrid form",
+    requires_text="it must be in its humanoid or hybrid form",
 )
 def m5599a1(c: Cast) -> None:
     if c.strike():
@@ -2067,7 +2067,7 @@ def m5599a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d6", 5),
     requires=_in_shapes(_M5599_SHAPE, "rat", "hybrid"),
-    requires_text="it must be in its rat or hybrid form",
+    requires_text="it must be in its beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
 def m5599a2(c: Cast) -> None:
@@ -2086,7 +2086,7 @@ def m5599a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     requires=_in_shape(_M5599_SHAPE, "rat"),
-    requires_text="it must be in its rat form",
+    requires_text="it must be in its beast form",
 )
 def m5599a3(c: Cast) -> None:
     c.shift(c.speed_of())
@@ -2809,7 +2809,7 @@ def m6121a1(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 6),
     requires=_in_shape(_M6121_SHAPE, "jackal"),
-    requires_text="it must be in its jackal form",
+    requires_text="it must be in its beast form",
 )
 def m6121a2(c: Cast) -> None:
     if c.strike():
@@ -2828,7 +2828,7 @@ def m6121a2(c: Cast) -> None:
     attack=Attack(vs=AC, printed=10),
     damage=Damage("4d4", 4),
     requires=_in_shape(_M6121_SHAPE, "human"),
-    requires_text="it must be in its human form",
+    requires_text="it must be in its humanoid form",
 )
 def m6121a3(c: Cast) -> None:
     if c.strike():
@@ -2921,8 +2921,8 @@ def m6121a6(c: Cast) -> None:
                 return
             for eff in list(c.world.effects.of(me)):
                 if eff.label.startswith(_M6121_SHAPE):
-                    c.world.effects.end(eff, "reverted to jackal form")
-            c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{_M6121_SHAPE}jackal")
+                    c.world.effects.end(eff, "reverted to beast form")
+            c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{_M6121_SHAPE}beast")
 
         c.watch(Dropped, revert, until=When.ENCOUNTER, on=me, label=label)
     _change_shape(c, _M6121_SHAPE, _M6121_SHAPES)

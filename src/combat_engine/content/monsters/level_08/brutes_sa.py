@@ -20,11 +20,14 @@ docstring:
 * five blocks in this wave ("minion" in their own type tags despite being
   assigned as brutes) are minion-brutes: `Damage("", n, kind=MINION)`,
   same as any other minion;
-* "Requirement: must be in wolf/hybrid form" has no checker -- there is no
-  way to ask what shape a creature is currently in, only to put it in one.
-  `c.in_form()` is the dropped marker, following the level-6 brute file's
-  own convention; `c.contract(ref)` is the matching marker for "contracts
-  a curse/disease", which also has no mechanism.
+* "Requirement: must be in beast/hybrid form" is a gate now. It had no
+  checker when this file was written -- there was no way to ask what shape a
+  creature was currently in, only to put it in one -- and
+  `combat_engine.content.monsters.forms` answers it: `c.form(name=)` records
+  the shape and `_shapes`/`_not_in` read it back, so these rows carry a
+  `requires=` and no marker.
+  `c.contract(ref)` is still the marker for "contracts a curse/disease",
+  which has no mechanism.
 
 Helpers are imported from `level_08/brutes.py` rather than written twice:
 `_struck_by`, `_struck_in_melee`, `_felled_by_me`, `_crowded`, `_melee_ctx`,
@@ -40,6 +43,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _not_in, _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
@@ -2845,7 +2849,8 @@ def m6619a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d8", 9),
-    dropped=("c.in_form()",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m6619a1(c: Cast) -> None:
     if c.strike():
@@ -2862,7 +2867,9 @@ def m6619a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d10", 9),
-    dropped=("c.in_form()", "c.contract(ref)"),
+    dropped=("c.contract(ref)",),
+    requires=_shapes("beast", "hybrid"),
+    requires_text="it must be in beast or hybrid form",
 )
 def m6619a2(c: Cast) -> None:
     """The curse of lycanthropy half -- `x5_34` -- has no contraction
@@ -2879,7 +2886,8 @@ def m6619a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("c.in_form()",),
+    requires=_shapes("hybrid"),
+    requires_text="it must be in hybrid form",
 )
 def m6619a3(c: Cast) -> None:
     victim = c.target
@@ -2898,9 +2906,20 @@ def m6619a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m6619a4(c: Cast) -> None:
-    c.form(until=When.ENCOUNTER, label=c.ref)
+    """It alters its physical form: humanoid, hybrid, beast.
 
+    **Written now that a shape can be read.** This was appearance only,
+    and correctly so while nothing could ask which form the creature was
+    in -- its own note said the gated attacks carried the gap. Those
+    Requirements are gates now, so the shape is what decides which of
+    this creature's attacks it may use, and the row is no longer out of
+    combat.
 
+    `humanoid` leads the list because that is what the creature is before it
+    changes anything, and one form replaces another -- which is what
+    "until it uses this power again" means.
+    """
+    _shapechange(c, "humanoid", "hybrid", "beast")
 # ==========================================================================
 # m876
 # ==========================================================================
@@ -3072,6 +3091,8 @@ def m920a5(c: Cast) -> None:
     target=Target(side="enemy", count=2),
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d6", 5),
+    requires=_not_in("beast"),
+    requires_text="it must not be in beast form",
 )
 def m957a0(c: Cast) -> None:
     if c.strike():
@@ -3089,6 +3110,8 @@ def m957a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d6", 5),
     dropped=("c.contract(ref)",),
+    requires=_not_in("humanoid"),
+    requires_text="it must not be in humanoid form",
 )
 def m957a1(c: Cast) -> None:
     """The disease contraction (`x5_34`) has no mechanism to call; the hit
@@ -3168,10 +3191,17 @@ def m957a4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.in_form()",),
 )
 def m957a5(c: Cast) -> None:
-    """Only the shape itself is granted -- which attacks each form forbids
-    is the same unmodelled question as the werewolf's, named once there
-    and not repeated here."""
-    c.form(until=When.ENCOUNTER, label=c.ref)
+    """It alters its physical form: beast, humanoid.
+
+    **Which attacks each shape forbids is on the attack rows**, not here. The
+    card states them as a loss ("it loses its bite attack in humanoid form"),
+    which is a Requirement on the bite; putting it here as a `c.forbid` would
+    have to be undone by hand every time the shape changed, and was not.
+
+    `beast` leads the list because that is the shape the block describes it
+    in, and one form replaces another -- which is what "until it uses this
+    power again" means.
+    """
+    _shapechange(c, "beast", "humanoid")

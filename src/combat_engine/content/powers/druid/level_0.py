@@ -4,7 +4,7 @@ Two things settle most of this file.
 
 **Species is not knowable.** `c.call_companion` builds a body whose numbers
 come off its owner and the spec names no database ref for a wolf, a bear or
-a living zephyr, so "your *wolf* animal companion" is read as "your animal
+a living zephyr, so "your *beast* animal companion" is read as "your animal
 companion" -- the precedent `ranger/level_2_b.py` set, and for the same
 reason: a question that is always false is what a broken row looks like.
 

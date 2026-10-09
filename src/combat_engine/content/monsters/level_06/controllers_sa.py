@@ -319,7 +319,7 @@ def m1007a6(c: Cast) -> None:
     is laid on any of them rather than guess and gate the wrong one. Said
     again in the report."""
     me = c.me
-    which = c.choose(["natural form", "human form"], f"{c.ref}: which shape") or "natural form"
+    which = c.choose(["natural form", "humanoid form"], f"{c.ref}: which shape") or "natural form"
     c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{c.ref} {which}")
     _ = me
 
@@ -495,7 +495,7 @@ def m1025a3(c: Cast) -> None:
 
 
 def _m1057_human_form(world: World, eid: int) -> bool:
-    return any(e.label == "m1057a5 human" for e in world.effects.of(eid))
+    return any(e.label == "m1057a5 humanoid" for e in world.effects.of(eid))
 
 
 @power(
@@ -509,7 +509,7 @@ def _m1057_human_form(world: World, eid: int) -> bool:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d4", 5),
     requires=lambda world, eid: not _m1057_human_form(world, eid),
-    requires_text="usable only while not in human form",
+    requires_text="usable only while not in humanoid form",
 )
 def m1057a0(c: Cast) -> None:
     if c.strike():
@@ -596,7 +596,7 @@ def m1057a5(c: Cast) -> None:
     for eff in list(c.world.effects.of(c.me)):
         if eff.label.startswith("m1057a5"):
             c.world.effects.end(eff, "changed shape")
-    which = c.choose(["natural form", "human form"], f"{c.ref}: which shape") or "natural form"
+    which = c.choose(["natural form", "humanoid form"], f"{c.ref}: which shape") or "natural form"
     c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{c.ref} {which}")
 
 
@@ -3868,7 +3868,7 @@ def m6470a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 7),
     requires=lambda world, eid: _m6470_shape(world, eid) != "human",
-    requires_text="usable only while in wolf or hybrid form",
+    requires_text="usable only while in beast or hybrid form",
 )
 def m6470a1(c: Cast) -> None:
     if c.strike():
@@ -3887,7 +3887,7 @@ def m6470a1(c: Cast) -> None:
     attack=Attack(vs=REF, printed=9),
     damage=Damage("2d6", 7, dtype=DamageType.RADIANT),
     requires=lambda world, eid: _m6470_shape(world, eid) != "wolf",
-    requires_text="usable only while in human or hybrid form",
+    requires_text="usable only while in humanoid or hybrid form",
 )
 def m6470a2(c: Cast) -> None:
     if c.strike():
@@ -3909,7 +3909,7 @@ def m6470a2(c: Cast) -> None:
         _m6470_shape(world, eid) != "wolf"
         and bool(world.get(eid, Health) and world.get(eid, Health).bloodied)
     ),
-    requires_text="usable only while bloodied and in human or hybrid form",
+    requires_text="usable only while bloodied and in humanoid or hybrid form",
 )
 def m6470a3(c: Cast) -> None:
     if c.strike():
