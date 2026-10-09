@@ -62,11 +62,11 @@ def main() -> int:
     declared = get(args.ref)
     if declared is None:
         print(f"{args.ref} is not declared. Its spec:\n")
-        print(_spec(args.ref) or "  (no such row)")
+        print(_spec(args.ref) or _absent(args.ref))
         return 1
 
     print("=== as printed " + "=" * 55)
-    print(_spec(args.ref) or "  (not in game.db)")
+    print(_spec(args.ref) or _absent(args.ref))
     print()
     print("=== the header it was given " + "=" * 42)
     print(f"  {declared}")
@@ -145,13 +145,73 @@ def main() -> int:
     return 0
 
 
+#: Which tables could hold a ref of each shape, most likely first. Derived
+#: by asking the built database which table actually holds each of the
+#: 23,009 declared refs, not from the ref grammar -- the grammar is where
+#: the old three-table guess came from and it was wrong for one row in five.
+#:
+#:     f<id>           2533   feat
+#:     i<id>[px]<n>    2491   item_block
+#:     cf:*             183   class_feature
+#:     rt:*             113   racial_trait
+#:
+#: Those 5,297 rows all printed "(not in game.db)", which is the one answer
+#: that cannot be told apart from a real ETL gap -- and telling those apart
+#: is what `defect=` turns on. #472.
+_TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # (a test on the ref, the tables to try in order)
+    ("rt:", ("racial_trait",)),
+    ("cf:", ("class_feature",)),
+    ("f", ("feat",)),
+    ("i", ("item_block", "item")),
+    ("p", ("power",)),
+    # A monster *ability* is `monster_power`; a bare creature id has no
+    # printed block of its own at all, because `monster` carries no `spec`
+    # column -- it is columns of numbers. The old code routed there and so
+    # could never have worked for `m145`.
+    ("m", ("monster_power",)),
+    ("r", ("race",)),
+)
+
+
+def _tables_for(ref: str) -> tuple[str, ...]:
+    """Which tables could hold this ref, most likely first."""
+    for prefix, tables in _TABLES:
+        if ref.startswith(prefix):
+            return tables
+    return ()
+
+
 def _spec(ref: str) -> str:
+    """The printed text, or **empty** when nothing holds it.
+
+    Empty on a miss is the contract, not a detail: both callers are written
+    `_spec(ref) or "<fallback>"`, so returning an explanation here would read
+    as a hit and silently retire two messages. The explanation belongs in
+    `_absent`.
+    """
     db = game()
-    table = "monster_power" if ref.startswith("m") and "a" in ref[1:] else (
-        "monster" if ref.startswith("m") else "power"
-    )
-    row = db.execute(f"SELECT spec FROM {table} WHERE ref = ?", (ref,)).fetchone()
-    return ("  " + row["spec"].replace("\n", "\n  ")) if row else ""
+    for table in _tables_for(ref):
+        row = db.execute(
+            f"SELECT spec FROM {table} WHERE ref = ?", (ref,)
+        ).fetchone()
+        if row and row["spec"]:
+            return "  " + row["spec"].replace("\n", "\n  ")
+    return ""
+
+
+def _absent(ref: str) -> str:
+    """Why there is no printed text -- which tables were actually asked.
+
+    "(not in game.db)" alone cannot tell "nothing holds this" from "I did not
+    look", and for 5,297 declared rows it meant the second. Naming the tables
+    is what lets the next reader tell a real ETL gap -- which is what
+    `defect=` turns on -- from an instrument that was not looking. #472.
+    """
+    tables = _tables_for(ref)
+    if not tables:
+        return f"  (no table holds a ref shaped like {ref!r})"
+    return f"  (not in game.db: no row in {' or '.join(tables)})"
 
 
 def _board(
