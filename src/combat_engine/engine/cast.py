@@ -5853,6 +5853,58 @@ class Cast:
         # callback the event.
         return picked(self)
 
+    def instead_of_now(
+        self, what: str, default: Callable[[], Any], *, on: int | None = None
+    ) -> Any:
+        """Offer a registered substitution **at the clause**, and run what is
+        taken.
+
+        The sibling of `instead_of`, for a clause that fires inside a watcher
+        the row installed itself rather than from a body the menu reached.
+        The invoker's covenant manifestation is the worked case: the row is
+        used once at the start of a fight and all it does is install a
+        `PowerResolved` watcher, so the push it later makes has no `Action`
+        behind it and `Cast.variant` is 0 for ever.
+
+        **This re-accepts the cost `instead_of` exists to avoid, knowingly.**
+        A question asked inside a watcher is invisible to `policy/` -- the
+        argument written three times over in `Action.augment`, `_variants`
+        and `c.pre_empt`. What makes it acceptable here and not there: a
+        manifestation is a *passive*, so there was never a menu entry whose
+        score the substitution would have changed. The AI did not choose to
+        manifest and cannot be asked to weigh manifesting differently.
+
+        Do not reach for this when the row is clicked or offered by the
+        dispatcher. `rt:r24-t0` looked like a watcher case and is not -- it
+        carries `on=Trigger(Dropped, ...)`, so `Trigger._ask` offers its
+        variants and `instead_of` reads them.
+
+        `on` is the creature the clause is about, bound to `c.target` for
+        the substitute's benefit. A watcher holds its subject in a closure
+        and the clause cannot see one -- the marshal's bonus lands on
+        whichever ally spent the action point, and a feat replacing it has
+        to know which.
+
+        Registration is the same `c.pre_empt(ref, what, clause)`; only the
+        read differs.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        waiting = list(known.pre_empts.get((self.ref, what), ())) if known else []
+        for clause, source in waiting:
+            # Offered, never imposed: every card registering one of these
+            # says "you can", so a declined offer leaves `default` running.
+            if self.choose([source], f"{source} instead of {what}",
+                           optional=True, decline=f"no, {what} as printed"):
+                was = self.target
+                self.target = on if on is not None else was
+                try:
+                    return clause(self)
+                finally:
+                    self.target = was
+        return default()
+
     def dice_for(
         self, ref: str = "", default: str = "", ctx: dict[str, Any] | None = None
     ) -> str:

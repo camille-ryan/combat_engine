@@ -708,7 +708,11 @@ def rt_r24_t0(c: Cast) -> None:
     a death throe with no neighbour simply does not land."""
     near = [e for e in c.enemies() if c.adjacent(e)]
     if near:
-        c.basic(on=near[0])
+        # One swing as printed, unless a feat has bought a different one.
+        # Offered through the variant the dispatcher already shows for this
+        # row -- it carries `on=Trigger(Dropped, ...)`, so `Trigger._ask`
+        # lists the substitutions beside "take it" and "decline".
+        c.instead_of("swing", lambda: c.basic(on=near[0]))
 
 
 @power("rt:r24-t2", level=0, cls="", usage=AT_WILL,

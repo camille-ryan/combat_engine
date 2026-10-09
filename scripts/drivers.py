@@ -1759,6 +1759,98 @@ def declined(out: Result) -> None:
              "no declined row is dealt to a character (vacuously: none is a feat)")
 
 
+
+############################################################
+
+def instead_now(out: Result) -> None:
+    """A clause that fires inside a watcher, replaced.
+
+    `c.instead_of` reads `Cast.variant`, which `dsl.use` settles from the
+    chosen menu entry -- so it answers for a row that was clicked or offered
+    by the dispatcher. The invoker's covenant manifestation is neither: the
+    covenant row is used once at the start of a fight and all it does is
+    install a `PowerResolved` watcher, so the push it later makes has no
+    `Action` behind it and `variant` is 0 for ever.
+
+    **This re-accepts the policy cost `#479` was built to avoid, and the
+    reason it is acceptable here is specific.** A question inside a watcher
+    is invisible to `policy/`. But a manifestation is a *passive* -- the AI
+    never chose to manifest -- so there is no menu entry whose score the
+    substitution would have changed. Where a row IS offered, `instead_of` is
+    still the right reader: `rt:r24-t0` looked like a watcher case and is
+    not, and `f2781` needed no new mechanism at all.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:now")
+
+    out.that(c.instead_of_now("manifest", lambda: "printed") == "printed",
+             "with nothing registered the printed clause runs")
+
+    held = c.pre_empt("drivers:now", "manifest", lambda using: "swapped")
+    out.that(held is not None, "a registration is laid as an effect")
+    out.that(c.instead_of_now("manifest", lambda: "printed") == "swapped",
+             "registered, the substitute runs instead")
+    out.that(c.instead_of_now("other", lambda: "printed") == "printed",
+             "and only for the clause it names")
+
+    # The subject a watcher holds in a closure reaches the clause.
+    seen: list[int] = []
+
+    def note_target(using: Cast) -> str:
+        seen.append(using.target if using.target is not None else -1)
+        return "swapped"
+
+    world2, me2, _ = _board()
+    c2 = Cast(world=world2, me=me2, ref="drivers:now")
+    c2.pre_empt("drivers:now", "manifest", note_target)
+    c2.instead_of_now("manifest", lambda: "printed", on=99)
+    out.that(seen == [99], "the clause is handed the creature it is about")
+    out.that(c2.target is None,
+             "and the binding is put back afterwards, not left standing")
+
+    # **Offered, never imposed.** Every card registering one of these says
+    # "you can", so a declined offer has to leave the printed clause
+    # running. With no decider installed the first option always wins, so
+    # this is the one assertion that needs one -- and without it, deleting
+    # the offer entirely leaves this driver green.
+    world4, me4, _ = _board()
+    c4 = Cast(world=world4, me=me4, ref="drivers:now")
+    c4.pre_empt("drivers:now", "manifest", lambda using: "swapped")
+    world4.decider = lambda actor, kind, options, prompt="": options[-1]
+    out.that(c4.instead_of_now("manifest", lambda: "printed") == "printed",
+             "a DECLINED offer leaves the printed clause running")
+    world4.decider = lambda actor, kind, options, prompt="": options[0]
+    out.that(c4.instead_of_now("manifest", lambda: "printed") == "swapped",
+             "and taking it still runs the substitute")
+
+    # Ending it, and suspension, like every other hold (#470).
+    world.effects.end(held, "driver")
+    out.that(c.instead_of_now("manifest", lambda: "printed") == "printed",
+             "ended, the printed clause is back")
+
+    world3, me3, _ = _board()
+    c3 = Cast(world=world3, me=me3, ref="drivers:now")
+    sus = c3.pre_empt("drivers:now", "manifest", lambda using: "swapped")
+    out.that(c3.instead_of_now("manifest", lambda: "printed") == "swapped", "laid")
+    world3.effects.suspend(sus)
+    out.that(c3.instead_of_now("manifest", lambda: "printed") == "printed",
+             "suspended, the printed clause runs")
+    world3.effects.resume(sus)
+    out.that(c3.instead_of_now("manifest", lambda: "printed") == "swapped",
+             "and the substitute comes back")
+
+    # The seven rows #480 named, and where each ended up.
+    from combat_engine.engine.dsl import REGISTRY
+
+    seven = ("f1548", "f2285", "f2751", "f2993", "f2430", "f2781", "f3558")
+    out.that(all(not REGISTRY[r].unfinished for r in seven),
+             "none of the seven is waiting on anything now")
+    known = world.get(caster, Powers)
+    out.that(known is not None, "and the board carries a Powers to register into")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1781,6 +1873,8 @@ DRIVERS = {
                   "what is in hand standing in for what a card asks"),
     "declined": (declined,
                  "the marker for work nobody intends to do"),
+    "instead_now": (instead_now,
+                    "a clause inside a watcher, replaced"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

@@ -845,7 +845,10 @@ def invoker_covenant_curse(c: Cast) -> None:
             optional=True,
         )
         if who is not None:
-            c.push(1, on=who)
+            # The manifestation itself, so a feat may stand something else
+            # here. Read at the clause rather than from a menu entry: this
+            # fires inside a watcher and no `Action` reached it.
+            c.instead_of_now("manifest", lambda: c.push(1, on=who), on=who)
 
     c.watch(PowerResolved, after, until=When.ENCOUNTER, on=me, label=c.ref)
 
@@ -903,9 +906,13 @@ def invoker_covenant_wrath(c: Cast) -> None:
         if count <= 0:
             return
         ref = ev.power
-        c.bonus(
-            "damage", count, until=When.EOT, on=me,
-            when=lambda ctx: ctx.get("power") == ref,
-        )
+
+        def manifest() -> None:
+            c.bonus(
+                "damage", count, until=When.EOT, on=me,
+                when=lambda ctx: ctx.get("power") == ref,
+            )
+
+        c.instead_of_now("manifest", manifest)
 
     c.watch(PowerUsed, before, until=When.ENCOUNTER, on=me, label=c.ref)

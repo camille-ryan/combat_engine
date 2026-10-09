@@ -645,14 +645,35 @@ def f2424(c: Cast) -> None:
 
 
 @power("f2430", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pre_empt(watched=)",))
+       reach=PERSONAL, target=SELF, )
 def f2430(c: Cast) -> None:
     """Lets an ally trade the all-defences bonus `cf:warlord-marshal-f4s1`
-    gives for a bigger one on a single defence. That row is declared, so
-    the name is not the hold: the bonus is laid from inside it and
-    nothing hands one back."""
+    gives for a bigger one on a single defence.
 
+    The feature lays its bonus from inside an `ActionPointSpent` watcher, so
+    there is no menu entry for the `#479` variant to ride on and the offer
+    is made at the clause with `c.instead_of_now`.
 
+    **The full modifier, not the half.** The feature gives half of Charisma
+    or Wisdom to every defence; this gives the whole of it to one, which is
+    the trade the card prints.
+
+    The choosing is the *ally's* -- "that ally can forgo" -- and
+    `instead_of_now` binds whoever spent the action point as the clause's
+    target, so the right creature is asked and the right one is improved.
+    """
+    amount = max(c.cha_mod, c.wis_mod)
+
+    def one_defence(using: Cast) -> None:
+        ally = using.target
+        if ally is None or amount <= 0:
+            return
+        pick = using.choose([AC, FORT, REF, WILL],
+                            "f2430: which defence instead")
+        if pick is not None:
+            using.bonus(pick, amount, until=When.SOTNT, on=ally)
+
+    c.pre_empt("cf:warlord-marshal-f4s1", "all_defences", one_defence)
 @power("f2435", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with p1448",

@@ -1701,7 +1701,7 @@ def f3557(c: Cast) -> None:
 
 
 @power("f3558", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.pre_empt(watched=)",))
+       reach=PERSONAL, target=SELF, narrative=("skill:diplomacy",))
 def f3558(c: Cast) -> None:
     """A standing bonus and a printed trigger on one card, so the row is a
     trait and the triggered half is a `c.watch`. The Intimidate bonus

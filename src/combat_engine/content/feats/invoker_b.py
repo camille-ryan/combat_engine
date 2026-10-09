@@ -83,7 +83,6 @@ COUNTS_AS = "c.counts_as(keyword=)"
 #: use, so it has no menu entry for a `c.pre_empt` variant to attach to --
 #: which is what these four need and `c.pre_empt(ref, what, clause)` cannot
 #: give them. One symbol for the four because it is one mechanism. #479.
-SUPPRESS = ("c.pre_empt(watched=)",)
 #: `c.grants_advantage` takes no `when=`, so combat advantage cannot be
 #: narrowed to one shape of power.
 NARROW_CA = ("c.grants_advantage(when=)",)
@@ -131,14 +130,6 @@ def _big_attack(ref: str, usages: tuple[Usage, ...] = _BIG) -> bool:
 
 def _mine_on_my_turn(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and world.turn == me and _big_attack(ev.power)
-
-
-def _mine_daily(world, me: int, ev: Any) -> bool:  # noqa: ANN001
-    return (
-        ev.actor == me
-        and world.turn == me
-        and _big_attack(ev.power, (Usage.DAILY,))
-    )
 
 
 def _mine_at_range(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -275,55 +266,95 @@ def f1540(c: Cast) -> None:
         c.bonus(guarded, 1, on=who, until=When.EONT, kind="power")
 
 
-@power("f1548", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SUPPRESS,
-       trigger="you use a divine daily attack power on your turn",
-       on=Trigger(PowerResolved, _mine_daily, "your daily invocation resolves"))
-def f1548(c: Cast) -> None:
-    """The pull is written and "instead of the normal benefit of your
-    covenant manifestation" is dropped: `cf:invoker-f1` arms its own
-    watch for the encounter and nothing declines one payout of it."""
-    for friend in c.within(5, side="ally"):
-        if friend != c.me:
-            c.pull(1, on=friend)
+# -- the clauses four feats put in place of a covenant manifestation --------
+#
+# Each takes the `Cast` of the covenant that is manifesting, which is what
+# `c.instead_of_now` hands a substitute. The covenant's own subject -- the
+# creature its manifestation was about -- arrives as `using.target`.
 
 
-@power("f2285", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SUPPRESS,
-       trigger="you use a divine encounter or daily attack power on your turn",
-       on=Trigger(PowerResolved, _mine_on_my_turn, "your invocation resolves"))
-def f2285(c: Cast) -> None:
-    """The goaded enemy needs somebody to swing at, and the printed line
-    does not name one -- so the victim is whoever of mine is standing
-    beside it. With nobody in reach there is no attack and therefore no
-    backlash, which is the printed conditional rather than a shortcut.
+def _f1548_pull(using: Cast) -> None:
+    """Each ally within 5 squares is pulled one square."""
+    for friend in using.within(5, side="ally"):
+        if friend != using.me:
+            using.pull(1, on=friend)
 
-    The paragon and epic steps of the burn are out of scope.
-    """
-    struck = _struck(c.world, c.trigger)
-    foe = c.choose(struck, f"{c.ref}: which target is goaded", optional=True)
+
+def _f2751_save(using: Cast) -> None:
+    """One ally within 10 squares makes a saving throw."""
+    friends = [a for a in using.within(10, side="ally") if a != using.me]
+    who = using.choose(friends, "f2751: which ally throws off an effect")
+    if who is not None:
+        using.save(on=who)
+
+
+def _f2285_goad(using: Cast) -> None:
+    """A struck enemy swings at one of mine, and burns for doing it."""
+    foe = using.target
+    if foe is None:
+        near = [e for e in using.enemies() if using.adjacent(e)]
+        foe = near[0] if near else None
     if foe is None:
         return
-    reachable = [a for a in c.within(1, side="ally") if c.adjacent_to(foe, a)]
+    reachable = [a for a in using.within(1, side="ally")
+                 if using.adjacent_to(foe, a)]
     if not reachable:
         return
-    if c.grant_attack(foe, on=reachable[0]):
-        c.flat(5 + c.int_mod, dtype=DamageType.FIRE, on=foe)
+    if using.grant_attack(foe, on=reachable[0]):
+        using.flat(5 + using.int_mod, dtype=DamageType.FIRE, on=foe)
 
 
+@power("f1548", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,)
+def f1548(c: Cast) -> None:
+    """Pulls the party in instead of the covenant manifestation.
+
+    **Armed, not triggered.** It hung on `PowerResolved` and pulled *as
+    well*, because nothing could decline one payout of the manifestation.
+    Registering a substitution is what "instead of the normal benefit" needs,
+    and the manifestation reads it at its own clause with
+    `c.instead_of_now` -- it fires inside a watcher the covenant installed,
+    so there is no menu entry for the `#479` variant to ride on.
+
+    Registered against **both** covenants an invoker may hold. Only the one
+    the character actually took ever fires, so naming both costs nothing and
+    saves asking which leg this is. `cf:invoker-f1s1` is not declared --
+    two of the three covenants are imported.
+    """
+    for covenant in ("cf:invoker-f1s0", "cf:invoker-f1s2"):
+        c.pre_empt(covenant, "manifest", _f1548_pull)
+@power("f2285", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,)
+def f2285(c: Cast) -> None:
+    """Goads a struck enemy into swinging at one of mine, and burns it for
+    doing so -- instead of the covenant manifestation.
+
+    **Armed, not triggered**, for `f1548`'s reason.
+
+    The goaded enemy is the one the manifestation was about, which
+    `c.instead_of_now` binds as the clause's target -- "one target of the
+    power", as printed. On the covenant whose manifestation has no target,
+    the damage-bonus one, nobody is bound and the clause falls back to an
+    adjacent enemy: the same approximation this row made before, for the
+    same reason, which is that the printed line does not say which target.
+
+    With nobody of mine in reach there is no attack and therefore no
+    backlash -- the printed conditional rather than a shortcut.
+    """
+    for covenant in ("cf:invoker-f1s0", "cf:invoker-f1s2"):
+        c.pre_empt(covenant, "manifest", _f2285_goad)
 @power("f2751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SUPPRESS,
-       trigger="you use a divine encounter or daily attack power on your turn",
-       on=Trigger(PowerResolved, _mine_on_my_turn, "your invocation resolves"))
+       reach=PERSONAL, target=SELF,)
 def f2751(c: Cast) -> None:
-    """Same drop as f1548. `c.save` follows the target, so the ally is
-    named."""
-    friends = [a for a in c.within(10, side="ally") if a != c.me]
-    who = c.choose(friends, f"{c.ref}: which ally throws off an effect")
-    if who is not None:
-        c.save(on=who)
+    """An ally shakes off an effect instead of the covenant manifestation.
 
-
+    **Armed, not triggered**, for `f1548`'s reason and in the same file: it
+    hung on `PowerResolved` and fired *as well*, because nothing could
+    decline one payout of the manifestation. `c.save` follows the target,
+    so the ally is named rather than assumed.
+    """
+    for covenant in ("cf:invoker-f1s0", "cf:invoker-f1s2"):
+        c.pre_empt(covenant, "manifest", _f2751_save)
 @power("f2981", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you hit only one target with a ranged invoker encounter or daily attack",
@@ -881,24 +912,27 @@ def f2992(c: Cast) -> None:
     )
 
 
-@power("f2993", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=SUPPRESS,
+@power("f2993", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use p2484",
        on=Trigger(PowerUsed, _used("p2484"), "you use that racial power"))
 def f2993(c: Cast) -> None:
-    """A shift on every landed invocation for the rest of the fight. The
-    "instead of your covenant manifestation" half is dropped, as in
-    f1548."""
+    """A shift on every landed invocation for the rest of the fight, in
+    place of the covenant manifestation.
+
+    **The one of the four that keeps its trigger**, because the card does:
+    the substitution does not exist until `p2484` is used, and then stands
+    until the encounter ends. So the registration happens from inside the
+    trigger rather than at arming, which `c.pre_empt` takes either way.
+    """
     me = c.me
     step = max(1, c.wis_mod)
 
-    def after(ev: Hit) -> None:
-        if ev.attacker == me and _big_attack(ev.power):
-            c.shift(step)
+    def stride(using: Cast) -> None:
+        using.shift(step, who=me)
 
-    c.watch(Hit, after, until=When.ENCOUNTER, on=me, label=f"{c.ref} stride")
-
-
+    for covenant in ("cf:invoker-f1s0", "cf:invoker-f1s2"):
+        c.pre_empt(covenant, "manifest", stride, until=When.ENCOUNTER)
 @power("f2994", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        dropped=(COUNTS_AS,),

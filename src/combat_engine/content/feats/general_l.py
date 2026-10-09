@@ -1929,29 +1929,31 @@ def f2876(c: Cast) -> None:
     c.heal(1, on=c.trigger.target)
 
 
-@power("f2781", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=CloseBurst(1), target=NO_TARGET,
-       dropped=("c.pre_empt(watched=)",),
-       trigger="you drop to 0 hit points or fewer",
-       on=Trigger(Dropped, _i_dropped, "you drop"))
+@power("f2781", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2781(c: Cast) -> None:
-    """A death throe: `Dropped` names its subject `actor` and carries no
-    target.
+    """One swing at **each** adjacent enemy at -2, in place of the single
+    swing `rt:r24-t0` grants on dropping.
 
-    "Instead of the attack that trait grants you" is dropped, and the
-    trait is no longer why. `rt:r24-t0` is a declared row now and
-    `c.forbid` would take it away -- but it is an immediate interrupt
-    and this is a free action, so `triggers` gathers and resolves it a
-    whole window earlier. By the time this body could forbid it, it has
-    already swung. Nothing suppresses a row answering the same event in
-    an earlier window, which is the absence ten rows already name.
+    **No new mechanism was needed and that is the finding.** This was filed
+    under `c.pre_empt(watched=)` on the reading that Ferocity fires from a
+    watcher. It does not: `rt:r24-t0` carries
+    `on=Trigger(Dropped, about_me, ...)`, so the dispatcher offers it and
+    lists this substitution beside "take it" and "decline" -- the variant
+    machinery that landed with `#479`.
+
+    So the row arms once and registers, rather than racing the trait on the
+    same `Dropped` event. Racing it was the old shape and it swung
+    *twice*: once here and once from the trait, which is one death throe
+    more than the card prints.
     """
-    c.penalty("attack", 2, on=c.me, until=When.EOT)
-    for foe in c.enemies():
-        if c.adjacent(to=foe):
-            c.basic(on=foe)
+    def all_around(using: Cast) -> None:
+        using.penalty("attack", 2, on=using.me, until=When.EOT)
+        for foe in using.enemies():
+            if using.adjacent(to=foe):
+                using.basic(on=foe)
 
-
+    c.pre_empt("rt:r24-t0", "swing", all_around)
 @power("f2782", level=1, cls="", usage=AT_WILL, action=ActionType.OPPORTUNITY,
        reach=CloseBurst(1), target=NO_TARGET,
        trigger="an enemy provokes an opportunity attack from you",

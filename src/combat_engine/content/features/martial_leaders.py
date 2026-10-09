@@ -614,8 +614,15 @@ def warlord_presence_guard(c: Cast) -> None:
         ally = _paying_ally(c, ev)
         if ally is None or amount <= 0:
             return
-        for defence in _DEFENCES:
-            c.bonus(defence, amount, until=When.SOTNT, on=ally)
+        def all_defences() -> None:
+            for defence in _DEFENCES:
+                c.bonus(defence, amount, until=When.SOTNT, on=ally)
+
+        # "That ally can forgo the normal bonus to all defences to instead
+        # gain a bonus to a single defence" -- the ally's choice and not the
+        # marshal's. Read at the clause because this fires inside a watcher
+        # on `ActionPointSpent`, which no menu entry reached.
+        c.instead_of_now("all_defences", all_defences, on=ally)
 
     c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
 
