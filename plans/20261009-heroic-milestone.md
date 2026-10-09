@@ -114,10 +114,30 @@ None blocks a heroic row, which is why they are out of the milestone. All
 three make the 5 sweeps above more trustworthy, and `#466` especially: a
 batch plan is only as good as the one line that says it passed.
 
-## Open question for Camille
+## Settled: `#453` and `#454` have their own milestone
 
-`#453` rituals and `#454` deities are in neither bucket — both are
-`story`-labelled, both are "names only, no rows", and
-`docs/STORY_ENGINE.md` says the story engine is not built. I left them out
-of the milestone on that reading. If "fully imported" means the tables too,
-they join the ETL batch and it is 12, not 10.
+Camille's call — **"Story engine imports"**, milestone 6. Rituals (360
+pages, 20 spec rows cite one) and deities (134 pages, 18 spec rows name
+one). So the ETL batch above stays at 10 and neither of these joins it.
+
+Scoped to the **imports** and not to the component: `docs/STORY_ENGINE.md`
+is a charter and its first line is "nothing is built". Reflavouring, the
+adventuring day (`GET/POST /api/day` is a deliberate `501`) and
+`ENCOUNTERS.md`'s five archetypes are unwritten *code* rather than unread
+pages, and want a milestone of their own if they get one.
+
+`#389` is the one that could sit in either. A disease has a stage track
+that outlives an encounter, which is the adventuring day's territory and is
+why it carries the `story` label — but it blocks 45 heroic monster rows, and
+milestone 1 is the one that has to answer "is heroic done". Left in heroic
+for that reason, cross-referenced from milestone 6, and one command moves it
+if the mechanism matters more than what it blocks.
+
+## Milestone state after this
+
+```
+1  Heroic tier fully imported   23 open    the 5-sweep plan above
+4  Paragon tier imported         1 open    #484, the shared tier filter
+5  Epic tier imported            0 open    rows only; gated on 4
+6  Story engine imports          2 open    #453 #454
+```
