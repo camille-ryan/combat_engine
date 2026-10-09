@@ -732,12 +732,102 @@ def suspension(out: Result) -> None:
              f"{struck(DamageType.FORCE)}")
 
 
+
+############################################################
+
+def sure_footed(out: Result) -> None:
+    """"Ignores difficult terrain when it shifts" -- and only when it shifts.
+
+    The printed rule this hangs off is arithmetic rather than a special case:
+    a square of difficult terrain costs one extra to enter, and a shift is
+    one square of movement, so **a shift cannot enter difficult terrain at
+    all** unless something exempts the creature. 23 rows print that
+    exemption, and until now `c.ignores_difficult` could only grant it
+    unconditionally -- which made every one of those rows better than its
+    card on walks, charges and runs too.
+
+    So the assertion that matters is the **negative** one: the exemption must
+    not leak into the other kinds of going. A driver that only checked "it
+    can shift into the mud now" would pass an implementation that exempted
+    everything, which is the implementation we already had.
+
+    Asserted on what the creature is *offered*, which is where the cost is
+    actually spent: nothing in `shift` or `step` charges for terrain, so a
+    test that moved the creature and looked at where it ended up would pass
+    no matter what this code did.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.durations import When
+
+    world, caster, _ = _board()
+    mud = world.reachable_squares(caster, 1, kind="shift")[0]
+    world.grid.difficult[mud] = "mud"
+
+    def offered(kind: str, budget: int = 1) -> bool:
+        return mud in world.reachable_squares(caster, budget, kind=kind)
+
+    out.that(not offered("walk"), "a square of mud is not one square of walking")
+    out.that(not offered("shift"), "and a one-square shift cannot enter it")
+    out.that(offered("walk", 2), "two squares of walking does reach it")
+
+    c = Cast(world=world, me=caster, ref="drivers:sure_footed")
+    held = c.ignores_difficult(on=caster, until=When.ENCOUNTER, when="shift")
+    out.that(offered("shift"), "exempt while shifting, the shift reaches it")
+    out.that(not offered("walk"),
+             "and the exemption does NOT leak into walking")
+    out.that(not offered("charge"), "nor into a charge")
+    out.that(not offered("run"), "nor into a run")
+
+    # The unscoped form is the one that was being used for these rows, and it
+    # is the thing the scope exists to be different from.
+    world, caster, _ = _board()
+    mud = world.reachable_squares(caster, 1, kind="shift")[0]
+    world.grid.difficult[mud] = "mud"
+    Cast(world=world, me=caster, ref="drivers:sure_footed").ignores_difficult(
+        on=caster, until=When.ENCOUNTER
+    )
+    out.that(offered("shift"), "the unscoped form exempts the shift")
+    out.that(offered("walk"), "and the walk as well -- which is the difference")
+
+    # A scope on a kind nothing prices is refused, not stored. An exemption
+    # nothing ever consults is this component's commonest bug.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:sure_footed")
+    refused = False
+    try:
+        c.ignores_difficult(on=caster, when="teleport")
+    except ValueError:
+        refused = True
+    out.that(refused, "a scope on a kind nothing prices raises rather than storing")
+    moves = world.get(caster, Movement)
+    out.that(not (moves and moves.ignores_when),
+             "and left nothing behind on the creature")
+
+    # It comes off, and it suspends -- it is side state like the unscoped
+    # form, so #470's lift has to reach it.
+    world, caster, _ = _board()
+    mud = world.reachable_squares(caster, 1, kind="shift")[0]
+    world.grid.difficult[mud] = "mud"
+    c = Cast(world=world, me=caster, ref="drivers:sure_footed")
+    held = c.ignores_difficult(on=caster, until=When.ENCOUNTER, when="shift")
+    out.that(offered("shift"), "laid")
+    world.effects.suspend(held)
+    out.that(not offered("shift"), "suspended, the scoped exemption lifts too")
+    world.effects.resume(held)
+    out.that(offered("shift"), "and comes back")
+    world.effects.end(held, "driver")
+    out.that(not offered("shift"), "and ends")
+
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),
     "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
+    "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

@@ -569,7 +569,12 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
         extra = 2 + _mods(world, actor, "run", {})
         far = speed(world, actor) + extra
-        for dest, path in sorted(world.reachable_paths(actor, far).items()):
+        # Priced as a run, because `execute` walks it as one. Offering
+        # options at walk prices and then charging run prices is the exact
+        # split `World.difficult` exists to prevent.
+        for dest, path in sorted(
+            world.reachable_paths(actor, far, kind="run").items()
+        ):
             out.append(Action(kind="run", cost=ActionType.MOVE, dest=dest, path=tuple(path)))
 
     # A shift is its own action: one square, and it provokes nothing.
@@ -603,8 +608,12 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
         for cost in sorted(offers, key=lambda a: a.value):
             if not encounter.can_spend(actor, cost):
                 continue
+            # Priced as a shift, to match `Cast.shift` and `execute`. A
+            # creature exempt from difficult terrain only while shifting was
+            # offered the same squares as one that is not.
             step = reachable(
-                world, actor, offers[cost], mode="walk" if mode in OVERHEAD else None
+                world, actor, offers[cost],
+                mode="walk" if mode in OVERHEAD else None, kind="shift",
             )
             for dest in sorted(step):
                 out.append(Action(kind="shift", cost=cost, dest=dest, path=(dest,)))
@@ -675,7 +684,12 @@ def _charges(world: World, encounter: Encounter, actor: int) -> list[Action]:
 
     # The charge context, so "+4 power bonus to speed when charging" is read
     # by the one measurement it is about.
-    reachable = world.reachable_paths(actor, speed(world, actor, {"charge": True}))
+    # Priced as a charge, to match the `kind="charge"` that `execute` walks
+    # it with -- "ignore all difficult terrain when you move as part of a
+    # charge" is a printed line and this is where it is spent.
+    reachable = world.reachable_paths(
+        actor, speed(world, actor, {"charge": True}), kind="charge"
+    )
     mine = world.get(actor, Position)
     here = mine.square if mine is not None else None
     if here is None:

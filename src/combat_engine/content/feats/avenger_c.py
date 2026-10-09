@@ -383,21 +383,19 @@ def f2928(c: Cast) -> None:
 
 
 @power("f2929", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2929(c: Cast) -> None:
-    """The terrain is ignored; the narrowing to shifts is dropped.
+    """Hit with the right weapon and rough ground stops slowing your shifts.
 
-    `c.ignores_difficult` is a property of the creature and takes a
-    *kind* of ground, not a way of moving, so written as printed the
-    avenger also walks over the rough for free. That is wider than the
-    card and it is named here rather than left in prose.
+    The narrowing to shifts is the whole of what was dropped, and it is a
+    keyword now: the exemption is keyed on the move kind, so the walk this
+    used to grant for free is no longer granted.
     """
     me = c.me
 
     def on_hit(ev: Hit) -> None:
         if _longsword(c, ev):
-            c.ignores_difficult(on=me, until=When.EOT)
+            c.ignores_difficult(on=me, until=When.EOT, when="shift")
 
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
     c.bonus("skill:acrobatics", 2, on=me, until=When.ENCOUNTER, kind="feat")

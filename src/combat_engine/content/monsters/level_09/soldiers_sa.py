@@ -1228,23 +1228,30 @@ def m3288a6(c: Cast) -> None:
 
 @power(
     "m3288a7", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m3288a7(c: Cast) -> None:
-    """The whole printed effect is "ignores difficult terrain **when it
-    shifts**," and `kind=` on `c.ignores_difficult` names a terrain label
-    (`ice`, `rubble`...), not a movement kind -- `level_05/controllers_sa.py`
-    already logs the same gap under this symbol. Nothing is written rather
-    than laying a waiver against a terrain that does not exist."""
+    """Rough ground costs her nothing while she shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(
     "m3288a8", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
+    todo=("c.grant_trait(mount)",),
 )
 def m3288a8(c: Cast) -> None:
-    """Bestows a7's power on her mount -- and a7 has nothing to bestow, for
-    the same reason."""
+    """Bestows her own sure-footedness on whatever she is riding.
+
+    **Re-pointed.** a7 works now, so the reason this is empty has changed:
+    what is missing is a mount. Nothing on the board records that one
+    creature is riding another, so there is no second creature to lay the
+    trait on and no event that would say when it changes.
+    """
 
 
 # ==========================================================================
@@ -2357,12 +2364,16 @@ def _m5785_humanoid_form(world: World, eid: int) -> bool:
 
 @power(
     "m5785a0", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m5785a0(c: Cast) -> None:
-    """The whole printed effect is "ignores difficult terrain **when it
-    shifts**," which `c.ignores_difficult`'s `kind=` cannot say -- that
-    names a terrain label, not a movement kind."""
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(

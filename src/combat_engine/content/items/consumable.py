@@ -435,8 +435,7 @@ def i2069p1(c: Cast) -> None:
 
 
 @power("i2356p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       )
+       reach=PERSONAL, target=SELF)
 def i2356p1(c: Cast) -> None:
     """Both powers the card names have refs now, so the whole benefit
     attaches. It used to be half a row: `p5389` resolved and the second was
@@ -663,12 +662,15 @@ def i2068p1(c: Cast) -> None:
 
 
 @power("i2070p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(when=)",))
+       reach=PERSONAL, target=SELF)
 def i2070p1(c: Cast) -> None:
-    """"When you shift" is the missing gate; rough ground is ignored on
-    every kind of move instead, which is more than the card gives."""
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    """A draught that lets the drinker shift through rough ground.
+
+    `When.ENCOUNTER` is the card's own duration -- "for the duration of the
+    encounter or for 5 minutes, whichever comes first", and nothing here
+    counts minutes outside a fight.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power("i2071p1", level=5, cls=ITEM, action=ActionType.NONE,

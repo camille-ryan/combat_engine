@@ -442,8 +442,7 @@ def m115741a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=PERSONAL,
-    target=SELF,
-    )
+    target=SELF)
 def m115741a2(c: Cast) -> None:
     """Tremorsense 10 comes with the form, as the card prints it.
 

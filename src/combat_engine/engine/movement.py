@@ -52,6 +52,14 @@ if TYPE_CHECKING:
 #: Moves that never provoke an opportunity attack.
 _SAFE = {"shift", "teleport", "push", "pull", "slide", "place", "swap"}
 
+#: The kinds of going whose cost is actually priced against difficult
+#: terrain, which is what `Movement.ignores_when` can be keyed on. A
+#: teleport or a forced slide pays nothing for terrain at all, so an
+#: exemption scoped to one would be a modifier nothing consults -- this
+#: component's commonest bug. `Cast.ignores_difficult` refuses anything
+#: outside this set rather than accepting it quietly.
+PRICED_KINDS = frozenset({"walk", "shift", "charge", "run"})
+
 #: Modes that leave the ground, and so pass over whoever is standing on it.
 #: Teleport is not one of them -- it has no path to pass along, so it has to
 #: arrive somewhere it fits.
@@ -475,7 +483,7 @@ def walk(
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break
-        spent += 2 if sq in world.difficult(eid) else 1
+        spent += 2 if sq in world.difficult(eid, kind) else 1
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_=kind))
     return spent
@@ -719,7 +727,8 @@ def _forced_square(
 
 
 def reachable(
-    world: World, eid: int, budget: int, *, mode: str | None = None
+    world: World, eid: int, budget: int, *, mode: str | None = None,
+    kind: str = "walk",
 ) -> dict[Square, list[Square]]:
     """Every square reachable within `budget`, with a path to each.
 
@@ -742,7 +751,11 @@ def reachable(
     if pos is None or budget <= 0:
         return {}
     overhead = mode_of(world, eid, mode) in OVERHEAD
-    rough = world.difficult(eid)
+    # Priced as the sort of move it is. A creature exempt from difficult
+    # terrain only while shifting reaches a square at one square of cost that
+    # it cannot reach at one while walking, and this is the only place that
+    # difference can be read -- the exemption is spent here, not in `step`.
+    rough = world.difficult(eid, kind)
     start = pos.square
     threat = _threatened_from(world, eid)
 
@@ -874,7 +887,10 @@ def _off_line(a: Square, b: Square, p: Square) -> int:
     return abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1]))
 
 
-def costs(world: World, eid: int, budget: int, *, mode: str | None = None) -> dict[Square, int]:
+def costs(
+    world: World, eid: int, budget: int, *, mode: str | None = None,
+    kind: str = "walk",
+) -> dict[Square, int]:
     """What reaching each square actually costs, in squares of movement.
 
     Same search as `reachable`, reported the other way round. A caller that
@@ -884,8 +900,8 @@ def costs(world: World, eid: int, budget: int, *, mode: str | None = None) -> di
     pos = world.get(eid, Position)
     if pos is None:
         return {}
-    rough = world.difficult(eid)
+    rough = world.difficult(eid, kind)
     out: dict[Square, int] = {}
-    for sq, path in reachable(world, eid, budget, mode=mode).items():
+    for sq, path in reachable(world, eid, budget, mode=mode, kind=kind).items():
         out[sq] = sum(2 if step in rough else 1 for step in path)
     return out

@@ -2091,13 +2091,16 @@ def m2093a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(when=)",),
 )
 def m2093a5(c: Cast) -> None:
-    """Rough ground costs it nothing. "When he shifts" is the narrowing, and
-    `c.ignores_difficult` carries no gate, so the exemption plays wider than
-    printed and the missing parameter is named."""
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    """Rough ground costs him nothing while he shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 # ==========================================================================

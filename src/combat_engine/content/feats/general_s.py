@@ -869,15 +869,20 @@ def f3721(c: Cast) -> None:
 
 
 @power("f3722", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ignores_difficult(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3722(c: Cast) -> None:
-    """`c.ignores_difficult` is a standing fact about the creature with
-    nowhere to hang "but only while charging or running", so this is
-    strictly wider than print: it ignores rough ground on an ordinary
-    walk too. The armour half is a fact about what is worn and is asked
-    when the trait is armed."""
+    """Rough ground is ignored on a charge or a run, out of heavy armour.
+
+    Two kinds, so two calls: the scope is keyed on the move kind and a
+    charge and a run are different kinds, which is right -- this feat says
+    nothing about an ordinary walk and the previous version granted one.
+
+    The armour half is asked once, when the trait is armed, which is the
+    same reading it had before: a creature does not change armour mid-fight.
+    """
     if _armour(c) not in HEAVY:
-        c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+        c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="charge")
+        c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="run")
 
 
 @power("f3724", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

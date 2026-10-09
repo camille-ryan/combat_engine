@@ -1870,12 +1870,16 @@ def m3290a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m3290a5(c: Cast) -> None:
-    """Rough ground ignored *when it shifts*, and not otherwise;
-    `c.ignores_difficult` takes a terrain `kind`, not a gate on how the
-    creature is moving. Confirmed absent against `scripts/vocab.py`."""
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(
@@ -2847,11 +2851,16 @@ def m3645a7(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m3645a8(c: Cast) -> None:
-    """Same gap as `m3290a5` -- rough ground ignored only while shifting,
-    and the method has no gate to narrow it to that."""
+    """Rough ground costs her nothing while she shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 # ==========================================================================

@@ -360,15 +360,16 @@ def p12362(c: Cast) -> None:
 @power("p12363", level=5, cls="x7_673", usage=DAILY, action=STANDARD,
        reach=MeleeOrRanged(1, by_weapon=True), target=ONE_CREATURE,
        keywords=[Keyword.PRIMAL, Keyword.WEAPON],
-       attack=Attack(Pick.PRIMARY, vs=AC),
-       dropped=("c.ignores_difficult(when=)",))
+       attack=Attack(Pick.PRIMARY, vs=AC))
 def p12363(c: Cast) -> None:
-    """The free shift is laid as a watch on the caster's own turn start, and
-    "you must end this shift closer to the target" is `toward=` that target.
+    """A free shift toward a distant quarry each turn, over rough ground.
 
-    One clause still has nowhere to go: the shift *alone* ignores difficult
-    terrain, and laying `c.ignores_difficult` for the turn would exempt the
-    whole of it."""
+    "You must end this shift closer to the target" is `toward=`, and "this
+    movement ignores difficult terrain" is the exemption laid for the
+    instant of the shift and taken off again -- which is exact, where
+    holding it for the turn would have exempted every other shift the
+    caster made.
+    """
     foe = c.target
     if c.strike(plus=_best(c) - c.attack_mod):
         c.damage(c.w(2), _best(c))
@@ -378,7 +379,10 @@ def p12363(c: Cast) -> None:
     def prowl(ev: Any) -> None:
         if ev.actor != c.me or c.adjacent(foe) or not _lonely(c):
             return
+        free = c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
         c.shift(c.primary_mod, who=c.me, toward=foe)
+        if free is not None:
+            c.world.effects.end(free, "the granted shift is over")
 
     c.watch(TurnStart, prowl, until=When.ENCOUNTER, on=c.me)
 
@@ -504,8 +508,7 @@ def p16571(c: Cast) -> None:
        reach=CloseBurst(5), target=NO_TARGET, keywords=[Keyword.ARCANE],
        trigger="a creature hits you with a melee or a ranged attack",
        on=Trigger(Hit, both(targets_me, either(by_melee, by_ranged)),
-                  "a creature hits you with a melee or ranged attack"),
-       )
+                  "a creature hits you with a melee or ranged attack"))
 def p16572(c: Cast) -> None:
     """Both halves now. The penalty is -2 against the caster only, and
     **against everything the attacker swings at** if it can see in the dark
@@ -861,8 +864,7 @@ def p16054(c: Cast) -> None:
 
 @power("p16055", level=10, cls="x7_942", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.DIVINE, Keyword.FEAR, Keyword.POLYMORPH],
-       )
+       keywords=[Keyword.DIVINE, Keyword.FEAR, Keyword.POLYMORPH])
 def p16055(c: Cast) -> None:
     """The form lasts the encounter and the darkvision lasts with it."""
     c.form(until=When.ENCOUNTER, label=c.ref)
@@ -1109,8 +1111,7 @@ def p16590(c: Cast) -> None:
 
 
 @power("p16591", level=10, cls="x7_1004", usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-       )
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE])
 def p16591(c: Cast) -> None:
     """The whole Effect is tremorsense 10 for the encounter. `c.truesight`
     and `c.see_invisible` answer a different question -- seeing what is

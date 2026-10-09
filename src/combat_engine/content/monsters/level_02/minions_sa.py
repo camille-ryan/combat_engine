@@ -103,13 +103,16 @@ def _triggering_enemy(c: Cast) -> int | None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m115725a0(c: Cast) -> None:
-    """The whole of this row is the narrowing: rough ground is ignored *when it
-    shifts* and not when it walks. `c.ignores_difficult` writes a terrain word
-    and takes no gate, so installing it bare would be a row stronger than its
-    card."""
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(

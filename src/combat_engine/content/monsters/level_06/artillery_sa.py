@@ -1680,12 +1680,16 @@ def m4771a6(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(when=)",),
 )
 def m5368a0(c: Cast) -> None:
-    """"When it shifts" narrows this to one action kind; `c.ignores_difficult`
-    has no `when=` to say that, only `kind=` for the terrain's own sort."""
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(

@@ -2233,12 +2233,17 @@ def m4766a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(when=)",),
+    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m4766a4(c: Cast) -> None:
-    """The web half is a terrain word and plays. The other half is difficult
-    terrain narrowed by *what made it*, and `c.ignores_difficult` waives a
-    kind of terrain or all of it with nothing in between."""
+    """The web half is a terrain word and plays.
+
+    **Re-pointed, and not at the move kind.** The other half is difficult
+    terrain narrowed by *what made it* -- terrain belonging to one sort of
+    creature -- which is a scope on the square's provenance, not on how this
+    creature is going. `when="shift"` would answer a sentence this card does
+    not say.
+    """
     c.ignores_difficult("web", on=c.me)
 
 

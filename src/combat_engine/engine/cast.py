@@ -1127,7 +1127,12 @@ class Cast:
         return target is not None and is_trap(self.world, target)
 
     def ignores_difficult(
-        self, kind: str = "", *, on: int | None = None, until: When = When.ENCOUNTER
+        self,
+        kind: str = "",
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: str = "",
     ) -> Effect | None:
         """Cross rough ground for nothing. `kind` names which sort, or all.
 
@@ -1135,6 +1140,21 @@ class Cast:
         terrain that is mud or shallow water" -- said twice, once per word.
         With no `kind` it is every sort. The labels are the ones the map and
         `c.zone(difficult=...)` give their squares.
+
+        `when` narrows it to **one kind of going**: `when="shift"` is "ignores
+        difficult terrain when it shifts", which 23 rows print and which this
+        verb could previously only say by granting the exemption for walking
+        too -- a row stronger than its card, on every one of them.
+
+        The cards name two more kinds and this engine has both:
+        `when="charge"` is "ignore all difficult terrain when you move as
+        part of a charge" and `when="run"` is "you ignore difficult terrain
+        when you run". `movement.PRICED_KINDS` is the authority on which
+        kinds exist, and anything outside it **raises**: a teleport or a
+        forced slide pays nothing for terrain in the first place, so an
+        exemption scoped to one would be a modifier nothing consults, which
+        is this component's commonest bug and reads exactly like a working
+        row.
         """
         from .components import Movement
 
@@ -1143,6 +1163,25 @@ class Cast:
         if moves is None:
             return None
         word = kind.lower() or "*"
+        if when:
+            scope = when.lower()
+            from .movement import PRICED_KINDS
+
+            if scope not in PRICED_KINDS:
+                raise ValueError(
+                    f"{self.ref}: nothing prices a move of kind {scope!r} "
+                    f"against difficult terrain; the kinds that do are "
+                    f"{sorted(PRICED_KINDS)}"
+                )
+            held = moves.ignores_when.setdefault(scope, set())
+            if word in held or word in moves.ignores:
+                return None
+            held.add(word)
+            return self.world.effects.apply(
+                who, self.me, until, label=f"{self.ref} sure-footed {scope}",
+                on_suspend=[lambda: held.discard(word)],
+                on_resume=[lambda: held.add(word)],
+            )
         if word in moves.ignores:
             return None
         moves.ignores.add(word)
@@ -2239,7 +2278,12 @@ class Cast:
         mover = self.me if who is None else who
         if to is not None:
             return shift(self.world, mover, to, share=share)
-        options = self.world.reachable_squares(mover, squares_)
+        # **Priced as a shift**, which is where "it ignores difficult terrain
+        # when it shifts" is actually spent: a one-square shift cannot enter
+        # difficult terrain because the square costs two, so the exemption is
+        # the difference between an option being offered and not. Nothing in
+        # `shift` or `step` charges for terrain -- the budget goes here.
+        options = self.world.reachable_squares(mover, squares_, kind="shift")
         if not options:
             return False
         options = self._nearest_first(list(options), toward, away_from, mover)

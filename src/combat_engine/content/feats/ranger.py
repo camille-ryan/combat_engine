@@ -281,20 +281,20 @@ def f773(c: Cast) -> None:
 
 @power("f776", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(when=)", "c.reroll_attack(on=)"))
+       dropped=("c.reroll_attack(on=)",))
 def f776(c: Cast) -> None:
-    """The beast walks over rough ground.
+    """The beast shifts over rough ground.
 
-    Two things dropped. The printed permission is only *while it shifts*
-    and `c.ignores_difficult` takes a terrain kind rather than a gate, so
-    the beast has it always -- wider than the card. And the reroll half
-    is re-aimed: `p1450` is declared now, so the gap is no longer its
-    name but that its reroll is of the caster's own roll and nothing
-    turns it on somebody else's.
+    The terrain half is exact now -- `when="shift"`, which is what the card
+    says and what the beast previously had on every kind of move.
+
+    The reroll half is still dropped and the gap is not its name: `p1450` is
+    declared, and what is missing is that `c.reroll_attack` rerolls the
+    caster's own roll with nothing to turn it on an ally's or a companion's.
     """
     pet = c.beast()
     if pet is not None:
-        c.ignores_difficult(on=pet, until=When.ENCOUNTER)
+        c.ignores_difficult(on=pet, until=When.ENCOUNTER, when="shift")
 
 
 @power("f780", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

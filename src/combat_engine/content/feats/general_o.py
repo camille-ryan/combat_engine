@@ -663,18 +663,20 @@ def f2971(c: Cast) -> None:
 
 
 @power("f2975", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignores_difficult(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2975(c: Cast) -> None:
-    """Difficult terrain is ignored *while running*.
+    """Difficult terrain is ignored while running, and two skill bonuses.
 
-    Re-aimed: running is a move kind the engine has -- `actions.legal`
-    builds a `run` action and `walk` carries `kind_="run"` -- so
-    `c.run()` named a gap that is not there. The gap is the other half:
-    `c.ignores_difficult` is per sort of *ground* and board-wide, and
-    the cost of a square is settled in `reachable_squares` before the
-    move announces itself, so there is no moment at which the exemption
-    could be narrowed to one kind of move. The two skill bonuses are not
-    a fight."""
+    The earlier note here had the diagnosis exactly right -- the cost of a
+    square is settled in `reachable_squares`, before the move announces
+    itself -- and drew the wrong conclusion from it. That is not a reason the
+    exemption cannot be narrowed; it is the place to narrow it. The search
+    now takes the move kind, so `when="run"` is read where the cost is spent
+    rather than where the move is announced.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="run")
+    c.bonus("skill:athletics", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f2976", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -916,8 +918,7 @@ def f3047(c: Cast) -> None:
 
 
 @power("f3064", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       )
+       reach=PERSONAL, target=SELF)
 def f3064(c: Cast) -> None:
     """Darkvision out to 5 squares, so the range is passed. The Stealth
     bonus is not a fight."""
@@ -1026,22 +1027,26 @@ def f3073(c: Cast) -> None:
 
 @power("f3074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(when=)",))
+       todo=("c.racial_power_used()",))
 def f3074(c: Cast) -> None:
-    """Re-aimed: "a r44 racial power" is three declared refs now, so the
-    trigger is writable. The benefit is not. `c.ignores_difficult` is
-    per terrain kind and board-wide, and the printed line is per *kind
-    of move* -- laid blanket it would exempt a full run as well as a
-    shift, which is a much larger rule and the whole of this feat.
-    `rt:r4-t4` is held back by the same sentence."""
+    """Using a racial power makes rough ground free to shift through.
+
+    **Re-pointed: the benefit is writable now and the trigger is not.** The
+    exemption is `when="shift"` until the end of the next turn, exactly as
+    printed -- the half this row was waiting on. What it still has nothing
+    to watch for is "when you use a racial power": `PowerUsed` carries the
+    ref, and nothing says which refs belong to a race, so the three would
+    have to be hand-listed here and go stale the moment a fourth is
+    declared. `rt:r4-t4`, which was held back by the same sentence as the
+    old note, is finished.
+    """
 
 
 @power("f3091", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with an attack",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
-                  "you hit with an attack"),
-       )
+                  "you hit with an attack"))
 def f3091(c: Cast) -> None:
     """`Hit` fires before the body rolls its damage, which is what makes
     "apply its damage bonus to the triggering hit" writable at all --

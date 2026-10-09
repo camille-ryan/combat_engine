@@ -524,14 +524,16 @@ def m5615a0(c: Cast) -> None:
 # ==========================================================================
 
 
-@power("m5783a0", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-       dropped=("c.ignores_difficult(when=)",))
+@power("m5783a0", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m5783a0(c: Cast) -> None:
-    """"Whenever it shifts" is narrower than `c.ignores_difficult` can say --
-    it takes a terrain kind, not a move kind -- so this is granted for all
-    of its movement, which only ever gives slightly more than the card
-    does."""
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(

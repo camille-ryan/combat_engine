@@ -156,6 +156,18 @@ KNOWN_SILENT = {
     # posing an ally that has a sense (#437), not a wider board.
     "m4736a4": "lends an ally's senses; the board fields it alone",
     "m135a3": "targets a destroyed undead ally; the board has none",
+    # Its printed benefit holds only "while you're not wearing heavy armor",
+    # and the board deals this character heavy armour -- so the row correctly
+    # lays nothing. `f3722` is silent for the same sentence and the same
+    # reason, and has been carried in `silent_refs` without one written down;
+    # this is the entry that records it for both.
+    #
+    # Before #471 this row was `todo=` with an empty body, so it was *refused*
+    # rather than silent, and the baseline never had to say anything about it.
+    # Writing the clause is what made it visible, which is the right
+    # direction. The dummy posing a character in light armour would retire
+    # both entries (#437).
+    "f1873": "holds only out of heavy armour; the board deals heavy armour",
     # Gives back the use of one named sibling row, and the harness fires
     # each row once on a fresh board -- so that sibling has never been
     # spent and there is nothing to give back. Driven by hand: with

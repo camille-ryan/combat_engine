@@ -74,13 +74,25 @@ class World:
             return options[0]
         return self.decider(actor, kind, options, prompt)
 
-    def reachable_paths(self, eid: int, budget: int) -> dict[Any, list[Any]]:
+    def reachable_paths(
+        self, eid: int, budget: int, kind: str = "walk"
+    ) -> dict[Any, list[Any]]:
         from .movement import reachable
 
-        return reachable(self, eid, budget)
+        return reachable(self, eid, budget, kind=kind)
 
-    def reachable_squares(self, eid: int, budget: int) -> list[Any]:
-        return sorted(self.reachable_paths(eid, budget))
+    def reachable_squares(
+        self, eid: int, budget: int, kind: str = "walk"
+    ) -> list[Any]:
+        """Where `eid` could get to. `kind` prices it as that sort of move.
+
+        The default stays "walk" because the sixteen content sites calling
+        this for a shift destination were written against it and changing
+        what they ask is not this change's business -- `Cast.shift`, which is
+        the one path every one of them actually goes through to *move*, asks
+        as a shift.
+        """
+        return sorted(self.reachable_paths(eid, budget, kind=kind))
 
     def rough(self) -> dict[Any, str]:
         """Every square that costs extra, and what sort of going it is."""
@@ -110,7 +122,7 @@ class World:
                 out |= squares(self, eid)
         return out
 
-    def difficult(self, for_: int | None = None) -> set[Any]:
+    def difficult(self, for_: int | None = None, kind: str = "walk") -> set[Any]:
         """Terrain that costs extra, from the map and from any live zone.
 
         With `for_`, the squares that cost extra **for that creature** --
@@ -118,6 +130,12 @@ class World:
         kind of going and not another. Applied here rather than at each of
         the three places that charge for movement, so an exemption cannot be
         honoured by some of them and ignored by the rest.
+
+        `kind` is the sort of move being priced -- "walk", "shift" -- and
+        picks up the exemptions a creature only has for that sort.
+        "Ignores difficult terrain **when it shifts**" is 23 rows, and
+        `Movement.ignores` alone could only say it by granting the exemption
+        for walking as well.
         """
         rough = self.rough()
         if for_ is None:
@@ -125,12 +143,14 @@ class World:
         from .components import Movement
 
         moves = self.get(for_, Movement)
-        ignored = moves.ignores if moves else set()
+        if moves is None:
+            return set(rough)
+        ignored = moves.ignores | moves.ignores_when.get(kind, set())
         if not ignored:
             return set(rough)
         if "*" in ignored:
             return set()
-        return {sq for sq, kind in rough.items() if kind not in ignored}
+        return {sq for sq, kind_ in rough.items() if kind_ not in ignored}
 
     # -- shorthands the rest of the engine and every power body call ---------
 

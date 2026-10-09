@@ -349,23 +349,19 @@ def rt_r4_t3(c: Cast) -> None:
 
 
 @power("rt:r4-t4", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(when=)",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r4_t4(c: Cast) -> None:
-    """`c.ignores_difficult` is per terrain kind and board-wide, and the
-    printed line is per *kind of move*. Laid blanket it would exempt a
-    full run as well as a shift, which is a much larger rule.
+    """Rough ground costs it nothing while it shifts, and nothing else.
 
-    Not a `when=` either, and the marker should not be re-aimed at one:
-    `Movement.ignores` is a flat set of terrain words read by the cost
-    function with no context to gate on. `Movement.using` says how the
-    creature is moving right now, so the piece that is missing is small,
-    but it is an engine change and not a keyword this row can pass.
-
-    Three rows elsewhere spell the same gap `c.ignores_difficult(
-    while_shifting=)`; whoever owns them should fold the two names into
-    one so the group counts four rather than two and two.
+    **The earlier note here was wrong on its own suggestion** and it is worth
+    saying which way: it proposed `Movement.using`, which names the *mode* a
+    creature is travelling in -- flying, climbing, swimming -- and a shift is
+    not a mode, so the gate would never have read true. The lever is the move
+    `kind`, which `step` and `MoveStart.kind_` already carry, and the cost
+    search now takes it. The `c.ignores_difficult(while_shifting=)` spelling
+    that note mentions is the same gap and folds in here.
     """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 # -- r5 ----------------------------------------------------------------

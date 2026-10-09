@@ -636,7 +636,7 @@ def f3572(c: Cast) -> None:
 
 @power("f3573", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(when=)",))
+       todo=("c.ignores_difficult(in_light=)",))
 def f3573(c: Cast) -> None:
     """Ignoring difficult terrain **in unlit squares**, and the gate is the
     whole of it: written ungated this is free movement over every kind of

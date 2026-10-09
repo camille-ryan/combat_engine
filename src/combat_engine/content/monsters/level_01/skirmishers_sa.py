@@ -1206,15 +1206,16 @@ def m4688a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m4688a3(c: Cast) -> None:
-    """Rough ground does not slow its *shift*, which is narrower than the one
-    waiver the vocabulary has. `c.ignores_difficult` is board-wide and for
-    every kind of movement, so writing the line as that would hand the elf a
-    rule it does not print -- an over-grant looks exactly like a working trait
-    and is never found again. Nothing is laid until the narrow form exists.
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
     """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 # --------------------------------------------------------------------------

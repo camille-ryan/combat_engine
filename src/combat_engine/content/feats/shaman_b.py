@@ -233,7 +233,7 @@ def f1882(c: Cast) -> None:
 
 @power("f1887", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignores_difficult(when=)",))
+       dropped=("c.ignores_difficult(while_near=)",))
 def f1887(c: Cast) -> None:
     """Sure-footedness is a flag on a creature's `Movement`, held for a
     duration, with no gate on it -- so "while adjacent to your spirit

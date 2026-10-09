@@ -861,8 +861,7 @@ def m4201a4(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
-    damage=Damage("1d6", 5),
-    )
+    damage=Damage("1d6", 5))
 def m4737a0(c: Cast) -> None:
     """The card pays +2 to the attack and 6 extra damage in dim light or
     darkness. Both are asked of the creature's **own** square at the moment

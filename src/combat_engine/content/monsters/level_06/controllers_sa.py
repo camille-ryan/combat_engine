@@ -2295,12 +2295,16 @@ def m3637a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignores_difficult(when=)",),
 )
 def m3637a6(c: Cast) -> None:
-    """"Ignores difficult terrain when shifting" has no verb narrowed to the
-    shift action -- the unconditional form would let it ignore difficult
-    terrain on an ordinary move too, which the card does not say."""
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 # ==========================================================================

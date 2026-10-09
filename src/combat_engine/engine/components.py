@@ -175,6 +175,17 @@ class Movement:
     #: Kinds of difficult terrain this creature crosses for nothing, by the
     #: label `Grid.difficult` gives them. `"*"` is all of it.
     ignores: set[str] = field(default_factory=set)
+    #: The same exemption, but only for one **kind of going**, keyed by the
+    #: `kind` a move is made with -- "ignores difficult terrain when it
+    #: shifts", which 23 rows print and `ignores` could only say by granting
+    #: it for walking too. A row stronger than its card.
+    #:
+    #: Keyed on the move kind rather than carrying a predicate because the
+    #: kind is already threaded through `step` and `MoveStart.kind_`, so the
+    #: scope costs a dict lookup where a callable would cost a call per
+    #: square searched. `charge` and `run` are the other two the cards name
+    #: and this engine prices both -- `movement.PRICED_KINDS`.
+    ignores_when: dict[str, set[str]] = field(default_factory=dict)
     #: How the creature is moving **right now**, or "" between moves.
     #:
     #: `modes` says what it *can* do and never what it *is* doing, so

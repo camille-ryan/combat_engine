@@ -867,13 +867,16 @@ def m1130a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(when=)",),
 )
 def m115726a0(c: Cast) -> None:
-    """"Whenever it **shifts**" is the narrowing nothing can say: the
-    difficult-terrain exemption is a standing property with no gate, so this
-    creature walks through brambles as freely as it steps through them."""
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(

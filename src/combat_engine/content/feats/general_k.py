@@ -158,6 +158,12 @@ def _resolved(ref: str):  # noqa: ANN202
     return when
 
 
+#: The armour groups a card means by "heavy armour". Spelled out here
+#: rather than imported from a sibling feat file: content must not reach
+#: across content, and a three-word tuple is not worth a shared module.
+_HEAVY_ARMOUR = ("chain", "scale", "plate")
+
+
 def _wielding_group(c: Cast, *groups: str) -> bool:
     gear = c.world.get(c.me, Gear)
     return gear is not None and any(w.group in groups for w in gear.melee)
@@ -232,8 +238,7 @@ def _primal(ctx: dict[str, Any]) -> bool:
        trigger="you are subjected to an effect that a save can end",
        on=Trigger(EffectApplied, lambda w, me, ev: (
            ev.target == me and ev.save_ends
-       ), "you are subjected to a save-ends effect"),
-       )
+       ), "you are subjected to a save-ends effect"))
 def f1675(c: Cast) -> None:
     """Buys an immediate saving throw at +5 by spending p2475.
     `c.expend_row` charges it: the use goes and p2475's own body never
@@ -703,12 +708,21 @@ def f1839(c: Cast) -> None:
 
 @power("f1873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignores_difficult(when=)", "c.ignores_difficult(squares=)"))
+       dropped=("c.ignores_difficult(squares=)",))
 def f1873(c: Cast) -> None:
-    """Both halves are narrower than the verb. `c.ignores_difficult`
-    waives *all* rough ground for a duration; this waives one square of
-    it, and all of it only on a charge. Writing the verb plain is a
-    strictly stronger feat than the one printed."""
+    """All rough ground on a charge, out of heavy armour. One square of it
+    on an ordinary move, which is the dropped half.
+
+    The charge half is exact: `when="charge"` is read where the cost of a
+    square is settled. The other half is a **partial** exemption -- one
+    square of difficult terrain and no more -- and the holder is a set of
+    terrain labels, so there is nowhere to put a count. That is a different
+    gap from this one and keeps its own marker.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is not None and gear.armour in _HEAVY_ARMOUR:
+        return
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="charge")
 
 
 @power("f1983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

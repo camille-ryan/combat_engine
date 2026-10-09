@@ -2437,14 +2437,16 @@ def m5367a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(when=)",),
 )
 def m5367a1(c: Cast) -> None:
-    """The waiver works; narrowing it to shifts does not. `Movement.ignores`
-    is a set of terrain labels with no room for a condition on *how* the
-    creature is moving, so the creature crosses rough ground freely whichever
-    way it goes."""
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    """Rough ground costs it nothing while it shifts, and nothing else.
+
+    `when="shift"` is the narrowing every one of these cards prints and this
+    verb could not say. It is spent in the *search*: a square of difficult
+    terrain costs two, a shift is one, so without the exemption the square is
+    never offered as a shift destination at all.
+    """
+    c.ignores_difficult(on=c.me, until=When.ENCOUNTER, when="shift")
 
 
 @power(
