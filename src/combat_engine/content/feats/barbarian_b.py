@@ -238,7 +238,7 @@ def f2296(c: Cast) -> None:
 
 
 @power("f2705", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.RAGE", "c.reroll_ones()"))
+       reach=PERSONAL, target=SELF, todo=("Keyword.RAGE",))
 def f2705(c: Cast) -> None:
     """Reroll the damage dice that come up 1, while raging and wielding
     a two-handed reach weapon. The weapon half is `c.wielding`; the

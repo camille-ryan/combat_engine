@@ -894,7 +894,7 @@ _granted("f2151", "f2151b", swap=Swap(6, utility=True))
 
 
 @power("f2151b", level=1, cls="", usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
+       reach=PERSONAL, target=SELF, todo=("events.DieRolled",))
 def f2151b(c: Cast) -> None:
     """Both halves want the same thing that does not exist: nothing
     announces an individual damage die, so neither "you roll a 1 on a

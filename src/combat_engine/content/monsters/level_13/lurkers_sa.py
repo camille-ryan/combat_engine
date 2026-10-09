@@ -948,16 +948,18 @@ def m2104a4(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("1d6", 8),
-    dropped=("c.reroll_ones()",),
+    
 )
 def m2304a0(c: Cast) -> None:
-    """The blow plays. "Reroll any damage die result of 1" is the dropped
-    clause: `c.reroll_damage` rolls the whole expression twice and keeps the
-    higher, which is a different and larger thing than replacing the ones."""
+    """The blow plays, and "reroll any damage die result of 1" with it.
+
+    Laid against this row's own ref, so it is this attack's dice and not
+    every roll the creature makes. `stacks=False`, so swinging all fight
+    leaves one hold rather than one per swing.
+    """
+    c.reroll_ones(ref=c.ref)
     if c.strike():
         c.hit()
-
-
 @power(
     "m2304a1",
     level=13,

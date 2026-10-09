@@ -7406,12 +7406,46 @@ class Cast:
         # fixed it; the dice are in hand at this point and nowhere else.
         if self._take_maximum():
             return _max_of(dice)
+        floor = self._reroll_floor()
+        if floor > 1:
+            return self._rolled_above(dice, floor)
         first = self.world.rng.roll(dice).total
         if self.total("damage_twice_lower") > 0:
             return min(first, self.world.rng.roll(dice).total)
         if self._rolls_twice_higher():
             return max(first, self.world.rng.roll(dice).total)
         return first
+
+    def _rolled_above(self, dice: str | int, floor: int) -> int:
+        """Roll, then replace each die under `floor` until it is not.
+
+        Per die rather than per expression: the card says "reroll each die
+        that shows a 1", so the dice that came up fine keep their faces.
+
+        **Capped twice, deliberately.** "Until it shows a different number"
+        is a loop, and a threshold at or above a die's own face count would
+        never terminate -- `below=3` on a d2 is not a card anybody printed,
+        but a typo would be an infinite one, inside a damage roll, hanging
+        the fight.
+
+        So there are two guards and **neither is individually load-bearing**:
+        planting either one alone leaves the driver green, because the other
+        catches it. Planting *both* hangs. That is on purpose for a hazard
+        this shape, and it is written down because a reader who plants one
+        guard, sees green, and deletes it as dead code would be removing
+        half of a pair rather than a redundancy.
+        """
+        rolled = self.world.rng.roll(dice)
+        faces = _faces_of(dice)
+        if faces <= 1 or floor > faces:
+            return rolled.total
+        for i, face in enumerate(rolled.dice):
+            tries = 0
+            while face < floor and tries < 10:
+                face = self.world.rng.die(faces)
+                tries += 1
+            rolled.dice[i] = face
+        return rolled.total
 
     def _take_maximum(self) -> bool:
         """Is a "deals maximum damage" hold waiting, and spend it if so.
@@ -7625,6 +7659,72 @@ class Cast:
         if keyword is not None:
             what = f"{what}:{keyword.value}"
         return self.bonus(what, 1, on=who, until=until, kind=self.ref)
+
+    def reroll_ones(
+        self,
+        *,
+        below: int = 2,
+        keyword: Keyword | None = None,
+        ref: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Reroll each damage die that shows a 1 until it shows a different
+        number."
+
+        **Not `c.reroll_damage`**, which rolls the whole expression twice and
+        keeps the higher -- a different and stronger rule, and `f1378b`'s own
+        note says six rows wanted this one instead. Here each low die is
+        replaced individually and the rest of the roll stands.
+
+        Recorded as a hold and read inside `_roll_damage`, where the dice are
+        in hand: `DamageRolled` carries a total with no dice behind it, and a
+        character's damage is rolled in the body rather than declared in a
+        header, so there is nothing to look up afterwards. That is the same
+        argument `reroll_damage` and `c.maximise` already make, and the same
+        place they are read.
+
+        `below` is the threshold, exclusive: the default 2 rerolls ones,
+        which is what almost every card prints, and 3 is the one that says
+        "a 1 or a 2".
+
+        `keyword` and `ref` narrow it to what the card names -- the curse
+        damage, one racial power, weapon dice only. Unqualified is every
+        damage roll the creature makes, which only a couple of cards mean.
+        """
+        who = on if on is not None else self.me
+        what = "reroll_damage_below"
+        if ref:
+            what = f"{what}@{ref}"
+        elif keyword is not None:
+            what = f"{what}:{keyword.value}"
+        # `stacks=False` because the floor is a `max`: a second identical
+        # hold changes nothing and would only pile up effects -- a monster
+        # whose own attack line prints the reroll lays one per swing
+        # otherwise.
+        #
+        # No `kind=`, and `c.bonus` refuses the pair outright: `stacks=False`
+        # already buckets under the laying row's ref, and a reroll floor is
+        # not a *typed* bonus that a printed type could stack against.
+        return self.bonus(what, below, on=who, until=until, stacks=False)
+
+    def _reroll_floor(self) -> int:
+        """The threshold under which a damage die is rerolled, for *this* row.
+
+        0 for everybody with nothing recorded, which is almost everybody.
+        The row being rolled is what answers a qualified hold, the same way
+        `_rolls_twice_higher` asks it.
+        """
+        best = self.total("reroll_damage_below")
+        aimed = self.total(f"reroll_damage_below@{self.ref}")
+        best = max(best, aimed)
+        from .dsl import get
+
+        p = get(self.ref)
+        if p is not None:
+            for k in p.keywords:
+                best = max(best, self.total(f"reroll_damage_below:{k.value}"))
+        return best
 
     def _rolls_twice_higher(self) -> bool:
         """Does this roller take the better of two, for *this* row?
@@ -9246,6 +9346,22 @@ class Cast:
             Note(text=f"{sq} is now at {grid.floor(sq)} squares")
         )
         return True
+
+
+def _faces_of(dice: str | int) -> int:
+    """How many faces each die of this expression has. 0 for a flat number.
+
+    Parsed the same way `_max_of` below parses it, and for the same reason
+    its note gives: a flat damage line is a real expression and not a
+    malformed one, so it has to answer rather than raise.
+    """
+    if isinstance(dice, int) or not dice or "d" not in dice:
+        return 0
+    _, _, rest = dice.partition("d")
+    faces, sign, _tail = rest.partition("+")
+    if not sign:
+        faces, _sign, _tail = rest.partition("-")
+    return int(faces) if faces.isdigit() else 0
 
 
 def _max_of(dice: str | int) -> int:

@@ -755,7 +755,7 @@ def f952(c: Cast) -> None:
 
 
 @power("f1661", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
+       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(sneak=)",))
 def f1661(c: Cast) -> None:
     """Rerolls the low dice of the extra damage when `p8278`'s necrotic
     rides along. The payout is announced and the racial power is a ref,

@@ -691,7 +691,7 @@ def p15893(c: Cast) -> None:
 @power(
     "p15894", level=10, cls=X7_917, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    dropped=("c.reroll_ones()", "events.ExtendedRested"),
+    dropped=("events.ExtendedRested",),
 )
 def p15894(c: Cast) -> None:
     """The slow is written and is gated on the aura rather than on a clock,

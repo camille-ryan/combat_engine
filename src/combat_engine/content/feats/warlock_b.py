@@ -312,7 +312,7 @@ def f2036(c: Cast) -> None:
 
 @power("f2760", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.reroll_ones()", "c.curse_damage()"))
+       todo=("c.curse_damage()",))
 def f2760(c: Cast) -> None:
     """Rerolls a 1 on the curse's damage dice. Two rows already want
     `c.reroll_ones()`; what is particular here is that the dice are the

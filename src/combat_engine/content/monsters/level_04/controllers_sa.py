@@ -869,13 +869,18 @@ def _reach_word(ref: str) -> str:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 5),
-    dropped=("c.reroll_ones()",),
+    
 )
 def m3540a0(c: Cast) -> None:
     """"Or 1d8 + 7 while bloodied" is one expression or the other, so the
     bigger one is paid by hand rather than as a second standing bonus that
-    would not stack with anything and would never come off. "Its next attack
-    roll" is `once=True` on a hold that expires anyway."""
+    would not stack with anything and would never come off. "Its next
+    attack roll" is `once=True` on a hold that expires anyway.
+
+    "Reroll any damage result of 1" is this row's own, so it is scoped to
+    this ref rather than to everything the creature rolls.
+    """
+    c.reroll_ones(ref=c.ref)
     if not c.strike():
         return
     if c.bloodied(on=c.me):
@@ -883,8 +888,6 @@ def m3540a0(c: Cast) -> None:
     else:
         c.hit()
     c.penalty("attack", 2, until=When.EOTNT, once=True)
-
-
 @power(
     "m3540a1",
     level=4,

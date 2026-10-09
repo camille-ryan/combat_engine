@@ -671,14 +671,27 @@ _granted("f1378", "f1378b")
 @power("f1378b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(5), target=EACH_ALLY,
        keywords=[Keyword.DIVINE, Keyword.RADIANT], group=CHANNEL_DIVINITY,
-       todo=("c.reroll_ones()",))
+       )
 def f1378b(c: Cast) -> None:
-    """Rerolls damage dice that come up 1 or 2 on radiant powers.
-    `c.reroll_damage` rolls the whole expression twice, which is a
-    different and stronger rule; six rows want the one that rerolls the
-    low dice. The light is scenery."""
+    """Each ally rerolls a 1 or a 2 on a radiant power's damage dice.
 
+    **Writable, and the first pass mis-pointed it.** "A radiant attack
+    power" is a *keyword*, which `c.reroll_ones(keyword=)` scopes directly
+    -- unlike `f3122`'s axe, which is a weapon group and has no scope yet.
 
+    `below=3` is the printed "a 1 or a 2". Laid on each target rather than
+    on the caster, because the card hands it to the allies too, and until
+    the end of the caster's next turn.
+
+    Not `c.reroll_damage`, which rolls the whole expression twice and keeps
+    the higher -- a different and stronger rule that six rows in this family
+    were marked for by mistake.
+
+    The light is scenery: it lights squares and changes nothing a row reads.
+    """
+    for friend in [c.me, *c.within(5, side="ally")]:
+        c.reroll_ones(below=3, keyword=Keyword.RADIANT, on=friend,
+                      until=When.EONT)
 _granted("f1379", "f1379b")
 
 

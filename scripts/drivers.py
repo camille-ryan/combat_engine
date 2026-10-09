@@ -1512,6 +1512,96 @@ def drawing(out: Result) -> None:
     out.that(gear.draw_cost is None and gear.draws_left == -1,
              "ended, the creature draws for a minor like everybody else")
 
+
+############################################################
+
+def reroll_low(out: Result) -> None:
+    """"Reroll each damage die that shows a 1 until it shows a different
+    number."
+
+    14 rows print it and `c.reroll_damage` is **not** it: that rolls the
+    whole expression twice and keeps the higher, which is a stronger rule.
+    `f1378b`'s own note says six rows wanted the weaker one. Here each low
+    die is replaced on its own and the rest of the roll stands.
+
+    Read inside `_roll_damage`, where the dice are in hand -- `DamageRolled`
+    carries a total with no dice behind it, and a character's damage is
+    rolled in the body rather than declared in a header. That is the same
+    argument `reroll_damage` and `c.maximise` already make.
+    """
+    from combat_engine.engine.cast import Cast, _faces_of
+    from combat_engine.engine.types import Keyword
+
+    out.that(_faces_of("2d6+5") == 6 and _faces_of(5) == 0,
+             "a flat damage line has no faces and does not raise")
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:reroll")
+    out.that(c._reroll_floor() == 0, "with nothing recorded there is no floor")
+
+    held = c.reroll_ones()
+    out.that(held is not None, "a reroll hold is laid as an effect")
+    out.that(c._reroll_floor() == 2, "and ones are what it rerolls")
+
+    # The real assertion: over many rolls, no die may come up under the
+    # floor. A single roll would pass on luck alone.
+    lows = 0
+    for _ in range(400):
+        if c._roll_damage("1d6") == 1:
+            lows += 1
+    out.that(lows == 0, "across 400 rolls of 1d6, not one result is a 1")
+
+    # And the negative control -- without the hold, ones DO come up, so the
+    # assertion above is about the hold and not about the dice.
+    world2, other, _ = _board()
+    plain = Cast(world=world2, me=other, ref="drivers:reroll")
+    seen = sum(1 for _ in range(400) if plain._roll_damage("1d6") == 1)
+    out.that(seen > 0, "and without the hold a 1 comes up, so that was the hold")
+
+    # The rest of the expression is untouched: a flat bonus still lands and
+    # the dice that were fine keep their faces.
+    out.that(all(c._roll_damage("1d6+5") >= 7 for _ in range(50)),
+             "the flat half of the expression is left alone")
+    out.that(all(2 <= c._roll_damage("1d6") <= 6 for _ in range(50)),
+             "and a rerolled die stays inside its own faces")
+
+    # "A 1 or a 2" is the other threshold one card prints.
+    world3, third, _ = _board()
+    c3 = Cast(world=world3, me=third, ref="drivers:reroll")
+    c3.reroll_ones(below=3)
+    out.that(all(c3._roll_damage("1d8") >= 3 for _ in range(200)),
+             "below=3 rerolls a 1 and a 2 both")
+
+    # A threshold a die cannot satisfy must terminate rather than spin.
+    world4, fourth, _ = _board()
+    c4 = Cast(world=world4, me=fourth, ref="drivers:reroll")
+    c4.reroll_ones(below=99)
+    out.that(c4._roll_damage("1d6") >= 1,
+             "a floor above every face terminates instead of looping")
+
+    # Scoped by keyword: only the rows carrying the word reroll.
+    world5, fifth, _ = _board()
+    fire = Cast(world=world5, me=fifth, ref="m145a0")
+    fire.reroll_ones(keyword=Keyword.FIRE)
+    out.that(fire._reroll_floor() == 0,
+             "a keyword hold does not fire for a row without the word")
+
+    # Scoped by ref: the named row rerolls and its neighbour does not.
+    world6, sixth, _ = _board()
+    named = Cast(world=world6, me=sixth, ref="drivers:reroll")
+    named.reroll_ones(ref="p9400")
+    out.that(named._reroll_floor() == 0, "a ref hold is silent on another row")
+    aimed = Cast(world=world6, me=sixth, ref="p9400")
+    out.that(aimed._reroll_floor() == 2, "and bites on the row it names")
+
+    # Suspension and ending, like every other hold (#470).
+    world7, seventh, _ = _board()
+    c7 = Cast(world=world7, me=seventh, ref="drivers:reroll")
+    eff = c7.reroll_ones()
+    out.that(c7._reroll_floor() == 2, "laid")
+    world7.effects.end(eff, "driver")
+    out.that(c7._reroll_floor() == 0, "ended, the dice are ordinary again")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1528,6 +1618,8 @@ DRIVERS = {
                      "one clause of a row replaced, and one added"),
     "drawing": (drawing,
                 "taking a weapon up, and what it costs"),
+    "reroll_low": (reroll_low,
+                   "each damage die that shows a 1, rolled again"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

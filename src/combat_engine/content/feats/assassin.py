@@ -113,14 +113,18 @@ def f1786(c: Cast) -> None:
 
 
 @power("f1789", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
+       reach=PERSONAL, target=SELF, )
 def f1789(c: Cast) -> None:
-    """Rerolls every 1 on one named row's damage dice. `c.reroll_damage`
-    rolls the whole thing twice, which is a different and better
-    outcome, so it is not a substitute. One implement block wants the
-    same symbol."""
+    """Rerolls every 1 on one named row's damage dice.
 
+    `c.reroll_damage` is **not** this: it rolls the whole expression twice
+    and keeps the higher, which is a different and better outcome. Here each
+    1 is replaced on its own and the dice that were fine keep their faces.
 
+    Scoped by ref, so it is that row's damage and nothing else the character
+    rolls.
+    """
+    c.reroll_ones(ref="p9400")
 def _missed_with(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.attacker == me and ev.power == ref

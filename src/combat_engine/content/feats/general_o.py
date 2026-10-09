@@ -1324,7 +1324,7 @@ def f3121(c: Cast) -> None:
 
 
 @power("f3122", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones()",))
+       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones(group=)",))
 def f3122(c: Cast) -> None:
     """Axe is a real group, so the attack bonus plays. Rerolling a
     damage die that came up 1 is read where the dice are rolled, and

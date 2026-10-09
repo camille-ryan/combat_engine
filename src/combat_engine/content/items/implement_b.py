@@ -564,17 +564,23 @@ def i3345x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reroll_ones()",),
+    dropped=("c.reroll_ones(when=)",),
 )
 def i3374x1(c: Cast) -> None:
-    """Re-aimed. `p13799` is printed and declared, so the power the rider
-    hangs on is no longer the hold. What is left is the rider itself:
-    rerolling the ones out of a damage roll is not `c.reroll_damage`,
-    which rolls the whole expression twice and keeps the higher, and the
-    individual dice are gone by the time anything can see them. Same hold
-    as `i1076x1`."""
+    """A reroll of the ones on one named power's damage.
 
+    `p13799` is printed and declared, so the power the rider hangs on was
+    never the hold -- the rider itself was, and it is written now. Not
+    `c.reroll_damage`, which rolls the whole expression twice and keeps the
+    higher.
 
+    **The printed combat-advantage condition is not expressed**, and that is
+    the one clause still missing: the floor is read where the dice are
+    rolled, and nothing there is told whether the target was granting
+    advantage. So this rerolls that power's ones against anybody, which is
+    wider than the card. Named rather than dropped silently.
+    """
+    c.reroll_ones(ref="p13799")
 @power(
     "i3406p1",
     level=3,

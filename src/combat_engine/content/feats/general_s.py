@@ -1227,7 +1227,7 @@ def f3748(c: Cast) -> None:
 
 
 @power("f3749", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones()",))
+       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(sneak=)",))
 def f3749(c: Cast) -> None:
     """Rerolling ones in a damage expression is a property of the roll,
     and `c.reroll_damage` rolls the whole thing twice instead."""

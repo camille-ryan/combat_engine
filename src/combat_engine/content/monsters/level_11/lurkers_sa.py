@@ -816,7 +816,7 @@ def m2252a8(c: Cast) -> None:
     keywords=[Keyword.WEAPON, Keyword.POISON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("1d6", 5),
-    dropped=("c.reroll_ones()",),
+    
 )
 def m2346a0(c: Cast) -> None:
     """The secondary attack is against another defence, so it cannot live in
@@ -829,9 +829,10 @@ def m2346a0(c: Cast) -> None:
     link, because "instead of slowed" replaces the condition and nothing
     else.
 
-    "Reroll a result of 1 on the damage die" is the dropped clause: nothing
-    sets a floor under a single die of a rolled expression.
+    "Reroll a result of 1 on the damage die" is this row's own, so it is
+    scoped to this ref rather than to every roll the creature makes.
     """
+    c.reroll_ones(ref=c.ref)
     if not c.strike():
         return
     c.hit()
