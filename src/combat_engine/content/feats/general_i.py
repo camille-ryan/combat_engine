@@ -401,7 +401,7 @@ _divine("f1363", "insight", clauses={
     "p3687": _bloodied_allies_attack,
 })
 _divine("f1424", "arcana", also=_arcane_after,
-        dropped=("c.counts_as(keyword=)",))
+        dropped=("spec.associated_powers()",))
 _divine("f1426", "thievery", also=_next_big_attack)
 _divine("f1429", "stealth", clauses={
     "p7241": _conceal_self,

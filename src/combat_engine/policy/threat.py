@@ -528,6 +528,10 @@ def row_types(ref: str) -> tuple[DamageType, ...]:
             if kind is not DamageType.UNTYPED:
                 found.add(kind)
     named = {d.value: d for d in DamageType}
+    # **The header, for `durations.keywords_of`'s reason**: this takes a
+    # ref and no creature, so a granted keyword is invisible to the
+    # scorer. It is a threat *estimate* rather than a rule, so the cost is
+    # a slightly wrong score and never a wrong outcome. #483.
     for kw in p.keywords or ():
         hit = named.get(getattr(kw, "value", ""))
         if hit is not None and hit is not DamageType.UNTYPED:

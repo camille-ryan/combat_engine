@@ -19,6 +19,7 @@ from .types import (
     Condition,
     DamageType,
     Defense,
+    Keyword,
     Size,
     Team,
     modifier,
@@ -700,6 +701,19 @@ class Powers:
     dice: dict[str, list[tuple[str, Callable[[dict[str, Any]], bool] | None]]] = field(
         default_factory=dict
     )
+    #: Keywords a named row carries **for this creature only**, by ref.
+    #:
+    #: "Your `p1448` power is considered an arcane attack power", "your
+    #: `p11739` gains the reliable keyword" -- 12 feats print a sentence of
+    #: that shape, and a row's keywords are otherwise **header data**: one
+    #: tuple, fixed at import, shared by everybody who ever holds the row.
+    #: A feat cannot edit it without editing it for everybody.
+    #:
+    #: Read through `dsl.keywords_of`, never off `Power.keywords` directly.
+    #: That is the whole discipline here: there were 22 sites reading the
+    #: header, and a grant honoured at 21 of them is a modifier nothing
+    #: consults at the 22nd -- this component's commonest bug.
+    granted_keywords: dict[str, frozenset[Keyword]] = field(default_factory=dict)
     #: Clauses that may run *instead of* one named clause of a named row.
     #: Keyed `(ref, what)`, where `what` is the clause's own word --
     #: `"pull"`, `"shift"`, `"temp_hp"` -- chosen by the row that offers it.

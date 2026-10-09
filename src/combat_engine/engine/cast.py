@@ -355,6 +355,11 @@ class Cast:
                     and declared.level == 0
                     and declared.usage is _Usage.AT_WILL
                     and declared.action is ActionType.NONE
+                    # **The header on purpose, not `keywords_of`.** This is
+                    # identifying *which* row in the loadout is the monk's
+                    # at-will, by the shape it was declared with. A keyword
+                    # a feat granted to some other row must not make that
+                    # row answer to this search.
                     and _Kw.PSIONIC in declared.keywords):
                 return ref
         return ""
@@ -1275,7 +1280,7 @@ class Cast:
         """
         bonus = self.world.scaling.pc(self.stats.level) + self.stats.mod(a)
         p = self._declared()
-        weapon_power = p is None or Keyword.WEAPON in p.keywords
+        weapon_power = p is None or Keyword.WEAPON in self.keywords_of(p)
         gear = self.world.get(self.me, Gear)
         if gear is not None:
             if weapon_power and self._trained_with(gear, self._wielded()):
@@ -1321,7 +1326,7 @@ class Cast:
         if p is not None and p.reach.alt is not None:
             ranged = self.ranged
         else:
-            ranged = p is not None and Keyword.RANGED in p.keywords
+            ranged = p is not None and Keyword.RANGED in self.keywords_of(p)
         return gear.ranged if ranged and gear.ranged else gear.main
 
     def _enhancement_of(self, p: Power | None) -> int:
@@ -1335,7 +1340,7 @@ class Cast:
         gear = self.world.get(self.me, Gear)
         if gear is None:
             return 0
-        if p is not None and Keyword.IMPLEMENT in p.keywords:
+        if p is not None and Keyword.IMPLEMENT in self.keywords_of(p):
             arm = gear.implement
         else:
             arm = self._wielded()
@@ -1428,7 +1433,7 @@ class Cast:
         elif p is not None and p.reach.alt is not None:
             fires = self.ranged
         else:
-            fires = p is not None and Keyword.RANGED in p.keywords
+            fires = p is not None and Keyword.RANGED in self.keywords_of(p)
         if fires and gear.ranged is not None:
             weapon = gear.ranged
         return weapon
@@ -1454,7 +1459,7 @@ class Cast:
         is not a weapon attack, and a held weapon must not lend it anything.
         """
         p = self._declared()
-        if p is None or Keyword.WEAPON not in p.keywords:
+        if p is None or Keyword.WEAPON not in self.keywords_of(p):
             return 0
         weapon = self._swinging()
         if weapon is None or "high crit" not in weapon.properties:
@@ -1504,6 +1509,67 @@ class Cast:
             lambda: gear.counts_as.remove(pair) if pair in gear.counts_as else None
         )
         effect.on_resume.append(lambda: gear.counts_as.append(pair))
+        return effect
+
+    def keywords_of(self, p: Any) -> frozenset[Keyword]:
+        """This row's keywords **for this caster**, header plus granted.
+
+        A one-line hop to `dsl.keywords_of` so the eleven reads in this file
+        do not each have to import it and name `self.me`.
+        """
+        from .dsl import keywords_of
+
+        return keywords_of(self.world, self.me, p)
+
+    def counts_as_keyword(
+        self,
+        ref: str,
+        keyword: Keyword,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Your <row> is considered an arcane attack power."
+
+        A keyword this creature's copy of a named row carries, on top of
+        whatever the header declares. Read through `dsl.keywords_of` and
+        nowhere else -- a row's keywords are header data, one tuple shared
+        by everybody who holds the row, so a feat cannot edit it without
+        editing it for all of them.
+
+        The sibling of `counts_as`, which waives a *weapon* requirement.
+        Both are "X counts as Y", and they are separate verbs because they
+        touch different state and are read in different places: that one is
+        `Cast.wielding`, this one is 22 sites.
+        """
+        from .components import Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        was = known.granted_keywords.get(ref, frozenset())
+        if keyword in was:
+            return None
+
+        def lift() -> None:
+            known.granted_keywords[ref] = was
+            if not was:
+                known.granted_keywords.pop(ref, None)
+
+        # The effect first, as `forbid` and `rolls_with` do.
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref}: {ref} counts as {keyword.value}",
+        )
+        if effect is None:
+            return None
+        known.granted_keywords[ref] = was | {keyword}
+        # `on_suspend` only -- `Effects._lift` runs it on expiry too.
+        effect.on_suspend.append(lift)
+        effect.on_resume.append(
+            lambda: known.granted_keywords.__setitem__(ref, was | {keyword})
+        )
         return effect
 
     def wielding(self, prop: str) -> bool:
@@ -3358,7 +3424,7 @@ class Cast:
             and (bool(among) or p.level == level)
             and (bool(among) or p.usage is want)
             and (bool(among) or not attacks or p.attack is not None)
-            and (keyword is None or keyword in p.keywords)
+            and (keyword is None or keyword in self.keywords_of(p))
         ]
         if not pool:
             return ""
@@ -7842,7 +7908,7 @@ class Cast:
 
         p = get(self.ref)
         if p is not None:
-            for k in p.keywords:
+            for k in self.keywords_of(p):
                 best = max(best, self.total(f"reroll_damage_below:{k.value}"))
         return best
 
@@ -7861,7 +7927,8 @@ class Cast:
         if p is None:
             return False
         return any(
-            self.total(f"damage_twice_higher:{k.value}") > 0 for k in p.keywords
+            self.total(f"damage_twice_higher:{k.value}") > 0
+            for k in self.keywords_of(p)
         )
 
     # -- a hold changing hands -----------------------------------------------
@@ -8091,7 +8158,7 @@ class Cast:
         -2 to the target's attack rolls until the end of your next turn.
         """
         p = self._declared()
-        rattles = bool(p and Keyword.RATTLING in p.keywords)
+        rattles = bool(p and Keyword.RATTLING in self.keywords_of(p))
         if not rattles:
             rattles = bool(self.total("rattling")) or (
                 bool(self.total("rattling melee")) and not self.ranged
@@ -8802,7 +8869,7 @@ class Cast:
         p = self._declared()
         # `None` is a blow with no row behind it -- a hazard, a fall. It
         # has no keywords to fail the gate with, so it is not gated.
-        keywords = p.keywords if p is not None else None
+        keywords = self.keywords_of(p) if p is not None else None
         retype = self._retyped(keywords)
         if retype is not None:
             return retype

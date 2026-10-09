@@ -1788,6 +1788,35 @@ def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
     return tuple(n for n in p.augment_costs if n <= have)
 
 
+def keywords_of(world: Any, actor: int, p: Any) -> frozenset[Keyword]:
+    """Every keyword a row carries **for this creature**.
+
+    The declared tuple plus whatever a feat granted. Read this, never
+    `Power.keywords` directly: a row's keywords are header data -- one
+    tuple, fixed at import, shared by everybody who ever holds the row --
+    and 12 feats print "your <row> is considered an arcane attack power" or
+    "gains the reliable keyword", which a header cannot say for one
+    character only.
+
+    **There were 22 sites reading the header** across `cast`, `dsl`,
+    `resolve`, `triggers`, `durations`, `api/render` and `policy`. A grant
+    honoured at 21 of them is a modifier nothing consults at the 22nd,
+    which is this component's commonest bug, so they all come through here.
+
+    `p` may be None -- a basic attack has no declared row -- and an actor
+    with no `Powers` answers the header, which is every monster.
+    """
+    from .components import Powers
+
+    if p is None:
+        return frozenset()
+    declared = frozenset(p.keywords)
+    known = world.get(actor, Powers) if actor is not None else None
+    if known is None:
+        return declared
+    return declared | known.granted_keywords.get(p.ref, frozenset())
+
+
 def usable(
     world: World, actor: int, p: Power, *, dying: bool = False, spent_ok: bool = False,
     augment: int = 0, aimed: bool = False,
@@ -1848,7 +1877,7 @@ def usable(
     # eighty-four times, which turned a twelve-round win into a
     # thirty-round stalemate. The bug predates the two-handed weapon that
     # exposed it; no fighter the tree dealt could take those rows before.
-    if Keyword.STANCE in p.keywords:
+    if Keyword.STANCE in keywords_of(world, actor, p):
         standing = world.effects.stance_of(actor)
         if standing is not None and standing.label == p.ref:
             return False, "already in this stance"
@@ -2404,7 +2433,7 @@ def use(
     # Reliable: a daily that misses everything is not spent. The keyword was
     # declared and nothing read it, so the two fighter dailies that carry it
     # were costing a use per miss -- which is the entire point of the word.
-    if spend and Keyword.RELIABLE in p.keywords and not landed:
+    if spend and Keyword.RELIABLE in keywords_of(world, actor, p) and not landed:
         powers = world.get(actor, Powers)
         if powers is not None:
             powers.unuse(ref)

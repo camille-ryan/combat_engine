@@ -779,7 +779,7 @@ def f1015(c: Cast) -> None:
 
 
 @power("f923", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.counts_as(keyword=)",))
+       reach=PERSONAL, target=SELF, )
 def f923(c: Cast) -> None:
     """The extra die plays, as a rolled modifier narrowed to one ref --
     `c.bonus(dice=)` re-rolls it each time the modifier is read, which is
@@ -789,8 +789,8 @@ def f923(c: Cast) -> None:
         "damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER,
         when=among("p1766"),
     )
-
-
+    # Reliable, recorded against the creature -- see `f921`.
+    c.counts_as_keyword("p1766", Keyword.RELIABLE)
 # -- the undead-hunting riders, where a clause per power is printed ---------
 
 
@@ -854,7 +854,7 @@ _riders("f1102", {"p835": _p835_swarm, "p1758": _p1758, "p620": _p620},
 
 
 @power("f1103", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.counts_as(keyword=)",))
+       reach=PERSONAL, target=SELF, dropped=("query.creature_type(counts_as=)",))
 def f1103(c: Cast) -> None:
     """The Perception and Insight bonuses are checks. "You are considered
     a vampire for the purpose of effects that relate to vampires" is the
@@ -1318,7 +1318,7 @@ def f1061(c: Cast) -> None:
 
 @power("f921", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.counts_as(keyword=)",))
+       )
 def f921(c: Cast) -> None:
     """Gives one named power damage it does not print, and the keyword that
     hands it back on a miss.
@@ -1336,8 +1336,9 @@ def f921(c: Cast) -> None:
     can write. The row plays without it; it simply spends on a miss.
     """
     c.change_dice("p1767", "1d8")
-
-
+    # Reliable: recorded against the creature, because a row's keywords
+    # are header data shared by everyone who holds it.
+    c.counts_as_keyword("p1767", Keyword.RELIABLE)
 @power("f725", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
 def f725(c: Cast) -> None:

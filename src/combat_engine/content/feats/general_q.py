@@ -779,12 +779,16 @@ def f3201(c: Cast) -> None:
 
 
 @power("f3203", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(keyword=)",))
+       reach=PERSONAL, target=SELF, )
 def f3203(c: Cast) -> None:
-    """Adds a keyword to a named row. Keywords are header data read
-    before anything runs and no verb writes one onto a power."""
+    """Adds the reliable keyword to one named row.
 
-
+    Keywords are header data -- one tuple fixed at import and shared by
+    everybody who holds the row -- so this is recorded against the creature
+    and merged by `dsl.keywords_of`, which `dsl.use` reads when it decides
+    whether a miss spends the power.
+    """
+    c.counts_as_keyword("p11739", Keyword.RELIABLE)
 @power("f3204", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f3204(c: Cast) -> None:

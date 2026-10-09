@@ -1851,6 +1851,93 @@ def instead_now(out: Result) -> None:
     known = world.get(caster, Powers)
     out.that(known is not None, "and the board carries a Powers to register into")
 
+
+############################################################
+
+def granted_keywords(out: Result) -> None:
+    """A keyword one creature's copy of a row carries, and nobody else's.
+
+    A row's keywords are **header data**: one tuple, fixed at import, shared
+    by everybody who ever holds the row. 12 feats print "your <row> is
+    considered an arcane attack power" or "gains the reliable keyword",
+    which a header cannot say for one character only.
+
+    **The whole risk here is a site that still reads the header.** There
+    were 22 of them across `cast`, `dsl`, `resolve`, `triggers`,
+    `durations`, `api/render` and `policy`; a grant honoured at 21 is a
+    modifier nothing consults at the 22nd, which is this component's
+    commonest bug. 19 come through `dsl.keywords_of` now and the other
+    three are annotated where they sit, because each has a reason:
+
+    * `cast.py:358` is *identifying* which row in a loadout is the monk's
+      at-will by the shape it was declared with -- a granted keyword must
+      not make some other row answer that search;
+    * `durations.keywords_of(label)` and `policy.threat.row_types(ref)`
+      take a ref and no creature, so there is nothing to ask about. `f1538`
+      keeps a marker naming the first of those rather than being written
+      and quietly half-working.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, keywords_of
+    from combat_engine.engine.types import Keyword
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:kw")
+    row = REGISTRY["p11739"]
+
+    declared = frozenset(row.keywords)
+    out.that(keywords_of(world, caster, row) == declared,
+             "with nothing granted, the header is the whole answer")
+    out.that(keywords_of(world, None, row) == declared,
+             "and an actor of None answers the header rather than raising")
+    out.that(keywords_of(world, caster, None) == frozenset(),
+             "a basic attack has no declared row and answers empty")
+
+    held = c.counts_as_keyword("p11739", Keyword.RELIABLE)
+    out.that(held is not None, "a grant is laid as an effect")
+    out.that(Keyword.RELIABLE in keywords_of(world, caster, row),
+             "and the keyword is there for this creature")
+    # **Structurally true, not guarded.** `c.counts_as_keyword` never
+    # receives a `Power` at all -- it writes a dict on `Powers` -- so there
+    # is no line to plant that would make the header change. Asserted
+    # anyway, because it is the property the whole design exists for and a
+    # future rewrite that reached for `Power.keywords` would break it here.
+    out.that(Keyword.RELIABLE not in frozenset(row.keywords),
+             "**not on the header**, which everybody else still reads")
+    out.that(keywords_of(world, caster, REGISTRY["p1448"])
+             == frozenset(REGISTRY["p1448"].keywords),
+             "another row is untouched by it")
+
+    # A second creature on the same board does not get it.
+    others = [e for e in world.having(Powers) if e != caster]
+    if others:
+        out.that(Keyword.RELIABLE not in keywords_of(world, others[0], row),
+                 "and no other creature on the board has it")
+
+    # Laid twice is once: the set already holds it.
+    again = c.counts_as_keyword("p11739", Keyword.RELIABLE)
+    out.that(again is None, "granting the same keyword twice lays nothing")
+
+    # Suspension and ending (#470).
+    world.effects.suspend(held)
+    out.that(Keyword.RELIABLE not in keywords_of(world, caster, row),
+             "suspended, the grant lifts")
+    world.effects.resume(held)
+    out.that(Keyword.RELIABLE in keywords_of(world, caster, row),
+             "and comes back")
+    world.effects.end(held, "driver")
+    out.that(Keyword.RELIABLE not in keywords_of(world, caster, row),
+             "ended, the row is its printed self again")
+
+    # The rows this was built for.
+    for ref, on_ref, kw in (("f3203", "p11739", Keyword.RELIABLE),
+                            ("f921", "p1767", Keyword.RELIABLE),
+                            ("f2983", "p1448", Keyword.DIVINE)):
+        its_world, its_actor, _ = _board(ref)
+        got = keywords_of(its_world, its_actor, REGISTRY[on_ref])
+        out.that(kw in got, f"{ref} grants {kw.value} to {on_ref}")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1875,6 +1962,8 @@ DRIVERS = {
                  "the marker for work nobody intends to do"),
     "instead_now": (instead_now,
                     "a clause inside a watcher, replaced"),
+    "granted_keywords": (granted_keywords,
+                         "a keyword one creature's copy of a row carries"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

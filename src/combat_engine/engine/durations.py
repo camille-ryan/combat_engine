@@ -182,6 +182,12 @@ def keywords_of(label: str) -> frozenset:
     # raised `TypeError` -- and the audit board never lays a
     # keyword-bearing hold, so three rows written that way passed clean
     # and only a hand-driven board found it.
+    # **The header, because there is no creature here to ask about.** This
+    # takes a label and nothing else, so `dsl.keywords_of` cannot be used:
+    # a keyword a feat granted one character is invisible at this site.
+    # It matters for one row -- `f1538` grants `FEAR` to every attack, and
+    # a save against a fear effect reads this -- so `f1538` keeps a marker
+    # naming it rather than being written and quietly half-working. #483.
     return frozenset(p.keywords) if p is not None else frozenset()
 
 

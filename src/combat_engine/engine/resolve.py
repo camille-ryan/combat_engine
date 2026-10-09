@@ -566,7 +566,9 @@ def _long_range(
     from .types import Keyword
 
     p = get(power)
-    if p is None or Keyword.WEAPON not in p.keywords:
+    from .dsl import keywords_of
+
+    if p is None or Keyword.WEAPON not in keywords_of(world, attacker, p):
         return 0
     if p.reach_of(branch).kind != "ranged":
         return 0

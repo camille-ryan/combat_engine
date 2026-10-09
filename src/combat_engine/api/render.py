@@ -27,7 +27,7 @@ from combat_engine.engine import (
     usable,
 )
 from combat_engine.engine.actions import legal
-from combat_engine.engine.dsl import aim_points, area_of, candidates
+from combat_engine.engine.dsl import aim_points, area_of, candidates, keywords_of
 from combat_engine.engine.durations import When
 from combat_engine.engine.events import Event
 from combat_engine.engine.movement import risk_along
@@ -658,7 +658,7 @@ def _traits(session: Session, eid: int) -> list[dto.PowerDTO]:
                 cost=p.action.value,
                 usage="always on",
                 range_text=str(p.reach),
-                keywords=[k.value for k in p.keywords],
+                keywords=[k.value for k in keywords_of(session.world, eid, p)],
                 attack_text=None,
                 damage=printed.get("damage") or None,
                 requirement_text=printed.get("requirement") or p.requires_text or None,
@@ -726,7 +726,7 @@ def roster(session: Session, options: list[Action]) -> list[dto.PowerDTO]:
                 cost=p.action.value,
                 usage=p.usage.value + (f" {p.recharge}+" if p.recharge else ""),
                 range_text=str(p.reach),
-                keywords=[k.value for k in p.keywords],
+                keywords=[k.value for k in keywords_of(world, actor, p)],
                 attack_text=printed.get("attack") or (str(p.attack) if p.attack else None),
                 damage=printed.get("damage") or None,
                 requirement_text=printed.get("requirement") or p.requires_text or None,

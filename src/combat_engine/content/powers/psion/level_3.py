@@ -152,7 +152,7 @@ def p13317(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(INT, vs=FORT),
-    dropped=("c.counts_as(keyword=)", "c.confine(to=)"),
+    dropped=("c.confine(to=)",),
 )
 def p13318(c: Cast) -> None:
     """"Moves more than 2 squares" is measured from where it stood when its

@@ -1713,7 +1713,7 @@ def f2244(c: Cast) -> None:
        on=Trigger(DamageApplied, lambda w, me, ev: (
            ev.target == me and ev.amount > 0
        ), "you take damage"),
-       dropped=("c.counts_as(keyword=)", "cf:sorcerer-f0s1"))
+       dropped=("cf:sorcerer-f0s1",))
 def f2175(c: Cast) -> None:
     """The second half plays. p1448's type is `c.element`, which is where
     the racial choice is recorded and what p1448's own body rolls with,
@@ -1733,8 +1733,9 @@ def f2175(c: Cast) -> None:
     if c.trigger.dtype is not mine:
         return
     c.restore_use("p1448", on=me)
-
-
+    # "Considered an arcane attack power": a keyword this invoker's copy
+    # of the row carries, which `dsl.keywords_of` merges with the header.
+    c.counts_as_keyword("p1448", Keyword.ARCANE)
 @power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.deals(ref=)",))
 def f2179(c: Cast) -> None:

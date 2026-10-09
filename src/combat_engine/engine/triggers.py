@@ -613,8 +613,10 @@ def by_keyword(word: Keyword) -> Callable[[World, int, Event], bool]:
 
     def check(world: World, me: int, ev: Event) -> bool:
 
+        from .dsl import keywords_of
+
         p = _power_of(ev)
-        return p is not None and word in p.keywords
+        return p is not None and word in keywords_of(world, me, p)
 
     return check
 

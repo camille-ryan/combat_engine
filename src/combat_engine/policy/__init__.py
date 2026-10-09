@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from combat_engine.engine.actions import Action, legal, perform
 from combat_engine.engine.components import Gear, Health, Side
-from combat_engine.engine.dsl import get
+from combat_engine.engine.dsl import get, keywords_of
 from combat_engine.engine.events import DamageApplied, Event, OpportunityWindow, PowerUsed
 from combat_engine.engine.grid import distance
 from combat_engine.engine.query import alive, distance_between, enemies, speed
@@ -302,7 +302,8 @@ def features(
     # be able to learn when.
     if action.kind == "power" and action.ref:
         declared = get(action.ref)
-        if declared is not None and Keyword.STANCE in declared.keywords:
+        if declared is not None and Keyword.STANCE in keywords_of(
+                world, actor, declared):
             f["swaps_stance"] = float(world.effects.stance_of(actor) is not None)
 
     foes = [e for e in enemies(world, actor) if alive(world, e)]

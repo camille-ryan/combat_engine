@@ -483,7 +483,7 @@ def f1704(c: Cast) -> None:
 
 @power("f1751", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.counts_as(keyword=)",))
+       )
 def f1751(c: Cast) -> None:
     """Adds radiant to whatever `p1448` already deals -- "as well as", not
     "instead of", which is `DamageRolled.dtypes` and not `c.deals`. The
@@ -502,8 +502,8 @@ def f1751(c: Cast) -> None:
 
     c.watch(DamageRolled, gild, until=When.ENCOUNTER, on=me,
             window=Window.BEFORE, label=c.ref)
-
-
+    # The keyword half. The damage type half is written above.
+    c.counts_as_keyword("p1448", Keyword.RADIANT)
 @power("f1773", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use rt:r18-t3 to shift",

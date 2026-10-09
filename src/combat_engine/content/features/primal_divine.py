@@ -781,11 +781,20 @@ def invoker_covenant_card_b(c: Cast) -> None:
 _MANIFESTING = (Usage.ENCOUNTER, Usage.DAILY)
 
 
-def _manifests(ref: str) -> bool:
+def _manifests(c: Cast, ref: str) -> bool:
+    """Is this a row the covenant manifestation answers?
+
+    **Asks the creature, not the header.** `f2983` makes one invoker's
+    `p1448` count as a divine encounter attack power *for this purpose*,
+    and a keyword a feat granted is invisible to `Power.keywords` --
+    `dsl.keywords_of` is where the grant and the declaration are merged.
+    """
+    from combat_engine.engine.dsl import keywords_of
+
     p = get(ref)
     return (
         p is not None
-        and Keyword.DIVINE in p.keywords
+        and Keyword.DIVINE in keywords_of(c.world, c.me, p)
         and p.usage in _MANIFESTING
         and p.is_attack
     )
@@ -832,7 +841,7 @@ def invoker_covenant_curse(c: Cast) -> None:
     c.grant_row("p7150", on=me, until=When.ENCOUNTER)
 
     def after(ev: PowerResolved) -> None:
-        if ev.actor != me or c.turn_of() != me or not _manifests(ev.power):
+        if ev.actor != me or c.turn_of() != me or not _manifests(c, ev.power):
             return
         struck = [
             r.target
@@ -900,7 +909,7 @@ def invoker_covenant_wrath(c: Cast) -> None:
     c.forbid("cf:invoker-f1c0", until=When.ENCOUNTER, on=me)
 
     def before(ev: PowerUsed) -> None:
-        if ev.actor != me or c.turn_of() != me or not _manifests(ev.power):
+        if ev.actor != me or c.turn_of() != me or not _manifests(c, ev.power):
             return
         count = sum(1 for who in ev.targets if who in c.enemies())
         if count <= 0:

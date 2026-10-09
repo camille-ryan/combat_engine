@@ -935,7 +935,7 @@ def f2993(c: Cast) -> None:
         c.pre_empt(covenant, "manifest", stride, until=When.ENCOUNTER)
 @power("f2994", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(COUNTS_AS,),
+       dropped=("c.as_basic(ranged)",),
        trigger="you use p7441",
        on=Trigger(PowerUsed, _used("p7441"), "you use that racial power"))
 def f2994(c: Cast) -> None:
@@ -993,7 +993,7 @@ def f2997(c: Cast) -> None:
 
 
 @power("f1538", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(COUNTS_AS,))
+       reach=PERSONAL, target=SELF, todo=("durations.keywords_of(creature)",))
 def f1538(c: Cast) -> None:
     """Every attack gains the fear keyword after `p1628`. The power is a
     ref, so the whole hold is the keyword: nothing adds one to the rows a
@@ -1002,23 +1002,25 @@ def f1538(c: Cast) -> None:
 
 
 @power("f2983", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(COUNTS_AS,))
+       reach=PERSONAL, target=SELF, )
 def f2983(c: Cast) -> None:
     """Re-aimed: the racial power is `p1448` and it is declared, so the
     name is no longer the gap. `cf:invoker-f1` asks the header fields of
     the resolved row and nothing overrides those from outside, which is
     the one thing still missing. The skill bonus is a column."""
-
-
+    # "Counts as a divine encounter attack power for the purpose of your
+    # covenant manifestation": `_manifests` asks `dsl.keywords_of` now,
+    # so the grant is what it sees.
+    c.counts_as_keyword("p1448", Keyword.DIVINE)
 @power("f2177", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(COUNTS_AS, "c.reshape_area()"))
+       reach=PERSONAL, target=SELF, todo=("c.reshape_area()",))
 def f2177(c: Cast) -> None:
     """Two clauses, neither sayable. `p1448` is a ref but nothing makes one
     row count as divine, and turning a burst into a close blast 3 changes
     the header's `reach` for one use -- `c.widen_areas` grows an area and
     does not reshape one."""
-
-
+    # "Considered a divine attack power" -- the mirror of `f2175`.
+    c.counts_as_keyword("p1448", Keyword.DIVINE)
 @power("f3001", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=REROLL)
 def f3001(c: Cast) -> None:
