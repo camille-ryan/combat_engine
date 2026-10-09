@@ -129,6 +129,24 @@ class Effect:
     #: and a payout owed for choosing is not owed for waiting.
     drop_then: Callable[[], None] | None = None
     ended: bool = False
+    #: Lifted but not ended -- everything it installed is off the creature and
+    #: the effect is still standing, still clocked, still owed its saving
+    #: throw. The printed shape is "when it takes fire damage it loses this
+    #: trait until the start of its next turn": the trait does not *end*, or
+    #: an encounter-long duration would be spent by one hit, and the creature
+    #: would never get it back.
+    #:
+    #: Readers consult nothing. `suspend` runs the same teardown `end` runs,
+    #: so a suspended condition is absent from `Conditions`, a suspended mod
+    #: is out of `Mods`, and a suspended relation is cleared -- which is why
+    #: 325 importers of `query` did not have to learn the word.
+    suspended: bool = False
+    #: Hooks for state the effect holds that `apply` did not install -- a
+    #: label in `Movement.ignores`, a number in `Defences.vulnerable`. Those
+    #: verbs maintain their own side state, so they lift and restore it
+    #: themselves. An effect carrying only installed state needs neither.
+    on_suspend: list[Callable[[], None]] = field(default_factory=list)
+    on_resume: list[Callable[[], None]] = field(default_factory=list)
 
     def __str__(self) -> str:
         bits = [self.label or "effect", self.when.value]
@@ -199,6 +217,8 @@ class Effects:
         escalate: Callable[[Effect], None] | None = None,
         subs: Iterable[Sub] = (),
         on_end: Iterable[Callable[[], None]] = (),
+        on_suspend: Iterable[Callable[[], None]] = (),
+        on_resume: Iterable[Callable[[], None]] = (),
         sustain_cost: ActionType | None = None,
         drop_cost: ActionType | None = None,
     ) -> Effect:
@@ -274,6 +294,8 @@ class Effects:
             escalate=escalate,
             subs=list(subs),
             on_end=list(on_end),
+            on_suspend=list(on_suspend),
+            on_resume=list(on_resume),
             sustained=self.world.round,
             sustain_cost=sustain_cost,
             drop_cost=drop_cost,
@@ -288,13 +310,7 @@ class Effects:
         # them anyway, and the creature kept a modifier with no live effect
         # left to ever take it off. A permanent -2 to attack, from a save-ends
         # effect that had already been saved against.
-        for eid, mod in eff.mods:
-            holder = self.world.get(eid, Mods)
-            if holder is None:
-                holder = self.world.add(eid, Mods())
-            holder.items.append(mod)
-        for kind, s, t in eff.relations:
-            self.world.relations.set(kind, s, t)
+        self._install_state(eff)
 
         # Announced for every effect, not only the ones that impose a
         # condition. A save-ends effect carrying nothing but ongoing damage
@@ -308,14 +324,7 @@ class Effects:
         )
         self._warn_sustainless(eff)
 
-        conds = self.world.get(owner, Conditions)
-        for c in eff.conditions:
-            if conds is not None and conds.add(c):
-                self.world.bus.emit(
-                    ConditionApplied(
-                        source=source, target=owner, condition=c, duration=when.value
-                    )
-                )
+        self._install_conditions(eff, source, when.value)
 
         if when is When.INSTANT:
             self.end(eff, "instant")
@@ -359,14 +368,46 @@ class Effects:
         )
         return True
 
-    # -- ending --------------------------------------------------------------
+    # -- installing and lifting ----------------------------------------------
+    #
+    # Expiring an effect and suspending one remove exactly the same state. The
+    # only difference is whether the effect is still standing afterwards -- so
+    # one lift serves both, and that is the whole reason these are factored
+    # out. Two teardown paths that were *meant* to match is how a modifier
+    # gets left on a creature with no effect behind it, which this file has
+    # already paid for once.
 
-    def end(self, eff: Effect, why: str = "expired") -> None:
-        if eff.ended:
-            return
-        eff.ended = True
-        self.live.pop(eff.id, None)
+    def _install_state(self, eff: Effect) -> None:
+        """Lay the mods and relations. Called before the announce, see `apply`."""
+        for eid, mod in eff.mods:
+            holder = self.world.get(eid, Mods)
+            if holder is None:
+                holder = self.world.add(eid, Mods())
+            holder.items.append(mod)
+        for kind, s, t in eff.relations:
+            self.world.relations.set(kind, s, t)
 
+    def _install_conditions(self, eff: Effect, source: int, duration: str) -> None:
+        """Lay the conditions and announce each one that was not already held."""
+        conds = self.world.get(eff.owner, Conditions)
+        for c in eff.conditions:
+            if conds is not None and conds.add(c):
+                self.world.bus.emit(
+                    ConditionApplied(
+                        source=source, target=eff.owner, condition=c, duration=duration
+                    )
+                )
+
+    def _lift(self, eff: Effect, why: str) -> None:
+        """Take off everything the effect installed. It stays standing.
+
+        `on_suspend` runs here and **not** in `end`, which is what makes the
+        accounting exact: a verb holding side state of its own -- a label in
+        `Movement.ignores`, a number in `Defences.vulnerable` -- names its
+        undo once, and that undo runs once whether the effect is suspended or
+        expired. Put the same undo in both lists and `vulnerable 5` would
+        subtract ten.
+        """
         conds = self.world.get(eff.owner, Conditions)
         for c in eff.conditions:
             if conds is not None and conds.remove(c):
@@ -377,6 +418,53 @@ class Effects:
                 holder.items.remove(mod)
         for kind, s, t in eff.relations:
             self.world.relations.clear(kind, s, t, why)
+        for fn in eff.on_suspend:
+            fn()
+
+    def suspend(self, eff: Effect, why: str = "suspended") -> bool:
+        """Lift the effect without ending it. Returns whether anything moved.
+
+        "When it takes fire or radiant damage it loses this trait until the
+        start of its next turn" is this, and `end` is the wrong verb for it
+        twice over: the encounter-long duration would be spent by one hit, and
+        a save-ends hold would stop owing its saving throw.
+
+        The subscriptions stay registered and go quiet instead -- `Cast.watch`
+        checks the flag before running the handler -- because re-registering a
+        sub on resume would mean storing the event class and window to rebuild
+        it from, and a watcher that fires while suspended is the same bug as a
+        modifier that still applies.
+        """
+        if eff.ended or eff.suspended:
+            return False
+        eff.suspended = True
+        self._lift(eff, why)
+        return True
+
+    def resume(self, eff: Effect) -> bool:
+        """Put back what `suspend` lifted. Returns whether anything moved."""
+        if eff.ended or not eff.suspended:
+            return False
+        eff.suspended = False
+        self._install_state(eff)
+        self._install_conditions(eff, eff.source, eff.when.value)
+        for fn in eff.on_resume:
+            fn()
+        return True
+
+    # -- ending --------------------------------------------------------------
+
+    def end(self, eff: Effect, why: str = "expired") -> None:
+        if eff.ended:
+            return
+        eff.ended = True
+        self.live.pop(eff.id, None)
+
+        # **A suspended effect has already been lifted.** Lifting twice emits
+        # a second `ConditionEnded` for a condition nobody holds, and
+        # decrements a refcount another effect is relying on.
+        if not eff.suspended:
+            self._lift(eff, why)
         for sub in eff.subs:
             self.world.bus.off(sub)
         for fn in eff.on_end:

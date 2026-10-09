@@ -3471,10 +3471,16 @@ def m5907a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m5907a2(c: Cast) -> None:
-    c.regeneration(20, on=c.me)
+    """Regeneration 20, switched off for a turn by acid or fire."""
+    heals = c.regeneration(20, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.ACID, DamageType.FIRE} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(
@@ -4420,10 +4426,16 @@ def m6422a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6422a1(c: Cast) -> None:
-    c.regeneration(10, on=c.me)
+    """Regeneration 10, switched off for a turn by radiant damage."""
+    heals = c.regeneration(10, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and DamageType.RADIANT in {ev.dtype, *ev.dtypes},
+        for_=When.EONT,
+    )
 
 
 @power(

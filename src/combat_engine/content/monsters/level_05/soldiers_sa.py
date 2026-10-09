@@ -2874,13 +2874,16 @@ def m6040a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6512a0(c: Cast) -> None:
-    """Regeneration 5 plays. Suspending it for a turn after fire or acid
-    damage has no hook yet -- `c.regeneration(suspended_by=)` is the gap nine
-    other rows already wait on."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by fire or acid."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.FIRE, DamageType.ACID} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(

@@ -1996,10 +1996,16 @@ def m6530a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6530a2(c: Cast) -> None:
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by force or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.FORCE, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(

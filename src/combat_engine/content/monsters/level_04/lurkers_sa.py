@@ -110,6 +110,7 @@ from combat_engine.engine.events import (
     AttackDeclared,
     AttackRolled,
     Bloodied,
+    DamageApplied,
     Dropped,
     Hit,
     Miss,
@@ -1494,12 +1495,16 @@ def m6395a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6582a0(c: Cast) -> None:
-    """The healing works; the pause two damage types are printed as causing
-    has no hold to live on."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by cold or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.COLD, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(
@@ -1597,11 +1602,16 @@ def m6582a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6584a0(c: Cast) -> None:
-    """As its sibling: the healing works, the type-triggered pause does not."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by cold or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.COLD, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(

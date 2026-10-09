@@ -1146,9 +1146,14 @@ class Cast:
         if word in moves.ignores:
             return None
         moves.ignores.add(word)
+        # **`on_suspend`, not `on_end`.** `Effects._lift` runs this for an
+        # expiry *and* for a suspension, so the label comes off exactly once
+        # either way -- and "it ignores difficult terrain while raging" can
+        # switch off without spending the stance.
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} sure-footed",
-            on_end=[lambda: moves.ignores.discard(word)],
+            on_suspend=[lambda: moves.ignores.discard(word)],
+            on_resume=[lambda: moves.ignores.add(word)],
         )
 
     def speed_of(self, who: int | None = None) -> int:
@@ -2915,8 +2920,17 @@ class Cast:
                 else:
                     defences.vulnerable.pop(kind, None)
 
+        def redo() -> None:
+            for kind in kinds:
+                defences.vulnerable[kind] = defences.vulnerable.get(kind, 0) + amount
+
+        # `on_suspend` rather than `on_end` -- see `Effects._lift`. Naming
+        # `undo` in both lists would subtract the amount twice on an expiry
+        # that followed a suspension, and leave the creature *resistant* to
+        # the type it was vulnerable to.
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} vulnerable", on_end=[undo]
+            who, self.me, until, label=f"{self.ref} vulnerable",
+            on_suspend=[undo], on_resume=[redo],
         )
 
     def resist(
@@ -6131,6 +6145,7 @@ class Cast:
         until: When = When.ENCOUNTER,
         on: int | None = None,
         while_bloodied: bool = False,
+        unless: Callable[[], bool] | None = None,
     ) -> Effect:
         """Heal this much at the start of each of that creature's turns.
 
@@ -6141,6 +6156,14 @@ class Cast:
 
         `while_bloodied` is the commoner printed form of the two: a
         regenerating monster usually only does it while hurt.
+
+        `unless` reads *state* at the moment of the tick, and is the other
+        printed shape -- "if it starts its turn on the ground, its
+        regeneration does not function that turn". Distinct from
+        `c.suspend_when`, which is the *event* shape and switches the whole
+        effect off until a stated clock: one stat block prints both clauses
+        and needs both, so collapsing them into one kwarg would have made
+        either clause unsayable on the row that wants the pair.
 
         **`ev.ghost` matters.** A ghost turn is the engine looking ahead,
         not a turn happening, and healing on one pays out for free every
@@ -6154,6 +6177,8 @@ class Cast:
             if ev.actor != who or ev.ghost:
                 return
             if while_bloodied and not self.bloodied(on=who):
+                return
+            if unless is not None and unless():
                 return
             self.heal(amount, on=who)
 
@@ -6237,6 +6262,14 @@ class Cast:
         holder: list[Effect] = []
 
         def fire(ev: Any) -> None:
+            # **A suspended effect's watcher does nothing.** Suspension lifts
+            # installed state by itself, but a verb built out of `watch` holds
+            # no installed state at all -- its whole effect is this handler --
+            # so without the guard "its regeneration does not function" would
+            # suspend an effect that went on healing. One check here covers
+            # every watcher-shaped verb in the surface.
+            if holder and holder[0].suspended:
+                return
             before = len(self.world.bus.log)
             held = len(self.world.effects.live)
             fn(ev)
@@ -6260,6 +6293,76 @@ class Cast:
         )
         holder.append(effect)
         return effect
+
+    def suspend_when(
+        self,
+        held: Effect | None,
+        event: type[Event],
+        pred: Callable[[Any], bool] | None = None,
+        *,
+        for_: When = When.SONT,
+        label: str = "",
+    ) -> Effect | None:
+        """Switch an effect off when something happens, and back on later.
+
+        The printed sentence is "**when** it takes fire or radiant damage, it
+        loses this trait **until** the start of its next turn", and it is said
+        about regeneration, insubstantial, a vulnerability, an invisibility and
+        a terrain-ignoring stance -- the same clause attached to five different
+        traits, which is why this is one verb rather than a `suspended_by=` on
+        each of them.
+
+        **Not `c.effect(...)` plus an end.** Ending the trait spends its
+        duration: an encounter-long regeneration would be gone for good after
+        one hit, and a save-ends hold would stop owing its saving throw. The
+        trait comes back.
+
+        `for_` is clocked on whoever holds the effect, so the default
+        `When.SONT` is *its* next turn, which is what the cards say. A second
+        trigger while it is already off is ignored: "until the start of its
+        next turn" said twice is one deadline, and it is the same deadline,
+        because the clock does not depend on when the sentence was said.
+
+        Returns the watcher, so a row can end the arrangement without ending
+        the trait. `None` if there is no effect to suspend, which is what
+        every `Cast` verb that can decline does.
+        """
+        if held is None:
+            return None
+        who = held.owner
+        timer: list[Effect] = []
+
+        def _arm(ev: Any) -> None:
+            if held.ended or (pred is not None and not pred(ev)):
+                return
+            # **A second trigger while it is already off does nothing.**
+            # `for_` is one clock on one creature, so a timer laid now and a
+            # timer laid three events ago reach the same deadline -- which
+            # makes this a guard against *accumulation*, not against a wrong
+            # answer, and the plant test says so: removing it leaves the
+            # driver green because five timers all resume at the same moment
+            # and four of the five resumes are no-ops.
+            #
+            # Kept anyway, and asserted on the count rather than the
+            # behaviour. Five live effects nobody can see is a slow leak, and
+            # `watch` reads `len(effects.live)` to decide whether a `once=`
+            # handler did anything -- so an arming that quietly laid an
+            # effect would spend an unrelated once-only row's hold.
+            if timer and not timer[0].ended:
+                return
+            self.world.effects.suspend(held)
+            timer[:] = [
+                self.world.effects.apply(
+                    who, who, for_,
+                    label=label or f"{self.ref} suspended",
+                    on_end=[lambda: self.world.effects.resume(held)],
+                )
+            ]
+
+        return self.watch(
+            event, _arm, until=When.ENCOUNTER, on=who,
+            label=label or f"{self.ref} suspends {held.label}",
+        )
 
     # -- areas ---------------------------------------------------------------
 

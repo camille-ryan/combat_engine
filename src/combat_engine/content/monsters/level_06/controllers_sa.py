@@ -2517,13 +2517,21 @@ def m5087a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.HEALING],
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m5087a1(c: Cast) -> None:
-    """The regeneration plays. Suspending it for a turn after acid or fire
-    damage is the gap `c.regeneration(suspended_by=)` already names eleven
-    times over."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by acid or fire.
+
+    The pause is `c.suspend_when` and not an end-and-relay: the trait is
+    encounter-long, so ending it would spend it on the first splash of acid
+    and it would never come back.
+    """
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.ACID, DamageType.FIRE} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(

@@ -109,6 +109,7 @@ from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
     ConditionApplied,
+    DamageApplied,
     DamageRolled,
     Dropped,
     Hit,
@@ -3426,14 +3427,16 @@ def m6555a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6578a0(c: Cast) -> None:
-    """The healing works; the switch that turns it off for a round does not.
-    `c.regeneration` has no way to be suspended by a damage type, and a watch
-    that ended and re-laid the whole effect would lose the clock it hangs on.
-    """
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by cold or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.COLD, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(
@@ -3498,11 +3501,16 @@ def m6578a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6585a0(c: Cast) -> None:
-    """As its sibling: the healing works, the type-triggered pause does not."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    """Regeneration 5, switched off for a turn by cold or fire."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.COLD, DamageType.FIRE} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(

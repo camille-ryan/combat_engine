@@ -450,11 +450,223 @@ def lighting(out: Result) -> None:
              "a carried light brightens the square it stands in")
 
 
+
+############################################################
+
+def suspension(out: Result) -> None:
+    """A trait switched off by a hit and back on at the stated time.
+
+    The printed clause is the same on five different traits -- "when it takes
+    fire or radiant damage it **loses this trait until the start of its next
+    turn**" -- and it is said about insubstantial, regeneration, a
+    vulnerability, an invisibility and a terrain-ignoring stance. So what is
+    asserted here is the one mechanism under all of them.
+
+    **The three negative controls are the whole point**, because every one of
+    them is a bug a positive-only driver would pass over:
+
+    * the effect must still be *standing* while it is off. `end` would read
+      correctly from outside -- the trait is gone -- and spend an
+      encounter-long duration on one hit, so the creature never gets it back
+      and no saving throw is ever owed.
+    * a watcher-shaped trait must go quiet. Suspension lifts installed state,
+      and `c.regeneration` installs none: its whole effect is a handler. It
+      healed right through the first draft of this.
+    * expiring a suspended effect must not lift twice. `c.vulnerable` adds a
+      number to a dict, and subtracting it on both the suspend and the expiry
+      leaves the creature *resistant* to the type it was vulnerable to --
+      which is the printed rule inverted, and silently.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health, Movement
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageApplied, TurnStart
+    from combat_engine.engine.query import takes_half
+    from combat_engine.engine.types import DamageType
+
+    # -- installed state: a condition ---------------------------------------
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+
+    out.that(not takes_half(world, caster), "nobody starts insubstantial")
+    thin = c.insubstantial(on=caster, until=When.ENCOUNTER)
+    out.that(takes_half(world, caster), "and the trait goes on")
+
+    world.effects.suspend(thin)
+    out.that(not takes_half(world, caster), "suspending takes the trait off")
+    out.that(not thin.ended and thin.id in world.effects.live,
+             "and the effect is STILL STANDING -- it was not ended")
+    out.that(thin.when is When.ENCOUNTER,
+             "so the encounter-long duration was not spent by one hit")
+
+    world.effects.resume(thin)
+    out.that(takes_half(world, caster), "resuming puts the trait back")
+
+    # Suspending what is already suspended must not double-lift: the
+    # refcount in `Conditions` is shared with every other effect imposing
+    # the same condition.
+    world.effects.suspend(thin)
+    out.that(not world.effects.suspend(thin), "a second suspend does nothing")
+    world.effects.resume(thin)
+    out.that(not world.effects.resume(thin), "and a second resume does nothing")
+    out.that(takes_half(world, caster), "the trait survived both no-ops")
+
+    # -- side state: a number in a dict -------------------------------------
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+
+    def vuln() -> int:
+        held = world.get(caster, Defences)
+        return held.vulnerable.get(DamageType.FIRE, 0) if held else 0
+
+    weak = c.vulnerable(5, DamageType.FIRE, until=When.ENCOUNTER, on=caster)
+    out.that(vuln() == 5, "vulnerable 5 fire", f"{vuln()}")
+    world.effects.suspend(weak)
+    out.that(vuln() == 0, "suspended, the vulnerability is gone", f"{vuln()}")
+    world.effects.resume(weak)
+    out.that(vuln() == 5, "and comes back at 5, not 10", f"{vuln()}")
+    world.effects.end(weak, "driver")
+    out.that(vuln() == 0, "and a plain expiry still clears it", f"{vuln()}")
+
+    # -- the double-lift control, aimed at where it can actually show -----
+    #
+    # **Written twice.** The first version expired a suspended
+    # `c.vulnerable` and asserted the number had not gone to -5. It passed
+    # with the guard deliberately removed, because `undo` pops the key
+    # instead of writing a negative -- so the check was asserting something
+    # true either way, which is the one thing a driver must not do.
+    #
+    # Where a double lift *does* show is `Conditions`, which is a refcount
+    # shared by every effect imposing the same condition: lift one effect
+    # twice and the second effect's hold is gone, while the second effect is
+    # still standing and still owed its saving throw. Two sources of the
+    # same condition is the board this needs.
+    world, caster, _ = _board()
+    first = Cast(world=world, me=caster, ref="drivers:suspension:a")
+    second = Cast(world=world, me=caster, ref="drivers:suspension:b")
+    one = first.insubstantial(on=caster, until=When.ENCOUNTER)
+    two = second.insubstantial(on=caster, until=When.ENCOUNTER)
+    out.that(takes_half(world, caster), "two effects impose the one condition")
+
+    world.effects.suspend(one)
+    out.that(takes_half(world, caster),
+             "suspending one leaves the OTHER effect's hold standing")
+    world.effects.end(one, "driver")
+    out.that(takes_half(world, caster),
+             "and expiring it does not lift the refcount a second time")
+    out.that(not two.ended, "the second effect never ended")
+
+    world.effects.end(two, "driver")
+    out.that(not takes_half(world, caster), "the last source ending does clear it")
+
+    # -- side state: a label in a set ---------------------------------------
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+
+    def ignores() -> set:
+        held = world.get(caster, Movement)
+        return set(held.ignores) if held else set()
+
+    sure = c.ignores_difficult(on=caster, until=When.ENCOUNTER)
+    out.that("*" in ignores(), "the terrain label goes on")
+    world.effects.suspend(sure)
+    out.that("*" not in ignores(), "suspension lifts it")
+    world.effects.resume(sure)
+    out.that("*" in ignores(), "and resuming restores it")
+
+    # -- a watcher-shaped trait ---------------------------------------------
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+    vital = world.get(caster, Health)
+    vital.hp = max(1, vital.max_hp - 20)   # room to heal into
+
+    def hp() -> int:
+        return world.get(caster, Health).hp
+
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=caster)
+    was = hp()
+    world.bus.emit(TurnStart(actor=caster, round=world.round))
+    out.that(hp() > was, "regeneration heals on a turn start",
+             f"{was} -> {hp()}")
+
+    world.effects.suspend(heals)
+    was = hp()
+    world.bus.emit(TurnStart(actor=caster, round=world.round))
+    out.that(hp() == was,
+             "a SUSPENDED watcher does nothing -- it installs no state",
+             f"{was} -> {hp()}")
+
+    world.effects.resume(heals)
+    was = hp()
+    world.bus.emit(TurnStart(actor=caster, round=world.round))
+    out.that(hp() > was, "and heals again once resumed",
+             f"{was} -> {hp()}")
+
+    # -- the verb, end to end, clock and all --------------------------------
+    #
+    # **The suspending event must not be `TurnStart`**, which an earlier
+    # version of this used for both halves -- so the one event that resumed
+    # the trait also re-suspended it, and a `suspend_when` wired to resume
+    # *nothing at all* passed every assertion in this driver. Found by
+    # plant-testing, not by reading. A damage event for the trigger and a
+    # turn start for the clock keeps the two separable.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+    thin = c.insubstantial(on=caster, until=When.ENCOUNTER)
+
+    def burn(kind: DamageType) -> None:
+        world.bus.emit(DamageApplied(
+            source=caster, target=caster, amount=1, dtype=kind,
+            absorbed=0, hp=1, detail="drivers:suspension",
+        ))
+
+    c.suspend_when(
+        thin, DamageApplied,
+        lambda ev: ev.target == caster and ev.dtype is DamageType.FIRE,
+        for_=When.SONT,
+    )
+    out.that(takes_half(world, caster), "the trait is on before anything fires")
+
+    burn(DamageType.COLD)
+    out.that(takes_half(world, caster),
+             "a damage type the predicate REFUSES does not suspend it")
+
+    burn(DamageType.FIRE)
+    out.that(not takes_half(world, caster), "the named type does")
+    out.that(not thin.ended, "and still without ending the trait")
+
+    world.bus.emit(TurnStart(actor=caster, round=world.round))
+    out.that(takes_half(world, caster),
+             "and it is back at the START OF ITS NEXT TURN -- the clock")
+
+    # A second trigger while it is already off re-ups the one deadline. The
+    # dropped timer must resume nothing, or the trait would come back the
+    # instant the old clock ran out.
+    burn(DamageType.FIRE)
+    out.that(not takes_half(world, caster), "a later hit suspends it again")
+    standing = len(world.effects.live)
+    burn(DamageType.FIRE)
+    burn(DamageType.FIRE)
+    burn(DamageType.FIRE)
+    out.that(not takes_half(world, caster),
+             "more hits while it is off do not resume it")
+    # Asserted on the count because the behaviour cannot tell the two apart:
+    # five timers all come due at the same turn start and four of the five
+    # resumes are no-ops, so a plant that removed the guard stayed green.
+    # What a missing guard really costs is effects nobody can see.
+    out.that(len(world.effects.live) == standing,
+             "and lay no second timer -- one deadline, one effect",
+             f"{len(world.effects.live)} live against {standing}")
+    world.bus.emit(TurnStart(actor=caster, round=world.round))
+    out.that(takes_half(world, caster), "and one turn start is still enough")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),
     "hiding": (hiding, "attacking gives you away, and AFTER is where you get it back"),
+    "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

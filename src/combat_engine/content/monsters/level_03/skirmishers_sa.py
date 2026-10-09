@@ -3206,15 +3206,30 @@ def m6567a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6577a0(c: Cast) -> None:
-    """Healing only while it is off the ground, which `c.height` can answer.
+    """Regeneration 5 while airborne, switched off for a turn by psychic.
 
-    What it cannot answer is the other half: a kind of damage that switches
-    regeneration off for the following turn. Nothing holds a suspension, so
-    that clause is named."""
-    _regenerates(c, 5, airborne=True)
+    **Two printed clauses and they are different mechanisms**, which is why
+    the row says both and not one:
+
+    * on the ground it heals nothing *that* turn -- state, read at the tick,
+      so `unless=`. Nothing is switched off; the next turn in the air heals
+      normally.
+    * psychic damage switches the trait off for the whole of its next turn --
+      an event with a clock, so `c.suspend_when` with `When.EONT`. `SONT`
+      would be wrong: the suspension has to still be standing when the turn
+      *starts*, which is the moment the healing would happen.
+    """
+    heals = c.regeneration(
+        5, until=When.ENCOUNTER, on=c.me, unless=lambda: c.height(on=c.me) == 0
+    )
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and DamageType.PSYCHIC in {ev.dtype, *ev.dtypes},
+        for_=When.EONT,
+    )
 
 
 @power(
@@ -3280,12 +3295,16 @@ def m6577a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6580a0(c: Cast) -> None:
-    """Regeneration plays; nothing holds the suspension two damage types
-    are printed as causing."""
-    c.regeneration(5)
+    """Regeneration 5, switched off for a turn by cold or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.COLD, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(
@@ -3354,12 +3373,16 @@ def m6580a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6583a0(c: Cast) -> None:
-    """Regeneration plays; nothing holds the suspension two damage types
-    are printed as causing."""
-    c.regeneration(5)
+    """Regeneration 5, switched off for a turn by fire or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.FIRE, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(

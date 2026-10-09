@@ -124,6 +124,7 @@ from combat_engine.engine.events import (
     AdjacencyLost,
     AttackRolled,
     Bloodied,
+    DamageApplied,
     DamageRolled,
     Dropped,
     Hit,
@@ -3204,13 +3205,16 @@ def m6561a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6581a0(c: Cast) -> None:
-    """The healing is exact. The suspension -- two damage types that switch it
-    off for one turn -- is the clause with nowhere to live: `c.regeneration`
-    takes an amount and a bloodied gate and nothing about what stops it."""
-    c.regeneration(5, on=c.me)
+    """Regeneration 5, switched off for a turn by fire or psychic."""
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.suspend_when(
+        heals, DamageApplied,
+        lambda ev: ev.target == c.me
+        and bool({DamageType.FIRE, DamageType.PSYCHIC} & {ev.dtype, *ev.dtypes}),
+        for_=When.EONT,
+    )
 
 
 @power(
