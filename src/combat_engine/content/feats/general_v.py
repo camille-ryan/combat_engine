@@ -746,20 +746,21 @@ def f3499(c: Cast) -> None:
 
 @power("f3500", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(group=)",),
+       
        proficiency=("w3601",))
 def f3500(c: Cast) -> None:
-    """One absence, three times over.
+    """A quarterstaff where the rogue rows ask for a light blade.
 
-    Both features are declared rows and neither is the hold:
-    `cf:rogue-scoundrel-f4` carries a `requires=` that asks for a light
-    blade, a crossbow or a sling, and `cf:rogue-scoundrel-f1s3` is
-    already waiting on this same symbol. Widening either to a staff,
-    and letting the rows that print "requires a light blade" accept
-    one, is the same missing thing: nothing says a weapon counts as a
-    group it is not in. The proficiency is a column and is declared."""
+    One waiver answers all three places the old note listed:
+    `cf:rogue-scoundrel-f4`'s `requires=` asks for a light blade, a
+    crossbow or a sling and is checked through `c.wielding`; so is every
+    rogue power printing the same line. Waiving it once covers them.
 
-
+    By slug rather than by group -- a quarterstaff's group is `staff`, and
+    waiving the whole staff group would let a card naming any other staff
+    through as well.
+    """
+    c.counts_as("light blade", holding="quarterstaff")
 def _proned_by_me(world: Any, me: int, ev: Any) -> bool:
     return (
         ev.source == me

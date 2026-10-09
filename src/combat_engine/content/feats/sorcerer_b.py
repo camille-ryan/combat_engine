@@ -381,21 +381,20 @@ def f2026(c: Cast) -> None:
 
 @power("f3433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, proficiency=("w3643", "w3619"),
-       todo=("c.counts_as(group=)",))
+       )
 def f3433(c: Cast) -> None:
-    """Re-aimed, and half of it lands.
+    """Proficiency with two superior light blades, and both count as daggers.
 
-    Proficiency is header data, not a body: `Power.proficiency` is what
-    `chargen` reads when the character is built, and both weapons are in
-    the table -- so the half that says "you may carry these" is written
-    and the row plays.
+    Proficiency is header data rather than a body: `Power.proficiency` is
+    what `chargen` reads when the character is built, and both weapons are
+    in the table.
 
-    What is dropped is the casting clause. `Weapon.group` is a plain
-    string on the component and nothing rewrites one, so a light blade
-    cannot be made to answer a dagger's Requirement.
+    The casting clause is written now. "Treat them as daggers" is a waiver
+    by **slug** -- a dagger is one weapon rather than a group, and both of
+    these are already light blades, so a group waiver would say nothing.
     """
-
-
+    for blade in ("kukri", "katar"):
+        c.counts_as("dagger", holding=blade)
 # -- the parity the engine cannot hear --------------------------------------
 
 

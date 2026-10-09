@@ -166,7 +166,6 @@ def _weapon_swung(world: World, eid: int, ctx: dict[str, Any]) -> Weapon | None:
     # is the only moment the clause can happen in -- `f2783` is the same shape. The
     # marker named it as missing and it had arrived.
     proficiency=("w3593", "w3596"),
-    dropped=("c.counts_as(group=)",),
 )
 def rogue_tactic_bludgeon(c: Cast) -> None:
     """Three clauses; two land and the middle one does not.
@@ -188,6 +187,9 @@ def rogue_tactic_bludgeon(c: Cast) -> None:
     reaches.
     """
     me = c.me
+    # One waiver, not two: a club and a mace are both group `mace`, so
+    # naming the group covers the pair the card names.
+    c.counts_as("light blade", holding="mace")
 
     def bludgeoning_and_rattling(ctx: dict[str, Any]) -> bool:
         declared = get(ctx.get("power") or "")

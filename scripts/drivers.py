@@ -1602,6 +1602,83 @@ def reroll_low(out: Result) -> None:
     world7.effects.end(eff, "driver")
     out.that(c7._reroll_floor() == 0, "ended, the dice are ordinary again")
 
+
+############################################################
+
+def counts_as(out: Result) -> None:
+    """"You can use a warhammer with any power that requires a light blade."
+
+    16 feats print a sentence of that shape. The Requirement they waive is
+    checked in exactly one place -- `Cast.wielding`, which 78 content rows
+    call -- so one waiver covers every row that asks, and the waiver is a
+    fact about the character rather than about any of the powers it unlocks.
+    That is why it cannot sit in a header: the same rogue power is reachable
+    with a light blade by everybody and with a hammer only by whoever took
+    the feat.
+
+    **The slug is matched on the waiver side only.** Several of these cards
+    name one weapon rather than a group, and a warhammer has no group of its
+    own to be named by -- but widening `wielding`'s own test would quietly
+    let some of its 78 callers through on a weapon their card never
+    mentioned.
+    """
+    from combat_engine.engine.cast import Cast, _weapon_is
+    from combat_engine.engine.components import Gear, Weapon
+
+    hammer = Weapon(ref="w:hammer", slug="warhammer", group="hammer",
+                    category="military", properties=frozenset({"versatile"}))
+    out.that(_weapon_is(hammer, "hammer"), "a weapon answers to its group")
+    out.that(_weapon_is(hammer, "military"), "and to its category")
+    out.that(_weapon_is(hammer, "versatile"), "and to a property")
+    out.that(_weapon_is(hammer, "warhammer"), "and to its printed slug")
+    out.that(not _weapon_is(hammer, "light blade"), "and to nothing else")
+    out.that(not _weapon_is(hammer, ""), "an empty word matches nothing")
+
+    world, caster, _ = _board("p5330")
+    gear = world.get(caster, Gear) or world.add(caster, Gear())
+    gear.weapons = [hammer]
+    gear.stowed = set()
+    c = Cast(world=world, me=caster, ref="drivers:counts")
+
+    out.that(c.wielding("hammer"), "the printed Requirement passes as it always did")
+    out.that(not c.wielding("light blade"),
+             "and a Requirement it does not meet still refuses")
+
+    held = c.counts_as("light blade", holding="warhammer")
+    out.that(held is not None, "a waiver is laid as an effect")
+    out.that(c.wielding("light blade"),
+             "now the hammer satisfies a light-blade Requirement")
+    out.that(c.wielding("hammer"),
+             "and what it actually is still satisfies its own")
+    out.that(not c.wielding("crossbow"),
+             "a waiver does not open every other Requirement")
+
+    # Keyed on what is in hand, not on the character: swap the weapon and
+    # the waiver stops applying.
+    sword = Weapon(ref="w:sword", slug="longsword", group="heavy blade",
+                   category="military")
+    gear.weapons = [sword]
+    out.that(not c.wielding("light blade"),
+             "holding something else, the waiver does not fire")
+    gear.weapons = [hammer]
+    out.that(c.wielding("light blade"), "and fires again with the hammer back")
+
+    # Two waivers, because two of these cards name a pair of weapons.
+    c.counts_as("crossbow", holding="hammer")
+    out.that(c.wielding("light blade") and c.wielding("crossbow"),
+             "two waivers on one weapon both stand")
+
+    # Suspension and ending (#470).
+    world.effects.suspend(held)
+    out.that(not c.wielding("light blade"), "suspended, the waiver lifts")
+    out.that(c.wielding("crossbow"), "and leaves the other standing")
+    world.effects.resume(held)
+    out.that(c.wielding("light blade"), "and comes back")
+    world.effects.end(held, "driver")
+    out.that(not c.wielding("light blade"),
+             "ended, the printed Requirement refuses again")
+    out.that(c.wielding("hammer"), "and the weapon is still what it is")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1620,6 +1697,8 @@ DRIVERS = {
                 "taking a weapon up, and what it costs"),
     "reroll_low": (reroll_low,
                    "each damage die that shows a 1, rolled again"),
+    "counts_as": (counts_as,
+                  "what is in hand standing in for what a card asks"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

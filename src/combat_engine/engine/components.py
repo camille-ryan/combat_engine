@@ -1009,6 +1009,20 @@ class Gear:
     #: weapon, which is what two of the three rows mean; the third is "draw
     #: and attack with a dagger", one weapon and not the rest.
     draw_only: str = ""
+    #: Weapon-requirement waivers: `(holding, satisfies)` pairs.
+    #:
+    #: "You can use a warhammer with any power that normally requires a
+    #: light blade" -- 16 feats print a sentence of that shape, and the
+    #: requirement they waive is checked in exactly one place,
+    #: `Cast.wielding`. So the waiver is a fact about the character rather
+    #: than about any of the powers it unlocks, which is why it cannot sit
+    #: in a header: the same rogue power is reachable with a light blade by
+    #: everybody and with a hammer only by whoever took the feat.
+    #:
+    #: `holding` is matched the way `wielding` matches a Requirement -- a
+    #: property, a group, a category -- **plus the printed slug**, because
+    #: several of these cards name one weapon rather than a group.
+    counts_as: list[tuple[str, str]] = field(default_factory=list)
     #: The weapons this creature is **trained** with, by ref -- its chassis's
     #: printed lines plus whatever its feats and its race opened up.
     #:

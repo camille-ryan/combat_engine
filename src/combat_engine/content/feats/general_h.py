@@ -630,7 +630,7 @@ def f1255b(c: Cast) -> None:
 
 
 @_trait("f1277", todo=("c.weapon_range()", "c.counts_as(property=)",
-                       "c.counts_as(group=)"),
+),
         proficiency=("w3662",))
 def f1277(c: Cast) -> None:
     """The proficiency lands. What is left is the clauses that rewrite
@@ -707,7 +707,7 @@ def f1279b(c: Cast) -> None:
 
 
 @_trait("f1288", usage=AT_WILL, proficiency=("w3663",),
-        dropped=("c.two_handed()", "c.counts_as(group=)"))
+        dropped=("c.two_handed()",))
 def f1288(c: Cast) -> None:
     """The proficiency lands and the penalty hangs on the grab being made
     while that weapon is in hand -- `RelationSet` is the only event that

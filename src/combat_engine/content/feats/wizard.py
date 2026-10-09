@@ -148,15 +148,23 @@ def f1134(c: Cast) -> None:
 
 
 @power("f1128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(group=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.counts_as(enhancement=)",))
 def f1128(c: Cast) -> None:
-    """Lets one weapon be an implement for this class, with its
-    enhancement but not its proficiency. `c.as_implement` rewrites the
-    group outright, which would hand over the proficiency too -- the
-    printed line is narrower than the verb. Same symbol the rogue's
-    f799 wants."""
+    """A longsword as an implement for this class's powers.
 
+    The waiver answers the half that is checked through `c.wielding` -- a
+    row asking whether an implement is in hand. That is narrower than
+    `c.as_implement`, which rewrites the weapon's group outright and would
+    hand over the proficiency the card withholds.
 
+    **Two clauses are still missing and are named rather than implied.**
+    The longsword adding its enhancement bonus to implement attack and
+    damage rolls is a separate thing from counting as one -- an implement's
+    enhancement is read off the implement, not off whatever is standing in
+    for it -- and "you do not gain its proficiency bonus" is the withholding
+    this waiver does not perform.
+    """
+    c.counts_as("implement", holding="longsword")
 @power("f276", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def f276(c: Cast) -> None:

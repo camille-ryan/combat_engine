@@ -1466,6 +1466,46 @@ class Cast:
 
         return get(self.ref)
 
+    def counts_as(
+        self,
+        satisfies: str,
+        *,
+        holding: str,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can use a warhammer with any power that requires a light blade."
+
+        `holding` is what is actually in hand and `satisfies` is what the
+        card the character wants to use asks for. Read by `wielding`, which
+        is the one place a printed weapon Requirement is checked, so one
+        waiver covers every row that asks.
+
+        Call it once per weapon the card names: two of these feats name a
+        pair ("a warhammer **or** a throwing hammer"), which is two waivers
+        and not a group.
+        """
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        pair = (holding, satisfies)
+        # The effect first, as `forbid` and `rolls_with` do.
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref}: {holding} counts as {satisfies}",
+        )
+        if effect is None:
+            return None
+        gear.counts_as.append(pair)
+        # `on_suspend` only -- `Effects._lift` runs it on expiry too, which
+        # is the whole point of its being the single list.
+        effect.on_suspend.append(
+            lambda: gear.counts_as.remove(pair) if pair in gear.counts_as else None
+        )
+        effect.on_resume.append(lambda: gear.counts_as.append(pair))
+        return effect
+
     def wielding(self, prop: str) -> bool:
         """Does the caster meet a printed Requirement line?
 
@@ -1480,10 +1520,21 @@ class Cast:
         if prop in ("two-weapon", "two melee weapons"):
             return gear.two_weapon
         weapon = gear.main
-        return weapon is not None and (
+        if weapon is None:
+            return False
+        if (
             prop in weapon.properties
             or weapon.group == prop
             or weapon.category == prop
+        ):
+            return True
+        # A feat may let what is in hand stand in for what the card asks
+        # for. Checked after the printed test rather than folded into it,
+        # so a character with no waiver takes exactly the path it always
+        # did.
+        return any(
+            satisfies == prop and _weapon_is(weapon, holding)
+            for holding, satisfies in gear.counts_as
         )
 
     # -- attacking -----------------------------------------------------------
@@ -5704,7 +5755,6 @@ class Cast:
         effect = self.world.effects.apply(
             who, self.me, until,
             label=f"{self.ref} pre-empts {ref} {what}",
-            on_end=[lambda: _drop_entry(known.pre_empts, key, entry)],
         )
         if effect is None:
             return None
@@ -5713,6 +5763,11 @@ class Cast:
         # suspended registration must not keep offering its menu entry:
         # the option would still be clickable and would then run a clause
         # the character has temporarily lost.
+        #
+        # `on_suspend` **only**, never `on_end` as well. `Effects._lift`
+        # runs this list from both the suspend path and the expiry path,
+        # and its own note says why: one undo named once, so a verb holding
+        # side state cannot subtract twice.
         effect.on_suspend.append(
             lambda: _drop_entry(known.pre_empts, key, entry)
         )
@@ -8879,13 +8934,13 @@ class Cast:
         # The effect first, as `forbid` and `rolls_with` do.
         effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} draws for {cost.value}",
-            on_end=[restore],
         )
         if effect is None:
             return None
         gear.draw_cost = cost
         gear.draws_left = gear.draw_allowance = per_turn
         gear.draw_only = only
+        # `on_suspend` only -- `Effects._lift` runs it on expiry too.
         effect.on_suspend.append(restore)
 
         def rearm() -> None:
@@ -9346,6 +9401,30 @@ class Cast:
             Note(text=f"{sq} is now at {grid.floor(sq)} squares")
         )
         return True
+
+
+def _weapon_is(weapon: Any, word: str) -> bool:
+    """Does this weapon answer to that word?
+
+    The same three tests `Cast.wielding` makes of a printed Requirement --
+    property, group, category -- **and the slug besides**, because a card
+    saying "you can use a warhammer with ..." names one weapon and a
+    warhammer has no group of its own to be named by.
+
+    The slug is deliberately *not* added to `wielding`'s own test: 78 rows
+    call it and widening what satisfies a Requirement would quietly let
+    some of them through on a weapon their card never mentioned. Only the
+    waiver side matches this loosely.
+    """
+    return bool(
+        word
+        and (
+            word in weapon.properties
+            or weapon.group == word
+            or weapon.category == word
+            or weapon.slug == word
+        )
+    )
 
 
 def _faces_of(dice: str | int) -> int:

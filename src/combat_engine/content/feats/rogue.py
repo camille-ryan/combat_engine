@@ -161,14 +161,25 @@ def f185(c: Cast) -> None:
 
 
 @power("f799", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(group=)",))
+       reach=PERSONAL, target=SELF, )
 def f799(c: Cast) -> None:
-    """Lets one weapon group count as another for a class's purposes.
-    `c.as_implement` does this for one specific case by rewriting the
-    group; the general form -- count as a light blade *for these rows
-    only*, at a cost -- has no verb."""
+    """A longsword where the rogue rows ask for a light blade, at the cost
+    of a die of the extra damage.
 
+    By **slug**, not by group: `f2078` is the card that waives every heavy
+    blade, and this one names the longsword only. "You still cannot throw
+    the longsword" needs nothing -- a longsword has no thrown property to
+    take away.
 
+    The price is `c.change_dice` on the class feature, gated on what is
+    actually in hand at the moment of the hit rather than at arming, the
+    same way `rogue_b._price` does it for the mace.
+    """
+    c.counts_as("light blade", holding="longsword")
+    c.change_dice(
+        "cf:rogue-scoundrel-f4", "1d6", on=c.me,
+        when=lambda ctx: c.wielding("longsword"),
+    )
 @power("f370", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.shift_becomes_move()",))
 def f370(c: Cast) -> None:

@@ -611,13 +611,15 @@ def f3699(c: Cast) -> None:
 
 
 @power("f3700", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(group=)",))
+       reach=PERSONAL, target=SELF, )
 def f3700(c: Cast) -> None:
-    """The whole benefit is one weapon counting as another group -- unarmed
-    read as a light blade -- for the rows that ask which group is in hand.
+    """An unarmed strike where the rows ask for a light blade.
+
+    `w3678` is the monk's unarmed strike and its group is `unarmed`, so the
+    waiver is keyed on that group: there is one weapon in it and naming the
+    group and the slug come to the same thing.
     """
-
-
+    c.counts_as("light blade", holding="unarmed")
 @power("f3701", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        dropped=("c.cover_from()",))

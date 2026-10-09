@@ -716,7 +716,7 @@ def m1521a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.counts_as(group=)",),
+    todo=("query.bloodied(to=)",),
 )
 def m1521a3(c: Cast) -> None:
     """Nothing lets another row's "if bloodied" ask treat a creature as

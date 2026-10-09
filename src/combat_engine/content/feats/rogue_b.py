@@ -86,7 +86,6 @@ from .styles import hit_with_one_of, used_one_of
 #: for why a second latch beside the first is not the answer.
 APPLIES = ("c.extra_damage(applies=)",)
 #: One weapon group standing in for another, for named rows only.
-COUNTS_AS = ("c.counts_as(group=)",)
 #: Nothing adds to the distance somebody else's shift covers.
 EXTEND_SHIFT = ("c.extend_shift()",)
 
@@ -463,7 +462,7 @@ def f2362(c: Cast) -> None:
 
 @power("f2338", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_ranged(ref)", "c.counts_as(group=)"),
+       dropped=("c.as_ranged(ref)",),
        trigger="you attack with a bow or a crossbow",
        on=Trigger(AttackDeclared, lambda w, me, ev: ev.attacker == me,
                   "you attack", window=Window.BEFORE))
@@ -778,17 +777,29 @@ def f2076(c: Cast) -> None:
 # -- one weapon group standing in for another -------------------------------
 
 
-def _counts_as(ref: str, what: str, *, wants: tuple[str, ...] = COUNTS_AS) -> None:
+def _counts_as(
+    ref: str,
+    what: str,
+    *,
+    waives: tuple[tuple[str, str], ...] = (),
+    wants: tuple[str, ...] = (),
+) -> None:
+    """A feat whose whole benefit is one weapon standing in for another.
+
+    `waives` is `(holding, satisfies)` pairs, matched the way a printed
+    Requirement is -- by group, category, property or printed slug -- so a
+    card naming a group waives it for every weapon in that group and a card
+    naming one weapon waives it for that one.
+    """
+
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+           reach=PERSONAL, target=SELF, **({"todo": wants} if wants else {}))
+    def feat(c: Cast) -> None:
+        for holding, satisfies in waives:
+            c.counts_as(satisfies, holding=holding)
 
     feat.__name__ = ref
-    feat.__doc__ = (
-        f"{what} `c.as_implement` rewrites a weapon's group outright; the "
-        "general form -- count as a light blade *for these rows only* -- "
-        "has no verb. `rogue.py`'s f799 named it first."
-    )
+    feat.__doc__ = what
 
 
 # **These two have a body and the helper above cannot give them one.** Both
@@ -814,7 +825,7 @@ def _price(c: Cast, groups: tuple[str, ...]) -> None:
 
 
 @power("f821", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.counts_as(group=)",))
+       reach=PERSONAL, target=SELF)
 def f821(c: Cast) -> None:
     """A mace where the rows ask for a light blade, at the cost of a die of
     the extra damage.
@@ -824,32 +835,67 @@ def f821(c: Cast) -> None:
     light blade *for these rows only* -- has no verb. `rogue.py`'s f799 named
     it first.
 
-    Inert until that lands, and correct rather than guessed: the class feature
-    refuses a mace, so there is no extra damage to charge a die against yet.
-    The clause is right the day the swap works."""
+    Both halves are written now. The swap is keyed on the **group**, which
+    is `mace` for a mace and for a club both, and the price is a die off the
+    class's extra damage while one is in hand."""
+    c.counts_as("light blade", holding="mace")
     _price(c, ("mace",))
 
 
 @power("f825", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.counts_as(group=)",))
+       reach=PERSONAL, target=SELF)
 def f825(c: Cast) -> None:
     """An axe, a hammer or a pick where the rows ask for a light blade, at the
     cost of a die of the extra damage.
 
-    f821 with three groups instead of one; see it for why the price is
-    written and the swap is not."""
+    `f821` with three groups instead of one, and both halves written. "With
+    one hand" is on the card and is not expressed: the waiver is matched by
+    one word, so a two-handed axe is let through as well."""
+    for group in ("axe", "hammer", "pick"):
+        c.counts_as("light blade", holding=group)
     _price(c, ("axe", "hammer", "pick"))
 
 
-_counts_as("f2078", """A one-handed heavy blade where the rows ask for a
-           light blade, the extra damage included. The proficiency half
-           is a column and not a body.""")
-_counts_as("f2437", """A hammer where the rows ask for a light blade.""")
-_counts_as("f2471", """A bow where the rows ask for a crossbow. The extra
-           damage already takes a bow -- `strikers._SNEAK_GROUPS` has
-           it -- so what is left is the rogue powers.""")
-_counts_as("f2895", """A shortbow where the rows ask for a crossbow. The
-           proficiency half is a column.""")
+_counts_as(
+    "f2078",
+    """A one-handed heavy blade where the rows ask for a light blade, the
+    extra damage included. The proficiency half is a column and not a body.
+
+    Keyed on the **group**, so every heavy blade answers. "One-handed" and
+    "military" narrow it on the card and are not expressed: the waiver is
+    matched by one word, so a two-handed heavy blade is let through too.
+    Named rather than left silent.
+    """,
+    waives=(("heavy blade", "light blade"),),
+)
+_counts_as(
+    "f2437",
+    """A hammer where the rows ask for a light blade.
+
+    Keyed on the group rather than on the two printed weapons, which is
+    both shorter and more correct here: the card names a warhammer and a
+    throwing hammer, and **the throwing hammer has no row in the weapon
+    table at all** -- the group covers it anyway.
+    """,
+    waives=(("hammer", "light blade"),),
+)
+_counts_as(
+    "f2471",
+    """A bow where the rows ask for a crossbow. The extra damage already
+    takes a bow -- `strikers._SNEAK_GROUPS` has it -- so what this adds is
+    the rogue powers.""",
+    waives=(("bow", "crossbow"),),
+)
+_counts_as(
+    "f2895",
+    """A shortbow where the rows ask for a crossbow. The proficiency half
+    is a column.
+
+    By slug, not by group: `f2471` is the card that waives every bow, and
+    this one names the short one only.
+    """,
+    waives=(("shortbow", "crossbow"),),
+)
 
 
 # -- the rest of the gaps, each named exactly -------------------------------
