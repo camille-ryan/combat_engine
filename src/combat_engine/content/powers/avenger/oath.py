@@ -240,11 +240,11 @@ def p5330(c: Cast) -> None:
     dice = f"{3 + sum(c.level >= n for n in (5, 11, 15, 21, 25))}d10"
     if c.strike():
         c.damage(dice, c.wis_mod, dtype=DamageType.RADIANT)
-        c.pull(1 + c.wis_mod)
+        c.instead_of("pull", lambda: c.pull(1 + c.wis_mod))
         c.immobilized(until=When.EONT)
     else:
         c.half_damage(dice, c.wis_mod, dtype=DamageType.RADIANT)
-        c.pull(1)
+        c.instead_of("pull", lambda: c.pull(1))
 
 
 _ALLY_SWINGS = "an ally within 10 squares attacks your oath of enmity target"

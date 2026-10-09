@@ -1379,7 +1379,7 @@ def p16391(c: Cast) -> None:
     keywords=ARCANE,
     trigger="you would make a Diplomacy or an Intimidate check",
     on=Trigger(SkillCheck, my_check("diplomacy", "intimidate"), "one of those checks"),
-    dropped=("c.pre_empt(ref, clause)",),
+    dropped=("c.swap_check()",),
     narrative=("skill:diplomacy",),
 )
 def p16392(c: Cast) -> None:

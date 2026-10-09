@@ -645,7 +645,7 @@ def f2424(c: Cast) -> None:
 
 
 @power("f2430", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
+       reach=PERSONAL, target=SELF, todo=("c.pre_empt(watched=)",))
 def f2430(c: Cast) -> None:
     """Lets an ally trade the all-defences bonus `cf:warlord-marshal-f4s1`
     gives for a bigger one on a single defence. That row is declared, so

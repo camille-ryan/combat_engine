@@ -525,13 +525,23 @@ def f1716(c: Cast) -> None:
 
 
 @power("f1724", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pre_empt(ref, clause)",))
+       reach=PERSONAL, target=SELF, )
 def f1724(c: Cast) -> None:
-    """Swaps the pull `p5330` prints for a slide. The row is a ref and is
-    declared; the pull happens inside its own body and nothing declines
-    one clause of a row that is already running."""
+    """Swaps the pull `p5330` prints for a slide, closer than it began.
 
+    **Armed, not triggered.** The feat registers the substitution once and
+    `p5330` reads it at its own pull with `c.instead_of`, which is how a
+    clause of another row gets replaced without replacing the row: `p5330`
+    damages as well as pulling, and swapping its body would have cost it
+    the damage.
 
+    The slide is the printed one -- "it must end the forced movement closer
+    to you than where it began" -- so it is `c.slide(1, toward=c.me)` on the
+    *using* row's `Cast`, which is what carries the creature being moved.
+    The feat's own target went stale the moment it finished arming.
+    """
+    c.pre_empt("p5330", "pull",
+               lambda using: using.slide(1, toward=using.me, on=using.target))
 # -- the granted card ------------------------------------------------------
 
 

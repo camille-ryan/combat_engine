@@ -63,6 +63,6 @@ def p5093(c: Cast) -> None:
 def p5094(c: Cast) -> None:
     """"Until the end of its turn" is `When.EOT`: the row answers an attack,
     so the turn running is the target's own."""
-    c.slide(1)
+    c.instead_of("slide", lambda: c.slide(1))
     c.slowed(until=When.EOT)
     c.cannot_shift(until=When.EOT)

@@ -446,7 +446,7 @@ def m4732a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.variant()",),
+    todo=("spec.subtype_block()",),
 )
 def m5092a0(c: Cast) -> None:
     """The card names three different sub-templates -- vulture, boar,

@@ -361,7 +361,7 @@ def p2094(c: Cast) -> None:
     on=_ON_CURSED_DROPS,
 )
 def p2095(c: Cast) -> None:
-    c.temp_hp(c.level, on=c.me)
+    c.instead_of("temp_hp", lambda: c.temp_hp(c.level, on=c.me))
 
 
 @power(

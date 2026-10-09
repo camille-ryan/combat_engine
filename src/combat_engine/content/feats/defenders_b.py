@@ -571,7 +571,7 @@ def f3327(c: Cast) -> None:
 
 
 @power("f3401", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.instead_of()",))
+       reach=PERSONAL, target=SELF, todo=("spec.power_ref()",))
 def f3401(c: Cast) -> None:
     """Trades the feature's normal effect for a penalty. The feature is
     `FLURRY` and the penalty is one line; what has no verb is the trade

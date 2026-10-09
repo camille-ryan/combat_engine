@@ -649,7 +649,7 @@ def f3701(c: Cast) -> None:
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        proficiency=("w3597",),
-       todo=("c.pre_empt(ref, clause)",))
+       todo=("c.redirect_damage()",))
 def f3702(c: Cast) -> None:
     """**Both of this row's old markers were false.** It claimed the sickle
     could not be asked for and that the flurry had no ref. Neither holds:

@@ -180,22 +180,24 @@ def f2563(c: Cast) -> None:
 
 @power("f2972", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.moved_by_me()", "c.pre_empt(ref, clause)"))
+       dropped=("c.moved_by_me()",))
 def f2972(c: Cast) -> None:
     """A free step whenever you teleport an ally, and a teleport in place
-    of the heal's slide.
+    of `p2339`'s slide.
 
-    `Moved`, `MoveStart` and `MoveEnd` all carry `kind_`, so "an ally
-    teleports" is sayable -- but none of them carries who did it, and
-    `ForcedMove` (which does) covers pushes, pulls and slides only.
+    The second clause is written now: `p2339` reads `c.instead_of` at its
+    own slide, so "you can teleport the target 1 square instead of sliding
+    the target" is a menu entry on `p2339` rather than a thing that happened
+    as well.
 
-    The second clause is **re-aimed**: `p2339` is a ref and its slide is
-    an ordinary printed clause inside its body, so what is wanted is the
-    swap for half of what another row does -- the same operation thirty
-    rows name, including the avenger's f1724 -- and not a verb of its own.
+    The first clause is still held. `Moved`, `MoveStart` and `MoveEnd` all
+    carry `kind_`, so "an ally teleports" is sayable -- but none of them
+    carries *who did it*, and `ForcedMove`, which does, covers pushes,
+    pulls and slides only. That is `c.moved_by_me()` and it is the marker
+    this row keeps.
     """
-
-
+    c.pre_empt("p2339", "slide",
+               lambda using: using.teleport(1, who=using.target))
 # -- keyword gates, which are the cheap ones -------------------------------
 
 

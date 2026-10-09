@@ -750,7 +750,7 @@ def p16468(c: Cast) -> None:
     keywords=[Keyword.TELEPORTATION],
 )
 def p2482(c: Cast) -> None:
-    c.teleport(3)
+    c.instead_of("teleport", lambda: c.teleport(3))
     c.insubstantial(until=When.SONT, on=c.me)
 
 

@@ -2164,6 +2164,7 @@ def use(
     granted_via: str = "",
     branch: int = 0,
     augment: int = 0,
+    variant: int = 0,
     reentrant: bool = False,
     reached: bool = False,
 ) -> bool:
@@ -2271,6 +2272,7 @@ def use(
         granted_via=granted_via,
         branch=branch,
         augment=augment,
+        variant=variant,
     )
     # **The same hole as the `PowerResolved` emit at the bottom of this
     # function, on the other side of the body.** `cast.used()` announces

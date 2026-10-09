@@ -52,7 +52,7 @@ def p2339(c: Cast) -> None:
     ally". The slide happens whether or not the surge is spent."""
     if c.may("spend a healing surge"):
         c.surge(bonus=c.cha_mod)
-    c.slide(1)
+    c.instead_of("slide", lambda: c.slide(1))
 
 
 @power(

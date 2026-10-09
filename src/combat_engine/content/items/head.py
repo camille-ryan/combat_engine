@@ -1047,7 +1047,7 @@ def i1541x1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="you grant an ally a basic attack",
        on=Trigger(PowerUsed, _granted_swing, "an ally swings one you gave"),
-       dropped=("c.pre_empt(ref, clause)",))
+       dropped=("c.grant_attack(upgrade=)",))
 def i1541p1(c: Cast) -> None:
     """`PowerUsed.granted_by` names the granter, so the trigger is
     declared, and `c.extra_action` drops the standard action into the

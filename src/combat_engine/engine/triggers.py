@@ -46,6 +46,25 @@ def _always(world: World, me: int, ev: Event) -> bool:
     return True
 
 
+def _substituted(world: Any, eid: int, ref: str) -> list[int]:
+    """1-based variant numbers for every substitution registered on a row.
+
+    The same count `actions._variants` offers the turn menu, read here
+    rather than imported: `actions` reaches into this module, and a
+    triggered row has to be offered its variants without that becoming a
+    cycle.
+    """
+    known = world.get(eid, Powers)
+    if known is None:
+        return []
+    found = sum(
+        len(entries)
+        for (on_ref, _what), entries in known.pre_empts.items()
+        if on_ref == ref
+    )
+    return list(range(1, found + 1))
+
+
 @dataclass(frozen=True)
 class Trigger:
     """A printed Trigger line, in a form something can act on.
@@ -246,13 +265,27 @@ class Triggers:
         p = get(ref)
         if p is None:
             return
-        options = [ref, ""]
+        # Each clause substitution registered against this row is another
+        # way of taking it, so it joins the offer the dispatcher already
+        # makes rather than becoming a second question. A triggered row
+        # never reaches the turn menu, so this is the only place its
+        # variants can be shown -- without this the registration would be
+        # a modifier nothing consults, which is this component's
+        # commonest bug and the one four feats here would have had.
+        #
+        # The printed card stays first, because the note above still
+        # holds: with no decider installed the first option wins, and
+        # that must be the row as printed rather than whichever feat
+        # happened to register.
+        options = [ref, *(f"{ref}#{n}" for n in _substituted(self.world, eid, ref)), ""]
         # Comma-joined rather than " or "-joined: an author writing the
         # second fragment naturally ("or knocked prone") would otherwise get
         # "or or" on the card.
         printed = ", ".join(t.text for t in p.triggers if t.text)
-        if self.world.decide(eid, "trigger", options, printed) != ref:
+        taken = self.world.decide(eid, "trigger", options, printed)
+        if not taken or taken.split("#")[0] != ref:
             return
+        variant = int(taken.split("#")[1]) if "#" in taken else 0
         dying = getattr(ev, "actor", None) == eid and not alive(self.world, eid)
         if not dying and not self.encounter.spend(
             eid, p.action, ignoring=_shrugging(ev, eid)
@@ -261,7 +294,8 @@ class Triggers:
 
         # `use` adds the pair itself, so nothing is added here -- doing both
         # would have the inner check refuse every triggered row.
-        use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev)
+        use(self.world, eid, ref, targets=self._at(p, eid, ev), trigger=ev,
+            variant=variant)
 
     def _at(self, p, eid: int, ev: Event) -> list[int] | None:  # noqa: ANN001
         """Who a triggered row is aimed at: whoever the event was about.

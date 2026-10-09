@@ -288,7 +288,7 @@ def f1834(c: Cast) -> None:
 
 
 @power("f1878", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INSTEAD)
+       reach=PERSONAL, target=SELF, todo=("c.change_distance(ref, n)",))
 def f1878(c: Cast) -> None:
     """Lengthens the shift `cf:barbarian-f1s3` grants. That feature is a
     declared row now, so this is no longer a naming gap -- but the 2 is a

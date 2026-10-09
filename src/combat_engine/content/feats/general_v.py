@@ -872,23 +872,31 @@ def f3507(c: Cast) -> None:
 # -- wardens ----------------------------------------------------------------
 
 
-@power("f3508", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=INSTEAD,
-       trigger="you use p5094",
-       on=Trigger(PowerUsed, _used("p5094"), "you use p5094"))
-def f3508(c: Cast) -> None:
-    """"Closer to the target" is a destination, so the teleport names a
-    square rather than a distance. `PowerUsed` because the step replaces
-    the slide the body is about to make -- and suppressing that slide is
-    the half nothing can say, so both happen."""
-    targets = c.trigger.targets
-    if not targets:
+def _f3508_step(using: Cast) -> None:
+    """Two squares closer to the target, instead of `p5094`'s slide.
+
+    "Closer to the target" is a destination rather than a distance. The
+    target comes off the using row's own target list -- the watcher this
+    replaces had to dig it out of a `PowerUsed` event.
+    """
+    aimed = using.target if using.target is not None else (
+        using.targets[0] if using.targets else None
+    )
+    if aimed is None:
         return
-    sq = _step_toward(c, targets[0], 2)
+    sq = _step_toward(using, aimed, 2)
     if sq is not None:
-        c.teleport(2, to=sq)
+        using.teleport(2, to=sq)
 
 
+@power("f3508", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,)
+def f3508(c: Cast) -> None:
+    """Steps toward the target instead of `p5094`'s slide.
+
+    **Rewritten from a watcher**, which slid *and* teleported.
+    """
+    c.pre_empt("p5094", "slide", _f3508_step)
 @power("f3509", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f3509(c: Cast) -> None:
@@ -1370,7 +1378,7 @@ def f3540(c: Cast) -> None:
 
 
 @power("f3541", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.stat_block()", *INSTEAD))
+       reach=PERSONAL, target=SELF, todo=("spec.stat_block()",))
 def f3541(c: Cast) -> None:
     """Every name on this card is a ref, so the naming marker was pointing
     at a gap that is not there. The hold now has a name of its own:
@@ -1692,7 +1700,7 @@ def f3557(c: Cast) -> None:
 
 
 @power("f3558", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=INSTEAD)
+       reach=PERSONAL, target=SELF, dropped=("c.pre_empt(watched=)",))
 def f3558(c: Cast) -> None:
     """A standing bonus and a printed trigger on one card, so the row is a
     trait and the triggered half is a `c.watch`. The Intimidate bonus

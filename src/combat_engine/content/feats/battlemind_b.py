@@ -192,19 +192,53 @@ def f3279(c: Cast) -> None:
     c.shift(1)
 
 
-@power("f3286", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       trigger="you use p10439",
-       on=Trigger(PowerUsed, _used(BLURRED_STEP), "you use p10439"),
-       dropped=INSTEAD)
+def _f3286_teleport(using: Cast) -> None:
+    """An Int-mod teleport in place of `p10439`'s shift, if a point is spare.
+
+    "and have at least 1 power point" is a *having*, not a spending, so
+    nothing is paid. Checked when the clause runs rather than when it was
+    registered, and a battlemind down to nothing shifts as printed instead
+    of being refused -- a variant carries no Requirement of its own, which
+    is the limit noted on #479.
+    """
+    if using.points() >= 1:
+        using.teleport(max(1, using.int_mod))
+    else:
+        using.shift(1)
+
+
+def _f3290_teleport(using: Cast) -> None:
+    """Any square beside the enemy `p10439` answered, in place of its shift.
+
+    One layer of event less than the watcher this replaces. That read
+    `c.trigger.trigger.actor` -- the feat's `PowerUsed`, then the event
+    `p10439` was answering. The clause runs inside `p10439`'s own use now,
+    so its trigger *is* that event.
+    """
+    foe = getattr(using.trigger, "actor", None)
+    pos = using.world.get(foe, Position) if foe is not None else None
+    if pos is None:
+        using.shift(1)
+        return
+    free = [sq for sq in neighbours(pos.square) if not using.in_squares([sq])]
+    spot = using.choose(free, "where to land")
+    if spot is not None:
+        using.teleport(20, to=spot)
+
+
+@power("f3286", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,)
 def f3286(c: Cast) -> None:
-    """The teleport lands; "instead of shifting" does not. `PowerUsed` is a
-    plain `Event` rather than a `Decision`, so nothing suppresses the
-    square `p10439` shifts on its own -- the battlemind gets both."""
-    if c.points() >= 1:
-        c.teleport(max(1, c.int_mod))
+    """Teleports instead of `p10439`'s shift, when a point is spare.
 
-
+    **Rewritten from a watcher.** It hung on `PowerUsed` and teleported in
+    *addition*, because `PowerUsed` is a plain `Event` and nothing could
+    suppress the shift the power makes on its own -- so the battlemind got
+    both, one square better than the card. Registering a substitution is
+    what "instead of shifting" actually needs, and `p10439` reads it at its
+    own `c.shift`.
+    """
+    c.pre_empt("p10439", "shift", _f3286_teleport)
 @power("f2271", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p10439",
@@ -221,36 +255,19 @@ def f2271(c: Cast) -> None:
         c.grants_advantage(on=foe, to=c.me, until=When.EONT)
 
 
-@power("f3290", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=INSTEAD,
-       trigger="you use p10439",
-       on=Trigger(PowerUsed, _used(BLURRED_STEP), "you use p10439"))
+@power("f3290", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,)
 def f3290(c: Cast) -> None:
-    """Teleport beside the triggering enemy rather than shifting.
+    """Teleports beside the triggering enemy instead of `p10439`'s shift.
 
-    **Re-aimed from `todo` to `dropped`, the way `f3286` already sits.**
-    The enemy is readable -- `PowerUsed.trigger` is the event `p10439`
-    answered and its actor is the creature that moved -- so the teleport
-    is written and the battlemind lands where the card says. Only
-    "instead of shifting" is missing, and it is missing for exactly
-    `f3286`'s reason: `PowerUsed` is a plain `Event`, so nothing
-    suppresses the square the power shifts on its own.
+    **Rewritten from a watcher** for `f3286`'s reason and in the same file:
+    hung on `PowerUsed` it teleported *and* shifted.
 
-    The landing square is chosen rather than picked, because "any square
-    adjacent to it" is the player's choice and several are usually free.
+    Both this and `f3286` replace the same clause of the same row, so they
+    are two menu entries and not a stack -- a battlemind holding both is
+    offered three ways to use `p10439` and picks one.
     """
-    foe = getattr(getattr(c.trigger, "trigger", None), "actor", None)
-    if foe is None:
-        return
-    pos = c.world.get(foe, Position)
-    if pos is None:
-        return
-    free = [sq for sq in neighbours(pos.square) if not c.in_squares([sq])]
-    spot = c.choose(free, "where to land")
-    if spot is not None:
-        c.teleport(20, to=spot)
-
-
+    c.pre_empt("p10439", "shift", _f3290_teleport)
 # -- mind spike -------------------------------------------------------------
 
 

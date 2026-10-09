@@ -156,6 +156,15 @@ def features(
     # before it is worth spending, and a bigger die on one creature is
     # not.
     f["augment_cost"] = float(action.augment)
+    # A clause substitution is its own option on the same row, so the
+    # scorer sees two entries that differ in nothing it measures unless it
+    # is told. **Zero weight is the honest starting point**: the printed
+    # clause and the substituted one are both what some card says to do,
+    # and nothing here knows which is better for this board. The feature
+    # exists so the choice is visible to the scorer and can be weighted
+    # from a scorecard run rather than being settled by menu order -- which
+    # is what "weighable by a policy" has to mean to be worth anything.
+    f["substituted"] = float(bool(action.variant))
 
     me = world.get(actor, Health)
     if me is not None:

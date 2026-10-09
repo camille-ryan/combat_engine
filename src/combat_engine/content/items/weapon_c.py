@@ -2334,7 +2334,7 @@ def i2405p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you make a ranged basic attack using this weapon",
-    todo=("c.pre_empt(ref, clause)",),
+    todo=("c.as_basic(at_will=)",),
 )
 def i2730p1(c: Cast) -> None:
     """Swaps a basic attack that is already happening for a different row

@@ -126,6 +126,18 @@ class Cast:
     #: asking `content.powers.augment.augment`, which is the older
     #: body-side arrangement for augments that only change the dice.
     augment: int = 0
+    #: Which registered substitution this use picked. 0 is the card as
+    #: printed, which is what every use has unless a feat has registered a
+    #: `c.pre_empt` against this row *and* the menu entry for it was the one
+    #: taken. 1-based into `Powers.pre_empts` flattened for this ref, in the
+    #: order `c.substitutions` lists them.
+    #:
+    #: Settled by `dsl.use` from the chosen `Action`, like `branch` and
+    #: `augment` and for the same reason: a substitution has to be
+    #: clickable and scoreable, which a question asked halfway through a
+    #: body is not. A body never compares this directly -- `c.instead_of`
+    #: is the read.
+    variant: int = 0
 
     @property
     def attack_mod(self) -> int:
@@ -5643,6 +5655,149 @@ class Cast:
         known.dice.setdefault(ref, []).insert(0, entry)
         return effect
 
+    def pre_empt(
+        self,
+        ref: str,
+        what: str,
+        clause: Callable[[Any], Any],
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"When you use <row>, you can X **instead of** Y."
+
+        `what` names the clause being replaced, not the row -- `"pull"`,
+        `"shift"`, `"temp_hp"` -- and the row has to read it with
+        `instead_of`. That is the same deal `change_dice` makes, and its
+        docstring says why it has to be this way: replacing the whole body
+        of a row that does two things throws the other one away. `p5330`
+        pulls *and* damages, and "slide instead of pulling" must not cost
+        it the damage.
+
+        **Nothing is asked here and nothing is asked in the body.** Each
+        registration becomes its own entry in the action menu -- see
+        `Powers.pre_empts` -- because a question put halfway through a body
+        cannot be clicked on a card and cannot be scored by `policy/`.
+
+        Call it once per candidate ref: a feat says "your covenant
+        manifestation" and cannot know which of the two the character took.
+        Nothing checks possession, because a feat lists rows the character
+        may not have and a registration against a row never used never
+        fires.
+
+        Yours by default, like the rest of this family.
+        """
+        from .components import Powers
+
+        # `_who` would resolve to the *target*, and these are armed by a
+        # feat on its own character with nothing targeted -- the
+        # `as_basic` convention rather than the `forbid` one.
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        entry = (clause, self.ref)
+        key = (ref, what)
+        # The effect first, as `forbid` and `rolls_with` do: registering
+        # before it exists left a clause substituted with nothing alive to
+        # ever put it back.
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} pre-empts {ref} {what}",
+            on_end=[lambda: _drop_entry(known.pre_empts, key, entry)],
+        )
+        if effect is None:
+            return None
+        known.pre_empts.setdefault(key, []).insert(0, entry)
+        # Side state, so it lifts and comes back with the effect (#470). A
+        # suspended registration must not keep offering its menu entry:
+        # the option would still be clickable and would then run a clause
+        # the character has temporarily lost.
+        effect.on_suspend.append(
+            lambda: _drop_entry(known.pre_empts, key, entry)
+        )
+        effect.on_resume.append(
+            lambda: known.pre_empts.setdefault(key, []).insert(0, entry)
+        )
+        return effect
+
+    def substitutions(self, ref: str = "", *, of: int | None = None) -> list[str]:
+        """Every clause substitution registered against a row, in menu order.
+
+        One entry per `(what, clause)` pair, labelled with the ref of the
+        row that registered it. The index into this list **plus one** is the
+        `variant` an `Action` carries; 0 is always the card as printed.
+
+        Flat rather than a product of the clauses: two feats replacing one
+        clause are a choice among them, and no card in the corpus asks for
+        two substitutions at once.
+        """
+        from .components import Powers
+
+        who = self.me if of is None else of
+        known = self.world.get(who, Powers)
+        if known is None:
+            return []
+        want = ref or self.ref
+        return [
+            source
+            for (on_ref, _what), entries in sorted(known.pre_empts.items())
+            if on_ref == want
+            for _clause, source in entries
+        ]
+
+    def instead_of(self, what: str, default: Callable[[], Any]) -> Any:
+        """Run whatever this use substituted for this clause, or the clause.
+
+        The read half of `pre_empt`, called inside the row being changed:
+
+            c.instead_of("pull", lambda: c.pull(1, on=c.target))
+
+        and the clause a feat registered is handed that same `Cast`:
+
+            c.pre_empt("p5330", "pull", lambda using: using.slide(1))
+
+        `default` is what the card prints, so the row keeps working
+        unchanged for everybody who has nothing registered -- the contract
+        `dice_for` holds.
+
+        Reads `c.variant`, which `dsl.use` settled from the chosen menu
+        entry **before** the body ran. So a row whose body runs once per
+        target substitutes for every one of them without asking again,
+        which is the bug a mid-body prompt would have had.
+        """
+        from .components import Powers
+
+        # A fast path and **not** the guard: nearly every use in a fight is
+        # variant 0, and this spares it building `flat`. Reverting it leaves
+        # the driver green, because the range check below rejects 0 on its
+        # own -- that is what actually enforces "variant 0 is the card as
+        # printed", so do not read this line as the thing doing it.
+        if not self.variant:
+            return default()
+        known = self.world.get(self.me, Powers)
+        if known is None:
+            return default()
+        flat = [
+            (on_what, clause)
+            for (on_ref, on_what), entries in sorted(known.pre_empts.items())
+            if on_ref == self.ref
+            for clause, _source in entries
+        ]
+        if not 0 < self.variant <= len(flat):
+            return default()
+        picked_what, picked = flat[self.variant - 1]
+        # The variant names one clause. Every *other* clause of the row is
+        # still the printed one, which is what makes a row with two
+        # substitutable clauses work at all.
+        if picked_what != what:
+            return default()
+        # The using row's `Cast`, not the feat's. A substitution has to know
+        # who is being hit, and the feat's own `c.target` went stale the
+        # moment it finished arming -- the same reason `c.watch` hands its
+        # callback the event.
+        return picked(self)
+
     def dice_for(
         self, ref: str = "", default: str = "", ctx: dict[str, Any] | None = None
     ) -> str:
@@ -9074,6 +9229,23 @@ def _drop_roll(known: Any, ref: str, entry: tuple) -> None:
             break
     if not swaps:
         known.rolls.pop(ref, None)
+
+
+def _drop_entry(store: dict, key: Any, entry: tuple) -> None:
+    """Undo one `c.pre_empt`, by identity, for the reason above.
+
+    Takes the dict rather than a named attribute on `Powers`, because the
+    key is a `(ref, what)` pair rather than a bare ref.
+    """
+    held = store.get(key)
+    if not held:
+        return
+    for i, sitting in enumerate(held):
+        if sitting is entry:
+            del held[i]
+            break
+    if not held:
+        store.pop(key, None)
 
 
 def _drop_dice(known: Any, ref: str, entry: tuple) -> None:

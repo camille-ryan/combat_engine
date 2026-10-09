@@ -79,7 +79,11 @@ COUNTS_AS = "c.counts_as(keyword=)"
 #: only this file used: the covenant is a declared row now, so the gap is
 #: not the naming of it but the printed swap for what a feature does inside
 #: its own body -- which is what thirty other rows already call.
-SUPPRESS = ("c.pre_empt(ref, clause)",)
+#: The covenant manifestation fires from a watcher on somebody else's
+#: use, so it has no menu entry for a `c.pre_empt` variant to attach to --
+#: which is what these four need and `c.pre_empt(ref, what, clause)` cannot
+#: give them. One symbol for the four because it is one mechanism. #479.
+SUPPRESS = ("c.pre_empt(watched=)",)
 #: `c.grants_advantage` takes no `when=`, so combat advantage cannot be
 #: narrowed to one shape of power.
 NARROW_CA = ("c.grants_advantage(when=)",)
@@ -897,7 +901,7 @@ def f2993(c: Cast) -> None:
 
 @power("f2994", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.instead_of()", COUNTS_AS),
+       dropped=(COUNTS_AS,),
        trigger="you use p7441",
        on=Trigger(PowerUsed, _used("p7441"), "you use that racial power"))
 def f2994(c: Cast) -> None:

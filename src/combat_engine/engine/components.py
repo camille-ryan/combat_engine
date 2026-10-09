@@ -691,6 +691,33 @@ class Powers:
     dice: dict[str, list[tuple[str, Callable[[dict[str, Any]], bool] | None]]] = field(
         default_factory=dict
     )
+    #: Clauses that may run *instead of* one named clause of a named row.
+    #: Keyed `(ref, what)`, where `what` is the clause's own word --
+    #: `"pull"`, `"shift"`, `"temp_hp"` -- chosen by the row that offers it.
+    #:
+    #: A feat printing "when you use <row>, you can X instead of Y" cannot
+    #: replace the row's *body*: `p5330` pulls **and** damages, so swapping
+    #: the body throws the damage away. The substitution belongs at the
+    #: clause, and the row reads it with `c.instead_of` -- the same bargain
+    #: `dice` above makes, whose note says it outright: a row must read it
+    #: to be changed.
+    #:
+    #: **Not asked at the clause, decided before the body runs.** Each
+    #: registration becomes its own entry in the action menu, the way each
+    #: half of a "Melee or Ranged" line and each augment already do, and
+    #: for the reason `Action.augment` gives: that is what makes both
+    #: reachable by clicking *and* weighable by a policy. A `c.choose`
+    #: buried in a body is invisible to `policy/`, which cannot compare
+    #: "pull" against "slide" if the option was scored before the question
+    #: was put. `Cast.variant` carries which one this use picked.
+    #:
+    #: A list per key, latest first, because two feats may speak about one
+    #: clause -- `p10439`'s shift is replaced by two of them. They do not
+    #: combine: substituting one clause twice is a choice among them, which
+    #: is why the menu is a flat list and not a product.
+    pre_empts: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
+        default_factory=dict
+    )
     #: A spellbook: rows the creature **owns and has not prepared**.
     #:
     #: `known` is what can be used, and it was the only list there was -- so

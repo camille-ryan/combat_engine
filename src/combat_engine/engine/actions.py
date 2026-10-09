@@ -51,6 +51,16 @@ class Action:
     #: same way each half of a "Melee or Ranged" line is, which is what
     #: makes both reachable by clicking and both weighable by a policy.
     augment: int = 0
+    #: Which registered clause substitution this option uses. 0 is the card
+    #: as printed, and is always offered -- a feat saying "you can X instead
+    #: of Y" does not take Y away.
+    #:
+    #: The third discriminator beside `branch` and `augment`, and here for
+    #: the reason given above them: a substitution has to be reachable by
+    #: clicking and weighable by a policy, and a question asked halfway
+    #: through the body is neither. `Powers.pre_empts` holds the clauses and
+    #: `c.instead_of` is what reads this.
+    variant: int = 0
     #: What this acts on, when that is not the actor and not a square: a live
     #: effect for `sustain`, and later a conjuration to walk or command.
     #:
@@ -79,6 +89,8 @@ class Action:
             bits.append(f"@{self.dest}")
         if self.augment:
             bits.append(f"+{self.augment}pp")
+        if self.variant:
+            bits.append(f"instead#{self.variant}")
         if self.blocked:
             bits.append(f"({self.blocked})")
         return " ".join(bits)
@@ -424,6 +436,26 @@ def _commands(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _variants(world: World, actor: int, ref: str) -> list[int]:
+    """0, then one index per clause substitution registered against this row.
+
+    0 leads, because the note in `basic_options` applies here too: a
+    headless run takes the first, and the first should be the printed card
+    rather than whichever feat happened to register.
+    """
+    from .components import Powers
+
+    known = world.get(actor, Powers)
+    if known is None:
+        return [0]
+    found = sum(
+        len(entries)
+        for (on_ref, _what), entries in known.pre_empts.items()
+        if on_ref == ref
+    )
+    return list(range(found + 1))
+
+
 def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = None) -> list[Action]:
     """One action per distinct way of aiming this power.
 
@@ -449,18 +481,24 @@ def _aimings(world: World, actor: int, ref: str, *, cost: ActionType | None = No
         if spend and not usable(world, actor, p, augment=spend)[0]:
             continue
         for b in open_branches:
-            out.extend(_aiming_branch(world, actor, ref, p, b, cost, spend))
+            # And each registered substitution, for the third time and the
+            # same argument.
+            for v in _variants(world, actor, ref):
+                out.extend(
+                    _aiming_branch(world, actor, ref, p, b, cost, spend, v)
+                )
     return out
 
 
-def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None, augment: int = 0) -> list[Action]:  # noqa: ANN001, E501
+def _aiming_branch(world: World, actor: int, ref: str, p, branch: int, cost: ActionType | None = None, augment: int = 0, variant: int = 0) -> list[Action]:  # noqa: ANN001, E501
     cost = cost or p.action
     reach = p.reach_of(branch, augment)
     aim_at = p.target_of(augment)
 
     def act(**kw) -> Action:  # noqa: ANN003
         return Action(
-            kind="power", cost=cost, ref=ref, branch=branch, augment=augment, **kw
+            kind="power", cost=cost, ref=ref, branch=branch, augment=augment,
+            variant=variant, **kw
         )
 
     if not p.is_attack_at(augment):
@@ -1032,6 +1070,7 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
             opportunity=action.cost is ActionType.OPPORTUNITY,
             branch=action.branch,
             augment=action.augment,
+            variant=action.variant,
         )
 
     if action.kind == "instinctive":

@@ -525,7 +525,7 @@ def f1259(c: Cast) -> None:
     c.use_power("p1449")
 
 
-@_trait("f1270", todo=("actions.bluff()", "c.pre_empt(ref, clause)"))
+@_trait("f1270", todo=("actions.bluff()",))
 def f1270(c: Cast) -> None:
     """Hands the combat advantage a Bluff check would win to an ally
     instead of taking it.
@@ -1327,7 +1327,7 @@ def _rattle_in_cloud(c: Cast, ev: Any) -> None:
 # -- the rows ---------------------------------------------------------------
 
 
-@_trait("f1237", todo=("c.split_weapon()", "c.instead_of()"))
+@_trait("f1237", todo=("c.split_weapon()",))
 def f1237(c: Cast) -> None:
     """Re-aimed: the bracketed capitalised class no longer defeats the
     label matcher and all four refs are in the spec, so the naming gap
@@ -1420,7 +1420,7 @@ _riders("f1299", {
     "p653": _ongoing_on_riposte,
 }, landed={"p315": _ongoing_on_granted_hit},
    resolved={"p4369": _beast_ongoing_instead},
-   dropped=("c.pre_empt(ref, clause)",))
+   dropped=("c.hit_rider(ref, clause)",))
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
 # sees; p1061 is the granted attack, which is readable now.
@@ -1431,7 +1431,7 @@ _riders("f1300", {
    dropped=("c.on_miss(ref)",))
 
 
-@_trait("f1301", todo=("c.pre_empt(ref, clause)",))
+@_trait("f1301", todo=("c.hit_rider(ref, clause)",))
 def f1301(c: Cast) -> None:
     """Both refs resolve. Both clauses rewrite the movement their row
     already prints -- a shift traded for a move, and a move allowed only
@@ -1439,7 +1439,7 @@ def f1301(c: Cast) -> None:
     made inside the other body with nothing announcing it."""
 
 
-@_trait("f1302", dropped=("c.pre_empt(ref, clause)", "query.provoked_by()"))
+@_trait("f1302", dropped=("query.provoked_by()",))
 def f1302(c: Cast) -> None:
     """Two of the four clauses are the same sentence on two rows: a
     defence bonus against *the target of* the exploit, which does not
@@ -1472,7 +1472,7 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("c.pre_empt(ref, clause)", "events.OpportunityWindow.step"))
+@_trait("f1303", dropped=("events.OpportunityWindow.step",))
 def f1303(c: Cast) -> None:
     """All four refs resolve and none of the clauses is a rider. p2099
     goes in the place of the melee basic a charge swings; the other
@@ -1514,7 +1514,7 @@ _riders("f1306", {
 }, dropped=("When.SURPRISE",))
 
 
-@_trait("f1307", todo=("c.stored_dose()", "c.effects_on()", "c.pre_empt(ref, clause)"))
+@_trait("f1307", todo=("c.stored_dose()", "c.effects_on()"))
 def f1307(c: Cast) -> None:
     """All four refs resolve. Re-aimed off `c.apply_poison`, which coats a
     weapon now: what these clauses want is the dose itself. Two of them

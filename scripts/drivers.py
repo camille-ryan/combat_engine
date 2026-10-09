@@ -1291,6 +1291,122 @@ def forms(out: Result) -> None:
 
 
 
+
+############################################################
+
+def substitution(out: Result) -> None:
+    """"You can X instead of Y" -- one clause of a row, replaced.
+
+    Twelve feats print a sentence of this shape against a named row, and
+    nine more hand a named row an extra clause. Neither had anywhere to go.
+
+    **The substitution is not a prompt.** It is settled before the body
+    runs, from the `Action` the menu offered, which is the arrangement
+    `branch` and `augment` already use and for the reason `Action.augment`
+    states: that is what makes both reachable by clicking *and* weighable by
+    a policy. A `c.choose` inside a body is invisible to `policy/`, which
+    cannot compare "pull" against "slide" if the option was scored before
+    the question was put.
+
+    **It replaces a clause, never a body.** `p5330` pulls and damages; the
+    card says "slide instead of pulling", and swapping the whole body would
+    quietly cost it the damage. So the row reads `c.instead_of` at the pull,
+    which is the deal `change_dice`/`dice_for` already makes -- a row must
+    read it to be changed.
+    """
+    from combat_engine.engine.actions import _variants
+    from combat_engine.engine.cast import Cast
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:sub")
+    done: list[str] = []
+
+    def printed() -> str:
+        done.append("pull")
+        return "pull"
+
+    # Nothing registered: the clause is the printed one, and the menu holds
+    # exactly one way of using the row.
+    out.that(c.instead_of("pull", printed) == "pull",
+             "with nothing registered, the printed clause runs")
+    out.that(done == ["pull"], "and it really ran, rather than being skipped")
+    out.that(_variants(world, caster, "p999") == [0],
+             "and the row offers one option, as printed")
+
+    held = c.pre_empt("p999", "pull", lambda using: "slide")
+    out.that(held is not None, "a substitution is laid as an effect")
+    out.that(_variants(world, caster, "p999") == [0, 1],
+             "and now the row offers two -- the printed one still first")
+    out.that(c.substitutions("p999") == ["drivers:sub"],
+             "labelled with the row that registered it")
+
+    # variant 0 is still the card. This is the half a chargen-time swap
+    # would lose: 25 of the 30 cards say "you can", so the printed clause
+    # is never taken away.
+    done.clear()
+    base = Cast(world=world, me=caster, ref="p999")
+    out.that(base.instead_of("pull", printed) == "pull",
+             "on variant 0 the printed clause still runs")
+
+    done.clear()
+    swapped = Cast(world=world, me=caster, ref="p999", variant=1)
+    out.that(swapped.instead_of("pull", printed) == "slide",
+             "on variant 1 the substitution runs instead")
+    out.that(done == [], "and the printed clause did NOT also run")
+
+    # The rest of the row is untouched, which is the whole argument for
+    # putting this at the clause rather than at the body.
+    out.that(swapped.instead_of("damage", lambda: "damage") == "damage",
+             "every OTHER clause of the row is still the printed one")
+
+    # A second feat on the same clause is another option, not a stack.
+    c.pre_empt("p999", "pull", lambda using: "teleport")
+    out.that(_variants(world, caster, "p999") == [0, 1, 2],
+             "two feats on one clause are three options, not four")
+    out.that(len(c.substitutions("p999")) == 2,
+             "and both are listed")
+    picked = Cast(world=world, me=caster, ref="p999", variant=1)
+    out.that(picked.instead_of("pull", printed) == "teleport",
+             "the latest registered leads, as `rolls` and `dice` do")
+
+    # Out of range is the printed card rather than a crash: a stale Action
+    # can outlive the effect that put it in the menu.
+    far = Cast(world=world, me=caster, ref="p999", variant=99)
+    done.clear()
+    out.that(far.instead_of("pull", printed) == "pull",
+             "a variant that no longer exists falls back to the card")
+    out.that(done == ["pull"], "and the printed clause is what ran")
+    # Variant 0 is held by the same range check, not by the fast path above
+    # it -- reverting the fast path leaves every assertion here green.
+    zero = Cast(world=world, me=caster, ref="p999", variant=0)
+    done.clear()
+    out.that(zero.instead_of("pull", printed) == "pull"
+             and done == ["pull"],
+             "and so is variant 0, by the range check rather than the fast path")
+
+    # Ending it puts the clause back and takes the menu entry away.
+    world.effects.end(held, "driver")
+    out.that(len(c.substitutions("p999")) == 1,
+             "ending one substitution leaves the other standing")
+    for eff in list(world.effects.of(caster)):
+        if "pre-empts" in eff.label:
+            world.effects.end(eff, "driver")
+    out.that(c.substitutions("p999") == [],
+             "and with both gone the row is only itself")
+    out.that(_variants(world, caster, "p999") == [0],
+             "which the menu agrees with")
+
+    # Suspension, because a registration is side state like the rest (#470).
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:sub")
+    sus = c.pre_empt("p999", "pull", lambda using: "slide")
+    out.that(len(c.substitutions("p999")) == 1, "laid")
+    world.effects.suspend(sus)
+    out.that(c.substitutions("p999") == [], "suspended, the option goes away")
+    world.effects.resume(sus)
+    out.that(len(c.substitutions("p999")) == 1, "and comes back")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1303,6 +1419,8 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "substitution": (substitution,
+                     "one clause of a row replaced, and one added"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

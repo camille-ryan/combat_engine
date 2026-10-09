@@ -116,7 +116,7 @@ def p10438(c: Cast) -> None:
     on=Trigger(MoveStart, _marked_shifts, "an adjacent enemy marked by you shifts"),
 )
 def p10439(c: Cast) -> None:
-    c.shift(1)
+    c.instead_of("shift", lambda: c.shift(1))
 
 
 @power(

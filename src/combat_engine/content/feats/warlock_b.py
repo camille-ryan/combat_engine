@@ -708,23 +708,32 @@ def f2197(c: Cast) -> None:
     )
 
 
-@power("f2081", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=INSTEAD)
-def f2081(c: Cast) -> None:
-    """Trades the temporary hit points a class feature pays for damage on
-    the next attack.
+def _f2081_damage(using: Cast) -> None:
+    """2/4/6 extra damage in place of `p2095`'s temporary hit points.
 
-    `cf:warlock-f1c6` is a ref and the damage half is one
-    `c.bonus(once=True)`, so the trigger and the upside are both ready.
-    The word the row turns on is "instead": nothing declines half of what
-    a row is doing inside its own body, and writing the upside without
-    the trade would be a strictly better feat than the printed one. That
-    is `c.pre_empt(ref, clause)`, the same gap 28 rows elsewhere name -- it
-    was written here as `c.forgo_temp_hp()`, which named the one shape
-    of it this row happens to want and so sat alone in its own group.
+    The ladder is read off the *using* row's caster, which is the character
+    whose level the card means. `once=True` because the printed bonus is
+    for one attack, not for every attack until the turn ends.
     """
+    step = 2 + 2 * (using.level >= 11) + 2 * (using.level >= 21)
+    using.bonus("damage", step, once=True, until=When.EONT, kind="feat")
 
 
+@power("f2081", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,)
+def f2081(c: Cast) -> None:
+    """Trades the temporary hit points `p2095` pays for extra damage.
+
+    **The trade is the point of the row**, and it is what could not be said:
+    writing the damage without giving up the temporary hit points would be a
+    strictly better feat than the printed one. `c.pre_empt` is the word
+    "instead" -- `p2095` reads it at its own `c.temp_hp` and lays this
+    instead.
+
+    Scales on the printed ladder, 2/4/6, read off the *using* row's caster
+    because that is the character whose level the card means.
+    """
+    c.pre_empt("p2095", "temp_hp", _f2081_damage)
 @power("f2194", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        todo=("c.forgo_healing()",))

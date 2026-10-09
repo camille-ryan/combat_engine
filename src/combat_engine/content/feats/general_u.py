@@ -701,30 +701,26 @@ def f3462b(c: Cast) -> None:
     c.teleport(5)
 
 
-@power("f3463", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.pre_empt(ref, clause)",),
-       trigger="you use your shadow jaunt",
-       on=Trigger(PowerUsed, _used(SHADOW_JAUNT), "you use that power"))
-def f3463(c: Cast) -> None:
-    """Removal from play is `Condition.REMOVED` on the caster's own clock,
-    and returning "to the square you last occupied" is then free -- a
-    creature removed from play does not move.
+def _f3463_vanish(using: Cast) -> None:
+    """Out of play until the start of your next turn, instead of a teleport.
 
-    The teleport it is meant to replace still happens: `PowerUsed` is
-    announced before the body runs and is not a decision anything can
-    stop, so the substitution is the dropped half.
-
-    **Re-aimed twice.** That half is not a teleport problem, it is the
-    twenty-nine-row `c.pre_empt(ref, clause)` gap -- a clause of another row
-    that cannot be suppressed from outside it. `c.forgo_teleport()` was
-    named by this row and one other and hid the group it belongs to; the
-    group was then called `c.instead_of()`, which named the *choice* and
-    not the pre-emption, and 4 rows wanting something else entirely were
-    sitting in it. #278.
+    Returning "to the square you last occupied" needs no code: a creature
+    removed from play does not move, so the square is still its own.
     """
-    c.condition(Condition.REMOVED, on=c.me, until=When.SONT)
+    using.condition(Condition.REMOVED, on=using.me, until=When.SONT)
 
 
+@power("f3463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,)
+def f3463(c: Cast) -> None:
+    """Removed from play instead of `p2482`'s teleport, back next turn.
+
+    **Rewritten from a watcher**, which fired on `PowerUsed` and let the
+    teleport it is meant to replace happen anyway. The substitution is the
+    whole of this row, so hanging it anywhere else made the feat strictly
+    better than printed.
+    """
+    c.pre_empt("p2482", "teleport", _f3463_vanish)
 # -- fighting something bigger ----------------------------------------------
 
 
