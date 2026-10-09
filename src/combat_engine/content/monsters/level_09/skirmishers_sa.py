@@ -2980,16 +2980,21 @@ def m6078a1(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
-    keywords=[Keyword.NECROTIC],
+    keywords=[Keyword.NECROTIC, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=12),
-    damage=Damage("1d6", 8, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.creature_kind", "Damage(dtypes=)"),
+    damage=Damage("1d6", 8, dtype=[DamageType.PSYCHIC, DamageType.NECROTIC],
+                  kind=LIMITED),
+    dropped=("Target.creature_kind",),
 )
 def m6078a2(c: Cast) -> None:
     """Two type filters `Target` cannot make -- "living creatures" and
-    "undead and animates" -- are both asked here, and the roll's own second
-    type (necrotic, beside the header's psychic) is the ordinary
-    one-roll-two-types gap."""
+    "undead and animates" -- are both asked here.
+
+    **This row contradicted itself, which is why it is worth a note.** The
+    keyword list said necrotic, the header said psychic, and the card says
+    the one roll is both -- so whichever a reader consulted, it was half
+    right. #423's walk catches exactly that shape.
+    """
     victim = c.target
     if victim is None:
         return

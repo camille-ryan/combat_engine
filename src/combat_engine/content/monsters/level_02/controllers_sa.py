@@ -726,6 +726,7 @@ def m5075a2(c: Cast) -> None:
     once_per_round=True,
     reach=CloseBurst(5),
     target=NO_TARGET,
+    keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d10", 3, dtype=DamageType.NECROTIC),
 )

@@ -875,7 +875,7 @@ _M115830_SWUNG = (
         when=both(_mark_swung_elsewhere(), leaves_me_out),
         text=_M115830_SWUNG,
     ),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 3, dtype=[DamageType.POISON, DamageType.PSYCHIC], kind=LIMITED),
 )
 def m115830a2(c: Cast) -> None:
     """Declared with no target and aimed by hand, because the printed line
@@ -3013,7 +3013,7 @@ def _my_mark_shifted(world: World, me: int, ev: Any) -> bool:
     keywords=[Keyword.FIRE, Keyword.RADIANT],
     trigger=_M3815_SHIFTED,
     on=Trigger(MoveEnd, when=_my_mark_shifted, text=_M3815_SHIFTED),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", dtype=[DamageType.FIRE, DamageType.RADIANT]),
 )
 def m3815a2(c: Cast) -> None:
     """A free action rather than an interrupt, so `MoveEnd`: the shift is
@@ -3539,7 +3539,7 @@ def m4251a2(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.RADIANT, Keyword.THUNDER],
     attack=Attack(vs=WILL, printed=17),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d10", 3, dtype=[DamageType.RADIANT, DamageType.THUNDER], kind=LIMITED),
 )
 def m4251a3(c: Cast) -> None:
     """A blow of two types has nowhere to go in the header -- `Damage` holds

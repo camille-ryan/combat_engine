@@ -418,6 +418,66 @@ def _recharge_fault(ref: str, power: object, printed: int) -> str:
     return f"recharge {declared_at} but the card prints {printed}"
 
 
+
+#: Where a card stops describing itself and starts describing its attack.
+#: Keywords sit before this; a damage type named after it belongs to a clause
+#: rather than to the keyword line.
+_CARD_BODY = re.compile(r"\b(Attack|Hit|Effect|Trigger|Requirement)\b|\+\d+\s+vs", re.I)
+
+
+def _card_keywords(flat: str) -> str:
+    """The part of the card that names its keywords.
+
+    Monster cards print them two ways -- `(cold, necrotic) Recharge` and
+    `(standard, at-will) Cold, Necrotic` -- so both the parenthetical and the
+    run after it count, and the region simply ends where the attack line
+    begins. Reading only the parenthetical called 29 correct rows faulty.
+    """
+    stop = _CARD_BODY.search(flat)
+    return flat[: stop.start()] if stop else flat[:140]
+
+
+def _keyword_faults(power: object, flat: str) -> list[str]:
+    """A damage type the card names as a keyword and the header does not.
+
+    **This is the omission `cards.py` could not report.** The note at the top
+    of this file says it "reports a disagreement, never an omission", and
+    `policy/threat.py` prices a row by unioning its keyword list -- so a
+    printed keyword the row dropped is a damage type the AI cannot see, and
+    nothing looked for it. #423.
+
+    Asked of the card rather than of the row's own fields, which is why it
+    lives here and not in `lint.py`. An AST-only version was written first
+    and could not be made sound: of 30 rows whose header type is missing from
+    their keywords, only **10** have a card that names it. The other 20
+    reproduce a compendium entry that prints no keyword for that type at all
+    -- `m4743a0`'s whole keyword line is `(standard, at-will)` and it deals
+    necrotic -- and `m1043a2` prints `Fire, Gaze, Psychic` with necrotic
+    damage, because its keywords describe its *riders*. Demanding the keyword
+    would have failed all three kinds alike.
+    """
+    damage = getattr(power, "damage", None)
+    if damage is None:
+        return []
+    kinds = [k for k in (damage.dtypes or ((damage.dtype,) if damage.dtype else ()))
+             if getattr(k, "value", "") not in ("", "untyped")]
+    if not kinds:
+        return []
+    said = {k.value.lower() for k in (getattr(power, "keywords", None) or ())}
+    head = _card_keywords(flat)
+    out = []
+    for kind in kinds:
+        word = kind.value.lower()
+        if word in said:
+            continue
+        if re.search(rf"\b{re.escape(word)}\b", head, re.I):
+            out.append(
+                f"deals {word} damage and the card names {word} as a keyword,"
+                f" but the header's `keywords=` does not"
+            )
+    return out
+
+
 def _check(ref: str, power: object, spec: str) -> list[str]:
     """Every disagreement between one header and one stat block."""
     out: list[str] = []
@@ -464,6 +524,8 @@ def _check(ref: str, power: object, spec: str) -> list[str]:
             out.append(
                 f"recharge {getattr(power, 'recharge', 0)} but the card says {digit}"
             )
+
+    out.extend(_keyword_faults(power, flat))
     return out
 
 

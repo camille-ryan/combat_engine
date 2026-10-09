@@ -1382,7 +1382,7 @@ def m1570a1(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=17),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 7, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m1570a2(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -3368,7 +3368,7 @@ def m3929a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.COLD, Keyword.FIRE],
     attack=Attack(vs=FORT, printed=16),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d10", 6, dtype=[DamageType.COLD, DamageType.FIRE]),
 )
 def m3929a2(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -3395,7 +3395,8 @@ def m3929a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=16),
     trigger=_M3929_HALVED,
     on=Trigger(Bloodied, about_me, _M3929_HALVED),
-    dropped=("Damage(dtypes=)",),
+    keywords=[Keyword.COLD, Keyword.FIRE],
+    damage=Damage("3d10", 6, dtype=[DamageType.COLD, DamageType.FIRE], kind=LIMITED),
 )
 def m3929a3(c: Cast) -> None:
     """"Reduced to 132 hit points or fewer" is half of the 264 the database
@@ -3775,7 +3776,7 @@ def m4038a0(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.PSYCHIC, Keyword.COLD],
     attack=Attack(vs=FORT, printed=17),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 6, dtype=[DamageType.PSYCHIC, DamageType.COLD]),
 )
 def m4038a1(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header, so it is
@@ -4167,7 +4168,7 @@ def m5221a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=18),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d10", 10, dtype=[DamageType.COLD, DamageType.NECROTIC]),
 )
 def m5221a1(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header. "Until the end
@@ -4192,7 +4193,8 @@ def m5221a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.COLD, Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=16),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("1d10", 3, dtype=[DamageType.COLD, DamageType.NECROTIC],
+                  kind=LIMITED),
 )
 def m5221a2(c: Cast) -> None:
     """"Living creatures in the blast" rules out the undead, which is a type
@@ -4209,11 +4211,7 @@ def m5221a2(c: Cast) -> None:
         return
     if not c.strike():
         return
-    dealt = c.damage(
-        "1d10", 3,
-        dtypes=(DamageType.COLD, DamageType.NECROTIC),
-        detail=c.ref,
-    )
+    dealt = c.hit()
     if c.is_(Condition.SLOWED, on=victim):
         c.immobilized(until=When.SAVE_ENDS, on=victim)
     else:
@@ -5317,7 +5315,7 @@ def m6587a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.FORCE],
     attack=Attack(vs=REF, printed=16),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 6, dtype=[DamageType.COLD, DamageType.FORCE]),
 )
 def m6587a1(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header. "Vulnerable 5

@@ -286,6 +286,7 @@ def m1029a0(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
+    keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("1d10", 5, dtype=DamageType.LIGHTNING),
 )
@@ -301,6 +302,7 @@ def m1029a1(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(2, 20),
     target=EACH_ENEMY,
+    keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=9),
     damage=Damage("1d10", 5, dtype=DamageType.LIGHTNING),
 )
@@ -430,6 +432,7 @@ def m115778a4(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("1d6", 4, dtype=DamageType.FIRE),
 )
@@ -445,6 +448,7 @@ def m1182a0(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
+    keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("1d10", 4, dtype=DamageType.FIRE),
 )
@@ -480,6 +484,7 @@ def m1182a2(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
+    keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("3d6", 4, dtype=DamageType.FIRE, kind=LIMITED),
 )
@@ -500,6 +505,7 @@ def m1182a3(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
+    keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("3d6", 4, dtype=DamageType.FIRE, kind=LIMITED),
 )
@@ -637,6 +643,7 @@ def m1531a5(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("1d6", 6, dtype=DamageType.NECROTIC),
 )
@@ -652,6 +659,7 @@ def m1939a0(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
+    keywords=[Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("1d6", 8, dtype=DamageType.NECROTIC),
 )
@@ -669,6 +677,7 @@ def m1939a1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
+    keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d6", 10, dtype=DamageType.NECROTIC, kind=LIMITED),
 )

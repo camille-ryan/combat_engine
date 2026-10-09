@@ -3210,7 +3210,7 @@ def m2348a5(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 4, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m2522a0(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -5127,19 +5127,19 @@ def m4641a2(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.ACID, Keyword.THUNDER],
     attack=Attack(vs=REF, printed=16),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 8, dtype=[DamageType.ACID, DamageType.THUNDER],
+                  kind=LIMITED, half_on_miss=True),
 )
 def m4641a3(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
     holds one `dtype` -- so it is rolled in the body as one blow of two types,
     which is what resistance reads as a unit. The Miss line is the same blow
     halved, which is what `c.half_damage` is for."""
-    kinds = (DamageType.ACID, DamageType.THUNDER)
     if c.strike():
-        c.damage("2d8", 8, dtypes=kinds, detail=c.ref)
+        c.hit()
         c.condition(Condition.DAZED, until=When.SAVE_ENDS)
     else:
-        c.half_damage("2d8", 8, dtypes=kinds)
+        c.hit(half=True)
 
 
 @power(
@@ -5955,7 +5955,7 @@ def m5758a2(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.COLD, Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=15),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("4d8", 2, dtype=[DamageType.COLD, DamageType.THUNDER], kind=LIMITED),
 )
 def m5758a3(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -6378,7 +6378,7 @@ def m5831a2(c: Cast) -> None:
     target=UpTo(2),
     keywords=[Keyword.COLD, Keyword.RADIANT],
     attack=Attack(vs=FORT, printed=15),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("3d6", 5, dtype=[DamageType.COLD, DamageType.RADIANT]),
 )
 def m5831a3(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -6593,7 +6593,7 @@ def m6537a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.IMPLEMENT],
     attack=Attack(vs=AC, printed=17),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 11, dtype=[DamageType.COLD, DamageType.FIRE]),
 )
 def m6537a2(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -6616,7 +6616,7 @@ def m6537a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=15),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 11, dtype=[DamageType.COLD, DamageType.FIRE]),
 )
 def m6537a3(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header, so it is
@@ -6657,12 +6657,18 @@ def m6537a4(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.COLD, Keyword.FIRE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=13),
-    dropped=("Damage(dtypes=)",),
+    dropped=("Damage(bonus= conditional)",),
 )
 def m6537a5(c: Cast) -> None:
-    """Two numbers for one blow and both of them two types, so the whole line
-    is rolled in the body: the header has one `dtype` to give and this needs
-    two. The Miss line is the same blow halved, which is `c.half_damage`.
+    """Two numbers for one blow -- "+8, or +15 if the target is slowed or
+    immobilized" -- so the whole line stays in the body.
+
+    **Re-pointed.** `Damage` carries the whole type now, which was the old
+    marker, and the types here are right. What a header still cannot hold is
+    a *conditional bonus*: one `Damage` has one `bonus`, and this card prints
+    two for the same blow depending on the target. Until that exists the line
+    cannot move up, and with it in the body the blow is not MM3-convertible
+    and the policy cannot forecast it.
 
     The flight is an Effect and happens whatever the attack did, once for the
     whole use -- `c.first` is where a once-per-power line goes.

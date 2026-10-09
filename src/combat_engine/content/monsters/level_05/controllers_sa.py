@@ -1730,7 +1730,7 @@ def m5602a2(c: Cast) -> None:
     reach=Melee(1),
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.POISON],
-    dropped=("c.conjure(side=)", "c.conjuration_hp()", "Damage(dtypes=)"),
+    dropped=("c.conjure(side=)", "c.conjuration_hp()"),
 )
 def m5602a3(c: Cast) -> None:
     """Conjures the viper, retiring an older one first -- "can have only one
@@ -1754,7 +1754,9 @@ def m5602a3(c: Cast) -> None:
         if ev.other != viper or team(c.world, ev.actor) is team(c.world, me):
             return
         if _secondary(c, 9, REF, ev.actor):
-            c.damage("1d10", 4, dtype=DamageType.NECROTIC, on=ev.actor)
+            c.damage("1d10", 4,
+            dtypes=(DamageType.NECROTIC, DamageType.POISON),
+            on=ev.actor)
 
     c.watch(AdjacencyLost, bit, until=When.ENCOUNTER, on=me, label=f"{c.ref} bite")
 

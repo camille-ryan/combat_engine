@@ -2692,7 +2692,7 @@ def _not_dominating(world: World, eid: int) -> bool:
     target=ONE_CREATURE,
     keywords=[Keyword.FORCE, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=15),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d8", 11, dtype=[DamageType.FORCE, DamageType.NECROTIC]),
 )
 def m5235a0(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header -- `Damage`
@@ -3120,7 +3120,7 @@ def m5761a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC, Keyword.POISON, Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=15),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 8, dtype=[DamageType.NECROTIC, DamageType.POISON]),
 )
 def m5761a1(c: Cast) -> None:
     """A two-type damage line has nowhere to go in the header, so it is

@@ -601,11 +601,18 @@ def m3312a5(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    keywords=[Keyword.FIRE, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=10),
-    damage=Damage("2d6", 0, dtype=DamageType.FIRE),
-    dropped=("Damage(dtypes=)",),
+    damage=Damage("2d6", 0, dtype=[DamageType.FIRE, DamageType.NECROTIC]),
 )
 def m3557a0(c: Cast) -> None:
+    """Both types in the header, with the keywords the card prints.
+
+    **The keyword list was empty**, which is the #423 half of #420 and the
+    reason this row was one of three the type tally could not derive from
+    keywords: nothing carried either word, so `policy/threat.py` -- which
+    prices a row by unioning them -- saw an untyped blow.
+    """
     if c.strike():
         c.hit()
 
