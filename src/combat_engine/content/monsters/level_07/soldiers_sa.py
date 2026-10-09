@@ -2225,13 +2225,26 @@ def m5791a0(c: Cast) -> None:
 
 @power(
     "m5791a1", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
-    target=NO_TARGET, dropped=("c.insubstantial(except_=)",),
+    target=NO_TARGET,
 )
 def m5791a1(c: Cast) -> None:
-    """`c.insubstantial` halves every damage type; the printed exception for
-    force and radiant, and the clause that drops the trait for a turn after
-    taking radiant, both need that exception to exist first."""
-    c.insubstantial(on=c.me, until=When.ENCOUNTER)
+    """Half damage except force and radiant, switched off for a turn by radiant.
+
+    The exception and the switch are the same two clauses `m5792a1` and
+    `m6075a1` print, and `When.EONT` is this card's wording -- "until the
+    **end** of its next turn", where the two in `level_13` say "start". The
+    difference is a whole turn of halved damage, so it is read off the card
+    rather than carried across from a sibling.
+    """
+    shape = c.insubstantial(
+        on=c.me, until=When.ENCOUNTER,
+        except_=(DamageType.FORCE, DamageType.RADIANT),
+    )
+    c.suspend_when(
+        shape, DamageApplied,
+        lambda ev: ev.target == c.me and DamageType.RADIANT in ev.types(),
+        for_=When.EONT,
+    )
 
 
 @power(

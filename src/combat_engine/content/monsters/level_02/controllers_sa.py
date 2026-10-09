@@ -77,6 +77,7 @@ from combat_engine.engine.dsl import get as _row_for
 from combat_engine.engine.events import (
     AttackRolled,
     Bloodied,
+    DamageApplied,
     Hit,
     Miss,
     TurnStart,
@@ -1284,15 +1285,29 @@ def m6531a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.insubstantial(when=)",),
 )
 def m6531a1(c: Cast) -> None:
-    """Half damage from everything is `Condition.INSUBSTANTIAL`, and the card
-    exempts two damage types from it. The condition halves whatever arrives and
-    takes no gate, so laying it bare is a row stronger than its card on a
-    defensive trait -- in every fight, invisibly. The second half of the row,
-    losing the trait when psychic damage lands, is sayable and has nothing to
-    switch off until the first half can be."""
+    """Half damage except force and psychic, switched off for a turn by psychic.
+
+    Refused in play until now, and for the right reason: laying the condition
+    bare would have made the creature halve force and psychic too, which is a
+    row *stronger* than its card on a defensive trait, in every fight,
+    invisibly. The exception had to exist before the row could be written at
+    all -- so the switch clause, which was always sayable, had nothing to
+    switch off.
+
+    Psychic is in both lists: it is excepted from the halving *and* it takes
+    the trait off. Force is only excepted.
+    """
+    shape = c.insubstantial(
+        on=c.me, until=When.ENCOUNTER,
+        except_=(DamageType.FORCE, DamageType.PSYCHIC),
+    )
+    c.suspend_when(
+        shape, DamageApplied,
+        lambda ev: ev.target == c.me and DamageType.PSYCHIC in ev.types(),
+        for_=When.SONT,
+    )
 
 
 @power(

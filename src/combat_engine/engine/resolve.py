@@ -920,7 +920,12 @@ def deal_damage(
         if health is None or not alive(world, target):
             return 0
 
-    if takes_half(world, target) and not _mods(
+    # Every type in the blow, because the trait's exception is about the
+    # damage source as a whole -- see `query.takes_half`. Read after the
+    # redirect above, so a blow moved onto another creature is asked about
+    # the types it actually carries.
+    blow_types = frozenset(kind for kinds, _ in parts for kind in kinds)
+    if takes_half(world, target, blow_types) and not _mods(
         world, source, "ignore insubstantial", dmg_ctx
     ):
         # Insubstantial halves everything, and does it before resistance so a

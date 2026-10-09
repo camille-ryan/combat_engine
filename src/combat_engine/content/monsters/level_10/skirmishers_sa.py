@@ -3225,30 +3225,21 @@ def m5792a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.insubstantial(except_=)",),
 )
 def m5792a1(c: Cast) -> None:
-    """`c.insubstantial` halves every damage type; the printed exception for
-    force and radiant has no lever yet -- the same gap `m5791a1` and
-    `m5985a6` already mark. Ends on taking radiant and is restored at the
-    end of its next turn, the `m6075a1` shape moved one event later to
-    match this card's own wording."""
-    me = c.me
-    shape: dict[str, Effect | None] = {"eff": c.insubstantial(on=me, until=When.ENCOUNTER)}
+    """Half damage except force and radiant, switched off for a turn by radiant.
 
-    def hurt(ev: DamageApplied) -> None:
-        if ev.target != me or DamageType.RADIANT not in ev.types() or shape["eff"] is None:
-            return
-        c.world.effects.end(shape["eff"], "radiant burned the shape away")
-        shape["eff"] = None
-
-        def restore(ev2: TurnEnd) -> None:
-            if ev2.actor == me:
-                shape["eff"] = c.insubstantial(on=me, until=When.ENCOUNTER)
-
-        c.watch(TurnEnd, restore, until=When.ENCOUNTER, on=me, once=True, label=f"{c.ref} reform")
-
-    c.watch(DamageApplied, hurt, until=When.ENCOUNTER, on=me, label=f"{c.ref} radiant-burn")
+    The `m5791a1` card exactly, and written the same way.
+    """
+    shape = c.insubstantial(
+        on=c.me, until=When.ENCOUNTER,
+        except_=(DamageType.FORCE, DamageType.RADIANT),
+    )
+    c.suspend_when(
+        shape, DamageApplied,
+        lambda ev: ev.target == c.me and DamageType.RADIANT in ev.types(),
+        for_=When.EONT,
+    )
 
 
 @power(

@@ -660,6 +660,77 @@ def suspension(out: Result) -> None:
     world.bus.emit(TurnStart(actor=caster, round=world.round))
     out.that(takes_half(world, caster), "and one turn start is still enough")
 
+    # -- the exception, which is a different clause on the same cards --------
+    #
+    # "Takes half damage from any damage source, **except those that deal
+    # force damage**" -- six stat blocks print it, and three of those six
+    # print the suspension clause as well, which is why both live on the one
+    # verb. Asserted through the damage path rather than by reading
+    # `half_except` back: a set nothing subtracted from is the commonest bug
+    # in this component.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+    vital = world.get(caster, Health)
+
+    def struck(kind: DamageType, amount: int = 20) -> int:
+        vital.hp = vital.max_hp
+        world.damage(caster, caster, amount, kind, detail="drivers:suspension")
+        return vital.max_hp - vital.hp
+
+    out.that(struck(DamageType.COLD) == 20, "a plain creature takes it all",
+             f"{struck(DamageType.COLD)}")
+    thin = c.insubstantial(
+        on=caster, until=When.ENCOUNTER, except_=(DamageType.FORCE,)
+    )
+    out.that(struck(DamageType.COLD) == 10, "insubstantial halves cold",
+             f"{struck(DamageType.COLD)}")
+    out.that(struck(DamageType.FORCE) == 20,
+             "and does NOT halve the excepted type",
+             f"{struck(DamageType.FORCE)}")
+
+    # The exception must go with the trait when the trait is switched off, or
+    # a suspended creature would be left with a standing exception to nothing.
+    world.effects.suspend(thin)
+    out.that(struck(DamageType.COLD) == 20, "suspended, cold is not halved")
+    world.effects.resume(thin)
+    out.that(struck(DamageType.COLD) == 10, "resumed, it is halved again")
+    out.that(struck(DamageType.FORCE) == 20, "and force is still excepted")
+
+    # **A suspended exception must come off the creature, and that is only
+    # observable with a second trait standing.** Suspension takes the
+    # condition away, so `takes_half` answers False before it ever reads the
+    # exception set -- which is why a plant that stopped the exception
+    # lifting stayed green here. Lay a plain insubstantial beside it and the
+    # stale exception becomes visible: the creature would stop halving force
+    # on the authority of a trait that is switched off.
+    world, caster, _ = _board()
+    first = Cast(world=world, me=caster, ref="drivers:suspension:a")
+    second = Cast(world=world, me=caster, ref="drivers:suspension:b")
+    vital = world.get(caster, Health)
+    excepting = first.insubstantial(
+        on=caster, until=When.ENCOUNTER, except_=(DamageType.FORCE,)
+    )
+    second.insubstantial(on=caster, until=When.ENCOUNTER)
+    out.that(struck(DamageType.FORCE) == 20,
+             "with both standing, the exception holds",
+             f"{struck(DamageType.FORCE)}")
+    world.effects.suspend(excepting)
+    out.that(struck(DamageType.FORCE) == 10,
+             "suspend the excepting trait and the other one halves force again",
+             f"{struck(DamageType.FORCE)}")
+    world.effects.resume(excepting)
+    out.that(struck(DamageType.FORCE) == 20, "and the exception comes back")
+
+    # An insubstantial with no exception halves everything, which is the
+    # negative control: the exception must come from the row, not the verb.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:suspension")
+    vital = world.get(caster, Health)
+    c.insubstantial(on=caster, until=When.ENCOUNTER)
+    out.that(struck(DamageType.FORCE) == 10,
+             "a trait with no exception halves force too",
+             f"{struck(DamageType.FORCE)}")
+
 
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),

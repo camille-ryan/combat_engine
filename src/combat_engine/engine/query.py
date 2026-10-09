@@ -14,6 +14,9 @@ from .components import (
     Barrier,
     Companion,
     Conditions,
+    # Two spellings, two different components, and this is the one holding
+    # resistance. `Defenses` above is AC/Fortitude/Reflex/Will.
+    Defences,
     Defenses,
     Health,
     Mods,
@@ -570,9 +573,34 @@ def can_react(world: World, eid: int, *, ignoring: Condition | None = None) -> b
     )
 
 
-def takes_half(world: World, eid: int) -> bool:
-    """Insubstantial: everything that reaches this creature is halved."""
-    return any(rules(c).insubstantial for c in active(world, eid))
+def takes_half(
+    world: World, eid: int, dtypes: frozenset[DamageType] = frozenset()
+) -> bool:
+    """Insubstantial: everything that reaches this creature is halved.
+
+    `dtypes` is the whole type of the blow being asked about, and the answer
+    is False when the trait excepts any of them -- "takes half damage from
+    any damage source, **except those that deal force damage**", which six
+    stat blocks print and `Rules.insubstantial` is a bool and cannot say.
+
+    **The exception is read off the creature**, from `Defences.half_except`,
+    not off the effect that laid the trait. That would be wrong if a creature
+    ever held two insubstantial traits with different exceptions, and no
+    printed block does -- so the simplification costs nothing and keeps this
+    a question the damage path can ask with what it already has in hand.
+
+    Called with no `dtypes` it answers the old question, which is what every
+    caller asking about the creature rather than a blow wants.
+    """
+    if not any(rules(c).insubstantial for c in active(world, eid)):
+        return False
+    held = world.get(eid, Defences)
+    if held is None or not held.half_except:
+        return True
+    # "Except those that deal force damage" excepts the *source*, not the
+    # part: a blow that is half force and half cold is one damage source
+    # dealing force damage, so none of it is halved.
+    return not (set(dtypes) & held.half_except.keys())
 
 
 def can_shift(world: World, eid: int) -> bool:

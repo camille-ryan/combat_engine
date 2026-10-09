@@ -239,38 +239,27 @@ def _square_beside(c: Cast, foe: int, within: int) -> Square | None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.insubstantial(except_=)",),
 )
 def m1576a0(c: Cast) -> None:
-    """Half damage from everything is insubstantiality, and the printed
-    exception is what the condition cannot carry: `Condition.INSUBSTANTIAL`
-    exempts force only when the attacker's own row grants it, where this card
-    exempts it outright.
+    """Half damage except force, switched off for a turn by acid, fire or radiant.
 
-    The suspension is exact and is the half worth having -- an acid, fire or
-    radiant packet takes the hold off and the start of the next turn puts it
-    back.
+    Both printed clauses, and they were each hand-rolled here before the
+    engine could say either. The exception is `except_=`; the switch is
+    `c.suspend_when`, which lifts the trait and puts it back rather than
+    ending and re-laying it -- the old version re-laid a *fresh*
+    encounter-long hold each time, so anything else watching the effect saw
+    it die and be replaced once per fire packet.
     """
-    me, ref = c.me, c.ref
-    burns = (DamageType.ACID, DamageType.FIRE, DamageType.RADIANT)
-    shape: dict[str, Effect | None] = {
-        "eff": c.insubstantial(on=me, until=When.ENCOUNTER)
-    }
-
-    def hurt(ev: DamageApplied) -> None:
-        if ev.target != me or shape["eff"] is None:
-            return
-        if not any(kind in burns for kind in ev.types()):
-            return
-        c.world.effects.end(shape["eff"], ref)
-        shape["eff"] = None
-
-    def back(ev: TurnStart) -> None:
-        if ev.actor == me and shape["eff"] is None:
-            shape["eff"] = c.insubstantial(on=me, until=When.ENCOUNTER)
-
-    c.watch(DamageApplied, hurt, until=When.ENCOUNTER, on=me, label=f"{ref} off")
-    c.watch(TurnStart, back, until=When.ENCOUNTER, on=me, label=f"{ref} on")
+    shape = c.insubstantial(
+        on=c.me, until=When.ENCOUNTER, except_=(DamageType.FORCE,)
+    )
+    c.suspend_when(
+        shape, DamageApplied,
+        lambda ev: ev.target == c.me and bool(
+            {DamageType.ACID, DamageType.FIRE, DamageType.RADIANT} & set(ev.types())
+        ),
+        for_=When.SONT,
+    )
 
 
 @power(

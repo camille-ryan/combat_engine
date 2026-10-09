@@ -3138,42 +3138,31 @@ def m5870a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.insubstantial(except_=)",),
 )
 def m5870a1(c: Cast) -> None:
-    """Half damage from everything, which is what insubstantial is, and the
-    printed exceptions are what it cannot carry: `Condition.INSUBSTANTIAL` has
-    one built-in exemption -- force, and only when the attacker's own row
-    grants it -- where this card names three unconditionally.
+    """Half damage except fire, force and radiant; switched off by fire or radiant.
 
-    The suppression is exact and is the half worth having: a fire or radiant
-    packet takes the hold off and the start of its next turn puts it back.
+    Three exceptions, which is the most any of these cards names, and the
+    switch is on two of the three -- force excepts the damage without
+    switching the trait off, so the two clauses are not the same list and
+    cannot share one.
+
+    **The old hand-rolled version read `ev.dtype` and not `ev.types()`**, so
+    a blow that was fire *and* something else -- which is what every
+    `dtypes=` rider makes -- took the trait off only when fire happened to be
+    the primary type.
     """
-    me = c.me
-
-    def shroud() -> Effect | None:
-        return c.insubstantial(on=me, until=When.ENCOUNTER)
-
-    held: list[Effect | None] = [shroud()]
-
-    def doused(ev: DamageApplied) -> None:
-        if ev.target != me or ev.amount <= 0:
-            return
-        if ev.dtype not in (DamageType.FIRE, DamageType.RADIANT):
-            return
-        standing = held[0]
-        if standing is not None and not standing.ended:
-            c.world.effects.end(standing, "the light burned it off")
-            held[0] = None
-
-    def mended(ev: TurnStart) -> None:
-        if ev.ghost or ev.actor != me:
-            return
-        if held[0] is None or held[0].ended:
-            held[0] = shroud()
-
-    c.watch(DamageApplied, doused, until=When.ENCOUNTER, on=me, label=f"{c.ref} out")
-    c.watch(TurnStart, mended, until=When.ENCOUNTER, on=me, label=f"{c.ref} back")
+    shape = c.insubstantial(
+        on=c.me, until=When.ENCOUNTER,
+        except_=(DamageType.FIRE, DamageType.FORCE, DamageType.RADIANT),
+    )
+    c.suspend_when(
+        shape, DamageApplied,
+        lambda ev: ev.target == c.me and ev.amount > 0 and bool(
+            {DamageType.FIRE, DamageType.RADIANT} & set(ev.types())
+        ),
+        for_=When.SONT,
+    )
 
 
 @power(

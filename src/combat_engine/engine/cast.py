@@ -3605,10 +3605,49 @@ class Cast:
         return self.condition(Condition.CANNOT_SHIFT, until=until, on=on)
 
     def insubstantial(
-        self, *, until: When = When.EONT, on: int | None = None
+        self,
+        *,
+        until: When = When.EONT,
+        on: int | None = None,
+        except_: tuple[DamageType, ...] = (),
     ) -> Effect | None:
-        """Halves all damage taken. A property of the creature, not the damage."""
-        return self.condition(Condition.INSUBSTANTIAL, until=until, on=on)
+        """Halves all damage taken. A property of the creature, not the damage.
+
+        `except_` names the types it does not halve -- "takes half damage from
+        any damage source, except those that deal force damage", which six
+        stat blocks print. It goes in `Defences.half_except` rather than on
+        the effect, and `query.takes_half` says why.
+
+        The exception lifts on `on_suspend` and not `on_end`, so that the
+        three cards printing *both* clauses -- an exception and "it loses this
+        trait until the start of its next turn" -- do not leave an exception
+        standing for a trait that is switched off.
+        """
+        held = self.condition(Condition.INSUBSTANTIAL, until=until, on=on)
+        kinds = tuple(except_)
+        if held is None or not kinds:
+            return held
+        who = held.owner
+        from .components import Defences
+
+        defences = self.world.get(who, Defences) or self.world.add(who, Defences())
+
+        def lift() -> None:
+            for kind in kinds:
+                left = defences.half_except.get(kind, 0) - 1
+                if left > 0:
+                    defences.half_except[kind] = left
+                else:
+                    defences.half_except.pop(kind, None)
+
+        def lay() -> None:
+            for kind in kinds:
+                defences.half_except[kind] = defences.half_except.get(kind, 0) + 1
+
+        lay()
+        held.on_suspend.append(lift)
+        held.on_resume.append(lay)
+        return held
 
     def unconscious(self, *, until: When = When.SAVE_ENDS, on: int | None = None) -> Effect | None:
         return self.condition(Condition.UNCONSCIOUS, until=until, on=on)

@@ -2008,16 +2008,21 @@ def m5985a5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.insubstantial(except_=)",),
 )
 def m5985a6(c: Cast) -> None:
-    """`c.insubstantial` halves every damage type; the printed exception
-    for force has no lever yet -- the same gap `level_07/soldiers_sa.py`'s
-    `m5791a1` already marks. Ends on its own next attack or on either
-    condition landing on it, the shape `_vanish_until_struck` already uses
-    in `level_04/lurkers_sa.py` for an ending with more than one close."""
+    """A form that halves everything but force, until it attacks or drops.
+
+    The only row in this family printing an exception and **no** switch
+    clause: it ends on its own next attack or on stun or unconsciousness
+    landing, which is the `_vanish_until_struck` shape in
+    `level_04/lurkers_sa.py` for an ending with more than one close. So
+    `except_=` is the whole of what was missing and `c.suspend_when` has no
+    business here.
+    """
     me = c.me
-    shape = c.insubstantial(on=me, until=When.ENCOUNTER)
+    shape = c.insubstantial(
+        on=me, until=When.ENCOUNTER, except_=(DamageType.FORCE,)
+    )
     if shape is None:
         return
     granted = (
@@ -2354,25 +2359,21 @@ def m6075a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.insubstantial(except_=)",),
 )
 def m6075a1(c: Cast) -> None:
-    me = c.me
-    shape: dict[str, Effect | None] = {"eff": c.insubstantial(on=me, until=When.ENCOUNTER)}
+    """Half damage except force and radiant, switched off for a turn by radiant.
 
-    def hurt(ev: DamageApplied) -> None:
-        if ev.target != me or DamageType.RADIANT not in ev.types() or shape["eff"] is None:
-            return
-        c.world.effects.end(shape["eff"], "radiant burned the shape away")
-        shape["eff"] = None
-
-        def restore(ev2: TurnEnd) -> None:
-            if ev2.actor == me:
-                shape["eff"] = c.insubstantial(on=me, until=When.ENCOUNTER)
-
-        c.watch(TurnEnd, restore, until=When.ENCOUNTER, on=me, once=True, label=f"{c.ref} reforms")
-
-    c.watch(DamageApplied, hurt, until=When.ENCOUNTER, on=me, label=c.ref)
+    The `m5791a1` card exactly, and written the same way.
+    """
+    shape = c.insubstantial(
+        on=c.me, until=When.ENCOUNTER,
+        except_=(DamageType.FORCE, DamageType.RADIANT),
+    )
+    c.suspend_when(
+        shape, DamageApplied,
+        lambda ev: ev.target == c.me and DamageType.RADIANT in ev.types(),
+        for_=When.EONT,
+    )
 
 
 @power(

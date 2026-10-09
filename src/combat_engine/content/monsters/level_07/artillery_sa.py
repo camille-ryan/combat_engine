@@ -752,13 +752,20 @@ def m3643a0(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=WILL, printed=11),
     damage=Damage("1d10", 5, dtype=DamageType.NECROTIC),
-    dropped=("c.insubstantial(when=)",),
+    dropped=("c.insubstantial(to=)",),
 )
 def m3643a1(c: Cast) -> None:
     """"Treats the m3643 as insubstantial" is insubstantial against one
-    named foe only, and `c.insubstantial` has no `when=` to narrow it to a
-    single attacker -- applying it broadly would halve damage from
-    everybody, not just this target."""
+    named foe only, and applying it broadly would halve damage from
+    everybody rather than from this target.
+
+    **Re-pointed from `c.insubstantial(when=)` to `(to=)`.** The gap is a
+    *scope*, not a condition -- the trait is never switched off, it only
+    faces one way -- and `c.invisible` already spells a one-sided version of
+    itself `to=`. Filed under the old symbol it would have reported ready
+    when #470's suspension landed, which answers a different sentence
+    entirely.
+    """
     if c.strike():
         c.hit()
 

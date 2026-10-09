@@ -214,6 +214,18 @@ class Defences:
     resist: dict[DamageType, int] = field(default_factory=dict)
     vulnerable: dict[DamageType, int] = field(default_factory=dict)
     immune: set[DamageType] = field(default_factory=set)
+    #: Types the creature's insubstantial trait does **not** halve -- "takes
+    #: half damage from any damage source, except those that deal force
+    #: damage". Counted rather than a set, for the same reason `Conditions`
+    #: is: two effects can name the same exception and the first to expire
+    #: must not clear the other's.
+    #:
+    #: Read as a property of the *creature*, not of the effect that laid it,
+    #: which is a simplification and a deliberate one: no printed stat block
+    #: carries two insubstantial traits at once, so there is no card on which
+    #: one trait's exception would wrongly narrow another's. `query.takes_half`
+    #: says so where it reads this.
+    half_except: dict[DamageType, int] = field(default_factory=dict)
 
 
 @dataclass
