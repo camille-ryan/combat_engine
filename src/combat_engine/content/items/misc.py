@@ -1096,9 +1096,29 @@ def i2969x1(c: Cast) -> None:
 
 
 @power("i3333x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3333x1(c: Cast) -> None:
-    """The Bluff bonus is written; the Fortune Card clause has no deck."""
+    """The item's Bluff bonus, declined with the rest of the item.
+
+    **The only one of the ten whose own line prints no Fortune Card clause**
+    -- just the bonus and its two level steps. Worth saying, because a
+    reader finding a plain skill bonus marked `declined=` will otherwise
+    wonder what was declined about it.
+
+    The answer is that **the unit is the item, not the row**: `i3333p1` is a
+    Fortune Card power, so the item exists for Fortune Cards and its
+    property line goes with it. Declining the power and keeping the property
+    would leave a +1 to Bluff attached to an item nobody can otherwise use.
+
+    Its old marker was separately wrong -- `dropped=("Fortune.deck",)`, with
+    a docstring saying "the Fortune Card clause has no deck" -- because the
+    sibling's clause had been attributed to this half. That is why it did
+    not come up in the first sweep for rows mentioning the cards.
+    """
     _skills(c, 1, "bluff")
 
 
@@ -1527,7 +1547,11 @@ def i3039p1(c: Cast) -> None:
 
 
 @power("i3334x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3334x1(c: Cast) -> None:
     _skills(c, 1, "acrobatics")
 
@@ -1543,7 +1567,11 @@ def i3334p1(c: Cast) -> None:
 
 
 @power("i3335x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3335x1(c: Cast) -> None:
     _skills(c, 1, "intimidate")
 
@@ -1559,7 +1587,11 @@ def i3335p1(c: Cast) -> None:
 
 
 @power("i3336x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
+       reach=PERSONAL, target=SELF,
+       declined=(
+           "Fortune Cards are out of scope: "
+           "Camille's call, 2026-10-09 (#482)"
+       ))
 def i3336x1(c: Cast) -> None:
     _skills(c, 1, "insight")
 

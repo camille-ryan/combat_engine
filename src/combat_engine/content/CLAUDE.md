@@ -54,9 +54,19 @@ the AI policy without running anything — and **the body is code** against a
   word carrying that argument.
 
   Does not count toward `blocked.py`, which reads `todo + dropped` — a
-  declined row is not work owed.
+  declined row is not work owed, and needs no bucket of its own there.
 
-  First use: the 11 Fortune Card rows, Camille's call, 2026-10-09 (#482).
+  **The unit is the thing, not the row.** First use was the 11 Fortune Card
+  rows (Camille's call, 2026-10-09, #482), and the instructive one is
+  `i3333x1`: it prints only a +1 to Bluff and names no card at all, and it
+  is declined anyway, because `i3333p1` is a Fortune Card power and a bonus
+  on an item nobody can otherwise use is not worth keeping. Decline the
+  item, not the lines that happen to mention it.
+
+  So it is **not** the marker for "one clause of a working row is declined".
+  That case was designed for, built in `blocked.py`, and removed when the
+  call turned out to be item-level — if it comes back, the row keeps
+  `dropped=` and the bucket comes back with it.
 * `defect="why"` — **the compendium is missing what the row would be written
   from.** Not a gap in this engine: a gap in the source, so no symbol will ever
   close it and `todo=`/`dropped=` both lie by naming one. Refused by `usable`
