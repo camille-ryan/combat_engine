@@ -13,7 +13,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .grid import Square, footprint
-from .types import Ability, Condition, DamageType, Defense, Size, Team, modifier
+from .types import (
+    Ability,
+    ActionType,
+    Condition,
+    DamageType,
+    Defense,
+    Size,
+    Team,
+    modifier,
+)
 
 # --------------------------------------------------------------------------
 # Identity and placement
@@ -977,6 +986,29 @@ class Gear:
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)
+    #: What taking a weapon up costs this creature, when something has made
+    #: it cheaper than the printed minor action.
+    #:
+    #: `actions._wielding` offers the draw and hard-coded `MINOR`, which is
+    #: the rule. Three rows buy their way out of it -- "once per turn you can
+    #: draw or sheathe a weapon as a free action **instead of** a minor
+    #: action" -- and that is a cost on the creature, not on any row, so it
+    #: cannot live in a header.
+    #:
+    #: `None` is the printed minor. A row that is free only once per turn
+    #: sets `draws_left` as well.
+    draw_cost: ActionType | None = None
+    #: How many cheap draws remain this turn, for the "once per turn" half.
+    #: `-1` is unlimited, which is what a card printing no limit means.
+    draws_left: int = -1
+    #: What `draws_left` refills to at the start of this creature's turn.
+    #: Kept separately because `draws_left` is spent down and would
+    #: otherwise have nothing to be restored from.
+    draw_allowance: int = -1
+    #: Which weapon the cheaper cost applies to, by ref. Empty is every
+    #: weapon, which is what two of the three rows mean; the third is "draw
+    #: and attack with a dagger", one weapon and not the rest.
+    draw_only: str = ""
     #: The weapons this creature is **trained** with, by ref -- its chassis's
     #: printed lines plus whatever its feats and its race opened up.
     #:

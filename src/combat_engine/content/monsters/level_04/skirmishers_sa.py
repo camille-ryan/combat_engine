@@ -1113,7 +1113,7 @@ def m3119a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it is reduced to 0 hit points",
     on=Trigger(Dropped, about_me, "it is reduced to 0 hit points"),
-    dropped=("c.draw()",),
+    dropped=("c.drop_all()",),
 )
 def m3119a4(c: Cast) -> None:
     """The ground it leaves behind is a one-square zone and it works. What

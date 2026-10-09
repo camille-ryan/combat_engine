@@ -1592,17 +1592,23 @@ def f3144(c: Cast) -> None:
 
 
 @power("f3145", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.draw()",))
+       reach=PERSONAL, target=SELF, )
 def f3145(c: Cast) -> None:
-    """Every weapon group, so no group gate at all -- just the weapon
-    keyword. Sheathing one weapon and drawing another on one minor
-    action is the dropped half; nothing puts a weapon into a hand."""
+    """A feat bonus on every weapon attack, and a swap on one minor action.
+
+    Every weapon group, so no group gate at all -- just the keyword.
+
+    **The second clause was already the engine's behaviour and the marker
+    was wrong.** "You can use a minor action to sheathe a weapon and then
+    draw a weapon" is one minor for a swap, and `Gear.wield` has always
+    stowed whatever cannot share a hand with what it takes up -- so
+    `actions._wielding`'s single minor action already sheathes one weapon
+    and draws another. Nothing to add; the marker came off.
+    """
     c.bonus(
         "attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: _keyworded(ctx, Keyword.WEAPON),
     )
-
-
 @power("f3146", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, proficiency=("w:orb",))
 def f3146(c: Cast) -> None:

@@ -1201,17 +1201,26 @@ _inert("rt:r51-t3", "A rest rule.")
 
 @power("rt:r51-t0", level=0, cls="", usage=AT_WILL,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       todo=("c.draw()",))
+       )
 def rt_r51_t0(c: Cast) -> None:
-    """Drawing or sheathing a weapon costs nothing here because it is not
-    an action the engine has: `Gear.stowed` is set when the character is
-    built and nothing moves a weapon in or out of it mid-fight.
+    """Once a turn, taking a weapon up or putting it away is free.
 
-    Re-aimed from `c.stow()`, which was this row alone, to `c.draw()`,
-    which twelve rows in the tree already name for the same missing
-    action. Sheathing is the same verb read backwards and does not need
-    a second symbol.
+    **The old note was wrong about the engine twice over.** It said drawing
+    "is not an action the engine has" and that nothing moves a weapon in or
+    out of `Gear.stowed` mid-fight -- but `actions._wielding` has offered
+    the draw, and `Gear.wield` has moved the weapon, since a ranger who put
+    the bow away could otherwise never pick it up again. What was missing
+    was never the draw. It was the *price*.
+
+    `per_turn=1` is the printed "once per turn", and when it is spent the
+    draw is still offered at the printed minor rather than disappearing --
+    the card makes it cheaper, it does not take it away.
+
+    Sheathing needs no second symbol and now no second verb either:
+    `c.stow` is `c.draw` read backwards, and `Gear.wield` already puts away
+    whatever cannot share a hand.
     """
+    c.draws_free(per_turn=1)
 
 
 @power("rt:r51-t1", level=0, cls="", usage=AT_WILL,

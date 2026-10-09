@@ -8692,6 +8692,110 @@ class Cast:
             who, self.me, until, label=f"{self.ref} decays {arm.ref}", on_end=[restore]
         )
 
+    def draw(self, ref: str = "", *, on: int | None = None) -> bool:
+        """Take a stowed weapon up, paying nothing for it.
+
+        "You can draw and attack with a dagger as part of the same standard
+        action", "you can draw a weapon before making the attack" -- the
+        row has already bought the action, so this is the taking-up on its
+        own. `actions._wielding` is the other door and charges the printed
+        minor; `draws_free` is what makes *that* door cheaper.
+
+        `ref` names which weapon, for a card that says so. Without it the
+        first stowed one is taken, which is what a card saying only "a
+        weapon" means.
+
+        False when there is nothing stowed to take, so a row can tell.
+        """
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return False
+        wanted = [w for w in gear.weapons
+                  if w.ref in gear.stowed and (not ref or w.ref == ref)]
+        if not wanted:
+            return False
+        gear.wield(wanted[0])
+        self.world.bus.emit(Note(text=f"{who} draws {wanted[0].ref}"))
+        return True
+
+    def stow(self, ref: str = "", *, on: int | None = None) -> bool:
+        """Put a held weapon away. `draw` read backwards.
+
+        One verb each way rather than one with a flag, because a row says
+        one or the other and `c.stow()` reads as the card does. `Gear.wield`
+        already stows whatever cannot share a hand with what is taken up,
+        so this is only for a card that puts something away and takes up
+        nothing.
+        """
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return False
+        wanted = [w for w in gear.held if not ref or w.ref == ref]
+        if not wanted:
+            return False
+        gear.stowed.add(wanted[0].ref)
+        self.world.bus.emit(Note(text=f"{who} stows {wanted[0].ref}"))
+        return True
+
+    def draws_free(
+        self,
+        *,
+        cost: ActionType = ActionType.FREE,
+        per_turn: int = -1,
+        only: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Make taking a weapon up cost less than the printed minor action.
+
+        "Once per turn, you can draw or sheathe a weapon as a free action
+        instead of a minor action." The draw itself is already offered --
+        `actions._wielding` has done it since a ranger who put the bow away
+        could otherwise never pick it up -- and what these rows change is
+        what it costs, which is a fact about the creature rather than about
+        any row and so cannot sit in a header.
+
+        `per_turn=-1` is a card printing no limit; `1` is the "once per
+        turn" the racial trait prints, and `Gear.draws_left` is refilled at
+        the start of each of this creature's turns.
+
+        `only` narrows it to one weapon ref, for "you can draw and attack
+        with a dagger as part of the same standard action" -- the cheap rate
+        is that weapon's, and everything else still costs the printed minor.
+        """
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        was = (gear.draw_cost, gear.draws_left, gear.draw_allowance,
+               gear.draw_only)
+
+        def restore() -> None:
+            (gear.draw_cost, gear.draws_left, gear.draw_allowance,
+             gear.draw_only) = was
+
+        # The effect first, as `forbid` and `rolls_with` do.
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} draws for {cost.value}",
+            on_end=[restore],
+        )
+        if effect is None:
+            return None
+        gear.draw_cost = cost
+        gear.draws_left = gear.draw_allowance = per_turn
+        gear.draw_only = only
+        effect.on_suspend.append(restore)
+
+        def rearm() -> None:
+            gear.draw_cost = cost
+            gear.draws_left = gear.draw_allowance = per_turn
+            gear.draw_only = only
+
+        effect.on_resume.append(rearm)
+        return effect
+
     def destroy(self, *, on: int | None = None, weapon: Weapon | None = None) -> bool:
         """Destroy an item a creature is carrying. It does not come back."""
         who = self._who(on)

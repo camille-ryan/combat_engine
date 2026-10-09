@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from .components import Budget, Health, Initiative, Powers
+from .components import Budget, Gear, Health, Initiative, Powers
 from .conditions import rules
 from .durations import When
 from .events import (
@@ -345,6 +345,14 @@ class Encounter:
         self.world.turn = eid
         budget = self.world.get(eid, Budget) or self.world.add(eid, Budget())
         budget.refresh()
+        # "Once per turn you can draw a weapon as a free action" is an
+        # allowance like the action budget beside it, so it refills here
+        # rather than from a watcher that would have to be installed per
+        # creature. Untouched for everyone whose draw costs the printed
+        # minor, which is everyone but three rows.
+        gear = self.world.get(eid, Gear)
+        if gear is not None and gear.draw_cost is not None and gear.draws_left >= 0:
+            gear.draws_left = gear.draw_allowance
         self.world.bus.emit(TurnStart(actor=eid, round=self.world.round))
 
     def end_turn(self) -> None:

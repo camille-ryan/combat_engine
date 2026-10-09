@@ -2153,12 +2153,20 @@ def i536x1(c: Cast) -> None:
 
 
 @power("i610x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.draw()",))
+       reach=PERSONAL, target=SELF, )
 def i610x1(c: Cast) -> None:
-    """Drawing a weapon costs no action the engine charges."""
+    """Initiative off the enhancement, and a free hand whenever you want.
+
+    "As a free action, you can draw a sheathed weapon or retrieve a stowed
+    item" is a cost reduction on an action the engine already offers --
+    `actions._wielding` charges the printed minor -- so it is written
+    against the creature rather than as something this row does.
+
+    The old note here said the draw "costs no action the engine charges",
+    which was simply wrong about `_wielding`.
+    """
     c.initiative(c.enhancement, on=c.me)
-
-
+    c.draws_free()
 @power("i632p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an ally near your spirit companion hits an enemy",

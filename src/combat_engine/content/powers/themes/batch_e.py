@@ -1017,20 +1017,25 @@ def p14378(c: Cast) -> None:
     keywords=MARTIAL,
     trigger="you roll initiative",
     on=Trigger(InitiativeRolled, about_me, "you roll initiative"),
-    dropped=("c.draw()", "query.initiative_of()"),
+    dropped=("query.initiative_of()",),
 )
 def p16000(c: Cast) -> None:
-    """Drawing a weapon is not modelled, and the second paragraph wants to
-    compare my initiative against every enemy's, which nothing exposes --
-    so the wider crit range goes with it."""
+    """Draw and shift the moment initiative is rolled.
+
+    The draw is written now -- it is free, because this row's free action
+    has already been spent on it.
+
+    Still carries `query.initiative_of()`: the second paragraph wants my
+    initiative compared against every enemy's, which nothing exposes, so
+    the wider crit range goes with it.
+    """
+    c.draw()
     c.shift(max(1, c.speed_of(c.me) // 2))
     for foe in c.within(1, side="enemy"):
         c.bonus(
             "attack", 2, kind="power", on=c.me, until=When.EONT, once=True,
             when=lambda ctx, f=foe: ctx["target"] == f,
         )
-
-
 @power(
     "p16001",
     level=2,

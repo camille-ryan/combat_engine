@@ -689,7 +689,7 @@ def i942x1(c: Cast) -> None:
 
 
 @power("i2067x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+       reach=PERSONAL, target=SELF, todo=("c.retrieve(consumable=)",))
 def i2067x1(c: Cast) -> None:
     """Drawing and stowing are not actions the engine spends, so a belt that
     makes one of them free has nothing to make free."""

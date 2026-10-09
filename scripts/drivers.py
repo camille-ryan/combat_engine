@@ -1407,6 +1407,111 @@ def substitution(out: Result) -> None:
     out.that(len(c.substitutions("p999")) == 1, "and comes back")
 
 
+
+############################################################
+
+def drawing(out: Result) -> None:
+    """Taking a weapon up: from a body for nothing, or cheaper than a minor.
+
+    **The draw already existed.** `actions._wielding` has offered it since a
+    ranger who put the bow away could otherwise never pick it up again, and
+    it charges the printed minor action. So `c.draw()` is not "drawing" --
+    it is the taking-up on its own, for a row that has already bought the
+    action ("you can draw and attack with a dagger as part of the same
+    standard action").
+
+    The other three rows change what the *menu's* draw costs, which is a
+    fact about the creature rather than about any row and so cannot live in
+    a header. `Gear.draw_cost` records it and `_wielding` reads it.
+
+    `c.draw()` was one symbol over 20 rows and three unrelated mechanisms:
+    weapons in hand, an entire Fortune Card deck, and one monster dropping
+    everything it carries. Only the first is here.
+    """
+    from combat_engine.engine.actions import _wielding
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.types import ActionType
+
+    world, caster, _ = _board("p5330")
+    c = Cast(world=world, me=caster, ref="drivers:draw")
+    gear = world.get(caster, Gear) or world.add(caster, Gear())
+    if len(gear.weapons) < 2:
+        out.that(False, "the board deals this character two weapons")
+        return
+
+    # Stow everything but the first, so there is something to draw.
+    second = gear.weapons[1]
+    gear.wield(gear.weapons[0])
+    out.that(second.ref in gear.stowed, "the second weapon starts on the belt")
+
+    out.that(c.draw(), "c.draw takes up what is stowed")
+    out.that(second.ref not in gear.stowed, "and it is in hand afterwards")
+
+    # Nothing left to take: the row can tell, rather than silently passing.
+    for w in gear.weapons:
+        gear.stowed.discard(w.ref)
+    out.that(not c.draw(), "with nothing stowed it answers False")
+
+    # Named, for a card that says which weapon.
+    gear.stowed.add(second.ref)
+    out.that(not c.draw("nosuchref"), "a ref that is not stowed is not drawn")
+    out.that(second.ref in gear.stowed, "and nothing else was taken instead")
+    out.that(c.draw(second.ref), "the named one is")
+
+    # ---- what the MENU charges ----------------------------------------
+    world, caster, _ = _board("p5330")
+    c = Cast(world=world, me=caster, ref="drivers:draw")
+    gear = world.get(caster, Gear)
+    gear.wield(gear.weapons[0])
+    enc = world.encounter
+
+    offers = _wielding(world, enc, caster)
+    out.that(bool(offers), "the menu offers a draw")
+    out.that(all(a.cost is ActionType.MINOR for a in offers),
+             "and charges the printed minor action by default")
+
+    held = c.draws_free(per_turn=1)
+    out.that(held is not None, "a cheaper draw is laid as an effect")
+    offers = _wielding(world, enc, caster)
+    out.that(offers and all(a.cost is ActionType.FREE for a in offers),
+             "now the same draw is free")
+
+    # Spent, it is a minor again -- the row says "once per turn", not
+    # "once per encounter", so the draw must not disappear.
+    gear.draws_left = 0
+    offers = _wielding(world, enc, caster)
+    out.that(bool(offers), "with the allowance spent the draw is still offered")
+    out.that(all(a.cost is ActionType.MINOR for a in offers),
+             "at the printed minor again, rather than vanishing")
+
+    # And the start of the creature's turn refills it.
+    world.encounter._begin(caster)
+    out.that(gear.draws_left == 1, "its own turn starting refills the allowance")
+
+    # An unlimited one is never spent down.
+    world, caster, _ = _board("p5330")
+    c = Cast(world=world, me=caster, ref="drivers:draw")
+    gear = world.get(caster, Gear)
+    c.draws_free()
+    out.that(gear.draws_left == -1, "a card printing no limit is unlimited")
+    world.encounter._begin(caster)
+    out.that(gear.draws_left == -1, "and stays so across a turn")
+
+    # Ending it puts the printed cost back.
+    world, caster, _ = _board("p5330")
+    c = Cast(world=world, me=caster, ref="drivers:draw")
+    gear = world.get(caster, Gear)
+    eff = c.draws_free(per_turn=1)
+    out.that(gear.draw_cost is ActionType.FREE, "laid")
+    world.effects.suspend(eff)
+    out.that(gear.draw_cost is None, "suspended, the printed minor is back")
+    world.effects.resume(eff)
+    out.that(gear.draw_cost is ActionType.FREE, "and it comes back")
+    world.effects.end(eff, "driver")
+    out.that(gear.draw_cost is None and gear.draws_left == -1,
+             "ended, the creature draws for a minor like everybody else")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -1421,6 +1526,8 @@ DRIVERS = {
     "forms": (forms, "which shape a creature is in, and two at once"),
     "substitution": (substitution,
                      "one clause of a row replaced, and one added"),
+    "drawing": (drawing,
+                "taking a weapon up, and what it costs"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

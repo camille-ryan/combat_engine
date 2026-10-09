@@ -852,18 +852,29 @@ def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     branch is offered on the strength of what is in hand. A ranger who put
     the bow away could never pick it up again.
     """
-    from .components import Gear
+    from .components import Gear, Weapon
 
     gear = world.get(actor, Gear)
     if gear is None or len(gear.weapons) < 2:
         return []
-    if not encounter.can_spend(actor, ActionType.MINOR):
-        return []
+    # A minor is the rule; three rows buy their way out of it and
+    # `c.draws_free` is what records that. `draws_left` is the "once per
+    # turn" half -- spent, the cost goes back to the printed minor rather
+    # than the draw going away.
+    cheap = gear.draw_cost is not None and gear.draws_left != 0
+
+    def price(w: Weapon) -> ActionType:
+        # Priced per weapon, because "draw and attack with a dagger" makes
+        # one weapon cheap and leaves the rest at the printed minor.
+        if cheap and (not gear.draw_only or gear.draw_only == w.ref):
+            return gear.draw_cost or ActionType.MINOR
+        return ActionType.MINOR
+
     held = {w.ref for w in gear.held}
     return [
-        Action(kind="wield", cost=ActionType.MINOR, subject=i, ref=w.ref)
+        Action(kind="wield", cost=price(w), subject=i, ref=w.ref)
         for i, w in enumerate(gear.weapons)
-        if w.ref not in held
+        if w.ref not in held and encounter.can_spend(actor, price(w))
     ]
 
 
@@ -1268,6 +1279,11 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if not 0 <= action.subject < len(gear.weapons):
             return False
         gear.wield(gear.weapons[action.subject])
+        # Only a draw that actually used the cheap rate spends the
+        # allowance; one taken at the printed minor leaves it alone.
+        if gear.draw_cost is not None and action.cost == gear.draw_cost \
+                and gear.draws_left > 0:
+            gear.draws_left -= 1
         world.bus.emit(Note(text=f"{actor} takes up {gear.weapons[action.subject].ref}"))
         return True
 

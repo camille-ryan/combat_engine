@@ -1282,13 +1282,21 @@ def _my_basic_hit(world: World, me: int, ev: Event) -> bool:
         Trigger(SkillCheck, _my_thievery, "you succeed on a Thievery check"),
         Trigger(Hit, _my_basic_hit, "you hit an enemy with a basic attack"),
     ),
-    dropped=("c.draw()",),
+    
 )
 def p16447(c: Cast) -> None:
-    """Nothing puts a thing into a hand or takes it out mid-fight."""
+    """Shift two squares, and put one thing into a hand or away.
+
+    "Draw **or** stow" is a choice, so it is offered rather than guessed --
+    and declining is legal, because the card says "you can".
+    """
     c.shift(2)
-
-
+    taken = c.choose(["draw", "stow"], "draw or stow one item", optional=True,
+                     decline="neither")
+    if taken == "draw":
+        c.draw()
+    elif taken == "stow":
+        c.stow()
 @power(
     "p16448",
     level=6,

@@ -611,12 +611,22 @@ def i1459p1(c: Cast) -> None:
 
 
 @power("i1698x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+       reach=PERSONAL, target=SELF, )
 def i1698x1(c: Cast) -> None:
-    """Drawing a weapon costs nothing in the first place, so there is no
-    minor action for this to fold into a standard."""
+    """Draw and attack with the one weapon, on a single standard action.
 
+    **Drawing was never free.** This row's note said "drawing a weapon
+    costs nothing in the first place, so there is no minor action for this
+    to fold into a standard" -- and `actions._wielding` has charged the
+    printed minor since a ranger who put the bow away could otherwise never
+    pick it up again. So there was a minor to fold in, and the card is a
+    cost reduction rather than nothing.
 
+    Narrowed to this item's own weapon with `only=`, because the printed
+    line names one weapon and the rest of the belt still costs a minor.
+    """
+    arm = c.held(what="magic")
+    c.draws_free(only=arm[0].ref if arm else "")
 @power("i1698p1", level=6, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you hit with a thrown weapon attack",

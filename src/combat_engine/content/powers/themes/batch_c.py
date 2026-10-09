@@ -1190,7 +1190,11 @@ def p16678(c: Cast) -> None:
 # All three are the Fortune Card deck, which the engine has no model of:
 # no hand, no draw, no discard, and no card types to branch on.
 
-FORTUNE = ("c.draw()",)
+#: Fortune Cards are a deck, a hand and three categories, and none of it
+#: exists. `c.draw()` was the marker and it was the wrong one -- that verb
+#: is weapons in hand, which is a different mechanism that happens to share
+#: an English word. 11 rows across this file and `items/`. #482.
+FORTUNE = ("Fortune.deck",)
 
 
 @power("p14363", level=2, cls="x7_889", usage=ENCOUNTER, action=MINOR,

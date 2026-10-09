@@ -1096,14 +1096,14 @@ def i2969x1(c: Cast) -> None:
 
 
 @power("i3333x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.draw()",))
+       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
 def i3333x1(c: Cast) -> None:
     """The Bluff bonus is written; the Fortune Card clause has no deck."""
     _skills(c, 1, "bluff")
 
 
 @power("i3333p1", level=3, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
 def i3333p1(c: Cast) -> None:
     """Fortune Cards are not modelled: no deck, no hand, no draw."""
 
@@ -1523,37 +1523,37 @@ def i3039p1(c: Cast) -> None:
 
 
 @power("i3334x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.draw()",))
+       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
 def i3334x1(c: Cast) -> None:
     _skills(c, 1, "acrobatics")
 
 
 @power("i3334p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
 def i3334p1(c: Cast) -> None:
     """Fortune Cards are not modelled."""
 
 
 @power("i3335x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.draw()",))
+       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
 def i3335x1(c: Cast) -> None:
     _skills(c, 1, "intimidate")
 
 
 @power("i3335p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
 def i3335p1(c: Cast) -> None:
     """Fortune Cards are not modelled."""
 
 
 @power("i3336x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.draw()",))
+       reach=PERSONAL, target=SELF, dropped=("Fortune.deck",))
 def i3336x1(c: Cast) -> None:
     _skills(c, 1, "insight")
 
 
 @power("i3336p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.draw()",))
+       reach=PERSONAL, target=SELF, todo=("Fortune.deck",))
 def i3336p1(c: Cast) -> None:
     """Fortune Cards are not modelled."""
 

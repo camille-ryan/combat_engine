@@ -1188,18 +1188,24 @@ def p15931(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.DIVINE, Keyword.WEAPON],
-    dropped=("c.draw()", "c.as_basic(charge=)"),
+    dropped=("c.as_basic(charge=)",),
 )
 def p15932(c: Cast) -> None:
-    """Drawing a weapon first is an equipment operation the engine has no
-    verb for, and the printed Special -- this row in place of a melee basic
-    attack on a charge -- is a standing substitution `c.as_basic` cannot
-    narrow to a charge."""
+    """"You can draw a weapon before making the attack."
+
+    The draw costs nothing here: the standard action is already bought by
+    using this row, which is exactly the case `c.draw` exists for -- the
+    taking-up on its own, with `actions._wielding` charging the minor at
+    the other door.
+
+    Still carries `c.as_basic(charge=)`: the printed Special puts this row
+    in place of a melee basic attack **on a charge**, and `c.as_basic`
+    cannot narrow a standing substitution to one window.
+    """
+    c.draw()
     c.attack(_best(c), vs=AC)
     if c.landed:
         c.damage(c.w(2), _best_mod(c))
-
-
 # ==========================================================================
 # x7_923 -- a shadow bargainer
 # ==========================================================================
