@@ -121,7 +121,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import has_combat_advantage, hidden_from, team
-from combat_engine.engine.triggers import Trigger, about_me, hits_me, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, by_power, hits_me, targets_me
 from combat_engine.engine.zones import Zone
 
 # --------------------------------------------------------------------------
@@ -1092,7 +1092,8 @@ def m5805a1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("4d6", 10, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5805a3"),
+                          "when it uses m5805a3"),
 )
 def m5805a2(c: Cast) -> None:
     _recharge_when_using(c, "m5805a3")
@@ -1539,7 +1540,8 @@ def m6582a1(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d6", 6, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m6582a3"),
+                          "when it uses m6582a3"),
 )
 def m6582a2(c: Cast) -> None:
     _recharge_when_using(c, "m6582a3")

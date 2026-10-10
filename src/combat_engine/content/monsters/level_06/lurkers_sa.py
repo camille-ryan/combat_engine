@@ -100,11 +100,12 @@ from combat_engine.engine.events import (
     DamageRolled,
     Dropped,
     Hit,
+    PowerUsed,
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import adjacent, team
-from combat_engine.engine.triggers import Trigger, about_me, both, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, both, by_power, targets_me
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -898,7 +899,8 @@ def m5942a0(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.FORCE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=9),
     damage=Damage("2d6", 6, dtype=[DamageType.FIRE, DamageType.FORCE], kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5942a2"),
+                          "when it uses m5942a2"),
 )
 def m5942a1(c: Cast) -> None:
     _recharge_when_using(c, "m5942a2")
@@ -916,7 +918,8 @@ def m5942a1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.TELEPORTATION],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5942a1"),
+                          "when it uses m5942a1"),
 )
 def m5942a2(c: Cast) -> None:
     _recharge_when_using(c, "m5942a1")
@@ -1184,7 +1187,8 @@ def m6500a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 10, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m6500a2"),
+                          "when it uses m6500a2"),
 )
 def m6500a1(c: Cast) -> None:
     _recharge_when_using(c, "m6500a2")
@@ -1204,7 +1208,8 @@ def m6500a1(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH, Keyword.TELEPORTATION],
     attack=Attack(vs=WILL, printed=9),
     narrative=("skill:insight",),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m6500a1"),
+                          "when it uses m6500a1"),
 )
 def m6500a2(c: Cast) -> None:
     """Assuming the target's likeness is a disguise with no combat reading

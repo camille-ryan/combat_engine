@@ -95,6 +95,7 @@ from combat_engine.engine.triggers import (
     about_me,
     both,
     by_melee,
+    by_power,
     by_ranged,
     enemy_within,
     targets_me,
@@ -1576,7 +1577,8 @@ def m5848a2(c: Cast) -> None:
     damage=Damage("1d6", 4),
     requires=_is_prone,
     requires_text="must be prone",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5848a2"),
+                          "when it uses m5848a2"),
 )
 def m5848a3(c: Cast) -> None:
     """The header copies the sword's own line so the card and the policy can
@@ -1678,7 +1680,8 @@ def m5867a2(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ILLUSION],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5867a2"),
+                          "when it uses m5867a2"),
 )
 def m5867a3(c: Cast) -> None:
     _recharge_when_using(c, "m5867a2")

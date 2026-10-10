@@ -128,6 +128,7 @@ from combat_engine.engine.triggers import (
     by_charge,
     by_me,
     by_melee,
+    hit_with,
     would_hit_me,
 )
 
@@ -1044,7 +1045,8 @@ def m3544a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     charges=True,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Hit, hit_with("m3544a2"),
+                          "when it hits with m3544a2"),
 )
 def m3544a1(c: Cast) -> None:
     """The attack line lost both its defence and its damage in extraction --
@@ -2881,7 +2883,8 @@ def m6121a4(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(10),
     target=UpTo(2, side="ally"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+                          "when first bloodied"),
 )
 def m6121a5(c: Cast) -> None:
     _recharge_when_bloodied(c)

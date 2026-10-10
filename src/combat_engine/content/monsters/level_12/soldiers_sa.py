@@ -139,7 +139,7 @@ from combat_engine.engine.query import (
     squares,
     team,
 )
-from combat_engine.engine.triggers import Trigger
+from combat_engine.engine.triggers import Trigger, by_power
 
 #: "Large or smaller", which the push and swallow lines here gate on.
 LARGE_OR_SMALLER = (Size.TINY, Size.SMALL, Size.MEDIUM, Size.LARGE)
@@ -547,7 +547,8 @@ _M1100_MISSED = "the m1100 misses with a melee attack"
     keywords=[Keyword.WEAPON],
     trigger=_M1100_MISSED,
     on=Trigger(Miss, when=both(by_me, by_melee), text=_M1100_MISSED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m1100a3"),
+                          "when it uses m1100a3"),
 )
 def m1100a2(c: Cast) -> None:
     """Another swing at the creature it just missed, through the row that

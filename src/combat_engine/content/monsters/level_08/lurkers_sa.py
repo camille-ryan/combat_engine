@@ -102,7 +102,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import distance_between, has_combat_advantage, team, unseen_by
-from combat_engine.engine.triggers import Trigger, about_me, by_melee, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, by_melee, by_power, targets_me
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -1839,7 +1839,8 @@ def m5920a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=WILL, printed=11),
     damage=Damage("1d6", 4),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5920a0"),
+                          "when it uses m5920a0"),
 )
 def m5920a1(c: Cast) -> None:
     _recharge_when_using(c, "m5920a0")

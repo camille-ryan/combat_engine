@@ -112,11 +112,12 @@ from combat_engine.engine.events import (
     Hit,
     InitiativeRolled,
     Moved,
+    PowerUsed,
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import cover_between, hidden_from, moving_as
-from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, by_power, targets_me
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -1175,7 +1176,8 @@ def m4210a1(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it takes damage",
     on=Trigger(DamageApplied, targets_me, "it takes damage"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m4210a3"),
+                          "when it uses m4210a3"),
 )
 def m4210a2(c: Cast) -> None:
     _recharge_when_using(c, "m4210a3")
@@ -1192,7 +1194,8 @@ def m4210a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.LIGHTNING],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m4210a2"),
+                          "when it uses m4210a2"),
 )
 def m4210a3(c: Cast) -> None:
     _recharge_when_using(c, "m4210a2")

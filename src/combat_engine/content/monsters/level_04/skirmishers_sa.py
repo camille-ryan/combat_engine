@@ -123,6 +123,7 @@ from combat_engine.engine.events import (
     Miss,
     Moved,
     OpportunityWindow,
+    PowerUsed,
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
@@ -321,7 +322,6 @@ def _doses_left(world: World, eid: int) -> bool:
     `PowerUsed` is the only record of how often a row has been used, and the
     gate is asked with `(world, eid)` where no `Cast` exists to read a tally.
     """
-    from combat_engine.engine.events import PowerUsed
 
     spent = sum(
         1

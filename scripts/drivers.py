@@ -2260,7 +2260,7 @@ def recharge_when(out: Result) -> None:
     from combat_engine.content import loader  # noqa: F401
     from combat_engine.engine.components import Powers
     from combat_engine.engine.dsl import get
-    from combat_engine.engine.events import Bloodied
+    from combat_engine.engine.events import Bloodied, Miss
     from combat_engine.engine.query import enemies
 
     ref = "m6669a2"
@@ -2303,6 +2303,49 @@ def recharge_when(out: Result) -> None:
     out.that(ref not in known.spent,
              "and a row spent again is given back again -- the dispatcher"
              " reads the spent set rather than a one-shot arming")
+
+    # ---- "when it uses <another row>", 14 rows --------------------------
+    from combat_engine.engine.events import Hit, PowerUsed
+
+    world, user, _ = _board("m5942a1", 1)
+    known = world.need(user, Powers)
+    known.note_use("m5942a1", world.round)
+    world.bus.emit(PowerUsed(actor=user, power="m5942a1", targets=[]))
+    out.that("m5942a1" in known.spent,
+             "using the row itself does NOT recharge it -- the card names its"
+             " sibling, and a predicate reading only the actor would pass here")
+    world.bus.emit(PowerUsed(actor=user, power="m5942a2", targets=[]))
+    out.that("m5942a1" not in known.spent,
+             "using the row the card names does")
+
+    # ---- "when it hits with <row>", 2 rows, and NOT on a miss ----------
+    world, hitter, _ = _board("m2243a3", 1)
+    known = world.need(hitter, Powers)
+    known.note_use("m2243a3", world.round)
+    foe = sorted(enemies(world, hitter))[0]
+    world.bus.emit(Miss(attacker=hitter, target=foe, power="m2243a2"))
+    out.that("m2243a3" in known.spent,
+             "a MISS with the named row does not recharge it -- 'hits with'"
+             " is a different sentence from 'uses'")
+    world.bus.emit(Hit(attacker=hitter, target=foe, power="m2243a2",
+                       critical=False))
+    out.that("m2243a3" not in known.spent, "a hit does")
+
+    # `Hit` names the swinger `attacker` and `PowerUsed` names it `actor`,
+    # which is why those are two predicates. Asserted, because a single
+    # function with a `getattr` fallback would pass every rule above and be
+    # silently false on exactly one of the two events.
+    from combat_engine.engine.triggers import by_power, hit_with
+
+    ev_hit = Hit(attacker=hitter, target=foe, power="m2243a2", critical=False)
+    ev_use = PowerUsed(actor=hitter, power="m2243a2", targets=[])
+    out.that(hit_with("m2243a2")(world, hitter, ev_hit),
+             "hit_with reads `attacker`, which is what Hit carries")
+    out.that(not by_power("m2243a2")(world, hitter, ev_hit),
+             "and by_power is false on a Hit -- it reads `actor`, which Hit"
+             " does not have. The two are not spellings of each other")
+    out.that(by_power("m2243a2")(world, hitter, ev_use),
+             "while by_power is true on the event that does carry `actor`")
 
 
 DRIVERS = {

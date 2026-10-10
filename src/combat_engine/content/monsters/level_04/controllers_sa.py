@@ -144,6 +144,7 @@ from combat_engine.engine.triggers import (
     about_me,
     both,
     by_melee,
+    by_power,
     targets_me,
 )
 
@@ -2374,7 +2375,8 @@ def m5314a1(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=6),
     damage=Damage("1d10", 4, dtype=DamageType.PSYCHIC, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5314a5"),
+                          "when it uses m5314a5"),
 )
 def m5314a2(c: Cast) -> None:
     """"Uses a free action to make an at-will attack ... against a creature of

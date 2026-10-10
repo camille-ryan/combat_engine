@@ -147,7 +147,15 @@ from combat_engine.engine.query import (
     scenery,
 )
 from combat_engine.engine.query import squares as squares_of
-from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, hits_me, targets_me
+from combat_engine.engine.triggers import (
+    Trigger,
+    about_me,
+    both,
+    by_melee,
+    hit_with,
+    hits_me,
+    targets_me,
+)
 from combat_engine.engine.zones import Zone
 
 # --------------------------------------------------------------------------
@@ -1250,7 +1258,8 @@ def m2243a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.TELEPORTATION, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Hit, hit_with("m2243a2"),
+                          "when it hits with m2243a2"),
 )
 def m2243a3(c: Cast) -> None:
     if c.first:

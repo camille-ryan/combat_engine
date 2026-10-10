@@ -2427,7 +2427,8 @@ def m6118a3(c: Cast) -> None:
     damage=Damage("2d10", 4, dtype=DamageType.THUNDER, kind=LIMITED, half_on_miss=True),
     requires=_has_been_hurt,
     requires_text="must have taken damage during the encounter",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+                          "when first bloodied"),
 )
 def m6118a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

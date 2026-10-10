@@ -85,6 +85,7 @@ from combat_engine.engine.events import (
     Hit,
     Miss,
     Moved,
+    PowerUsed,
     TurnStart,
     Window,
 )
@@ -95,7 +96,7 @@ from combat_engine.engine.query import (
     hidden_from,
     moving_as,
 )
-from combat_engine.engine.triggers import Trigger, about_me
+from combat_engine.engine.triggers import Trigger, about_me, by_power
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -1063,7 +1064,8 @@ def m5560a2(c: Cast) -> None:
     damage=Damage("4d10", 8, kind=LIMITED),
     requires=_underground,
     requires_text="it must be underground",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5560a2"),
+                          "when it uses m5560a2"),
 )
 def m5560a3(c: Cast) -> None:
     """The attack fires once, at the end of the whole move, rather than on

@@ -119,6 +119,7 @@ from combat_engine.engine.events import (
     Miss,
     Moved,
     OpportunityWindow,
+    PowerUsed,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -1339,7 +1340,6 @@ def m2507a3(c: Cast) -> None:
         if zc2 is not None and zc2.effect is not None:
             c.world.effects.end(zc2.effect, "m2507 used m2507a6")
 
-    from combat_engine.engine.events import PowerUsed
     from combat_engine.engine.events import ZoneEntered as _ZE
 
     c.watch(_ZE, tick, until=When.SUSTAIN, on=me, label=f"{c.ref} enter")

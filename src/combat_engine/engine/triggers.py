@@ -417,6 +417,46 @@ def by_action_point(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "action_point", False))
 
 
+def by_power(ref: str) -> Callable[[World, int, Any], bool]:
+    """A use of one named row, by the creature being asked.
+
+    `"Recharge when the m4210 uses m4210a3"` is 17 monster rows, and the
+    pattern is older than that: `items/implement_b.py` and
+    `items/implement_d.py` each grew a private `_used_by_me(ref)` doing
+    exactly this. It belongs beside `about_me` and `targets_me` rather than a
+    third time in `monsters/`.
+
+    Reads `actor`, so it is false on any event that names its subject
+    something else -- the same trap `about_me`'s note describes.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        return getattr(ev, "actor", None) == me and getattr(ev, "power", "") == ref
+
+    return check
+
+
+def hit_with(ref: str) -> Callable[[World, int, Any], bool]:
+    """A **hit** landed with one named row, by the creature being asked.
+
+    Not a spelling of `by_power`, and the difference is the kind that goes
+    silently false: `Hit` names the swinger `attacker` where `PowerUsed`
+    names it `actor`, so `by_power` on a `Hit` reads a field that is not
+    there and is never true. Same trap `about_me`'s note describes, which is
+    why these are two functions and not one with a `getattr` fallback -- a
+    default would hide the mistake instead of making it impossible.
+
+    "Recharge when the m2243 hits with m2243a2" is the printed shape, and it
+    is a different sentence from "when it uses" -- a miss does not recharge
+    it.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        return getattr(ev, "attacker", None) == me and getattr(ev, "power", "") == ref
+
+    return check
+
+
 def about_me(world: World, me: int, ev: Event) -> bool:
     """Reads `ev.actor`, and **only** `ev.actor`.
 
