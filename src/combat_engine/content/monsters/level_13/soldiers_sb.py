@@ -151,7 +151,7 @@ from combat_engine.engine.query import (
     has_combat_advantage,
     team,
 )
-from combat_engine.engine.triggers import Trigger, about_me
+from combat_engine.engine.triggers import Trigger, about_me, about_somebody_adjacent
 
 #: "A Large or larger creature", which is what m2032's three weapon rows
 #: raise their critical dice against.
@@ -838,7 +838,8 @@ def m2032a2(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("4d12", kind=LIMITED),
     requires_text="it must have combat advantage against the target",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_somebody_adjacent,
+                          "when an adjacent creature becomes bloodied"),
 )
 def m2032a3(c: Cast) -> None:
     """"Requires combat advantage against the target" is about a pair, and

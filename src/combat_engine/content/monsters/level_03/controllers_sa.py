@@ -1528,7 +1528,8 @@ def m4229a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=8),
     damage=Damage("1d8", 3, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+                          "when bloodied"),
 )
 def m4229a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2863,7 +2864,8 @@ def m6044a1(c: Cast) -> None:
     reach=CloseBurst(5),
     target=ONE_ALLY,
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+                          "when bloodied"),
 )
 def m6044a2(c: Cast) -> None:
     _recharge_when_bloodied(c)

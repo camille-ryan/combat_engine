@@ -150,6 +150,7 @@ from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
+    about_somebody_adjacent,
     both,
     by_melee,
     hit_with,
@@ -1048,7 +1049,8 @@ def m1987a1(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.MELEE],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d12", 8, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_somebody_adjacent,
+                          "when an adjacent creature becomes bloodied"),
 )
 def m1987a2(c: Cast) -> None:
     if c.first:

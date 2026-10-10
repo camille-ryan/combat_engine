@@ -111,7 +111,14 @@ from combat_engine.engine.query import (
     is_,
     team,
 )
-from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, targets_me
+from combat_engine.engine.triggers import (
+    Trigger,
+    about_me,
+    about_somebody_adjacent,
+    both,
+    by_melee,
+    targets_me,
+)
 from combat_engine.engine.types import Relation
 
 # --------------------------------------------------------------------------
@@ -665,7 +672,8 @@ def _recharge_when_neighbor_bloodied(c: Cast, ref: str, radius: int = 1) -> None
         has_combat_advantage(world, eid, foe) for foe in enemies(world, eid)
     ),
     requires_text="requires combat advantage",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_somebody_adjacent,
+                          "when an adjacent creature becomes bloodied"),
 )
 def m1059a1(c: Cast) -> None:
     """The recharge-when-a-neighbor-bloodies clause is armed from the body,

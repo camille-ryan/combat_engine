@@ -396,7 +396,8 @@ def m3131a0(c: Cast) -> None:
     keywords=[Keyword.ILLUSION, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
     damage=Damage("2d6", 2, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+                          "when bloodied"),
 )
 def m3131a1(c: Cast) -> None:
     """The printed "recharge when bloodied" is armed on top of the die, not

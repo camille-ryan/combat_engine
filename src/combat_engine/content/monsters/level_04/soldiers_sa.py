@@ -670,7 +670,8 @@ def m3130a0(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
     damage=Damage("2d6", 2, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+                          "when bloodied"),
 )
 def m3130a1(c: Cast) -> None:
     """"Recharge when bloodied" on top of the die: the number stays in the header

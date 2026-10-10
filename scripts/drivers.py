@@ -2347,6 +2347,36 @@ def recharge_when(out: Result) -> None:
     out.that(by_power("m2243a2")(world, hitter, ev_use),
              "while by_power is true on the event that does carry `actor`")
 
+    # ---- "when an ADJACENT creature becomes bloodied", 3 rows -----------
+    #
+    # The half that goes wrong silently: `Bloodied` carries both the creature
+    # bloodied (`actor`) and whoever struck it (`source`), usually on opposite
+    # sides, and `by_somebody_adjacent` reads the striker. Reading the wrong
+    # one recharges the row off the wrong body and passes any test that only
+    # checks "it came back".
+    from combat_engine.engine.query import adjacent
+    from combat_engine.engine.triggers import about_somebody_adjacent, by_somebody_adjacent
+
+    world, owner, _ = _board("m1059a1", 1)
+    near = next(e for e in sorted(enemies(world, owner)) if adjacent(world, owner, e))
+    far = next(e for e in sorted(enemies(world, owner)) if not adjacent(world, owner, e))
+    known = world.need(owner, Powers)
+
+    known.note_use("m1059a1", world.round)
+    world.bus.emit(Bloodied(actor=far, source=owner))
+    out.that("m1059a1" in known.spent,
+             "a creature bloodied FAR away does not recharge it")
+    world.bus.emit(Bloodied(actor=near, source=owner))
+    out.that("m1059a1" not in known.spent,
+             "a creature bloodied ADJACENT does")
+
+    ev = Bloodied(actor=far, source=near)
+    out.that(not about_somebody_adjacent(world, owner, ev),
+             "about_somebody_adjacent reads `actor` -- who was bloodied")
+    out.that(by_somebody_adjacent(world, owner, ev),
+             "where by_somebody_adjacent reads `source` -- who struck. Same"
+             " event, two different creatures, and only one is the card\'s")
+
 
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),

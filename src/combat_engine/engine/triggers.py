@@ -586,6 +586,24 @@ def by_somebody_adjacent(world: World, me: int, ev: Event) -> bool:
     return foe is not None and foe != me and adjacent(world, me, foe)
 
 
+def about_somebody_adjacent(world: World, me: int, ev: Event) -> bool:
+    """Is the creature this event is *about* standing next to me?
+
+    "Recharges when an adjacent creature becomes bloodied" is three monster
+    rows, and `by_somebody_adjacent` is the wrong half of the same question:
+    that one reads `attacker`/`source` -- whoever **struck** -- where this
+    reads `actor`, the creature the event happened *to*. On a `Bloodied`
+    those are two different creatures and usually on opposite sides, so
+    using the other one would recharge the row off the wrong body.
+
+    Same `about_me` / `by_me` split, one square out.
+    """
+    from .query import adjacent
+
+    who = getattr(ev, "actor", None)
+    return who is not None and who != me and adjacent(world, me, who)
+
+
 def closed_on_me(world: World, me: int, ev: Event) -> bool:
     """Somebody *else* moved into reach of me.
 
