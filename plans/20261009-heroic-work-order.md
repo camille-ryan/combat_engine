@@ -165,12 +165,62 @@ compares the two — `cards.py` returns early unless the row has `damage=`.
 
 ---
 
+## Phase 3, as executed — both closed
+
+`#477` and `#449`, with their measurements on the issues.
+
+* **`#477`** was "three copies, 28 rows" and is **eight reader definitions
+  and three writer definitions across 22 files, 105 rows**. The writers had
+  to move first: they laid `c.form(label=...)` with no `name=`, so folding
+  the readers first would have made 44 gates answer yes to everything.
+  `audit --calls` cannot see that, proven by planting it.
+* **`#449`** corrected 1,024 thresholds and found a second fault its own
+  instrument could not see — 440 conditional cards where content and column
+  **agree on 6 and both are wrong**. Rounds 6.5 → 7.0, into #217's band,
+  which is the opposite direction from the one its body feared.
+
+---
+
 ## Phase 4 — `#468`, on its own clock
 
 2,073 unfinished rows: the authoring half. A content wave is **~50% of a
 week's token budget**, so it is scheduled, never opportunistic. Phases 1–3
 shrink it first. Read `#468`'s comments before starting — six programme
 revisions are recorded there, not in the body.
+
+### As executed — the recharge-condition family, 181 rows
+
+```
+blocked                 2051 -> 1826
+Usage.RECHARGE(when=)    204 -> 23
+drivers                  289 -> 323 rules
+```
+
+`Power.recharge_when` plus `Triggers._recharge`, then three waves. **The
+engine half is asked at the moment the event fires rather than armed when the
+row is spent**, which is how 169 rows do it by hand — arming works and means
+the condition cannot be read without running the row.
+
+Three predicates came out of it, and each exists because the obvious single
+one is **silently false** on half its events:
+
+| | reads | because |
+|---|---|---|
+| `by_power(ref)` | `actor` | `PowerUsed` names the user that |
+| `hit_with(ref)` | `attacker` | `Hit` does not have `actor` at all |
+| `about_somebody_adjacent` | `actor` | `Bloodied` also carries `source`, the striker, usually on the other side |
+
+Every one of the three was planted and each turned exactly the rules that
+name it red.
+
+**The re-pointing tax is not a constant.** This issue records "about a third
+of a family re-points rather than finishes"; here it was 181 written and 0
+re-pointed, because `#449` had just read all 440 cards to place the marker.
+The tax is the price of a marker written without reading the cards.
+
+**`#489` is what is left of it**: ten rows printing a *state* — "while no
+creature is dominated by this power" — which a `Trigger` cannot express,
+because there is no moment to watch. The remaining thirteen are singles.
 
 ---
 
