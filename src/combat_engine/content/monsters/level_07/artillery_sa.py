@@ -40,12 +40,11 @@ already gets elsewhere in this project.
 
 from __future__ import annotations
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy, _twice
 from combat_engine.content.monsters.level_03.brutes_sa import _enemy_closed_on_me
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
-from combat_engine.content.monsters.level_04.brutes import _change_shape
-from combat_engine.content.monsters.level_04.brutes_sa import _in_shapes
 from combat_engine.content.monsters.level_07.brutes import _is_bloodied
 from combat_engine.engine import (
     AC,
@@ -1216,7 +1215,7 @@ def m6191a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
-    requires=_in_shapes(_M6191_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in humanoid or hybrid form",
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d6", 5),
@@ -1234,7 +1233,7 @@ def m6191a1(c: Cast) -> None:
     reach=Ranged(10),
     target=UpTo(2),
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT],
-    requires=_in_shapes(_M6191_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in humanoid or hybrid form",
     attack=Attack(vs=REF, printed=12),
     damage=Damage("3d4", 4, dtype=DamageType.FIRE),
@@ -1258,7 +1257,7 @@ def m6191a2(c: Cast) -> None:
     reach=CloseBlast(5),
     target=EACH_ENEMY,
     keywords=[Keyword.CHARM, Keyword.FIRE, Keyword.IMPLEMENT],
-    requires=_in_shapes(_M6191_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in humanoid or hybrid form",
     attack=Attack(vs=WILL, printed=10),
 )
@@ -1304,7 +1303,7 @@ def m6191a4(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m6191a5(c: Cast) -> None:
-    _change_shape(c, _M6191_SHAPE, ("true", "human", "hybrid"))
+    _shapechange(c, "true", "human", "hybrid")
 
 
 _M6191_ADJ = "an enemy ends its move adjacent to the m6191"

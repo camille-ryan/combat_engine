@@ -58,7 +58,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.content.monsters.level_04.brutes import _change_shape, _in_shape
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_06.controllers import _is_humanoid, _living
 from combat_engine.content.monsters.level_07.brutes import _aura, _crit_line
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
@@ -106,9 +106,6 @@ from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import alive, team
 from combat_engine.engine.triggers import Trigger, about_me
 
-#: m3034's two shapes and the prefix its hold is labelled with, so the three
-#: gated rows can read which one is in force.
-_M3034_SHAPE = "m3034a5 "
 _M3034_SHAPES = ("humanoid", "wolf")
 
 
@@ -396,7 +393,7 @@ def m2809a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("4d4", 6),
-    requires=_in_shape(_M3034_SHAPE, "humanoid"),
+    requires=_shapes("humanoid"),
     requires_text="the m3034 must be in its humanoid form",
 )
 def m3034a0(c: Cast) -> None:
@@ -415,7 +412,7 @@ def m3034a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d12", 3),
-    requires=_in_shape(_M3034_SHAPE, "wolf"),
+    requires=_shapes("wolf"),
     requires_text="the m3034 must be in its beast form",
 )
 def m3034a1(c: Cast) -> None:
@@ -464,7 +461,7 @@ def m3034a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    requires=_in_shape(_M3034_SHAPE, "wolf"),
+    requires=_shapes("wolf"),
     requires_text="the m3034 must be in its beast form",
 )
 def m3034a3(c: Cast) -> None:
@@ -528,7 +525,7 @@ def m3034a5(c: Cast) -> None:
 
     A polymorph is not a stance, so the shape worn before is ended by hand.
     """
-    _change_shape(c, _M3034_SHAPE, _M3034_SHAPES)
+    _shapechange(c, *_M3034_SHAPES)
 
 
 # ==========================================================================

@@ -176,20 +176,6 @@ def _grief_stricken(c: Cast, victim: int) -> None:
     c.vulnerable(5, DamageType.PSYCHIC, until=When.SAVE_ENDS, on=victim)
 
 
-def _in_shape(prefix: str, word: str) -> Any:
-    """A printed Requirement naming one of a shapechanger's forms. A
-    creature that has not changed shape yet passes every gate, the way
-    `level_04/brutes.py`'s version of this does."""
-
-    def gate(world: World, eid: int) -> bool:
-        for effect in world.effects.of(eid):
-            if effect.label.startswith(prefix):
-                return effect.label.endswith(word)
-        return True
-
-    return gate
-
-
 def _ally_hit_in_melee(world: World, me: int, ev: Hit) -> bool:
     """"An ally hits with a melee attack." `ally_within` has no radius-free
     form, and this trigger prints no distance at all."""
@@ -586,7 +572,11 @@ def m3272a3(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.POLYMORPH],
 )
 def m3272a4(c: Cast) -> None:
-    c.form(until=When.ENCOUNTER, revert=None, label="m3272a4 beast")
+    # `name=` so the shape is readable through `query.in_form` and not only
+    # as a label. One fixed shape and no choice, so this stays a direct
+    # `c.form` rather than `_shapechange`. #477.
+    c.form(until=When.ENCOUNTER, revert=None, name="beast",
+           label="m3272a4 beast")
     c.regeneration(5, until=When.ENCOUNTER, on=c.me)
     c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER)
 

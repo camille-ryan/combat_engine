@@ -15,6 +15,7 @@ creature can actually shoot without a penalty the engine does not model.
 
 from __future__ import annotations
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.engine import (
     AC,
@@ -190,47 +191,12 @@ def _crit_line(c: Cast, dice: str, bonus: int) -> None:
         c.hit()
 
 
-def _in_shape(prefix: str, word: str):  # noqa: ANN202
-    """A printed Requirement naming one of a shapechanger's two forms.
-
-    A creature that has not changed shape yet is in whatever shape it was
-    found in, which the stat block does not say -- so an undeclared form
-    rules out neither attack. Once it has changed, the hold is the answer.
-    """
-
-    def gate(world: World, eid: int) -> bool:
-        for effect in world.effects.of(eid):
-            if effect.label.startswith(prefix):
-                return effect.label.endswith(word)
-        return True
-
-    return gate
-
-
-def _change_shape(c: Cast, prefix: str, shapes: tuple[str, ...]) -> None:
-    """Take one of two shapes, ending whichever was worn before.
-
-    A polymorph is not a stance, so `c.form` does not clear the old one for
-    itself. The form carries no conditions and no movement modes: the
-    printed line changes what the creature looks like and which rows it can
-    reach, and nothing else.
-    """
-    for effect in list(c.world.effects.of(c.me)):
-        if effect.label.startswith(prefix):
-            c.world.effects.end(effect, "changed shape")
-    shape = c.choose(list(shapes), "which shape")
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{prefix}{shape}")
-
-
 # ==========================================================================
 # Brutes
 # ==========================================================================
 
 # -- m2812 ------------------------------------------------------------------
 
-#: The prefix on m2812a4's hold, so the three gated rows can read which of
-#: the two shapes is in force.
-_M2812_SHAPE = "m2812a4 "
 _M2812_SHAPES = ("wolf", "bugbear")
 
 
@@ -243,7 +209,7 @@ _M2812_SHAPES = ("wolf", "bugbear")
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("2d8", 4),
-    requires=_in_shape(_M2812_SHAPE, "wolf"),
+    requires=_shapes("wolf"),
     requires_text="the m2812 must be in its beast shape",
 )
 def m2812a0(c: Cast) -> None:
@@ -261,7 +227,7 @@ def m2812a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d10", 6),
-    requires=_in_shape(_M2812_SHAPE, "bugbear"),
+    requires=_shapes("bugbear"),
     requires_text="the m2812 must be in its humanoid shape",
 )
 def m2812a1(c: Cast) -> None:
@@ -301,7 +267,7 @@ def m2812a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC, Keyword.RELIABLE],
     attack=Attack(vs=WILL, printed=5),
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    requires=_in_shape(_M2812_SHAPE, "wolf"),
+    requires=_shapes("wolf"),
     requires_text="the m2812 must be in its beast shape",
     dropped=("c.learn()",),
 )
@@ -339,7 +305,7 @@ def m2812a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m2812a4(c: Cast) -> None:
-    _change_shape(c, _M2812_SHAPE, _M2812_SHAPES)
+    _shapechange(c, *_M2812_SHAPES)
 
 
 # -- m284 -------------------------------------------------------------------

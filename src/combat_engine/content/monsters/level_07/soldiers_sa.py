@@ -28,6 +28,7 @@ Conventions, the same ones the rest of the tree settled:
 
 from __future__ import annotations
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
 from combat_engine.content.monsters.level_02.lurkers_sa import (
     _reach_kind,
@@ -47,7 +48,6 @@ from combat_engine.content.monsters.level_03.soldiers_sa import (
     _adjacent_foe_looks_away,
     _marked_shifts,
 )
-from combat_engine.content.monsters.level_04.brutes_sa import _change_shape, _in_shapes
 from combat_engine.content.monsters.level_07.soldiers import (
     _aura,
     _hands_free,
@@ -1799,16 +1799,15 @@ def m5577a3(c: Cast) -> None:
 # m5598
 # ==========================================================================
 
-_M5598_SHAPE = "m5598a6 "
 _M5598_SHAPES = ("snake", "human", "hybrid")
 
 
 def _m5598_free_to_grab(world: World, eid: int) -> bool:
-    return _in_shapes(_M5598_SHAPE, "snake", "hybrid")(world, eid) and _hands_free(world, eid)
+    return _shapes("snake", "hybrid")(world, eid) and _hands_free(world, eid)
 
 
 def _m5598_holding(world: World, eid: int) -> bool:
-    return _in_shapes(_M5598_SHAPE, "snake", "hybrid")(world, eid) and _has_hold(world, eid)
+    return _shapes("snake", "hybrid")(world, eid) and _has_hold(world, eid)
 
 
 def _m5598_steady(world: World, eid: int) -> bool:
@@ -1829,7 +1828,7 @@ def m5598a0(c: Cast) -> None:
     "m5598a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12), damage=Damage("2d10", 4),
-    requires=_in_shapes(_M5598_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in its humanoid or hybrid form",
 )
 def m5598a1(c: Cast) -> None:
@@ -1842,7 +1841,7 @@ def m5598a1(c: Cast) -> None:
     "m5598a2", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.POISON],
     attack=Attack(vs=REF, printed=12), damage=Damage("1d8", 6, dtype=DamageType.POISON),
-    requires=_in_shapes(_M5598_SHAPE, "snake", "hybrid"),
+    requires=_shapes("snake", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
@@ -1909,7 +1908,7 @@ def m5598a5(c: Cast) -> None:
     target=SELF, keywords=[Keyword.POLYMORPH],
 )
 def m5598a6(c: Cast) -> None:
-    _change_shape(c, _M5598_SHAPE, _M5598_SHAPES)
+    _shapechange(c, *_M5598_SHAPES)
 
 
 @power(

@@ -1289,6 +1289,31 @@ def forms(out: Result) -> None:
     out.that(not shifted(world, caster),
              "a form laid with no name records no shape at all")
 
+    # ---- end to end, through a real grantor row (#477) ------------------
+    #
+    # **Everything above this point would pass with every grantor in the tree
+    # broken**, because it lays its own forms. That is exactly the regression
+    # the fold could cause: `monsters/forms.py`'s readers ask `Shapes`, and a
+    # grantor that forgets `name=` records nothing -- so `in_form` falls back
+    # to its permissive answer and **44 gates start passing unconditionally**.
+    # Silently false, and no row would look wrong.
+    #
+    # So this asserts the whole path a card takes: use the printed polymorph
+    # row, then ask the question its own stat block's Requirements ask.
+    from combat_engine.engine.dsl import use
+
+    world, caster, _ = _board("m2812a4", 1)
+    out.that(not shifted(world, caster), "before using it, no shape is recorded")
+    use(world, caster, "m2812a4")
+    out.that(shifted(world, caster),
+             "using a real printed polymorph row records a shape -- this is"
+             " the rule that catches a grantor which forgot `name=`")
+    out.that(in_form(world, caster, "wolf") or in_form(world, caster, "bugbear"),
+             "and it is one of the two shapes that card prints")
+    out.that(not (in_form(world, caster, "wolf")
+                  and in_form(world, caster, "bugbear")),
+             "exactly one of them, because a polymorph ends the shape before")
+
 
 
 

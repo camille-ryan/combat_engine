@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.engine import (
     AC,
@@ -851,23 +852,6 @@ _SHAPES = ("jackal", "human")
 _SHAPE_LABEL = "m4926a3 "
 
 
-def _in_shape(word: str):  # noqa: ANN202
-    """A printed Requirement naming one of the two forms.
-
-    A creature that has not changed shape yet is in whatever shape it was
-    found in, which the stat block does not say -- so an undeclared form
-    rules out neither attack. Once it has changed, the hold is the answer.
-    """
-
-    def gate(world: World, eid: int) -> bool:
-        for effect in world.effects.of(eid):
-            if effect.label.startswith(_SHAPE_LABEL):
-                return effect.label.endswith(word)
-        return True
-
-    return gate
-
-
 @power(
     "m4926a0",
     level=3,
@@ -898,7 +882,7 @@ def m4926a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=8),
     damage=Damage(bonus=5, kind=MINION),
-    requires=_in_shape("jackal"),
+    requires=_shapes("jackal"),
     requires_text="the m4926 must be in its beast shape",
 )
 def m4926a1(c: Cast) -> None:
@@ -916,7 +900,7 @@ def m4926a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage(bonus=3, kind=MINION),
-    requires=_in_shape("human"),
+    requires=_shapes("human"),
     requires_text="the m4926 must be in its humanoid shape",
 )
 def m4926a2(c: Cast) -> None:
@@ -956,12 +940,10 @@ def m4926a3(c: Cast) -> None:
 
     Using it again ends the shape it was in, which `c.form` does not do for
     itself -- a polymorph is not a stance, and this one is printed as one.
+    That is `_shapechange`'s job now, with `revert=None` because this card
+    prints no way out and the form lasts the encounter. #477.
     """
-    for effect in list(c.world.effects.of(c.me)):
-        if effect.label.startswith(_SHAPE_LABEL):
-            c.world.effects.end(effect, "it changed shape again")
-    shape = c.choose(list(_SHAPES), "which shape") or _SHAPES[0]
-    c.form(until=When.ENCOUNTER, revert=None, label=f"{_SHAPE_LABEL}{shape}")
+    _shapechange(c, *_SHAPES, revert=None)
 
 
 # --------------------------------------------------------------------------

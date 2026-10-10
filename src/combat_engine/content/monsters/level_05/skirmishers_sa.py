@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_01.brutes_sa import _crit_line
 from combat_engine.content.monsters.level_01.skirmishers_sa import _moved_far
@@ -59,12 +60,7 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
 )
 from combat_engine.content.monsters.level_03.artillery_sa import _death_throe
 from combat_engine.content.monsters.level_03.skirmishers_sa import _mobile_attack
-from combat_engine.content.monsters.level_04.brutes import (
-    _change_shape,
-    _in_shape,
-    _is_bloodied,
-)
-from combat_engine.content.monsters.level_04.brutes_sa import _in_shapes
+from combat_engine.content.monsters.level_04.brutes import _is_bloodied
 from combat_engine.content.monsters.level_05.artillery_sa import _bloodied_edge
 from combat_engine.content.monsters.level_05.brutes_sa import _i_charged
 from combat_engine.engine import (
@@ -1898,9 +1894,6 @@ def m5561a2(c: Cast) -> None:
 # m5597
 # ==========================================================================
 
-#: The prefix on m5597a5's hold, so the three gated rows can read which of
-#: the block's three shapes is in force.
-_M5597_SHAPE = "m5597a5 "
 _M5597_SHAPES = ("wolf", "human", "hybrid")
 
 
@@ -1926,7 +1919,7 @@ def m5597a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 4),
-    requires=_in_shapes(_M5597_SHAPE, "wolf", "hybrid"),
+    requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
 )
 def m5597a1(c: Cast) -> None:
@@ -1949,7 +1942,7 @@ def m5597a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d10", 6),
-    requires=_in_shapes(_M5597_SHAPE, "wolf", "hybrid"),
+    requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
@@ -1968,7 +1961,7 @@ def m5597a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d6", 7),
-    requires=_in_shapes(_M5597_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in its humanoid or hybrid form",
 )
 def m5597a3(c: Cast) -> None:
@@ -1990,7 +1983,7 @@ def m5597a3(c: Cast) -> None:
     charges=True,
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d10", 6),
-    requires=_in_shapes(_M5597_SHAPE, "wolf", "hybrid"),
+    requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
 )
 def m5597a4(c: Cast) -> None:
@@ -2010,14 +2003,13 @@ def m5597a4(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5597a5(c: Cast) -> None:
-    _change_shape(c, _M5597_SHAPE, _M5597_SHAPES)
+    _shapechange(c, *_M5597_SHAPES)
 
 
 # ==========================================================================
 # m5599
 # ==========================================================================
 
-_M5599_SHAPE = "m5599a4 "
 _M5599_SHAPES = ("rat", "human", "hybrid")
 
 
@@ -2044,7 +2036,7 @@ def m5599a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d4", 6),
-    requires=_in_shapes(_M5599_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in its humanoid or hybrid form",
 )
 def m5599a1(c: Cast) -> None:
@@ -2066,7 +2058,7 @@ def m5599a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("1d6", 5),
-    requires=_in_shapes(_M5599_SHAPE, "rat", "hybrid"),
+    requires=_shapes("rat", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
@@ -2085,7 +2077,7 @@ def m5599a2(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    requires=_in_shape(_M5599_SHAPE, "rat"),
+    requires=_shapes("rat"),
     requires_text="it must be in its beast form",
 )
 def m5599a3(c: Cast) -> None:
@@ -2102,7 +2094,7 @@ def m5599a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5599a4(c: Cast) -> None:
-    _change_shape(c, _M5599_SHAPE, _M5599_SHAPES)
+    _shapechange(c, *_M5599_SHAPES)
 
 
 # ==========================================================================
@@ -2808,7 +2800,7 @@ def m6121a1(c: Cast) -> None:
     target=UpTo(2),
     attack=Attack(vs=AC, printed=10),
     damage=Damage("2d6", 6),
-    requires=_in_shape(_M6121_SHAPE, "jackal"),
+    requires=_shapes("jackal"),
     requires_text="it must be in its beast form",
 )
 def m6121a2(c: Cast) -> None:
@@ -2827,7 +2819,7 @@ def m6121a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("4d4", 4),
-    requires=_in_shape(_M6121_SHAPE, "human"),
+    requires=_shapes("human"),
     requires_text="it must be in its humanoid form",
 )
 def m6121a3(c: Cast) -> None:
@@ -2925,7 +2917,7 @@ def m6121a6(c: Cast) -> None:
             c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{_M6121_SHAPE}beast")
 
         c.watch(Dropped, revert, until=When.ENCOUNTER, on=me, label=label)
-    _change_shape(c, _M6121_SHAPE, _M6121_SHAPES)
+    _shapechange(c, *_M6121_SHAPES)
     c.shift(3)
 
 

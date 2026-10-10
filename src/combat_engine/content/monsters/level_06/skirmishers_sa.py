@@ -45,6 +45,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.content.monsters.level_01.skirmishers_sa import _by_hand
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
@@ -60,8 +61,6 @@ from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _per_round_rider,
     _shift_up_to,
 )
-from combat_engine.content.monsters.level_04.brutes import _change_shape
-from combat_engine.content.monsters.level_04.brutes_sa import _in_shapes
 from combat_engine.content.monsters.level_04.skirmishers import _struck
 from combat_engine.content.monsters.level_04.skirmishers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_05.skirmishers import _airborne
@@ -2790,7 +2789,7 @@ def m5891a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 9),
-    requires=_in_shapes("m5891a5", "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in humanoid or hybrid form",
 )
 def m5891a1(c: Cast) -> None:
@@ -2807,7 +2806,7 @@ def m5891a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 3),
-    requires=_in_shapes("m5891a5", "wolf", "hybrid"),
+    requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
 def m5891a2(c: Cast) -> None:
@@ -2827,7 +2826,7 @@ def m5891a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 9),
-    requires=_in_shapes("m5891a5", "wolf", "hybrid"),
+    requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in beast or hybrid form",
     dropped=("c.disease()",),
 )
@@ -2854,7 +2853,7 @@ def m5891a4(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5891a5(c: Cast) -> None:
-    _change_shape(c, "m5891a5", ("human", "wolf", "hybrid"))
+    _shapechange(c, "human", "wolf", "hybrid")
 
 
 # --------------------------------------------------------------------------

@@ -38,12 +38,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.soldiers_sa import _ref_of
 from combat_engine.content.monsters.level_03.brutes_sa import _enemy_closed_on_me
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
-from combat_engine.content.monsters.level_04.brutes import _change_shape
-from combat_engine.content.monsters.level_04.brutes_sa import _in_shapes
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_05.artillery_sa import (
     _bloodied_edge,
@@ -2309,7 +2308,6 @@ def m5939a3(c: Cast) -> None:
 # m5957
 # ==========================================================================
 
-_M5957_SHAPE = "m5957a5 "
 _M5957_SHAPES = ("wolf", "human", "hybrid")
 
 
@@ -2336,7 +2334,7 @@ def m5957a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 2),
-    requires=_in_shapes(_M5957_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in humanoid or hybrid form",
 )
 def m5957a1(c: Cast) -> None:
@@ -2354,7 +2352,7 @@ def m5957a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 2),
-    requires=_in_shapes(_M5957_SHAPE, "wolf", "hybrid"),
+    requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in beast or hybrid form",
     dropped=("c.contract(ref)",),
 )
@@ -2409,7 +2407,7 @@ def m5957a4(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5957a5(c: Cast) -> None:
-    _change_shape(c, _M5957_SHAPE, _M5957_SHAPES)
+    _shapechange(c, *_M5957_SHAPES)
 
 
 # ==========================================================================

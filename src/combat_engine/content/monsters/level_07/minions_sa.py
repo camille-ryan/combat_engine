@@ -29,8 +29,8 @@ matched here by `Ident.ref` rather than any word.
 
 from __future__ import annotations
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
-from combat_engine.content.monsters.level_04.brutes import _change_shape, _in_shape
 from combat_engine.content.monsters.level_06.minions_sa import _ref_of
 from combat_engine.engine import (
     AC,
@@ -83,7 +83,6 @@ from combat_engine.engine.triggers import Trigger, about_me, targets_me
 # Shared shapes
 # --------------------------------------------------------------------------
 
-_M5783_SHAPE = "m5783a3 "
 _M5783_SHAPES = ("beast", "humanoid")
 
 
@@ -545,7 +544,7 @@ def m5783a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=12),
     damage=Damage("", 7, kind=MINION),
-    requires=_in_shape(_M5783_SHAPE, "beast"),
+    requires=_shapes("beast"),
     requires_text="it must be in beast form",
 )
 def m5783a1(c: Cast) -> None:
@@ -564,7 +563,7 @@ def m5783a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("", 5, kind=MINION),
-    requires=_in_shape(_M5783_SHAPE, "humanoid"),
+    requires=_shapes("humanoid"),
     requires_text="it must be in humanoid form",
 )
 def m5783a2(c: Cast) -> None:
@@ -582,7 +581,7 @@ def m5783a2(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5783a3(c: Cast) -> None:
-    _change_shape(c, _M5783_SHAPE, _M5783_SHAPES)
+    _shapechange(c, *_M5783_SHAPES)
 
 
 # ==========================================================================

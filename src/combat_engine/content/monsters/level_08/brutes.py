@@ -46,6 +46,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -266,38 +267,6 @@ def _squeezes_freely(c: Cast) -> None:
                 c.world.effects.end(eff, ref)
 
     c.watch(ConditionApplied, unsqueeze, until=When.ENCOUNTER, on=me, label=ref)
-
-
-def _in_shape(prefix: str, word: str):  # noqa: ANN202
-    """A printed Requirement naming one of a shapechanger's two forms.
-
-    A creature that has not changed shape yet is in whatever shape it was
-    found in, which the stat block does not say -- so an undeclared form
-    rules out neither attack. Once it has changed, the hold is the answer.
-    """
-
-    def gate(world: World, eid: int) -> bool:
-        for effect in world.effects.of(eid):
-            if effect.label.startswith(prefix):
-                return effect.label.endswith(word)
-        return True
-
-    return gate
-
-
-def _change_shape(c: Cast, prefix: str, shapes: tuple[str, ...]) -> None:
-    """Take one of two shapes, ending whichever was worn before.
-
-    A polymorph is not a stance, so `c.form` does not clear the old one for
-    itself. The form carries no conditions and no movement modes: the printed
-    line changes what the creature looks like and which rows it can reach,
-    and nothing else.
-    """
-    for effect in list(c.world.effects.of(c.me)):
-        if effect.label.startswith(prefix):
-            c.world.effects.end(effect, "changed shape")
-    shape = c.choose(list(shapes), "which shape")
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=f"{prefix}{shape}")
 
 
 # ==========================================================================
@@ -1298,9 +1267,6 @@ def m423a0(c: Cast) -> None:
 
 # -- m479 -------------------------------------------------------------------
 
-#: The prefix on m479a3's hold, so the two gated rows can read which of the
-#: two shapes is in force.
-_M479_SHAPE = "m479a3 "
 _M479_SHAPES = ("m485", "human")
 
 
@@ -1314,7 +1280,7 @@ _M479_SHAPES = ("m485", "human")
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d4", 4),
-    requires=_in_shape(_M479_SHAPE, "human"),
+    requires=_shapes("human"),
     requires_text="the m479 must not be in its m485 shape",
 )
 def m479a0(c: Cast) -> None:
@@ -1332,7 +1298,7 @@ def m479a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d6", 4),
-    requires=_in_shape(_M479_SHAPE, "m485"),
+    requires=_shapes("m485"),
     requires_text="the m479 must be in its m485 shape",
 )
 def m479a1(c: Cast) -> None:
@@ -1385,7 +1351,7 @@ def m479a3(c: Cast) -> None:
     The second shape is named by the id of the creature it imitates, because
     that is the only name this project has for anything.
     """
-    _change_shape(c, _M479_SHAPE, _M479_SHAPES)
+    _shapechange(c, *_M479_SHAPES)
 
 
 # -- m4883 ------------------------------------------------------------------

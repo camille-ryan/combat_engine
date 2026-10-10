@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapes
 from combat_engine.content.monsters.level_01 import settle
 from combat_engine.content.monsters.level_03.controllers import (
     _nonminion,
@@ -523,24 +524,6 @@ _SHAPES = ("jackal", "human")
 _SHAPE_LABEL = "m4927a4 "
 
 
-def _in_shape(word: str):  # noqa: ANN202
-    """A printed Requirement naming one of the two forms.
-
-    A creature that has not changed shape yet is in whatever shape it was
-    found in, which the stat block does not say -- so an undeclared form
-    rules out none of the attacks. Once it has changed, the hold is the
-    answer.
-    """
-
-    def gate(world: World, eid: int) -> bool:
-        for effect in world.effects.of(eid):
-            if effect.label.startswith(_SHAPE_LABEL):
-                return effect.label.endswith(word)
-        return True
-
-    return gate
-
-
 @power(
     "m4927a0",
     level=4,
@@ -550,7 +533,7 @@ def _in_shape(word: str):  # noqa: ANN202
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d6", 4),
-    requires=_in_shape("jackal"),
+    requires=_shapes("jackal"),
     requires_text="the m4927 must be in its beast shape",
 )
 def m4927a0(c: Cast) -> None:
@@ -569,7 +552,7 @@ def m4927a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
-    requires=_in_shape("human"),
+    requires=_shapes("human"),
     requires_text="the m4927 must be in its humanoid shape",
 )
 def m4927a1(c: Cast) -> None:
@@ -587,7 +570,7 @@ def m4927a1(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d6", 3, dtype=DamageType.THUNDER),
-    requires=_in_shape("jackal"),
+    requires=_shapes("jackal"),
     requires_text="the m4927 must be in its beast shape",
 )
 def m4927a2(c: Cast) -> None:
@@ -654,7 +637,17 @@ def m4927a4(c: Cast) -> None:
         if effect.label.startswith(_SHAPE_LABEL):
             c.world.effects.end(effect, "it changed shape again")
     shape = c.choose(list(_SHAPES), "which shape") or _SHAPES[0]
-    hold = c.form(until=When.ENCOUNTER, revert=None, label=f"{_SHAPE_LABEL}{shape}")
+    # **Not `_shapechange`, and the reason is the handle.** This is the one
+    # grantor of the fourteen that needs the `Effect` back -- the printed
+    # "dropping to 0 hit points ends it too" is a watcher that has to be able
+    # to end *this* hold and to be taken down with it. `_shapechange` returns
+    # the word, which is what its other thirteen callers want. #477.
+    #
+    # `name=` all the same, because that is what the folded readers ask: the
+    # three gates above this row read `Shapes` through `query.in_form` now,
+    # not the label.
+    hold = c.form(until=When.ENCOUNTER, revert=None, name=shape,
+                  label=f"{_SHAPE_LABEL}{shape}")
 
     def slump(ev: Dropped) -> None:
         if ev.actor == c.me and not hold.ended:

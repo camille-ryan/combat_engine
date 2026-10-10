@@ -70,9 +70,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange
 from combat_engine.content.monsters.level_03.brutes import _squeezes_freely
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
-from combat_engine.content.monsters.level_04.brutes import _change_shape
 from combat_engine.content.monsters.level_07.brutes import _aura
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_13.soldiers import _burn_and_hold
@@ -2176,7 +2176,7 @@ def m6146a6(c: Cast) -> None:
     """Three shapes and nothing else: the statistics do not change, so all the
     form is for is the Requirement on the four rows above it. A polymorph is
     not a stance, so whatever was worn before is ended by hand."""
-    _change_shape(c, _M6146_SHAPE, _M6146_SHAPES)
+    _shapechange(c, *_M6146_SHAPES)
 
 
 @power(

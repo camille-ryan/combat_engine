@@ -107,6 +107,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapes
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_03.skirmishers_sa import _shoved_by_hand
 from combat_engine.content.monsters.level_04.skirmishers import _struck
@@ -1700,16 +1701,6 @@ _M4338_OOZE = "m4338a5 sludge"
 _M4338_BLED = "its attack bloodies an enemy"
 
 
-def _in_sludge(world: World, eid: int) -> bool:
-    """The printed Requirement on m4338a2, asked of the hold m4338a5 lays.
-
-    Written before `monsters/forms.py` could be asked what shape a creature
-    is wearing; a label on the hold answers the same question, so neither row
-    carries a marker. It is a third copy of that one mechanism all the same.
-    """
-    return any(eff.label == _M4338_OOZE for eff in world.effects.of(eid))
-
-
 @power(
     "m4338a0",
     level=12,
@@ -1746,7 +1737,7 @@ def m4338a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=13),
-    requires=_in_sludge,
+    requires=_shapes("sludge"),
     requires_text="usable only in the shape m4338a5 takes",
 )
 def m4338a2(c: Cast) -> None:
@@ -1832,7 +1823,12 @@ def m4338a5(c: Cast) -> None:
     the purpose of effects that read the word. The form carries the label
     m4338a2's Requirement asks for, and the printed way back out is the
     minor action `c.form` already gives it."""
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=_M4338_OOZE)
+    # `name="sludge"` is what `m4338a2`'s Requirement reads now: it asked
+    # `_in_sludge`, a third copy of "which shape is this creature in" that
+    # matched this exact label, and it is `_shapes("sludge")` since the
+    # fold. #477.
+    c.form(until=When.ENCOUNTER, revert=MINOR, name="sludge",
+           label=_M4338_OOZE)
     c.set_origin("ooze", on=c.me, until=When.ENCOUNTER)
 
 

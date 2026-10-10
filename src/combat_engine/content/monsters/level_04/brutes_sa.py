@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
@@ -55,13 +56,7 @@ from combat_engine.content.monsters.level_03.brutes_sa import (
     _while_bloodied,
 )
 from combat_engine.content.monsters.level_03.skirmishers_sa import _two_basics
-from combat_engine.content.monsters.level_04.brutes import (
-    _change_shape,
-    _crit_line,
-    _holding,
-    _is_bloodied,
-    _kin,
-)
+from combat_engine.content.monsters.level_04.brutes import _crit_line, _holding, _is_bloodied, _kin
 from combat_engine.content.monsters.level_04.skirmishers import _has_advantage
 from combat_engine.engine import (
     AC,
@@ -134,25 +129,6 @@ from combat_engine.engine.triggers import (
 # --------------------------------------------------------------------------
 # Shared shapes
 # --------------------------------------------------------------------------
-
-
-def _in_shapes(prefix: str, *words: str):  # noqa: ANN202
-    """`brutes._in_shape` for a Requirement that names **two** of the forms.
-
-    "It must be in humanoid or hybrid form" is printed on five rows across the two
-    shapechangers here and the single-word gate cannot say it. Undeclared is
-    still permissive, for the reason that one gives: a creature that has not
-    changed shape yet is in whatever shape it was found in, which the stat
-    block does not say, so no attack is ruled out.
-    """
-
-    def gate(world: World, eid: int) -> bool:
-        for effect in world.effects.of(eid):
-            if effect.label.startswith(prefix):
-                return any(effect.label.endswith(word) for word in words)
-        return True
-
-    return gate
 
 
 def _denies_shift_in(c: Cast, zone: int) -> None:
@@ -1776,9 +1752,6 @@ def m5944a2(c: Cast) -> None:
 # m5952
 # --------------------------------------------------------------------------
 
-#: The prefix on m5952a4's hold, so the three gated rows can read which of the
-#: three shapes is in force.
-_M5952_SHAPE = "m5952a4 "
 _M5952_SHAPES = ("rat", "human", "hybrid")
 
 
@@ -1808,7 +1781,7 @@ def m5952a0(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 8),
-    requires=_in_shapes(_M5952_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in one of two of its forms",
 )
 def m5952a1(c: Cast) -> None:
@@ -1829,7 +1802,7 @@ def m5952a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 4),
-    requires=_in_shapes(_M5952_SHAPE, "rat", "hybrid"),
+    requires=_shapes("rat", "hybrid"),
     requires_text="it must be in one of two of its forms",
     dropped=("c.contract(ref)",),
 )
@@ -1854,7 +1827,7 @@ def m5952a2(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     charges=True,
-    requires=_in_shapes(_M5952_SHAPE, "hybrid"),
+    requires=_shapes("hybrid"),
     requires_text="it must be in its third form",
 )
 def m5952a3(c: Cast) -> None:
@@ -1877,7 +1850,7 @@ def m5952a3(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m5952a4(c: Cast) -> None:
-    _change_shape(c, _M5952_SHAPE, _M5952_SHAPES)
+    _shapechange(c, *_M5952_SHAPES)
 
 
 # --------------------------------------------------------------------------
@@ -2152,7 +2125,6 @@ def m6050a5(c: Cast) -> None:
 # m6190
 # --------------------------------------------------------------------------
 
-_M6190_SHAPE = "m6190a3 "
 _M6190_SHAPES = ("beast", "human", "hybrid")
 
 
@@ -2166,7 +2138,7 @@ _M6190_SHAPES = ("beast", "human", "hybrid")
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d8", 6),
-    requires=_in_shapes(_M6190_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in one of two of its forms",
 )
 def m6190a0(c: Cast) -> None:
@@ -2189,7 +2161,7 @@ def m6190a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 6, kind=LIMITED),
-    requires=_in_shapes(_M6190_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in one of two of its forms",
 )
 def m6190a1(c: Cast) -> None:
@@ -2210,7 +2182,7 @@ def m6190a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=7),
-    requires=_in_shapes(_M6190_SHAPE, "human", "hybrid"),
+    requires=_shapes("human", "hybrid"),
     requires_text="it must be in one of two of its forms",
 )
 def m6190a2(c: Cast) -> None:
@@ -2229,7 +2201,7 @@ def m6190a2(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m6190a3(c: Cast) -> None:
-    _change_shape(c, _M6190_SHAPE, _M6190_SHAPES)
+    _shapechange(c, *_M6190_SHAPES)
 
 
 @power(
@@ -2241,7 +2213,7 @@ def m6190a3(c: Cast) -> None:
     target=SELF,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    requires=_in_shapes(_M6190_SHAPE, "beast", "hybrid"),
+    requires=_shapes("beast", "hybrid"),
     requires_text="it must be in one of two of its forms",
 )
 def m6190a4(c: Cast) -> None:
