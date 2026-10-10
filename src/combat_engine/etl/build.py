@@ -346,6 +346,37 @@ CREATE TABLE trap (
   dialect TEXT
 );
 CREATE INDEX trap_level ON trap(level);
+
+-- A disease, which 47 rows wait on and nothing had ever read. #389.
+--
+-- The pages were indexed by name and id alone (`_ALIAS_TABLES`), so `x5_<id>`
+-- already resolved as a *token* and nothing could resolve it to a row. The
+-- stage track is uniform across all 69 -- every page prints Stage 0 as
+-- "recovers" and then 2 to 5 worsening stages -- and the **DC is not**.
+--
+-- Four printed shapes, measured across all 69 before this was written:
+--
+--     fixed            58   "9 or lower" / "14 or higher"
+--     source_level      2   "9 + two-thirds <creature>'s level or lower"
+--     encounter_level   1   "9 + encounter level or demon level or lower"
+--     band              8   "Lower than Easy DC" / "Moderate DC"
+--
+-- `dc_shape` carries which, and `worsen_dc`/`improve_dc` are **NULL** for the
+-- band pages -- their numbers come from 4e's Easy/Moderate-by-level table,
+-- which this engine does not have, so storing anything would be the guess
+-- `etl/CLAUDE.md` forbids. For `source_level` and `encounter_level` the number
+-- stored is the printed base and the shape says what to add to it: reading `9`
+-- off those alone is wrong by two-thirds of a level.
+--
+-- `check_skills` is plural because one page prints "Arcana **or** Insight" --
+-- two skills, either of which answers, and a single column would have had to
+-- drop one.
+CREATE TABLE disease (
+  ref TEXT PRIMARY KEY, id INTEGER, level INTEGER,
+  check_skills TEXT, worsen_dc INTEGER, improve_dc INTEGER,
+  dc_shape TEXT, stages INTEGER, spec TEXT
+);
+CREATE INDEX disease_level ON disease(level);
 """
 
 
@@ -361,6 +392,7 @@ class Report:
     crossed: int = 0
     companions: int = 0
     traps: int = 0
+    diseases: int = 0
     links_found: int = 0
     links_total: int = 0
     #: Rows whose text says something about a weapon, gate or rider. #237.
@@ -413,6 +445,7 @@ class Report:
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
+            f"diseases      {self.diseases:6d}  (stage track and the DC shape its page prints)",
             f"weapon rows   {self.wields:6d}  (what each power's text says it needs)",
             (f"blank stats   {len(self.unexpected_blank):6d} unexpected  "
              f"**{', '.join(self.unexpected_blank)}** -- a stat line that "
@@ -503,6 +536,7 @@ def build() -> Report:
     report.crossed += _cross_reference(out, names, table="class_feature")
     report.companions = _companions(source, out, names)
     report.traps = _traps(source, out, names)
+    report.diseases = _diseases(source, out, names)
     report.build_powers = _build_powers(source, out, names)
     # Every other name the compendium prints, so the scrubber can see
     # them. These tables are not imported as content and never will be --
@@ -1539,6 +1573,103 @@ def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
     return written
 
 
+#: `PlainTxt` is already line-structured as `<label> : <text>`, which is why
+#: these anchor on a line start and a colon rather than reconstructing the
+#: layout out of `Txt`'s tags. The first version of this parser flattened the
+#: HTML the way the probe did and matched **nothing** on all 69 pages -- the
+#: probe and the parser were reading two different columns.
+_DIS_FIXED = re.compile(r"^(\d+) or (lower|higher)\s*:", re.M)
+#: "9 + two-thirds <creature>'s level or lower" and "9 + encounter level or
+#: demon level or lower". The base is printed; what it scales with is not a
+#: number, so the shape is recorded and the base stored as printed.
+_DIS_SCALED = re.compile(
+    r"^(\d+)\s*\+\s*(?:two-thirds|one-half|half|encounter)\b[^:]*?"
+    r"\bor\s+(lower|higher)\s*:",
+    re.M | re.I,
+)
+#: "Lower than Easy DC" / "Moderate DC" -- 4e's DC-by-level table, which this
+#: engine does not hold, so the number is NULL and the shape says why.
+_DIS_BAND = re.compile(r"^(?:Lower than\s+)?(?:Easy|Moderate|Hard) DC\s*:", re.M)
+_DIS_STAGE = re.compile(r"^Stage (\d+)\s*:", re.M)
+_DIS_CHECK = re.compile(r"^Check\s*:\s*(.+)$", re.M)
+_DIS_SKILLS = re.compile(r"makes? an? ([A-Za-z]+(?:\s+or\s+[A-Za-z]+)*) check", re.I)
+
+
+def _diseases(source: sqlite3.Connection, out: sqlite3.Connection,
+              names: dict[str, dict[str, str]]) -> int:
+    """Every disease page, which 47 content rows wait on. #389.
+
+    The pages were indexed by name and id alone, so `x5_<id>` resolved as an
+    opaque token and nothing could resolve it to a row -- which is what
+    `c.contract(ref)`'s marker has been naming all along. The ids are already
+    the refs those markers want, so this reads the rest of the page.
+
+    **The stage track is the easy half and the DC is not.** All 69 pages print
+    Stage 0 ("the target recovers") and then two to five worsening stages, and
+    the DC comes in four shapes -- see the schema note. Probed across all 69
+    before this was written, because a parser that reads only the commonest
+    shape stores nothing for eleven pages and looks like it worked.
+
+    `spec` is the whole sanitised page, which is what an author reads and
+    writes the stage clauses from; the columns are what the engine needs to
+    decide whether a check improves or worsens.
+    """
+    written = 0
+    for did, name, level, plain in source.execute(
+        "SELECT ID, Name, Level, PlainTxt FROM Disease ORDER BY ID"
+    ):
+        flat = " ".join((plain or "").split())
+        # The page repeats its own name, twice on most of them, the way a
+        # trap's and a companion's do.
+        for _ in range(3):
+            if name and flat.startswith(name):
+                flat = flat[len(name):].lstrip()
+        flat = re.split(r"\s*Published in\b", flat)[0].strip()
+        if len(flat) < 20:
+            continue
+        # The labelled lines, as the page already gives them.
+        lines = "\n".join(x.strip() for x in (plain or "").splitlines() if x.strip())
+        ref = f"x5_{did}"
+        fixed = {b.lower(): int(n) for n, b in _DIS_FIXED.findall(lines)}
+        scaled = {b.lower(): int(n) for n, b in _DIS_SCALED.findall(lines)}
+        if "lower" in fixed and "higher" in fixed:
+            shape, worsen, improve = "fixed", fixed["lower"], fixed["higher"]
+        elif "lower" in scaled and "higher" in scaled:
+            shape = ("encounter_level" if re.search(r"encounter level", lines, re.I)
+                     else "source_level")
+            worsen, improve = scaled["lower"], scaled["higher"]
+        elif _DIS_BAND.search(lines):
+            shape, worsen, improve = "band", None, None
+        else:
+            shape, worsen, improve = "", None, None
+        chk = _DIS_CHECK.search(lines)
+        sk = _DIS_SKILLS.search(chk.group(1)) if chk else None
+        skills = (
+            ",".join(w.strip().lower() for w in re.split(r"\s+or\s+", sk.group(1)))
+            if sk else ""
+        )
+        stages = len({int(n) for n in _DIS_STAGE.findall(lines)})
+        out.execute(
+            "INSERT OR REPLACE INTO disease VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                ref,
+                did,
+                int(m.group()) if (m := re.search(r"\d+", str(level or ""))) else None,
+                skills,
+                worsen,
+                improve,
+                shape,
+                stages,
+                sanitise.scrub(flat, {name: ref}),
+            ),
+        )
+        # The printed rules, before the scrub, exactly as `_traps` does. #349.
+        names.setdefault(ref, {})
+        names[ref] = {**names[ref], "name": name, "rules_text": flat}
+        written += 1
+    return written
+
+
 def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
                 names: dict[str, dict[str, str]]) -> int:
     """Every familiar and beast companion's printed block.
@@ -2434,9 +2565,12 @@ def _cross_reference_rest(
     # said "no printed names in any spec". This docstring's claim that the
     # shared `identifies` test "keeps the two halves of this arrangement from
     # drifting apart" holds only once both halves cover the same tables.
+    # **`disease` is in this list deliberately.** A new table that misses it
+    # keeps every printed name its pages mention, and the pages mention
+    # creatures constantly -- "9 + two-thirds <creature>'s level". #389.
     for table in ("power", "monster_power", "class_feature",
                   "companion", "item", "item_block", "feat", "race",
-                  "trap", "racial_trait"):
+                  "trap", "racial_trait", "disease"):
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
