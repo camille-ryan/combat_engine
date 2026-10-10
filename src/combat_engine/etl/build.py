@@ -2378,9 +2378,32 @@ def _cross_reference_rest(
     # Lowest ref wins a tie, only so the build is deterministic; where two
     # pages share a name either answer says the same thing, which is "a name
     # was here and it is not something we hold".
+    #
+    # **`x\d+_`, with the digit required.** It was `x\d*_`, which also admits
+    # the `x_` prefix -- and **1,944 of those 1,950 entries have a real row
+    # behind them**, keyed `x_<rowref>`: `x_m2858` is a creature's name,
+    # `x_m6092a1` is one of its abilities. So 42% of an index documented as
+    # "the names that are not rows" was row names, and the harm is the one this
+    # note warns about two paragraphs down, arriving by the other door.
+    #
+    # **It had not fired yet, and the filter is tightened anyway.** Removing
+    # the 1,669 names moved **zero** specs, because `_elsewhere` only
+    # substitutes in five anchored positions and no spec writes one of these
+    # names in a ritual or disease position. So this is a latent wrong answer
+    # rather than a live one: a card saying "the <creature> ritual" would have
+    # been handed an opaque token for a creature.
+    #
+    # Worth doing regardless, because the token is deliberate everywhere else
+    # it appears. `x_<rowref>` is minted on purpose by the two arms above --
+    # the stranger-demotion for a monster ability (#175) and the race arm --
+    # and means *"a name was here and we are deliberately not pointing you at
+    # that row, because pointing would be false."* Admitting those tokens into
+    # an index whose whole argument is "these names have no row" makes the one
+    # index that must not point at a row able to point at a deliberately
+    # blinded one. #340.
     by_other: dict[str, str] = {}
     for ref, entry in names.items():
-        if not re.match(r"^x\d*_", ref):
+        if not re.match(r"^x\d+_", ref):
             continue
         name = _low((entry.get("name") or "").strip())
         if len(name) < 3:
@@ -3214,7 +3237,7 @@ def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:
 
     **The index is the names that are not rows**, which is the other half of
     why this was invisible. A ritual, a disease, a hazard, a deity and a
-    paragon path are compendium *pages*: 4,700 of them have an entry in
+    paragon path are compendium *pages*: 3,003 of them have an entry in
     `names.json` and **none has a row in any table**. So they can never be
     reached through `by_name`, which is built from imported rows -- and
     resolving onto `by_name` would be worse than nothing, because a ritual
