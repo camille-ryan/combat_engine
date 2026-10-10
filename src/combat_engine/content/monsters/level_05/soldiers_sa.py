@@ -1221,7 +1221,8 @@ def m1436a3(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("1d10", 4, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1436a4(c: Cast) -> None:
     if c.strike():
@@ -2044,7 +2045,8 @@ def m4177a2(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("3d6", 4, dtype=DamageType.THUNDER, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4177a3(c: Cast) -> None:
     if c.strike():
@@ -2477,7 +2479,8 @@ def m5446a2(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("3d6", 4, dtype=DamageType.THUNDER, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5446a3(c: Cast) -> None:
     if c.strike():
@@ -2837,7 +2840,8 @@ def m6040a2(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.HEALING],
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d6", 5, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6040a3(c: Cast) -> None:
     if c.strike():
@@ -2995,7 +2999,8 @@ def m6512a5(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it is subjected to an effect that a save can end",
     on=Trigger(EffectApplied, _save_ends_on_me, "it is subjected to an effect that a save can end"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6512a6(c: Cast) -> None:
     c.save(on=c.me)

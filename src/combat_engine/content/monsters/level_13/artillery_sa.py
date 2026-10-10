@@ -539,7 +539,8 @@ def m2517a2(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=17),
     damage=Damage("1d8", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2517a3(c: Cast) -> None:
     """The printed recharge sentence sits on top of the die the database
@@ -1243,7 +1244,8 @@ def m5374a4(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(20),
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5374a5(c: Cast) -> None:
     """It spends somebody else's turn for them.

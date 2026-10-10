@@ -1483,7 +1483,8 @@ def m4925a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4925a3(c: Cast) -> None:
     """m4925a1 twice into one creature, and the daze for landing both.
@@ -1865,7 +1866,8 @@ def m5032a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=6),
     damage=Damage("2d6", 2, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5032a3(c: Cast) -> None:
     """"Recharge when first bloodied" has no spelling of its own -- the

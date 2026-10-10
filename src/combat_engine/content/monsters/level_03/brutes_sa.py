@@ -1187,7 +1187,8 @@ def m4684a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=4),
     damage=Damage("1d10", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4684a2(c: Cast) -> None:
     """"Any at-will melee attack power", which is wider than a basic attack, so
@@ -2176,7 +2177,8 @@ def m6579a1(c: Cast) -> None:
     target=EACH_OTHER,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d10", 3, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6579a2(c: Cast) -> None:
     _recharge_when_bloodied(c)

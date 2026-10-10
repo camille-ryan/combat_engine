@@ -1756,7 +1756,8 @@ def m4749a2(c: Cast) -> None:
     "m4749a3", level=8, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=CloseBurst(2), target=EACH_ENEMY, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("1d12", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4749a3(c: Cast) -> None:
     if c.strike():
@@ -2463,7 +2464,8 @@ def m5628a3(c: Cast) -> None:
     reach=CloseBlast(3), target=EACH_OTHER, keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("2d12", 5, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5628a4(c: Cast) -> None:
     """"Recharge when first bloodied" is on top of the die, the same two
@@ -2611,7 +2613,8 @@ def m5646a2(c: Cast) -> None:
         relation=Relation.GRABBED_BY,
     ),
     reach=Melee(1), attack=Attack(vs=FORT, printed=11), damage=Damage("1d6", 3, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5646a3(c: Cast) -> None:
     if c.first:
@@ -3748,7 +3751,8 @@ def m919a1(c: Cast) -> None:
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.DIVINE, Keyword.THUNDER, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d12", 9, dtype=DamageType.THUNDER, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m919a2(c: Cast) -> None:
     if c.first:

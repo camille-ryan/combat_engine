@@ -693,7 +693,8 @@ def m1442a1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.TELEPORTATION],
     attack=Attack(vs=REF, printed=5),
     damage=Damage("3d6", 4, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1442a2(c: Cast) -> None:
     """The Effect is taken on the last target rather than the first: the printed
@@ -1634,7 +1635,8 @@ def m5315a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=7),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5315a1(c: Cast) -> None:
     """The shove has no distance printed, so it is the one square a bare push
@@ -2165,7 +2167,8 @@ def m6190a0(c: Cast) -> None:
     damage=Damage("2d8", 6, kind=LIMITED),
     requires=_shapes("human", "hybrid"),
     requires_text="it must be in one of two of its forms",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6190a1(c: Cast) -> None:
     if c.first:

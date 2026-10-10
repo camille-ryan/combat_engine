@@ -1617,7 +1617,8 @@ def m3212a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d6", 3, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3212a2(c: Cast) -> None:
     if c.strike():
@@ -1779,7 +1780,8 @@ def m3271a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d12", 0, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3271a2(c: Cast) -> None:
     if c.strike():
@@ -1959,7 +1961,8 @@ def m4184a2(c: Cast) -> None:
     keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("2d6", 2, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4184a3(c: Cast) -> None:
     if c.strike():
@@ -2580,7 +2583,8 @@ def m5133a2(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d6", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5133a3(c: Cast) -> None:
     if c.strike():
@@ -2735,7 +2739,8 @@ def m5316a5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     narrative=("skill:stealth",),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5316a6(c: Cast) -> None:
     """It thins out: unhittable, able to walk through things, and unable to
@@ -3190,7 +3195,8 @@ def m6567a2(c: Cast) -> None:
     damage=Damage("2d8", 3, kind=LIMITED),
     trigger="an enemy adjacent to it misses it",
     on=Trigger(Miss, _missed_me_from_beside, "an adjacent enemy misses it"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6567a3(c: Cast) -> None:
     foe = getattr(c.trigger, "attacker", None)

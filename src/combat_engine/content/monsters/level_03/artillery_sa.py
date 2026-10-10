@@ -1890,7 +1890,8 @@ def m6622a3(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d12", 4, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6622a4(c: Cast) -> None:
     """"Recharge when first bloodied" on top of the die the database files:

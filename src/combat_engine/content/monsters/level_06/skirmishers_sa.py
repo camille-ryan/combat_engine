@@ -2423,7 +2423,8 @@ def m5491a7(c: Cast) -> None:
         both(targets_me, either(by_melee, by_ranged)),
         "an enemy hits it with a melee or a ranged attack",
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5491a8(c: Cast) -> None:
     c.shift(4)
@@ -3274,7 +3275,8 @@ def m6662a3(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     requires_text="it must be in water, within 1 square of ground made of fine particles or debris",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6662a4(c: Cast) -> None:
     if not c.terrain("water"):

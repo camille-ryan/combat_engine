@@ -1424,7 +1424,8 @@ def m4181a3(c: Cast) -> None:
     keywords=[Keyword.COLD],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d6", 3, dtype=DamageType.COLD, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4181a4(c: Cast) -> None:
     """"Recharges when first bloodied" is armed on top of the die, which stays
@@ -2579,7 +2580,8 @@ def m5799a1(c: Cast) -> None:
     reach=CloseBurst(5),
     target=ONE_ALLY,
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5799a2(c: Cast) -> None:
     """The extra damage is gated on the cushion still being there rather than
@@ -3057,7 +3059,8 @@ def m6269a5(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d6", 4, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6269a6(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -3234,7 +3237,8 @@ def m6271a4(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=6),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6271a5(c: Cast) -> None:
     _recharge_when_bloodied(c)

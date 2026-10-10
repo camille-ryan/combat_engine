@@ -77,6 +77,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import (
+    Bloodied,
     ConditionApplied,
     Hit,
     Miss,
@@ -88,6 +89,7 @@ from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import alive, distance_between, team
 from combat_engine.engine.triggers import (
     Trigger,
+    about_me,
     both,
     by_me,
     by_melee,
@@ -665,7 +667,8 @@ def m4178a2(c: Cast) -> None:
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=5),
     damage=Damage("3d6", 2, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4178a3(c: Cast) -> None:
     """"Recharges when first bloodied" on top of the die the database files:
@@ -824,7 +827,8 @@ def m4502a3(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=5),
     damage=Damage("1d10", 1, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4502a4(c: Cast) -> None:
     """"1d4 random creatures in the burst" is a *count* rolled at use time and

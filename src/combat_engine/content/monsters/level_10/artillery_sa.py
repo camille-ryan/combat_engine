@@ -1989,7 +1989,8 @@ def m5786a2(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=13),
     damage=Damage("3d10", 12, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5786a3(c: Cast) -> None:
     """Requirement: beast form, asked in the body."""
@@ -2503,7 +2504,8 @@ def m6368a0(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("3d6", 4, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6368a1(c: Cast) -> None:
     _recharge_when_bloodied(c)

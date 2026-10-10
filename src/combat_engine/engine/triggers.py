@@ -182,6 +182,55 @@ class Triggers:
                     )
                 )
 
+        # **The recharge conditions, from the same registry walk.** A card
+        # printing "Recharge when first bloodied" names an event exactly as a
+        # Trigger line does, so the subscription is the same shape -- once per
+        # event class, not once per creature per row.
+        #
+        # Deliberately **not** armed when the row is spent. 169 rows do it that
+        # way by hand and it works, but it means the condition cannot be read
+        # without running the row, and it has to be disarmed again. Asking
+        # "is this ref spent?" at the moment the event fires needs no state at
+        # all and cannot leak a watcher. #449.
+        for etype in sorted(
+            {t.event for p in REGISTRY.values() for t in p.recharges},
+            key=lambda e: e.__name__,
+        ):
+            self._subs.append(self.world.bus.on(etype, self._recharge))
+
+    def _recharge(self, ev: Event) -> None:
+        """Give back any spent row whose printed condition this event meets.
+
+        Initiative order for the same reason `_offer` uses it: a replay of
+        the same seed must restore in the same sequence.
+
+        The predicate is handed `(world, me, event)` where `me` is the
+        creature that *holds* the row, not the one that caused the event --
+        the same contract `Trigger.when` documents, and the one that lets
+        "when the creature is first bloodied" and "when an ally drops" be the
+        same event class.
+        """
+        from .dsl import get
+
+        for eid in list(self.encounter.order):
+            known = self.world.get(eid, Powers)
+            if known is None or not known.spent:
+                continue
+            for ref in sorted(known.spent):
+                p = get(ref)
+                if p is None:
+                    continue
+                for trig in p.recharges:
+                    if isinstance(ev, trig.event) and trig.when(self.world, eid, ev):
+                        # **Silently, as `actions.recharge` does.** There is no
+                        # `PowerRecharged` event yet -- `m6180a3` wants one and
+                        # carries the marker for it -- and minting one here
+                        # would put a new event in every fixture's stream for a
+                        # reason unrelated to this change. It wants adding on
+                        # both paths at once, which is its own commit.
+                        known.restore(ref)
+                        break
+
     def disarm(self) -> None:
         for sub in self._subs:
             self.world.bus.off(sub)

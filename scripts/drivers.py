@@ -2238,6 +2238,73 @@ def class_form(out: Result) -> None:
     )
 
 
+def recharge_when(out: Result) -> None:
+    """"Recharge when first bloodied" -- a condition, where there was a die.
+
+    440 cards print a recharge condition and no threshold at all, and until
+    now the only thing that could give such a row back was
+    `actions.recharge`'s d6 -- a die the card never printed. 204 rows carried
+    a marker saying so and 169 more armed a watcher by hand from the body.
+
+    **The arming is the design decision worth asserting.** The hand-rolled
+    version installs a watcher when the row is *used*, which works and means
+    the condition cannot be read without running the row. This asks "is this
+    ref spent?" at the moment the event fires, so there is no state to arm,
+    nothing to disarm, and the header stays readable by the wire and the
+    policy -- which is what `engine/CLAUDE.md` means by "header is data".
+
+    The negative control is the half that matters: a row that was **not**
+    spent must not be "restored", and a creature that is not the one bloodied
+    must not get its row back from somebody else's crossing.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.events import Bloodied
+    from combat_engine.engine.query import enemies
+
+    ref = "m6669a2"
+    p = get(ref)
+    out.that(p is not None and bool(p.recharges),
+             "the row declares a printed recharge condition")
+    out.that(p is not None and p.recharge == 0,
+             "and no die, because its card prints none")
+
+    world, caster, _ = _board(ref, 1)
+    known = world.need(caster, Powers)
+
+    # Not spent: the event must not pretend to give anything back.
+    world.bus.emit(Bloodied(actor=caster, source=None))
+    out.that(ref not in known.spent, "unspent to begin with")
+
+    known.note_use(ref, world.round)
+    out.that(ref in known.spent, "spent")
+
+    # Somebody else crossing the line is not this creature's condition.
+    other = sorted(enemies(world, caster))[0]
+    world.bus.emit(Bloodied(actor=other, source=caster))
+    out.that(ref in known.spent,
+             "another creature being bloodied does NOT give it back -- the"
+             " negative control, and without it `about_me` could read any"
+             " actor and still pass")
+
+    world.bus.emit(Bloodied(actor=caster, source=other))
+    out.that(ref not in known.spent,
+             "being bloodied itself does, which is the printed sentence")
+
+    # And again: `Bloodied` is emitted once per crossing by `resolve`, so
+    # "first" needs no extra state here -- but a second emit must not resurrect
+    # a row that was never re-spent.
+    world.bus.emit(Bloodied(actor=caster, source=other))
+    out.that(ref not in known.spent, "a second crossing changes nothing")
+
+    known.note_use(ref, world.round)
+    world.bus.emit(Bloodied(actor=caster, source=other))
+    out.that(ref not in known.spent,
+             "and a row spent again is given back again -- the dispatcher"
+             " reads the spent set rather than a one-shot arming")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -2250,6 +2317,8 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "recharge_when": (recharge_when,
+                      "a printed condition gives a spent row back"),
     "class_form": (class_form,
                    "a class form is a state and a keyword, and those differ"),
     "substitution": (substitution,

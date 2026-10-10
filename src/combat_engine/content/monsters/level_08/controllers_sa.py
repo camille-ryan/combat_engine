@@ -2494,7 +2494,8 @@ def m3472a5(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.TELEPORTATION],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3472a6(c: Cast) -> None:
     if c.first:
@@ -3466,7 +3467,8 @@ def m4326a3(c: Cast) -> None:
     keywords=[Keyword.ILLUSION, Keyword.PSYCHIC, Keyword.ZONE, Keyword.AREA],
     attack=Attack(vs=WILL, printed=12),
     damage=Damage("2d8", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4326a4(c: Cast) -> None:
     if c.first:

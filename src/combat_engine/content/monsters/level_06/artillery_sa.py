@@ -1855,7 +1855,8 @@ def m5460a1(c: Cast) -> None:
         kind=LIMITED,
         half_on_miss=True,
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5460a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2056,7 +2057,8 @@ def m5840a2(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5840a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2292,7 +2294,8 @@ def m5939a2(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.POISON],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("1d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5939a3(c: Cast) -> None:
     """"Centred on a creature taking ongoing poison" is a placement rule for
@@ -2668,7 +2671,8 @@ def m6114a4(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     no_provoke=True,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6114a5(c: Cast) -> None:
     _recharge_when_bloodied(c)

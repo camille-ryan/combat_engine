@@ -76,6 +76,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import (
     ActionPointSpent,
     AttackDeclared,
+    Bloodied,
     DamageApplied,
     Dropped,
     EffectApplied,
@@ -90,7 +91,7 @@ from combat_engine.engine.grid import distance as square_distance
 from combat_engine.engine.grid import neighbours
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import distance_between, enemies, is_, team
-from combat_engine.engine.triggers import Trigger, by_keyword, by_melee
+from combat_engine.engine.triggers import Trigger, about_me, by_keyword, by_melee
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -2091,7 +2092,8 @@ def _my_blow_landed_on_an_enemy(world: World, me: int, ev: Event) -> bool:
     keywords=[Keyword.FIRE, Keyword.TELEPORTATION],
     trigger=_M6272_LANDED,
     on=Trigger(Hit, _my_blow_landed_on_an_enemy, _M6272_LANDED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6272a3(c: Cast) -> None:
     """Both creatures move and the second one's destination is named, so it is
@@ -2159,7 +2161,8 @@ def m6506a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d10", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6506a2(c: Cast) -> None:
     if c.strike():

@@ -338,7 +338,8 @@ def m1159a1(c: Cast) -> None:
     keywords=[Keyword.THUNDER, Keyword.CLOSE],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("3d6", 4, dtype=DamageType.THUNDER, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1159a2(c: Cast) -> None:
     """"3d6+4, or 3d6+9 if bloodied" is two expressions, rolled in the
@@ -2196,7 +2197,8 @@ def m3774a4(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.FIRE, Keyword.CLOSE],
     attack=Attack(vs=REF, printed=9),
     damage=Damage("2d6", 3, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3774a5(c: Cast) -> None:
     """"Makes an at-will attack against an ally" is read as its own
@@ -2998,7 +3000,8 @@ def m4183a2(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.CLOSE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("2d6", 5, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4183a3(c: Cast) -> None:
     if c.first:
@@ -3712,7 +3715,8 @@ def m5729a2(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5729a3(c: Cast) -> None:
     if c.first:
@@ -3810,7 +3814,8 @@ def m5784a3(c: Cast) -> None:
     damage=Damage("1d10", 5),
     requires=lambda world, eid: _m5784_form(world, eid) == "humanoid form",
     requires_text="usable only in humanoid form",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5784a4(c: Cast) -> None:
     """"Difficult terrain for creatures without forest walk" and "5
@@ -3973,7 +3978,8 @@ def m5833a3(c: Cast) -> None:
     reach=AreaBurst(1, 10),
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC, Keyword.ZONE, Keyword.AREA],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5833a4(c: Cast) -> None:
     if c.first:
@@ -4618,7 +4624,8 @@ def m6108a4(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.CLOSE],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("3d6", 7, dtype=DamageType.FIRE),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6108a5(c: Cast) -> None:
     if c.first:

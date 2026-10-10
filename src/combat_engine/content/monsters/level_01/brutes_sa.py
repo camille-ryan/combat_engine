@@ -318,7 +318,8 @@ def m1437a2(c: Cast) -> None:
     keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=2),
     damage=Damage("3d6", 4, dtype=DamageType.COLD, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1437a3(c: Cast) -> None:
     """"Save ends both" is one effect with two conditions and exactly one
@@ -785,7 +786,8 @@ def m5283a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=6),
     damage=Damage("4d6", 4, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5283a2(c: Cast) -> None:
     _recharge_when_bloodied(c)

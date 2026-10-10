@@ -471,7 +471,8 @@ def m115865a2(c: Cast) -> None:
     reach=CloseBlast(3),
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m115865a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -679,7 +680,8 @@ def m1521a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("3d10", 5),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1521a1(c: Cast) -> None:
     """Two bites at one target, each at the -2 the card prints -- read as
@@ -1681,7 +1683,8 @@ def m5388a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5388a1(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1909,7 +1912,8 @@ def m5494a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5494a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2550,7 +2554,8 @@ def m6168a3(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6168a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2667,7 +2672,8 @@ def m6501a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6501a2(c: Cast) -> None:
     _recharge_when_bloodied(c)

@@ -469,7 +469,8 @@ def m115788a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=9),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m115788a2(c: Cast) -> None:
     """The card prints "Recharge when first bloodied" where the database files
@@ -581,7 +582,8 @@ def m1431a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d6", 4, dtype=DamageType.LIGHTNING, kind=LIMITED, half_on_miss=True),
     no_provoke=True,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1431a3(c: Cast) -> None:
     """The range line did not survive extraction -- only the roll, the half on
@@ -955,7 +957,8 @@ _M2540_HIT = "a melee attack hits it"
     target=NO_TARGET,
     trigger=_M2540_HIT,
     on=Trigger(Hit, both(targets_me, by_melee), _M2540_HIT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2540a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2410,7 +2413,8 @@ def m5649a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(10),
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5649a2(c: Cast) -> None:
     """The card prints "Recharge when first bloodied" where the database files

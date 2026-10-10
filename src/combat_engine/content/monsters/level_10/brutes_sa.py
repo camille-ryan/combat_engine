@@ -784,7 +784,8 @@ _M2081_MISSED = "it is missed by a melee attack from an adjacent attacker"
         and getattr(ev, "attacker", None) is not None
         and distance_between(w, m, ev.attacker) <= 1
     ), _M2081_MISSED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2081a2(c: Cast) -> None:
     from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
@@ -1429,7 +1430,8 @@ _M4250_ALLY_HIT = "it or an adjacent ally is hit by a melee attack"
     target=NO_TARGET,
     trigger=_M4250_ALLY_HIT,
     on=Trigger(Hit, _hit_me_or_adjacent_ally_melee, _M4250_ALLY_HIT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4250a3(c: Cast) -> None:
     from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied

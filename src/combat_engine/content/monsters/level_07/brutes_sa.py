@@ -1703,7 +1703,8 @@ def m5093a3(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("3d8", 5, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5093a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2850,7 +2851,8 @@ def m6432a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("3d12", 9, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6432a1(c: Cast) -> None:
     _recharge_when_bloodied(c)

@@ -1315,7 +1315,8 @@ _M5336_HURT = "it is damaged by an attack"
     target=NO_TARGET,
     trigger=_M5336_HURT,
     on=Trigger(DamageApplied, targets_me, _M5336_HURT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5336a6(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1734,7 +1735,8 @@ def m6230a3(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=14),
     damage=Damage("2d8", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6230a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

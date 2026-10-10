@@ -1462,7 +1462,8 @@ def m1433a1(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("1d6", 1, DamageType.ACID, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1433a2(c: Cast) -> None:
     """"Recharges when first bloodied" is the printed sentence on top of the
@@ -2309,7 +2310,8 @@ def m4389a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=6),
     damage=Damage("", 5, DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4389a3(c: Cast) -> None:
     """A flat 5 with no dice is a `Damage` with an empty expression and a
@@ -2916,7 +2918,8 @@ def m5427a1(c: Cast) -> None:
     ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("3d4", 7, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5427a2(c: Cast) -> None:
     """"Cannot stand up until the grab ends" is `Condition.PINNED` laid beside
@@ -3253,7 +3256,8 @@ def m5853a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("2d6", 5, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5853a1(c: Cast) -> None:
     """"Until the end of **its** next turn" is the target's turn, which is

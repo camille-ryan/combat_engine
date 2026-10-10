@@ -1365,7 +1365,8 @@ _M5910_ATTACKED = "an enemy makes an attack against m5910"
     keywords=[Keyword.TELEPORTATION],
     trigger=_M5910_ATTACKED,
     on=Trigger(AttackDeclared, targets_me, _M5910_ATTACKED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5910a5(c: Cast) -> None:
     _recharge_when_bloodied(c)

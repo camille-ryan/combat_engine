@@ -416,7 +416,8 @@ def m1194a2(c: Cast) -> None:
     keywords=[Keyword.RADIANT],
     attack=Attack(vs=WILL, printed=18),
     damage=Damage("1d10", 5, dtype=DamageType.RADIANT, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1194a3(c: Cast) -> None:
     """The burst prints no target line, so it catches everybody standing in
@@ -1702,7 +1703,8 @@ def m2640a3(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("2d10", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2640a4(c: Cast) -> None:
     """The temporary hit points are an Effect line about the area rather than
@@ -1951,7 +1953,8 @@ def m2654a3(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("2d10", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2654a4(c: Cast) -> None:
     if c.strike():
@@ -2093,7 +2096,8 @@ def m3920a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=20),
     damage=Damage("3d6", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3920a2(c: Cast) -> None:
     """A penalty takes no `kind=` and that is the rule, so the four
@@ -3346,7 +3350,8 @@ def m5465a3(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5465a4(c: Cast) -> None:
     """One or two allies swing, so this row declares no target and names the
@@ -3711,7 +3716,8 @@ def m5768a2(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("2d10", 12, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5768a3(c: Cast) -> None:
     """The pull is the printed Effect and the swing is a second attack line

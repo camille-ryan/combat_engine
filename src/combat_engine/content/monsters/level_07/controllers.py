@@ -118,6 +118,7 @@ from combat_engine.engine.query import (
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import (
     Trigger,
+    about_me,
     both,
     by_keyword,
     by_melee,
@@ -282,7 +283,8 @@ def m281a2(c: Cast) -> None:
     keywords=[Keyword.THUNDER, Keyword.CLOSE],
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("3d6", 4, dtype=DamageType.THUNDER, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m281a3(c: Cast) -> None:
     """"3d6 + 4, or 3d6 + 9 if it is bloodied" is two expressions, so the
@@ -1481,7 +1483,8 @@ def _hurt_in_melee(world: World, me: int, ev: Any) -> bool:
     damage=Damage("1d10", 5, dtype=DamageType.COLD, kind=LIMITED),
     trigger=_M4841_HURT,
     on=Trigger(DamageApplied, when=_hurt_in_melee, text=_M4841_HURT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4841a5(c: Cast) -> None:
     """`DamageApplied` rather than `Hit`: the printed trigger is the damage

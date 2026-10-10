@@ -105,6 +105,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import (
     AttackRolled,
+    Bloodied,
     DamageApplied,
     Dropped,
     EffectApplied,
@@ -122,6 +123,7 @@ from combat_engine.engine.query import (
 )
 from combat_engine.engine.triggers import (
     Trigger,
+    about_me,
     both,
     by_charge,
     by_me,
@@ -755,7 +757,8 @@ def m3245a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ALLY,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3245a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2530,7 +2533,8 @@ def m5923a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("3d6", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5923a3(c: Cast) -> None:
     """"Each time it hits the target, it can shift 1 extra square and slide
@@ -3174,7 +3178,8 @@ def m6597a3(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6597a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

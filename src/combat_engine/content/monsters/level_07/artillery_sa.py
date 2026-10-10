@@ -85,9 +85,9 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.events import AdjacencyGained, AttackRolled, Hit, TurnStart
+from combat_engine.engine.events import AdjacencyGained, AttackRolled, Bloodied, Hit, TurnStart
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.triggers import Trigger, both, by_melee, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, targets_me
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -886,7 +886,8 @@ def m3982a3(c: Cast) -> None:
     keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("2d8", 4, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3982a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1080,7 +1081,8 @@ def m5732a3(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5732a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1321,7 +1323,8 @@ _M6191_ADJ = "an enemy ends its move adjacent to the m6191"
     target=NO_TARGET,
     trigger=_M6191_ADJ,
     on=Trigger(AdjacencyGained, _enemy_closed_on_me, _M6191_ADJ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6191a6(c: Cast) -> None:
     _recharge_when_bloodied(c)

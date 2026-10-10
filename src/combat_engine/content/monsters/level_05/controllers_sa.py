@@ -1037,7 +1037,8 @@ def m4152a3(c: Cast) -> None:
     damage=Damage("2d6", 5, kind=LIMITED),
     requires=_any_enemy_suffering(Condition.SLOWED, Condition.RESTRAINED),
     requires_text="targets slowed or restrained creatures",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4152a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1177,7 +1178,8 @@ def m4190a3(c: Cast) -> None:
     keywords=[Keyword.FORCE],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("2d10", 2, dtype=DamageType.FORCE, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4190a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

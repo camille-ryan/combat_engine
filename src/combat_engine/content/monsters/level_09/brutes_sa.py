@@ -2393,7 +2393,8 @@ def m5667a3(c: Cast) -> None:
     target=NO_TARGET,
     attack=Attack(vs=REF, printed=12),
     damage=Damage("3d6", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5667a4(c: Cast) -> None:
     """Recharges early the first time it is bloodied, on top of the die
@@ -2495,7 +2496,8 @@ def m5734a3(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5734a4(c: Cast) -> None:
     _recharge_when_no_damage_dealt(c)
@@ -2915,7 +2917,8 @@ _M6281_RANGED_HIT = "an enemy within 5 squares hits it with a ranged or an area 
     target=NO_TARGET,
     trigger=_M6281_RANGED_HIT,
     on=Trigger(Hit, _shot_me_from_afar(5), _M6281_RANGED_HIT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6281a5(c: Cast) -> None:
     _recharge_when_bloodied(c)

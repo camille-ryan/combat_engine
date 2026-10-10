@@ -133,7 +133,15 @@ from combat_engine.engine.query import (
     flanked_by,
     has_combat_advantage,
 )
-from combat_engine.engine.triggers import Trigger, both, by_me, by_melee, by_opportunity, targets_me
+from combat_engine.engine.triggers import (
+    Trigger,
+    about_me,
+    both,
+    by_me,
+    by_melee,
+    by_opportunity,
+    targets_me,
+)
 from combat_engine.engine.zones import Zone
 
 # --------------------------------------------------------------------------
@@ -394,7 +402,8 @@ def m115779a1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m115779a2(c: Cast) -> None:
     """Recharges on a printed sentence rather than only a die. The form ends
@@ -2271,7 +2280,8 @@ def m5644a3(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=10),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5644a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2678,7 +2688,8 @@ def m5917a3(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("1d6", 5, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5917a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2997,7 +3008,8 @@ def m6609a3(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6609a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

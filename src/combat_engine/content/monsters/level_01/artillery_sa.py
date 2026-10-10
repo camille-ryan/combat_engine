@@ -1205,7 +1205,8 @@ def m6669a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d8", 3, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6669a2(c: Cast) -> None:
     _recharge_when_bloodied(c)

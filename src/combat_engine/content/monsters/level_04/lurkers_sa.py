@@ -668,7 +668,8 @@ def m4185a1(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d12", 3, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4185a2(c: Cast) -> None:
     """"Save ends **both**" is one saving throw, so the veil is hung on the

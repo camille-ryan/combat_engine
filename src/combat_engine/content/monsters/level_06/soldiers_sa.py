@@ -352,7 +352,8 @@ def m1132a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d10", 5, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1132a3(c: Cast) -> None:
     """The printed Requirement naming its own bastard sword is not a gate
@@ -865,7 +866,8 @@ def m2043a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=Target(side="ally", count=2),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2043a2(c: Cast) -> None:
     mate = c.target
@@ -1195,7 +1197,8 @@ def m4187a2(c: Cast) -> None:
     keywords=[Keyword.ACID],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d6", 3, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4187a3(c: Cast) -> None:
     if c.strike():
@@ -1328,7 +1331,8 @@ def m5159a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.GAZE],
     attack=Attack(vs=WILL, printed=9),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5159a2(c: Cast) -> None:
     if c.strike():
@@ -2033,7 +2037,8 @@ def m6348a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=9),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6348a3(c: Cast) -> None:
     victim = c.target

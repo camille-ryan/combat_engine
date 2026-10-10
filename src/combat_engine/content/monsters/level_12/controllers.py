@@ -1305,7 +1305,8 @@ _M4842_HURT = "an enemy's melee attack deals damage to the m4842"
     damage=Damage("1d10", 9, dtype=DamageType.COLD, kind=LIMITED),
     trigger=_M4842_HURT,
     on=Trigger(DamageApplied, when=_hurt_in_melee, text=_M4842_HURT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4842a5(c: Cast) -> None:
     """The printed trigger is damage landing, so a blow a resistance ate

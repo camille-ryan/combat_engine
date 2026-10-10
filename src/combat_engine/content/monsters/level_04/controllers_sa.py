@@ -407,7 +407,8 @@ def m1435a2(c: Cast) -> None:
     damage=Damage(
         "1d8", 5, dtype=DamageType.PSYCHIC, kind=LIMITED, half_on_miss=True
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1435a3(c: Cast) -> None:
     """"Save ends both" is one hold carrying the daze and the burn, which is
@@ -822,7 +823,8 @@ def m3535a1(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
     damage=Damage("2d6", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3535a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2734,7 +2736,8 @@ def m5490a1(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=5),
     damage=Damage("3d6", 4, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5490a2(c: Cast) -> None:
     """The Effect is about allies, who are not targets of this row, so they

@@ -1983,7 +1983,8 @@ def m5327a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="an enemy marked by it and within 3 squares moves away from it",
     on=Trigger(MoveStart, _marked_within_moves_away(3), "a marked enemy moves away within 3"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5327a4(c: Cast) -> None:
     """Recharges when first bloodied, the exact phrase `_recharge_when_bloodied`
@@ -2404,7 +2405,8 @@ def m5785a2(c: Cast) -> None:
     target=EACH_ENEMY, attack=Attack(vs=REF, printed=12),
     damage=Damage("2d8", 8, kind=LIMITED, half_on_miss=True),
     requires=_m5785_beast_form, requires_text="it must be in beast form",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5785a3(c: Cast) -> None:
     """Recharges when first bloodied, `_recharge_when_bloodied`'s shape."""

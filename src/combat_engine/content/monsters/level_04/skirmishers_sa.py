@@ -641,7 +641,8 @@ def m1434a3(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d8", 3, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1434a4(c: Cast) -> None:
     """The aftereffect is the one clause with nowhere to live: nothing fires
@@ -1274,7 +1275,8 @@ def m3214a1(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it is targeted by a melee or a ranged attack",
     on=Trigger(AttackDeclared, targets_me, "it is targeted by an attack"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3214a2(c: Cast) -> None:
     """Two verbs for one sentence: `c.swap` exchanges the squares and
@@ -2189,7 +2191,8 @@ def m4182a3(c: Cast) -> None:
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("1d8", 4, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4182a4(c: Cast) -> None:
     if c.first:
@@ -2494,7 +2497,8 @@ def m5367a3(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5367a4(c: Cast) -> None:
     """Two named rows against two named targets, with the move spent in halves
@@ -2641,7 +2645,8 @@ def m5515a2(c: Cast) -> None:
         AttackDeclared, both(targets_me, by_melee),
         "an enemy makes a melee attack against it",
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5515a3(c: Cast) -> None:
     """The Stealth check has no roll to make -- there is no hiding requirement
@@ -2738,7 +2743,8 @@ def m5652a3(c: Cast) -> None:
     on=Trigger(
         Miss, both(targets_me, by_melee), "a creature misses it with a melee attack"
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5652a4(c: Cast) -> None:
     """Three clauses and they run in order: the step, the haul, and the free
@@ -2859,7 +2865,8 @@ def m5824a3(c: Cast) -> None:
     ),
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5824a4(c: Cast) -> None:
     """`max_size` is a real `Target` field, so the size half of the target line

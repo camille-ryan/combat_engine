@@ -952,7 +952,8 @@ _M4862_ALLY_HIT = "an enemy hits one of the m4862's allies with a melee attack"
         when=both(by_melee, ally_within(10), enemy_within(1)),
         text=_M4862_ALLY_HIT,
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4862a3(c: Cast) -> None:
     """No attack roll is printed -- the target simply goes down."""

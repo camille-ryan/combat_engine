@@ -569,7 +569,8 @@ def m5326a2(c: Cast) -> None:
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
     requires=_has_bell,
     requires_text="the m5326 must be holding a bell",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5326a3(c: Cast) -> None:
     if c.strike():
@@ -793,7 +794,8 @@ def m5540a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ZONE],
     attack=Attack(vs=REF, printed=12),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5540a2(c: Cast) -> None:
     if c.first:
@@ -2110,7 +2112,8 @@ def m5988a1(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5988a2(c: Cast) -> None:
     if c.first:
@@ -2562,7 +2565,8 @@ def m6233a3(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6233a4(c: Cast) -> None:
     if c.first:
@@ -2715,7 +2719,8 @@ def m6640a5(c: Cast) -> None:
              in ("close_burst", "close_blast", "area_burst"))(get(getattr(ev, "power", "") or "")),
         text="it takes damage from a close or area attack",
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6640a6(c: Cast) -> None:
     if c.first:

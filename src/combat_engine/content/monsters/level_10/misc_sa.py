@@ -68,9 +68,9 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Stats
-from combat_engine.engine.events import Hit, MoveStart
+from combat_engine.engine.events import Bloodied, Hit, MoveStart
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.triggers import Trigger, targets_me
+from combat_engine.engine.triggers import Trigger, about_me, targets_me
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -562,7 +562,8 @@ def m790a2(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 10, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m790a3(c: Cast) -> None:
     _recharge_when_bloodied(c)

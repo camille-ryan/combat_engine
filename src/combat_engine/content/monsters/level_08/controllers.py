@@ -539,7 +539,8 @@ _M2960_STRUCK = "an enemy's attack hits the m2960"
     target=NO_TARGET,
     trigger=_M2960_STRUCK,
     on=Trigger(Hit, when=hits_me, text=_M2960_STRUCK),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2960a4(c: Cast) -> None:
     """Half damage from **one** blow, so this is not `c.insubstantial`: that
@@ -855,7 +856,8 @@ def m346a2(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.CHARM, Keyword.CLOSE],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m346a3(c: Cast) -> None:
     """No damage at all -- the whole of the hit is the hold.
@@ -1250,7 +1252,8 @@ _M4796_AIMED_AT = "a melee or a ranged attack is aimed at the m4796"
         when=both(targets_me, either(by_melee, by_ranged)),
         text=_M4796_AIMED_AT,
     ),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4796a5(c: Cast) -> None:
     """The printed trigger reads "hits", and `c.redirect` only works on the
@@ -1586,7 +1589,8 @@ def m5010a2(c: Cast) -> None:
     keywords=[Keyword.CLOSE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("1d6", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5010a3(c: Cast) -> None:
     """The spec line prints a recharge die and the printed sentence says it

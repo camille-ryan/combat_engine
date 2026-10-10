@@ -469,7 +469,8 @@ _M115823_HURT = "it takes damage from an enemy"
     damage=Damage("2d8", 6, kind=LIMITED),
     trigger=_M115823_HURT,
     on=Trigger(DamageApplied, _hurt_by_an_enemy, _M115823_HURT),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m115823a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2922,7 +2923,8 @@ def m5780a1(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5780a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -3387,7 +3389,8 @@ def _hit_me_adjacent(world: World, me: int, ev: Hit) -> bool:
     damage=Damage("2d6", 7, kind=LIMITED),
     trigger=_M6343_INTERRUPTED,
     on=Trigger(Hit, _hit_me_adjacent, _M6343_INTERRUPTED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6343a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

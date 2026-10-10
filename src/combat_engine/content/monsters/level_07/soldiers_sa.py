@@ -1249,7 +1249,8 @@ def m3783a0(c: Cast) -> None:
 @power(
     "m3783a1", level=7, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=Melee(1), target=UpTo(2),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3783a1(c: Cast) -> None:
     """"Recharges when first bloodied" is `_recharge_when_bloodied`, armed
@@ -2099,7 +2100,8 @@ def m5733a0(c: Cast) -> None:
 @power(
     "m5733a1", level=7, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=PERSONAL, target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5733a1(c: Cast) -> None:
     if c.first:

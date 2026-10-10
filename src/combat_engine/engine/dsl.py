@@ -778,6 +778,16 @@ class Power:
     #: nothing reads it. See `engine/triggers.py`.
     on: Trigger | Sequence[Trigger] | None = None
     recharge: int = 0
+    #: The printed "Recharge when ..." condition, in a form the dispatcher
+    #: can act on -- `recharge` is the die half and this is the sentence.
+    #:
+    #: **440 cards print a condition and no die**, and for those `recharge=0`
+    #: is the honest declaration, so this is the only thing that can give the
+    #: row back. 204 of them carried `dropped=("Usage.RECHARGE(when=)",)`
+    #: because there was nowhere to say it, and 169 more armed a watcher by
+    #: hand from the body -- which works, and cannot be read by the wire or
+    #: the policy without running the row. Header is data. #449, #488.
+    recharge_when: Trigger | Sequence[Trigger] | None = None
     #: How many times per encounter. Two for the cleric's heal; one for
     #: everything else that is not at-will.
     uses: int = 1
@@ -995,6 +1005,29 @@ class Power:
         if self.on is None:
             return ()
         return (self.on,) if isinstance(self.on, Trigger) else tuple(self.on)
+
+    @property
+    def recharges(self) -> tuple[Trigger, ...]:
+        """Every printed condition that gives this row back, as a tuple.
+
+        Same shape as `triggers` and for the same reason: a card prints
+        *"Recharge when the m4356 takes cold **or** fire damage"*, which is
+        two event classes, and declaring one of them leaves the row looking
+        finished while quietly missing half the sentence.
+
+        **A condition, not a die.** 440 cards print "Recharge when ..." with
+        no threshold at all, and `recharge=0` is the honest declaration for
+        them -- so this is the only thing that can give those rows back. One
+        card prints both (`m4356a2`: "recharge 6, **or** recharges when ...")
+        and keeps its number as well as this. #449, #488.
+        """
+        if self.recharge_when is None:
+            return ()
+        return (
+            (self.recharge_when,)
+            if isinstance(self.recharge_when, Trigger)
+            else tuple(self.recharge_when)
+        )
 
     # -- one augment of an augmentable row ----------------------------------
     #
@@ -1227,6 +1260,7 @@ def power(
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
+    recharge_when: Trigger | Sequence[Trigger] | None = None,
     uses: int = 1,
     once_per_round: bool = False,
     group: str = "",
@@ -1338,6 +1372,7 @@ def power(
             trigger=trigger,
             on=on,
             recharge=recharge,
+            recharge_when=recharge_when,
             uses=uses,
             once_per_round=once_per_round,
             group=group,

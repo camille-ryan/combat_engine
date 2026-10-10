@@ -72,6 +72,7 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import get as _row_for
 from combat_engine.engine.events import (
     AttackDeclared,
+    Bloodied,
     Dropped,
     Hit,
     Miss,
@@ -269,7 +270,8 @@ def m1430a3(c: Cast) -> None:
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("1d12", 3, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1430a4(c: Cast) -> None:
     """"Save ends both" is two holds here rather than one: `c.ongoing` carries a
@@ -364,7 +366,8 @@ def m1432a3(c: Cast) -> None:
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d8", 2, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1432a4(c: Cast) -> None:
     _recharge_when_bloodied(c)

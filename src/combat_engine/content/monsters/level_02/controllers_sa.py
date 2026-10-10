@@ -480,7 +480,8 @@ def _hit_with_either(world: World, me: int, ev: Any) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger="it hits with its staff or with m4681a1",
     on=Trigger(Hit, _hit_with_either, "it hits with its staff or with m4681a1"),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4681a3(c: Cast) -> None:
     """The extra damage goes on whoever the triggering attack hit, which is
@@ -911,7 +912,8 @@ def m5398a0(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=5),
     damage=Damage("2d6", 3, dtype=DamageType.THUNDER, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5398a1(c: Cast) -> None:
     _recharge_when_bloodied(c)

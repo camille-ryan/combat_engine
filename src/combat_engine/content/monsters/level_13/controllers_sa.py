@@ -4296,7 +4296,8 @@ def m5332a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d10", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5332a2(c: Cast) -> None:
     """The card prints its damage on the **miss** line, which is the only

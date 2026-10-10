@@ -125,6 +125,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import (
     AttackDeclared,
+    Bloodied,
     ConditionEnded,
     DamageApplied,
     Dropped,
@@ -741,7 +742,8 @@ def m3531a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("2d6", 4, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3531a2(c: Cast) -> None:
     """"Save ends both" is one saving throw, so the four penalties are hung on
@@ -1004,7 +1006,8 @@ def m3543a4(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ALLY,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3543a5(c: Cast) -> None:
     """"+2, or +4 with combat advantage" is written as two mutually exclusive
@@ -2499,7 +2502,8 @@ def m6346a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d8", 4, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6346a3(c: Cast) -> None:
     """The captive is dragged to a named square rather than a distance, and the

@@ -266,7 +266,8 @@ def m3270a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=5),
     damage=Damage("2d8", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m3270a1(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1151,7 +1152,8 @@ def m6039a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=5),
     damage=Damage("3d6", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6039a1(c: Cast) -> None:
     if c.first:

@@ -3330,7 +3330,8 @@ def m6011a2(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6011a3(c: Cast) -> None:
     _recharge_when_neighbor_bloodied(c, c.ref, radius=0)

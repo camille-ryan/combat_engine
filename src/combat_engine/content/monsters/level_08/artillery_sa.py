@@ -89,6 +89,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackRolled,
+    Bloodied,
     Hit,
     Miss,
     Moved,
@@ -101,6 +102,7 @@ from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import distance_between, squares, team, unseen_by
 from combat_engine.engine.triggers import (
     Trigger,
+    about_me,
     both,
     by_melee,
     by_ranged,
@@ -2121,7 +2123,8 @@ def m6405a3(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("3d8", 11, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m6405a4(c: Cast) -> None:
     """"Close burst 1, or 2 if bloodied" keeps the printed baseline in the

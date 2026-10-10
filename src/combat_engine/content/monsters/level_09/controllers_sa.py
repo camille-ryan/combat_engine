@@ -2452,7 +2452,8 @@ def m5626a3(c: Cast) -> None:
     keywords=[Keyword.FORCE, Keyword.AREA],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d8", 8, dtype=DamageType.FORCE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5626a4(c: Cast) -> None:
     if c.strike():

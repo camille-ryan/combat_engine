@@ -1747,7 +1747,8 @@ def m1450a2(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("1d8", 5, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m1450a3(c: Cast) -> None:
     """The concealment is against the creatures this row dazed and nobody
@@ -2352,7 +2353,8 @@ def m2070a1(c: Cast) -> None:
     keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("3d6", 6, dtype=DamageType.THUNDER, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m2070a2(c: Cast) -> None:
     """Two numbers for one blow: the base stays in the header where a rescale
@@ -4564,7 +4566,8 @@ _M4153_HELD = (Condition.SLOWED, Condition.RESTRAINED)
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d8", 6, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4153a4(c: Cast) -> None:
     """"Targets slowed or restrained creatures" is a restriction `Target`
@@ -4825,7 +4828,8 @@ _M4365_WOUNDED = "an attack hits m4365"
     keywords=[Keyword.TELEPORTATION],
     trigger=_M4365_WOUNDED,
     on=Trigger(Hit, when=_hit_me, text=_M4365_WOUNDED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m4365a5(c: Cast) -> None:
     """"The triggering attack grants combat advantage to m4365" is read as the
@@ -6069,7 +6073,8 @@ def m5807a2(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("3d10", 9, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5807a3(c: Cast) -> None:
     """The card prints the recharge as a bloodied one and the database files a
@@ -6409,7 +6414,8 @@ def m5831a3(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=15),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(Bloodied, about_me,
+        "when first bloodied"),
 )
 def m5831a4(c: Cast) -> None:
     """No damage line: the daze is the whole of the hit. The push is an Effect
