@@ -788,6 +788,16 @@ class Power:
     #: hand from the body -- which works, and cannot be read by the wire or
     #: the policy without running the row. Header is data. #449, #488.
     recharge_when: Trigger | Sequence[Trigger] | None = None
+    #: A recharge condition that is a **state, not a moment**, re-asked at
+    #: the start of the creature's turn beside the d6. `recharge_when` takes
+    #: a `Trigger` and so needs an event to watch; ten rows print a standing
+    #: condition instead -- "recharges when no creature is affected by this
+    #: power" -- which becomes true by any of five routes and has no single
+    #: moment to subscribe to. See `query.lingers` and #489.
+    #:
+    #: All three forms coexist, because a card may print more than one:
+    #: the die, a trigger, and a state.
+    recharge_while: Callable[[World, int], bool] | None = None
     #: How many times per encounter. Two for the cleric's heal; one for
     #: everything else that is not at-will.
     uses: int = 1
@@ -1273,6 +1283,7 @@ def power(
     on: Trigger | Sequence[Trigger] | None = None,
     recharge: int = 0,
     recharge_when: Trigger | Sequence[Trigger] | None = None,
+    recharge_while: Callable[[World, int], bool] | None = None,
     uses: int = 1,
     once_per_round: bool = False,
     group: str = "",
@@ -1385,6 +1396,7 @@ def power(
             on=on,
             recharge=recharge,
             recharge_when=recharge_when,
+            recharge_while=recharge_while,
             uses=uses,
             once_per_round=once_per_round,
             group=group,

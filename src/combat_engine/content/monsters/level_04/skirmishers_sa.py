@@ -3135,9 +3135,7 @@ def m5938a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d6", 4, kind=LIMITED),
-    requires=_not_grabbing,
-    requires_text="must have no creature grabbed",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_not_grabbing,
 )
 def m5938a2(c: Cast) -> None:
     """"Until the grab ends" is measured by nothing in `When`: a grab ends

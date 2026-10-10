@@ -2869,9 +2869,13 @@ def m6281a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("1d6", 4),
-    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6281a3(c: Cast) -> None:
+    """The one printed recharge in #489's ten that genuinely is a **moment**
+    -- "ends its turn having dealt no damage" happens at a turn boundary and
+    needs a per-turn tally, so it stays a watch rather than becoming a
+    `recharge_while=` predicate. The marker was stale: the clause was already
+    written and the symbol named a gap this row does not have."""
     _recharge_when_no_damage_dealt(c)
     if c.strike():
         c.hit()

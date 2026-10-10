@@ -1629,9 +1629,7 @@ def m5010a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    requires=_no_traps_left,
-    requires_text="every trap this row made must have ended",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_no_traps_left,
 )
 def m5010a5(c: Cast) -> None:
     """The squares are printed as unoccupied, so nobody is standing in one

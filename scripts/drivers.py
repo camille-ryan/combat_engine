@@ -2238,6 +2238,87 @@ def class_form(out: Result) -> None:
     )
 
 
+def recharge_while(out: Result) -> None:
+    """A recharge condition that is a **state**, not a moment.
+
+    `recharge_when` takes a `Trigger`, which needs an event to watch. Ten
+    cards print a standing condition instead -- "recharges when no creature
+    is affected by this power", "when it does not have a creature grabbed" --
+    and there is no moment to subscribe to: the last hold goes away when its
+    owner saves, or dies, or it expires, or it is suspended, or the creature
+    holding it drops. Watching all five routes and re-asking at each is both
+    the hard way and the fragile way, because missing one leaves the power
+    gone for the rest of the fight and says nothing. #489.
+
+    So it is a predicate re-asked where 4e already asks: at the start of the
+    creature's turn, in `actions.recharge`, beside the die.
+
+    **Three things here are negative controls and each one caught something
+    in the writing.**
+
+    * A row printing *only* a state has `recharge=0`, and `actions.recharge`
+      used to `continue` on exactly that before the predicate could be asked.
+      Without the first assertion this whole field would be unreachable on
+      nine of its ten rows.
+    * The state being false must leave the row spent. Five of these rows had
+      their predicate wired to `requires=` instead, which is a different
+      sentence -- a usability gate refuses the power *while* the condition
+      holds, which no card says.
+    * The die is rolled before the state is asked, and that ordering is part
+      of the contract: this module records every draw in `Rng.rolls` in
+      order, so short-circuiting on a state that happens to be true would
+      drop a draw a fixture has already recorded.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.query import enemies, holds_somebody, lingers
+    from combat_engine.engine.types import Relation
+
+    ref = "m3101a1"
+    p = get(ref)
+    out.that(p is not None and p.recharge_while is not None,
+             "the row declares a state to recharge on")
+    out.that(p is not None and p.recharge == 0,
+             "and no die, because its card prints none -- the case the old"
+             " `recharge <= 0` gate dropped before asking")
+
+    world, caster, _ = _board(ref, 1)
+    known = world.need(caster, Powers)
+    known.note_use(ref, world.round)
+    out.that(ref in known.spent, "spent")
+
+    # Negative control: the state is false, so the row stays spent.
+    victim = sorted(enemies(world, caster))[0]
+    world.relations.set(Relation.GRABBED_BY, caster, victim)
+    out.that(holds_somebody(world, caster), "it is holding somebody")
+    actions.recharge(world, caster)
+    out.that(ref in known.spent,
+             "holding somebody, the row does NOT come back -- the control,"
+             " and without it any predicate at all would look like it worked")
+
+    # Positive: let go, and the next turn gives it back.
+    world.relations.clear(Relation.GRABBED_BY, caster, victim, "let go")
+    out.that(not holds_somebody(world, caster), "no longer holding anybody")
+    actions.recharge(world, caster)
+    out.that(ref not in known.spent,
+             "holding nobody, the row comes back, which is the printed"
+             " sentence")
+
+    # A state that is still false must not hand back a row twice either.
+    actions.recharge(world, caster)
+    out.that(ref not in known.spent, "and asking again changes nothing")
+
+    # `query.lingers` is the shared predicate for five of the ten, and `by=`
+    # is what keeps two of a kind from holding each other's power spent.
+    held = get("m461a3")
+    out.that(held is not None and held.recharge_while is not None,
+             "the charm row reads its own lingering hold")
+    out.that(not lingers(world, "m461a3", by=caster),
+             "nothing lingering from a row nobody has cast")
+
+
 def recharge_when(out: Result) -> None:
     """"Recharge when first bloodied" -- a condition, where there was a die.
 
@@ -2562,7 +2643,7 @@ def disease(out: Result) -> None:
 
 
 def summoned(out: Result) -> None:
-    """A character's summon takes its numbers from the summoner. #459.
+    r"""A character's summon takes its numbers from the summoner. #459.
 
     88 blocks, and **79 of them print no numbers at all** -- "HP your
     bloodied value", "Defenses your defenses + 2". So the block is a rule for
@@ -2646,6 +2727,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "recharge_while": (recharge_while,
+                       "a recharge condition that is a state, not a moment"),
     "class_form": (class_form,
                    "a class form is a state and a keyword, and those differ"),
     "substitution": (substitution,

@@ -1359,7 +1359,12 @@ def recharge(world: World, actor: int) -> None:
         return
     for ref in sorted(known.spent):
         p = get(ref)
-        if p is None or p.usage is not Usage.RECHARGE or p.recharge <= 0:
+        if p is None or p.usage is not Usage.RECHARGE:
+            continue
+        # A row may print a die, a state, or both -- and one that prints only
+        # a state has `recharge=0`, which the old gate dropped before it could
+        # be asked. #489.
+        if p.recharge <= 0 and p.recharge_while is None:
             continue
         # **A d6, not a d20.** A printed "Recharge 6" is *roll a d6, recharge on a 6* --
         # one chance in six. Rolling a d20 against the same threshold made it
@@ -1382,5 +1387,14 @@ def recharge(world: World, actor: int) -> None:
         #
         # `roll` rather than `die`, because `die` does not append to `Rng.rolls` and this
         # module's contract is that every draw is recorded in order.
-        if world.rng.roll("1d6").total >= p.recharge:
+        #
+        # **The die is rolled first, and that ordering is deliberate.** This
+        # module's contract is that every draw is recorded in `Rng.rolls` in
+        # order, so short-circuiting on a state that happens to be true would
+        # drop a draw a fixture has already recorded. Asking the state first
+        # would have re-recorded every replay fixture holding a recharge row.
+        back = p.recharge > 0 and world.rng.roll("1d6").total >= p.recharge
+        if not back and p.recharge_while is not None:
+            back = p.recharge_while(world, actor)
+        if back:
             known.restore(ref)

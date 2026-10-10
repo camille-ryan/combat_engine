@@ -212,10 +212,17 @@ def _can_fly(c: Cast, who: int | None) -> bool:
 
 
 def _nobody_dominated_by(ref: str) -> Any:
-    """"Recharge when no creature is dominated by this power" is a gate on
-    whether the earlier hold is still standing on any of the caster's
-    enemies, asked the same way `_has_a_hexed_enemy` asks about a hex in
-    `level_07/controllers.py`."""
+    """"Recharge when no creature is dominated by this power."
+
+    A state, not a moment, so it is `recharge_while=` -- re-asked at the start
+    of this creature's turn beside the die. **It was wired to `requires=` and
+    that was a different sentence**: a usability gate refuses the power while
+    somebody is dominated, which the card never says, and since nothing put
+    the power back the row was once-per-encounter either way. #489.
+
+    `eff.source == eid` keeps it to this creature's own hold, so two of these
+    on the board do not hold each other's power spent.
+    """
 
     def check(world: World, eid: int) -> bool:
         return not any(
@@ -4377,9 +4384,7 @@ def m5936a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=10),
-    requires=_nobody_dominated_by("m5936a3"),
-    requires_text="recharges when no creature is dominated by this power",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_nobody_dominated_by("m5936a3"),
 )
 def m5936a3(c: Cast) -> None:
     victim = c.target
@@ -4655,9 +4660,7 @@ def m6108a5(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=10),
-    requires=_nobody_dominated_by("m6108a6"),
-    requires_text="recharges when no creature is dominated by this power",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_nobody_dominated_by("m6108a6"),
 )
 def m6108a6(c: Cast) -> None:
     victim = c.target

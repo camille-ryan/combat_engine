@@ -136,8 +136,10 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
     distance_between,
+    enemies,
     flanked_by,
     squares,
+    taking_ongoing,
 )
 from combat_engine.engine.triggers import (
     Trigger,
@@ -932,6 +934,17 @@ def _nobody_is_burning(c: Cast) -> None:
     c.watch(TurnStart, quiet, until=When.ENCOUNTER, on=me, label=label)
 
 
+def _no_enemy_burning(world: World, eid: int) -> bool:
+    """"Recharge when no enemy is taking ongoing damage."
+
+    The row's own target line is `ongoing=True`, so this is the same question
+    the pool asks, read from the other side: the power comes back once the
+    board has stopped burning. A state rather than a moment -- a burn ends on
+    a save, on an expiry, or on the burning creature dying. #489.
+    """
+    return not any(taking_ongoing(world, foe) for foe in enemies(world, eid))
+
+
 @power(
     "m3540a2",
     level=4,
@@ -947,7 +960,7 @@ def _nobody_is_burning(c: Cast) -> None:
     keywords=[Keyword.IMPLEMENT],
     attack=Attack(vs=WILL, printed=8),
     damage=Damage("2d6", 4, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_no_enemy_burning,
 )
 def m3540a2(c: Cast) -> None:
     """The printed penalty is one sentence covering four numbers, so it is

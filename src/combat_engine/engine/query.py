@@ -1304,3 +1304,39 @@ def line_of_effect(world: World, a: int, b: int) -> bool:
         for src in squares(world, a)
         for dst in squares(world, b)
     )
+
+
+def lingers(world: World, ref: str, *, by: int | None = None) -> bool:
+    """Is anything this power laid still in play?
+
+    The question a card asks as **"recharges when no creature is affected by
+    this power"** -- and the reason `Power.recharge_while` exists rather than
+    a `Trigger`. There is no moment to watch: the last effect goes away when
+    its owner saves, or dies, or it expires, or it is suspended, or the
+    creature holding it drops. Subscribing to all five and re-asking is both
+    the hard way and the fragile way, because missing one route leaves the
+    power gone for the rest of the fight and says nothing.
+
+    Matched on the effect's `label`, which is how an effect is tied back to
+    the row that laid it -- `Effect.source` is the *entity* that cast it, not
+    the card. Every verb these rows use already labels with the ref and has
+    done since before this was written: `c.condition` passes `self.ref`,
+    `c.dominate` passes `f"{self.ref} dominate"`, `c.form` passes
+    `label or self.ref`. So this reads a convention rather than needing one
+    imposed.
+
+    A zone counts, which is what "when all of this power's <zones> have
+    ended" needs: a zone's effect is owned by the zone entity, so nothing the
+    caster owns mentions it -- the same blind spot `Effects.sustaining`
+    records -- but the label still names the row.
+
+    **`by=` narrows to one creature's own handiwork, and matters whenever two
+    of a kind are on the board.** Two of these monsters appear as a pair in
+    their own stat block, so without it either one's hold keeps both their
+    powers spent.
+    """
+    return any(
+        (eff.label == ref or eff.label.startswith(f"{ref} "))
+        and (by is None or eff.source == by)
+        for eff in world.effects.live.values()
+    )

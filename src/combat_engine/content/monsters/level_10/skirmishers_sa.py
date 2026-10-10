@@ -4052,9 +4052,7 @@ def _m6481_nobody_dominated(world: World, eid: int) -> bool:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=15),
-    requires=_m6481_nobody_dominated,
-    requires_text="no creature must be dominated by this power",
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_m6481_nobody_dominated,
 )
 def m6481a6(c: Cast) -> None:
     if c.strike():

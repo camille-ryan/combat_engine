@@ -120,7 +120,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import has_combat_advantage, hidden_from, team
+from combat_engine.engine.query import enemies, has_combat_advantage, hidden_from, is_, team
 from combat_engine.engine.triggers import Trigger, about_me, by_power, hits_me, targets_me
 from combat_engine.engine.zones import Zone
 
@@ -208,25 +208,18 @@ def _ridden_by(least: int):  # noqa: ANN202
     return gate
 
 
-def _recharge_when_nobody_blinded(c: Cast) -> None:
-    """Put the row back up at the top of its turn when no enemy is blinded.
+def _no_enemy_blinded(world: World, eid: int) -> bool:
+    """"Recharge when no enemy is blinded", the second of two printed
+    conditions on `m5485a3`.
 
-    The second half of a two-clause printed recharge, and it has to be asked
-    rather than watched: the condition is the *absence* of something, which no
-    event announces. The die stays in the header either way.
+    A state, not a moment: the condition is the *absence* of something, which
+    no event announces -- a blind ends on a save, on an expiry, or on the
+    blinded creature dying, and watching all three to re-ask is the fragile
+    way round. `recharge_while=` asks it at the start of the turn instead.
+
+    Was a hand-rolled `TurnStart` watch doing exactly this. #489.
     """
-    me, ref = c.me, c.ref
-    label = f"{ref} recharge"
-    if any(effect.label == label for effect in c.world.effects.of(me)):
-        return
-
-    def dawn(ev: TurnStart) -> None:
-        if ev.actor != me or ev.ghost:
-            return
-        if not any(c.is_(Condition.BLINDED, on=foe) for foe in c.enemies()):
-            c.restore_use(ref, on=me)
-
-    c.watch(TurnStart, dawn, until=When.ENCOUNTER, on=me, label=label)
+    return not any(is_(world, foe, Condition.BLINDED) for foe in enemies(world, eid))
 
 
 def _recharge_on_melee_miss(c: Cast) -> None:
@@ -1012,16 +1005,24 @@ def m5485a2(c: Cast) -> None:
     reach=CloseBurst(2),
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=5),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_no_enemy_blinded,
 )
 def m5485a3(c: Cast) -> None:
-    """No damage line: the shove and the blind are the whole of the Hit. Both
-    printed recharge conditions are armed -- one is an event and one is the
-    absence of a state, so they are asked in different places -- and the die
-    stays in the header, which is what the card shows."""
+    """No damage line: the shove and the blind are the whole of the Hit.
+
+    **The card prints two recharge conditions and they are different kinds of
+    thing**, which is the case #489 was built around. "Uses <its other row>"
+    is a moment, so it stays a watch armed in the body. "No enemy is blinded"
+    is the *absence* of something and no event announces it, so it is a
+    `recharge_while=` predicate re-asked at the start of this creature's turn
+    beside the die. The die stays in the header, which is what the card
+    shows.
+
+    This replaced a hand-rolled `TurnStart` watch that asked the same
+    question -- correct, but a private copy of what `actions.recharge` now
+    does for every row of this shape."""
     if c.first:
         _recharge_when_using(c, "m5485a1")
-        _recharge_when_nobody_blinded(c)
     if c.strike():
         c.push(3)
         c.blinded(until=When.EONT)

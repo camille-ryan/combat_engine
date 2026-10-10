@@ -133,6 +133,7 @@ from combat_engine.engine.query import (
     distance_between,
     flanked_by,
     is_,
+    lingers,
     moving_as,
     squares,
     team,
@@ -1329,6 +1330,21 @@ def m461a2(c: Cast) -> None:
     c.save(on=who)
 
 
+def _nothing_charmed_by(ref: str) -> Any:
+    """"Recharge when no creature is affected by this power."
+
+    `query.lingers` reads the effect's label, which is how an effect ties
+    back to the row that laid it -- `Effect.source` is the entity that cast
+    it, not the card. `by=eid` narrows it to this creature's own hold so that
+    two of these on the board do not keep each other's power spent. #489.
+    """
+
+    def check(world: World, eid: int) -> bool:
+        return not lingers(world, ref, by=eid)
+
+    return check
+
+
 @power(
     "m461a3",
     level=9,
@@ -1339,7 +1355,7 @@ def m461a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_nothing_charmed_by("m461a3"),
 )
 def m461a3(c: Cast) -> None:
     """Its victim will not touch it, and turns on anybody who does.

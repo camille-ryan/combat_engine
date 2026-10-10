@@ -67,7 +67,7 @@ from combat_engine.engine.events import (
     ZoneEntered,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import adjacent, team
+from combat_engine.engine.query import adjacent, holds_somebody, team
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -688,6 +688,18 @@ def m3101a0(c: Cast) -> None:
         c.hit()
 
 
+def _not_grabbing(world: World, eid: int) -> bool:
+    """"Recharge when it does not have a creature grabbed."
+
+    A state, not a moment, which is why it is `recharge_while=` and not a
+    `Trigger`: the grab ends when the held creature escapes, or saves, or
+    dies, or this creature drops it to do something else. Watching all four
+    and re-asking is the fragile way -- miss one and the power is gone for
+    the fight. #489.
+    """
+    return not holds_somebody(world, eid)
+
+
 @power(
     "m3101a1",
     level=2,
@@ -699,7 +711,7 @@ def m3101a0(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("1d8", 4, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_not_grabbing,
 )
 def m3101a1(c: Cast) -> None:
     """The Hit line only. The printed Sustain Standard -- crush the held
