@@ -1621,7 +1621,7 @@ def p16436(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("Keyword.BEAST_FORM",),
+    dropped=("c.form(class_form=)",),
 )
 def p16535(c: Cast) -> None:
     """The form and the printed alternative -- end it as a minor action and
@@ -1646,7 +1646,7 @@ def p16535(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
-    dropped=("Keyword.BEAST_FORM",),
+    dropped=("c.form(class_form=)",),
 )
 def p16535b(c: Cast) -> None:
     """The attack the form unlocks -- the second card inside p16535's entry.
@@ -1674,7 +1674,7 @@ def p16535b(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_bloodied,
     requires_text="you must have started this turn bloodied",
-    dropped=("Keyword.BEAST_FORM",),
+    dropped=("c.form(class_form=)",),
 )
 def p16537(c: Cast) -> None:
     """Both benefits are printed "while you are in beast form".
@@ -1747,7 +1747,7 @@ def _hit_while_bloodied(world: World, me: int, ev: object) -> bool:
         Trigger(Bloodied, about_me, "an attack bloodies you"),
         Trigger(Hit, _hit_while_bloodied, "you are hit while bloodied"),
     ),
-    dropped=("Keyword.BEAST_FORM", "c.provoke(allies=)"),
+    dropped=("c.form(class_form=)", "c.provoke(allies=)"),
 )
 def p16539(c: Cast) -> None:
     """Both printed triggers are declared -- half of an "or" declared looks

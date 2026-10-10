@@ -1521,7 +1521,7 @@ def p16525(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
-    dropped=("Keyword.BEAST_FORM",),
+    dropped=("c.form(class_form=)",),
 )
 def p16525b(c: Cast) -> None:
     """The attack the form unlocks, which is a **second card filed under

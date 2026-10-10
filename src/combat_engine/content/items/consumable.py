@@ -487,7 +487,7 @@ def i1420p1(c: Cast) -> None:
 
 @power("i2561p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("Keyword.BEAST_FORM",))
+       dropped=("c.form(class_form=)",))
 def i2561p1(c: Cast) -> None:
     """The +1 is gated on the power being a form power, not on the shape.
 

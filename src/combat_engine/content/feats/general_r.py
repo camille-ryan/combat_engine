@@ -1703,7 +1703,7 @@ def f3646(c: Cast) -> None:
 @power("f3646b", level=1, cls="", usage=AT_WILL, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.PRIMAL, Keyword.POLYMORPH], once_per_round=True,
-       dropped=("Keyword.BEAST_FORM",))
+       dropped=("c.form(class_form=)",))
 def f3646b(c: Cast) -> None:
     """The printed form "normally doesn't change your game statistics", so
     `c.form` is taken bare -- no conditions, no modes -- with a minor

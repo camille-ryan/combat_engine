@@ -576,7 +576,7 @@ def f665(c: Cast) -> None:
 
 
 @power("f666", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, dropped=("Keyword.BEAST_FORM",))
+    reach=PERSONAL, target=SELF, dropped=("c.form(class_form=)",))
 def f666(c: Cast) -> None:
     """Multiclass: that class's form power, which the spec names by ref
     and which prints no limit of its own, plus one of its 1st-level

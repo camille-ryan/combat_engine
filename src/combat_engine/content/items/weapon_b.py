@@ -2259,7 +2259,7 @@ def i1820p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("Keyword.GUARDIAN_FORM",),
+    todo=("c.form(class_form=)",),
 )
 def i1840x1(c: Cast) -> None:
     """Pays out only while a particular kind of shape is held.

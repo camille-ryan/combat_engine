@@ -1688,7 +1688,7 @@ def i3190p2(c: Cast) -> None:
     target=SELF,
     trigger="you use your p5032 power to assume beast form",
     on=Trigger(PowerUsed, _used_by_me("p5032"), "you assume beast form"),
-    dropped=("Keyword.BEAST_FORM",),
+    dropped=("c.form(class_form=)",),
 )
 def i1093p1(c: Cast) -> None:
     """The trigger is declared against the ref the spec prints.
