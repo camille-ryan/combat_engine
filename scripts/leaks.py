@@ -113,6 +113,21 @@ _DICT: frozenset[str] | None = None
 _TRUSTED: frozenset[str] | None = None
 
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "data", "localization"}
+
+# Longest printed name, in words, set by `_index`. Read by `_hits` to size
+# its n-gram window. A literal here left every name above the literal
+# unreachable, silently -- see `_index`.
+_NGRAM_CAP = 1
+
+#: Names holding punctuation, keyed by first segment -> (all segments, key).
+#: Reported when every segment is on the line. Set by `_index`; see
+#: `_segments` for why a name cannot simply be one phrase.
+_SEGMENTED: dict[str, list[tuple[tuple[str, ...], str]]] = {}
+
+#: The same names as a flat key set, and the longest of them in words.
+#: `_hits`'s second pass needs a span across segments, not within one.
+_SEGMENTED_KEYS: frozenset[str] = frozenset()
+_NGRAM_SPAN = 1
 TEXT_SUFFIXES = {".py", ".md", ".js", ".css", ".html", ".json", ".toml", ".txt", ".sql"}
 
 
@@ -131,20 +146,77 @@ def _index(names: dict) -> tuple[dict[str, list[str]], dict[str, str]]:
     where the compendium writes a hyphen is just as much a leak, and this
     catches that too.
 
+    **And a third time, for every other punctuation mark.** A hyphen was not
+    special: `_hits` builds its phrases with `[a-z']+` joined by single spaces,
+    so *no* key holding a character outside that class could ever compare
+    equal. 638 keys were unmatchable and **247 of them fired nothing at all**
+    when planted verbatim in plain prose -- 150 because the printed name holds
+    a comma or a parenthesis, the rest a colon, slash, ampersand, quote or
+    bracket. Found by planting a name in a new table's spec and watching
+    `--specs` report clean, which is the plant-test rule earning its keep: the
+    plant was a bad one, and chasing why found a real gap rather than a bad
+    plant. #493.
+
+    So the key is now built the *same way `_hits` builds a phrase*, which is
+    the invariant that was missing all three times. Collapses 11 keys onto 10
+    and loses nothing -- both refs land on the one key.
+
     Returns the lookup, and beside it the printed spelling of each key, so a
     finding can quote what the compendium prints rather than the normalised
     form a reader would then go looking for in vain.
     """
+    global _NGRAM_CAP, _SEGMENTED, _SEGMENTED_KEYS, _NGRAM_SPAN
     index: dict[str, list[str]] = {}
     printed: dict[str, str] = {}
+    segmented: dict[str, list[tuple[tuple[str, ...], str]]] = {}
+    widest = 1
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip().lower()
         if len(name) <= 2:
             continue
-        key = " ".join(_fold(name).replace("-", " ").split())
+        segments = _segments(name)
+        if not segments:
+            continue
+        key = " ".join(segments)
         index.setdefault(key, []).append(ref)
         printed.setdefault(key, name)
+        if len(segments) > 1:
+            segmented.setdefault(segments[0], []).append((segments, key))
+        widest = max(widest, *(len(seg.split()) for seg in segments))
+    _SEGMENTED = segmented
+    _SEGMENTED_KEYS = frozenset(key for segs in segmented.values() for _, key in segs)
+    # Both derived, never literals. A fixed `6` left every 7-word name
+    # unreachable -- the same by-construction hole as the hyphen, counted a
+    # third time. `_NGRAM_CAP` sizes the within-a-run pass, so it is the
+    # longest **segment**; `_NGRAM_SPAN` sizes the across-punctuation pass,
+    # so it is the longest whole **name**.
+    _NGRAM_CAP = widest
+    _NGRAM_SPAN = max((len(k.split()) for k in _SEGMENTED_KEYS), default=1)
     return index, printed
+
+
+def _segments(name: str) -> tuple[str, ...]:
+    """A printed name as the word-runs `_hits` can actually match.
+
+    **Punctuation is a boundary on the line and so has to be one here.**
+    `_hits` captures runs with `[a-z' -]` precisely so it does not read across
+    an opening bracket -- without that, every `def <verb>(self` pair looked
+    like a two-word name. The consequence nobody drew: a *name* holding a
+    comma, parenthesis, colon, slash or ampersand can never appear inside one
+    run either, so no amount of normalising the key reaches it. Normalising
+    the key alone moved the unreachable count 247 -> 229.
+
+    So a name is a **tuple of segments**, and `_hits` reports it when every
+    segment is on the line. That keeps the no-reading-across-brackets rule
+    exactly as it was -- each segment still has to sit inside a single run --
+    while making the whole name reachable. #493.
+    """
+    folded = _fold(name).replace("-", " ")
+    return tuple(
+        " ".join(words)
+        for chunk in re.split(r"[^a-z' -]+", folded)
+        if (words := re.findall(r"[a-z']+", chunk))
+    )
 
 
 def _fold(text: str) -> str:
@@ -443,9 +515,26 @@ def specs() -> int:
     # `rt:` branch, so no author is handed either brief today. Adding those
     # branches before this walk was watching would have shipped names on the
     # first day. #415, #419.
+    #
+    # **And it happened again, to three tables in one day.** `disease`
+    # (#389), `associate` (#459) and `terrain` (#458) were each imported with
+    # a `spec` column and none was added here -- so three commit messages
+    # claimed "`leaks.py --specs` clean" over specs this walk had never read,
+    # which is the same false pass `trap` and `racial_trait` gave for 782.
+    # Proven by planting a printed monster name in a new table's spec: the
+    # walk reported clean.
+    #
+    # The list being hand-kept is the fault. It stays hand-written for the
+    # reason `REVIEWED` does -- a derived "every table with a spec column"
+    # would silently start checking a column that is not a brief -- but a new
+    # table now has to appear in two places and the second is easy to miss.
+    # `#492` is that gap, and what would close it: the two lists reconciled
+    # against the set of tables that actually have a spec column, with any
+    # exclusion named rather than silently allowed.
     for table in ("power", "monster_power", "class_feature", "companion",
                   "item", "item_block", "feat", "race",
-                  "trap", "racial_trait"):
+                  "trap", "racial_trait",
+                  "disease", "associate", "terrain"):
         for ref, spec in db.execute(f"SELECT ref, spec FROM {table}"):
             for line in (spec or "").splitlines():
                 for name, refs in _hits(line, index):
@@ -954,8 +1043,16 @@ def _hits(line: str, index: dict[str, list[str]]) -> list[tuple[str, list[str]]]
 
     Built from the line's own word n-grams rather than by trying 17,000
     regexes -- one pass over the line instead of one pass per name.
+
+    The window is `_NGRAM_CAP`, which `_index` derives from the longest
+    printed name. It was the literal `6` and 18 seven-word names were
+    unreachable because of it -- the same by-construction hole the hyphen and
+    the accent each cut, counted a third time. **Anything comparing a key
+    against a phrase built here has to be built by the same rules**, which is
+    the invariant `_index` now holds.
     """
     out: list[tuple[str, list[str]]] = []
+    seen: set[str] = set()
     # Within runs of prose only. Punctuation is a boundary -- a method
     # signature is not a sentence, and reading across the opening bracket
     # made every `def <verb>(self` pair look like a two-word name.
@@ -963,10 +1060,35 @@ def _hits(line: str, index: dict[str, list[str]]) -> list[tuple[str, list[str]]]
     # name is reachable at all. See `_fold`.
     for run in re.findall(r"[a-z'](?:[a-z' -]*[a-z'])?", _fold(line.lower())):
         words = re.findall(r"[a-z']+", run)
-        for size in range(min(6, len(words)), 0, -1):
+        for size in range(min(_NGRAM_CAP, len(words)), 0, -1):
             for i in range(len(words) - size + 1):
                 phrase = " ".join(words[i : i + size])
+                seen.add(phrase)
                 if phrase in index:
+                    out.append((phrase, index[phrase]))
+    # A name holding punctuation sits in no single run, so it needs a second
+    # pass over the line with punctuation collapsed to a space.
+    #
+    # **"Every segment somewhere on the line" is not good enough**, and the
+    # first version of this did that. A flattened spec is one line of up to
+    # 3,300 characters, so on three trap specs the base segment appeared and
+    # the one-word parenthesised qualifier turned up unrelated somewhere else
+    # in the same line -- three findings that were artefacts of the test. It
+    # was reproducing `build._spelt_out`, which that file's own docstring
+    # calls "a cheap sieve, not a match".
+    #
+    # So the segments have to be **contiguous**: the name as printed, with
+    # only non-letters between its parts. That is what collapsing gives. The
+    # second pass reads across brackets, which the first deliberately does
+    # not -- confined to names that genuinely hold punctuation, where the
+    # alternative is not matching them at all.
+    if _SEGMENTED:
+        flat = re.sub(r"[^a-z' -]+", " ", _fold(line.lower()))
+        words = re.findall(r"[a-z']+", flat)
+        for size in range(min(_NGRAM_SPAN, len(words)), 1, -1):
+            for i in range(len(words) - size + 1):
+                phrase = " ".join(words[i : i + size])
+                if phrase in _SEGMENTED_KEYS and phrase in index:
                     out.append((phrase, index[phrase]))
     return out
 

@@ -23,9 +23,10 @@ condition. `c.resist(when=)` is the gated form, and the gate reads `source`
 off the damage context -- which carries it, and `from_attack` beside it, so
 "an attack" can be told from a zone's burn.
 
-**"Secondary Attack" has no ref to live in**, so `_secondary` rolls the
-printed total through `scaling.trim` the way a header's `Attack(printed=)` is
-rolled. Four rows here print one.
+**A follow-up attack line has no ref to live in** -- the stat block prints it
+under the first attack rather than as its own card -- so `_secondary` rolls
+the printed total through `scaling.trim` the way a header's `Attack(printed=)`
+is rolled. Four rows here print one.
 
 **A hit line with no damage on it gets no `c.hit()` and no `damage=`.**
 Six rows here print a condition, a curse or a lost healing surge as the whole

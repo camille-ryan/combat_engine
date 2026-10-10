@@ -545,8 +545,14 @@ def _phrase(part: str, index: _Index) -> dict:
 
 
 def _split(clause: str, seps: tuple[str, ...]) -> list[str]:
-    """Split outside brackets. `Shield Proficiency (Heavy or Light)` is one
-    requirement, and so is `Beast Mastery class feature (boar, lizard)`."""
+    """Split outside brackets.
+
+    A prerequisite naming two grades of one thing is **one** requirement, not
+    two -- `f161`/`f162` print as one card with the pair in brackets, and so
+    does a class feature that brackets the companions it can be taken for.
+    Splitting on the bracket turned each into two prerequisites, neither of
+    which any character meets.
+    """
     low = clause.lower()
     parts: list[str] = []
     depth = start = position = 0
