@@ -369,6 +369,39 @@ CREATE TABLE armour (
 );
 CREATE INDEX armour_kind ON armour(kind, type);
 
+-- Summons, mounts and companions a character brings along. #459.
+--
+-- 88 stat blocks, read for `ID, Name` only until now -- so `c.summon(ref)` is
+-- written, 67 rows call it, and the refs they pass are improvised because the
+-- blocks were unread. Eleven rows carry a marker naming the gap.
+--
+-- **Not the same table as `companion`.** That one (105 rows) is the ranger's
+-- beast and its relatives. This is the Essentials classes' animal companions,
+-- every elemental companion, every mount, and every summoned creature in the
+-- game. Two kinds of ally, two tables.
+--
+-- **Defences come in two printed shapes and only one is a number**, measured
+-- across all 88 before this was written:
+--
+--     relative  79   "Defenses your defenses + 2"   -- 59 summons, 12
+--                    elemental companions, 6 mounts, 2 others
+--     absolute   9   "AC 15, Fortitude 13, Reflex 13, Will 13"
+--
+-- So `ac`/`fort`/`ref_def`/`will` are **NULL on 79 of 88** and `defences`
+-- holds the printed expression instead. Deriving a number for a summoned
+-- creature would be inventing one: its defences *are* the summoner's, and the
+-- summoner is not known at import.
+--
+-- `hp` is text for the same reason -- 86 of 88 print "your bloodied value" or
+-- "1", not a number. The two shapes are the whole reason this table cannot
+-- look like `monster`.
+CREATE TABLE associate (
+  ref TEXT PRIMARY KEY, id INTEGER, kind TEXT, size TEXT, origin TEXT,
+  hp TEXT, defences TEXT, ac INTEGER, fort INTEGER, ref_def INTEGER,
+  will INTEGER, speed INTEGER, spec TEXT
+);
+CREATE INDEX associate_kind ON associate(kind);
+
 -- Traps and hazards. **631 of these were never read**, and `terrain.arm`
 -- said so in a docstring that read as a design choice: "the numbers come
 -- off the monster curve because there is no row to read them from: the ETL
@@ -438,6 +471,7 @@ class Report:
     classes: int = 0
     weapons: int = 0
     armour: int = 0
+    associates: int = 0
     features: int = 0
     seconds: int = 0
     crossed: int = 0
@@ -492,6 +526,7 @@ class Report:
             f"classes       {self.classes:6d}",
             f"weapons       {self.weapons:6d}  (base weapons, numbers off the page)",
             f"armour        {self.armour:6d}  (bases, materials and enchantments; #452)",
+            f"associates    {self.associates:6d}  (summons, mounts, companions; #459)",
             f"features      {self.features:6d}  (class features, new)",
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
@@ -582,6 +617,7 @@ def build() -> Report:
     report.classes = _classes(source, out, names)
     report.weapons = _weapons(source, out, names)
     report.armour = _armour(source, out, names)
+    report.associates = _associates(source, out, names)
     report.features = _features(source, out, names)
     # Right here and not inside `_powers`: a class feature's prose names the
     # powers its class is built around, and this table does not exist yet when
@@ -1574,6 +1610,79 @@ _ARM_CHECK = re.compile(r"^Check\s*:\s*(-?\d+)", re.M)
 _ARM_SPEED = re.compile(r"^Speed\s*:\s*(-?\d+)", re.M)
 _ARM_WEIGHT = re.compile(r"^Weight\s*:\s*([^\n]+?)\s*(?:Cost\s*:|$)", re.M)
 _ARM_COST = re.compile(r"^Cost\s*:\s*([^\n]+)$", re.M)
+
+
+#: The two printed defence shapes, and the fields every block carries.
+#: `Defenses` is **not** line-anchored: the 12 elemental companions print it
+#: on the same line as `HP`, and anchoring cost all twelve on the first pass.
+#: Speed is `Speed 8`, `Speed land 6 (ice walk)` or `Speed 6 , fly 6`, so the
+#: optional word between is not optional in practice. #459.
+_AS_REL = re.compile(r"\bDefenses\s+(your [^\n]+)", re.I)
+_AS_ABS = re.compile(
+    r"\bAC\s+(\d+),\s*Fortitude\s+(\d+),\s*Reflex\s+(\d+),\s*Will\s+(\d+)")
+#: Stops at the next labelled clause as well as at a semicolon: 8 blocks
+#: print "HP your bloodied value Initiative equal to yours" on one line,
+#: and `[^;\n]+` swallowed the initiative.
+_AS_HP = re.compile(
+    r"\bHP\s+(.+?)(?:;|\s+(?:Initiative|Healing Surges|Defenses|AC|Speed)\b|$)")
+_AS_SPEED = re.compile(r"\bSpeed\s+(?:\w+\s+)?(\d+)")
+_AS_LINE = re.compile(
+    r"^(Tiny|Small|Medium|Large|Huge|Gargantuan)\s+(\w+)", re.M | re.I)
+
+
+def _associates(source: sqlite3.Connection, out: sqlite3.Connection,
+                names: dict[str, dict[str, str]]) -> int:
+    """Every summon, mount and companion block. #459.
+
+    Read for `ID, Name` only until now, which is why `c.summon(ref)` is
+    written and 67 rows pass it improvised refs.
+
+    **The defences are the whole shape of this table.** 79 of 88 print them
+    relative to the summoner -- "your defenses + 2" -- and 9 print numbers.
+    A relative block has no AC to store, so `ac` and its three siblings are
+    NULL and `defences` carries the printed expression. Deriving a number
+    would be inventing the summoner.
+
+    `hp` is text for the same reason: almost every block prints "your
+    bloodied value".
+    """
+    written = 0
+    for aid, name, kind, plain in source.execute(
+        "SELECT ID, Name, Type, PlainTxt FROM Associate ORDER BY ID"
+    ):
+        f = "\n".join(x.strip() for x in (plain or "").splitlines() if x.strip())
+        spec = re.split(r"\s*Published in\b", " ".join(f.split()))[0].strip()
+        for _ in range(3):
+            if name and spec.startswith(name):
+                spec = spec[len(name):].lstrip()
+        if len(spec) < 20:
+            continue
+        rel, absolute = _AS_REL.search(f), _AS_ABS.search(f)
+        hp, speed = _AS_HP.search(f), _AS_SPEED.search(f)
+        line = _AS_LINE.search(f)
+        ref = f"x10_{aid}"
+        out.execute(
+            "INSERT OR REPLACE INTO associate VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                ref,
+                aid,
+                (kind or "").strip().lower(),
+                (line.group(1).lower() if line else ""),
+                (line.group(2).lower() if line else ""),
+                (hp.group(1).strip() if hp else ""),
+                (rel.group(1).strip() if rel and not absolute else ""),
+                int(absolute.group(1)) if absolute else None,
+                int(absolute.group(2)) if absolute else None,
+                int(absolute.group(3)) if absolute else None,
+                int(absolute.group(4)) if absolute else None,
+                int(speed.group(1)) if speed else None,
+                sanitise.scrub(spec, {name: ref}),
+            ),
+        )
+        names.setdefault(ref, {})
+        names[ref] = {**names[ref], "name": name, "rules_text": spec}
+        written += 1
+    return written
 
 
 def _armour(source: sqlite3.Connection, out: sqlite3.Connection,
@@ -2717,7 +2826,7 @@ def _cross_reference_rest(
     # creatures constantly -- "9 + two-thirds <creature>'s level". #389.
     for table in ("power", "monster_power", "class_feature",
                   "companion", "item", "item_block", "feat", "race",
-                  "trap", "racial_trait", "disease"):
+                  "trap", "racial_trait", "disease", "associate"):
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
