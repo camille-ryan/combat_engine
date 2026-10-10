@@ -110,6 +110,16 @@ class Keyword(StrEnum):
     CONJURATION = "conjuration"
     SUMMONING = "summoning"
     POLYMORPH = "polymorph"
+    #: A class form, printed in the keyword line beside Implement and Primal.
+    #:
+    #: **Two words, and `etl/power.py` matched them as one word each.** Its
+    #: `_KEYWORDS` list held `"beast"` and `"form"` separately, so a card
+    #: printing "Beast Form" yielded two strings and neither was the keyword
+    #: -- and with no enum member for either, both were dropped on the way
+    #: here. 134 compendium powers print the first of these and 68 the
+    #: second; the tree saw none of them. #478.
+    BEAST_FORM = "beast form"
+    GUARDIAN_FORM = "guardian form"
     SLEEP = "sleep"
     GAZE = "gaze"
     DISEASE = "disease"

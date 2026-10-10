@@ -72,7 +72,14 @@ _KEYWORDS = [
     "martial", "arcane", "divine", "primal", "psionic", "shadow", "weapon", "implement",
     "fire", "cold", "lightning", "thunder", "necrotic", "radiant", "poison", "psychic",
     "acid", "force", "healing", "charm", "fear", "illusion", "teleportation", "conjuration",
-    "zone", "stance", "reliable", "invigorating", "rattling", "beast", "form", "polymorph",
+    "zone", "stance", "reliable", "invigorating", "rattling", "polymorph",
+    # **Two words, not two keywords.** These were `"beast"` and `"form"` as
+    # separate entries, so a card printing "Beast Form" in its powerstat
+    # line yielded both strings and neither was the keyword it prints -- and
+    # `Keyword` had no member for either, so both were dropped and the tree
+    # saw nothing. Matched longest-first below, so these win over any
+    # single-word entry they contain. #478.
+    "beast form", "guardian form",
     # **A subclass gate, not a mechanic.** Printed on six wizard rows whose trigger
     # only one subclass can meet, and dropped here until now -- so `chargen` had
     # nothing to exclude them by and dealt them to every wizard. #319.
@@ -208,4 +215,9 @@ def _shape(p: Power, body: str) -> None:
                 p.reach += f" +{plus.group(1)} reach"
             break
 
-    p.keywords = tuple(w for w in _KEYWORDS if re.search(rf"\b{w}\b", low))
+    # Longest first: a two-word keyword must be matched before any
+    # single word inside it, or the phrase never gets its turn.
+    p.keywords = tuple(
+        w for w in sorted(_KEYWORDS, key=len, reverse=True)
+        if re.search(rf"\b{w}\b", low)
+    )

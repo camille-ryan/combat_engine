@@ -293,11 +293,36 @@ def scrub(
         # contain "guards", so "the guards in the area" was scrubbed. The word a
         # reader needs protected is the one in `kept`, and its plural inherits
         # that protection.
-        for token in {name, *re.findall(r"[^\W\d_]+", name)}:
+        # **Contiguous runs of the name, longest first, not just whole and
+        # single.** A three-word creature writes its own short form as
+        # *two* of its words -- "the <second> <third> shifts 1 square" --
+        # and that fragment is a name even when neither word is. Without
+        # the runs, gating the single words below takes the short form with
+        # them: `m1526`'s own name survived into its brief that way, which
+        # is a leak and strictly worse than the bug being fixed.
+        #
+        # Longest first in the substitution pass below, so the two-word
+        # short form wins over either word inside it.
+        words = re.findall(r"[^\W\d_]+", name)
+        runs = {
+            " ".join(words[i:j])
+            for i in range(len(words))
+            for j in range(i + 2, len(words) + 1)
+        }
+        for token in {name, *runs, *words}:
             low = token.lower()
             long_enough = len(token) > 2 or (len(token) == 2 and low not in STOPWORDS)
             if not long_enough or low in kept:
                 continue
+            # **The lone words are still substituted, and #379's second
+            # fault is still open.** One word of a three-word name is
+            # sometimes a word the card is using for something else --
+            # `m1526`'s "an adjacent triggered <trap>" becomes its own ref.
+            # A frequency cut was tried for it and measured: it costs
+            # **1,543 briefs** their ref, because creature names contain
+            # their own type and "the dragon" is a self-reference the cut
+            # cannot tell from "a trap". 1,543 against four sentences is
+            # the wrong trade, so the cut is not here. #379.
             usable.setdefault(token, ref)
             many = plural(token)
             if many and many.lower() != low:
