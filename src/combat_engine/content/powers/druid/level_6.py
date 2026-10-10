@@ -102,7 +102,7 @@ def p10371(c: Cast) -> None:
     action=REACTION,
     reach=CloseBurst(10),
     target=EACH_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.BEAST_FORM],
     trigger="an ally in the burst scores a critical hit",
     on=Trigger(
         Hit, when=_ally_crit_within_10, text="an ally scores a critical hit"

@@ -2264,12 +2264,17 @@ def i1820p1(c: Cast) -> None:
 def i1840x1(c: Cast) -> None:
     """Pays out only while a particular kind of shape is held.
 
-    **The shape is readable now; this form is not one of them.** `c.in_form`
-    and `query.shifted` answer which shape a creature wears, and 32 monster
-    Requirements are gates on it. This row asks something else: whether a
-    *power* belongs to a class's form, which is a keyword on the power rather
-    than a state on the creature. 121 rows print one and nothing carries it,
-    so the marker names the keyword.
+    **The marker is right and its reason was wrong.** The note here used to
+    say this row asks "whether a *power* belongs to a class's form, which is
+    a keyword on the power rather than a state on the creature". It is the
+    other way round: the card reads "while you're in a **guardian form**",
+    which is a state, and nothing in the tree grants one.
+
+    `Keyword.GUARDIAN_FORM` exists now and **0 rows carry it**, because every
+    power that prints it is level 11+ and the tier filter cuts them before
+    they reach a row -- #484. So unlike its beast-form siblings, which the
+    keyword unblocked, this one is waiting on a form nothing can enter, and
+    `todo=` rather than `dropped=` is right: there is no payout to withhold.
     """
 
 

@@ -129,7 +129,7 @@ def _weapon_rider(c: Cast, amount: int, dtype: DamageType, *, prone: bool) -> No
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10838(c: Cast) -> None:
     """The whole of what this shape does on a board is be a shape: its
@@ -148,7 +148,7 @@ def p10838(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10840(c: Cast) -> None:
     """"With beast form powers" is read off the gate of whichever row is
@@ -168,7 +168,7 @@ def p10840(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10842(c: Cast) -> None:
     """The damage context carries `charge`, which is what makes the rider
@@ -255,7 +255,7 @@ def p13512(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.THUNDER],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.THUNDER, Keyword.BEAST_FORM],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
@@ -348,7 +348,7 @@ def p4897(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.BEAST_FORM],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,

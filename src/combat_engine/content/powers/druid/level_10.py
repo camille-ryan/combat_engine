@@ -283,7 +283,7 @@ def p2734(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.BEAST_FORM],
     requires=in_beast_form,
     requires_text=BEAST_FORM,
 )
@@ -308,7 +308,7 @@ def p2844(c: Cast) -> None:
     action=INTERRUPT,
     reach=Melee(1),
     target=ANY_CREATURE,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.BEAST_FORM],
     trigger="you are targeted by an area or a close attack",
     on=Trigger(
         AttackDeclared,

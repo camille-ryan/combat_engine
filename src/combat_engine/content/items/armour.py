@@ -692,7 +692,7 @@ def i1586x1(c: Cast) -> None:
             when=_in_beast_form(c))
 
 
-@power("i1586p1", level=2, cls=ITEM, usage=ENCOUNTER, action=MOVE,
+@power("i1586p1", keywords=[Keyword.BEAST_FORM], level=2, cls=ITEM, usage=ENCOUNTER, action=MOVE,
        reach=PERSONAL, target=SELF, requires=in_beast_form)
 def i1586p1(c: Cast) -> None:
     """The printed Beast Form keyword is a Requirement -- that is what the
@@ -1214,7 +1214,7 @@ def i2094x1(c: Cast) -> None:
                 when=_in_beast_form(c))
 
 
-@power("i2094p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
+@power("i2094p1", keywords=[Keyword.BEAST_FORM], level=3, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an enemy adjacent to you shifts",
        on=Trigger(MoveStart, _adjacent_enemy_moves("shift"),
@@ -1882,7 +1882,7 @@ def i2089x1(c: Cast) -> None:
     c.watch(PowerResolved, changed, until=When.ENCOUNTER, on=c.me)
 
 
-@power("i2089p1", level=4, cls=ITEM, usage=DAILY, action=MOVE,
+@power("i2089p1", keywords=[Keyword.BEAST_FORM], level=4, cls=ITEM, usage=DAILY, action=MOVE,
        reach=PERSONAL, target=SELF, requires=in_beast_form)
 def i2089p1(c: Cast) -> None:
     """"Must end adjacent to an enemy" is the destination, not advice, so

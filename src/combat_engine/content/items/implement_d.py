@@ -1688,21 +1688,34 @@ def i3190p2(c: Cast) -> None:
     target=SELF,
     trigger="you use your p5032 power to assume beast form",
     on=Trigger(PowerUsed, _used_by_me("p5032"), "you assume beast form"),
-    dropped=("c.form(class_form=)",),
 )
 def i1093p1(c: Cast) -> None:
     """The trigger is declared against the ref the spec prints.
 
-    **The shape is readable now; this form is not one of them.** `c.in_form`
-    and `query.shifted` answer which shape a creature wears, and 32 monster
-    Requirements are gates on it. This row asks something else: whether a
-    *power* belongs to a class's form, which is a keyword on the power rather
-    than a state on the creature. 121 rows print one and nothing carries it,
-    so the marker names the keyword.
+    **The damage bonus is narrowed now, and it was paying against
+    everything.** The card gives "a power bonus to damage rolls **using beast
+    form powers** through this totem equal to the totem's enhancement
+    bonus", and the bonus was laid unconditionally -- so every attack the
+    character made while the totem was live got it, not only the beast form
+    ones. That is the direction of error this component's notes keep warning
+    about: a modifier too wide is a wrong number in every fight, where a
+    modifier nothing consults is merely absent.
+
+    `Keyword.BEAST_FORM` and the 67 headers declaring it are what make the
+    gate writable; `_keywords_of` was already in this file for the identical
+    job on three other items, so the clause is one lambda and no new helper.
+
+    "While you are in beast form" is carried by the trigger and the duration
+    rather than by a second gate: the row only fires on using `p5032`, which
+    *is* assuming the form, and ends with the encounter. A character who
+    leaves the form early keeps the bonus, which is the one way this is
+    looser than the card -- `p16535`'s `name=` now makes that gateable and
+    it is a separate sentence on a separate item.
     """
     c.resize(Size.LARGE, on=c.me, until=When.ENCOUNTER)
     c.bonus(
-        "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER
+        "damage", c.enhancement, kind="power", on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: Keyword.BEAST_FORM in _keywords_of(ctx.get("power")),
     )
 
 

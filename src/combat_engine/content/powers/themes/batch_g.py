@@ -1503,17 +1503,28 @@ def p16525(c: Cast) -> None:
     because leaving the form is not a bare exit -- it is a minor action
     that also shifts you a square.
 
-    Two clauses have no verb: low-light vision, and barring every power that
-    lacks a keyword. The third used to be the at-will attack the form
-    unlocks -- it is `p12263b`'s sibling `p16525b` now, declared below.
+    **One clause has no verb**, and this note said two. Low-light vision is
+    `c.low_light` and is called two lines down -- the note outlived the fix.
+    What is genuinely unwritable is barring every power that lacks a keyword,
+    which is the `c.forbid(keyword=)` in the marker and is shared with
+    `p16535` and `f3646b`.
+
+    `name=` as well as the label, so the three rows in this theme that print
+    "while you are in beast form" can read the state through `c.in_form`
+    rather than only finding the hold by its ref.
+
+    The third clause used to be the at-will attack the form unlocks -- it is
+    `p12263b`'s sibling `p16525b` now, declared below.
     """
-    shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
+    shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref,
+                   name="beast")
     c.endable(shape, MINOR, then=lambda: c.shift(1))
     c.low_light(until=When.ENCOUNTER)
 
 
 @power(
     "p16525b",
+    keywords=[Keyword.BEAST_FORM],
     level=0,
     cls="x7_992",
     usage=ENCOUNTER,
@@ -1521,7 +1532,6 @@ def p16525(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
-    dropped=("c.form(class_form=)",),
 )
 def p16525b(c: Cast) -> None:
     """The attack the form unlocks, which is a **second card filed under
@@ -1640,7 +1650,7 @@ def _is_bloodied(world: World, eid: int) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.BEAST_FORM],
     requires=_is_bloodied,
     requires_text="you must have started this turn bloodied",
 )
@@ -1673,7 +1683,7 @@ def p16527(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
-    keywords=[Keyword.FEAR],
+    keywords=[Keyword.FEAR, Keyword.BEAST_FORM],
     trigger="an attack hits you while you are not in your beast form",
     on=Trigger(Hit, targets_me, "an attack hits you"),
 )
@@ -1696,7 +1706,7 @@ def p16528(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_ALLY,
-    keywords=[Keyword.PRIMAL],
+    keywords=[Keyword.PRIMAL, Keyword.BEAST_FORM],
 )
 def p16529(c: Cast) -> None:
     c.end_effect(on=c.target, save_ends=True)

@@ -1486,7 +1486,7 @@ def p16530(c: Cast) -> None:
 
 @power(
     "p16532", level=2, cls=X7_993, usage=ENCOUNTER, action=MINOR,
-    reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
+    reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING, Keyword.BEAST_FORM],
     requires=lambda world, eid: _bloodied(world, eid),
     requires_text="you must have started this turn bloodied",
 )
@@ -1502,7 +1502,8 @@ def p16532(c: Cast) -> None:
 
 
 @power(
-    "p16533", level=6, cls=X7_993, usage=AT_WILL, action=MOVE,
+    "p16533",
+    keywords=[Keyword.BEAST_FORM], level=6, cls=X7_993, usage=AT_WILL, action=MOVE,
     reach=PERSONAL, target=SELF,
 )
 def p16533(c: Cast) -> None:
@@ -1510,7 +1511,8 @@ def p16533(c: Cast) -> None:
 
 
 @power(
-    "p16534", level=10, cls=X7_993, usage=ENCOUNTER, action=FREE,
+    "p16534",
+    keywords=[Keyword.BEAST_FORM], level=10, cls=X7_993, usage=ENCOUNTER, action=FREE,
     reach=CloseBurst(2), target=EACH_ENEMY,
     trigger="you use the p16530 power",
     on=Trigger(PowerUsed, _used("p16530"), "you use the p16530 power"),

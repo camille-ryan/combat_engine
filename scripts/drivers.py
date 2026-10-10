@@ -2142,6 +2142,77 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def class_form(out: Result) -> None:
+    """A class form is a state *and* a keyword, and they are not the same test.
+
+    Two sentences printed in nearly the same words on the same cards:
+
+    * "while you are in beast form" -- a state on the creature;
+    * "your beast form attack powers deal 1d6 extra damage" -- a keyword on
+      the row being used.
+
+    **Ten rows were marked as wanting the first when they wanted the second**,
+    which is the mistake this rule exists to keep from coming back. A character
+    can be a beast and swing something that is not a beast form power, and a
+    bonus gated on the wrong one of those is wrong in every fight rather than
+    merely absent.
+
+    The grantors are the other half. They laid `c.form(label=...)` with no
+    `name=`, so the hold could be found by its ref and the *word* was nowhere
+    -- `c.suffering` answered and `query.in_form` could not, and only the
+    second is what "while you are in beast form" asks.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import in_form, shifted
+    from combat_engine.engine.types import Keyword
+
+    world, caster, _ = _board()
+
+    # ---- the state half -------------------------------------------------
+    out.that(not shifted(world, caster), "nobody has changed shape yet")
+    out.that(in_form(world, caster, "beast"),
+             "and the gate is permissive about that, as a Requirement must be")
+
+    c = Cast(world=world, me=caster, ref="drivers:form")
+    held = c.form(until=When.ENCOUNTER, label="drivers:form", name="beast")
+    out.that(shifted(world, caster), "taking the form records it")
+    out.that(in_form(world, caster, "beast"), "and the word is readable")
+    out.that(not in_form(world, caster, "guardian"),
+             "a DIFFERENT form's word is not -- this is the negative control,"
+             " and without it `in_form`'s permissive answer passes everything")
+
+    world.effects.end(held, "driver")
+    out.that(not shifted(world, caster), "ending it takes the shape away")
+
+    # ---- the keyword half, which is a different question ----------------
+    bf = [r for r in ("p5036", "p16537", "p16539")
+          if (p := get(r)) is not None and Keyword.BEAST_FORM in p.keywords]
+    out.that(len(bf) == 3,
+             "the rows the cards tag are tagged -- 0 of 68 headers declared"
+             " this keyword before the parse fix, so every gate on it was"
+             " silently false")
+    plain = get("p12400")
+    out.that(plain is not None and Keyword.BEAST_FORM not in plain.keywords,
+             "and a row the card does not tag is not tagged")
+
+    # The two tests disagree, which is the whole point of having both.
+    world2, caster2, _ = _board()
+    c2 = Cast(world=world2, me=caster2, ref="drivers:form2")
+    c2.form(until=When.ENCOUNTER, label="drivers:form2", name="beast")
+    out.that(in_form(world2, caster2, "beast"), "in the form")
+    out.that(Keyword.BEAST_FORM not in (get("p12400").keywords),
+             "swinging a row that is not a beast form power")
+    out.that(
+        in_form(world2, caster2, "beast")
+        and Keyword.BEAST_FORM not in get("p12400").keywords,
+        "so a state gate PAYS and a keyword gate does NOT, on the same swing"
+        " -- which is why one marker could not serve both",
+    )
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -2154,6 +2225,8 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "class_form": (class_form,
+                   "a class form is a state and a keyword, and those differ"),
     "substitution": (substitution,
                      "one clause of a row replaced, and one added"),
     "drawing": (drawing,

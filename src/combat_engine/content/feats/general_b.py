@@ -576,17 +576,21 @@ def f665(c: Cast) -> None:
 
 
 @power("f666", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, dropped=("c.form(class_form=)",))
+    reach=PERSONAL, target=SELF)
 def f666(c: Cast) -> None:
     """Multiclass: that class's form power, which the spec names by ref
     and which prints no limit of its own, plus one of its 1st-level
     at-wills once per encounter.
 
-    Dropped: the card narrows the choice to at-wills with the beast
-    form keyword, and no keyword in the tree says so, so the set is
-    every 1st-level at-will of the class rather than the subset."""
+    **The narrowing is written now.** This row's marker said "no keyword in
+    the tree says so, so the set is every 1st-level at-will of the class
+    rather than the subset" -- and that was true until `Keyword.BEAST_FORM`
+    arrived and 67 headers declared it. `c.borrow_row` already took
+    `keyword=`, so the subset the card names is one argument. **4 of the
+    class's 18 1st-level at-wills are in it**, which is the whole point of
+    the narrowing: the unfiltered set was more than four times too big."""
     c.grant_row("p5032", on=c.me, until=When.ENCOUNTER)
-    c.borrow_row("druid", level=1, uses=1)
+    c.borrow_row("druid", level=1, uses=1, keyword=Keyword.BEAST_FORM)
 
 
 @power("f667", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

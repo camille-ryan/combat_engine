@@ -1703,7 +1703,7 @@ def f3646(c: Cast) -> None:
 @power("f3646b", level=1, cls="", usage=AT_WILL, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.PRIMAL, Keyword.POLYMORPH], once_per_round=True,
-       dropped=("c.form(class_form=)",))
+       dropped=("c.forbid(keyword=)",))
 def f3646b(c: Cast) -> None:
     """The printed form "normally doesn't change your game statistics", so
     `c.form` is taken bare -- no conditions, no modes -- with a minor
@@ -1713,13 +1713,25 @@ def f3646b(c: Cast) -> None:
     payout for ending a hold *deliberately*, which is exactly what
     changing back is, and it runs for that and not for the clock.
 
-    Re-aimed. Whether a creature is in the form is askable -- the hold is
-    labelled and `c.suffering` reads it back -- and what is missing is
-    the keyword the restriction turns on: there is no `BEAST_FORM` in
-    `Keyword`, so "you can't use powers that lack it" has no set to test
-    against. The equipment clauses are bookkeeping with no combat
-    consequence."""
-    shape = c.form(label="beast form", revert=MINOR, until=When.ENCOUNTER)
+    Re-aimed twice, and this note is the second time. It used to say the
+    missing piece was "the keyword the restriction turns on: there is no
+    `BEAST_FORM` in `Keyword`, so 'you can't use powers that lack it' has no
+    set to test against." **The keyword arrived and the set is testable
+    now** -- `Keyword.BEAST_FORM` is declared on 67 rows.
+
+    What is left is the *refusal*, which is a different thing from the set:
+    nothing can bar a character from using powers that lack a keyword.
+    `c.forbid(keyword=)` is the symbol, and `p16525` and `p16535` carry it
+    for the identical sentence on two themes, so this is one gap across
+    three rows rather than three.
+
+    `name=` as well as the label, so the form answers `c.in_form("beast")`
+    and not only `c.suffering`. Only the second knows the word, and the
+    restriction will need the state as well as the keyword.
+
+    The equipment clauses are bookkeeping with no combat consequence."""
+    shape = c.form(label="beast form", revert=MINOR, until=When.ENCOUNTER,
+                   name="beast")
     c.endable(shape, MINOR, then=lambda: c.shift(1))
 
 

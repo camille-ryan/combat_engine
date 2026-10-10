@@ -144,6 +144,22 @@ def _weapon_attack(ref: str) -> bool:
     return p.reach_of(0).kind in ("melee", "ranged")
 
 
+def _beast_form_power(ctx: dict[str, Any]) -> bool:
+    """Is the power this modifier is being asked about a beast form power?
+
+    "Your beast form attack powers deal 1d6 extra damage" is a gate on the
+    keyword of the row being used, not on the shape the character is wearing
+    -- and the two read alike in English, which is how the marker on
+    `p16539` came to name the shape. A creature can be a beast and swing
+    something that is not a beast form power.
+
+    The damage context names the power as `power`, the same key the attack
+    context uses, so one reader serves both sides.
+    """
+    p = get(str(ctx.get("power") or ""))
+    return p is not None and Keyword.BEAST_FORM in p.keywords
+
+
 def _by_attack(ref: str) -> bool:
     """Did an attack deal this, rather than a burn or an ongoing?"""
     p = get(ref)
@@ -1621,24 +1637,39 @@ def p16436(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.form(class_form=)",),
+    dropped=("c.forbid(keyword=)",),
 )
 def p16535(c: Cast) -> None:
     """The form and the printed alternative -- end it as a minor action and
     shift 1 -- are written as one way out, so `revert=None` and the shift
     rides on `c.endable`.
 
+    **`name=` is what makes the form askable**, and it was missing. The card
+    says "you change from your humanoid form to a beast form", and three rows
+    in this theme -- `p16537`, `p16538`, `p16539` -- print "while you are in
+    beast form". They had nothing to read: the hold was labelled with this
+    ref, so `c.suffering` could find it but `query.in_form` could not, and
+    only the second knows the *word*. One argument, and `p16537` is written.
+
+    Re-aimed. The marker said `c.form(class_form=)` -- "nothing grants a
+    class form" -- and this row *is* the grantor. What it actually cannot
+    write is the restriction: "you can't use weapon or implement attack
+    powers that lack the beast form keyword, although you can sustain such
+    powers." That is `c.forbid(keyword=)`, which `p16525` has carried all
+    along for the identical sentence on the sibling theme.
+
     The secondary at-will attack is `p16535b`, declared below: it had no ref
     of its own until `parse_extra` ran for theme powers, and "Highest ability
     modifier + 3 vs. AC" is `Pick.HIGHEST` in its header rather than the
     `c.best_ability()` this row was waiting on."""
-    shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
+    shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref, name="beast")
     c.endable(shape, MINOR, then=lambda: c.shift(1, who=c.me))
     c.low_light(until=When.ENCOUNTER)
 
 
 @power(
     "p16535b",
+    keywords=[Keyword.BEAST_FORM],
     level=0,
     cls=X7_994,
     usage=ENCOUNTER,
@@ -1646,7 +1677,6 @@ def p16535(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
-    dropped=("c.form(class_form=)",),
 )
 def p16535b(c: Cast) -> None:
     """The attack the form unlocks -- the second card inside p16535's entry.
@@ -1671,30 +1701,43 @@ def p16535b(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.BEAST_FORM],
     requires=_bloodied,
     requires_text="you must have started this turn bloodied",
-    dropped=("c.form(class_form=)",),
 )
 def p16537(c: Cast) -> None:
-    """Both benefits are printed "while you are in beast form".
+    """Both benefits are printed "while you are in beast form", and both are
+    gated on it now.
 
-    **The shape is readable now; this form is not one of them.** `c.in_form`
-    and `query.shifted` answer which shape a creature wears, and 32 monster
-    Requirements are gates on it. This row asks something else: whether a
-    *power* belongs to a class's form, which is a keyword on the power rather
-    than a state on the creature. 121 rows print one and nothing carries it,
-    so the marker names the keyword.
+    **This row's marker named the wrong half.** It said the gap was "whether
+    a *power* belongs to a class's form, which is a keyword on the power
+    rather than a state on the creature" -- and this card asks for the
+    state, not the keyword. The speed and the regeneration apply while the
+    character is a beast, whatever power is being used. What was missing was
+    `p16535` passing `name=` to `c.form`, so `c.in_form` had a word to match.
 
-    The Requirement -- "started this turn bloodied" -- is declared and does
-    refuse the row, so what is printed here plays no part yet.
+    Two gates rather than one, because the two clauses are not gated alike:
+    the speed is "while you are in beast form", and the regeneration is
+    "while you are bloodied **and** in beast form". `while_bloodied` already
+    says the first half of the second, so the form goes in `unless` -- which
+    is inverted, hence `not`.
+
+    The `unless` closure reads the form at the moment regeneration would pay
+    rather than at the moment this row ran, which is the point: the card lets
+    you leave the form and come back inside the same encounter.
+
+    "Level 11: Regeneration 4" and "Level 21: Regeneration 6" are the tier
+    lines and out of scope.
     """
-    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)
-    c.regeneration(2, until=When.ENCOUNTER, on=c.me, while_bloodied=True)
+    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: c.in_form("beast", on=c.me))
+    c.regeneration(2, until=When.ENCOUNTER, on=c.me, while_bloodied=True,
+                   unless=lambda: not c.in_form("beast", on=c.me))
 
 
 @power(
     "p16538",
+    keywords=[Keyword.BEAST_FORM],
     level=6,
     cls=X7_994,
     usage=ENCOUNTER,
@@ -1741,23 +1784,38 @@ def _hit_while_bloodied(world: World, me: int, ev: object) -> bool:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.STANCE],
+    keywords=[Keyword.STANCE, Keyword.BEAST_FORM],
     trigger="an attack bloodies you, or you are hit while bloodied",
     on=(
         Trigger(Bloodied, about_me, "an attack bloodies you"),
         Trigger(Hit, _hit_while_bloodied, "you are hit while bloodied"),
     ),
-    dropped=("c.form(class_form=)", "c.provoke(allies=)"),
+    dropped=("c.provoke(allies=)",),
 )
 def p16539(c: Cast) -> None:
     """Both printed triggers are declared -- half of an "or" declared looks
     finished and is not. The stance runs "until you are no longer bloodied",
     which no duration says; `When.STANCE` is the nearest, and it holds until
-    something else replaces it. The extra 1d6 is on beast form powers, and
-    "your allies provoke opportunity attacks from you" turns the side test
-    in the opportunity window around, which nothing can ask for."""
+    something else replaces it.
+
+    **"Your beast form attack powers deal 1d6 extra damage" is written now.**
+    It is a gate on the *keyword of the power being used*, not on the
+    creature's shape, and the gate had nothing to test: `Keyword.BEAST_FORM`
+    did not exist and no header declared it. Both halves arrived, so the
+    clause is `_keyword` on the context's power -- the shape
+    `general_l.py`'s psychic feats have used all along.
+
+    `dice=` rather than a flat number, because "1d6 extra damage" is rolled
+    afresh per attack, and `c.bonus`'s `dice` is rolled every time the
+    modifier applies.
+
+    Still dropped: "your allies provoke opportunity attacks from you" turns
+    the side test in the opportunity window around, which nothing can ask
+    for."""
     c.stance(label=c.ref)
     c.bonus("attack", 2, kind="power", on=c.me, until=When.STANCE)
+    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.STANCE,
+            when=lambda ctx: _beast_form_power(ctx))
 
 
 # -- x7_1010: the trickster --------------------------------------------------

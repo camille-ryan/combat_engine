@@ -236,7 +236,7 @@ def p14504(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.BEAST_FORM],
     requires=in_beast_form,
     requires_text=BEAST_FORM,
 )
@@ -271,7 +271,7 @@ def p16119(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.BEAST_FORM],
     requires=in_beast_form,
     requires_text=BEAST_FORM,
 )

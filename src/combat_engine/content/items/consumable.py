@@ -225,6 +225,18 @@ def _is_row(ref: str) -> Callable[[dict[str, Any]], bool]:
     return gate
 
 
+def _beast_form_power(ctx: dict[str, Any]) -> bool:
+    """Is the power this modifier is being asked about a beast form power?
+
+    "A +1 power bonus to damage rolls with beast form powers" asks about the
+    row being used, not about the shape the wearer is in -- a character can
+    be a beast and swing something that is not a beast form power. Reads the
+    same `power` key `_is_row` above does.
+    """
+    p = get(str(ctx.get("power") or ""))
+    return p is not None and Keyword.BEAST_FORM in p.keywords
+
+
 def _keyword_gate(*words: Keyword) -> Callable[[dict[str, Any]], bool]:
     """Gate a modifier on the keywords of the power in the context."""
 
@@ -486,23 +498,31 @@ def i1420p1(c: Cast) -> None:
 
 
 @power("i2561p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.form(class_form=)",))
+       reach=PERSONAL, target=SELF)
 def i2561p1(c: Cast) -> None:
-    """The +1 is gated on the power being a form power, not on the shape.
+    """The +1 is gated on the power being a form power, not on the shape --
+    and that gate is writable now.
 
-    **The shape is readable now; this form is not one of them.** `c.in_form`
-    and `query.shifted` answer which shape a creature wears, and 32 monster
-    Requirements are gates on it. This row asks something else: whether a
-    *power* belongs to a class's form, which is a keyword on the power rather
-    than a state on the creature. 121 rows print one and nothing carries it,
-    so the marker names the keyword.
+    The card says "a +1 power bonus to damage rolls **with beast form
+    powers**", which asks about the row being used rather than about the
+    shape the wearer is wearing. The marker was right that this is a keyword
+    on the power and wrong about what was missing: `Keyword.BEAST_FORM` is
+    in `Keyword` now and 67 headers declare it, so `_keyword` on the damage
+    context's power is the whole clause.
 
-    The self-damage half is written and runs; only the bonus is withheld,
-    because a damage bonus that pays against everything is worse than one
-    that pays against nothing.
+    The note this replaces said the bonus was withheld because "a damage
+    bonus that pays against everything is worse than one that pays against
+    nothing." That was the right call to make while the gate was
+    unwritable, and it is why this row was `dropped=` rather than written
+    wrong.
+
+    "Level 8: +2" and the three above it are the tier lines and out of scope.
     """
     _soulfang(c)
+    c.bonus(
+        "damage", 1, kind="power", on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: _beast_form_power(ctx),
+    )
 
 
 @power("i2685x1", level=3, cls=ITEM, action=ActionType.NONE,

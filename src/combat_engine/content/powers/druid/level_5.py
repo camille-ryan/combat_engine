@@ -69,7 +69,7 @@ BEAST_FORM = "you must be in beast form"
     action=STANDARD,
     reach=AreaBurst(1, within=5),
     target=EACH_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.AREA, Keyword.POISON],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.AREA, Keyword.POISON, Keyword.BEAST_FORM],
     attack=Attack(WIS, vs=FORT),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
@@ -109,7 +109,7 @@ def p10370(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10844(c: Cast) -> None:
     """The attack context carries `opportunity`, which is what makes the
@@ -132,7 +132,7 @@ def p10844(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10846(c: Cast) -> None:
     """The climb speed goes in the form itself, which ends it when the shape
@@ -151,7 +151,7 @@ def p10846(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10848(c: Cast) -> None:
     """The damage context carries no `advantage` -- that is on the attack

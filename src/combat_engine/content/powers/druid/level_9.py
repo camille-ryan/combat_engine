@@ -81,7 +81,7 @@ _ELEMENTS = (
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.MELEE, Keyword.POISON],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.MELEE, Keyword.POISON, Keyword.BEAST_FORM],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
@@ -122,7 +122,7 @@ def p10372(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10850(c: Cast) -> None:
     """The Stealth half is a check; the speed is real."""
@@ -140,7 +140,7 @@ def p10850(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10852(c: Cast) -> None:
     """"You must land at the end of each turn" has nothing to read it: the
@@ -158,7 +158,7 @@ def p10852(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.POISON],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.POISON, Keyword.BEAST_FORM],
 )
 def p10854(c: Cast) -> None:
     """A standard action, which is what its own header prints -- the other
@@ -322,7 +322,7 @@ def p13527(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.FIRE],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.FIRE, Keyword.BEAST_FORM],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
