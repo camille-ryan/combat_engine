@@ -292,6 +292,104 @@ def companion(ref: str) -> Block:
     )
 
 
+#: How a block's printed hit points read. Four expressions cover all 88 and
+#: three of them are **relative to the summoner**, which is why `hp` is a text
+#: column and this is a lookup rather than an int. #459.
+_AS_HP = {
+    "your bloodied value": lambda h: max(1, h.max_hp // 2),
+    "your healing surge value": lambda h: max(1, h.surge_value),
+}
+#: "your defenses + 2", "your defenses -2", or "your defenses, not
+#: including..." -- the offset, or 0.
+#:
+#: **The sign is captured.** The first version read `\+\s*(\d+)` and silently
+#: missed the two blocks that print a *penalty*, giving a summon two points
+#: more defence than its page allows on every defence it has. 16 print a
+#: plus, 2 a minus, 61 no offset at all.
+_AS_BONUS = re.compile(r"your defenses\s*([+-])\s*(\d+)", re.I)
+
+
+def spawn_associate(
+    world: World,
+    ref: str,
+    square: tuple[int, int],
+    *,
+    of: int,
+    team: Team | None = None,
+) -> int:
+    """Put a summon, mount or companion on the board from its own block. #459.
+
+    **Its numbers are the summoner's**, which is the whole reason this cannot
+    be `spawn`. 79 of the 88 blocks print "Defenses your defenses + 2" and 67
+    print "HP your bloodied value" -- so the block is a *rule for deriving*
+    a stat line, and the creature it derives from is not known until something
+    summons it.
+
+    So `of` is required rather than defaulted. A summon with nobody to read
+    is not a summon, and defaulting it would produce a creature with the
+    engine's own floor numbers and no sign anything was wrong.
+
+    The 9 blocks that print absolute defences use them, and `scale="monster"`
+    for the same reason `spawn_companion` does: the page gives a finished
+    total and `Scaling` decides what the level term is worth.
+    """
+    from combat_engine.engine.basic import BEAST
+    from combat_engine.engine.components import Conditions, Defences, Mods
+    from combat_engine.engine.query import team as side_of
+
+    db = game()
+    row = db.execute(
+        "SELECT kind, size, hp, defences, ac, fort, ref_def, will, speed"
+        " FROM associate WHERE ref = ?", (ref,)
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"no associate {ref}")
+
+    mine = world.get(of, Health)
+    theirs = world.get(of, Defenses)
+    level = (st.level if (st := world.get(of, Stats)) else 1)
+
+    printed = (row["hp"] or "").strip().lower()
+    if printed in _AS_HP and mine is not None:
+        hp = _AS_HP[printed](mine)
+    elif printed.isdigit():
+        hp = max(1, int(printed))
+    else:
+        # **1, not the engine's floor.** Twelve elemental companions print
+        # "HP 1; a missed attack never damages the companion" and the rest of
+        # the unparsed tail is prose. A creature whose block says 1 has 1.
+        hp = 1
+
+    if row["ac"] is not None:
+        values = {AC: row["ac"], FORT: row["fort"],
+                  REF: row["ref_def"], WILL: row["will"]}
+        scale = "monster"
+    else:
+        m = _AS_BONUS.search(row["defences"] or "")
+        bonus = (int(m.group(2)) * (-1 if m.group(1) == "-" else 1)) if m else 0
+        base = theirs.values if theirs is not None else {}
+        values = {d: base.get(d, 10) + bonus for d in (AC, FORT, REF, WILL)}
+        scale = theirs.scale if theirs is not None else "pc"
+
+    eid = world.spawn(
+        Ident(ref=ref, role=(row["kind"] or "").strip().lower()),
+        Position(square=square,
+                 size=SIZES.get((row["size"] or "medium").lower(), Size.MEDIUM)),
+        Side(team=team or side_of(world, of) or Team.PC),
+        Stats(level=level, scores={}),
+        Defenses(values=values, scale=scale),
+        Health(max_hp=max(1, hp), surges=0, dies_at_zero=True),
+        Movement(speed=row["speed"] or 6),
+        Defences(),
+        Conditions(),
+        Mods(),
+        Budget(),
+        Powers(known=[], basic=BEAST),
+    )
+    place(world, eid, square)
+    return eid
+
+
 def spawn_companion(
     world: World,
     ref: str,

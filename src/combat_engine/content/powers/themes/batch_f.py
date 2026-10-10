@@ -987,14 +987,17 @@ def _guard_of(c: Cast) -> int | None:
 )
 def p15885(c: Cast) -> None:
     """`c.cast_from` is the printed "you make the roll using your
-    statistics". Two halves it cannot say: the guard has no actions of its
-    own and `c.summon` puts it in the initiative order, and `x10_57` has no
-    block in the tree yet, so the spawn is guarded rather than left to
-    raise."""
-    try:
-        guard = c.summon("x10_57")
-    except KeyError:
-        return
+    statistics".
+
+    **`x10_57` has a block now** (#459), so the `try`/`except KeyError` that
+    guarded a missing row is gone -- the guard was hiding the gap, and a
+    `KeyError` is what a genuinely absent ref should do. Its hit points are
+    "your healing surge value" and its defences are the summoner's, which is
+    what the block says and what `spawn_associate` reads.
+
+    The half still missing is that the guard has no actions of its own and
+    `c.summon` puts it in the initiative order."""
+    guard = c.summon("x10_57")
     if not guard:
         return
     c.cast_from(c.me, on=guard, until=When.ENCOUNTER)

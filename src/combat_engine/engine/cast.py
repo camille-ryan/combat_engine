@@ -4983,9 +4983,19 @@ class Cast:
             return 0
         from .query import team as side_of
 
-        made = loader.spawn(
-            self.world, ref, where, team=team or side_of(self.world, self.me) or Team.ENEMY
-        )
+        # **An `x10_` ref is a character's summon, not a monster.** #459 built
+        # that table, and its blocks derive their numbers from the summoner --
+        # "HP your bloodied value", "Defenses your defenses + 2" -- so they
+        # spawn through a path that is handed one. `loader.spawn` reads the
+        # `monster` table and would raise on these.
+        if ref.startswith("x10_"):
+            made = loader.spawn_associate(self.world, ref, where, of=self.me,
+                                          team=team)
+        else:
+            made = loader.spawn(
+                self.world, ref, where,
+                team=team or side_of(self.world, self.me) or Team.ENEMY,
+            )
         if self.world.encounter is not None:
             self.world.encounter.join(made)
         # `Summoned` was added because a row whose whole Effect is "you

@@ -223,12 +223,20 @@ def p13555(c: Cast) -> None:
     uses=2,
 )
 def p13744(c: Cast) -> None:
-    """"Its checks use your statistics" is `Summon`'s default -- the block
-    is an offset from the summoner's and this one prints none. The surge
-    lost when the steed drops is not written: nothing here watches a
-    summon's own `Dropped`."""
-    spec = get(c.ref).summon
-    steed = c.summon_inline(spec, at=c.origin or _free_square(c, 5))
+    """"Its checks use your statistics" is what the block says, and the block
+    is a row now (#459): `x10_12` is a large mount at speed 8 whose defences
+    equal the summoner's. It used to be `c.summon_inline` off `Summon`'s bare
+    defaults, which gave it the engine's speed rather than the printed 8.
+
+    `c.instead_of` is here because `f3541` prints "you can choose to summon
+    a x10_13 instead of a x10_12" -- and with both blocks now rows, the two
+    differ: speed 9 against 8 and defences one point higher. The choice was
+    empty while neither had numbers.
+
+    The surge lost when the steed drops is still not written: nothing here
+    watches a summon's own `Dropped`."""
+    where = c.origin or _free_square(c, 5)
+    steed = c.instead_of("steed", lambda: c.summon("x10_12", at=where))
     if steed:
         c.ride(on=steed)
 

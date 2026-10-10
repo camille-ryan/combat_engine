@@ -1379,14 +1379,28 @@ def f3540(c: Cast) -> None:
 
 
 @power("f3541", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.stat_block()",))
+       reach=PERSONAL, target=SELF)
 def f3541(c: Cast) -> None:
-    """Every name on this card is a ref, so the naming marker was pointing
-    at a gap that is not there. The hold now has a name of its own:
-    neither `x10_13` nor the `x10_12` it replaces has a block anywhere the
-    spec carries -- `p13744` summons the second off `Summon`'s bare
-    defaults -- so the two forms are the same creature and the choice this
-    row grants has nothing to choose between."""
+    """"You can choose to summon a x10_13 instead of a x10_12" -- a
+    substitution on one clause of another row, which is `c.pre_empt`.
+
+    **The note this replaces was right when it was written and is wrong
+    now.** It said neither block existed, so "the two forms are the same
+    creature and the choice this row grants has nothing to choose between".
+    #459 made both rows and they differ: `x10_13` is speed 9 with defences
+    at the summoner's +1, `x10_12` is speed 8 at +0. The choice is real.
+
+    `until=When.ENCOUNTER` because a feat is held for the fight, and the
+    offer surfaces as a variant on `p13744`'s menu entry rather than as a
+    prompt inside its body -- which is what makes it weighable by `policy/`.
+    """
+    c.pre_empt(
+        "p13744", "steed",
+        # No square passed: `c.summon` finds a free one near the caster when
+        # given none, which is what `p13744` does for its own default too.
+        lambda _c: c.summon("x10_13"),
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 # -- channel divinity -------------------------------------------------------

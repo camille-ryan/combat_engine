@@ -82,7 +82,6 @@ from combat_engine.engine import (
     Ranged,
     SavingThrow,
     SkillCheck,
-    Summon,
     Target,
     Trigger,
     TurnStart,
@@ -862,16 +861,17 @@ def p16473(c: Cast) -> None:
     dropped=FROM_BLOCK,
 )
 def p16476(c: Cast) -> None:
-    """It has no row in the database, so this is `c.summon_inline` and not
-    `c.summon` -- and the entry prints no block either, so the numbers are
-    `Summon`'s defaults. Only the size is printed.
+    """**It has a row now** (#459), so this is `c.summon` and the numbers are
+    its own: tiny, speed 5, hit points equal to the summoner's bloodied
+    value, and defences at the summoner's **minus 2** -- which the page
+    prints and `Summon`'s defaults silently improved on.
 
     "It lacks actions of its own" is what a summon already is: spawned as
     a `Companion`, it takes no turn and acts when its summoner spends an
     action on it. The lost surge when it drops is a clause about a
     creature that is gone and nothing watches a summon's own `Dropped`.
     """
-    c.summon_inline(Summon(size="tiny"), at=c.origin)
+    c.summon("x10_93", at=c.origin)
 
 
 @power(

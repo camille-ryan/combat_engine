@@ -2561,6 +2561,71 @@ def disease(out: Result) -> None:
              "and a DC shape, because the pages print four of them")
 
 
+def summoned(out: Result) -> None:
+    """A character's summon takes its numbers from the summoner. #459.
+
+    88 blocks, and **79 of them print no numbers at all** -- "HP your
+    bloodied value", "Defenses your defenses + 2". So the block is a rule for
+    deriving a stat line and the creature it derives from is not known until
+    something summons it, which is why `spawn_associate` requires `of=` and
+    `loader.spawn` cannot serve these refs.
+
+    The rule most worth asserting is the **sign**. The first version of the
+    offset pattern read `\+\s*(\d+)` and silently missed the two blocks that
+    print a *penalty*, which gave those summons two points more defence than
+    their page allows, on every defence they have -- a wrong number rather
+    than a missing one.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defenses, Health, Movement
+    from combat_engine.engine.types import Defense
+
+    def made(ref: str):  # noqa: ANN202
+        world, me, _ = _board()
+        c = Cast(world=world, me=me, ref="drivers:summon")
+        base = world.get(me, Defenses)
+        mine = world.get(me, Health)
+        eid = c.summon(ref)
+        return world, eid, base, mine
+
+    # +0: defences equal the summoner's, hp is their bloodied value
+    world, eid, base, mine = made("x10_12")
+    d, h, mv = (world.get(eid, Defenses), world.get(eid, Health),
+                world.get(eid, Movement))
+    out.that(eid != 0, "a summon with a relative block reaches the board")
+    out.that(d is not None and d.values[Defense.AC] == base.values[Defense.AC],
+             "its defences equal the summoner's, which is what the page says")
+    out.that(h is not None and h.max_hp == max(1, mine.max_hp // 2),
+             "and its hit points are the summoner's bloodied value")
+    out.that(mv is not None and mv.speed == 8,
+             "speed is the printed 8, not the engine's default -- this row used"
+             " to spawn off `Summon`'s bare defaults and lose it")
+
+    # +1: the same block one point better, which is what f3541 chooses
+    world, eid, base, _ = made("x10_13")
+    d = world.get(eid, Defenses)
+    out.that(d is not None and d.values[Defense.AC] == base.values[Defense.AC] + 1,
+             "a block printing `+ 1` is one better")
+
+    # -2: the sign, and the reason this rule exists
+    world, eid, base, _ = made("x10_93")
+    d = world.get(eid, Defenses)
+    out.that(d is not None and d.values[Defense.AC] == base.values[Defense.AC] - 2,
+             "and a block printing `-2` is two WORSE -- the negative control,"
+             " and the one a plus-only pattern reads as +0")
+
+    # the 9 that print absolute numbers use them
+    world, eid, base, _ = made("x10_1")
+    d = world.get(eid, Defenses)
+    out.that(d is not None and d.values[Defense.AC] == 15,
+             "a block printing `AC 15` uses 15, not an offset")
+
+    # a summon joins the order, which is the half `loader.spawn` alone misses
+    out.that(world.encounter is None or eid in list(world.encounter.order),
+             "and it is in the initiative order rather than standing there")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -2573,6 +2638,8 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "summoned": (summoned,
+                 "a summon derives its numbers from its summoner"),
     "disease": (disease,
                 "catching a disease, and a stage that does not move"),
     "keyword_ban": (keyword_ban,
