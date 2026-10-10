@@ -2599,7 +2599,7 @@ def m6112a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d10", 7),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m6112a1(c: Cast) -> None:
     """The damage and the escalating penalty against a bloodied target both
@@ -2624,7 +2624,7 @@ def m6112a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.POISON],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("3d8", 4, dtype=DamageType.POISON, kind=LIMITED, half_on_miss=True),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m6112a2(c: Cast) -> None:
     me = c.me

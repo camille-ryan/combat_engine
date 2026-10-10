@@ -1845,7 +1845,7 @@ def m5598a1(c: Cast) -> None:
     attack=Attack(vs=REF, printed=12), damage=Damage("1d8", 6, dtype=DamageType.POISON),
     requires=_shapes("snake", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m5598a2(c: Cast) -> None:
     """The end-of-encounter disease check has no mechanism; the attack bonus

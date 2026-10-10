@@ -627,14 +627,17 @@ def m1948a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d6", 5),
-    dropped=("c.contract(ref)",),
 )
 def m2023a0(c: Cast) -> None:
-    """The burn is exact. The disease the first failed save hands over is a block
-    of its own and nothing carries one, which is the named gap."""
+    """The burn is exact, and the disease the first failed save hands over is
+    written now. `c.contract` records it and #389 built the table the ref
+    resolves to. **The stage never advances in a fight**, which is the card:
+    every disease page checks at the end of an extended rest, and this
+    engine has none."""
     if c.strike():
         c.hit()
         c.ongoing(3, until=When.SAVE_ENDS)
+        c.contract("x5_23")
 
 
 # --------------------------------------------------------------------------

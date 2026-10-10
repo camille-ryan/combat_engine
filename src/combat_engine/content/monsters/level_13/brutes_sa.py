@@ -2106,7 +2106,6 @@ def m6146a2(c: Cast) -> None:
     damage=Damage("3d8", 13),
     requires=_in_either_shape(_M6146_SHAPE, "beast", "hybrid"),
     requires_text="the m6146 must not be in its walking form",
-    dropped=("c.contract(ref)",),
 )
 def m6146a3(c: Cast) -> None:
     """The bite lands. The disease is the dropped clause: the card names a
@@ -2114,6 +2113,7 @@ def m6146a3(c: Cast) -> None:
     rolls a saving throw at the end of an encounter."""
     if c.strike():
         c.hit()
+        c.contract("x5_25")
 
 
 @power(

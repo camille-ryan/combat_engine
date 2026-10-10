@@ -2360,13 +2360,13 @@ def m5957a1(c: Cast) -> None:
     damage=Damage("2d6", 2),
     requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in beast or hybrid form",
-    dropped=("c.contract(ref)",),
 )
 def m5957a2(c: Cast) -> None:
     """Disease contraction has no verb -- the same symbol twenty other rows
     already wait on. The damage half is exact."""
     if c.strike():
         c.damage("2d6", 6 if c.bloodied() else 2)
+        c.contract("x5_34")
 
 
 @power(

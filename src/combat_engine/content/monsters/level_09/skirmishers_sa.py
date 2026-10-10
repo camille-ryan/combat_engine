@@ -2332,14 +2332,18 @@ def m5819a2(c: Cast) -> None:
     damage=Damage("3d8", 6, dtype=DamageType.POISON, kind=LIMITED),
     trigger="it dies",
     on=Trigger(Died, about_me, "it dies"),
-    dropped=("c.contract_disease()",),
 )
 def m5819a3(c: Cast) -> None:
-    """The burst and its poison damage are the half that plays; nothing
-    anywhere models catching a disease, so the save-at-end-of-encounter
-    clause has nowhere to go."""
+    """The burst, its poison damage and the disease all play now.
+
+    The card contracts `x5_62` on a failed save *at the end of the
+    encounter*, and this engine cannot tell that moment from the end of the
+    fight -- so it lands on the hit, which is the closest this horizon
+    allows and errs toward the creature catching it. #389 built the table;
+    the stage does not advance, which is what the page prints."""
     if c.strike():
         c.hit()
+        c.contract("x5_62")
 
 
 # ==========================================================================

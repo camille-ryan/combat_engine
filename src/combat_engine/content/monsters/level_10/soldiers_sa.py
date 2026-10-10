@@ -164,8 +164,6 @@ from combat_engine.engine.zones import Zone
 
 #: "slowed and cannot shift" and friends -- a disease track this engine
 #: does not have at all. Reused wherever a card's own escalation names one.
-_NO_DISEASE = ("Condition.DISEASED",)
-
 #: Acid, cold, fire, lightning, poison -- the five elemental resist riders
 #: m3832a4 lets the creature pick between.
 _M3832_ELEMENTS = (
@@ -745,7 +743,6 @@ def m115863a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d12", 6, dtype=DamageType.NECROTIC),
-    dropped=_NO_DISEASE,
 )
 def m115863a2(c: Cast) -> None:
     """The disease contraction at the encounter's end has no track to land
@@ -753,6 +750,7 @@ def m115863a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(5, DamageType.NECROTIC)
+        c.contract("x5_23")
 
 
 @power(
@@ -1543,12 +1541,12 @@ def m2092a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d12", 6),
-    dropped=_NO_DISEASE,
 )
 def m2092a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(10, DamageType.NECROTIC)
+        c.contract("x5_22")
 
 
 @power("m2092a3", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -1764,7 +1762,7 @@ def m3273a1(c: Cast) -> None:
     ),
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=FORT, printed=13),
-    dropped=_NO_DISEASE,
+    dropped=("etl.monster.inline_disease()",),
 )
 def m3273a2(c: Cast) -> None:
     c.strike()

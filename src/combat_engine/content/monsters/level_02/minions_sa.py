@@ -732,7 +732,7 @@ def m6036a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=7),
     damage=Damage(bonus=5, kind=MINION),
-    dropped=("c.disease()",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m6630a0(c: Cast) -> None:
     """The contagion is the clause with nowhere to go: it is a saving throw made

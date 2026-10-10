@@ -190,14 +190,18 @@ def m1008a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=5),
     damage=Damage("1d8", 8),
-    dropped=("c.contract(ref)",),
 )
 def m1991a0(c: Cast) -> None:
     """The critical damage is the engine's -- `c.damage` maxes its dice on a
-    crit, which is the printed number. Catching the disease is the clause with
-    nowhere to go: there is no illness to contract."""
+    crit, which is the printed number.
+
+    The disease is written: `c.contract` records it and `#389` built the
+    table the ref resolves to. **The stage never advances in a fight**,
+    which is the card -- every disease page checks at the end of an
+    extended rest, and this engine has none."""
     if c.strike():
         c.hit()
+        c.contract("x5_45")
 
 
 @power(
@@ -207,7 +211,6 @@ def m1991a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.contract(ref)",),
 )
 def m1991a1(c: Cast) -> None:
     """The +2 to AC and Fortitude is **already in the database numbers**, so
@@ -215,11 +218,25 @@ def m1991a1(c: Cast) -> None:
     vulnerability is the other way round: it is in the numbers too and the
     trait suppresses it until the line is crossed.
 
-    The infection on a critical hit is the same absence `m1991a0` names.
+    **The infection is on a critical hit by this creature**, so it is a
+    watcher on its own hits rather than a clause in any one attack row --
+    every attack it makes can crit, and the trait is where the card prints
+    it. `x5_45` is a row since #389; `m1991a0` carries the same clause on its
+    own hit line, which is the ordinary half.
+
+    `once=True` is deliberately **not** on this watch, unlike the bloodied
+    one below: the hide stops working once, and a creature can crit more
+    than once.
     """
     me = c.me
     guard = c.world.get(me, Defences) or c.world.add(me, Defences())
     held = guard.vulnerable.pop(DamageType.RADIANT, 0)
+
+    def crit(ev: Hit) -> None:
+        if ev.attacker == me and ev.critical:
+            c.contract("x5_45", on=ev.target)
+
+    c.watch(Hit, crit, until=When.ENCOUNTER, on=me, label=f"{c.ref} infects")
 
     def bled(ev: Bloodied) -> None:
         if ev.actor != me:

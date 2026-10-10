@@ -1478,7 +1478,6 @@ def m3988a0(c: Cast) -> None:
     "m3988a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(2),
     target=ONE_CREATURE, keywords=[Keyword.DISEASE],
     attack=Attack(vs=REF, printed=13), damage=Damage("1d6", 4),
-    dropped=("Condition.DISEASED",),
 )
 def m3988a1(c: Cast) -> None:
     """There is no disease track in this engine at all -- the whole
@@ -1486,6 +1485,7 @@ def m3988a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(5)
+        c.contract("x5_23")
 
 
 @power("m3988a2", level=9, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET)
@@ -1506,12 +1506,12 @@ def m3988a2(c: Cast) -> None:
         relation=Relation.GRABBED_BY,
     ),
     attack=Attack(vs=AC, printed=15), damage=Damage("2d10", 6),
-    dropped=("Condition.DISEASED",),
 )
 def m3988a3(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(10)
+        c.contract("x5_23")
 
 
 @power("m3988a4", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -2174,7 +2174,7 @@ def m5613a1(c: Cast) -> None:
     "m5613a2", level=9, usage=Usage.RECHARGE, recharge=4, action=STANDARD, reach=CloseBlast(3),
     target=EACH_ENEMY, keywords=[Keyword.DISEASE, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14), damage=Damage("2d12", 6, kind=LIMITED),
-    dropped=("Condition.DISEASED",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m5613a2(c: Cast) -> None:
     if c.strike():

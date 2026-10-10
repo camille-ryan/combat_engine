@@ -3107,7 +3107,7 @@ def m6629a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d8", 5),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m6629a1(c: Cast) -> None:
     """The bite lands; what it leaves behind cannot be recorded.

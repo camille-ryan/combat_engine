@@ -2200,7 +2200,6 @@ def m5596a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d12", 10),
-    dropped=("c.condition(disease=)",),
 )
 def m5596a3(c: Cast) -> None:
     """Requirement: wolf or hybrid form, asked in the body. The blow
@@ -2213,6 +2212,7 @@ def m5596a3(c: Cast) -> None:
     plus = 2 if victim is not None and c.bloodied(on=victim) else 0
     if c.strike(plus=plus):
         c.hit()
+        c.contract("x5_27")
 
 
 @power(

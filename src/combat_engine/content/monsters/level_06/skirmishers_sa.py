@@ -2473,7 +2473,7 @@ def m5610a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 3),
-    dropped=("c.disease()",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m5610a1(c: Cast) -> None:
     """The blow is exact; the disease a failed end-of-encounter save hands
@@ -2830,7 +2830,6 @@ def m5891a2(c: Cast) -> None:
     damage=Damage("1d10", 9),
     requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in beast or hybrid form",
-    dropped=("c.disease()",),
 )
 def m5891a3(c: Cast) -> None:
     """The bite and the prone are exact; the disease a failed end-of-encounter
@@ -2838,6 +2837,7 @@ def m5891a3(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.prone()
+        c.contract("x5_54")
 
 
 @power("m5891a4", level=6, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET)

@@ -448,14 +448,19 @@ def m115864a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d6", 7),
-    dropped=("c.contract(ref)",),
 )
 def m115864a3(c: Cast) -> None:
     """Two damage lines, one of them conditional, so the bigger one is rolled
     in the body: the header carries the plain line as the card prints it.
 
-    The disease is dropped. It is contracted at the *end of the encounter*
-    against a stat block id, and nothing carries a disease track.
+    The disease is written. `c.contract` records it and #389 built the table the ref
+    resolves to. **The stage never advances in a fight**, which is the card:
+    every disease page checks at the end of an extended rest, and this
+    engine has none.
+
+    The card contracts it at the *end of the encounter*, which this engine
+    cannot distinguish from the end of the fight -- so it lands on the hit,
+    which is one round early and the closest this horizon allows.
     """
     if not c.strike():
         return
@@ -465,6 +470,7 @@ def m115864a3(c: Cast) -> None:
     else:
         c.hit()
     c.ongoing(5, DamageType.NECROTIC)
+    c.contract("x5_23")
 
 
 @power(

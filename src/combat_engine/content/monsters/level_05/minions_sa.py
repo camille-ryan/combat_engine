@@ -635,7 +635,7 @@ def m5608a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 5, kind=MINION),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m5608a1(c: Cast) -> None:
     """The blow and the step are exact. The disease the end-of-encounter save
@@ -685,7 +685,7 @@ def m5609a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 8, kind=MINION),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m5609a1(c: Cast) -> None:
     """The end-of-encounter saving throw against the disease has no contraction

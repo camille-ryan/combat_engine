@@ -2488,6 +2488,79 @@ def keyword_ban(out: Result) -> None:
              " a single set could not say which direction each meant")
 
 
+def disease(out: Result) -> None:
+    """"...and the target contracts `x5_23`." 47 rows printed this. #389.
+
+    The ref had nothing behind it: diseases were indexed by name and id and
+    there was no table, so `c.contract(ref)` named a ref that could not
+    resolve to a row. The table is 69 rows now and the verb records it.
+
+    **The stage does not advance, and that is the card.** Every one of the 69
+    pages checks at the end of an *extended rest*, which this engine does not
+    have -- so a disease caught in a fight stays where it was caught. The
+    assertion below is deliberately that it does *not* move, because the
+    tempting bug is to advance it on a turn boundary and call that progress.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Afflictions
+    from combat_engine.engine.query import enemies
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:disease")
+    foe = sorted(enemies(world, me))[0]
+
+    out.that(not c.exposed(on=foe), "nobody has caught anything yet")
+    held = c.contract("x5_23", on=foe)
+    out.that(held is not None, "contracting it is laid as an effect")
+    out.that(c.exposed(on=foe), "and the creature is exposed")
+    out.that(c.exposed("x5_23", on=foe), "to that disease by name")
+    out.that(not c.exposed("x5_34", on=foe),
+             "and NOT to a different one -- the negative control, and without"
+             " it `exposed` could answer yes to anything")
+
+    caught = world.get(foe, Afflictions)
+    out.that(caught is not None and caught.contracted.get("x5_23") == 1,
+             "recorded at stage 1, which is where every page starts")
+
+    # Catching it twice is not catching it again.
+    again = c.contract("x5_23", on=foe)
+    out.that(again is None, "contracting the same disease twice does nothing")
+    out.that(caught is not None and len(caught.contracted) == 1,
+             "and leaves one entry, not two")
+
+    # A turn passing does not move the stage. This is the assertion that keeps
+    # somebody from "fixing" the track into something the cards do not say.
+    from combat_engine.engine.events import TurnEnd
+
+    before = dict(caught.contracted) if caught else {}
+    world.bus.emit(TurnEnd(actor=foe, round=world.round))
+    out.that(caught is not None and caught.contracted == before,
+             "a turn ending does NOT advance the stage -- every page checks at"
+             " the end of an extended rest, which this engine has none of")
+
+    # Suspension, because it is side state like the rest (#470).
+    world.effects.suspend(held)
+    out.that(not c.exposed(on=foe), "suspended, the infection lifts")
+    world.effects.resume(held)
+    out.that(c.exposed(on=foe), "and comes back")
+
+    # The table the ref resolves to, which is the half that did not exist.
+    import sqlite3
+
+    from combat_engine.db import GAME
+    db = sqlite3.connect(GAME)
+    row = db.execute(
+        "select level, check_skills, worsen_dc, improve_dc, dc_shape, stages"
+        " from disease where ref='x5_23'").fetchone()
+    out.that(row is not None, "the ref resolves to a row in `disease`")
+    out.that(row is not None and row[5] >= 2,
+             "which carries a stage track")
+    out.that(row is not None and row[4] in
+             ("fixed", "source_level", "encounter_level", "band"),
+             "and a DC shape, because the pages print four of them")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -2500,6 +2573,8 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "disease": (disease,
+                "catching a disease, and a stage that does not move"),
     "keyword_ban": (keyword_ban,
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,

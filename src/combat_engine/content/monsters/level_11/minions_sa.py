@@ -330,7 +330,6 @@ def m2006a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d4", 5, kind=MINION),
-    dropped=("c.contract(ref)",),
 )
 def m2006a1(c: Cast) -> None:
     """The disease (`x5_17`) has no contraction mechanism to call; the blow and
@@ -338,6 +337,7 @@ def m2006a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(5, DamageType.NECROTIC)
+        c.contract("x5_17")
 
 
 # ==========================================================================

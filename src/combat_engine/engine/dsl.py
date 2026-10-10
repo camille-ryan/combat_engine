@@ -1224,7 +1224,19 @@ _SYMBOL = re.compile(
     # `rt:` is the same case as `cf:` and was left out of it: a racial
     # trait is a declared row like any other, and a feat riding on one
     # that is not written yet had no way to name what it waited for.
-    r"|[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+"
+    #
+    # **`x5_` is a disease**, and it is the third time this list has grown for
+    # the same reason: a row waiting on something the database now holds had
+    # no way to name it. Until `#389`'s table landed there was nothing behind
+    # the ref, so the 47 rows that want one say `c.contract(ref)` -- naming
+    # the *verb* and leaving the ref abstract, which is the only thing they
+    # could do. With the table built the ref is nameable, and
+    # `x5_\d+` is the shape the ETL mints.
+    #
+    # Deliberately narrow: `x\d+_\d+` in general would admit the 3,071 ritual
+    # and deity tokens, which are **not** rows and would make a marker
+    # unverifiable again -- the exact fault this pattern exists to prevent.
+    r"|[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+|x5_\d+"
 )
 
 #: What a `narrative=` element may look like -- `skill:thievery`. See

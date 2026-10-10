@@ -1808,19 +1808,22 @@ def m5952a1(c: Cast) -> None:
     damage=Damage("2d6", 4),
     requires=_shapes("rat", "hybrid"),
     requires_text="it must be in one of two of its forms",
-    dropped=("c.contract(ref)",),
 )
 def m5952a2(c: Cast) -> None:
     """"Save ends both" is one effect carrying the condition and the burn, which
     is what `ongoing=` on `c.condition` is for; two calls would be two saves.
-    The disease the first failed save hands over is a block of its own and
-    nothing contracts one."""
+    The disease the first failed save hands over is written now.
+    `c.contract` records it and #389 built the table the ref
+    resolves to. **The stage never advances in a fight**, which is the card:
+    every disease page checks at the end of an extended rest, and this
+    engine has none."""
     if c.strike():
         c.hit()
         c.condition(
             Condition.SLOWED, until=When.SAVE_ENDS,
             ongoing=(5, DamageType.UNTYPED),
         )
+        c.contract("x5_23")
 
 
 @power(

@@ -2879,7 +2879,7 @@ def m6619a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d10", 9),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
@@ -3121,7 +3121,6 @@ def m957a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d6", 5),
-    dropped=("c.contract(ref)",),
     requires=_not_in("humanoid"),
     requires_text="it must not be in humanoid form",
 )
@@ -3131,6 +3130,7 @@ def m957a1(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(5)
+        c.contract("x5_34")
 
 
 @power(

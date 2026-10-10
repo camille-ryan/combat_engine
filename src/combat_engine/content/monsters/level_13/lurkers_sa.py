@@ -2205,7 +2205,6 @@ def m5998a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.POISON, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("1d4", 8, half_on_miss=True),
-    dropped=("c.contract(ref)",),
 )
 def m5998a2(c: Cast) -> None:
     """Two packets, because the card prints two: an untyped blow in the
@@ -2219,6 +2218,7 @@ def m5998a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.damage("4d10", dtypes=both_types)
+        c.contract("x5_65")
     else:
         c.hit(half=True)
         c.half_damage("4d10", dtypes=both_types)

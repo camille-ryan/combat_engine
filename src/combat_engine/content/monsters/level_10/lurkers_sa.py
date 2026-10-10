@@ -1215,18 +1215,22 @@ def m5817a3(c: Cast) -> None:
     damage=Damage("3d12", 8, dtype=DamageType.NECROTIC, kind=LIMITED),
     requires=_m5817_in_head_form,
     requires_text="the m5817 must be in head form",
-    dropped=("c.contract(disease=)",),
 )
 def m5817a4(c: Cast) -> None:
-    """The grab and the combat advantage it carries play; contracting the
-    named disease at the end of the encounter has no counterpart -- nothing
-    in `Cast` tracks a disease's stages."""
+    """The grab and the combat advantage it carries play, and the disease is
+    written.
+
+    The card contracts it *at the end of the encounter*, which this engine
+    cannot tell from the end of the fight -- so it lands on the hit, one
+    round early and the closest this horizon allows. `c.contract` records it;
+    the stage does not advance, which is what the page prints."""
     if c.strike():
         c.hit()
         c.grab(dc=22)
         c.gains_advantage(
             lambda ctx: ctx.get("target") in c.grabbing(of=c.me), until=When.ENCOUNTER,
         )
+        c.contract("x5_62")
 
 
 @power(

@@ -1196,14 +1196,13 @@ def m1952a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 7, dtype=DamageType.NECROTIC),
-    dropped=("c.contract(ref)",),
 )
 def m1968a0(c: Cast) -> None:
     """The bloodied line is a second expression rather than a rider, so the
     header keeps the printed one and the other is rolled here; the two
     points on the attack are a plus rather than a bonus, because two
     bonuses of one kind do not add. The disease the hit line names is the
-    gap: nothing gives a creature one."""
+    gap is closed: `x5_38` is a row since #389."""
     hard = c.bloodied(c.me)
     if not c.strike(plus=2 if hard else 0):
         return
@@ -1211,6 +1210,7 @@ def m1968a0(c: Cast) -> None:
         c.damage("3d8", 9, dtype=DamageType.NECROTIC)
     else:
         c.hit()
+    c.contract("x5_38")
 
 
 # ==========================================================================
@@ -1849,7 +1849,7 @@ _M4362_FELLED = "it is reduced to 0 hit points"
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d10", 5),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m4362a0(c: Cast) -> None:
     if c.strike():
@@ -1867,7 +1867,7 @@ def m4362a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d10", 5, kind=LIMITED),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m4362a1(c: Cast) -> None:
     if c.strike():
@@ -1884,7 +1884,7 @@ def m4362a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=REF, printed=13),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
     trigger=_M4362_FELLED,
     on=Trigger(Dropped, when=about_me, text=_M4362_FELLED),
 )

@@ -5737,6 +5737,80 @@ class Cast:
             label=f"{self.ref} cannot attack",
         )
 
+    def contract(
+        self,
+        ref: str,
+        *,
+        on: int | None = None,
+        stage: int = 1,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"...and the target contracts `x5_23`." 47 rows print this. #389.
+
+        The ref is a disease's row in `game.db` -- `#389` built that table,
+        and the ETL already resolves the printed name to the ref, so the
+        clause an author writes is the clause the card prints.
+
+        **The stage does not advance, and that is the card rather than a
+        gap.** All 69 disease pages check at the *end of an extended rest*,
+        and this engine has no extended rest -- `chargen` says persistence
+        does not exist and `GET /api/day` is a deliberate `501`. So a disease
+        caught in a fight stays at the stage it was caught at for the rest of
+        that fight, which is what the printed rules say happens. `stage` is a
+        parameter because two cards print "contracts stage 2" outright.
+
+        What the state is *for* in an encounter is the rows that ask about it.
+        `m5100a0`'s aura acts on "an enemy that has been exposed to a
+        disease" and had nothing to read; `c.exposed` is that reader.
+
+        Laid as an effect rather than written straight onto the component, so
+        it suspends and resumes with everything else (#470) -- and so the
+        `until` is visible, which matters because `When.ENCOUNTER` is a
+        statement about this engine's horizon and not about the disease.
+        """
+        from .components import Afflictions
+
+        who = self._who(on)
+        if who is None:
+            return None
+        caught = self.world.get(who, Afflictions) or self.world.add(
+            who, Afflictions()
+        )
+        if ref in caught.contracted:
+            return None
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} {ref}",
+            # **Both lists, which is what side state needs.** `on_suspend`
+            # alone lifted the infection and never gave it back -- the rule
+            # that the undo goes in `on_suspend` and not also in `on_end` is
+            # about `_lift` running it from both the suspend and the expiry
+            # paths, and says nothing about coming back. `c.form` registers
+            # the pair for the same reason. Caught by the driver asserting
+            # resume, which is the half it is easy not to assert.
+            on_suspend=[lambda: caught.contracted.pop(ref, None)],
+            on_resume=[lambda: caught.contracted.__setitem__(ref, stage)],
+        )
+        if effect is None:
+            return None
+        caught.contracted[ref] = stage
+        return effect
+
+    def exposed(self, ref: str = "", *, on: int | None = None) -> bool:
+        """Has this creature caught a disease -- that one, or any?
+
+        With no ref it answers "any", which is what `m5100a0`'s aura asks and
+        the commoner of the two printed questions.
+        """
+        from .components import Afflictions
+
+        who = self._who(on)
+        if who is None:
+            return False
+        caught = self.world.get(who, Afflictions)
+        if caught is None or not caught.contracted:
+            return False
+        return bool(caught.contracted) if not ref else ref in caught.contracted
+
     def forbid(
         self,
         ref: str = "",

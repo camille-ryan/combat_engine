@@ -729,7 +729,7 @@ def m6347a5(c: Cast) -> None:
     damage=Damage("1d6", 7, dtype=DamageType.POISON),
     trigger="it dies",
     on=Trigger(Dropped, about_me, "it dies"),
-    dropped=("c.contract(ref)", "c.emerge()"),
+    dropped=("c.emerge()",),
 )
 def m6347a6(c: Cast) -> None:
     """The poison blow plays. The disease it seeds on an end-of-encounter
@@ -738,6 +738,7 @@ def m6347a6(c: Cast) -> None:
     nothing spawns a creature off a delayed end-of-encounter check."""
     if c.strike():
         c.hit()
+        c.contract("x5_91")
 
 
 # ==========================================================================

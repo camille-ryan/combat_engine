@@ -164,7 +164,6 @@ def _by_spread(world: World, me: int, ev: Any) -> bool:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=0),
     damage=Damage("", 2, kind=MINION),
-    dropped=("c.contract(ref)",),
     requires=_not_in("humanoid"),
     requires_text="it must not be in humanoid form",
 )
@@ -177,6 +176,7 @@ def m1058a0(c: Cast) -> None:
     """
     if c.strike():
         c.hit()
+        c.contract("x5_23")
 
 
 @power(

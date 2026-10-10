@@ -1548,7 +1548,7 @@ def m5612a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("3d8", 7, kind=LIMITED),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m5612a2(c: Cast) -> None:
     """The blow plays. The disease it seeds on an end-of-encounter failed

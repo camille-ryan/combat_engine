@@ -2205,7 +2205,6 @@ def m1969a3(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=17),
     trigger=_M1969_FELLED,
     on=Trigger(Dropped, about_me, _M1969_FELLED),
-    todo=("c.contract(ref)",),
 )
 def m1969a4(c: Cast) -> None:
     """A death throe whose only printed consequence is a disease, and there
@@ -2214,6 +2213,7 @@ def m1969a4(c: Cast) -> None:
     nothing inside the audit's `ok`."""
     if c.strike():
         c.note(f"{c.ref}: the target would contract this stat block's disease")
+        c.contract("x5_38")
 
 
 @power(
@@ -2313,20 +2313,23 @@ def m1970a2(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.WEAPON, Keyword.DISEASE],
     trigger=_M1970_FELLED,
     on=Trigger(Dropped, about_me, _M1970_FELLED),
-    dropped=("c.contract(ref)",),
 )
 def m1970a3(c: Cast) -> None:
     """A death throe in two halves. The swing is whichever row this
     creature's basic attack actually is, which is the printed "makes a melee
     basic attack"; the Secondary Attack has no ref of its own, so its printed
-    total goes through `_secondary`. The disease is the dropped half -- the
-    swing is real, so the row plays."""
+    total goes through `_secondary`.
+
+    The disease rides that secondary, per enemy: `c.contract` records it and
+    #389 built the table the ref resolves to. **The stage never advances in a
+    fight**, which is the card: every disease page checks at the end of an
+    extended rest, and this engine has none."""
     prey = _adjacent_foe(c, c.ref)
     if prey is not None:
         c.basic(on=prey)
     for who in sorted(foe for foe in c.enemies() if c.distance(foe) <= 10):
         if _secondary(c, 18, WILL, who):
-            c.note(f"{c.ref}: the target would contract this stat block's disease")
+            c.contract("x5_38", on=who)
 
 
 @power(
@@ -3906,7 +3909,6 @@ _M4329_CLOSED_IN = "an enemy moves adjacent to it"
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("2d8", 5),
-    dropped=("c.contract(ref)",),
 )
 def m4329a0(c: Cast) -> None:
     """The blow is exact. There is no contraction mechanism for the disease,
@@ -3914,6 +3916,7 @@ def m4329a0(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.note(f"{c.ref}: the target would be exposed to this stat block's disease")
+        c.contract("x5_18")
 
 
 @power(
@@ -4018,16 +4021,26 @@ def m4329a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.contract(ref)",),
+    todo=("c.disease_check()", "c.exposed(pending=)"),
 )
 def m5100a0(c: Cast) -> None:
-    """The whole trait is about disease, and there is no disease.
+    """The whole trait is about disease, and `c.contract` is not enough for it.
 
-    Both halves -- a saving throw against infection and an Endurance check as
-    though a rest had been taken -- ask after a state nothing can be in, so
-    nothing here works and the marker is `todo` rather than `dropped`. The
-    aura itself is laid, because it is what the trait's range *is* and a
-    later contraction mechanism would have somewhere to pay out.
+    Re-aimed. A creature *can* be infected now (#389), so the state both
+    halves ask after exists -- what is missing is two things the recording
+    verb does not do:
+
+    * **"must make an Endurance check against the disease as if it had just
+      completed an extended rest."** This card forces the stage check inside
+      a fight, which is the one place `c.contract`'s note says the stage never
+      advances. The table carries `check_skills`, `worsen_dc` and
+      `improve_dc` now, so the check is writable -- it wants a verb.
+    * **"exposed to a disease" is not "infected".** The card distinguishes a
+      creature that was hit and has a save pending from one that failed it,
+      and `Afflictions.contracted` records only the second.
+
+    The aura is laid because it is what the trait's range *is*, and both
+    clauses pay out inside it once those exist.
     """
     c.aura(2, label=c.ref, until=When.ENCOUNTER)
 
@@ -4083,12 +4096,17 @@ def m5100a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.POISON],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("2d10", 10, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.disease_in_list()",),
 )
 def m5100a2(c: Cast) -> None:
-    """The poison is exact. Which of four diseases the d4 picks does not
-    matter while none of them can be caught, so the roll is not made -- a
-    choice with no consequence is not a mechanic."""
+    """The poison is exact. The d4 picks among four diseases and **only one of
+    the four resolves to a ref** -- the card prints them as a numbered list,
+    and the ETL resolves a disease after "contracts" or "exposed to" and not
+    in a list, so three arrive as prose.
+
+    Rolling the d4 and contracting the one that resolves would be wrong three
+    times in four, so the roll is still not made. Re-aimed at the resolver
+    position rather than at the verb, which exists now."""
     if c.strike():
         c.hit()
         c.note(f"{c.ref}: the target would be exposed to one of this card's diseases")

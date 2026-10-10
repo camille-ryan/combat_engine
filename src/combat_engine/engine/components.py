@@ -1024,6 +1024,31 @@ class Ammo:
 
 
 @dataclass
+class Afflictions:
+    """What a creature has caught. #389.
+
+    `contracted` maps a disease's ref to the stage it is at, which is **1**
+    for every row in the tree -- "the target contracts `x5_23`" is the whole
+    of what 47 monster cards say, and every disease page prints stage 1 as
+    where you start.
+
+    **The stage never advances in play, and that is the cards' doing rather
+    than a gap.** Every one of the 69 pages checks at the *end of an extended
+    rest*, and an extended rest does not exist in this engine -- `chargen`
+    says persistence does not exist and the adventuring day is a deliberate
+    `501`. So a disease caught in a fight stays at the stage it was caught
+    at for the rest of that fight, which is exactly what the printed rules
+    say happens.
+
+    What the state is *for* inside an encounter is the rows that ask about
+    it: `m5100a0`'s aura acts on "an enemy that has been exposed to a
+    disease", and before this there was nothing to ask.
+    """
+
+    contracted: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
 class Gear:
     """What the creature is holding and wearing, as mechanical facts only.
 

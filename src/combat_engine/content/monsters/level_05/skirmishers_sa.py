@@ -1797,12 +1797,12 @@ def m5404a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=REF, printed=8),
-    dropped=("c.contract(ref)",),
 )
 def m5404a2(c: Cast) -> None:
-    """The whole of the Hit line is "exposed to" a disease ref; nothing
-    contracts one."""
-    c.strike()
+    """The whole of the Hit line is the exposure, so the hit has to be
+    checked for its own sake -- `c.strike()` bare threw the result away."""
+    if c.strike():
+        c.contract("x5_23")
 
 
 @power(
@@ -1951,11 +1951,11 @@ def m5597a1(c: Cast) -> None:
     damage=Damage("1d10", 6),
     requires=_shapes("wolf", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
-    dropped=("c.contract(ref)",),
 )
 def m5597a2(c: Cast) -> None:
     if c.strike():
         c.hit()
+        c.contract("x5_34")
 
 
 @power(
@@ -2067,7 +2067,6 @@ def m5599a1(c: Cast) -> None:
     damage=Damage("1d6", 5),
     requires=_shapes("rat", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
-    dropped=("c.contract(ref)",),
 )
 def m5599a2(c: Cast) -> None:
     if c.strike():
@@ -2075,6 +2074,7 @@ def m5599a2(c: Cast) -> None:
         victim = c.target
         if victim is not None and has_combat_advantage(c.world, c.me, victim):
             c.ongoing(5, on=victim)
+            c.contract("x5_23")
 
 
 @power(

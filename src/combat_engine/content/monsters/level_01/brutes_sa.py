@@ -1231,7 +1231,7 @@ def m5568a5(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=6),
     damage=Damage(bonus=5, kind=MINION),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m6562a0(c: Cast) -> None:
     """The saving throw is made "at the end of the encounter" and what it

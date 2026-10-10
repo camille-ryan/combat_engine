@@ -534,13 +534,13 @@ def m115825a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 7),
-    dropped=("c.contract(ref)",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
 def m115825a2(c: Cast) -> None:
     if c.strike():
         c.hit()
+        c.contract("x5_34")
 
 
 @power(
@@ -2290,7 +2290,6 @@ def m5405a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d8", 6),
-    dropped=("c.contract(ref)",),
     requires=_shapes("beast"),
     requires_text="it must be in beast form",
 )
@@ -2298,6 +2297,7 @@ def m5405a3(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(10 if c.bloodied(c.me) else 5)
+        c.contract("x5_36")
 
 
 @power(
@@ -2500,7 +2500,6 @@ def m5591a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 6),
-    dropped=("c.contract(ref)",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
@@ -2508,6 +2507,7 @@ def m5591a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(10 if c.bloodied(c.me) else 5)
+        c.contract("x5_36")
 
 
 @power(
@@ -3749,7 +3749,6 @@ def m6550a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 6),
-    dropped=("c.contract(ref)",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
@@ -3757,6 +3756,7 @@ def m6550a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(10 if c.bloodied(c.me) else 5)
+        c.contract("x5_36")
 
 
 @power(

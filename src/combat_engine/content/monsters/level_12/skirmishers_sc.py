@@ -463,7 +463,7 @@ def m1140a0(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=15),
     trigger=_M1140_FELL,
     on=Trigger(Dropped, about_me, _M1140_FELL),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m1140a1(c: Cast) -> None:
     """No damage line -- the hold the hit lays is the whole of the hit, so
@@ -1340,16 +1340,25 @@ def m2322a1(c: Cast) -> None:
     damage=Damage("2d4", 5),
     requires=_has_shed,
     requires_text="usable only while affected by m2322a4",
-    dropped=("c.contract(ref)",),
 )
 def m2322a2(c: Cast) -> None:
     """The secondary attack is rolled by hand because the header carries one
-    attack line and this card prints two. What it confers is a block of its
-    own with its own stages, and nothing applies one by ref."""
+    attack line and this card prints two.
+
+    **The disease rides the secondary, not the first hit**, which is the
+    distinction the card draws and the reason this is not one `c.contract`
+    after `c.hit()`: a creature the primary hits and the secondary misses
+    catches nothing.
+
+    The note this replaces said "what it confers is a block of its own with
+    its own stages, and nothing applies one by ref". It is `x5_18`, a page in
+    the disease table since #389, and the ref is what the spec already
+    resolves to."""
     if not c.strike():
         return
     c.hit()
-    c.attack(c.world.scaling.trim(15, c.level), FORT, as_="secondary")
+    if c.attack(c.world.scaling.trim(15, c.level), FORT, as_="secondary"):
+        c.contract("x5_18")
 
 
 @power(
@@ -4135,7 +4144,7 @@ def m6000a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("4d8", 7, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m6000a3(c: Cast) -> None:
     """Three things hang on the domination ending, and `on_end` is the one

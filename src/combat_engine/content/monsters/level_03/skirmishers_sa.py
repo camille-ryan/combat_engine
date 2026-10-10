@@ -539,16 +539,18 @@ def m1053a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 2),
-    dropped=("c.contract(ref)",),
 )
 def m1053a1(c: Cast) -> None:
-    """The burn is exact; catching the disease is the dropped half.
+    """The burn is exact.
 
-    A disease is a track rolled between encounters and the engine has no
-    verb for handing one over, so the clause is named rather than faked."""
+    The disease is written: `c.contract` records it and `#389` built the
+    table the ref resolves to. **The stage never advances in a fight**,
+    which is the card -- every disease page checks at the end of an
+    extended rest, and this engine has none."""
     if c.strike():
         c.hit()
         c.ongoing(2)
+        c.contract("x5_23")
 
 
 @power(
@@ -616,13 +618,13 @@ def m1054a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 2),
-    dropped=("c.contract(ref)",),
 )
 def m1054a1(c: Cast) -> None:
     """As m1053a1: the burn lands, the disease has no verb to carry it."""
     if c.strike():
         c.hit()
         c.ongoing(2)
+        c.contract("x5_23")
 
 
 @power(
@@ -685,13 +687,13 @@ def m1055a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 2),
-    dropped=("c.contract(ref)",),
 )
 def m1055a1(c: Cast) -> None:
     """As m1053a1: the burn lands, the disease has no verb to carry it."""
     if c.strike():
         c.hit()
         c.ongoing(2)
+        c.contract("x5_23")
 
 
 @power(
@@ -1240,7 +1242,6 @@ def m115824a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 4),
-    dropped=("c.contract(ref)",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
@@ -1251,6 +1252,7 @@ def m115824a2(c: Cast) -> None:
     result = c.strike()
     if result:
         c.hit()
+        c.contract("x5_23")
         if result.advantage:
             c.ongoing(5)
 
@@ -2042,7 +2044,6 @@ def m4616a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d4", 4),
-    dropped=("c.contract(ref)",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
@@ -2052,6 +2053,7 @@ def m4616a2(c: Cast) -> None:
     if c.strike():
         c.hit()
         c.ongoing(2)
+        c.contract("x5_23")
 
 
 @power(

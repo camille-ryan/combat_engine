@@ -1283,15 +1283,17 @@ def m4738a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=FORT, printed=6),
-    dropped=("c.disease()",),
 )
 def m4738a2(c: Cast) -> None:
     """The header's attack line is the *secondary* one, because that is the
     only roll this row makes itself: the two primaries are the other two rows,
-    used in turn. What a landed secondary does -- expose the creature to a
-    disease with a track of its own -- has no verb."""
-    if _both_hit(c, "m4738a0", "m4738a1"):
-        c.strike()
+    used in turn.
+
+    What a landed secondary does is written now -- `x5_23` is a row since
+    #389, and `c.strike()` has to be *tested* rather than called for its own
+    sake, which is what hid the clause here."""
+    if _both_hit(c, "m4738a0", "m4738a1") and c.strike():
+        c.contract("x5_23")
 
 
 @power(

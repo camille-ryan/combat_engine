@@ -1699,14 +1699,15 @@ def m3593a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("1d8", 2),
-    dropped=("c.contract()",),
 )
 def m3593a1(c: Cast) -> None:
-    """Contracting the printed disease has no verb -- there is no disease
-    track on a board. The damage and the ongoing are written."""
+    """The damage, the ongoing and the disease are all written. #389 built
+    the table `x5_23` resolves to and `c.contract` records it; the stage does
+    not advance in a fight, which is what every disease page prints."""
     if c.strike():
         c.hit()
         c.ongoing(5, on=c.target)
+        c.contract("x5_23")
 
 
 @power(

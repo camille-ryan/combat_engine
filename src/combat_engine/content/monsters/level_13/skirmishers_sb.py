@@ -379,14 +379,18 @@ def m1093a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("1d8", 7),
-    dropped=("c.contract(ref)",),
 )
 def m1093a1(c: Cast) -> None:
-    """The burn is exact; catching the disease is the dropped half. A disease
-    is a track rolled between encounters and the engine keeps none."""
+    """The burn is exact, and the disease is written now.
+
+    `c.contract` records it and #389 built the table the ref
+    resolves to. **The stage never advances in a fight**, which is the card:
+    every disease page checks at the end of an extended rest, and this
+    engine has none."""
     if c.strike():
         c.hit()
         c.ongoing(5)
+        c.contract("x5_34")
 
 
 @power(
@@ -2003,7 +2007,7 @@ def m3843a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("1d6", 4),
-    dropped=("c.contract(ref)",),
+    dropped=("etl.monster.inline_disease()",),
 )
 def m3843a1(c: Cast) -> None:
     """As m1093a1: the burn lands, the disease has no verb to carry it."""
