@@ -37,6 +37,43 @@ scattered singles, because the singles each cost a card read.
 *correctness* fix, not an unblock — it does not reduce the marked count. Do it
 for the 544 rows' sake, not for throughput.
 
+### Progress, 2026-10-10
+
+```
+closed    #389  the disease table, c.contract, 38 rows written
+          #487  c.forbid by keyword, 7 rows
+          #477  the shape fold, 105 rows          (earlier today)
+          #449  1,024 recharge thresholds         (earlier today)
+          #378 #379  the ETL resolvers            (earlier today)
+landed    #452  armour: 408 rows, 4 kinds
+          #459  associate: 88 blocks, 2 defence shapes
+filed     #485 #486 #488 #489 #490
+blocked   2051 -> 1977
+```
+
+**The probe-before-parse discipline paid three times in a row**, and each
+time the count that looked right was the one hiding the fault:
+
+* `disease` — the first parser matched **nothing on all 69 pages** because
+  `PlainTxt` is line-structured and the probe had flattened `Txt`'s tags. 69
+  rows written, every field empty.
+* `armour` — a substring test for "Armor" called a *base* an enchantment,
+  because `Cloth Armor` carries the word in its **name**. The counts were
+  right by accident.
+* `associate` — `^Defenses` lost all 12 elemental companions, which print it
+  on the same line as `HP`; they came back as "neither", which reads like
+  data. And `HP ... Initiative equal to yours` is one line, so 8 hp values
+  swallowed the initiative while all 88 reported populated.
+
+So: **check field populations against a prediction, not the row count.**
+
+And one asymmetry worth keeping: `armour` has **no slug column**.
+`weapon.slug` is exempt from `leaks.VOCABULARY_COLUMNS` because no weapon is
+in `names.json`; all 408 armour rows are, so a slug would hold a printed name
+on every one. That is `racial_trait.slug`'s case and #433's answer was to
+drop it. `armour.type`/`armour.base` are gated instead — and adding them went
+**red on two values**, both read and both coincidences.
+
 ### 2. The ETL batch — one rebuild, one sweep
 
 Every one needs `scripts/build.py` and a wide sweep, so they go together.
