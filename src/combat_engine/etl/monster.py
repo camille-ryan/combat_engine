@@ -272,7 +272,40 @@ def parse(
     # <another creature's Chain ability> chain devil", because `by_word`
     # takes the name apart and then loses to whatever `others` already
     # holds. Dropping the clash here is what lets the name win.
-    mine = {w.lower() for w in re.findall(r"[A-Za-z]+", m.name)}
+    #
+    # **A contiguous run of my own name, not only a single word of it** --
+    # which is the same widening `sanitise.scrub` needed for #379 and for the
+    # same reason. A specialised creature's short form is usually *two* of its
+    # words, and that run is frequently another creature's whole name: 262
+    # names in the corpus contain another creature's full name, because the
+    # corpus is full of "<adjective> <base creature>" and "<base creature>
+    # <role>". With only the single words dropped, the run stayed in `others`
+    # and won, so the card's self-reference came out as the **base creature's
+    # ref** -- 147 rows across 82 creatures.
+    #
+    # `m148a3` is the proof, and it holds both answers in one sentence:
+    # *"attacks have a 50% chance to miss the m148. The effect ends when the
+    # m147 is hit by an attack"* -- one creature, one sentence, its own ref
+    # and a stranger's. `m5584a1` is the inverted one: *"a m5585 can walk on
+    # m5584 as though it were solid ground"*, where the creature's own ref
+    # landed on the terrain and the stranger's on the creature.
+    #
+    # Every one of the 147 reads as the creature talking about itself, checked
+    # including the 14 that sit beside a plural or an "ally" and so could have
+    # been "others of my kind": `m2640a1` says *"the m2654 or an ally of the
+    # m2640's choosing"*, which is one captain twice. Swarm counts like
+    # `m3831a3`'s *"at least two other <my kind> within 5 squares"* mean others
+    # of **this** stat block, so this ref is the right answer there too. #378.
+    #
+    # Letters rather than ASCII letters, because an accented name came apart at
+    # the accent and the fragment matched nothing -- `scrub` carries the same
+    # fix and the note explaining it.
+    _mine = re.findall(r"[^\W\d_]+", m.name)
+    mine = {w.lower() for w in _mine} | {
+        " ".join(_mine[i:j]).lower()
+        for i in range(len(_mine))
+        for j in range(i + 2, len(_mine) + 1)
+    }
     for name, ref in (others or {}).items():
         if name.lower() in mine:
             continue
