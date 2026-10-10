@@ -107,6 +107,55 @@ watermark committed + pushed.
 
 ---
 
+## Phase 2, as executed — four landed, one blocked, five untouched
+
+Two rebuilds, two wide sweeps (1810s and 1778s), both clean at 14
+instruments, both watermarks committed and pushed. Silent refs **200 across
+all of it**, which is the number that matters when every monster number is
+re-read.
+
+**Landed and closed:** `#379` (contiguous name runs, 492 specs), `#378`
+(a specialised creature's short form is its own, 147 specs across 82
+creatures, foreign citations 418 → 272).
+
+**Landed, still open with the measurement:** `#340` — `by_other`'s filter was
+`^x\d*_` and admitted 1,944 entries that *have* rows, so 42% of an index
+documented as "the names that are not rows" was row names. Removing them
+moved **zero** specs: latent, not live. The open half is ~50 occurrences with
+no anchoring noun, and option 2 from its own thread ("resolve by index
+anywhere") is now **refuted by measurement** — 306 matches of which 162 are
+one entry that is not a name.
+
+**`#478`** turned out to be two issues' worth and both halves landed in this
+phase: the parse fix, then 67 headers declaring the keyword, six rows written
+and a bug fixed. `#487` (`c.forbid(keyword=)`) is what is left.
+
+### `#339` is blocked, and not by work
+
+Its own recorded sequencing is *"step 2 here, then #235, then steps 3-5, to
+avoid writing the leg work twice over the same headers"* — the headers being
+the 76 `cf:` refs that embed a build name. Step 2 landed in `b661cde`.
+**`#235` is open and carries no milestone**, so the next step of a
+milestone-1 issue is an issue outside the milestone. Raised on both; not
+resolved, because adding an issue to a milestone changes what "heroic done"
+means.
+
+### The five table extractions were not started
+
+`#452` `#456` `#457` `#458` `#459`. Each is a new parser plus a table plus a
+content reader, and none is blocked — they are simply bigger than the rest of
+this phase put together. They are the honest reason Phase 2 is not finished.
+
+### Filed on the way
+
+`#485` a secondary-attack clause became its own ability, named after its
+heading (1 row, and `m4756a2` is incomplete because of it). `#486` **2,916
+content headers omit a keyword the database names**, and no instrument
+compares the two — `cards.py` returns early unless the row has `damage=`.
+`#487` the keyword refusal.
+
+---
+
 ## Phase 3 — content (2 issues, narrow)
 
 | | what |
