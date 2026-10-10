@@ -402,6 +402,40 @@ CREATE TABLE associate (
 );
 CREATE INDEX associate_kind ON associate(kind);
 
+-- Terrain features, which `content/terrain.py` has been inventing numbers
+-- for. #458.
+--
+-- **This table is not shaped like `trap`, and the issue assumed it was.**
+-- Measured across all 145 before writing a parser: `perception_dc` is on
+-- **0** of them, and so is a printed level. The trap analogy -- "a trap and
+-- a terrain feature are the same kind of object" -- does not survive the
+-- pages.
+--
+-- Two kinds, and only one carries mechanics:
+--
+--     Fantastic Terrain  121   `Effect:` and `Usage:` on all 121, and
+--                              nothing else. 14 print damage dice. No
+--                              attack, no DC, no level.
+--     Terrain Power       24   an action, a Requirement (20), a Check
+--                              (15 by band, 6 by number), an attack
+--                              (12 relative, 7 flat) and damage (11).
+--
+-- `attack_level` holds the relative form -- "Attack: Level + 3 vs
+-- Fortitude" -- because the level is the *user's* and is not known at
+-- import. `attack_flat` holds the 7 that print a number. Both NULL where
+-- the page prints neither, which is 5 of the 24 and all 121 of the others.
+--
+-- `check_band` is "easy", "moderate" or "hard" -- 4e's DC-by-level table,
+-- which this engine does not hold. The same dependency `#389`'s 8 band
+-- diseases have, now from a second direction.
+CREATE TABLE terrain (
+  ref TEXT PRIMARY KEY, id INTEGER, kind TEXT, effect TEXT, usage TEXT,
+  requirement TEXT, check_skill TEXT, check_band TEXT, check_dc INTEGER,
+  attack_level INTEGER, attack_flat INTEGER, defence TEXT, damage TEXT,
+  spec TEXT
+);
+CREATE INDEX terrain_kind ON terrain(kind);
+
 -- Traps and hazards. **631 of these were never read**, and `terrain.arm`
 -- said so in a docstring that read as a design choice: "the numbers come
 -- off the monster curve because there is no row to read them from: the ETL
@@ -472,6 +506,7 @@ class Report:
     weapons: int = 0
     armour: int = 0
     associates: int = 0
+    terrain: int = 0
     features: int = 0
     seconds: int = 0
     crossed: int = 0
@@ -527,6 +562,7 @@ class Report:
             f"weapons       {self.weapons:6d}  (base weapons, numbers off the page)",
             f"armour        {self.armour:6d}  (bases, materials and enchantments; #452)",
             f"associates    {self.associates:6d}  (summons, mounts, companions; #459)",
+            f"terrain       {self.terrain:6d}  (121 prose features, 24 with mechanics; #458)",
             f"features      {self.features:6d}  (class features, new)",
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
@@ -618,6 +654,7 @@ def build() -> Report:
     report.weapons = _weapons(source, out, names)
     report.armour = _armour(source, out, names)
     report.associates = _associates(source, out, names)
+    report.terrain = _terrain(source, out, names)
     report.features = _features(source, out, names)
     # Right here and not inside `_powers`: a class feature's prose names the
     # powers its class is built around, and this table does not exist yet when
@@ -1628,6 +1665,79 @@ _AS_HP = re.compile(
 _AS_SPEED = re.compile(r"\bSpeed\s+(?:\w+\s+)?(\d+)")
 _AS_LINE = re.compile(
     r"^(Tiny|Small|Medium|Large|Huge|Gargantuan)\s+(\w+)", re.M | re.I)
+
+
+#: Terrain's printed fields. `Perception DC` and a printed level are
+#: deliberately absent: **0 of 145 pages carry either**, which is the measured
+#: reason this table is not shaped like `trap`. #458.
+_TR_EFFECT = re.compile(r"\bEffect\s*:\s*(.+?)(?=\s+(?:Usage|Published)\s*:|$)", re.S | re.I)
+_TR_USAGE = re.compile(r"\bUsage\s*:\s*(.+?)(?=\s+Published\b|$)", re.S | re.I)
+_TR_REQ = re.compile(
+    r"\bRequirement\s*:\s*(.+?)(?=\s+(?:Check|Target|Attack|Effect)\s*:|$)",
+    re.S | re.I)
+_TR_BAND = re.compile(r"\bCheck\s*:\s*(\w+)[^.]*?\((easy|moderate|hard) DC\)", re.I)
+_TR_DC = re.compile(r"\bCheck\s*:\s*(\w+)[^.]*?DC\s*(\d+)", re.I)
+_TR_ATK_LVL = re.compile(r"\bAttack\s*:\s*Level\s*\+\s*(\d+)\s+vs\.?\s+(\w+)", re.I)
+_TR_ATK_FLAT = re.compile(r"\bAttack\s*:\s*\+?(\d+)\s+vs\.?\s+(\w+)", re.I)
+_TR_DAMAGE = re.compile(r"(\d+d\d+)")
+
+
+def _terrain(source: sqlite3.Connection, out: sqlite3.Connection,
+             names: dict[str, dict[str, str]]) -> int:
+    """Terrain features, which `content/terrain.py` invents numbers for. #458.
+
+    **Measured first, and the issue's premise did not hold.** It proposed the
+    trap table's columns -- `perception_dc`, `role`, `level` -- and **0 of
+    145 pages print any of the three**. 121 of them print `Effect:` and
+    `Usage:` and no numbers at all; the mechanics live in the 24 Terrain
+    Powers, which print an action, a check and usually an attack.
+
+    The attack is relative on 12 of those 24 -- "Attack: Level + 3 vs
+    Fortitude", where the level is the *user's* -- so `attack_level` holds
+    the offset and `attack_flat` the 7 that print a number. Storing one as
+    the other would be wrong by a level either way.
+    """
+    written = 0
+    for tid, name, kind, plain in source.execute(
+        "SELECT ID, Name, type, PlainTxt FROM Terrain ORDER BY ID"
+    ):
+        flat = " ".join((plain or "").split())
+        for _ in range(3):
+            if name and flat.startswith(name):
+                flat = flat[len(name):].lstrip()
+        spec = re.split(r"\s*Published in\b", flat)[0].strip()
+        if len(spec) < 20:
+            continue
+        ref = f"x2_{tid}"
+        band, dc = _TR_BAND.search(spec), _TR_DC.search(spec)
+        lvl, flat_atk = _TR_ATK_LVL.search(spec), _TR_ATK_FLAT.search(spec)
+        eff, use, req = (_TR_EFFECT.search(spec), _TR_USAGE.search(spec),
+                         _TR_REQ.search(spec))
+        dmg = _TR_DAMAGE.search(spec)
+        out.execute(
+            "INSERT OR REPLACE INTO terrain VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                ref,
+                tid,
+                (kind or "").strip().lower(),
+                (eff.group(1).strip() if eff else ""),
+                (use.group(1).strip() if use else ""),
+                (req.group(1).strip() if req else ""),
+                ((band or dc).group(1).strip().lower() if (band or dc) else ""),
+                (band.group(2).lower() if band else ""),
+                int(dc.group(2)) if dc else None,
+                int(lvl.group(1)) if lvl else None,
+                int(flat_atk.group(1)) if flat_atk and not lvl else None,
+                ((lvl or flat_atk).group(2).strip().lower()
+                 if (lvl or flat_atk) else ""),
+                (dmg.group(1) if dmg else ""),
+                sanitise.scrub(spec, {name: ref}),
+            ),
+        )
+        names.setdefault(ref, {})
+        names[ref] = {**names[ref], "name": name, "rules_text": spec}
+        written += 1
+    return written
 
 
 def _associates(source: sqlite3.Connection, out: sqlite3.Connection,
@@ -2826,7 +2936,7 @@ def _cross_reference_rest(
     # creatures constantly -- "9 + two-thirds <creature>'s level". #389.
     for table in ("power", "monster_power", "class_feature",
                   "companion", "item", "item_block", "feat", "race",
-                  "trap", "racial_trait", "disease", "associate"):
+                  "trap", "racial_trait", "disease", "associate", "terrain"):
         rows = out.execute(f"SELECT ref, spec FROM {table}").fetchall()
         for ref, spec in rows:
             if not spec:
