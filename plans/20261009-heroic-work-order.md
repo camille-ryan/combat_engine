@@ -37,6 +37,32 @@ enters a fixture's stream.
 
 ---
 
+## Phase 1, as executed — three issues left it
+
+Recorded here because the reasons are the kind a plan should carry forward,
+and all three were found by reading rather than by trying:
+
+* **`#478` -> Phase 2.** The keyword is already in the printed powerstat
+  line and `etl/power.py`'s `_KEYWORDS` already matches it -- as the two
+  separate words `"beast"` and `"form"`, against a `Keyword` enum that has
+  neither. So it is a parse fix plus **a rebuild**, which must not land in
+  an engine batch.
+* **`#364` -> a session of its own**, like `#389`. It reads as one line in
+  `candidates` and is not: `"team"` was missing from that pool entirely, so
+  **156 rows that print "You and each ally" are declared `"ally"` and are
+  correct only because the bug adds the caster**. Flipping the one line
+  breaks every one of them. ~350 rows to classify, ~230 to edit, 114 dead
+  guards, and a re-record. The classification is in `tmp/ally364.json`.
+  The `"team"` pool itself landed -- zero behaviour change, nothing used it.
+* **`#283` and `#400` are deliberately held, and their comments say so.**
+  `#283`'s fix is one line and still the wrong thing to land first: it costs
+  1.5 rounds at level 5 until `policy/` can price a weak at-will against a
+  strong one a move away, and the comment names exactly what to re-run when
+  it can. `#400` carries Camille's own decision to keep it open at one row.
+
+**So Phase 1 delivered `#480`, `#481`, `#483`, `#474` and an increment of
+`#471`.** Four issues closed, two re-scoped, two correctly untouched.
+
 ## Phase 2 — ETL (10 issues, **one** rebuild)
 
 Every one of these changes `etl/`, so each needs `scripts/build.py`, a wide
