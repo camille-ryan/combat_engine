@@ -37,6 +37,33 @@ scattered singles, because the singles each cost a card read.
 *correctness* fix, not an unblock — it does not reduce the marked count. Do it
 for the 544 rows' sake, not for throughput.
 
+## Camille's adjustment, 2026-10-10
+
+> *"Leak gate things can't continue to be 30+% of dev time. I don't
+> understand why we aren't just, when ingesting a new row, checking to make
+> sure that the code used localization."*
+
+She is right and it is measured in **#494**. `leaks.py` is a blocklist search
+over free text, and every hole it has ever had is a consequence of that shape
+rather than a bug in the matcher — hyphens (578 names, #336), non-ASCII
+letters (332), punctuation (247, #493), whole unregistered tables (#492).
+Four, each found by accident.
+
+```
+27,089  scrubbed specs scanned
+ 2,256  distinct capitalised multi-word phrases surviving
+    77  are in names.json   <- all today's gate can ever evaluate
+ 2,179  are NOT               <- outside its reach, forever
+```
+
+So: **no further matcher work on `leaks.py`.** #476 is parked pending #494's
+decision. The replacement is an allowlist on the shape of the output — a
+scrubbed spec may hold only known rules vocabulary and `x_<ref>` tokens —
+which cannot be defeated by spelling and costs a converging one-time
+curation instead of an unbounded series of holes.
+
+Fix a leak when it is found. Do not generalise the finding into another pass.
+
 ### Progress, 2026-10-10
 
 ```
@@ -47,9 +74,21 @@ closed    #389  the disease table, c.contract, 38 rows written
           #378 #379  the ETL resolvers            (earlier today)
 landed    #452  armour: 408 rows, 4 kinds
           #459  associate: 88 blocks, 2 defence shapes
-filed     #485 #486 #488 #489 #490
-blocked   2051 -> 1977
+          #489  recharge_while, 10 rows
+          #492  three tables added to the leak gate's specs walk
+filed     #485 #486 #488 #490 #493 #494
+blocked   2051 -> 1966
 ```
+
+**The marker named the wrong gap three times in one day**, and #489 is the
+clearest case: of its ten rows, **five had their predicate already written
+and wired to `requires=`** — a usability gate, which refuses the power while
+the condition holds and is a sentence no card prints — and **two were
+finished outright**. Three of ten genuinely wanted the new field.
+
+The wrong wiring was invisible because nothing ever put the row back, so the
+row was once-per-encounter either way and read as "waiting on the engine".
+Re-reading the cards is cheaper than trusting the symbol, every time.
 
 **The probe-before-parse discipline paid three times in a row**, and each
 time the count that looked right was the one hiding the fault:
