@@ -949,7 +949,12 @@ def f3040(c: Cast) -> None:
 #: Both halves of the charge `cf:artificer-f0s0` banks, which is what the
 #: four rows riding on it have no subject without. The feature's own row
 #: names the same two, so the group holds together.
-BANKED = ("events.ShortRested", "c.boost_roll()")
+#: The boost half landed in #495 -- `c.boost_roll` now spends a bonus into a
+#: roll already made, which is the second sentence of every one of these. What
+#: is left is the first: the charge is laid during a short rest and nothing
+#: announces one, so there is no charge to spend and these rows have no
+#: subject. One symbol, one gap, which is what the pair could not say.
+BANKED = ("events.ShortRested",)
 
 
 def _banked(ref: str, what: str) -> None:

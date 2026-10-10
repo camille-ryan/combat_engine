@@ -108,16 +108,18 @@ def artificer_empower(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=(_REST, "c.boost_roll()"),
+    todo=(_REST,),
 )
 def artificer_empower_reservoir(c: Cast) -> None:
-    """Both halves are missing, which is why this is `todo` and not
-    `dropped`.
+    """**The spending half landed in #495.** `c.boost_roll` adds to a roll
+    already made, which is exactly what this feature's free action does with
+    its banked +2 -- `c.bonus` was the wrong verb and applied to the next
+    roll rather than the one on the table.
 
-    The reservoir is laid during a rest, and it is spent as a free action
-    *after* an attack roll has already been made -- `c.bonus` applies to
-    the next roll, not to one that has landed, so a +2 written with it
-    would be a different, later number.
+    What is left is the laying. The reservoir is filled during a short rest
+    and nothing announces one, so there is never a charge to spend and the
+    row still has nothing to do. One symbol now rather than two, which is
+    what lets `todo.py` go red on the right day.
     """
 
 

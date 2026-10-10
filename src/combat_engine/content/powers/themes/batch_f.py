@@ -189,16 +189,16 @@ def _ally_within_10(world: Any, me: int, ev: Any) -> bool:
         Trigger(SavingThrow, _me_or_ally_rolled, "you or an ally makes a saving throw"),
         Trigger(SkillCheck, _me_or_ally_rolled, "you or an ally makes a skill check"),
     ),
-    dropped=("c.boost_roll()",),
 )
 def p12244(c: Cast) -> None:
-    """Three events for one printed sentence. Only the skill-check half can
-    be paid: `c.boost_check` settles a check after the die is down, and there
-    is no twin of it for an attack roll or a saving throw."""
+    """Three events for one printed sentence, and now one verb for all three.
+
+    `c.boost_roll` dispatches on what triggered, so the `isinstance` branch
+    that used to pay the skill-check third and drop the other two is gone --
+    it was not a simplification but the whole of the gap. #495."""
     points = augment(c, 1)
     gain = c.roll("1d4") + 1 if points else 1
-    if isinstance(c.trigger, SkillCheck):
-        c.boost_check(gain)
+    c.boost_roll(gain)
 
 
 @power(

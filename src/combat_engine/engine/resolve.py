@@ -410,6 +410,13 @@ def attack(
         # an off-hand attack", which is the whole of a two-weapon feat's
         # printed trigger. Same plain attribute as `vs`.
         landed.hand = hand
+        # The context, for the same reason `rolled.ctx` carries it above: a
+        # row answering the settled outcome has to be able to read what the
+        # attack *was*. `c.boost_roll` needs the crit range off it to judge a
+        # boosted total by the same rule this function does -- without it the
+        # verb falls back to a hard 20 and is wrong for every build that
+        # widens the range, which is silently false rather than visibly so.
+        landed.ctx = ctx
 
         # An immediate interrupt answering a hit may undo it -- a reroll on
         # "when you are hit" is the printed shape, and by the rules the hit
@@ -444,6 +451,7 @@ def attack(
             ev.ammo = drawn
             ev.vs = vs
             ev.hand = hand
+            ev.ctx = ctx
             return ev
 
         # Until the outcome stops changing. An *interrupt* answers before

@@ -2893,6 +2893,79 @@ class Cast:
         result.hit = face == 20 or (face != 1 and result.total >= result.target_defence)
         return True
 
+    def boost_roll(self, amount: int, *, kind: str = "") -> bool:
+        """Add to the triggering roll **without rolling it again**.
+
+        "Add 4 to the roll", where the roll has already been made and the
+        outcome already decided from it. Three near neighbours exist and each
+        is a different sentence:
+
+        * `c.reroll_attack` and `c.reroll_save` **replace** the die, which is
+          a different number whenever the original was already good enough
+          with the bonus on it -- a 14 against AC 17 is a hit at +4, and a
+          fresh d20 misses 15 times in 20.
+        * `c.boost_check` does exactly this, and only for a `SkillCheck`.
+        * `c.bonus("attack", ...)` is read by the *next* attack. The roll in
+          hand was summed before the row was offered.
+
+        `kind` is `attack`, `save`, `check`, or empty for whatever triggered.
+        It is there so a row can refuse to fire on the wrong sort of roll
+        rather than silently boosting one its card never mentions.
+
+        **`natural` does not move, and that is the whole point.** The card
+        says add to the *roll*, not that the die landed differently, so a
+        boost can turn a miss into a hit and can never manufacture a
+        critical or rescue a natural 1 -- the same distinction
+        `AttackResult.treated` records for "treat the roll as odd". #495.
+        """
+        from .events import SkillCheck
+
+        ev = self.trigger
+        if ev is None or not amount:
+            return False
+
+        result = getattr(ev, "result", None)
+        if result is not None and kind in ("", "attack"):
+            result.total += amount
+            # Recomputed from the untouched `natural`, so a 1 stays a miss
+            # and a boost cannot manufacture a critical. `forced` outranks
+            # the arithmetic: a row that said the attack simply hits is not
+            # un-hit by a number.
+            #
+            # **The crit floor is read, not assumed to be 20.** `resolve`
+            # judges a hit as `natural >= 20 - crit_range`, so hard-coding 20
+            # here would judge a boosted roll by a different rule than the
+            # one that settled it -- wrong for every build that widens the
+            # range, and wrong invisibly. The context rides on the event for
+            # exactly this.
+            from .resolve import _mods
+
+            ctx = getattr(ev, "ctx", None) or {}
+            floor = 20 - (
+                _mods(self.world, ctx.get("attacker", self.me), "crit_range", ctx)
+                if ctx
+                else 0
+            )
+            result.hit = (
+                result.forced
+                or result.natural >= floor
+                or (result.natural != 1 and result.total >= result.target_defence)
+            )
+            return True
+
+        if hasattr(ev, "saved") and kind in ("", "save"):
+            ev.bonus += amount
+            # 10 is the printed threshold and `c.reroll_save` uses the same
+            # literal; there is one saving throw DC in the game.
+            ev.saved = ev.natural + ev.bonus >= 10
+            return True
+
+        if isinstance(ev, SkillCheck) and kind in ("", "check"):
+            self.boost_check(amount)
+            return True
+
+        return False
+
     def terrain(self, word: str) -> bool:
         """Is the fight being had in that sort of place? `c.terrain("aquatic")`.
 

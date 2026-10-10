@@ -84,6 +84,7 @@ from combat_engine.engine.events import (
     Miss,
     PowerResolved,
     SavingThrow,
+    SkillCheck,
     SurgeSpent,
     TurnEnd,
 )
@@ -986,12 +987,18 @@ def p14103(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_ALLY,
     keywords=[Keyword.ARCANE],
-    todo=("c.boost_roll()",),
+    todo=("c.replace_roll()",),
 )
 def p14141(c: Cast) -> None:
     """Three recorded results standing in for the next three d20 rolls of
     three different kinds -- attack, save, skill -- spent in the order they
-    come. Only attack rolls can carry a modifier at all."""
+    come.
+
+    **Re-pointed off `c.boost_roll` (#495), which is a different mechanism.**
+    That verb adds to a roll that was made; this one says the roll is not
+    made at all -- a stored face is used instead. Nothing substitutes a d20
+    before it is rolled, and `c.treat_roll_as` is the near neighbour and
+    dictates only parity."""
 
 
 @power(
@@ -1871,11 +1878,27 @@ def p16620(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you roll a d20 and dislike the result",
-    todo=("c.boost_roll()",),
+    on=(
+        Trigger(AttackRolled, by_me, "you make an attack roll"),
+        Trigger(SavingThrow, about_me, "you make a saving throw"),
+        Trigger(SkillCheck, about_me, "you make a skill check"),
+    ),
+    dropped=("c.ability_check()",),
 )
 def p16621(c: Cast) -> None:
-    """Any d20 roll at all -- attack, save, skill, ability check -- and only
-    attack rolls can carry a modifier, so there is nothing to lay it on."""
+    """Add 1d10 to the roll, then subtract 1d4 from it.
+
+    **One boost of the difference, not two calls.** Each `c.boost_roll`
+    recomputes the outcome from the running total, so adding 1d10 and then
+    subtracting 1d4 in two steps would announce a hit and take it back --
+    `resolve` re-announces while the outcome keeps changing, so the
+    intermediate number would reach every rider watching `Hit`. The card is
+    one net adjustment and is written as one.
+
+    "Any d20" is four kinds of roll and the engine has three. The ability
+    check is `c.ability_check()`, with eleven other rows. #495.
+    """
+    c.boost_roll(c.roll("1d10") - c.roll("1d4"))
 
 
 @power(

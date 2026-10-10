@@ -85,8 +85,10 @@ from combat_engine.engine import (
     PowerUsed,
     Ranged,
     Relation,
+    SavingThrow,
     SecondWind,
     Size,
+    SkillCheck,
     Target,
     Trigger,
     TurnEnd,
@@ -96,6 +98,7 @@ from combat_engine.engine import (
     When,
     Window,
     World,
+    ally_within,
     both,
     by_keyword,
     by_me,
@@ -3489,11 +3492,24 @@ def i625p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(5),
     target=NO_TARGET,
-    todo=("c.boost_roll()",),
+    trigger="an ally within 5 squares makes a d20 roll",
+    on=(
+        Trigger(AttackRolled, ally_within(5), "an ally makes an attack roll"),
+        Trigger(SavingThrow, ally_within(5), "an ally makes a saving throw"),
+        Trigger(SkillCheck, ally_within(5), "an ally makes a skill check"),
+    ),
+    dropped=("dsl.uses(enhancement)",),
 )
 def i939p1(c: Cast) -> None:
-    """Adds to any d20 an ally has already rolled. `c.boost_check` does it
-    for a skill check alone, and an attack roll has only a reroll."""
+    """A +1 power bonus to a d20 an ally within 5 has already rolled.
+
+    The printed allowance is "a number of times a day equal to the
+    enhancement bonus of the weapon" -- a use count that is a *column*
+    rather than a literal, and `uses=` in the header takes a number. One use
+    a day is what it deals, which is the enhancement at the lowest level the
+    item is printed at, so the row is short at higher plusses rather than
+    wrong. #495."""
+    c.boost_roll(1)
 
 
 # -- level 5 ----------------------------------------------------------------

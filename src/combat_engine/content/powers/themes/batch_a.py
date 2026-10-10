@@ -1219,16 +1219,17 @@ def _roll_near_me(world: World, me: int, ev: Event) -> bool:
             AttackRolled, _roll_near_me, "a creature within 5 makes an attack roll"
         ),
     ),
-    dropped=("c.boost_roll()",),
 )
 def p16400(c: Cast) -> None:
-    """The skill-check half is `c.boost_check`, which adds to the triggering
-    check after the die is down. The attack-roll half wants the same reader
-    for an attack and there is none -- a modifier laid now applies to the
-    next roll, not to the one being answered."""
+    """A d6, used as a bonus **or a penalty** -- the card offers the choice
+    because the trigger is any creature within 5, which includes enemies.
+
+    So the sign is read off whose roll it is: a friend's roll is helped and
+    an enemy's is hindered, which is the only reading that makes the printed
+    choice mean anything. Nothing else in the row needs to know. #495."""
     swing = c.roll("1d6")
-    if isinstance(c.trigger, SkillCheck):
-        c.boost_check(swing)
+    who = getattr(c.trigger, "attacker", getattr(c.trigger, "actor", None))
+    c.boost_roll(-swing if who in c.enemies() else swing)
 
 
 # -- x7_989 ------------------------------------------------------------------

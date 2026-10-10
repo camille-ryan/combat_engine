@@ -43,6 +43,7 @@ from combat_engine.engine import (
     WILL,
     ActionPointSpent,
     ActionType,
+    AttackRolled,
     Cast,
     Condition,
     ConditionEnded,
@@ -53,9 +54,12 @@ from combat_engine.engine import (
     Keyword,
     Moved,
     PowerUsed,
+    SavingThrow,
+    SkillCheck,
     Trigger,
     TurnStart,
     When,
+    ally_within,
     power,
 )
 from combat_engine.engine.basic import BEAST, MELEE, RANGED
@@ -693,14 +697,35 @@ def f2435(c: Cast) -> None:
         )
 
 
-@power("f2463", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2463", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.boost_roll()",))
+       trigger="an adjacent ally makes an attack roll, a saving throw or a "
+               "skill check",
+       on=(
+           Trigger(AttackRolled, ally_within(1), "an adjacent ally attacks"),
+           Trigger(SavingThrow, ally_within(1), "an adjacent ally saves"),
+           Trigger(SkillCheck, ally_within(1), "an adjacent ally checks"),
+       ))
 def f2463(c: Cast) -> None:
-    """Re-aimed three times over. `c.expend_row` spends a row from
-    outside it, and a level-11 monster wave declared `m4421a6`, so there
-    is now something to spend.
+    """Spend the racial power to add 1d6 to an adjacent ally's roll.
 
-    The remaining hold is the boost itself: `c.boost_check` reaches a
-    skill check and neither an attack roll nor a saving throw, which are
-    the two this row is printed to improve."""
+    Two halves and both are now sayable: `c.expend_row` spends `p6186` from
+    outside it, and `c.boost_roll` reaches the roll on the table whatever
+    kind it was. The expenditure is the cost, so it comes first and the
+    boost only happens if the racial power was actually there to spend --
+    paying out for nothing is what a row that reads the cost after the
+    benefit does. #495.
+
+    `ally_within(1)` is the printed "adjacent", read off whoever the event
+    is about rather than off a target: on an attack roll that is the one
+    swinging.
+
+    **`AT_WILL`, not `ENCOUNTER`**, and `lint.py` said so: a triggered trait
+    declared per-encounter is spent on its first firing, and this card prints
+    no limit of its own. The limit is `p6186`'s single encounter use, which
+    `c.expend_row` enforces -- declaring a second one here would have made
+    the feat fire once a fight where the card allows it as often as the
+    racial power is available.
+    """
+    if c.expend_row("p6186"):
+        c.boost_roll(c.roll("1d6"))

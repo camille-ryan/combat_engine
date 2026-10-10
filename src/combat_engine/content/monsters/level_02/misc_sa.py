@@ -216,15 +216,19 @@ def _i_failed_a_save(world: World, me: int, ev: Event) -> bool:
         Trigger(Miss, by_me, "m6007 misses with an attack"),
         Trigger(SavingThrow, _i_failed_a_save, "m6007 fails a saving throw"),
     ),
-    todo=("c.boost_roll()",),
 )
 def m6007a3(c: Cast) -> None:
-    """Both halves add to a roll that has already been made, and neither can
-    be said. `c.reroll_attack` and `c.reroll_save` replace the die rather
-    than raising it, which is a different number whenever the original was
-    good enough once +4 is on it; `c.boost_check` does the right thing and
-    only for a skill check. Both triggers are declared so the row goes live
-    the day the verb lands."""
+    """+4 to the roll it just missed with, or to the save it just failed.
+
+    One verb for both halves, because `c.boost_roll` dispatches on what
+    triggered -- the attack branch and the save branch are the same printed
+    sentence and reading them apart would be two copies of one clause.
+
+    **Not a reroll.** `c.reroll_attack` replaces the die, which is a
+    different number whenever the original was already good enough once +4
+    is on it: a 14 against AC 17 lands at +4 and a fresh d20 misses 15 times
+    in 20. #495."""
+    c.boost_roll(4)
 
 
 def _hit_with_its_blade(world: World, me: int, ev: Event) -> bool:

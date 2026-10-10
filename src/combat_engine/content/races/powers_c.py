@@ -755,27 +755,53 @@ def p14074(c: Cast) -> None:
     target=SELF,
     trigger="you make an attack roll, a saving throw, a skill check or an "
     "ability check and dislike the result",
-    on=Trigger(SkillCheck, about_me, "you make a skill check"),
-    dropped=("c.boost_roll()",),
+    on=(
+        Trigger(AttackRolled, by_me, "you make an attack roll"),
+        Trigger(SavingThrow, about_me, "you make a saving throw"),
+        Trigger(SkillCheck, about_me, "you make a skill check"),
+    ),
+    dropped=("c.ability_check()",),
 )
 def p6186(c: Cast) -> None:
-    """Only the skill-check branch can be answered once the die is down:
-    `c.boost_check` is the one verb that reaches a settled roll.
+    """"Add 1d6 to the triggering roll", whatever the roll was.
 
-    Re-aimed off the two half-symbols onto the one the rest of the tree
-    names. The printed line is "add 1d6 to the triggering roll", whatever
-    the roll was, and both `AttackResult.total` and `SavingThrow.saved`
-    are read back -- so the hold is a verb, not an engine limit. The
-    `c.reroll_save` docstring says why it must be a verb: five rows
-    reaching into an event by hand is five chances to double a modifier.
+    Three of the four printed kinds are declared and paid by one verb, since
+    `c.boost_roll` dispatches on what triggered. The **ability check** is the
+    fourth and the engine has no such roll -- that is `c.ability_check()`,
+    which eleven other rows want, and it is the honest remainder here rather
+    than a note.
 
-    **The die comes through `c.dice_for`**, not written in: f1836 prints
-    "you add 1d10 to the roll, rather than 1d6" about this very row, and a
-    hard-coded `"1d6"` here is what made that feat unwritable. The skill is
-    handed over so the feat can narrow to the check it names."""
+    Not a reroll: the card adds to the number on the table. #495.
+
+    **The die still comes through `c.dice_for`, and that is load-bearing.**
+    `f1836` prints "you add 1d10 to the roll, rather than 1d6" about this
+    very row, and a hard-coded `"1d6"` here makes that feat a modifier
+    nothing consults -- this component's commonest bug, and `lint.py` has a
+    guard named after it. The skill is handed over in the context so the
+    feat can narrow to the check it names.
+    """
     ev = c.trigger
     skill = str(getattr(ev, "skill", "") or "").lower()
-    c.boost_check(c.roll(c.dice_for("p6186", "1d6", {"skill": skill})))
+    # **What kind of roll, and which power rolled it.** `f1836` narrows to a
+    # Nature check or an attack roll of two keywords, and an empty `skill`
+    # used to be the only thing it could read -- which lumped a saving throw
+    # in with an attack roll and let the feat improve a roll its card never
+    # mentions. The moment this row could boost more than a skill check,
+    # "not a skill check" stopped meaning "an attack".
+    kind = "check" if skill else "attack" if hasattr(ev, "result") else "save"
+    c.boost_roll(
+        c.roll(
+            c.dice_for(
+                "p6186",
+                "1d6",
+                {
+                    "skill": skill,
+                    "kind": kind,
+                    "power": str(getattr(ev, "power", "") or ""),
+                },
+            )
+        )
+    )
 
 
 # -- r36 --------------------------------------------------------------------

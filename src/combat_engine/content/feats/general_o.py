@@ -876,7 +876,7 @@ def f3045(c: Cast) -> None:
 
 
 @power("f3046", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.boost_roll()",))
+       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
 def f3046(c: Cast) -> None:
     """Rides on an ally's attack that benefited from `cf:artificer-f0s0`.
 

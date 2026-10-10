@@ -406,16 +406,19 @@ def p222(c: Cast) -> None:
     # Prerequisite: Star Pact. See p2094.
     trigger=_CURSED_DROPS,
     on=_ON_CURSED_DROPS,
-    dropped=("c.boost_roll()",),
+    dropped=("c.bonus(any_roll=)",),
 )
 def p2263(c: Cast) -> None:
     # Printed as +1 to any single d20 roll during your next turn: attack,
     # save, skill or ability check, the holder's choice. Only attack rolls
     # can carry a modifier here, so that is what it lands on -- `once` spends
     # it on the first roll, and the duration drops it if it goes unused.
-    # The other three kinds of roll are a `dropped=` rather than a note:
-    # one bonus offered across four different rolls, spent by whichever
-    # comes first, is what `c.boost_roll()` names and twelve rows want.
+    # **Re-pointed: this is not what `c.boost_roll` turned out to be.** That
+    # verb (#495) adds to the roll on the table, and this bonus is banked
+    # *before* any of the four rolls happens -- it is a one-shot offered
+    # across attack, save, skill and ability check, spent by whichever comes
+    # first and lost at the end of the turn. `c.bonus(once=True)` does that
+    # for one kind of roll; the gap is a one-shot that spans kinds.
     # "Cumulative" needs nothing -- three drops lay three of these and
     # each is spent by the same roll, which is the printed +3.
     c.bonus("attack", 1, on=c.me, until=When.EONT, once=True)

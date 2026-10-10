@@ -560,7 +560,8 @@ def f1835(c: Cast) -> None:
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF)
+       reach=PERSONAL, target=SELF,
+       dropped=("Keyword.SPIRIT",))
 def f1836(c: Cast) -> None:
     """Swaps the die a racial power adds to a roll: 1d10 rather than 1d6.
 
@@ -571,16 +572,32 @@ def f1836(c: Cast) -> None:
     and the `c.dice_for` p6186 now reads were built for.
 
     The gate is the printed narrowing: a Nature check, or an attack roll
-    with a beast form or spirit power. `p6186` hands its skill over, so the
-    first is exact. The second is written as "not a skill check at all"
-    because that row cannot currently boost an attack roll -- its own
-    `c.boost_roll()` marker -- so the clause is correct the day it can and
-    applies to nothing before then, rather than being left out.
+    with a beast form or spirit power.
+
+    **The second half was written as "not a skill check at all" and that
+    became wrong the day `p6186` could boost more than a check (#495).** It
+    was correct while the row answered skill checks only -- there was no
+    other roll for the gate to catch -- and the moment attack rolls and
+    saving throws arrived, "not a skill check" meant *both*, so the feat
+    improved a saving throw its card never mentions and every attack roll
+    rather than two keywords' worth. `p6186` now says which kind of roll it
+    is and which power rolled it, so the narrowing is exact.
+
+    The spirit half cannot be said: the engine has `Keyword.BEAST_FORM` and
+    no spirit keyword, which is the `#486` family -- a keyword the database
+    names and no header declares. A `dropped=` rather than a silent
+    widening, because the widening is what was wrong here.
     """
-    c.change_dice(
-        "p6186", "1d10",
-        when=lambda ctx: ctx.get("skill", "") in ("nature", ""),
-    )
+
+    def narrowed(ctx: dict[str, Any]) -> bool:
+        if ctx.get("skill", "") == "nature":
+            return True
+        if ctx.get("kind") != "attack":
+            return False
+        rolled = get(str(ctx.get("power", "")))
+        return bool(rolled and Keyword.BEAST_FORM in (rolled.keywords or ()))
+
+    c.change_dice("p6186", "1d10", when=narrowed)
 
 
 @power("f1848", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -1386,13 +1386,18 @@ def f928(c: Cast) -> None:
 
 
 @power("f718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.boost_roll()",))
+       reach=PERSONAL, target=SELF, todo=("c.boost_roll(extra=)",))
 def f718(c: Cast) -> None:
-    """Adds one to the roll a named racial power is already adding to.
-    The power is a ref, so the trigger is sayable -- but by then the d20
-    is down, and `c.bonus` is read by the *next* roll. `c.boost_check`
-    does this for a skill check and there is no counterpart for an
-    attack."""
+    """**Re-aimed: `c.boost_roll` landed in #495 and is not what this
+    wants.** The verb adds to a roll already made, which is what `p6186`
+    does. This feat adds one more to *what `p6186` is contributing*, and
+    only when the roll being improved belongs to an arcane power.
+
+    So the gap is a modifier on the **amount of somebody else's boost** --
+    nothing says "a boost is being spent into this roll, here is what it
+    comes to, and here is a chance to change it". `i2295x1` is the same
+    gap from the other side and the two should land together.
+    """
 
 
 @power("f933", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

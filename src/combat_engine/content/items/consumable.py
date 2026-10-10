@@ -93,6 +93,8 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Ranged,
+    SavingThrow,
+    SkillCheck,
     SurgeSpent,
     Trigger,
     TurnEnd,
@@ -101,6 +103,7 @@ from combat_engine.engine import (
     World,
     ZoneEntered,
     about_me,
+    by_me,
     get,
     power,
     targets_me,
@@ -867,11 +870,18 @@ def i3468x1(c: Cast) -> None:
 
 
 @power("i3468p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.boost_roll()",))
+       reach=PERSONAL, target=SELF,
+       trigger="a roll you just made",
+       on=(
+           Trigger(AttackRolled, by_me, "you make an attack roll"),
+           Trigger(SavingThrow, about_me, "you make a saving throw"),
+           Trigger(SkillCheck, about_me, "you make a skill check"),
+       ))
 def i3468p1(c: Cast) -> None:
-    """"A roll you just made" covers an attack, a check and a save alike,
-    and only the skill check has a way in -- `c.boost_check`. One third of
-    a printed line is not the line."""
+    """A +1 item bonus on an attack roll, skill check or saving throw you
+    just made -- all three kinds, which is why one third of it was not the
+    line. `c.boost_roll` dispatches on whichever triggered. #495."""
+    c.boost_roll(1)
 
 
 @power("i3548p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,

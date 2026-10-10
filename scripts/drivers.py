@@ -2238,6 +2238,162 @@ def class_form(out: Result) -> None:
     )
 
 
+def boost_roll(out: Result) -> None:
+    """"Add 4 to the roll" -- a roll already made, and an outcome already
+    decided from it.
+
+    18 rows print this and none could say it. Three neighbours exist and each
+    is a different sentence: `c.reroll_attack` and `c.reroll_save` **replace**
+    the die, which is a different number whenever the original was already
+    good enough with the bonus on it; `c.boost_check` does exactly the right
+    thing and only for a skill check; `c.bonus("attack", ...)` is read by the
+    next attack, not the one in hand. #495.
+
+    **The end-to-end half is what is actually worth asserting**, and it was
+    not obvious it would work. `Miss` is announced after the outcome is
+    settled, so a row boosting the roll there is editing a decision already
+    taken. `resolve` turns out to handle it: the announcement is emitted in a
+    loop that re-announces while `result.hit` keeps changing -- built for
+    rerolls, and a boost composes with it unchanged. Asserting the **`Hit`
+    arrives** rather than that `result.hit` flipped is the difference between
+    testing the verb and testing the engine around it.
+
+    The three negative controls are each a real way to get this wrong:
+
+    * a boost must not manufacture a **critical** -- a crit is off a natural
+      20 and `natural` does not move, which is the same distinction
+      `AttackResult.treated` records for "treat the roll as odd";
+    * a boost must not rescue a **natural 1**, which misses at any total;
+    * with **no roll in hand** it must report failure, because returning
+      success would make 18 rows look written.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import Hit, Miss
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+    from combat_engine.engine.types import Defense
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:boost")
+
+    # No trigger at all.
+    out.that(c.boost_roll(4) is False,
+             "with no roll in hand it refuses -- the control, since returning"
+             " success would make every row of this shape look written")
+
+    class _Rolled:
+        def __init__(self, result: AttackResult) -> None:
+            self.result = result
+
+    # A miss by 3, boosted by 4, becomes a hit. `natural` must not move.
+    res = AttackResult(natural=14, total=15, target_defence=18, hit=False)
+    c.trigger = _Rolled(res)
+    out.that(c.boost_roll(4) is True, "it boosts an attack roll")
+    out.that(res.total == 19, "the total rose by exactly the amount")
+    out.that(res.natural == 14, "the die did NOT move -- the card adds to the"
+                                " roll, not to what the die showed")
+    out.that(res.hit is True, "and 19 against 18 now hits")
+    out.that(res.critical is False,
+             "without becoming a critical -- the control, and the reason"
+             " `natural` is left alone")
+
+    # A natural 1 misses at any total.
+    res = AttackResult(natural=1, total=2, target_defence=10, hit=False)
+    c.trigger = _Rolled(res)
+    c.boost_roll(20)
+    out.that(res.hit is False,
+             "a natural 1 still misses with +20 on it -- the control")
+
+    # A natural 20 that was already a crit stays one.
+    res = AttackResult(natural=20, total=21, target_defence=18,
+                       hit=True, critical=True)
+    c.trigger = _Rolled(res)
+    c.boost_roll(4)
+    out.that(res.critical is True and res.hit is True,
+             "a critical is not undone by boosting it")
+
+    # **The crit floor is read off the context, not assumed to be 20.**
+    # `resolve` judges a hit as `natural >= 20 - crit_range`, so a verb
+    # hard-coding 20 judges a boosted roll by a different rule than the one
+    # that settled it -- and is wrong only for builds that widen the range,
+    # which is the kind of wrong nothing notices.
+    from combat_engine.engine.components import Mod, Mods
+
+    mods = world.get(caster, Mods) or world.add(caster, Mods())
+    mods.items.append(Mod(what="crit_range", value=1, label="drivers:boost"))
+    res = AttackResult(natural=19, total=5, target_defence=30, hit=False)
+    c.trigger = _Rolled(res)
+    c.trigger.ctx = {"attacker": caster}
+    c.boost_roll(1)
+    out.that(res.hit is True,
+             "a 19 hits a defence of 30 when the build's crit range reaches"
+             " 19 -- the floor is read, not assumed")
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:boost"]
+    res = AttackResult(natural=19, total=5, target_defence=30, hit=False)
+    c.trigger = _Rolled(res)
+    c.trigger.ctx = {"attacker": caster}
+    c.boost_roll(1)
+    out.that(res.hit is False,
+             "and with the range back to normal the same 19 misses -- the"
+             " control, without which the assertion above passes on a verb"
+             " that always hits")
+
+    # `kind=` refuses the wrong sort of roll.
+    res = AttackResult(natural=14, total=15, target_defence=18)
+    c.trigger = _Rolled(res)
+    out.that(c.boost_roll(4, kind="save") is False,
+             "kind='save' declines an attack roll, so a row cannot boost a"
+             " roll its card never mentions")
+
+    # -- a save -------------------------------------------------------------
+    class _Save:
+        def __init__(self) -> None:
+            self.natural, self.bonus, self.saved = 7, 0, False
+
+    ev = _Save()
+    c.trigger = ev
+    out.that(c.boost_roll(4) is True, "it boosts a saving throw")
+    out.that(ev.saved is True, "7 + 4 clears the 10 the rule prints")
+    out.that(ev.natural == 7, "and again the die did not move")
+
+    # -- end to end: the Hit has to actually be announced -------------------
+    foe = sorted(enemies(world, caster))[0]
+    seen: list[str] = []
+    world.bus.on(Hit, lambda ev: seen.append("hit"))
+    world.bus.on(Miss, lambda ev: seen.append("miss"))
+
+    def rescue(ev: Miss) -> None:
+        if ev.attacker != caster:
+            return
+        # The trigger has to be handed over, which is what `dsl` does for a
+        # real row. The first version of this built a bare `Cast` and the
+        # boost found no roll in hand -- it reported False and the engine was
+        # blameless. A driver asserting the engine must first be a driver
+        # that calls the verb the way a row does.
+        rescuer = Cast(world=world, me=caster, ref="drivers:boost")
+        rescuer.trigger = ev
+        rescuer.boost_roll(80, kind="attack")
+
+    sub = world.bus.on(Miss, rescue)
+    # A bonus low enough that the attack cannot land on its own, and a boost
+    # large enough to clear any defence. **Both numbers had to be checked
+    # rather than chosen**: the first pair was -50 and +40, which cannot
+    # reach a defence of 13 from a total of -31, so the rule went red on its
+    # own arithmetic while the engine was doing exactly the right thing.
+    from combat_engine.engine import resolve as _resolve
+
+    _resolve.attack(world, caster, foe, -40, Defense.AC, power="drivers:boost")
+    out.that("miss" in seen,
+             "the attack missed first, which is the setup and not the finding")
+    out.that("hit" in seen,
+             "and a `Hit` was then ANNOUNCED -- not merely `result.hit`"
+             " flipped. `resolve` re-announces while the outcome keeps"
+             " changing, so a boost reaches every rider watching `Hit`")
+
+    world.bus.off(sub)
+
+
 def recharge_while(out: Result) -> None:
     """A recharge condition that is a **state**, not a moment.
 
@@ -2727,6 +2883,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "boost_roll": (boost_roll,
+                   "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,
                        "a recharge condition that is a state, not a moment"),
     "class_form": (class_form,

@@ -769,16 +769,17 @@ def i2274p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.boost_roll()",),
+    todo=("c.boost_roll(extra=)",),
 )
 def i2295x1(c: Cast) -> None:
-    """Adds 1 to a d6 `x_m4421a6` rolls. Nothing reaches inside a row's
-    own roll to change it.
+    """**Re-aimed again: `c.boost_roll` landed in #495 and is the wrong
+    half.** That verb adds to a roll already made, which is what `p6186`
+    does; this property adds 1 to the **d6 `p6186` itself rolls**, and only
+    for a divine attack power used through this implement.
 
-    Re-aimed onto the name nine other rows already use for that, since
-    the ref the property is gated on is given and the naming gap was
-    never the hold. `c.boost_check` is the near neighbour and answers a
-    `SkillCheck` trigger only."""
+    The gap is a modifier on the amount of another row's boost. `f718` is
+    the same sentence with a different keyword and a different +1, so the
+    two share one symbol and should land together."""
 
 
 @power(
