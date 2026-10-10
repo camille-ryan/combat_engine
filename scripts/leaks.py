@@ -486,6 +486,12 @@ VOCABULARY_COLUMNS = (
     ("feat", "tier"),
     ("monster", "role"),
     ("monster", "origin"),
+    # Armour's two mechanical words. The table has **no slug** for the reason
+    # `racial_trait` has none -- all 408 rows are in `names.json`, so a slug
+    # would hold a printed name on every one -- and these two columns are here
+    # so that "a type is mechanics" is checked rather than asserted. #452.
+    ("armour", "type"),
+    ("armour", "base"),
     # **`weapon.slug` is deliberately absent, and `racial_trait` has no slug to
     # add.** The asymmetry is the point and is worth leaving written down: a
     # weapon's name is mechanics -- thirty are in `sanitise.RULES_TERMS` and
@@ -503,6 +509,13 @@ VOCABULARY_COLUMNS = (
 REVIEWED = {
     ("power", "action", "move"),      # a monster ability is called Move
     ("power", "kind", "pact"),        # the warlock's, and a card of that name
+    # Armour's two, found by adding the columns rather than by assuming the
+    # claim. `chainmail` is the armour type word and also `a4`'s own printed
+    # name -- the column holds the right word and the row is named after it.
+    # `chain` is the printed restriction on an enchantment's `Armor:` line and
+    # also what two unrelated monster abilities are called. #452.
+    ("armour", "type", "chainmail"),
+    ("armour", "base", "chain"),
 }
 
 

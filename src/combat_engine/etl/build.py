@@ -319,6 +319,56 @@ CREATE TABLE weapon (
 );
 CREATE INDEX weapon_group ON weapon(grp, category);
 
+-- Armour and shields, which nothing read. #452.
+--
+-- `Armor` is an `Item` **category**, 408 rows, carrying everything the weapon
+-- table carries and never read into one of its own. `#346` was blocked on
+-- "there is no armour table", which was true of `game.db` and false of the
+-- compendium.
+--
+-- Three kinds, separated by **one printed line** rather than by judgement,
+-- measured across all 408:
+--
+--     base          15   prints `Type:` and no minimum
+--     material      80   prints `Type:` **and** `Minimum Enhancement Value:`
+--     enchantment  309   prints `Armor:` naming the base it goes on
+--     mount          4   barding: an AC bonus and neither line, because
+--                        no character wears it
+--
+-- The line is the test, not the word: `Cloth Armor` prints `Type : Cloth` and
+-- the word "Armor" is in its *name*, so a substring check calls a base an
+-- enchantment. Anchored on the line start for that reason -- the same trap
+-- #389's disease parser hit from the other side.
+--
+-- `kind` carries which. `ac_bonus` is NULL where the page prints none (310 of
+-- them do not), and so are `check` and `speed`: 54 and 53 rows print those,
+-- and 0 is a real armour check penalty, so a default would mean "no penalty"
+-- on 354 rows that simply do not say.
+--
+-- **There is no `slug` column, and the asymmetry with `weapon` is the point.**
+-- `weapon.slug` is exempt from `leaks.VOCABULARY_COLUMNS` because a weapon's
+-- name *is* mechanics: thirty are in `sanitise.RULES_TERMS` and **none has a
+-- `names.json` entry**. Armour is the opposite -- all 408 have one, because the
+-- 309 enchantments are magic item names -- so a slug here would hold a printed
+-- name on every row. That is `racial_trait.slug`'s case, where the column held
+-- a name on 147 of 151 rows and was **dropped rather than exempted** (#433).
+--
+-- `type` is the matching key instead, and it is genuinely mechanical: "cloth",
+-- "leather", "plate", and on an enchantment the printed restriction "scale or
+-- plate" or "any". Both columns are in `leaks.VOCABULARY_COLUMNS` so the claim
+-- is checked rather than asserted.
+--
+-- `base` on an enchantment is the printed restriction -- "Cloth", "Scale or
+-- plate", "Any" -- stored as the page writes it, because the same column on
+-- `weapon` already holds a weapon's restriction that way.
+CREATE TABLE armour (
+  ref TEXT PRIMARY KEY, id INTEGER, kind TEXT,
+  type TEXT, base TEXT, ac_bonus INTEGER, check_penalty INTEGER,
+  speed_penalty INTEGER, min_enhancement INTEGER, weight TEXT, cost TEXT,
+  level INTEGER, enhancement INTEGER
+);
+CREATE INDEX armour_kind ON armour(kind, type);
+
 -- Traps and hazards. **631 of these were never read**, and `terrain.arm`
 -- said so in a docstring that read as a design choice: "the numbers come
 -- off the monster curve because there is no row to read them from: the ETL
@@ -387,6 +437,7 @@ class Report:
     powers: int = 0
     classes: int = 0
     weapons: int = 0
+    armour: int = 0
     features: int = 0
     seconds: int = 0
     crossed: int = 0
@@ -440,6 +491,7 @@ class Report:
             f"powers        {self.powers:6d}",
             f"classes       {self.classes:6d}",
             f"weapons       {self.weapons:6d}  (base weapons, numbers off the page)",
+            f"armour        {self.armour:6d}  (bases, materials and enchantments; #452)",
             f"features      {self.features:6d}  (class features, new)",
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
@@ -529,6 +581,7 @@ def build() -> Report:
     _powers(source, out, report, names)
     report.classes = _classes(source, out, names)
     report.weapons = _weapons(source, out, names)
+    report.armour = _armour(source, out, names)
     report.features = _features(source, out, names)
     # Right here and not inside `_powers`: a class feature's prose names the
     # powers its class is built around, and this table does not exist yet when
@@ -1508,6 +1561,100 @@ _TRAP_ATTACK = re.compile(r"Attack:?\s*([+-]\s*\d+)\s*vs\.?\s*(\w+)", re.I)
 #: `Hit: ... takes 3d10 damage`. The dice only -- the rest of the Hit line is
 #: rules text for somebody to write as code, like a monster's.
 _TRAP_DAMAGE = re.compile(r"(\d+d\d+(?:\s*\+\s*\d+)?)\s+damage", re.I)
+
+
+#: Every field the three armour kinds print, anchored on the **line** rather
+#: than the word. `Cloth Armor` prints `Type : Cloth` and carries "Armor" in
+#: its name, so a substring test calls a base an enchantment. #452.
+_ARM_TYPE = re.compile(r"^Type\s*:\s*(.+)$", re.M)
+_ARM_BASE = re.compile(r"^Armor\s*:\s*(.+)$", re.M)
+_ARM_AC = re.compile(r"^AC Bonus\s*:\s*\+?(-?\d+)", re.M)
+_ARM_MIN = re.compile(r"^Minimum Enhancement Value\s*:\s*\+?(\d+)", re.M)
+_ARM_CHECK = re.compile(r"^Check\s*:\s*(-?\d+)", re.M)
+_ARM_SPEED = re.compile(r"^Speed\s*:\s*(-?\d+)", re.M)
+_ARM_WEIGHT = re.compile(r"^Weight\s*:\s*([^\n]+?)\s*(?:Cost\s*:|$)", re.M)
+_ARM_COST = re.compile(r"^Cost\s*:\s*([^\n]+)$", re.M)
+
+
+def _armour(source: sqlite3.Connection, out: sqlite3.Connection,
+            names: dict[str, dict[str, str]]) -> int:
+    """Armour and shields, which nothing read. #452.
+
+    `Armor` is an `Item` *category* and carries everything `weapon` carries.
+    `#346` was blocked on "there is no armour table" -- true of `game.db`,
+    false of the compendium.
+
+    **The kind is one printed line**, measured across all 408 before this was
+    written: 15 print `Type:` alone (a base), 80 print `Type:` **and** a
+    minimum enhancement (a material), 309 print `Armor:` naming the base they
+    go on (an enchantment), and 4 print neither.
+
+    **No `slug`.** `weapon` has one because a weapon's name is mechanics and
+    none of them is in `names.json`; every one of these 408 is, since the 309
+    enchantments are magic item names. That is `racial_trait.slug`'s case and
+    #433's answer was to drop the column, not exempt it. `type` is the
+    matching key -- "cloth", "plate", or an enchantment's printed restriction
+    "scale or plate" -- and both it and `base` are gated by
+    `leaks.VOCABULARY_COLUMNS`.
+
+    **NULL where the page prints nothing.** 310 rows print no AC bonus, 354
+    no check penalty, 355 no speed penalty -- and **0 is a real armour check
+    penalty**, so a default would say "no penalty" about rows that simply do
+    not say. The same call `trap.perception_dc` documents.
+    """
+    written = 0
+    for row in source.execute(
+        "SELECT ID, Name, Level, Enhancement, PlainTxt FROM Item"
+        " WHERE Category = 'Armor' ORDER BY ID"
+    ):
+        aid, name, level, enh, plain = row
+        f = "\n".join(x.strip() for x in (plain or "").splitlines() if x.strip())
+        kind_type = _ARM_TYPE.search(f)
+        kind_base = _ARM_BASE.search(f)
+        minimum = _ARM_MIN.search(f)
+        if kind_type and minimum:
+            kind = "material"
+        elif kind_type:
+            kind = "base"
+        elif kind_base:
+            kind = "enchantment"
+        elif _ARM_AC.search(f):
+            # **The four that print neither are barding** -- armour for a
+            # mount, which carries an AC bonus and a check penalty and no
+            # `Type:` line because no character wears it. Named from the
+            # structure (an AC bonus with neither a type nor a base) rather
+            # than from the prose, and named rather than left blank because
+            # `#459`'s mounts will want them.
+            kind = "mount"
+        else:
+            kind = ""
+        def num(pat: re.Pattern[str], text: str = f) -> int | None:
+            m = pat.search(text)
+            return int(m.group(1)) if m else None
+        weight = _ARM_WEIGHT.search(f)
+        cost = _ARM_COST.search(f)
+        out.execute(
+            "INSERT OR REPLACE INTO armour VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                f"a{aid}",
+                aid,
+                kind,
+                (kind_type.group(1).strip().lower() if kind_type else ""),
+                (kind_base.group(1).strip().lower() if kind_base else ""),
+                num(_ARM_AC),
+                num(_ARM_CHECK),
+                num(_ARM_SPEED),
+                num(_ARM_MIN),
+                (weight.group(1).strip() if weight else ""),
+                (cost.group(1).strip() if cost else ""),
+                int(m.group()) if (m := re.search(r"\d+", str(level or ""))) else None,
+                int(m2.group()) if (m2 := re.search(r"\d+", str(enh or ""))) else None,
+            ),
+        )
+        names.setdefault(f"a{aid}", {})
+        names[f"a{aid}"] = {**names[f"a{aid}"], "name": name}
+        written += 1
+    return written
 
 
 def _traps(source: sqlite3.Connection, out: sqlite3.Connection,
