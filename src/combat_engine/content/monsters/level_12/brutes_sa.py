@@ -1671,7 +1671,7 @@ def m4307a1(c: Cast) -> None:
     action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.vulnerable(when=)",),
+    
     trigger=_M4307_ATTACKED,
     on=Trigger(AttackDeclared, when=targets_me, text=_M4307_ATTACKED),
 )
@@ -1683,7 +1683,12 @@ def m4307a2(c: Cast) -> None:
     foe = _triggering_enemy(c)
     if foe is None:
         return
-    c.vulnerable(10, on=foe, until=When.EONT)
+    # Narrowed to this creature's own attacks, which is the printed line:
+    # unscoped it was vulnerable 10 to **everything**, and the party's
+    # striker got the benefit of a monster's reaction.
+    me = c.me
+    c.vulnerable(10, on=foe, until=When.EONT,
+                 when=lambda ctx: ctx.get("source") == me)
     c.effect(_M4307_SOFT, until=When.EONT, on=foe)
 
 

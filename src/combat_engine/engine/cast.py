@@ -3144,6 +3144,7 @@ class Cast:
         *,
         until: When = When.SAVE_ENDS,
         on: int | None = None,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """Takes `amount` extra from every hit, or from one damage type.
 
@@ -3158,6 +3159,28 @@ class Cast:
             return None
         kinds = [dtype] if dtype is not None else list(DamageType)
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
+
+        # **A scoped vulnerability goes somewhere else entirely.** The flat
+        # dict is a running total with nowhere to record what the clause
+        # applies to, and eleven rows print a scope -- "vulnerable 10 to the
+        # <monster>'s attacks", "vulnerable 3 to weapon attacks". Those are
+        # kept as triples and read in `resolve.deal_damage` beside immunity
+        # and resistance, which already consult the same context. #471.
+        if when is not None:
+            entry = (dtype, amount, when)
+            defences.vulnerable_when.append(entry)
+
+            def lift_scoped() -> None:
+                if entry in defences.vulnerable_when:
+                    defences.vulnerable_when.remove(entry)
+
+            # `on_suspend` only -- `Effects._lift` runs it on expiry too.
+            return self.world.effects.apply(
+                who, self.me, until, label=f"{self.ref} vulnerable when",
+                on_suspend=[lift_scoped],
+                on_resume=[lambda: defences.vulnerable_when.append(entry)],
+            )
+
         for kind in kinds:
             defences.vulnerable[kind] = defences.vulnerable.get(kind, 0) + amount
 

@@ -1689,6 +1689,13 @@ def candidates(
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
         "other_ally": allies(world, actor),
+        # **`"team"` was missing here entirely**, so a row declaring it
+        # raised `KeyError` at targeting and no row in the tree used it --
+        # which is why `_side`'s note that "a card meaning you as well says
+        # you and each ally, and `team` is that pool" described something
+        # unreachable. `Cast._side` has had it all along; this is the
+        # targeting half catching up. #364.
+        "team": [*allies(world, actor), actor],
         # Not a creature at all, and not in any of the pools above: scenery
         # has no `Side`, so every one of them is empty for it.
         "object": scenery(world, "object", loose=aim.loose),

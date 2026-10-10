@@ -1075,7 +1075,7 @@ def i1953p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.vulnerable(when=)",),
+    dropped=("c.resist(into_vulnerability=)",),
 )
 def i1977p1(c: Cast) -> None:
     """`c.resistances` reads what each enemy shrugs off, a negative

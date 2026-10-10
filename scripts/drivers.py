@@ -2018,6 +2018,130 @@ def item_as_weapon(out: Result) -> None:
             w.ref == ref for w in its_gear.weapons)
         out.that(got, f"{ref} puts its profile in the wearer's gear")
 
+
+############################################################
+
+def scoped_vulnerable(out: Result) -> None:
+    """Vulnerable to *some* of what reaches you, not all of it.
+
+    "Vulnerable 10 to the <monster>'s attacks" is narrower than
+    `c.vulnerable` could say: `Defences.vulnerable` is a flat
+    `dict[DamageType, int]`, a running total with nowhere to record what the
+    clause applies to. Unscoped, `m4307a2` made its victim vulnerable 10 to
+    **everything** -- so a monster's reaction handed the party's striker the
+    benefit.
+
+    The second of the three scope kinds `#471` names. The first was the move
+    kind and needed no new representation at all, because `step` already
+    carried it. This one does: the triples live beside the flat dict and are
+    read in `resolve.deal_damage`, against the same context immunity and
+    resistance are already read against.
+
+    **`max`, not a sum**, which is how the unscoped vulnerability is read
+    two lines above it: two clauses both apply and 4e takes the larger.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.resolve import _scoped_vuln
+    from combat_engine.engine.types import DamageType
+
+    world, caster, _ = _board()
+    foes = [e for e in world.having(Defences) if e != caster]
+    if not foes:
+        out.that(False, "the board fields something to be vulnerable")
+        return
+    foe = foes[0]
+    c = Cast(world=world, me=caster, ref="drivers:vuln")
+    ALL = (DamageType.FIRE, DamageType.UNTYPED)
+
+    # **The key is `source`, not `attacker`.** `deal_damage`'s own note
+    # says why: damage is dealt by things that are not swings -- ongoing
+    # damage, a zone's burn, a trait's `c.flat` -- so the dealer is the
+    # effect's owner rather than somebody taking a shot, and `from_attack`
+    # is how a gate tells the two apart.
+    #
+    # Worth spelling out because I got it wrong first and this driver did
+    # not catch it: it built its own context with `attacker`, so the two
+    # rows written against that key passed here and would never have fired
+    # in a real fight. The end-to-end assertion below is the one that bites.
+    mine = {"source": caster}
+    theirs = {"source": foe}
+    out.that(_scoped_vuln(world, foe, ALL, mine) == 0,
+             "with nothing recorded there is no scoped vulnerability")
+
+    held = c.vulnerable(10, on=foe, until=When.EONT,
+                        when=lambda ctx: ctx.get("source") == caster)
+    out.that(held is not None, "a scoped vulnerability is laid as an effect")
+    out.that(_scoped_vuln(world, foe, ALL, mine) == 10,
+             "and counts for the attacker it names")
+    out.that(_scoped_vuln(world, foe, ALL, theirs) == 0,
+             "**and not for anybody else**, which is the whole point")
+
+    # It stays out of the flat dict, so an unscoped read is unaffected.
+    held_def = world.get(foe, Defences)
+    out.that(not held_def.vulnerable,
+             "the flat dict is untouched, so an unscoped reader sees nothing")
+
+    # Typed scope: only the type it names.
+    c.vulnerable(3, DamageType.COLD, on=foe, until=When.EONT,
+                 when=lambda ctx: True)
+    out.that(_scoped_vuln(world, foe, (DamageType.COLD,), theirs) == 3,
+             "a typed scope counts for its own type")
+    out.that(_scoped_vuln(world, foe, (DamageType.ACID,), theirs) == 0,
+             "and not for another")
+
+    # Two clauses: the larger, not the sum.
+    c.vulnerable(4, DamageType.COLD, on=foe, until=When.EONT,
+                 when=lambda ctx: True)
+    out.that(_scoped_vuln(world, foe, (DamageType.COLD,), theirs) == 4,
+             "two clauses on one type take the larger, not the sum")
+
+    # Ending and suspension (#470).
+    world.effects.end(held, "driver")
+    out.that(_scoped_vuln(world, foe, ALL, mine) == 0
+             or _scoped_vuln(world, foe, (DamageType.COLD,), mine) == 4,
+             "ending one clause leaves the others standing")
+
+    # **End to end, through a real blow.** Every assertion above hands
+    # `_scoped_vuln` a context this driver built, which is exactly how the
+    # wrong key survived: the rows said `attacker` and so did the driver.
+    # This one lays the scope and then actually deals damage, so the context
+    # is `deal_damage`'s own.
+    w3, me3, _ = _board()
+    victim = next(e for e in w3.having(Defences) if e != me3)
+    mine3 = Cast(world=w3, me=me3, ref="drivers:vuln")
+    hp = w3.get(victim, Health)
+    if hp is not None:
+        mine3.vulnerable(5, on=victim, until=When.EONT,
+                         when=lambda ctx: ctx.get("source") == me3)
+        before = hp.hp
+        mine3.flat(10, on=victim)
+        mine3.vulnerable(0, on=victim)  # no-op, keeps the shape honest
+        out.that(before - hp.hp == 15,
+                 "a real blow from the named source takes 10 + the scoped 5")
+
+        w4, me4, _ = _board()
+        other4 = next(e for e in w4.having(Defences) if e != me4)
+        c4 = Cast(world=w4, me=me4, ref="drivers:vuln")
+        hp4 = w4.get(other4, Health)
+        c4.vulnerable(5, on=other4, until=When.EONT,
+                      when=lambda ctx: ctx.get("source") == -99)
+        was = hp4.hp
+        c4.flat(10, on=other4)
+        out.that(was - hp4.hp == 10,
+                 "and a blow from anybody else takes the 10 alone")
+
+    world2, me2, _ = _board()
+    other = next(e for e in world2.having(Defences) if e != me2)
+    c2 = Cast(world=world2, me=me2, ref="drivers:vuln")
+    sus = c2.vulnerable(7, on=other, until=When.EONT, when=lambda ctx: True)
+    out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "laid")
+    world2.effects.suspend(sus)
+    out.that(_scoped_vuln(world2, other, ALL, {}) == 0, "suspended, it lifts")
+    world2.effects.resume(sus)
+    out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -2046,6 +2170,8 @@ DRIVERS = {
                          "a keyword one creature's copy of a row carries"),
     "item_as_weapon": (item_as_weapon,
                        "an item that is also a weapon"),
+    "scoped_vulnerable": (scoped_vulnerable,
+                          "vulnerable to some of what reaches you"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
 

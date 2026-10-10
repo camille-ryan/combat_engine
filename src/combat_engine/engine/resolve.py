@@ -671,6 +671,36 @@ def _ignored_resist(
     return _mods(world, source, "ignore resist", ctx) + specific
 
 
+def _scoped_vuln(
+    world: World, target: int, types: tuple[DamageType, ...], ctx: dict
+) -> int:
+    """Vulnerability that applies to only some of what reaches the creature.
+
+    "Vulnerable 10 to the <monster>'s attacks", "vulnerable 3 to weapon
+    attacks" -- `Defences.vulnerable` is a flat total with nowhere to record
+    a scope, so these are kept as `(dtype, amount, when)` triples and read
+    here, against the same context immunity and resistance are read against.
+
+    `max` and not a sum, the same way the unscoped vulnerability above is
+    read: two clauses making a creature vulnerable both apply, and 4e takes
+    the largest rather than adding them. A `None` dtype is every type, which
+    is what the attacker-scoped clauses print.
+    """
+    from .components import Defences
+
+    held = world.get(target, Defences)
+    if held is None or not held.vulnerable_when:
+        return 0
+    return max(
+        (
+            amount
+            for dtype, amount, when in held.vulnerable_when
+            if (dtype is None or dtype in types) and when(ctx)
+        ),
+        default=0,
+    )
+
+
 def _immunity_ignored(
     world: World, source: int, types: tuple[DamageType, ...], ctx: dict
 ) -> int | None:
@@ -987,7 +1017,9 @@ def deal_damage(
                 0, resist - _ignored_resist(world, source, part_types, dmg_ctx)
             )
             worst_vuln = max(
-                worst_vuln, max(defences.vulnerable.get(t, 0) for t in part_types)
+                worst_vuln,
+                max(defences.vulnerable.get(t, 0) for t in part_types),
+                _scoped_vuln(world, target, part_types, dmg_ctx),
             )
             live.append([value, resist])
         resisted += ignored

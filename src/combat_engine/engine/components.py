@@ -254,6 +254,24 @@ class Defences:
 
     resist: dict[DamageType, int] = field(default_factory=dict)
     vulnerable: dict[DamageType, int] = field(default_factory=dict)
+    #: Vulnerability that applies to **some** of what reaches the creature:
+    #: `(dtype or None, amount, when)` triples, `when` a predicate on the
+    #: damage context.
+    #:
+    #: `vulnerable` above is a flat `dict[DamageType, int]` with nowhere to
+    #: record a scope, and eleven rows print one -- "vulnerable 10 to the
+    #: <monster>'s attacks", "vulnerable 3 to **weapon** attacks",
+    #: "vulnerable 5 to your attacks that deal the chosen type". A `None`
+    #: dtype means every type, which is what the attacker-scoped ones say.
+    #:
+    #: A list rather than a dict because two scoped vulnerabilities to the
+    #: same type are two different clauses and both count; the unscoped
+    #: dict is a running total and cannot say which clause put it there.
+    #: Read in `resolve.deal_damage` beside immunity and resistance, which
+    #: are already read against the same context. #471.
+    vulnerable_when: list[
+        tuple[DamageType | None, int, Callable[[dict[str, Any]], bool]]
+    ] = field(default_factory=list)
     immune: set[DamageType] = field(default_factory=set)
     #: Types the creature's insubstantial trait does **not** halve -- "takes
     #: half damage from any damage source, except those that deal force

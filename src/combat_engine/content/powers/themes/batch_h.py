@@ -1124,7 +1124,7 @@ def p15950(c: Cast) -> None:
             "an attack damages you while you are bloodied",
         ),
     ),
-    dropped=("c.vulnerable(when=)",),
+    dropped=("c.aura(vulnerable=)",),
 )
 def p15951(c: Cast) -> None:
     """The aura is laid. "Vulnerable 3 to weapon attacks" is not a damage
@@ -1731,7 +1731,7 @@ def p16694(c: Cast) -> None:
 @power(
     "p16046", level=0, cls=X7_939, usage=ENCOUNTER, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE, Keyword.PRIMAL],
-    dropped=("c.vulnerable(when=)",),
+    dropped=("c.aura(vulnerable=)",),
 )
 def p16046(c: Cast) -> None:
     """The resistance half is exact and is held on the geometry, so it comes

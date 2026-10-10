@@ -619,7 +619,7 @@ def f2294(c: Cast) -> None:
        on=Trigger(Hit, lambda w, me, ev: (
            ev.attacker == me and Keyword.PSIONIC in _keywords(ev.power)
        ), "you hit with a psionic power"),
-       dropped=("c.vulnerable(when=)",))
+       )
 def f2297(c: Cast) -> None:
     """"Augmented" is `c.points_spent`, which counts what went into that
     row this encounter. What is dropped is "of your powers": `c.vulnerable`
@@ -628,8 +628,13 @@ def f2297(c: Cast) -> None:
     foe = c.trigger.target
     if c.points_spent(c.trigger.power) <= 0:
         return
-    c.vulnerable(2, DamageType.FIRE, on=foe, until=When.EONT)
-    c.vulnerable(2, DamageType.PSYCHIC, on=foe, until=When.EONT)
+    # "The fire and the psychic damage **of your powers**" -- scoped to
+    # this character's own attacks, which is what was dropped. Unscoped it
+    # made the enemy vulnerable to everybody's fire.
+    me = c.me
+    mine = lambda ctx: ctx.get("source") == me  # noqa: E731
+    for kind in (DamageType.FIRE, DamageType.PSYCHIC):
+        c.vulnerable(2, kind, on=foe, until=When.EONT, when=mine)
 
 
 @power("f2299", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
