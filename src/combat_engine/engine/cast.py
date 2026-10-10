@@ -5738,12 +5738,42 @@ class Cast:
         )
 
     def forbid(
-        self, ref: str, *, on: int | None = None, until: When = When.SAVE_ENDS
+        self,
+        ref: str = "",
+        *,
+        keyword: Keyword | None = None,
+        lacking: Keyword | None = None,
+        on: int | None = None,
+        until: When = When.SAVE_ENDS,
     ) -> Effect | None:
         """Take a row away for a while. "Loses the ability to use ..."
 
         Not the same as spending it: the creature still has the row and
         simply cannot reach it, so it comes back when the effect ends.
+
+        **Three sentences, and two of them are opposites.** Seven rows carried
+        `c.forbid(keyword=)` as one marker and the cards read:
+
+            keyword=   "cannot use powers that HAVE the polymorph keyword"
+                       -- two items, imposed on a target, save ends.
+                       `p12344`'s "cannot teleport" is the same sentence
+                       about a different keyword.
+            lacking=   "can't use weapon or implement attack powers that
+                       LACK the beast form keyword" -- four form rows,
+                       self-imposed, lasting as long as the shape.
+
+        They are kept as two arguments and two sets rather than one inverted
+        into the other, because **both can be true of one creature at once**
+        and a single set could not say which direction each entry meant.
+
+        `lacking=` also writes the printed exception: *"although you can
+        sustain such powers"*. Every row the creature currently has standing
+        is recorded as sustainable at the moment the restriction lands, so
+        changing shape does not cancel the zone it was holding. A refusal
+        written without that is the half most easily dropped and the one
+        that would be most visible in play.
+
+        #487.
         """
         from .components import Powers
 
@@ -5753,16 +5783,44 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
+        if not ref and keyword is None and lacking is None:
+            return None
+
+        undo: list[Callable[[], None]] = []
+        label = f"{self.ref} forbids {ref or keyword or lacking}"
+        if ref:
+            undo.append(lambda: known.forbidden.discard(ref))
+        if keyword is not None:
+            undo.append(lambda: known.forbidden_keywords.discard(keyword))
+        standing: set[str] = set()
+        if lacking is not None:
+            # What is already running is exempt, read **now** rather than when
+            # the refusal is asked: the card says you may sustain "such
+            # powers", meaning the ones you were already sustaining, not any
+            # power you happen to have standing later.
+            standing = {
+                e.label.split()[0]
+                for e in self.world.effects.of(who)
+                if e.label and e.label.split()[0] in known.all
+            }
+            undo.append(lambda: known.required_keywords.discard(lacking))
+            undo.append(lambda: known.sustainable.difference_update(standing))
+
         # The effect first. Adding to `forbidden` before it exists meant a
         # caller that swallowed the raise left the row taken away with
         # nothing alive to ever give it back.
         effect = self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} forbids {ref}",
-            on_end=[lambda: known.forbidden.discard(ref)],
+            who, self.me, until, label=label, on_end=undo,
         )
         if effect is None:
             return None
-        known.forbidden.add(ref)
+        if ref:
+            known.forbidden.add(ref)
+        if keyword is not None:
+            known.forbidden_keywords.add(keyword)
+        if lacking is not None:
+            known.required_keywords.add(lacking)
+            known.sustainable |= standing
         return effect
 
     def rolls_with(

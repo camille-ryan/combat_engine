@@ -758,7 +758,6 @@ def p12343(c: Cast) -> None:
     target=EACH_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(Pick.PRIMARY, vs=FORT),
-    dropped=("c.forbid(keyword=)",),
 )
 def p12344(c: Cast) -> None:
     """Restrained, and half-blind while it is.
@@ -771,8 +770,12 @@ def p12344(c: Cast) -> None:
     hold's own `save_mod` -- narrowed to this effect, where a `"save"`
     modifier would apply to every roll the creature made.
 
-    "The target cannot teleport" is the dropped half: `c.forbid` takes one
-    row's ref, and this forbids every row carrying a keyword.
+    "The target cannot teleport" is written now, as
+    `c.forbid(keyword=Keyword.TELEPORTATION)`. The note here said `c.forbid`
+    "takes one row's ref, and this forbids every row carrying a keyword" --
+    which was the gap, and is the reading `#487` built. It rides the same
+    `save_mod`-bearing hold, so the one printed save clears the restraint,
+    the concealment and this together.
     """
     better = _enhanced(c)
     if not c.strike():
@@ -788,6 +791,7 @@ def p12344(c: Cast) -> None:
     )
     if hold is None:
         return
+    c.forbid(keyword=Keyword.TELEPORTATION, on=foe, until=When.SAVE_ENDS)
     for other in c.within(30, of=foe, side="other"):
         veil = c.conceal(
             on=other, until=When.ENCOUNTER, when=_unless_adjacent(c, foe, other)

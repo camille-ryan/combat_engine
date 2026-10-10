@@ -1930,6 +1930,26 @@ def usable(
             return False, "not known"
         if p.ref in powers.forbidden:
             return False, "cannot be used right now"
+        # **Two keyword prohibitions, and they point opposite ways.** Read
+        # through `keywords_of` rather than `p.keywords`, for #483's reason:
+        # a feat can grant a keyword to one character's copy of a row, and a
+        # refusal reading the header would ignore the grant.
+        if powers.forbidden_keywords or powers.required_keywords:
+            mine = keywords_of(world, actor, p)
+            barred = mine & powers.forbidden_keywords
+            if barred:
+                return False, f"cannot use {sorted(barred)[0].value} powers"
+            # "You can't use weapon or implement attack powers that lack the
+            # beast form keyword, **although you can sustain such powers.**"
+            # The exception is the half most easily dropped, and dropping it
+            # cancels every zone and stance the character had running when it
+            # changed shape -- so a row already standing is exempt.
+            if powers.required_keywords and p.ref not in powers.sustainable:
+                missing = powers.required_keywords - mine
+                if missing:
+                    return False, (
+                        f"needs the {sorted(missing)[0].value} keyword"
+                    )
         # Checked for every usage, because **every printed "1/round" rider
         # is on an at-will** -- and this lived inside the not-at-will branch,
         # so the guard was unreachable and the header field was decoration.

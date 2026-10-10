@@ -1637,7 +1637,6 @@ def p16436(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.forbid(keyword=)",),
 )
 def p16535(c: Cast) -> None:
     """The form and the printed alternative -- end it as a minor action and
@@ -1665,6 +1664,7 @@ def p16535(c: Cast) -> None:
     shape = c.form(until=When.ENCOUNTER, revert=None, label=c.ref, name="beast")
     c.endable(shape, MINOR, then=lambda: c.shift(1, who=c.me))
     c.low_light(until=When.ENCOUNTER)
+    c.forbid(lacking=Keyword.BEAST_FORM, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

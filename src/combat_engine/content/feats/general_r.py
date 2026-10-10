@@ -1703,7 +1703,7 @@ def f3646(c: Cast) -> None:
 @power("f3646b", level=1, cls="", usage=AT_WILL, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.PRIMAL, Keyword.POLYMORPH], once_per_round=True,
-       dropped=("c.forbid(keyword=)",))
+       )
 def f3646b(c: Cast) -> None:
     """The printed form "normally doesn't change your game statistics", so
     `c.form` is taken bare -- no conditions, no modes -- with a minor
@@ -1732,6 +1732,7 @@ def f3646b(c: Cast) -> None:
     The equipment clauses are bookkeeping with no combat consequence."""
     shape = c.form(label="beast form", revert=MINOR, until=When.ENCOUNTER,
                    name="beast")
+    c.forbid(lacking=Keyword.BEAST_FORM, on=c.me, until=When.ENCOUNTER)
     c.endable(shape, MINOR, then=lambda: c.shift(1))
 
 

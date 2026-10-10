@@ -1460,7 +1460,7 @@ def p16432(c: Cast) -> None:
 @power(
     "p16530", level=0, cls=X7_993, usage=ENCOUNTER, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-    dropped=("spec.inline_block()", "c.forbid(keyword=)"),
+    dropped=("spec.inline_block()",),
 )
 def p16530(c: Cast) -> None:
     """The form itself is written: it holds until the encounter ends, it is
@@ -1471,8 +1471,17 @@ def p16530(c: Cast) -> None:
     with no ref of its own, so there is nothing to decorate and nothing to
     grant. The ban is by keyword rather than by row, and `c.forbid` names one
     row. Low-light vision is the twelve-row hold it always is.
+
+    **Two of the three are written now.** `c.forbid(lacking=)` says "cannot
+    use powers that lack the beast form keyword" -- the direction `c.forbid`
+    could not express, since it names one row and the card names a keyword --
+    and `name=` makes the shape askable through `query.in_form` rather than
+    only findable by its label. What is left is the second block the page
+    prints under this ref with no ref of its own.
     """
-    beast = c.form(until=When.ENCOUNTER, revert=None, label=c.ref)
+    beast = c.form(until=When.ENCOUNTER, revert=None, label=c.ref,
+                   name="beast")
+    c.forbid(lacking=Keyword.BEAST_FORM, on=c.me, until=When.ENCOUNTER)
     small = c.resize(Size.SMALL, until=When.ENCOUNTER)
 
     def back() -> None:

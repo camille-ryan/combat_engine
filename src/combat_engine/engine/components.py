@@ -689,6 +689,23 @@ class Powers:
     #: Rows taken away for a while. Not the same as spent: a forbidden row
     #: is one the creature still has and cannot currently reach.
     forbidden: set[str] = field(default_factory=set)
+    #: Keywords whose rows cannot be used. *"The target is dazed and cannot
+    #: use powers that have the polymorph keyword"* -- two items print that,
+    #: and `p12344`'s "cannot teleport" is the same thing said about a
+    #: different keyword.
+    forbidden_keywords: set[Keyword] = field(default_factory=set)
+    #: Keywords a row **must** carry to be usable -- the opposite reading,
+    #: and four rows print it: *"you can't use weapon or implement attack
+    #: powers that lack the beast form keyword."* Kept apart from
+    #: `forbidden_keywords` rather than inverted into it, because the two
+    #: sentences coexist on one creature and a single set cannot say which
+    #: direction each entry means. #487.
+    required_keywords: set[Keyword] = field(default_factory=set)
+    #: Rows exempt from `required_keywords` because they are only being
+    #: *sustained*. Every one of those four cards prints "although you can
+    #: sustain such powers", and a refusal written without it cancels every
+    #: zone and stance the character had running when it shifted.
+    sustainable: set[str] = field(default_factory=set)
     #: Which ability a named row rolls, when something has changed it.
     #: Keyed by ref, each entry an `(ability, when)` pair -- sixteen feats
     #: print "you may use Dexterity instead of Strength with <row>", and

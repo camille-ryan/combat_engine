@@ -1377,12 +1377,16 @@ def i1880x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with a melee attack using this weapon",
     on=Trigger(Hit, both(by_me, by_melee), "you hit with a melee attack"),
-    dropped=("c.forbid(keyword=)",),
 )
 def i1880p1(c: Cast) -> None:
-    """`c.forbid` takes one ref away and the card takes a keyword away, so
-    the polymorph half is dropped and the daze lands."""
+    """Dazed **and** barred from polymorph powers, on the one save the card
+    prints for both.
+
+    The note here said "`c.forbid` takes one ref away and the card takes a
+    keyword away, so the polymorph half is dropped". `c.forbid(keyword=)`
+    takes the keyword away now, which is the whole of it."""
     c.dazed(until=When.SAVE_ENDS)
+    c.forbid(keyword=Keyword.POLYMORPH, until=When.SAVE_ENDS)
 
 
 @power(
@@ -1418,11 +1422,20 @@ def i2459x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    todo=("c.end_forms(on=)", "c.forbid(keyword=)"),
+    dropped=("c.end_forms(on=)",),
 )
 def i2459p1(c: Cast) -> None:
-    """Both halves are missing: nothing ends a form from outside it, and
-    nothing bars a keyword."""
+    """"Reverts to its natural form **and** cannot use powers that have the
+    polymorph keyword (save ends)."
+
+    The second half is written now. The first is not: nothing ends a form
+    from *outside* it -- `c.form` is laid by the creature changing shape and
+    there is no verb for a third party stripping it -- so this is `dropped=`
+    rather than `todo=`, because the row now does something in play.
+
+    The two halves are not redundant. Barring the keyword stops it shifting
+    *again*; it does not undo the shape it is already wearing."""
+    c.forbid(keyword=Keyword.POLYMORPH, until=When.SAVE_ENDS)
 
 
 @power(

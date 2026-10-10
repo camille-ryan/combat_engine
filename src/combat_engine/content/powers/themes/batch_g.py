@@ -1496,18 +1496,23 @@ def p16414(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.forbid(keyword=)",),
 )
 def p16525(c: Cast) -> None:
     """`revert=None` and `c.endable` instead of `c.form(revert=MINOR)`,
     because leaving the form is not a bare exit -- it is a minor action
     that also shifts you a square.
 
-    **One clause has no verb**, and this note said two. Low-light vision is
-    `c.low_light` and is called two lines down -- the note outlived the fix.
-    What is genuinely unwritable is barring every power that lacks a keyword,
-    which is the `c.forbid(keyword=)` in the marker and is shared with
-    `p16535` and `f3646b`.
+    **Every clause is written now.** This note has twice described a gap
+    that had closed: it said two clauses had no verb when low-light vision
+    already had one, and then named barring powers that lack a keyword as the
+    one remaining. That is `c.forbid(lacking=)` -- a second reading of
+    `c.forbid`, because the card bars what *lacks* the keyword where
+    `c.forbid(keyword=)` bars what has it, and both exist in the tree.
+
+    The printed exception rides with it: "although you can sustain such
+    powers" means whatever was already standing when the shape was taken
+    stays usable, so changing form does not cancel the zone you were
+    holding.
 
     `name=` as well as the label, so the three rows in this theme that print
     "while you are in beast form" can read the state through `c.in_form`
@@ -1520,6 +1525,7 @@ def p16525(c: Cast) -> None:
                    name="beast")
     c.endable(shape, MINOR, then=lambda: c.shift(1))
     c.low_light(until=When.ENCOUNTER)
+    c.forbid(lacking=Keyword.BEAST_FORM, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

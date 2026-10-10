@@ -2378,6 +2378,116 @@ def recharge_when(out: Result) -> None:
              " event, two different creatures, and only one is the card\'s")
 
 
+def keyword_ban(out: Result) -> None:
+    """Two keyword prohibitions that point opposite ways, on one creature.
+
+    Seven rows carried `c.forbid(keyword=)` as one marker and the cards read
+    three different sentences:
+
+        keyword=   "cannot use powers that HAVE the polymorph keyword"
+                   -- two items, imposed on a target, save ends. `p12344`'s
+                   "cannot teleport" is the same shape, different keyword.
+        lacking=   "can't use weapon or implement attack powers that LACK
+                   the beast form keyword" -- four form rows, self-imposed.
+
+    **Both can be true of one creature at once**, which is why they are two
+    sets rather than one inverted into the other, and this asserts that
+    directly: a creature barred from polymorph *and* required to carry beast
+    form refuses a polymorph power for the first reason and a plain power for
+    the second.
+
+    The rule most likely to be dropped is the printed exception --
+    *"although you can sustain such powers"* -- and dropping it cancels every
+    zone and stance the character was holding when it changed shape.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import get, usable
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import Keyword
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:ban")
+    known = world.need(me, Powers)
+
+    # The board is built around this ref, so the creature already knows it.
+    # `Powers.all` is derived, not a set -- `known` is the list to add to.
+    plain = "m145a0"          # no beast form keyword
+    if plain not in known.known:
+        known.known.append(plain)
+
+    ok, why = usable(world, me, get(plain))
+    out.that(ok, f"before any ban the row is usable ({why})")
+
+    # ---- `lacking=`: only keyworded powers allowed --------------------
+    held = c.forbid(lacking=Keyword.BEAST_FORM, on=me, until=When.ENCOUNTER)
+    out.that(held is not None, "the restriction is laid as an effect")
+    ok, why = usable(world, me, get(plain))
+    out.that(not ok, f"a row LACKING the keyword is refused ({why})")
+    out.that("beast form" in (why or ""),
+             "and the reason names the keyword, not a generic refusal")
+
+    bf = get("p16537")
+    out.that(bf is not None and Keyword.BEAST_FORM in bf.keywords,
+             "p16537 carries the keyword")
+    if "p16537" not in known.known:
+        known.known.append("p16537")
+    ok, _ = usable(world, me, bf)
+    out.that(ok, "a row that HAS the keyword is still usable -- the negative"
+                 " control, and without it a blanket refusal passes above")
+
+    world.effects.end(held, "driver")
+    ok, _ = usable(world, me, get(plain))
+    out.that(ok, "ending the restriction gives the plain row back")
+
+    # ---- the sustain exception --------------------------------------
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:ban")
+    known = world.need(me, Powers)
+    if plain not in known.known:
+        known.known.append(plain)
+    # something of that row is already standing when the shape is taken
+    world.effects.apply(me, me, When.ENCOUNTER, label=f"{plain} zone")
+    c.forbid(lacking=Keyword.BEAST_FORM, on=me, until=When.ENCOUNTER)
+    ok, why = usable(world, me, get(plain))
+    out.that(ok,
+             "a row already standing when the shape was taken may still be"
+             " sustained -- the printed exception, and the half whose absence"
+             f" would cancel every zone the character was holding ({why})")
+
+    # ---- `keyword=`: that keyword barred, everything else fine -------
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:ban")
+    known = world.need(me, Powers)
+    if plain not in known.known:
+        known.known.append(plain)
+    # **A row the keyword actually reaches.** `m145a0` carries no keywords
+    # at all, so banning one of them proves nothing -- the first version of
+    # this rule banned WEAPON and went red, which is the plant test working
+    # on the test rather than on the code. `p16537` carries BEAST_FORM.
+    banned = get("p16537")
+    if "p16537" not in known.known:
+        known.known.append("p16537")
+    out.that(banned is not None and Keyword.BEAST_FORM in banned.keywords,
+             "p16537 carries the keyword about to be banned")
+    ok, _ = usable(world, me, banned)
+    out.that(ok, "and is usable before the ban")
+    c.forbid(keyword=Keyword.BEAST_FORM, on=me, until=When.SAVE_ENDS)
+    ok, why = usable(world, me, banned)
+    out.that(not ok, f"barred once the keyword is forbidden ({why})")
+    ok, _ = usable(world, me, get(plain))
+    out.that(ok, "while a row carrying NO keywords is untouched -- the"
+                 " negative control for this direction")
+
+    # ---- both at once, which is why they are two sets ----------------
+    c.forbid(lacking=Keyword.POLYMORPH, on=me, until=When.ENCOUNTER)
+    out.that(Keyword.BEAST_FORM in known.forbidden_keywords
+             and Keyword.POLYMORPH in known.required_keywords,
+             "one creature holds a forbidden keyword AND a required one --"
+             " a single set could not say which direction each meant")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -2390,6 +2500,8 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "keyword_ban": (keyword_ban,
+                    "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
     "class_form": (class_form,
