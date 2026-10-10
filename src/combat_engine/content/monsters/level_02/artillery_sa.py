@@ -312,7 +312,7 @@ def m1655a1(c: Cast) -> None:
     "m1655a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=AreaBurst(3, 20),
     target=EACH_CREATURE,
@@ -658,13 +658,14 @@ def m4178a2(c: Cast) -> None:
     "m4178a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_OTHER,
     keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=5),
     damage=Damage("3d6", 2, dtype=DamageType.FIRE, kind=LIMITED, half_on_miss=True),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4178a3(c: Cast) -> None:
     """"Recharges when first bloodied" on top of the die the database files:
@@ -816,13 +817,14 @@ def m4502a3(c: Cast) -> None:
     "m4502a4",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=5),
     damage=Damage("1d10", 1, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4502a4(c: Cast) -> None:
     """"1d4 random creatures in the burst" is a *count* rolled at use time and
@@ -843,7 +845,7 @@ def m4502a4(c: Cast) -> None:
     "m4502a5",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=MINOR,
     reach=Ranged(5),
     target=Target(
@@ -1089,7 +1091,7 @@ def m5441a2(c: Cast) -> None:
     "m5441a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Ranged(10),
     target=UpTo(2),
@@ -1356,7 +1358,7 @@ def m6507a2(c: Cast) -> None:
     "m6507a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=AreaBurst(1, 15),
     target=EACH_CREATURE,

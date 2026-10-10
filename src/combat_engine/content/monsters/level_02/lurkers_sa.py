@@ -262,13 +262,14 @@ def m1430a3(c: Cast) -> None:
     "m1430a4",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_OTHER,
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("1d12", 3, dtype=DamageType.ACID, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m1430a4(c: Cast) -> None:
     """"Save ends both" is two holds here rather than one: `c.ongoing` carries a
@@ -357,12 +358,13 @@ def m1432a3(c: Cast) -> None:
     "m1432a4",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d8", 2, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m1432a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -663,7 +665,7 @@ def m3441a2(c: Cast) -> None:
     "m3441a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
@@ -790,7 +792,7 @@ def m4299a1(c: Cast) -> None:
     "m4299a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=ActionType.IMMEDIATE_REACTION,
     reach=Melee(1),
     target=NO_TARGET,
@@ -1121,7 +1123,7 @@ def m5281a3(c: Cast) -> None:
     "m5281a4",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
@@ -1534,7 +1536,7 @@ def m5848a1(c: Cast) -> None:
     "m5848a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
@@ -1563,7 +1565,7 @@ def m5848a2(c: Cast) -> None:
     "m5848a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -1571,6 +1573,7 @@ def m5848a2(c: Cast) -> None:
     damage=Damage("1d6", 4),
     requires=_is_prone,
     requires_text="must be prone",
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5848a3(c: Cast) -> None:
     """The header copies the sword's own line so the card and the policy can
@@ -1644,13 +1647,14 @@ def m5867a1(c: Cast) -> None:
     "m5867a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("2d6", 8, dtype=DamageType.POISON, kind=LIMITED, half_on_miss=True),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5867a2(c: Cast) -> None:
     _recharge_when_using(c, "m5867a3")
@@ -1666,11 +1670,12 @@ def m5867a2(c: Cast) -> None:
     "m5867a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ILLUSION],
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5867a3(c: Cast) -> None:
     _recharge_when_using(c, "m5867a2")

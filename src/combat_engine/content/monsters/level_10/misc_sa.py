@@ -538,7 +538,7 @@ def m790a1(c: Cast) -> None:
     "m790a2",
     level=10,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(3),
     target=Target(side="enemy", everyone=True, label="enemies in the burst"),
@@ -555,13 +555,14 @@ def m790a2(c: Cast) -> None:
     "m790a3",
     level=10,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(5),
     target=Target(side="enemy", everyone=True, label="enemies in the burst"),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 10, dtype=DamageType.PSYCHIC, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m790a3(c: Cast) -> None:
     _recharge_when_bloodied(c)

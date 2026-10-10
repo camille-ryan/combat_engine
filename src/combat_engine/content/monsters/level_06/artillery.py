@@ -656,7 +656,7 @@ def m492a5(c: Cast) -> None:
     "m492a6",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(10),
     target=Target("any", 3, label="Up to three creatures in the blast"),

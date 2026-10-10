@@ -595,7 +595,7 @@ def m5027a1(c: Cast) -> None:
     "m5027a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,

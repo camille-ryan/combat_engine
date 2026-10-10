@@ -198,7 +198,7 @@ def m1037a0(c: Cast) -> None:
     "m1037a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=Target(side="enemy", count=1, max_size=Size.MEDIUM, label="Medium or smaller"),
@@ -466,11 +466,12 @@ def m115865a2(c: Cast) -> None:
     "m115865a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=11),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m115865a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -605,7 +606,7 @@ def m1453a1(c: Cast) -> None:
     "m1453a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_OTHER,
@@ -672,12 +673,13 @@ def m1521a0(c: Cast) -> None:
     "m1521a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("3d10", 5),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m1521a1(c: Cast) -> None:
     """Two bites at one target, each at the -2 the card prints -- read as
@@ -1245,7 +1247,7 @@ def m3320a0(c: Cast) -> None:
     "m3320a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
@@ -1674,11 +1676,12 @@ def m5388a0(c: Cast) -> None:
     "m5388a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=11),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5388a1(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1885,7 +1888,7 @@ def m5494a1(c: Cast) -> None:
     "m5494a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -1902,10 +1905,11 @@ def m5494a2(c: Cast) -> None:
     "m5494a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5494a3(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2108,7 +2112,7 @@ def m5778a3(c: Cast) -> None:
     "m5778a4",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
@@ -2268,7 +2272,7 @@ def m5975a0(c: Cast) -> None:
     "m5975a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
@@ -2332,7 +2336,7 @@ _M5982_ALLY_BLOODIED = "an ally within 10 squares of m5982 is first bloodied"
     "m5982a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -2508,7 +2512,7 @@ def m6168a2(c: Cast) -> None:
     "m6168a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2542,10 +2546,11 @@ def m6168a3(c: Cast) -> None:
     "m6168a4",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6168a4(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2658,10 +2663,11 @@ def m6501a1(c: Cast) -> None:
     "m6501a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6501a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -2882,7 +2888,7 @@ def m6619a2(c: Cast) -> None:
     "m6619a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,

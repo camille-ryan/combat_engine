@@ -870,7 +870,7 @@ def m6544a2(c: Cast) -> None:
     "m6544a3",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,

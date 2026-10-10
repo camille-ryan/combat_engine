@@ -28,7 +28,7 @@ _M709_CONDITIONED = "the m709 is hit by an attack that applies a condition"
     "m709a1",
     level=13,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=INTERRUPT,
     reach=Ranged(5),
     target=ONE_CREATURE,

@@ -563,7 +563,7 @@ def m291a0(c: Cast) -> None:
     "m291a1",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
@@ -1479,10 +1479,11 @@ def m4925a2(c: Cast) -> None:
     "m4925a3",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4925a3(c: Cast) -> None:
     """m4925a1 twice into one creature, and the daze for landing both.
@@ -1721,7 +1722,7 @@ def m495a5(c: Cast) -> None:
     "m495a6",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_OTHER,
@@ -1857,13 +1858,14 @@ def m5032a2(c: Cast) -> None:
     "m5032a3",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=6),
     damage=Damage("2d6", 2, dtype=DamageType.PSYCHIC, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5032a3(c: Cast) -> None:
     """"Recharge when first bloodied" has no spelling of its own -- the

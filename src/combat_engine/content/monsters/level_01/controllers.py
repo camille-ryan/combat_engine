@@ -233,7 +233,7 @@ def m2978a1(c: Cast) -> None:
     "m2978a2",
     level=1,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(10),
     target=UpTo(2),

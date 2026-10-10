@@ -315,7 +315,7 @@ def m2938a1(c: Cast) -> None:
     "m2938a2",
     level=9,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,

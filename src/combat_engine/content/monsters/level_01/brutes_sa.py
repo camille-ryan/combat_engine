@@ -311,13 +311,14 @@ def m1437a2(c: Cast) -> None:
     "m1437a3",
     level=1,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_OTHER,
     keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=2),
     damage=Damage("3d6", 4, dtype=DamageType.COLD, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m1437a3(c: Cast) -> None:
     """"Save ends both" is one effect with two conditions and exactly one
@@ -496,7 +497,7 @@ def m4615a1(c: Cast) -> None:
     "m4615a2",
     level=1,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
@@ -777,13 +778,14 @@ def m5283a1(c: Cast) -> None:
     "m5283a2",
     level=1,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=6),
     damage=Damage("4d6", 4, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5283a2(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1147,7 +1149,7 @@ def m5568a2(c: Cast) -> None:
     "m5568a3",
     level=1,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_OTHER,

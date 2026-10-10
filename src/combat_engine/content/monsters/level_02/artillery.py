@@ -508,7 +508,7 @@ def m5031a1(c: Cast) -> None:
     "m5031a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,

@@ -186,7 +186,7 @@ def m2941a1(c: Cast) -> None:
     "m2941a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_ENEMY,

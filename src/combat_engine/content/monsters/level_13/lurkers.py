@@ -229,7 +229,7 @@ def m4985a3(c: Cast) -> None:
     "m4985a4",
     level=13,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=MINOR,
     reach=CloseBlast(3),
     target=EACH_ENEMY,

@@ -299,7 +299,7 @@ def m1017a0(c: Cast) -> None:
 
 
 @power(
-    "m1017a1", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1017a1", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=UpTo(2), attack=Attack(vs=AC, printed=13),
     damage=Damage("3d10", 5, kind=LIMITED),
 )
@@ -405,7 +405,7 @@ def m1061a1(c: Cast) -> None:
 
 
 @power(
-    "m1061a2", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1061a2", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=11),
 )
@@ -618,7 +618,7 @@ def m115916a2(c: Cast) -> None:
 
 
 @power(
-    "m115916a3", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m115916a3", level=8, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.ILLUSION],
 )
 def m115916a3(c: Cast) -> None:
@@ -649,7 +649,7 @@ def m1483a0(c: Cast) -> None:
 
 
 @power(
-    "m1483a1", level=8, usage=Usage.RECHARGE, recharge=6, action=INTERRUPT,
+    "m1483a1", level=8, usage=Usage.RECHARGE, recharge=4, action=INTERRUPT,
     reach=Melee(1), target=NO_TARGET, keywords=[Keyword.FIRE],
     attack=Attack(vs=REF, printed=13), damage=Damage("1d6", 5, dtype=DamageType.FIRE, kind=LIMITED),
     trigger="an adjacent enemy shifts",
@@ -672,7 +672,7 @@ def m1483a2(c: Cast) -> None:
 
 
 @power(
-    "m1483a3", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1483a3", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(2), target=ONE_CREATURE, keywords=[Keyword.FIRE],
     attack=Attack(vs=AC, printed=15), damage=Damage("2d8", 7, dtype=DamageType.FIRE, kind=LIMITED),
 )
@@ -705,7 +705,7 @@ def m1506a1(c: Cast) -> None:
 
 
 @power(
-    "m1506a2", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1506a2", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=11),
 )
@@ -820,7 +820,7 @@ def m1768a0(c: Cast) -> None:
 
 
 @power(
-    "m1768a1", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1768a1", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=CloseBurst(2), target=EACH_ENEMY, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("3d6", 5, kind=LIMITED),
 )
@@ -870,7 +870,7 @@ def m1779a0(c: Cast) -> None:
 
 
 @power(
-    "m1779a1", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1779a1", level=8, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5, kind=LIMITED),
 )
@@ -940,7 +940,7 @@ def m1937a1(c: Cast) -> None:
 
 
 @power(
-    "m1937a2", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1937a2", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=CloseBlast(5), target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=13), damage=Damage("3d8", 5, kind=LIMITED),
 )
@@ -1043,7 +1043,7 @@ def m2505a1(c: Cast) -> None:
 
 
 @power(
-    "m2505a2", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m2505a2", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=11),
 )
@@ -1753,9 +1753,10 @@ def m4749a2(c: Cast) -> None:
 
 
 @power(
-    "m4749a3", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m4749a3", level=8, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=CloseBurst(2), target=EACH_ENEMY, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("1d12", 6, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4749a3(c: Cast) -> None:
     if c.strike():
@@ -1763,7 +1764,7 @@ def m4749a3(c: Cast) -> None:
 
 
 @power(
-    "m4749a4", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m4749a4", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Ranged(10), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=REF, printed=11), damage=Damage("2d8", 8, kind=LIMITED),
 )
@@ -1849,7 +1850,7 @@ def m4755a2(c: Cast) -> None:
 
 
 @power(
-    "m4755a3", level=8, usage=Usage.RECHARGE, recharge=6, action=INTERRUPT,
+    "m4755a3", level=8, usage=Usage.RECHARGE, recharge=5, action=INTERRUPT,
     reach=PERSONAL, target=NO_TARGET,
     trigger="it is hit by a melee attack",
     on=Trigger(
@@ -1911,7 +1912,7 @@ def m5096a2(c: Cast) -> None:
 
 
 @power(
-    "m5096a3", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5096a3", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=CloseBurst(1), target=EACH_ENEMY, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("2d10", 10, kind=LIMITED),
 )
@@ -2458,10 +2459,11 @@ def m5628a3(c: Cast) -> None:
 
 
 @power(
-    "m5628a4", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5628a4", level=8, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=CloseBlast(3), target=EACH_OTHER, keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("2d12", 5, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5628a4(c: Cast) -> None:
     """"Recharge when first bloodied" is on top of the die, the same two
@@ -2603,12 +2605,13 @@ def m5646a2(c: Cast) -> None:
 
 
 @power(
-    "m5646a3", level=8, usage=Usage.RECHARGE, recharge=6, action=MINOR,
+    "m5646a3", level=8, usage=Usage.RECHARGE, recharge=0, action=MINOR,
     target=Target(
         side="enemy", count=1, label="creature grabbed by it",
         relation=Relation.GRABBED_BY,
     ),
     reach=Melee(1), attack=Attack(vs=FORT, printed=11), damage=Damage("1d6", 3, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5646a3(c: Cast) -> None:
     if c.first:
@@ -3010,7 +3013,7 @@ def m5835a2(c: Cast) -> None:
 
 
 @power(
-    "m5835a3", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5835a3", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=CloseBurst(2), target=EACH_ENEMY, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("2d10", 7, kind=LIMITED),
 )
@@ -3084,7 +3087,7 @@ def m5858a2(c: Cast) -> None:
 
 
 @power(
-    "m5858a3", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5858a3", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(2), target=ONE_CREATURE, attack=Attack(vs=REF, printed=11),
     damage=Damage("3d12", 6, kind=LIMITED, half_on_miss=True),
 )
@@ -3180,7 +3183,7 @@ def m5974a0(c: Cast) -> None:
 
 
 @power(
-    "m5974a1", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5974a1", level=8, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("2d10", 5, kind=LIMITED),
 )
@@ -3345,7 +3348,7 @@ def m6020a3(c: Cast) -> None:
 
 
 @power(
-    "m6020a4", level=8, usage=Usage.RECHARGE, recharge=6, action=MINOR,
+    "m6020a4", level=8, usage=Usage.RECHARGE, recharge=5, action=MINOR,
     reach=CloseBurst(5), target=EACH_ALLY,
 )
 def m6020a4(c: Cast) -> None:
@@ -3741,10 +3744,11 @@ def m919a1(c: Cast) -> None:
 
 
 @power(
-    "m919a2", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m919a2", level=8, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.DIVINE, Keyword.THUNDER, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d12", 9, dtype=DamageType.THUNDER, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m919a2(c: Cast) -> None:
     if c.first:
@@ -3874,7 +3878,7 @@ def m954a1(c: Cast) -> None:
 
 
 @power(
-    "m954a2", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m954a2", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(2), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("2d10", 5, kind=LIMITED),
 )

@@ -304,7 +304,7 @@ def m1120a2(c: Cast) -> None:
     "m1120a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
@@ -457,7 +457,7 @@ def m1167a1(c: Cast) -> None:
 
 
 @power(
-    "m1167a2", level=8, usage=Usage.RECHARGE, recharge=6, action=MOVE,
+    "m1167a2", level=8, usage=Usage.RECHARGE, recharge=5, action=MOVE,
     reach=PERSONAL, target=NO_TARGET,
 )
 def m1167a2(c: Cast) -> None:
@@ -516,7 +516,7 @@ def m1184a0(c: Cast) -> None:
     "m1184a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -636,7 +636,7 @@ def m1818a1(c: Cast) -> None:
     "m1818a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -744,7 +744,7 @@ def m1819a1(c: Cast) -> None:
     "m1819a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -863,7 +863,7 @@ def m1826a2(c: Cast) -> None:
     "m1826a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -952,7 +952,7 @@ def m1930a0(c: Cast) -> None:
     "m1930a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -1019,7 +1019,7 @@ def m2010a0(c: Cast) -> None:
     "m2010a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -1337,7 +1337,7 @@ def m3289a1(c: Cast) -> None:
     "m3289a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -1568,7 +1568,7 @@ def m3471a0(c: Cast) -> None:
     "m3471a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -1753,7 +1753,7 @@ def m3650a0(c: Cast) -> None:
     "m3650a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
@@ -1863,7 +1863,7 @@ def m3675a1(c: Cast) -> None:
     "m3675a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=MINOR,
     reach=CloseBurst(5),
     target=ONE_CREATURE,
@@ -1954,7 +1954,7 @@ _M4255_MISS = "a melee attack misses m4255"
     "m4255a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -1993,7 +1993,7 @@ def m4255a3(c: Cast) -> None:
 
 
 @power(
-    "m4255a4", level=8, usage=Usage.RECHARGE, recharge=6, action=MOVE, reach=PERSONAL,
+    "m4255a4", level=8, usage=Usage.RECHARGE, recharge=4, action=MOVE, reach=PERSONAL,
     target=NO_TARGET, no_provoke=True,
 )
 def m4255a4(c: Cast) -> None:
@@ -2001,7 +2001,7 @@ def m4255a4(c: Cast) -> None:
 
 
 @power(
-    "m4255a5", level=8, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=PERSONAL,
+    "m4255a5", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD, reach=PERSONAL,
     target=NO_TARGET, keywords=[Keyword.HEALING],
 )
 def m4255a5(c: Cast) -> None:
@@ -2037,7 +2037,7 @@ def m4324a0(c: Cast) -> None:
     "m4324a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2140,7 +2140,7 @@ def m4508a1(c: Cast) -> None:
     "m4508a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
@@ -2286,7 +2286,7 @@ def m5293a1(c: Cast) -> None:
     "m5293a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
@@ -2678,7 +2678,7 @@ _M6003_HIT = "m6003 is hit by a melee or a ranged attack"
     "m6003a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=INTERRUPT,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -2965,7 +2965,7 @@ def m6436a1(c: Cast) -> None:
 
 
 @power(
-    "m6436a2", level=8, usage=Usage.RECHARGE, recharge=6, action=MOVE, reach=PERSONAL,
+    "m6436a2", level=8, usage=Usage.RECHARGE, recharge=5, action=MOVE, reach=PERSONAL,
     target=NO_TARGET, keywords=[Keyword.TELEPORTATION],
 )
 def m6436a2(c: Cast) -> None:
@@ -3059,7 +3059,7 @@ def m6558a4(c: Cast) -> None:
     "m6558a5",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_OTHER,

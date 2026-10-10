@@ -316,7 +316,7 @@ def m1042a1(c: Cast) -> None:
 
 
 @power(
-    "m1042a2", level=7, usage=Usage.RECHARGE, recharge=6, action=MINOR,
+    "m1042a2", level=7, usage=Usage.RECHARGE, recharge=5, action=MINOR,
     reach=Ranged(20), target=NO_TARGET, keywords=[Keyword.NECROTIC],
     todo=("spec.monster_ref()",),
 )
@@ -393,7 +393,7 @@ def _adjacent_enemy_bloodied(world: World, me: int, ev: Bloodied) -> bool:
 
 
 @power(
-    "m1078a2", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1078a2", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14), damage=Damage("1d12", 9, kind=LIMITED),
 )
@@ -592,7 +592,7 @@ def m1745a1(c: Cast) -> None:
 
 
 @power(
-    "m1745a2", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m1745a2", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=CloseBlast(3), target=EACH_ENEMY, keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d6", 2, dtype=DamageType.POISON, kind=LIMITED),
@@ -798,7 +798,7 @@ def m1981a1(c: Cast) -> None:
 
 
 @power(
-    "m1981a2", level=7, usage=Usage.RECHARGE, recharge=6, action=MINOR,
+    "m1981a2", level=7, usage=Usage.RECHARGE, recharge=5, action=MINOR,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12), damage=Damage("2d8", 6, dtype=DamageType.NECROTIC),
 )
@@ -939,7 +939,7 @@ def m2028a1(c: Cast) -> None:
 
 
 @power(
-    "m2028a2", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m2028a2", level=7, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=CloseBurst(5), target=EACH_ENEMY, keywords=[Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=12),
     damage=Damage("3d8", 3, dtype=DamageType.NECROTIC, kind=LIMITED),
@@ -1174,7 +1174,7 @@ def m3379a1(c: Cast) -> None:
 
 
 @power(
-    "m3379a2", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m3379a2", level=7, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, attack=Attack(vs=AC, printed=14),
     damage=Damage("1d8", 7, kind=LIMITED),
 )
@@ -1208,7 +1208,7 @@ def m3379a3(c: Cast) -> None:
 
 
 @power(
-    "m3615a0", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m3615a0", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.DISEASE, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=10), damage=Damage("2d6", 2, kind=LIMITED),
 )
@@ -1247,8 +1247,9 @@ def m3783a0(c: Cast) -> None:
 
 
 @power(
-    "m3783a1", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m3783a1", level=7, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=Melee(1), target=UpTo(2),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3783a1(c: Cast) -> None:
     """"Recharges when first bloodied" is `_recharge_when_bloodied`, armed
@@ -1578,7 +1579,7 @@ def m4509a2(c: Cast) -> None:
 
 
 @power(
-    "m4509a3", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m4509a3", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, attack=Attack(vs=AC, printed=14),
     damage=Damage("2d12", 3, kind=LIMITED),
 )
@@ -1974,7 +1975,7 @@ def m5600a2(c: Cast) -> None:
 
 
 @power(
-    "m5600a3", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5600a3", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12), damage=Damage("3d8", 8, kind=LIMITED),
 )
@@ -1989,7 +1990,7 @@ def m5600a3(c: Cast) -> None:
 
 
 @power(
-    "m5600a4", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5600a4", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=PERSONAL, target=NO_TARGET,
 )
 def m5600a4(c: Cast) -> None:
@@ -2096,8 +2097,9 @@ def m5733a0(c: Cast) -> None:
 
 
 @power(
-    "m5733a1", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m5733a1", level=7, usage=Usage.RECHARGE, recharge=0, action=STANDARD,
     reach=PERSONAL, target=NO_TARGET,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5733a1(c: Cast) -> None:
     if c.first:
@@ -2418,7 +2420,7 @@ def m5934a0(c: Cast) -> None:
 
 
 @power(
-    "m5934a1", level=7, usage=Usage.RECHARGE, recharge=6, action=MINOR,
+    "m5934a1", level=7, usage=Usage.RECHARGE, recharge=4, action=MINOR,
     reach=CloseBlast(5), target=ONE_CREATURE, attack=Attack(vs=WILL, printed=10),
 )
 def m5934a1(c: Cast) -> None:
@@ -2714,7 +2716,7 @@ def m884a0(c: Cast) -> None:
 
 
 @power(
-    "m884a1", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m884a1", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(2), target=ONE_CREATURE, damage=Damage("3d10", 5, kind=LIMITED),
 )
 def m884a1(c: Cast) -> None:
@@ -2760,7 +2762,7 @@ def _master_near_is_struck(radius: int):  # noqa: ANN202
 
 
 @power(
-    "m884a3", level=7, usage=Usage.RECHARGE, recharge=6, action=ActionType.IMMEDIATE_INTERRUPT,
+    "m884a3", level=7, usage=Usage.RECHARGE, recharge=5, action=ActionType.IMMEDIATE_INTERRUPT,
     reach=PERSONAL, target=NO_TARGET,
     trigger="its master is within 2 squares and is hit by an attack",
     on=Trigger(DamageRolled, _master_near_is_struck(2), "its master within 2 squares is hit"),
@@ -2821,7 +2823,7 @@ def m897a1(c: Cast) -> None:
 
 
 @power(
-    "m897a2", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m897a2", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.WEAPON],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d6", 6, dtype=DamageType.FIRE, kind=LIMITED),
@@ -2907,7 +2909,7 @@ def m961a0(c: Cast) -> None:
 
 
 @power(
-    "m961a1", level=7, usage=Usage.RECHARGE, recharge=6, action=STANDARD,
+    "m961a1", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.COLD, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("3d8", 4, dtype=DamageType.COLD, kind=LIMITED),
@@ -3009,7 +3011,7 @@ def m992a2(c: Cast) -> None:
 
 
 @power(
-    "m992a3", level=7, usage=Usage.RECHARGE, recharge=6, action=MINOR,
+    "m992a3", level=7, usage=Usage.RECHARGE, recharge=4, action=MINOR,
     reach=PERSONAL, target=SELF,
 )
 def m992a3(c: Cast) -> None:
@@ -3024,7 +3026,7 @@ def _missed_me(world: World, me: int, ev: Miss) -> bool:
 
 
 @power(
-    "m992a4", level=7, usage=Usage.RECHARGE, recharge=6, action=ActionType.IMMEDIATE_REACTION,
+    "m992a4", level=7, usage=Usage.RECHARGE, recharge=0, action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL, target=NO_TARGET,
     trigger="it is missed by a melee or ranged attack",
     on=Trigger(Miss, _missed_me, "it is missed by a melee or ranged attack"),

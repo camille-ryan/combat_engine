@@ -590,7 +590,7 @@ def m1948a1(c: Cast) -> None:
     "m1948a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -662,13 +662,14 @@ def m3130a0(c: Cast) -> None:
     "m3130a1",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=CloseBlast(3),
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
     damage=Damage("2d6", 2, dtype=DamageType.PSYCHIC, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3130a1(c: Cast) -> None:
     """"Recharge when bloodied" on top of the die: the number stays in the header
@@ -712,7 +713,7 @@ def m3531a0(c: Cast) -> None:
     "m3531a1",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -733,13 +734,14 @@ def m3531a1(c: Cast) -> None:
     "m3531a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("2d6", 4, dtype=DamageType.NECROTIC, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3531a2(c: Cast) -> None:
     """"Save ends both" is one saving throw, so the four penalties are hung on
@@ -998,10 +1000,11 @@ def m3543a4(c: Cast) -> None:
     "m3543a5",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ALLY,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3543a5(c: Cast) -> None:
     """"+2, or +4 with combat advantage" is written as two mutually exclusive
@@ -1186,7 +1189,7 @@ def m3770a2(c: Cast) -> None:
     "m3770a3",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ALLY,
@@ -1352,7 +1355,7 @@ def m4739a1(c: Cast) -> None:
     "m4739a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -1462,7 +1465,7 @@ def m5082a1(c: Cast) -> None:
     "m5082a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_OTHER,
@@ -1562,7 +1565,7 @@ def m5401a1(c: Cast) -> None:
     "m5401a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
@@ -1893,7 +1896,7 @@ def m5429a1(c: Cast) -> None:
     "m5429a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=Target(
@@ -2490,12 +2493,13 @@ def m6346a2(c: Cast) -> None:
     "m6346a3",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MOVE,
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d8", 4, kind=LIMITED, half_on_miss=True),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6346a3(c: Cast) -> None:
     """The captive is dragged to a named square rather than a distance, and the

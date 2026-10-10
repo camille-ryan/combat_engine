@@ -633,7 +633,7 @@ def m2921a1(c: Cast) -> None:
     "m2921a2",
     level=13,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=MINOR,
     reach=CloseBurst(3),
     target=ONE_CREATURE,

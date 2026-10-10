@@ -648,7 +648,7 @@ def m1993a0(c: Cast) -> None:
     "m1993a1",
     level=7,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -710,7 +710,7 @@ def _adjacent_enemy_bloodied(world: World, me: int, ev: Bloodied) -> bool:
     "m2614a1",
     level=7,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=FREE,
     reach=Melee(1),
     target=NO_TARGET,
@@ -1054,7 +1054,7 @@ def m5560a2(c: Cast) -> None:
     "m5560a3",
     level=7,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -1063,6 +1063,7 @@ def m5560a2(c: Cast) -> None:
     damage=Damage("4d10", 8, kind=LIMITED),
     requires=_underground,
     requires_text="it must be underground",
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5560a3(c: Cast) -> None:
     """The attack fires once, at the end of the whole move, rather than on
@@ -1318,7 +1319,7 @@ def m963a0(c: Cast) -> None:
     "m963a1",
     level=7,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,

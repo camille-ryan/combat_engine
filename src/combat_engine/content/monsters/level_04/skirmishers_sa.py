@@ -634,13 +634,14 @@ def m1434a3(c: Cast) -> None:
     "m1434a4",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_ENEMY,
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("1d8", 3, dtype=DamageType.POISON, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m1434a4(c: Cast) -> None:
     """The aftereffect is the one clause with nowhere to live: nothing fires
@@ -1267,12 +1268,13 @@ def m3214a1(c: Cast) -> None:
     "m3214a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="it is targeted by a melee or a ranged attack",
     on=Trigger(AttackDeclared, targets_me, "it is targeted by an attack"),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3214a2(c: Cast) -> None:
     """Two verbs for one sentence: `c.swap` exchanges the squares and
@@ -1933,7 +1935,7 @@ def m3562a0(c: Cast) -> None:
     "m3562a1",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2082,7 +2084,7 @@ def m4009a0(c: Cast) -> None:
     "m4009a1",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
@@ -2180,13 +2182,14 @@ def m4182a3(c: Cast) -> None:
     "m4182a4",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_ENEMY,
     keywords=[Keyword.ACID],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("1d8", 4, dtype=DamageType.ACID, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4182a4(c: Cast) -> None:
     if c.first:
@@ -2222,7 +2225,7 @@ def m4507a0(c: Cast) -> None:
     "m4507a1",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2376,7 +2379,7 @@ def m5318a1(c: Cast) -> None:
     "m5318a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2487,10 +2490,11 @@ def m5367a3(c: Cast) -> None:
     "m5367a4",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5367a4(c: Cast) -> None:
     """Two named rows against two named targets, with the move spent in halves
@@ -2628,7 +2632,7 @@ def m5515a2(c: Cast) -> None:
     "m5515a3",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -2637,6 +2641,7 @@ def m5515a2(c: Cast) -> None:
         AttackDeclared, both(targets_me, by_melee),
         "an enemy makes a melee attack against it",
     ),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5515a3(c: Cast) -> None:
     """The Stealth check has no roll to make -- there is no hiding requirement
@@ -2724,7 +2729,7 @@ def m5652a3(c: Cast) -> None:
     "m5652a4",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -2733,6 +2738,7 @@ def m5652a3(c: Cast) -> None:
     on=Trigger(
         Miss, both(targets_me, by_melee), "a creature misses it with a melee attack"
     ),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5652a4(c: Cast) -> None:
     """Three clauses and they run in order: the step, the haul, and the free
@@ -2845,7 +2851,7 @@ def m5824a3(c: Cast) -> None:
     "m5824a4",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=Target(
@@ -2853,6 +2859,7 @@ def m5824a3(c: Cast) -> None:
     ),
     attack=Attack(vs=REF, printed=7),
     damage=Damage("2d8", 6, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5824a4(c: Cast) -> None:
     """`max_size` is a real `Target` field, so the size half of the target line
@@ -3115,7 +3122,7 @@ def m5938a1(c: Cast) -> None:
     "m5938a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
@@ -3123,6 +3130,7 @@ def m5938a1(c: Cast) -> None:
     damage=Damage("1d6", 4, kind=LIMITED),
     requires=_not_grabbing,
     requires_text="must have no creature grabbed",
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5938a2(c: Cast) -> None:
     """"Until the grab ends" is measured by nothing in `When`: a grab ends
@@ -3534,7 +3542,7 @@ def m977a1(c: Cast) -> None:
     "m977a2",
     level=4,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,

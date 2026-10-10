@@ -221,7 +221,7 @@ def m1111a0(c: Cast) -> None:
 
 
 @power(
-    "m1111a1", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=Melee(1),
+    "m1111a1", level=9, usage=Usage.RECHARGE, recharge=5, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=16), damage=Damage("2d8", 7, kind=LIMITED),
 )
 def m1111a1(c: Cast) -> None:
@@ -288,7 +288,7 @@ def _an_immobilized_enemy_m1144(world: World, eid: int) -> bool:
 
 
 @power(
-    "m1144a1", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=Ranged(5),
+    "m1144a1", level=9, usage=Usage.RECHARGE, recharge=5, action=STANDARD, reach=Ranged(5),
     target=NO_TARGET, keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
@@ -324,7 +324,7 @@ def m115867a0(c: Cast) -> None:
 
 
 @power(
-    "m115867a1", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=CloseBurst(2),
+    "m115867a1", level=9, usage=Usage.RECHARGE, recharge=5, action=STANDARD, reach=CloseBurst(2),
     target=EACH_OTHER, keywords=[Keyword.THUNDER],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("4d6", 5, dtype=DamageType.THUNDER, kind=LIMITED),
@@ -752,7 +752,7 @@ def m1949a1(c: Cast) -> None:
 
 
 @power(
-    "m1949a2", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=Melee(1),
+    "m1949a2", level=9, usage=Usage.RECHARGE, recharge=4, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, attack=Attack(vs=AC, printed=16), damage=Damage("2d6", 5, kind=LIMITED),
 )
 def m1949a2(c: Cast) -> None:
@@ -800,7 +800,7 @@ def m1982a0(c: Cast) -> None:
 
 
 @power(
-    "m1982a1", level=9, usage=Usage.RECHARGE, recharge=6, action=MINOR, reach=CloseBurst(3),
+    "m1982a1", level=9, usage=Usage.RECHARGE, recharge=5, action=MINOR, reach=CloseBurst(3),
     target=EACH_ENEMY, keywords=[Keyword.NECROTIC], attack=Attack(vs=FORT, printed=14),
 )
 def m1982a1(c: Cast) -> None:
@@ -1388,7 +1388,7 @@ def m3592a3(c: Cast) -> None:
 
 
 @power(
-    "m3592a4", level=9, usage=Usage.RECHARGE, recharge=6, action=MINOR, reach=CloseBlast(5),
+    "m3592a4", level=9, usage=Usage.RECHARGE, recharge=5, action=MINOR, reach=CloseBlast(5),
     target=EACH_ALLY,
 )
 def m3592a4(c: Cast) -> None:
@@ -1621,7 +1621,7 @@ def m4004a1(c: Cast) -> None:
 
 
 @power(
-    "m4004a2", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=Melee(1),
+    "m4004a2", level=9, usage=Usage.RECHARGE, recharge=5, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
@@ -1969,7 +1969,7 @@ def m5327a2(c: Cast) -> None:
 
 
 @power(
-    "m5327a3", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=Melee(2),
+    "m5327a3", level=9, usage=Usage.RECHARGE, recharge=5, action=STANDARD, reach=Melee(2),
     target=UpTo(2), attack=Attack(vs=AC, printed=14), damage=Damage("2d10", 6, kind=LIMITED),
 )
 def m5327a3(c: Cast) -> None:
@@ -1979,10 +1979,11 @@ def m5327a3(c: Cast) -> None:
 
 
 @power(
-    "m5327a4", level=9, usage=Usage.RECHARGE, recharge=6, action=INTERRUPT, reach=PERSONAL,
+    "m5327a4", level=9, usage=Usage.RECHARGE, recharge=0, action=INTERRUPT, reach=PERSONAL,
     target=NO_TARGET,
     trigger="an enemy marked by it and within 3 squares moves away from it",
     on=Trigger(MoveStart, _marked_within_moves_away(3), "a marked enemy moves away within 3"),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5327a4(c: Cast) -> None:
     """Recharges when first bloodied, the exact phrase `_recharge_when_bloodied`
@@ -2169,7 +2170,7 @@ def m5613a1(c: Cast) -> None:
 
 
 @power(
-    "m5613a2", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=CloseBlast(3),
+    "m5613a2", level=9, usage=Usage.RECHARGE, recharge=4, action=STANDARD, reach=CloseBlast(3),
     target=EACH_ENEMY, keywords=[Keyword.DISEASE, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14), damage=Damage("2d12", 6, kind=LIMITED),
     dropped=("Condition.DISEASED",),
@@ -2236,7 +2237,7 @@ def m5620a2(c: Cast) -> None:
 
 
 @power(
-    "m5620a3", level=9, usage=Usage.RECHARGE, recharge=6, action=MINOR, reach=CloseBurst(3),
+    "m5620a3", level=9, usage=Usage.RECHARGE, recharge=5, action=MINOR, reach=CloseBurst(3),
     target=EACH_ALLY,
 )
 def m5620a3(c: Cast) -> None:
@@ -2337,7 +2338,7 @@ def m5654a4(c: Cast) -> None:
 
 
 @power(
-    "m5654a5", level=9, usage=Usage.RECHARGE, recharge=6, action=MINOR, reach=CloseBlast(3),
+    "m5654a5", level=9, usage=Usage.RECHARGE, recharge=5, action=MINOR, reach=CloseBlast(3),
     target=EACH_OTHER, attack=Attack(vs=FORT, printed=12),
 )
 def m5654a5(c: Cast) -> None:
@@ -2399,10 +2400,11 @@ def m5785a2(c: Cast) -> None:
 
 
 @power(
-    "m5785a3", level=9, usage=Usage.RECHARGE, recharge=6, action=STANDARD, reach=CloseBurst(1),
+    "m5785a3", level=9, usage=Usage.RECHARGE, recharge=0, action=STANDARD, reach=CloseBurst(1),
     target=EACH_ENEMY, attack=Attack(vs=REF, printed=12),
     damage=Damage("2d8", 8, kind=LIMITED, half_on_miss=True),
     requires=_m5785_beast_form, requires_text="it must be in beast form",
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5785a3(c: Cast) -> None:
     """Recharges when first bloodied, `_recharge_when_bloodied`'s shape."""

@@ -692,13 +692,14 @@ def m3101a0(c: Cast) -> None:
     "m3101a1",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.HEALING],
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("1d8", 4, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3101a1(c: Cast) -> None:
     """The Hit line only. The printed Sustain Standard -- crush the held
@@ -937,7 +938,7 @@ _M4862_ALLY_HIT = "an enemy hits one of the m4862's allies with a melee attack"
     "m4862a3",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=REACTION,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -951,6 +952,7 @@ _M4862_ALLY_HIT = "an enemy hits one of the m4862's allies with a melee attack"
         when=both(by_melee, ally_within(10), enemy_within(1)),
         text=_M4862_ALLY_HIT,
     ),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4862a3(c: Cast) -> None:
     """No attack roll is printed -- the target simply goes down."""

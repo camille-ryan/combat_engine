@@ -328,13 +328,14 @@ def m5403a0(c: Cast) -> None:
     "m5403a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=Ranged(15),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("", 6, kind=MINION),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5403a1(c: Cast) -> None:
     """"Recharges when it spends a minor action to reload" is the same minor this
@@ -393,7 +394,7 @@ def m5437a0(c: Cast) -> None:
     "m5437a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,

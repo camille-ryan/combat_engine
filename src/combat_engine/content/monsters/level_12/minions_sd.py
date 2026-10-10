@@ -1329,13 +1329,14 @@ def m6128a3(c: Cast) -> None:
     "m6128a4",
     level=12,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.HEALING, Keyword.TELEPORTATION],
     trigger=_M6128_FELLED,
     on=Trigger(Dropped, when=about_me, text=_M6128_FELLED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6128a4(c: Cast) -> None:
     """It spends a life and gets up somewhere else, unseen.

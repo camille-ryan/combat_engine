@@ -248,7 +248,7 @@ def m1504a5(c: Cast) -> None:
     "m1504a6",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=3,
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
@@ -751,7 +751,7 @@ def m4156a3(c: Cast) -> None:
     "m4156a4",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_ENEMY,
@@ -891,13 +891,14 @@ def m5942a0(c: Cast) -> None:
     "m5942a1",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_OTHER,
     keywords=[Keyword.FIRE, Keyword.FORCE, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=9),
     damage=Damage("2d6", 6, dtype=[DamageType.FIRE, DamageType.FORCE], kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5942a1(c: Cast) -> None:
     _recharge_when_using(c, "m5942a2")
@@ -910,11 +911,12 @@ def m5942a1(c: Cast) -> None:
     "m5942a2",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.TELEPORTATION],
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5942a2(c: Cast) -> None:
     _recharge_when_using(c, "m5942a1")
@@ -947,7 +949,7 @@ def m5955a0(c: Cast) -> None:
     "m5955a1",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
@@ -1097,7 +1099,7 @@ def m6408a5(c: Cast) -> None:
     "m6408a6",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
@@ -1176,12 +1178,13 @@ def m6500a0(c: Cast) -> None:
     "m6500a1",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 10, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6500a1(c: Cast) -> None:
     _recharge_when_using(c, "m6500a2")
@@ -1194,13 +1197,14 @@ def m6500a1(c: Cast) -> None:
     "m6500a2",
     level=6,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(5),
     target=Target(side="enemy", count=1, label="one creature in the burst"),
     keywords=[Keyword.POLYMORPH, Keyword.TELEPORTATION],
     attack=Attack(vs=WILL, printed=9),
     narrative=("skill:insight",),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6500a2(c: Cast) -> None:
     """Assuming the target's likeness is a disguise with no combat reading

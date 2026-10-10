@@ -1619,7 +1619,7 @@ def m4964a2(c: Cast) -> None:
     "m4964a3",
     level=10,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,

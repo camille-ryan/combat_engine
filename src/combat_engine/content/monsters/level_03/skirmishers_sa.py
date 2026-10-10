@@ -1610,13 +1610,14 @@ def m3212a1(c: Cast) -> None:
     "m3212a2",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d6", 3, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3212a2(c: Cast) -> None:
     if c.strike():
@@ -1771,13 +1772,14 @@ def m3271a1(c: Cast) -> None:
     "m3271a2",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d12", 0, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m3271a2(c: Cast) -> None:
     if c.strike():
@@ -1950,13 +1952,14 @@ def m4184a2(c: Cast) -> None:
     "m4184a3",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_ENEMY,
     keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("2d6", 2, dtype=DamageType.LIGHTNING, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4184a3(c: Cast) -> None:
     if c.strike():
@@ -2325,7 +2328,7 @@ def m5066a0(c: Cast) -> None:
     "m5066a1",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=MOVE,
     reach=Melee(1),
     target=NO_TARGET,
@@ -2570,13 +2573,14 @@ def m5133a2(c: Cast) -> None:
     "m5133a3",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d6", 5, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5133a3(c: Cast) -> None:
     if c.strike():
@@ -2706,7 +2710,7 @@ def m5316a4(c: Cast) -> None:
     "m5316a5",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=MINOR,
     reach=CloseBurst(5),
     target=EACH_ENEMY,
@@ -2726,11 +2730,12 @@ def m5316a5(c: Cast) -> None:
     "m5316a6",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
     narrative=("skill:stealth",),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5316a6(c: Cast) -> None:
     """It thins out: unhittable, able to walk through things, and unable to
@@ -2879,7 +2884,7 @@ def m5845a3(c: Cast) -> None:
     "m5845a4",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -3160,7 +3165,7 @@ def m6567a1(c: Cast) -> None:
     "m6567a2",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(5),
     target=UpTo(2),
@@ -3177,7 +3182,7 @@ def m6567a2(c: Cast) -> None:
     "m6567a3",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=ActionType.IMMEDIATE_REACTION,
     reach=Melee(1),
     target=NO_TARGET,
@@ -3185,6 +3190,7 @@ def m6567a2(c: Cast) -> None:
     damage=Damage("2d8", 3, kind=LIMITED),
     trigger="an enemy adjacent to it misses it",
     on=Trigger(Miss, _missed_me_from_beside, "an adjacent enemy misses it"),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m6567a3(c: Cast) -> None:
     foe = getattr(c.trigger, "attacker", None)
@@ -3300,7 +3306,7 @@ def m6577a2(c: Cast) -> None:
     "m6577a3",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
@@ -3366,7 +3372,7 @@ def m6580a1(c: Cast) -> None:
     "m6580a2",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
@@ -3434,7 +3440,7 @@ def m6583a1(c: Cast) -> None:
     "m6583a2",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,

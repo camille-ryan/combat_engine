@@ -494,7 +494,7 @@ def m115747a0(c: Cast) -> None:
     "m115747a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -596,10 +596,11 @@ def m115925a1(c: Cast) -> None:
     "m115925a2",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m115925a2(c: Cast) -> None:
     """"Uses claw twice against the same target", so `ONE_CREATURE` and two
@@ -857,7 +858,7 @@ def m3216a0(c: Cast) -> None:
     "m3216a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
@@ -921,7 +922,7 @@ def m3218a0(c: Cast) -> None:
     "m3218a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -1357,13 +1358,14 @@ def m4180a2(c: Cast) -> None:
     "m4180a3",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_ENEMY,
     keywords=[Keyword.LIGHTNING],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("2d6", 6, dtype=DamageType.LIGHTNING, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4180a3(c: Cast) -> None:
     """The secondary attack is once per use and fires only if the blast landed
@@ -1458,13 +1460,14 @@ def m4189a2(c: Cast) -> None:
     "m4189a3",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(4),
     target=EACH_ENEMY,
     keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=6),
     damage=Damage("1d6", 5, dtype=DamageType.COLD, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4189a3(c: Cast) -> None:
     """"Vulnerable 5 to **all** damage" is `c.vulnerable` with no type at
@@ -1501,13 +1504,14 @@ def m4416a0(c: Cast) -> None:
     "m4416a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d8", 4, dtype=DamageType.NECROTIC, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4416a1(c: Cast) -> None:
     _recharge_when_bloodied(c)
@@ -1696,7 +1700,7 @@ def m5322a2(c: Cast) -> None:
     "m5322a3",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=MINOR,
     reach=CloseBurst(5),
     target=ONE_CREATURE,
@@ -1756,7 +1760,7 @@ def m5383a0(c: Cast) -> None:
     "m5383a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2139,7 +2143,7 @@ def m5855a0(c: Cast) -> None:
     "m5855a1",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -2346,12 +2350,13 @@ def m5937a1(c: Cast) -> None:
     "m5937a2",
     level=5,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d6", 5, kind=LIMITED, half_on_miss=True),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5937a2(c: Cast) -> None:
     _recharge_when_bloodied(c)

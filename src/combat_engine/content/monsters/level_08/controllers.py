@@ -261,7 +261,7 @@ def m179a2(c: Cast) -> None:
     "m179a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_ENEMY,
@@ -332,7 +332,7 @@ def m2851a1(c: Cast) -> None:
     "m2851a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
@@ -512,7 +512,7 @@ def m2960a2(c: Cast) -> None:
     "m2960a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
@@ -533,12 +533,13 @@ _M2960_STRUCK = "an enemy's attack hits the m2960"
     "m2960a4",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=INTERRUPT,
     reach=PERSONAL,
     target=NO_TARGET,
     trigger=_M2960_STRUCK,
     on=Trigger(Hit, when=hits_me, text=_M2960_STRUCK),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m2960a4(c: Cast) -> None:
     """Half damage from **one** blow, so this is not `c.insubstantial`: that
@@ -623,7 +624,7 @@ def m3105a0(c: Cast) -> None:
     "m3105a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
@@ -848,12 +849,13 @@ def m346a2(c: Cast) -> None:
     "m346a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_OTHER,
     keywords=[Keyword.CHARM, Keyword.CLOSE],
     attack=Attack(vs=WILL, printed=11),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m346a3(c: Cast) -> None:
     """No damage at all -- the whole of the hit is the hold.
@@ -1006,7 +1008,7 @@ def m456a2(c: Cast) -> None:
     "m456a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=3,
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
@@ -1028,7 +1030,7 @@ def m456a3(c: Cast) -> None:
     "m456a4",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=MINOR,
     reach=CloseBurst(10),
     target=EACH_ALLY,
@@ -1238,7 +1240,7 @@ _M4796_AIMED_AT = "a melee or a ranged attack is aimed at the m4796"
     "m4796a5",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=INTERRUPT,
     reach=PERSONAL,
     target=NO_TARGET,
@@ -1248,6 +1250,7 @@ _M4796_AIMED_AT = "a melee or a ranged attack is aimed at the m4796"
         when=both(targets_me, either(by_melee, by_ranged)),
         text=_M4796_AIMED_AT,
     ),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4796a5(c: Cast) -> None:
     """The printed trigger reads "hits", and `c.redirect` only works on the
@@ -1419,7 +1422,7 @@ def m4989a1(c: Cast) -> None:
     "m4989a2",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
@@ -1576,13 +1579,14 @@ def m5010a2(c: Cast) -> None:
     "m5010a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_ENEMY,
     keywords=[Keyword.CLOSE],
     attack=Attack(vs=REF, printed=11),
     damage=Damage("1d6", 5, kind=LIMITED),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5010a3(c: Cast) -> None:
     """The spec line prints a recharge die and the printed sentence says it
@@ -1617,12 +1621,13 @@ def m5010a4(c: Cast) -> None:
     "m5010a5",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
     requires=_no_traps_left,
     requires_text="every trap this row made must have ended",
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m5010a5(c: Cast) -> None:
     """The squares are printed as unoccupied, so nobody is standing in one
@@ -1663,7 +1668,7 @@ def m657a0(c: Cast) -> None:
     "m657a1",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(5),
     target=Target("enemy", 1, label="One nondeafened creature"),
@@ -1698,11 +1703,12 @@ def m657a2(c: Cast) -> None:
     "m657a3",
     level=8,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=0,
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=11),
+    dropped=("Usage.RECHARGE(when=)",),
 )
 def m657a3(c: Cast) -> None:
     """No damage at all. The slow and the penalty ride on one effect, so

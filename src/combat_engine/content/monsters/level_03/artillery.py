@@ -602,7 +602,7 @@ def m4789a3(c: Cast) -> None:
     "m4789a4",
     level=3,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=5,
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,

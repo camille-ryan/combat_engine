@@ -1126,7 +1126,7 @@ def m4881a1(c: Cast) -> None:
     "m4881a2",
     level=2,
     usage=Usage.RECHARGE,
-    recharge=6,
+    recharge=4,
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
