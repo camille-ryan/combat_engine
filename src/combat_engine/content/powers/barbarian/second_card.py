@@ -35,7 +35,7 @@ def _in_this_rage(ref: str):  # noqa: ANN202
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.THUNDER],
+    keywords=[Keyword.PRIMAL, Keyword.WEAPON, Keyword.THUNDER, Keyword.RAGE],
     attack=Attack(STR, vs=FORT),
     once_per_round=True,
     requires=_in_this_rage("p4832"),

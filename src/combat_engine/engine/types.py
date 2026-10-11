@@ -120,6 +120,19 @@ class Keyword(StrEnum):
     #: second; the tree saw none of them. #478.
     BEAST_FORM = "beast form"
     GUARDIAN_FORM = "guardian form"
+    #: A barbarian's rage, printed in the keyword line beside Primal and
+    #: Weapon on 37 cards.
+    #:
+    #: **The ETL's `_KEYWORDS` list omitted it**, so `power.keywords` named it
+    #: on none of those 37 while every one of their specs read "Primal ,
+    #: Rage , Weapon". Fifteen rows wanted it and each had reasoned its way
+    #: to a different place: one blamed the enum, one said "rage is not a
+    #: keyword the tree has", one said "nothing says a barbarian is raging".
+    #: The first cause was one entry missing from a hand-kept list.
+    #:
+    #: Third omission of that kind found one at a time, after `bladespell`
+    #: (#319) and `beast form` (#478). #503.
+    RAGE = "rage"
     SLEEP = "sleep"
     GAZE = "gaze"
     DISEASE = "disease"

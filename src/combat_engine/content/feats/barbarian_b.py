@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.barbarian.rage import in_rage
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -37,8 +38,11 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     PowerUsed,
+    SecondWind,
     Trigger,
+    TurnEnd,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.components import Health
@@ -47,12 +51,23 @@ from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.query import distance_between, team
 
 
+def _used_one_of(*refs: str):  # noqa: ANN202
+    """`PowerUsed` for any of several named rows, by this creature.
+
+    `_i_used` above takes one ref; two cards here print a pair, and asking
+    twice with two Triggers would fire the row twice when both are somehow
+    used in one window.
+    """
+
+    def check(world, me: int, ev) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power in refs
+
+    return check
+
+
 def _took_the_charge(world, me: int, ev: object) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power == "p4809"
 
-#: Rage is not a state anything holds: the class's daily attack rows
-#: carry no keyword declaring it. `cf:barbarian-rage` waits on the same.
-RAGE = ("Keyword.RAGE",)
 #: A class feature named in prose with no ref.
 FEATURE = ("c.class_feature()",)
 #: "Use it as a heavy thrown weapon, normal range 5 and long range 10":
@@ -202,25 +217,39 @@ def f2883(c: Cast) -> None:
 # -- rage, which nothing declares ------------------------------------------
 
 
-@power("f1831", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RAGE)
+@power("f1831", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1766 or p1769",
+       on=Trigger(PowerUsed, _used_one_of("p1766", "p1769"),
+                  "you use one of those racial powers"))
 def f1831(c: Cast) -> None:
-    """An attack bonus after one of two racial powers, **while
-    raging**. Both powers are refs now, so `used_one_of` would declare
-    the trigger -- what is left is the rage gate, and a row that paid
-    out of rage as well as in it would be wrong in every fight."""
+    """+2 to attack rolls until the end of your next turn, after one of two
+    racial powers, **while raging**.
+
+    Its own note said the rage gate was what was left and that "a row that
+    paid out of rage as well as in it would be wrong in every fight". The
+    gate existed: `rage.in_rage()` -- see the note on `RAGE` above. #503.
+    """
+    if in_rage(c):
+        c.bonus("attack", 2, on=c.me, until=When.EONT, kind="feat")
 
 
 @power("f1858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RAGE)
+       reach=PERSONAL, target=SELF, todo=("c.choose(before_damage=)",))
 def f1858(c: Cast) -> None:
     """Trade a die of weapon damage for ongoing damage, on a hit with
     "any rage power". Which rows those are is the same gap: nothing
-    marks a row as one."""
+    marks a row as one.
+
+    **Re-pointed: `Keyword.RAGE` exists now (#503).** "Any rage power" is
+    askable. What is left is the printed *option* -- reducing the damage
+    by 1[W] **before you roll it** -- which is a choice put to the holder
+    at a moment nothing currently offers one.
+    """
 
 
 @power("f1991", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.RAGE", "feat.category"))
+       reach=PERSONAL, target=SELF, todo=("feat.category",))
 def f1991(c: Cast) -> None:
     """A damage bonus while raging that grows with how many nearby
     allies have taken a feat of a particular category. `c.feat(ref)`
@@ -229,31 +258,74 @@ def f1991(c: Cast) -> None:
 
 
 @power("f2296", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RAGE)
+       reach=PERSONAL, target=SELF)
 def f2296(c: Cast) -> None:
-    """A melee damage bonus while raging, paid for by damage to
-    yourself on a turn that hurt nobody. The self-harm half is a
-    `TurnEnd` watcher and writable on its own -- but without the rage
-    gate it would bite every turn of the fight."""
+    """+2 melee damage while raging, and 2 damage to yourself if you end a
+    turn having hurt nobody.
+
+    The self-harm half was always writable; what the docstring said it
+    lacked was the rage gate, "without which it would bite every turn of the
+    fight". `rage.in_rage()` was that gate all along -- see the note on
+    `RAGE` above. Both halves carry it, so a barbarian not raging neither
+    gains the bonus nor pays for it. #503.
+    """
+    step = 2 + (c.level >= 11) + 2 * (c.level >= 21)
+    c.bonus(
+        "damage", step, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: in_rage(c) and not ctx.get("ranged"),
+    )
+    hurt = {"any": False}
+
+    def dealt(ev: Hit) -> None:
+        if ev.attacker == c.me:
+            hurt["any"] = True
+
+    def settle(ev: TurnEnd) -> None:
+        if ev.ghost or ev.actor != c.me:
+            return
+        if in_rage(c) and not hurt["any"]:
+            c.flat(step, on=c.me)
+        hurt["any"] = False
+
+    c.watch(Hit, dealt, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} dealt")
+    c.watch(TurnEnd, settle, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} toll")
 
 
 @power("f2705", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.RAGE",))
-def f2705(c: Cast) -> None:
-    """Reroll the damage dice that come up 1, while raging and wielding
-    a two-handed reach weapon. The weapon half is `c.wielding`; the
-    other two are not there. `c.reroll_damage` rolls the whole
-    expression twice and keeps the higher, which is a different and
-    much larger thing."""
-
-
-@power("f2885", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Keyword.RAGE",))
+       todo=("c.reroll_ones(when=)",))
+def f2705(c: Cast) -> None:
+    """Reroll any weapon damage die showing a 1, while raging and wielding a
+    two-handed reach weapon.
+
+    **Re-pointed, and the rage half was never the gap.** `rage.in_rage()`
+    answers that and always did; `c.wielding` answers the weapon. What is
+    missing is that `c.reroll_ones` takes `below`, `keyword`, `ref`, `on`
+    and `until` and **no `when=`**, so there is nowhere to hang either
+    condition -- and writing it ungated would reroll every 1 the character
+    ever rolls, which is a much larger rule than the card prints.
+
+    `c.reroll_damage` is the other near neighbour and is a different thing
+    again: it rolls the whole expression twice and keeps the higher. #503.
+    """
+
+
+@power("f2885", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you take a second wind"))
 def f2885(c: Cast) -> None:
-    """Extra hit points from a second wind taken while raging.
-    `SecondWind` is the moment now; nothing says a barbarian is raging,
-    which is the half still missing."""
+    """Charisma modifier in extra hit points from a second wind taken while
+    raging.
+
+    **It was never blocked.** The docstring said "nothing says a barbarian
+    is raging"; `powers/barbarian/rage.py` has exported `raging()` and
+    `in_rage()` the whole time, with a module docstring stating that two
+    dozen rows print the requirement and something has to answer them. See
+    the note on `RAGE` above. #503.
+    """
+    if in_rage(c):
+        c.heal(c.cha_mod, on=c.me)
 
 
 # -- class features named in prose -----------------------------------------

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.barbarian.rage import in_rage
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
@@ -20,14 +21,16 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     DamageApplied,
+    DamageType,
     Dropped,
+    Hit,
+    SurgeSpent,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.query import allies
-
-RAGE = ("Keyword.RAGE",)
 
 
 @power("f454", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -96,19 +99,52 @@ def f1826(c: Cast) -> None:
 
 
 @power("f593", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RAGE)
+       reach=PERSONAL, target=SELF)
 def f593(c: Cast) -> None:
-    """A damage bonus while raging. Rage is not a state anything holds
-    -- the class's daily attack rows carry no keyword declaring it, which
-    is the same gap `cf:barbarian-rage` has been waiting on."""
+    """+1 to damage rolls while raging, +2 at 11th and +3 at 21st.
+
+    **It was never blocked.** `rage.raging()` has answered "are you raging"
+    since the module was written -- see the note on `RAGE` above. The gate
+    is asked per attack rather than once at arming, because a rage can end
+    mid-fight and the bonus goes with it. #503.
+    """
+    c.bonus(
+        "damage", 1 + (c.level >= 11) + (c.level >= 21),
+        on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: in_rage(c),
+    )
 
 
-@power("f1720", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RAGE)
+@power("f1720", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you spend a healing surge",
+       on=Trigger(SurgeSpent, about_me, "you spend a healing surge"))
 def f1720(c: Cast) -> None:
-    """Extra radiant damage after spending a surge **while raging**.
-    `SurgeSpent` is announced, so the trigger half is writable; the rage
-    half is not, and half a gate would pay out every time."""
+    """Charisma modifier in extra radiant damage on your next melee attack,
+    after spending a surge while raging.
+
+    **Neither half was missing and the row said both were.** Its docstring
+    claimed the rage gate did not exist -- `rage.in_rage()` has answered it
+    all along -- and when that was corrected I re-pointed it to
+    `events.SurgeSpent`, which `todo.py` reported as existing on the very
+    next run. It is emitted from every site that decrements a surge, by
+    design.
+
+    Written as a one-shot watcher rather than a `c.bonus`, because the extra
+    damage has a **type** the card names and a damage bonus carries none.
+    #503.
+    """
+    if not in_rage(c):
+        return
+    me = c.me
+
+    def rider(ev: Hit) -> None:
+        if ev.attacker != me or ev.result.ctx.get("ranged"):
+            return
+        c.flat(c.cha_mod, dtype=DamageType.RADIANT, on=ev.target)
+
+    c.watch(Hit, rider, until=When.EONT, on=me, once=True,
+            label=f"{c.ref} radiant")
 
 
 @power("f1009", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -119,7 +155,7 @@ def f1009(c: Cast) -> None:
 
 
 @power("f1010", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RAGE)
+       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
 def f1010(c: Cast) -> None:
     """Grows a named power's burst and pays a damage bonus, both while
     raging.
@@ -141,4 +177,11 @@ def f1010(c: Cast) -> None:
     would have to come from the duration -- laid on the `PowerUsed` that
     announces it, which fires before the body, and held to the end of
     that turn.
+    
+
+    **Re-pointed: the rage gate was never the hold.** `rage.in_rage()`
+    answers it. What is left is rewriting the named row's burst from 5 to
+    "5 + your Charisma modifier" -- reach is header data the menu reads
+    before anything runs, which is `c.recast(reach=)`, the symbol `f287`
+    and `f601` already carry.
     """

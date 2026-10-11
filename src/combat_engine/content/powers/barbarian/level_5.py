@@ -80,7 +80,7 @@ def _two_handed_reach(world: World, eid: int) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p10059(c: Cast) -> None:
@@ -106,7 +106,7 @@ def p10059(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p10066(c: Cast) -> None:
@@ -140,7 +140,7 @@ def p10066(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
     requires=_two_handed_reach,
     requires_text="needs a two-handed reach weapon",
@@ -194,7 +194,7 @@ def p11563(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.FIRE],
+    keywords=[*PRIMAL_WEAPON, Keyword.FIRE, Keyword.RAGE],
     attack=Attack(STR, vs=REF),
 )
 def p13772(c: Cast) -> None:
@@ -260,7 +260,7 @@ def p14421(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.COLD],
+    keywords=[*PRIMAL_WEAPON, Keyword.COLD, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4831(c: Cast) -> None:
@@ -300,7 +300,7 @@ def p4831(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.THUNDER],
+    keywords=[*PRIMAL_WEAPON, Keyword.THUNDER, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4832(c: Cast) -> None:
@@ -324,7 +324,7 @@ def p4832(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.FIRE, Keyword.HEALING],
+    keywords=[*PRIMAL_WEAPON, Keyword.FIRE, Keyword.HEALING, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4943(c: Cast) -> None:
@@ -375,7 +375,7 @@ def p4943(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[*PRIMAL_WEAPON, Keyword.LIGHTNING],
+    keywords=[*PRIMAL_WEAPON, Keyword.LIGHTNING, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4944(c: Cast) -> None:
@@ -408,7 +408,7 @@ def p4944(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p7394(c: Cast) -> None:
@@ -449,7 +449,7 @@ def p7394(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p9568(c: Cast) -> None:
@@ -496,7 +496,7 @@ def p9568(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p9569(c: Cast) -> None:
@@ -545,7 +545,7 @@ def p9569(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p9570(c: Cast) -> None:
@@ -570,7 +570,7 @@ def p9570(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p9571(c: Cast) -> None:

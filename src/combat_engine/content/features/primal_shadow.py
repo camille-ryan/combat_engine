@@ -388,7 +388,7 @@ def barbarian_whirling(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    todo=("Keyword.RAGE",),
+    todo=("p4807",),
 )
 def barbarian_rage(c: Cast) -> None:
     """Two sentences and neither can be said.
@@ -419,7 +419,7 @@ def barbarian_rage(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
     uses=2,
     requires_text="must be raging and have at least one unused rage power",
-    todo=("Keyword.RAGE",),
+    todo=("p4807",),
 )
 def barbarian_rage_strike(c: Cast) -> None:
     """The card `cf:barbarian-f2` grants, and the first ref it has ever had.

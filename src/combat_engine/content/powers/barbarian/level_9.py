@@ -117,7 +117,7 @@ def _mine(c: Cast, who: int) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p10060(c: Cast) -> None:
@@ -152,7 +152,7 @@ def p10060(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p10061(c: Cast) -> None:
@@ -223,7 +223,7 @@ def p14427(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4837(c: Cast) -> None:
@@ -257,7 +257,7 @@ def p4837(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4838(c: Cast) -> None:
@@ -279,7 +279,7 @@ def p4838(c: Cast) -> None:
     action=REACTION,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
     trigger=_CHARGED_US,
     on=Trigger(AttackDeclared, both(by_charge, targets_my_side), _CHARGED_US),
@@ -324,7 +324,7 @@ def p4875(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.POISON],
+    keywords=[*PRIMAL_WEAPON, Keyword.POISON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4924(c: Cast) -> None:
@@ -355,7 +355,7 @@ def p4924(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.ACID],
+    keywords=[*PRIMAL_WEAPON, Keyword.ACID, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4949(c: Cast) -> None:
@@ -389,7 +389,7 @@ def p4949(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_WEAPON, Keyword.COLD],
+    keywords=[*PRIMAL_WEAPON, Keyword.COLD, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p4950(c: Cast) -> None:
@@ -424,7 +424,7 @@ def p4950(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p7392(c: Cast) -> None:
@@ -464,7 +464,7 @@ def p7392(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p9576(c: Cast) -> None:
@@ -499,7 +499,7 @@ def p9576(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.RAGE],
     attack=Attack(STR, vs=AC),
 )
 def p9577(c: Cast) -> None:

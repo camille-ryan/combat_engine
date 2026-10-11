@@ -84,6 +84,15 @@ _KEYWORDS = [
     # only one subclass can meet, and dropped here until now -- so `chargen` had
     # nothing to exclude them by and dealt them to every wizard. #319.
     "bladespell",
+    # **37 cards print it and this list omitted it**, so `power.keywords` named
+    # it on none of them while every one of their specs read "Primal , Rage ,
+    # Weapon". Fifteen rows wanted `Keyword.RAGE` and the first cause was
+    # here, not in the enum and not in the headers: a hand-kept list that had
+    # never been reconciled against what the pages actually print.
+    #
+    # The same shape as `bladespell` and `beast form` above, which is three
+    # omissions found one at a time. #503.
+    "rage",
 ]
 
 

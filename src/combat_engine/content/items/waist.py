@@ -331,7 +331,7 @@ def i1897x1(c: Cast) -> None:
 
 
 @power("i2131x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Keyword.RAGE",))
+       reach=PERSONAL, target=SELF, dropped=("events.DroppedToZero",))
 def i2131x1(c: Cast) -> None:
     """A death save is an ordinary `SavingThrow` with `against="death"`,
     announced before it is read back, so the bonus is written onto it.

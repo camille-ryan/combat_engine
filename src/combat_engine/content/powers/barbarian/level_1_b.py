@@ -54,7 +54,17 @@ from combat_engine.engine.query import adjacent, distance_between
 
 from .rage import enter, held_by
 
-PRIMAL_RAGE = [Keyword.PRIMAL, Keyword.WEAPON]
+#: **The keyword this constant is named for exists now (#503)**, so it
+#: carries it. It held only Primal and Weapon while `Keyword.RAGE` did not
+#: exist, which made the name a promise the value did not keep.
+#:
+#: `p14414` was using it and **its card prints no Rage** -- "Primal ,
+#: Weapon" and nothing else. Harmless while the constant omitted the
+#: keyword, and a wrong keyword the moment it did not: a latent error that
+#: only surfaced because the value caught up with the name. Moved to
+#: `PRIMAL_WEAPON`.
+PRIMAL_RAGE = [Keyword.PRIMAL, Keyword.WEAPON, Keyword.RAGE]
+PRIMAL_WEAPON = [Keyword.PRIMAL, Keyword.WEAPON]
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
 
@@ -93,7 +103,7 @@ def _felled(c: Cast, ev: Any) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_RAGE,
+    keywords=PRIMAL_WEAPON,
     attack=Attack(STR, vs=AC),
 )
 def p14414(c: Cast) -> None:

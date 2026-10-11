@@ -943,11 +943,17 @@ def f1772(c: Cast) -> None:
 
 
 @power("f1865", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Keyword.RAGE",))
+       reach=PERSONAL, target=SELF, dropped=("query.stance_keyword()",))
 def f1865(c: Cast) -> None:
     """The flat +1 plays. The increase to +2 turns on standing inside a
-    polymorph or a rage, and rage is not a keyword the tree has, so
-    there is no set of rows to ask about."""
+    primal polymorph or a rage.
+
+    **Re-pointed: `Keyword.RAGE` exists now (#503) and is no longer the
+    hold.** Both keywords are declared on their rows. What is missing is a
+    reader: `Effects.stance_of` gives the effect and nothing turns that back
+    into the row that laid it to ask which keywords it carries. The label
+    leads with the ref, so it is a small reader -- but a reader, not a
+    keyword."""
     c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
