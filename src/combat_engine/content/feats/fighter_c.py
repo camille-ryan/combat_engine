@@ -252,12 +252,22 @@ def f2358(c: Cast) -> None:
 
 
 @power("f2359", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.retarget_defence()",))
+       reach=PERSONAL, target=SELF)
 def f2359(c: Cast) -> None:
-    """The skill half plays. `p2104`, `p10733` and `p10593` may hit
-    Reflex instead of AC, and the defence a row rolls against is header
-    data -- the same gap `f2331` and four item blocks name."""
+    """A skill bonus, and three named rows that may hit Reflex instead of
+    AC.
+    **The defence was never header-only.** `resolve.roll` reads
+    `vs = declared.vs`, so an interrupt may move it -- what cannot is an
+    *ordinary* listener, which runs after the resolve callback has read the
+    field. That distinction is the whole of `c.attacks_defence`, and is
+    almost certainly how twelve rows concluded the engine could not do
+    this. #509.
+    """
     c.bonus("skill:acrobatics", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+    c.attacks_defence(
+        REF, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in ("p2104", "p10733", "p10593"),
+    )
 
 
 @power("f2360", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -304,11 +314,23 @@ def f2364(c: Cast) -> None:
 
 
 @power("f2366", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.retarget_defence()",))
+       reach=PERSONAL, target=SELF)
 def f2366(c: Cast) -> None:
-    """The skill half plays; `p4541`, `p2248`, `p10592` and `p10472` may
-    hit Fortitude instead of AC, which is header data."""
+    """A skill bonus, and four named rows that may hit Fortitude instead of
+    AC.
+    **The defence was never header-only.** `resolve.roll` reads
+    `vs = declared.vs`, so an interrupt may move it -- what cannot is an
+    *ordinary* listener, which runs after the resolve callback has read the
+    field. That distinction is the whole of `c.attacks_defence`, and is
+    almost certainly how twelve rows concluded the engine could not do
+    this. #509.
+    """
     c.bonus("skill:endurance", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+    c.attacks_defence(
+        FORT, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power")
+        in ("p4541", "p2248", "p10592", "p10472"),
+    )
 
 
 @power("f2370", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

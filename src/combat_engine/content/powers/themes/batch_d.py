@@ -1258,7 +1258,16 @@ def p15953(c: Cast) -> None:
     `c.rolls_with`, both of which exist -- `ability_for` *reads* which
     ability a line rolls and choosing is a different question. So the ability
     half is one line whenever the row has an attack to hang it on, and the
-    marker now names only what is missing."""
+    marker now names only what is missing.
+
+    **Correction: the defence is not header-only and the verb exists.**
+    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
+    cannot is an *ordinary* listener, which runs after the resolve callback
+    has already read the field. That distinction is the whole of
+    `c.attacks_defence` and is almost certainly how this family concluded the
+    engine could not do it. This row is writable -- it needs its card read,
+    not an engine change. #509.
+    """
 
 
 @power(

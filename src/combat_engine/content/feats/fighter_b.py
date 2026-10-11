@@ -701,15 +701,22 @@ def f1317(c: Cast) -> None:
 
 
 @power("f2331", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.retarget_defence()",))
+       reach=PERSONAL, target=SELF)
 def f2331(c: Cast) -> None:
-    """**Re-aimed from `todo` to `dropped`.** The card has two printed
-    sentences and only the second is missing: `p4541`, `p10471` or
-    `p10593` may hit Reflex instead of AC, and the defence a row rolls
-    against is header data with no verb to move it -- four item blocks
-    want the same one. The skill bonus is the whole of the first
-    sentence, stands whatever is in hand, and is worth playing."""
+    """A skill bonus, and three named rows that may hit Reflex instead of
+    AC.
+    **The defence was never header-only.** `resolve.roll` reads
+    `vs = declared.vs`, so an interrupt may move it -- what cannot is an
+    *ordinary* listener, which runs after the resolve callback has read the
+    field. That distinction is the whole of `c.attacks_defence`, and is
+    almost certainly how twelve rows concluded the engine could not do
+    this. #509.
+    """
     c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.attacks_defence(
+        REF, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in ("p4541", "p10471", "p10593"),
+    )
 
 
 @power("f2071", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -794,6 +801,15 @@ def f2332(c: Cast) -> None:
 
     Still dropped: `p622` and `p1019` hitting Reflex instead of AC is
     header data, the same gap `f2331` names.
+    
+
+    **Correction: the defence is not header-only and the verb exists.**
+    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
+    cannot is an *ordinary* listener, which runs after the resolve callback
+    has already read the field. That distinction is the whole of
+    `c.attacks_defence` and is almost certainly how this family concluded the
+    engine could not do it. This row is writable -- it needs its card read,
+    not an engine change. #509.
     """
     if not _grip(c, "hammer", "pick", hands=1):
         return

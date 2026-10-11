@@ -1694,5 +1694,14 @@ def i1318p1(c: Cast) -> None:
     defence is read off the power's own `Attack` line before the roll. The
     extra damage lands: declared in the `BEFORE` window so the modifier is
     installed before the triggering attack rolls its damage, and
-    `once=True` spends it there."""
+    `once=True` spends it there.
+
+    **Correction: the defence is not header-only and the verb exists.**
+    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
+    cannot is an *ordinary* listener, which runs after the resolve callback
+    has already read the field. That distinction is the whole of
+    `c.attacks_defence` and is almost certainly how this family concluded the
+    engine could not do it. This row is writable -- it needs its card read,
+    not an engine change. #509.
+    """
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EOT, once=True)

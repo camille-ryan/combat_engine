@@ -2238,6 +2238,86 @@ def class_form(out: Result) -> None:
     )
 
 
+def attacks_defence(out: Result) -> None:
+    """Move a creature's attacks onto a different defence.
+
+    Twelve rows print "your weapon attacks target Reflex instead of AC" and
+    all twelve say the engine cannot do it: *"`AttackDeclared.vs` is a field
+    but `resolve.attack` reads its own local afterwards, so a listener
+    rewriting it changes nothing."*
+
+    **That was already false when it was written.** `resolve.roll` reads
+    `vs = declared.vs`, and the comment above that line records the fix in
+    as many words. What *is* true, and is how the wrong conclusion was
+    almost certainly reached: an **ordinary** listener is too late. `roll` is
+    the resolve callback -- it runs after the interrupt window and before
+    ordinary listeners -- so a plain `c.watch` sees `AttackDeclared` only
+    once the defence has been read off it.
+
+    So the two controls that matter are the window ones. Asserting only that
+    the defence moved would pass on a verb registered in either window, and
+    the whole content of this verb is which one. #509.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import resolve as _resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackDeclared, AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    world, caster, _ = _board()
+    foe = sorted(enemies(world, caster))[0]
+    rolled: list[Defense] = []
+    world.bus.on(AttackRolled, lambda ev: rolled.append(ev.vs))
+
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
+    out.that(rolled[-1] is Defense.AC,
+             "with nothing moving it, the attack rolls against what it"
+             " declared")
+
+    # An ordinary listener is too late -- the control that is the whole
+    # point, and the reason twelve rows concluded this was impossible.
+    def late(ev: AttackDeclared) -> None:
+        if ev.attacker == caster:
+            ev.vs = Defense.WILL
+
+    sub = world.bus.on(AttackDeclared, late)
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
+    out.that(rolled[-1] is Defense.AC,
+             "an ORDINARY listener rewriting `vs` changes nothing -- it runs"
+             " after the resolve callback has read it, which is exactly what"
+             " the twelve rows observed and generalised too far")
+    world.bus.off(sub)
+
+    # The verb, which registers in the interrupt window.
+    c = Cast(world=world, me=caster, ref="drivers:vs")
+    held = c.attacks_defence(Defense.REF, until=When.ENCOUNTER)
+    out.that(held is not None, "the verb lays a hold")
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
+    out.that(rolled[-1] is Defense.REF,
+             "and the attack now rolls against Reflex -- the same rewrite,"
+             " in `Window.BEFORE`")
+
+    # Somebody else's attack is untouched.
+    _resolve.attack(world, foe, caster, 5, Defense.AC, power="drivers:vs")
+    out.that(rolled[-1] is Defense.AC,
+             "another creature's attack is untouched -- the control, without"
+             " which one feat moves every attack on the board")
+
+    # The gate.
+    world.effects.end(held, "driver ended it")
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
+    out.that(rolled[-1] is Defense.AC, "ending the hold puts it back")
+
+    c.attacks_defence(Defense.FORT, until=When.ENCOUNTER,
+                      when=lambda ctx: ctx.get("power") == "drivers:gated")
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
+    out.that(rolled[-1] is Defense.AC, "a gated hold declines the wrong row")
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:gated")
+    out.that(rolled[-1] is Defense.FORT, "and takes the one it names")
+
+
 def waive(out: Result) -> None:
     """Switch off part of what a condition costs, without lifting it.
 
@@ -3289,6 +3369,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "attacks_defence": (attacks_defence,
+                        "an attack moved onto a different defence"),
     "waive": (waive,
               "part of a condition's cost switched off, condition intact"),
     "extend_move": (extend_move,

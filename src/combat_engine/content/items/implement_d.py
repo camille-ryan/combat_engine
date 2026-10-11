@@ -1488,7 +1488,16 @@ def i2895x1(c: Cast) -> None:
     """The defence a power attacks is header data: `AttackDeclared.vs` is
     a field but `resolve.attack` reads its own local afterwards, so a
     listener rewriting it changes nothing. The block's second paragraph
-    is the tome's contents, which is the Power beside this one."""
+    is the tome's contents, which is the Power beside this one.
+
+    **Correction: the defence is not header-only and the verb exists.**
+    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
+    cannot is an *ordinary* listener, which runs after the resolve callback
+    has already read the field. That distinction is the whole of
+    `c.attacks_defence` and is almost certainly how this family concluded the
+    engine could not do it. This row is writable -- it needs its card read,
+    not an engine change. #509.
+    """
 
 
 @power(

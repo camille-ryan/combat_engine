@@ -41,6 +41,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     NO_TARGET,
     PERSONAL,
+    REF,
     SELF,
     ActionType,
     Cast,
@@ -437,12 +438,25 @@ def f1794(c: Cast) -> None:
 
 
 @power("f2227", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retarget_defence()",))
+       reach=PERSONAL, target=SELF)
 def f2227(c: Cast) -> None:
-    """Weapon attacks hit Reflex instead of AC while a named power holds
-    you insubstantial. The power is `p2482` and `c.insubstantial` is
-    readable -- what is missing is swapping the defence a row rolls
-    against, which four item blocks also want."""
+    """Weapon attacks hit Reflex instead of AC while `p2482` holds you
+    insubstantial.
+
+    **The defence was never header-only.** `resolve.roll` reads
+    `vs = declared.vs`, so an interrupt may move it -- what cannot is an
+    *ordinary* listener, which runs after the resolve callback has read the
+    field. `c.attacks_defence` registers in the right window, and that
+    distinction is almost certainly how twelve rows concluded this was
+    impossible. #509.
+
+    Asked per attack rather than once at arming: the insubstantiality is a
+    hold that can end mid-fight and the swap must end with it.
+    """
+    c.attacks_defence(
+        REF, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: c.is_(Condition.INSUBSTANTIAL, on=c.me),
+    )
 
 
 @power("f2819", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

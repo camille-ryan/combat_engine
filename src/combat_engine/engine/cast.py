@@ -6363,6 +6363,56 @@ class Cast:
                     self.target = was
         return default()
 
+    def attacks_defence(
+        self,
+        defence: Defense,
+        *,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Move this creature's attacks onto a different defence.
+
+        "Your weapon attacks target Reflex instead of AC", printed on twelve
+        rows across four fighter feats, an assassin feat and five item
+        blocks.
+
+        **The engine has always allowed this and the rows said it did not.**
+        Their note reads *"`AttackDeclared.vs` is a field but `resolve.attack`
+        reads its own local afterwards, so a listener rewriting it changes
+        nothing"*, and `resolve.roll` has read `vs = declared.vs` since the
+        commit whose comment says *"a row printing 'its attacks target Reflex
+        instead of AC' set the field, changed nothing, and logged nothing"*.
+
+        What is true, and is almost certainly how the wrong conclusion was
+        reached: **an ordinary listener is too late.** `roll` is the resolve
+        callback and runs after the interrupt window but before ordinary
+        listeners, so a plain `c.watch` sees the event only once the defence
+        has been read. This registers in `Window.BEFORE`, which is the whole
+        of the difference and the reason to have a verb rather than twelve
+        hand-rolled watches.
+
+        `when` reads the attack context, so "while you are insubstantial" and
+        "with a weapon" are sayable. #509.
+        """
+        from .events import AttackDeclared, Window
+
+        who = self.me if on is None else on
+
+        def swap(ev: AttackDeclared) -> None:
+            if ev.attacker != who:
+                return
+            if when is not None and not when(getattr(ev, "ctx", None) or {
+                "attacker": ev.attacker, "target": ev.target, "power": ev.power,
+            }):
+                return
+            ev.vs = defence
+
+        return self.watch(
+            AttackDeclared, swap, until=until, window=Window.BEFORE,
+            on=who, label=f"{self.ref} vs {defence.value}",
+        )
+
     def waive(
         self,
         condition: Condition,

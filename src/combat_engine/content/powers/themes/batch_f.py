@@ -217,7 +217,16 @@ def p12244(c: Cast) -> None:
 def p12245(c: Cast) -> None:
     """The swap and the redirection are exact. The +2 against the triggering
     attack is not: the roll is already settled by the time a `Hit` is
-    announced, so nothing the row lays can change what it is compared to."""
+    announced, so nothing the row lays can change what it is compared to.
+
+    **Correction: the defence is not header-only and the verb exists.**
+    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
+    cannot is an *ordinary* listener, which runs after the resolve callback
+    has already read the field. That distinction is the whole of
+    `c.attacks_defence` and is almost certainly how this family concluded the
+    engine could not do it. This row is writable -- it needs its card read,
+    not an engine change. #509.
+    """
     mate = c.target
     if mate is None:
         return
