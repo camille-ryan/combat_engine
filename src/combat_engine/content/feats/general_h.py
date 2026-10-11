@@ -422,12 +422,15 @@ def f1292(c: Cast) -> None:
     )
 
 
-@_trait("f1236", todo=("c.extend_move()",))
+@_trait("f1236")
 def f1236(c: Cast) -> None:
-    """Adds a modifier to the distance a named racial power teleports.
-    The distance is an argument inside that row's own body; a second
-    teleport laid beside it would be two hops, which is a different
-    thing when something stands between."""
+    """Adds the Intelligence modifier to the distance `p2482` teleports.
+
+    **Not a second teleport laid beside the first**, which this row's own
+    note said before the verb existed: two hops of 3 and 4 are not one hop
+    of 7 the moment anything is in the way. #502.
+    """
+    c.extend_move("p2482", c.int_mod)
 
 
 # -- the standing bonuses ---------------------------------------------------

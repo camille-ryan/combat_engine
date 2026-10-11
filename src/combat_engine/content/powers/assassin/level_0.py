@@ -205,7 +205,10 @@ def p9401(c: Cast) -> None:
     """"To a square adjacent to a different creature" is a constraint on the
     destination and `c.teleport` has no way to carry one, so the square is
     left to the world's decider."""
-    c.teleport(3 if c.level < 11 else (4 if c.level < 21 else 5))
+    # Read rather than written in, so `f2935` can lengthen it. #502.
+    c.teleport(
+        c.squares_for(c.ref, 3 if c.level < 11 else (4 if c.level < 21 else 5))
+    )
 
 
 @power(

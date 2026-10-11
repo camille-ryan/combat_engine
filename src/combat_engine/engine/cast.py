@@ -6363,6 +6363,87 @@ class Cast:
                     self.target = was
         return default()
 
+    def extend_move(
+        self,
+        ref: str,
+        squares_: int,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """Make a named row move you further. `c.extend_move("p1449", 5)`.
+
+        The sibling of `change_dice` and the same argument: the distance a
+        row moves you is an **argument inside its own body**, so "one more
+        square on every swordmage teleport" had nothing to change. Eleven
+        rows print a sentence of that shape.
+
+        **Not a second move laid beside the first.** Two hops of 1 and 8 are
+        not one hop of 9 the moment anything is in the way, and that is the
+        whole reason this is a modifier on the distance rather than another
+        `c.teleport` -- `f1236`'s note said so before the verb existed.
+
+        **A row must read it to be changed**, with `squares_for`, exactly as
+        `change_dice` requires `dice_for`. A `extend_move` on a row whose
+        body still hard-codes its distance is a modifier nothing consults,
+        which is this component's commonest bug.
+
+        `when` is a context predicate, so "if it ends next to a shrouded
+        enemy" is sayable by the row that moves. #502.
+
+        **Defaults to the caster, not to `c.target`.** Every card printing
+        this is about your own move -- "one more square on every swordmage
+        teleport you make" -- and the repo already has this bug on record
+        once: `c.surge_value` fell through to the target and healed off the
+        wrong creature's maximum while its docstring read as though it did
+        not. `change_dice` still takes `_who`, which is right for it because
+        a row may change the dice of somebody else's power.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        entry = (squares_, when)
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} moves {ref} {squares_:+d}",
+            on_end=[lambda: _drop_squares(known, ref, entry)],
+        )
+        if effect is None:
+            return None
+        known.extra_squares.setdefault(ref, []).insert(0, entry)
+        return effect
+
+    def squares_for(
+        self, ref: str = "", default: int = 0, ctx: dict[str, Any] | None = None
+    ) -> int:
+        """How far this row moves this creature, after anything lengthening it.
+
+        The read half of `extend_move`. `default` is what the card prints, so
+        a row writes `c.teleport(c.squares_for(c.ref, 8))` and keeps working
+        for everybody who has nothing changing it.
+
+        **The entries add**, where `dice_for` takes the first that matches: a
+        die is replaced and a distance is increased, so two feats each
+        granting a square grant two. That is what the cards say and it is the
+        one place these two verbs differ.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None:
+            return default
+        seen = ctx or {}
+        extra = sum(
+            n
+            for n, gate in known.extra_squares.get(ref or self.ref, ())
+            if gate is None or gate(seen)
+        )
+        return default + extra
+
     def dice_for(
         self, ref: str = "", default: str = "", ctx: dict[str, Any] | None = None
     ) -> str:
@@ -10088,6 +10169,19 @@ def _drop_entry(store: dict, key: Any, entry: tuple) -> None:
             break
     if not held:
         store.pop(key, None)
+
+
+def _drop_squares(known: Any, ref: str, entry: tuple) -> None:
+    """Undo one `c.extend_move`, by identity, for the reason `_drop_dice`
+    gives: two feats may grant the same number of squares to the same row,
+    and removing by value would take the wrong one off."""
+    held = known.extra_squares.get(ref)
+    if not held:
+        return
+    for i, one in enumerate(held):
+        if one is entry:
+            del held[i]
+            break
 
 
 def _drop_dice(known: Any, ref: str, entry: tuple) -> None:

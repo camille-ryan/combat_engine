@@ -2238,6 +2238,76 @@ def class_form(out: Result) -> None:
     )
 
 
+def extend_move(out: Result) -> None:
+    """Make a named row move you further, from outside it.
+
+    The distance a row moves you is an **argument inside its own body** --
+    `c.teleport(8)`, `c.shift(1)`, `c.slide(3)` -- so "one more square on
+    every swordmage teleport" and "five squares further on that power" had
+    nothing to change. Eleven rows print a sentence of that shape and each
+    had worked out the gap independently in its own docstring. #502.
+
+    The exact sibling of `change_dice`/`dice_for`, which won the same
+    argument for dice, and the same bargain applies: **a row must read it to
+    be changed.** A modifier nothing consults is this component's commonest
+    bug.
+
+    Two things here are worth asserting beyond the obvious:
+
+    * **the entries add**, where `dice_for` takes the first that matches. A
+      die is *replaced* and a distance is *increased*, so two feats each
+      granting a square grant two. That is the one place the two verbs
+      differ and it is easy to copy wrongly.
+    * **a second move laid beside the first is not the same thing.** Two
+      hops of 1 and 8 are not one hop of 9 the moment anything is in the
+      way, which is why this is a modifier and not another `c.teleport`.
+      Asserted as a distance, not as two calls.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:reach")
+    known = world.need(caster, Powers)
+
+    out.that(c.squares_for("p9999", 8) == 8,
+             "with nothing changing it, a row moves what its card prints")
+
+    first = c.extend_move("p9999", 2)
+    out.that(first is not None, "a feat lengthens it")
+    out.that(c.squares_for("p9999", 8) == 10, "by exactly its two squares")
+
+    second = c.extend_move("p9999", 1)
+    out.that(c.squares_for("p9999", 8) == 11,
+             "and a second feat ADDS to the first -- 8+2+1. `dice_for` takes"
+             " the first match instead, because a die is replaced where a"
+             " distance is increased")
+
+    out.that(c.squares_for("p8888", 8) == 8,
+             "a different row is untouched -- the control, without which one"
+             " feat lengthens every move in the game")
+
+    # The gate.
+    c.extend_move("p9999", 5, when=lambda ctx: bool(ctx.get("beside_shroud")))
+    out.that(c.squares_for("p9999", 8) == 11,
+             "a gated square is absent when its condition is not in the"
+             " context")
+    out.that(c.squares_for("p9999", 8, {"beside_shroud": True}) == 16,
+             "and present when it is")
+
+    # Ending one takes back exactly one.
+    if first is not None:
+        world.effects.end(first, "driver ended it")
+    out.that(c.squares_for("p9999", 8) == 9,
+             "ending the first feat's effect takes back its two squares and"
+             " leaves the other one -- removed by identity, because two feats"
+             " may grant the same number to the same row")
+    out.that(len(known.extra_squares.get("p9999", ())) == 2,
+             "and the store holds the other two entries, not a stale third")
+    _ = second
+
+
 def conceal_in(out: Result) -> None:
     """A zone that conceals whoever stands in it, which `c.conceal` cannot
     say.
@@ -3133,6 +3203,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "extend_move": (extend_move,
+                    "a named row moves you further, from outside it"),
     "conceal_in": (conceal_in,
                    "a zone that conceals whoever stands in it"),
     "rerolled": (rerolled,

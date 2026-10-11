@@ -736,6 +736,27 @@ class Powers:
     dice: dict[str, list[tuple[str, Callable[[dict[str, Any]], bool] | None]]] = field(
         default_factory=dict
     )
+    #: Extra squares a named row moves you, when something has lengthened it.
+    #:
+    #: The exact sibling of `dice` above, and the same argument wins it: the
+    #: distance a row moves you is an **argument inside its own body** --
+    #: `c.teleport(8)`, `c.shift(1)`, `c.slide(3)` -- so "one more square on
+    #: every swordmage teleport" and "five squares further on that power" had
+    #: nothing to change. Eleven rows print a sentence of that shape and each
+    #: says so in its own docstring.
+    #:
+    #: A second move laid beside the first is **not** the same thing: two hops
+    #: of 1 and 8 are not one hop of 9 when something blocks the way, and
+    #: `f1236`'s note already said that.
+    #:
+    #: A list, latest first, and `when` is a context predicate so "if it ends
+    #: beside a shrouded enemy" is sayable. The values **add**, unlike `dice`
+    #: where the first match wins: two feats each granting a square give two
+    #: squares, which is what the cards say. `Cast.squares_for` is the read
+    #: and the row that moves must use it. #502.
+    extra_squares: dict[
+        str, list[tuple[int, Callable[[dict[str, Any]], bool] | None]]
+    ] = field(default_factory=dict)
     #: Keywords a named row carries **for this creature only**, by ref.
     #:
     #: "Your `p1448` power is considered an arcane attack power", "your

@@ -773,7 +773,7 @@ def f2584(c: Cast) -> None:
 
 @power("f2600", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.extend_move()", "c.extend_shift()"))
+       dropped=("c.extend_move(any_of=)", "c.extend_shift()"))
 def f2600(c: Cast) -> None:
     """Three clauses on three refs -- `p7441`, `p7442`, `p7443` -- so the
     naming gap is gone and what is left is not one gap but two.
@@ -1206,7 +1206,8 @@ def f2702b(c: Cast) -> None:
     """Declared on the hit rather than on the damage: `DamageApplied`
     does not say whether an attack caused it, and a hit that rolls no
     damage is not a case this card has to tell apart."""
-    c.teleport(3)
+    # Read rather than written in, so `f2703` can lengthen it. #502.
+    c.teleport(c.squares_for(c.ref, 3))
     c.conceal(on=c.me, until=When.SONT)
 
 
@@ -1242,10 +1243,15 @@ def f2701(c: Cast) -> None:
 
 
 @power("f2703", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_move()",))
+       reach=PERSONAL, target=SELF)
 def f2703(c: Cast) -> None:
-    """Lengthens the teleport `f2702b` makes. The distance is written
-    into that row's body, and nothing reaches into another row's move."""
+    """Lengthens the teleport `f2702b` makes, by the better of two modifiers.
+
+    "Your Dexterity modifier **or** your Intelligence modifier" is the
+    holder's choice, and so it is the larger of the two -- nobody picks the
+    smaller. #502.
+    """
+    c.extend_move("f2702b", max(c.dex_mod, c.int_mod))
 
 
 # -- standing bonuses -------------------------------------------------------

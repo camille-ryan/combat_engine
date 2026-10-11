@@ -183,11 +183,16 @@ def f273(c: Cast) -> None:
 
 
 @power("f786", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_move()",))
+       reach=PERSONAL, target=SELF)
 def f786(c: Cast) -> None:
-    """Adds two squares to the distance two named racial powers move you.
-    Both are named by ref, so this is not a naming gap -- nothing adds to
-    the distance a *particular* row moves."""
+    """Two squares on each of two named racial powers.
+
+    Both were named by ref already, so this was never a naming gap -- what
+    was missing is that the distance a row moves you is an argument inside
+    its own body. Both of them read `c.squares_for` now. #502.
+    """
+    c.extend_move("p1770", 2)
+    c.extend_move("p1828", 2)
 
 
 @power("f764", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -291,7 +291,7 @@ def f2262(c: Cast) -> None:
 
 
 @power("f2263", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_move()",))
+       reach=PERSONAL, target=SELF, todo=("c.extend_move(any_of=)",))
 def f2263(c: Cast) -> None:
     """One more square on every swordmage teleport. The distance is an
     argument each row passes to `c.teleport` and nothing adds to it --

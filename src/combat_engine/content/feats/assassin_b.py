@@ -651,7 +651,8 @@ def f1803(c: Cast) -> None:
 
 
 @power("f1807", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_move()",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.extend_move(destination=)",))
 def f1807(c: Cast) -> None:
     """Five squares further on `p1449`, if it ends beside a shrouded
     enemy. The power is a ref and `c.shrouds` answers the condition;

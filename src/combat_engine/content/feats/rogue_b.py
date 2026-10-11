@@ -283,7 +283,7 @@ def f2075(c: Cast) -> None:
 
 
 @power("f820", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_move()",),
+       reach=PERSONAL, target=SELF, dropped=("c.extend_move(mid_move=)",),
        trigger="an opportunity attack hits you while you are moving",
        on=Trigger(Hit, _at_me, "you are hit"))
 def f820(c: Cast) -> None:

@@ -1644,7 +1644,7 @@ def m2341a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.extend_move()",),
+    dropped=("c.extend_move(mid_move=)",),
 )
 def m2341a4(c: Cast) -> None:
     """"A +5 racial bonus" -- the word in front of "bonus" is the type, and

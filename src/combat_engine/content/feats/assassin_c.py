@@ -61,7 +61,12 @@ from combat_engine.engine.events import (
 #: The row whose body invokes the shrouds and rolls what they are worth.
 SHROUDS = "p9400"
 #: How far a named row moves you is header data, read before the body.
-DISTANCE = ("c.extend_move()",)
+#: **Removed as a shared constant, because the three rows that carried it
+#: want three different things** -- which is the fault `content/CLAUDE.md`
+#: names: one symbol serving several needs cannot go red or green correctly
+#: for any of them. `f2935` is written now; `f2921` wants a modifier keyed
+#: to where the move *ends*; `f2831` replaces another row's move rather than
+#: lengthening it. #502.
 #: A row's printed Requirement, waived for one use. `Power.requires` is
 #: asked by `dsl.usable` and nothing standing on the creature relaxes it.
 REQUIREMENT = ("c.ignore_requirement(ref)",)
@@ -175,7 +180,7 @@ def f2827(c: Cast) -> None:
 
 
 @power("f2831", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=DISTANCE,
+       reach=PERSONAL, target=SELF, dropped=("c.instead_of(move=)",),
        trigger="you use p9401 inside your p2473",
        on=Trigger(PowerUsed, _used("p9401"), "you use that teleport"))
 def f2831(c: Cast) -> None:
@@ -504,18 +509,30 @@ def f2937(c: Cast) -> None:
 
 
 @power("f2921", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=DISTANCE)
+       reach=PERSONAL, target=SELF,
+       todo=("c.extend_move(destination=)",))
 def f2921(c: Cast) -> None:
-    """Two squares further on any teleport that ends beside the p3069
-    target. `c.teleport` takes a distance from its caller and there is no
-    standing modifier a move of any kind reads."""
+    """Two squares further on **any** teleport that ends beside the `p3069`
+    target.
+
+    `c.extend_move` landed (#502) and is keyed to one named row, which this
+    is not: the card narrows by where the move *ends*, across every teleport
+    the character has. The distance is chosen before the destination is, so
+    the gate cannot be asked at the moment `c.squares_for` is read -- which
+    is the same obstacle `f1807` carries."""
 
 
 @power("f2935", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=DISTANCE)
+       reach=PERSONAL, target=SELF)
 def f2935(c: Cast) -> None:
-    """A square further on p9401, and it accumulates across a fight. Same
-    gap as f2921, and it is the half f2831 drops."""
+    """A square further on `p9401`.
+
+    One named row, which is what `c.extend_move` is keyed to, and `p9401`
+    reads `c.squares_for` now. "It accumulates across a fight" needs nothing
+    extra: the entries **add**, so taking this twice grants two squares,
+    which is the one place `squares_for` differs from `dice_for`. #502.
+    """
+    c.extend_move("p9401", 1)
 
 
 # -- the rest ---------------------------------------------------------------

@@ -1949,7 +1949,7 @@ def f3168(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p2482",
        on=Trigger(PowerUsed, _used("p2482"), "you use that power"),
-       dropped=("c.extend_move()",))
+       dropped=("c.spend_points(choice=)",))
 def f3169(c: Cast) -> None:
     """The insubstantiality plays. Lengthening the teleport the power
     itself makes would have to reach inside that row, and `PowerUsed` is

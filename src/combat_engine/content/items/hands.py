@@ -568,7 +568,7 @@ def i839x1(c: Cast) -> None:
 
 
 @power("i839p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_move()",))
+       reach=PERSONAL, target=SELF, dropped=("c.extend_move(mode=)",))
 def i839p1(c: Cast) -> None:
     """Climbing at full speed is a movement mode at that speed; doubling
     climb movement somebody *else* grants has no verb."""

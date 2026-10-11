@@ -321,7 +321,8 @@ def p1770(c: Cast) -> None:
         c.ignore_condition(Condition.SQUEEZING, on=c.me, until=When.EOT),
     )
     try:
-        c.shift(c.speed_of())
+        # Read rather than written in, so `f786` can lengthen it. #502.
+        c.shift(c.squares_for(c.ref, c.speed_of()))
     finally:
         for one in held:
             if one is not None:

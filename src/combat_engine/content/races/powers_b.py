@@ -750,7 +750,8 @@ def p16468(c: Cast) -> None:
     keywords=[Keyword.TELEPORTATION],
 )
 def p2482(c: Cast) -> None:
-    c.instead_of("teleport", lambda: c.teleport(3))
+    # Read rather than written in, so `f1236` can lengthen it. #502.
+    c.instead_of("teleport", lambda: c.teleport(c.squares_for(c.ref, 3)))
     c.insubstantial(until=When.SONT, on=c.me)
 
 
@@ -833,8 +834,12 @@ def p1767(c: Cast) -> None:
 def p1828(c: Cast) -> None:
     """The mode is lent for the turn so the pathfinder measures 8 rather than
     the ground speed; the float down is the absence of falling damage."""
-    c.mode("fly", 8, until=When.EOT, on=c.me)
-    c.move(8, at="fly")
+    # One read, used for both: the mode and the move are the same printed
+    # distance, and lengthening only one would let the pathfinder measure a
+    # route it is not allowed to finish. #502.
+    far = c.squares_for(c.ref, 8)
+    c.mode("fly", far, until=When.EOT, on=c.me)
+    c.move(far, at="fly")
 
 
 @power(

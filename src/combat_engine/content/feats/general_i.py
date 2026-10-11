@@ -1288,7 +1288,7 @@ def f1392(c: Cast) -> None:
 
 @power("f1393", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.extend_shift()", "c.extend_move()"))
+       todo=("c.extend_shift()", "c.extend_move(any_of=)"))
 def f1393(c: Cast) -> None:
     """One extra square on every shift and every teleport a power grants.
     Both are distances a row names when it moves you; nothing lengthens
