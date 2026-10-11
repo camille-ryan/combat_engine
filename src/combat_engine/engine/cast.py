@@ -9876,9 +9876,22 @@ class Cast:
         who = self._who(on)
         gear = self.world.get(who, Gear) if who is not None else None
         if gear is None:
+            self.world.bus.emit(
+                Note(text=f"{self.ref} cannot disarm {who}: it holds no gear")
+            )
             return False
         arm = weapon or gear.main
         if arm is None or arm not in gear.weapons:
+            # **Say why.** Every monster in the game reaches this branch --
+            # `loader.spawn` hands them `Gear()` with an empty `weapons`, so
+            # `gear.main` is None -- and returning a bare False made a row
+            # that tried to disarm a creature indistinguishable from one that
+            # succeeded against an empty hand. Which the model cannot
+            # currently tell apart either, and #518 is where that is decided;
+            # this is only the half that is right under every answer.
+            self.world.bus.emit(
+                Note(text=f"{self.ref} cannot disarm {who}: nothing in hand")
+            )
             return False
         gear.weapons.remove(arm)
         gear.stowed.discard(arm.ref)
