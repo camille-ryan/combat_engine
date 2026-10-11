@@ -1034,12 +1034,15 @@ def p16454(c: Cast) -> None:
                    both(lambda w, me, ev: getattr(ev, "actor", None) == me,
                         lambda w, me, ev: not ev.saved),
                    "you fail a saving throw")),
-       todo=("c.on_reroll()",))
+       todo=("c.bank_reroll()",))
 def p16455(c: Cast) -> None:
-    """The whole Effect is a reroll held over a window and spent on some
-    *later* roll of the character's choosing. `c.reroll_check` and
-    `c.reroll_attack` both act on the roll being answered, which is
-    exactly the one the card excludes."""
+    """**Re-pointed: announcing a reroll (#496) does not reach this.**
+
+    Every reroll verb in the engine acts on the roll being *answered*, read
+    off `c.trigger`. This card holds a reroll over a window and spends it on
+    some later roll of the character's choosing -- which is precisely the
+    roll it excludes. The missing thing is a stored, unspent reroll, not a
+    moment or a flag."""
 
 
 @power("p16456", level=6, cls="x7_991", usage=ENCOUNTER, action=REACTION,
@@ -1178,12 +1181,18 @@ def p16677(c: Cast) -> None:
 
 
 @power("p16678", level=10, cls="x7_1018", usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("c.on_reroll()",))
+       reach=PERSONAL, target=SELF, todo=("c.roll_twice()",))
 def p16678(c: Cast) -> None:
-    """"Roll twice and take the higher" standing over a whole encounter is
-    not `c.reroll_check`, which answers one settled roll. Perfect recall is
-    the other clause and has no combat half at all, so there is nothing
-    here that plays."""
+    """**Re-pointed: a standing advantage, not a reroll (#496).**
+
+    "Roll twice and take the higher" for a whole encounter is not a reroll
+    answering one settled roll -- it changes how every roll of a kind is
+    made. `c.reroll_damage` is the nearest thing and is the same idea on the
+    damage side, which is the argument that this belongs as its own standing
+    modifier rather than as a watcher that rerolls everything.
+
+    The other printed clause has no combat meaning at all, so nothing here
+    plays and the marker stays `todo=`."""
 
 
 # ---------------------------------------------------------------- x7_889 --

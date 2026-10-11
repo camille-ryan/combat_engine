@@ -55,9 +55,6 @@ from combat_engine.engine.query import allies, distance_between, enemies
 
 #: A racial power the benefit line names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: Nothing announces that a roll was a reroll, so a rider on one cannot
-#: find its moment. The ranger's f761 dropped a clause for the same.
-REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 
@@ -340,19 +337,43 @@ def f471(c: Cast) -> None:
 
 
 @power("f216", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+       reach=PERSONAL, target=SELF,
+       todo=("c.penalty(on_attacker=)",))
 def f216(c: Cast) -> None:
-    """A penalty on the attack roll a racial power forces to be made
-    again. `p1452` is a ref -- what is missing is that nothing announces
-    a roll is a reroll, so there is no moment at which to penalise
-    one."""
+    """**Re-pointed. The reroll half landed in #496 and was not the hold.**
+
+    `f217` one row down is the same sentence and is now written in three
+    lines, because its +2 lands on the holder's own roll and a standing
+    modifier gated on `reroll_by` reaches it. This one does not: `p1452`
+    makes the creature *attacking you* roll again, and
+    `resolve._mods(world, attacker, "attack", ctx)` reads the attacker's
+    own `Mods`. A penalty imposed by the defender has nowhere to sit.
+
+    Laying it on every enemy at arming is the near miss and is wrong: it
+    misses anything that joins the fight later, and the hole is invisible.
+    What is wanted is a penalty the defender carries and the attacker's roll
+    consults -- which is a real engine gap and not this row's to invent.
+    """
 
 
 @power("f217", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+       reach=PERSONAL, target=SELF)
 def f217(c: Cast) -> None:
-    """A bonus on the roll `p1450` buys. Same gap as f216, from the
-    other side."""
+    """+2 on the new attack roll `p1450` buys.
+
+    A **standing** modifier, not a triggered one, and that is the whole
+    simplification: the gate `reroll_by` only answers true while
+    `c.reroll_attack` is re-summing, so a bonus laid once at arming applies
+    to exactly the rolls the card names and to nothing else. No trigger, no
+    arming, no window to get the ordering wrong. #496.
+
+    `reroll_by` rather than a bare `reroll`: the card says the roll *this*
+    racial power forces, so a magic weapon`s reroll must not pick it up.
+    """
+    c.bonus(
+        "attack", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: ctx.get("reroll_by") == "p1450",
+    )
 
 
 @power("f287", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

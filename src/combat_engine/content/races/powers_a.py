@@ -78,8 +78,8 @@ from combat_engine.engine import (
     Melee,
     Miss,
     MoveStart,
-    PowerUsed,
     Ranged,
+    Rerolled,
     SavingThrow,
     SkillCheck,
     Target,
@@ -96,6 +96,7 @@ from combat_engine.engine import (
     hits_me,
     my_check,
     power,
+    rerolled_by,
     targets_me,
 )
 from combat_engine.engine.components import Health, Position
@@ -1201,12 +1202,23 @@ def p16040(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you use p1450 to reroll an attack and dislike the result",
-    on=Trigger(PowerUsed, _used("p1450"), "you use p1450"),
-    todo=("c.on_reroll()",),
+    on=Trigger(Rerolled, rerolled_by("p1450", roll="attack"),
+               "p1450 has rerolled your attack"),
 )
 def p16044(c: Cast) -> None:
-    """A reroll is not announced, so there is no second result to dislike:
-    `PowerUsed` fires above the body of the row that would have rolled."""
+    """Roll it a third time with a +2 power bonus, and keep that.
+
+    **The trigger moved off `PowerUsed`, which was the fault.** That event
+    fires *above* the body of the row doing the rolling, so this row was
+    offered before `p1450` had rerolled anything -- there was no second
+    result to dislike, which is what its old docstring said. `Rerolled`
+    fires after, with the new face and the live result on it. #496.
+
+    `keep="new"` is the printed "use this result, even if it's lower", and
+    `bonus=2` is one clause with the reroll rather than a `c.bonus` laid
+    afterwards, which the next roll would read instead of this one.
+    """
+    c.reroll_attack(keep="new", bonus=2)
 
 
 def _under_a_save(world, me: int, ev: Any) -> bool:  # noqa: ANN001

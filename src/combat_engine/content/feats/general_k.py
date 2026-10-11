@@ -83,6 +83,7 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Ranged,
+    Rerolled,
     SavingThrow,
     SecondWind,
     SkillCheck,
@@ -93,6 +94,7 @@ from combat_engine.engine import (
     Wall,
     When,
     Window,
+    World,
     about_me,
     get,
     power,
@@ -110,9 +112,6 @@ R33 = (
     "p10043", "p10044", "p10045", "p10046",
     "p14073", "p14074", "p14075", "p14076",
 )
-#: Nothing announces that a roll was a reroll, so a rider on one cannot
-#: find its moment.
-REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 #: A class feature named in prose with no ref behind it.
@@ -458,11 +457,46 @@ def f1674(c: Cast) -> None:
     here would be a second, separate shift. Same hold `f2600` carries."""
 
 
-@power("f1697", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+def _any_reroll_of_mine(world: World, me: int, ev: Any) -> bool:
+    """Any reroll this creature made, of any kind and from any power.
+
+    `f1697` narrows on nothing: "when you reroll an attack roll, skill check,
+    or ability check". So it reads `Rerolled` bare, where the racial-power
+    feats in this family narrow with `rerolled_by`. #496.
+    """
+    return getattr(ev, "actor", None) == me
+
+
+@power("f1697", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you reroll an attack roll, a skill check or an ability check",
+       on=Trigger(Rerolled, _any_reroll_of_mine, "you roll a d20 again"),
+       dropped=("c.ability_check()", "c.grants_advantage(everyone=)"))
 def f1697(c: Cast) -> None:
-    """Pays out on a reroll, in both directions. Nothing announces that a
-    roll is a second one, so neither half has a moment."""
+    """+2 on the reroll, and combat advantage to all attackers if it came
+    out worse.
+
+    The bonus is the half that plays. It answers any reroll of this
+    creature's, narrowing on neither a ref nor a power, which is what the
+    card prints -- so it reads `Rerolled` bare where the racial-power feats
+    use `rerolled_by`.
+
+    Two clauses are short and both are `dropped=` rather than notes. The
+    **ability check** is a roll this engine does not have, with eleven other
+    rows waiting on it. And "grants combat advantage to **all** attackers"
+    has no spelling: `c.grants_advantage(to=)` names one beneficiary, an
+    ally, or your own side -- there is no word for the other side, and
+    looping over the enemies on the board at this instant would miss
+    whatever arrives next. #496.
+
+    **The marker is spelled `everyone=` and was first written
+    `to='everyone'`, which `todo.py` reported as already existing.** A
+    symbol naming a *value* for a kwarg that exists collides with the verb
+    itself, so the row read as ready the moment it was marked. A kwarg that
+    genuinely does not exist is the only shape the check can answer
+    honestly.
+    """
+    c.boost_roll(2)
 
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

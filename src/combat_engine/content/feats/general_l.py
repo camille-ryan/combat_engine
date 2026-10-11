@@ -81,6 +81,7 @@ from combat_engine.engine import (
     When,
     Window,
     about_me,
+    after_forced_reroll,
     get,
     hits_me,
     power,
@@ -95,8 +96,6 @@ from combat_engine.engine.query import alive, allies, distance_between, holding,
 RACE_OPTION = ("c.race_option()",)
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
-#: Nothing announces that a roll was a reroll.
-REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 #: Total defence is not an action this engine has.
@@ -875,29 +874,77 @@ def f2879(c: Cast) -> None:
     which is the build choice nothing records."""
 
 
-@power("f2753", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+@power("f2753", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="p1452 makes an enemy reroll its attack and the reroll misses",
+       on=Trigger(Miss, after_forced_reroll("p1452"),
+                  "the attack you forced to be rerolled missed"))
 def f2753(c: Cast) -> None:
-    """A penalty when the attack `p1452` forces to be made again misses.
-    `p1452` is a ref -- the gap is that nothing announces a roll is a
-    reroll, which is the same hold `general_f.f216` carries."""
+    """That enemy takes -2 to attack rolls until the end of your next turn.
+
+    A penalty on the enemy's own rolls, so it is laid on the enemy and needs
+    no gate -- which is what separates it from `f216`, whose -2 applies only
+    to the one forced roll and so has to be a gated modifier on a creature
+    that is not the feat holder. #496.
+    """
+    foe = getattr(c.trigger, "attacker", None)
+    if foe is None:
+        return
+    # No `kind=`: `c.penalty` refuses one outright, because a penalty has no
+    # type in 4e and what stops two from stacking is coming from the same
+    # row -- which the label already is.
+    c.penalty("attack", 2, on=foe, until=When.EONT)
 
 
-@power("f2846", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+@power("f2846", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="p1452 makes an enemy reroll its attack",
+       on=(
+           Trigger(Miss, after_forced_reroll("p1452"),
+                   "the forced reroll missed"),
+           Trigger(Hit, after_forced_reroll("p1452"),
+                   "the forced reroll hit"),
+       ))
 def f2846(c: Cast) -> None:
-    """Damage to the attacker when `p1452`'s rerolled roll misses. The
-    two-type damage is writable now (`c.flat(dtypes=)`) and the `f651`
-    clause is an ordinary `c.feat`; what is left is the same reroll gap
-    as f2753 -- nothing announces that a roll is a reroll, so the moment
-    both halves of the row hang on never comes."""
+    """Fire and necrotic damage to the attacker, and it cannot see you.
+
+    **Both outcomes are declared and they pay out differently**, which is
+    what the second printed sentence is for: a miss always pays, and a hit
+    pays only with `f651` taken. Declaring only `Miss` would have dropped
+    half the card for anyone who has that feat, and declaring only the
+    damage would have paid the blinding on a hit as well -- the card does
+    not.
+    """
+    foe = getattr(c.trigger, "attacker", None)
+    if foe is None:
+        return
+    landed = isinstance(c.trigger, Hit)
+    if landed and not c.feat("f651"):
+        return
+    c.flat(c.level, dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=foe)
+    if not landed:
+        c.hide(from_=foe, until=When.EONT)
 
 
 @power("f2849", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+       reach=PERSONAL, target=SELF,
+       todo=("c.ignore_cover(reroll=)", "c.retype_damage(dtypes=)"))
 def f2849(c: Cast) -> None:
-    """Rides on `p1450`'s reroll. Same gap from the other side, and
-    neither the pair of damage types nor the `f651` clause is still one."""
+    """**Re-pointed. The reroll is announced now (#496) and neither clause
+    was waiting on that.** Two symbols, because the row prints two things
+    this engine cannot say and they fail for unrelated reasons.
+
+    The rerolled attack **ignores cover and concealment**. `c.ignore_cover`
+    takes a `when=` gate, so the obvious version is a gate on `reroll_by` --
+    and it would be silently false: cover is read inside `defence()` with
+    `resolve`'s own context, where `reroll` is always False. The reroll's
+    context exists only for the attack re-sum.
+
+    And it **adds two damage types** to whatever the rerolled attack already
+    deals. That is `f1231`'s gap and the same symbol: nothing retypes damage
+    another row is about to deal. The `f651` clause rides on top of that
+    one, so it is not separately blocked.
+    """
 
 
 # -- the racial powers that are refs, so the rider is ordinary --------------
@@ -1518,11 +1565,11 @@ def f2793(c: Cast) -> None:
     Spears and shortbows are the spear and bow groups -- the closest
     this engine says it.
 
-    Re-aimed. The last clause is not the `c.on_reroll()` hold the other
-    two rows here carry: nothing needs to *notice* a reroll, the row
-    needs to aim `p1450` at somebody else's attack roll, and
-    `c.reroll_attack` reads the attack off `c.trigger` and takes no
-    creature."""
+    Re-aimed, and the reroll family landing (#496) confirms it: nothing
+    here needs to *notice* a reroll. The row needs to aim `p1450` at
+    somebody else's attack roll, and `c.reroll_attack` reads the attack off
+    `c.trigger` and takes no creature. Same shape as `f715`'s remaining
+    hold, from a different direction."""
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",

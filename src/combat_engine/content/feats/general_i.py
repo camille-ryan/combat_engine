@@ -76,6 +76,7 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Ranged,
+    Rerolled,
     SavingThrow,
     SkillCheck,
     Trigger,
@@ -83,6 +84,7 @@ from combat_engine.engine import (
     TurnStart,
     Usage,
     When,
+    World,
     get,
     power,
 )
@@ -1067,13 +1069,35 @@ def f1448b(c: Cast) -> None:
 _granted("f1450", "f1450b")
 
 
+def _my_worse_reroll(world: World, me: int, ev: Any) -> bool:
+    """A reroll of mine that came out lower than the roll it replaced.
+
+    The printed trigger is "you use a power that gives you a reroll, and
+    the reroll is lower than the original roll" -- so it narrows on neither
+    a ref nor a kind of roll, which is why it reads `Rerolled` bare where
+    the racial-power feats use `rerolled_by`. The faces are compared, not
+    the totals: a total carries modifiers the card does not mention, and
+    `f217`'s +2 would make a worse die look like a better roll. #496.
+    """
+    return (
+        getattr(ev, "actor", None) == me
+        and getattr(ev, "new", 0) < getattr(ev, "old", 0)
+    )
+
+
 @power("f1450b", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       todo=("c.on_reroll()",))
+       trigger="a reroll of yours comes out lower than the original roll",
+       on=Trigger(Rerolled, _my_worse_reroll,
+                  "your reroll came out lower"))
 def f1450b(c: Cast) -> None:
-    """Hands back the use of whatever power granted a reroll, when the
-    reroll came out worse. Nothing announces that a roll was a reroll, so
-    there is no moment to answer; twelve rows want the same."""
+    """Hands back the use of whatever power granted the reroll.
+
+    `ev.by` is the ref of that power, which is why `Rerolled` carries it:
+    the card says "the power that gave you the reroll" and the row has no
+    other way to know which one that was. #496.
+    """
+    c.restore_use(str(getattr(c.trigger, "by", "")), on=c.me)
 
 
 _granted("f1452", "f1452b")

@@ -2238,6 +2238,172 @@ def class_form(out: Result) -> None:
     )
 
 
+def rerolled(out: Result) -> None:
+    """Nothing announced that a roll was a reroll, and 18 rows ride on one.
+
+    "A damage bonus when the reroll lands on your sworn enemy", "combat
+    advantage when the forced second attack roll misses", "a slide or a
+    shift depending on the parity of the reroll". `c.reroll_attack` took the
+    reroll and said neither that one happened nor what it came up. #496.
+
+    It is **two** needs and the rows split roughly 14 to 3:
+
+    * most hang on the settled **outcome** -- the rider pays out when the
+      rerolled attack hits or misses -- so they read
+      `AttackResult.rerolled_by` off the `Hit`/`Miss`, which survives once
+      the dust settles;
+    * three modify **the reroll itself** ("a penalty on the roll your racial
+      power forces to be made again"), which needs the second roll to be
+      gateable. `reroll_attack` recomputes its result inline and re-sums
+      nothing, so a `when=` gate on a reroll was never consulted at all.
+
+    The controls here are the point. In order of how easily each gets
+    written wrong:
+
+    * **a roll that is not a reroll must announce nothing**, or every attack
+      in the game triggers eighteen feats;
+    * **a reroll-gated modifier must be absent from the first roll** -- that
+      is the entire meaning of the gate, and a modifier that applies to both
+      is indistinguishable from an ordinary bonus;
+    * **`by` must narrow**, or a feat keyed to one racial power pays out on a
+      magic weapon's reroll;
+    * **`roll` must discriminate**, or a penalty on a rerolled attack lands
+      on a rerolled saving throw;
+    * **every d20 reroll path must speak.** Four do. A fifth added later and
+      left silent is indistinguishable from a rider that never fires, so the
+      count is asserted rather than trusted.
+    """
+    # Every path that rolls a d20 again has to announce. Counted off the one
+    # helper they all go through, so adding a fifth that forgets is visible.
+    import inspect
+
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import resolve as _resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mod, Mods
+    from combat_engine.engine.events import AttackRolled, Hit, Miss, Rerolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.triggers import after_reroll_by, rerolled_by
+    from combat_engine.engine.types import Defense
+
+    src = inspect.getsource(Cast)
+    out.that(src.count("_announce_reroll(") == 5,
+             "four d20 reroll paths announce, through one helper -- counted so"
+             " a fifth added later cannot be silently missed")
+
+    world, caster, _ = _board()
+    foe = sorted(enemies(world, caster))[0]
+    seen: list[Rerolled] = []
+    world.bus.on(Rerolled, lambda ev: seen.append(ev))
+
+    # -- a roll that is not a reroll --------------------------------------
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:plain")
+    out.that(not seen,
+             "an ordinary attack announces NO reroll -- the control, and"
+             " without it every attack in the game triggers eighteen feats")
+
+    # -- the reroll-gated penalty, absent from the first roll -------------
+    mods = world.get(caster, Mods) or world.add(caster, Mods())
+    mods.items.append(
+        Mod(what="attack", value=-5, label="drivers:reroll",
+            when=lambda ctx: bool(ctx.get("reroll")))
+    )
+    firsts: list[int] = []
+
+    def again(ev: AttackRolled) -> None:
+        if ev.attacker != caster or ev.result.rerolled_by:
+            return
+        firsts.append(ev.result.total)
+        hand = Cast(world=world, me=caster, ref="p1450")
+        hand.trigger = ev
+        hand.reroll_attack(keep="new")
+
+    sub = world.bus.on(AttackRolled, again)
+    landed: list[object] = []
+    world.bus.on(Hit, lambda ev: landed.append(ev))
+    world.bus.on(Miss, lambda ev: landed.append(ev))
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:reroll")
+    world.bus.off(sub)
+
+    out.that(len(seen) == 1, "the reroll announced itself once")
+    out.that(bool(seen) and seen[0].roll == "attack", "as an attack reroll")
+    out.that(bool(seen) and seen[0].by == "p1450",
+             "naming the row that bought it, which every rider narrows on")
+    out.that(bool(seen) and seen[0].actor == caster, "and the creature rolling")
+
+    settled = landed[-1] if landed else None
+    result = getattr(settled, "result", None)
+    out.that(result is not None and result.rerolled_by == ["p1450"],
+             "the settled outcome remembers it was rerolled, and by what --"
+             " which is where 14 of the 18 rows hang")
+    out.that(result is not None and len(result.rolls) == 2,
+             "and both faces are on record")
+
+    # The gate: -5 on the second roll and not on the first.
+    out.that(
+        result is not None
+        and bool(firsts)
+        and result.total == firsts[0] + (result.natural - result.rolls[0]) - 5,
+        "the reroll-gated penalty applied to the SECOND roll only -- the"
+        " total is the first total, plus the change in the die, minus 5",
+    )
+
+    # The gate narrows by *which* row forced the reroll, not merely that one
+    # happened: all three rows wanting it say "the reroll your racial power
+    # forces". A bare flag would have them modify a magic weapon's reroll too.
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:reroll"]
+    mods.items.append(
+        Mod(what="attack", value=-7, label="drivers:other",
+            when=lambda ctx: ctx.get("reroll_by") == "p1452")
+    )
+    firsts.clear()
+    seen.clear()
+    sub2 = world.bus.on(AttackRolled, again)
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:narrow")
+    world.bus.off(sub2)
+    settled2 = landed[-1]
+    res2 = settled2.result
+    out.that(
+        res2.total == firsts[0] + (res2.natural - res2.rolls[0]),
+        "a gate naming a DIFFERENT row's reroll does not apply -- the"
+        " control, without which one feat's penalty lands on every reroll"
+        " on the board",
+    )
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:other"]
+    mods.items.append(
+        Mod(what="attack", value=-7, label="drivers:mine",
+            when=lambda ctx: ctx.get("reroll_by") == "p1450")
+    )
+    firsts.clear()
+    seen.clear()
+    sub3 = world.bus.on(AttackRolled, again)
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:mine")
+    world.bus.off(sub3)
+    res3 = landed[-1].result
+    out.that(
+        res3.total == firsts[0] + (res3.natural - res3.rolls[0]) - 7,
+        "and the gate naming p1450, which is the row that rerolled, does",
+    )
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:mine"]
+    ev = seen[0]
+
+    # -- `by` narrows -----------------------------------------------------
+    out.that(rerolled_by("p1450")(world, caster, ev) is True,
+             "rerolled_by matches the row that bought it")
+    out.that(rerolled_by("p1452")(world, caster, ev) is False,
+             "and not a different row -- the control, without which a feat"
+             " keyed to one racial power fires on any reroll at all")
+    out.that(rerolled_by("p1450", roll="save")(world, caster, ev) is False,
+             "nor a different kind of roll -- a penalty on a rerolled attack"
+             " must not land on a rerolled saving throw")
+    out.that(after_reroll_by("p1450")(world, caster, settled) is True,
+             "after_reroll_by reads the settled outcome")
+    out.that(after_reroll_by("p1452")(world, caster, settled) is False,
+             "and narrows there too")
+
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:reroll"]
+
+
 def boost_roll(out: Result) -> None:
     """"Add 4 to the roll" -- a roll already made, and an outcome already
     decided from it.
@@ -2883,6 +3049,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "rerolled": (rerolled,
+                 "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,
                    "adding to a roll already made, without rolling again"),
     "recharge_while": (recharge_while,

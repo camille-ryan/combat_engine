@@ -436,6 +436,74 @@ def by_power(ref: str) -> Callable[[World, int, Any], bool]:
     return check
 
 
+def rerolled_by(ref: str, *, roll: str = "") -> Callable[[World, int, Any], bool]:
+    """A `Rerolled` bought by this row, optionally of one kind of roll.
+
+    The riders on a reroll all narrow on *which* row granted it -- "the
+    reroll your racial power forces", never "any reroll" -- so a bare watch
+    on `Rerolled` would pay a feat keyed to one racial power out on a magic
+    weapon's reroll as well. #496.
+
+    `roll` narrows further, because a penalty on a rerolled attack must not
+    land on a rerolled saving throw.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        if getattr(ev, "by", None) != ref:
+            return False
+        if roll and getattr(ev, "roll", "") != roll:
+            return False
+        return getattr(ev, "actor", None) == me
+
+    return check
+
+
+def after_reroll_by(ref: str) -> Callable[[World, int, Any], bool]:
+    """A settled `Hit` or `Miss` whose attack this row rolled again.
+
+    The other half of `rerolled_by`, and the one most of the eighteen rows
+    want: "a damage bonus when the reroll lands on your sworn enemy",
+    "combat advantage when the forced second roll misses". Those hang on the
+    **outcome**, not on the moment the die was thrown, so they read
+    `AttackResult.rerolled_by` off the settled event rather than watching
+    `Rerolled`.
+
+    Reads `attacker`, not `actor`: `Hit` and `Miss` have no `actor`, and
+    reading one that is not there is this component's documented way of
+    being silently false.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        result = getattr(ev, "result", None)
+        if result is None or ref not in getattr(result, "rerolled_by", ()):
+            return False
+        return getattr(ev, "attacker", None) == me
+
+    return check
+
+
+def after_forced_reroll(ref: str) -> Callable[[World, int, Any], bool]:
+    """A settled outcome of an attack **against me** that I made be rolled
+    again.
+
+    `after_reroll_by`'s mirror, and both are needed because the two racial
+    powers this family rides on point opposite ways: one rerolls your own
+    attack, the other makes the creature hitting you roll again. So on the
+    settled `Hit` or `Miss` the feat holder is the `attacker` in one case and
+    the `target` in the other, and a single predicate reading `attacker`
+    would be silently false for every row of the second shape -- five of the
+    eighteen. #496.
+    """
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        result = getattr(ev, "result", None)
+        if result is None or ref not in getattr(result, "rerolled_by", ()):
+            return False
+        return getattr(ev, "target", None) == me
+
+    return check
+
+
 def hit_with(ref: str) -> Callable[[World, int, Any], bool]:
     """A **hit** landed with one named row, by the creature being asked.
 

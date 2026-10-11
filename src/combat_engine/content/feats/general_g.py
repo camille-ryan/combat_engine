@@ -71,6 +71,7 @@ from combat_engine.engine import (
     PowerResolved,
     Powers,
     PowerUsed,
+    Rerolled,
     SavingThrow,
     SecondWind,
     Trigger,
@@ -80,6 +81,7 @@ from combat_engine.engine import (
     about_me,
     by_me,
     power,
+    rerolled_by,
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import (
@@ -100,9 +102,6 @@ R33 = (
     "p10043", "p10044", "p10045", "p10046",
     "p14073", "p14074", "p14075", "p14076",
 )
-#: Nothing announces that a roll is a reroll, so a rider on one cannot
-#: find its moment. `f216` and `f217` carry the same.
-REROLL = ("c.on_reroll()",)
 #: Which weapons and implements a character may pick up is settled when
 #: it is built, and a `Cast` runs with the gear already in hand.
 PROFICIENCY = ("chargen.proficiency()",)
@@ -1209,19 +1208,42 @@ def f1131(c: Cast) -> None:
 # -- rerolls, which nothing announces ---------------------------------------
 
 
-@power("f633", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+@power("f633", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1450",
+       on=Trigger(Rerolled, rerolled_by("p1450", roll="attack"),
+                  "p1450 rolls your attack again"))
 def f633(c: Cast) -> None:
-    """A die added to the roll a named racial power buys. The power is a
-    ref; what is missing is that nothing says a roll is a reroll, so
-    there is no moment at which to add to one."""
+    """+1d4 on the reroll `p1450` buys.
+
+    **A die, so it cannot be a standing modifier** the way `f217`'s flat +2
+    is -- `Mod.value` is an integer and this has to be rolled. So it answers
+    the `Rerolled` moment and adds to the roll still in hand with
+    `c.boost_roll`, which is why that verb had to land first (#495).
+
+    `Rerolled` carries the live result as a plain attribute for exactly
+    this, and `resolve` recomputes the outcome after the interrupt window,
+    so a boost applied here is judged with the rest. #496.
+
+    `AT_WILL`, because `lint.py` is right that a triggered trait declared
+    per-encounter is spent on its first firing and this card prints no limit
+    of its own -- the limit is `p1450`'s single encounter use.
+    """
+    c.boost_roll(c.roll("1d4"), kind="attack")
 
 
 @power("f715", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+       reach=PERSONAL, target=SELF,
+       todo=("c.reroll_attack(all_targets=)",))
 def f715(c: Cast) -> None:
-    """Widens the same racial power's reroll to every target of one
-    arcane power. Same gap, from the other side."""
+    """**Re-pointed: this was never the announcement gap (#496).**
+
+    `c.reroll_attack` rerolls *the triggering roll* -- one roll, read off
+    `c.trigger`. An area power rolls separately against every creature it
+    touches, and this feat says the one reroll applies to all of them. There
+    is no second roll to find: the others have already been resolved and
+    their results are not on the triggering event.
+    """
 
 
 # -- build-time choices -----------------------------------------------------

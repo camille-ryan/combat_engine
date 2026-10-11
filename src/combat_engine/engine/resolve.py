@@ -86,6 +86,18 @@ class AttackResult:
     #: so "you roll the same number on each die of the attack roll" and "if
     #: both of your attack rolls would hit" had nothing left to read.
     rolls: list[int] = field(default_factory=list)
+    #: The refs that rolled this attack again, in order. `rolls` already said
+    #: *that* it was rerolled -- more than one face -- and could not say by
+    #: what, which is the half every rider on a reroll narrows on: the
+    #: printed clauses say "the reroll your racial power grants", never "any
+    #: reroll". A feat keyed to one power would otherwise pay out on a magic
+    #: weapon's reroll too.
+    #:
+    #: Read at the **settled** outcome, which is where 14 of the 18 rows hang
+    #: -- "a damage bonus when the reroll lands", "combat advantage when the
+    #: forced second roll misses". The `Rerolled` event is the moment; this is
+    #: the fact, still readable once the dust settles. #496.
+    rerolled_by: list[str] = field(default_factory=list)
 
     @property
     def parity(self) -> str:
@@ -255,6 +267,20 @@ def attack(
             # a rider gated on an off-hand attack read a key the context
             # did not carry, which is silently false rather than wrong.
             "hand": hand,
+            # **Is this the second roll, and whose doing?** Declared here,
+            # with the defaults that say "no", because this is where the
+            # attack context is built -- `lint.py` derives the legal key set
+            # from this very dict, so a key `c.reroll_attack` invented on its
+            # own would be a gate on a key no context carries, which is the
+            # fault that walk exists to catch. `reroll_attack` overrides both
+            # when it re-sums.
+            #
+            # `reroll_by` as well as the flag: the three rows that modify a
+            # reroll each narrow to the one *their own* racial power forces,
+            # and a bare flag would have them modify a magic weapon's reroll
+            # too. #496.
+            "reroll": False,
+            "reroll_by": "",
             # **Everyone this attack is aimed at**, not just the one being
             # rolled against. "Attacks that do not include you as a target" is
             # a printed clause -- the mark penalty a few hundred lines down

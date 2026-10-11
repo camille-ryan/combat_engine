@@ -1194,8 +1194,10 @@ def p16399(c: Cast) -> None:
     Re-aimed off `c.change_dice()`, which exists now and is the wrong verb:
     that one says *which* die a row rolls, and this says what the die **came
     up**, on a roll the triggering row has already made. Nothing reaches into
-    a finished roll to set its result -- `c.boost_roll()` and `c.on_reroll()`
-    are the neighbouring gaps and neither is this either."""
+    a finished roll to set its result. `c.boost_roll` (#495) and the
+    `Rerolled` announcement (#496) were the neighbouring gaps and both have
+    landed; neither is this. Adding to a roll and dictating what it shows
+    are different operations, and only the first is written."""
     c.spend_surge(on=c.me)
 
 

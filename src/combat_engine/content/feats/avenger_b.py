@@ -45,11 +45,15 @@ from combat_engine.engine import (
     Cast,
     DamageType,
     Hit,
+    Miss,
     PowerResolved,
     PowerUsed,
     SurgeSpent,
     Trigger,
     When,
+    World,
+    after_forced_reroll,
+    after_reroll_by,
     power,
 )
 from combat_engine.engine.basic import RANGED
@@ -66,8 +70,6 @@ from combat_engine.engine.query import (
 OATH = "p3069"
 #: A racial power the benefit line names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: Nothing announces that a roll was a reroll.
-REROLL = ("c.on_reroll()",)
 #: A class feature named in prose with no ref.
 FEATURE = ("c.class_feature()",)
 
@@ -371,18 +373,71 @@ def f1527(c: Cast) -> None:
             return
 
 
-@power("f1524", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+def _my_reroll_hit_my_oath(world: World, me: int, ev: Any) -> bool:
+    """`p1450` rolled my attack again and it landed on my sworn enemy."""
+    return after_reroll_by("p1450")(world, me, ev) and sworn(
+        world, me, getattr(ev, "target", -1)
+    )
+
+
+def _my_oath_missed_its_reroll(world: World, me: int, ev: Any) -> bool:
+    """`p1452` made my sworn enemy roll again, and it missed me.
+
+    **`after_forced_reroll`, not `after_reroll_by`**, and the difference is
+    the whole reason both exist: here the feat holder is the `target` of the
+    attack and the sworn enemy is the `attacker`, which is the mirror of
+    `f1524` one row up. A predicate reading `attacker` would be silently
+    false on every row of this shape. #496.
+    """
+    return after_forced_reroll("p1452")(world, me, ev) and sworn(
+        world, me, getattr(ev, "attacker", -1)
+    )
+
+
+@power("f1524", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="p1450 rerolls an attack of yours against your oath target "
+               "and you hit",
+       on=Trigger(Hit, _my_reroll_hit_my_oath,
+                  "your rerolled attack hits your oath target"))
 def f1524(c: Cast) -> None:
-    """A damage bonus when a racial reroll lands on the sworn enemy.
-    `p1450` is a ref -- what is missing is that nothing announces a roll
-    was a reroll."""
+    """+2 to damage against that target until the end of your next turn.
+
+    The bonus is gated on the target rather than laid flat, because the card
+    says "against that target" -- the one the reroll landed on, not every
+    enemy. `2 *` the usual tier step, which this file already spells the
+    same way a few rows up. #496.
+    """
+    victim = getattr(c.trigger, "target", None)
+    if victim is None:
+        return
+    step = 2 * (1 + (c.level >= 11) + (c.level >= 21))
+    c.bonus(
+        "damage", step, on=c.me, until=When.EONT, kind="feat",
+        when=lambda ctx: ctx.get("target") == victim,
+    )
 
 
-@power("f1522", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+@power("f1522", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your oath target misses on an attack p1452 made it reroll",
+       on=Trigger(Miss, _my_oath_missed_its_reroll,
+                  "your oath target missed its forced reroll"))
 def f1522(c: Cast) -> None:
-    """The same gap as f1524, paying out on the reroll *missing*."""
+    """+2 to damage against that target until the end of your next turn.
+
+    `f1524`'s mirror: there the reroll is yours and lands, here it is the
+    enemy's and misses. Same payout, opposite side of the attack, which is
+    why the two predicates read different fields off the same event.
+    """
+    foe = getattr(c.trigger, "attacker", None)
+    if foe is None:
+        return
+    step = 2 * (1 + (c.level >= 11) + (c.level >= 21))
+    c.bonus(
+        "damage", step, on=c.me, until=When.EONT, kind="feat",
+        when=lambda ctx: ctx.get("target") == foe,
+    )
 
 
 @power("f1556", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

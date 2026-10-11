@@ -850,9 +850,11 @@ class Cast:
             again = max(again, ev.natural)
         elif keep == "worst":
             again = min(again, ev.natural)
+        was = ev.natural
         ev.natural = again
         ev.bonus += bonus
         ev.saved = again + ev.bonus >= 10
+        self._announce_reroll("save", was, again, actor=getattr(ev, "actor", self.me))
         return ev.saved
 
     def surge_value(self, of: int | None = None) -> int:
@@ -2878,6 +2880,8 @@ class Cast:
         `c.bonus` laid afterwards is read by the next attack rather than by
         this one.
         """
+        from .resolve import _mods
+
         ev = self.trigger
         result = getattr(ev, "result", None) if ev is not None else None
         if result is None:
@@ -2889,9 +2893,63 @@ class Cast:
         shift_ = face - old
         result.natural = face
         result.total += shift_ + bonus
+        # **Modifiers that apply only to a second roll.** Three rows print
+        # "a penalty on the roll your racial power forces to be made again",
+        # and there was nowhere to lay one: this function recomputes the
+        # result inline and re-sums nothing, so a `c.bonus(..., when=...)`
+        # gated on a reroll was never consulted. Taken as the *difference*
+        # between the context with `reroll` set and without, so only the
+        # reroll-gated modifiers move and the ordinary ones are not counted
+        # twice -- they are already in `total`.
+        ctx = getattr(ev, "ctx", None) or {}
+        if ctx:
+            who = ctx.get("attacker", self.me)
+            # `reroll_by` as well as `reroll`, because the three rows wanting
+            # this each narrow to the reroll **their own** racial power
+            # forces -- "a penalty on the attack roll `p1452` makes you roll
+            # again". A bare `reroll` flag would have them modify every
+            # reroll on the board, including a magic weapon's.
+            again = {**ctx, "reroll": True, "reroll_by": self.ref}
+            result.total += _mods(self.world, who, "attack", again) - _mods(
+                self.world, who, "attack", ctx
+            )
         result.critical = face == 20
         result.hit = face == 20 or (face != 1 and result.total >= result.target_defence)
+        # Recorded on the result and announced as a moment, which are two
+        # different needs: 14 of the 18 rows hang on the settled outcome
+        # ("a damage bonus when the reroll lands") and read the list; the
+        # rest want the moment. #496.
+        result.rerolled_by.append(self.ref)
+        self._announce_reroll(
+            "attack", old, face, actor=ctx.get("attacker", self.me)
+        )
         return True
+
+    def _announce_reroll(self, roll: str, old: int, new: int, *, actor: int) -> None:
+        """One place that says a d20 was rolled again.
+
+        Four paths roll a d20 again -- `reroll_attack`, `reroll_save`,
+        `reroll_check` and `reroll_initiative` -- and a path that forgets to
+        announce is silent, which is indistinguishable from a rider that
+        never fires. So they all come through here and `drivers.py` asserts
+        the count. #496.
+
+        The **damage** rerolls are not among them on purpose: `reroll_damage`
+        and `reroll_ones` are standing modifiers read inside `_roll_damage`,
+        where there is no d20 and no single face, and none of the rows
+        wanting this is about one.
+        """
+        from .events import Rerolled
+
+        said = Rerolled(actor=actor, roll=roll, by=self.ref, old=old, new=new)
+        # The live result rides along as a plain attribute rather than a
+        # field, so it never reaches the wire or a replay fixture -- the same
+        # arrangement `resolve` uses for `rolled.result`, and for the same
+        # reason. Three rows answer this event by changing the roll again
+        # ("+1d4 to the reroll", "reroll it once more with a +2 bonus"), and
+        # without it they have the moment and nothing to act on.
+        said.result = getattr(self.trigger, "result", None)
+        self.world.bus.emit(said)
 
     def boost_roll(self, amount: int, *, kind: str = "") -> bool:
         """Add to the triggering roll **without rolling it again**.
@@ -5746,10 +5804,23 @@ class Cast:
         return True
 
     def reroll_initiative(self, *, on: int | None = None) -> int:
-        """Take a new initiative check and move in the order. Returns the roll."""
+        """Take a new initiative check and move in the order. Returns the roll.
+
+        Announces itself like the other three d20 rerolls (#496). No row
+        currently riders on a rerolled initiative, and it is announced
+        anyway: a path that stays silent is the one a future rider fails on
+        for no visible reason, and `drivers.py` asserts all four speak.
+        """
+        from .components import Initiative
+
         who = on or self.me
         enc = self.world.encounter
-        return enc.reroll_initiative(who) if enc is not None else 0
+        if enc is None:
+            return 0
+        before = getattr(self.world.get(who, Initiative), "roll", 0) or 0
+        rolled = enc.reroll_initiative(who)
+        self._announce_reroll("initiative", before, rolled, actor=who)
+        return rolled
 
     def autohit(self, ev: Any = None) -> bool:
         """Make the attack being answered simply hit. It cannot be rolled away.
@@ -8757,6 +8828,9 @@ class Cast:
             keep
         ]
         self.boost_check(bonus)
+        self._announce_reroll(
+            "check", old, ev.natural, actor=getattr(ev, "actor", self.me)
+        )
         return fresh
 
     # -- action points -------------------------------------------------------

@@ -35,11 +35,13 @@ from combat_engine.engine import (
     DamageType,
     Hit,
     Keyword,
+    Miss,
     PowerUsed,
     SavingThrow,
     SurgeSpent,
     Trigger,
     When,
+    after_forced_reroll,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -47,8 +49,6 @@ from combat_engine.engine.query import allies, line_of_effect, unseen_by
 
 #: A class feature the benefit names in prose with no ref.
 FEATURE = ("c.class_feature()",)
-#: Nothing announces that a roll was a reroll.
-REROLL = ("c.on_reroll()",)
 
 #: The ref the prerequisite column gives for the heal three rows modify.
 WORD = "p2339"
@@ -382,12 +382,24 @@ def f1144(c: Cast) -> None:
         )
 
 
-@power("f1145", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+@power("f1145", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="p1452 makes an enemy reroll its attack and the reroll misses "
+               "you",
+       on=Trigger(Miss, after_forced_reroll("p1452"),
+                  "the attack you forced to be rerolled missed you"))
 def f1145(c: Cast) -> None:
-    """Combat advantage when `p1452`'s forced second attack roll misses.
-    The power is a ref now; what is still missing is that nothing
-    announces a roll was a reroll, which is the half f1524 also wants."""
+    """That enemy grants combat advantage to the next ally who attacks it.
+
+    `to="ally"` leaves the holder out, which is what the card says -- "the
+    next one of **your allies**" -- and `once=True` is the "next one": the
+    relation is spent by the first ally to swing. The words are `c.within`'s
+    and `"team"` would have included the bard, who the card does not. #496.
+    """
+    foe = getattr(c.trigger, "attacker", None)
+    if foe is None:
+        return
+    c.grants_advantage(on=foe, to="ally", until=When.EONT, once=True)
 
 
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -773,6 +773,49 @@ class Escaped(Event):
 
 
 @dataclass
+class Rerolled(Event):
+    """A d20 was rolled again, and by which row.
+
+    **Nothing announced this and 18 rows print a rider on it** -- "a damage
+    bonus when the reroll lands", "combat advantage when the forced second
+    roll misses", "a slide or a shift depending on the parity of the
+    reroll". `c.reroll_attack` took the reroll and said neither that one
+    happened nor what it came up, so every one of those riders had no moment
+    to hang from. #496.
+
+    `by` is the ref of the row that bought the reroll, which is what the
+    riders actually narrow on: all of them say "the reroll *your racial
+    power* grants", not "any reroll". Without it a feat keyed to one racial
+    power would pay out on a magic weapon's reroll as well.
+
+    `roll` is `attack`, `save`, `check` or `initiative`. A penalty on a
+    rerolled attack must not land on a rerolled save, so the riders need to
+    tell them apart.
+
+    **Named `roll` and not `kind` because `Event.kind` is a property** that
+    returns the class name and `wire()` puts it in the envelope every replay
+    fixture reads. A field of that name shadows it, which breaks the wire
+    format rather than only this event.
+
+    `old` and `new` are the faces, not the totals -- the parity clauses read
+    the die, and a total carries modifiers the card does not mention.
+
+    **Damage rerolls are deliberately not this.** `c.reroll_damage` and
+    `c.reroll_ones` are standing modifiers read inside `_roll_damage`, where
+    there is no d20 and no single face; none of the 18 rows is about one.
+    Announcing them is a separate event and a separate issue, and calling
+    them `Rerolled` here would make a rider on an attack reroll fire on a
+    damage die.
+    """
+
+    actor: int
+    roll: str
+    by: str
+    old: int
+    new: int
+
+
+@dataclass
 class InitiativeRolled(Event):
     """A creature's place in the order was decided.
 

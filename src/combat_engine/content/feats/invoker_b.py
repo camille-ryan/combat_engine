@@ -57,7 +57,9 @@ from combat_engine.engine import (
     TurnStart,
     Usage,
     When,
+    World,
     about_me,
+    after_reroll_by,
     get,
     power,
     targets_me,
@@ -70,8 +72,6 @@ from combat_engine.engine.query import alive
 FEATURE = ("c.class_feature()",)
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: Nothing announces that a roll was a reroll.
-REROLL = ("c.on_reroll()",)
 #: Nothing adds a keyword to a row, or makes one count as another sort.
 COUNTS_AS = "c.counts_as(keyword=)"
 #: "Instead of your covenant manifestation": nothing declines a class
@@ -1021,11 +1021,38 @@ def f2177(c: Cast) -> None:
     does not reshape one."""
     # "Considered a divine attack power" -- the mirror of `f2175`.
     c.counts_as_keyword("p1448", Keyword.DIVINE)
-@power("f3001", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REROLL)
+def _rerolled_a_big_power(world: World, me: int, ev: Any) -> bool:
+    """`p1450` rerolled one of my encounter or daily class attack powers.
+
+    The card narrows three ways at once -- the reroll must be `p1450`'s, the
+    power must be of this class, and it must be an encounter or daily rather
+    than an at-will -- so all three are asked here rather than half in the
+    header and half in the body. The power's ref is on the settled event.
+    """
+    if not after_reroll_by("p1450")(world, me, ev):
+        return False
+    row = get(str(getattr(ev, "power", "")))
+    return bool(
+        row
+        and row.cls == "c127"
+        and row.usage in (Usage.ENCOUNTER, Usage.DAILY)
+    )
+
+
+@power("f3001", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="p1450 rerolls one of your encounter or daily attack powers "
+               "and it hits",
+       on=Trigger(Hit, _rerolled_a_big_power,
+                  "your rerolled encounter or daily power hit"))
 def f3001(c: Cast) -> None:
-    """Extra damage on a target hit by a racial reroll. `p1450` is a ref;
-    what is missing is that nothing announces a roll was a reroll."""
+    """4 extra damage to any target the reroll hits.
+
+    Paid per target hit, which is what "any target you hit with the reroll"
+    means on an area power -- the trigger fires once per creature struck, so
+    the row needs no loop of its own. #496.
+    """
+    c.flat(4, on=getattr(c.trigger, "target", None))
 
 
 # -- standing riders on this invoker's own attacks --------------------------

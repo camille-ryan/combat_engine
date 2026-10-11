@@ -119,8 +119,6 @@ RACIAL = ("c.on_racial_power()",)
 #: class, picked at build time and recorded nowhere. The same symbol
 #: `features/racial._option` carries.
 RACE_OPTION = ("c.race_option()",)
-#: Nothing announces that a roll was a reroll.
-REROLL = ("c.on_reroll()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
 #: "You can swap a power you know for this one." The card is handed over;

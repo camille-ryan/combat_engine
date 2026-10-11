@@ -44,6 +44,8 @@ from combat_engine.engine import (
     Relation,
     Trigger,
     When,
+    World,
+    after_reroll_by,
     power,
 )
 from combat_engine.engine.dsl import get
@@ -135,17 +137,35 @@ def f783(c: Cast) -> None:
         )
 
 
-@power("f761", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_reroll()",))
-def f761(c: Cast) -> None:
-    """Extra damage when a reroll granted by one racial power lands on
-    the quarry. The quarry half is written as a standing damage bonus;
-    what is dropped is the narrowing to *rerolled* attacks, because
-    nothing announces that a roll was a reroll."""
-    c.bonus(
-        "damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: _is_my_quarry(c, ctx.get("target")),
+def _reroll_hit_my_quarry(world: World, me: int, ev: Any) -> bool:
+    """`p1450` rolled my attack again and it landed on my quarry."""
+    return after_reroll_by("p1450")(world, me, ev) and _is_my_quarry(
+        Cast(world=world, me=me, ref="f761"), getattr(ev, "target", None)
     )
+
+
+@power("f761", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="p1450 rerolls an attack of yours and it hits your quarry",
+       on=Trigger(Hit, _reroll_hit_my_quarry,
+                  "your rerolled attack hit your quarry"))
+def f761(c: Cast) -> None:
+    """1d6 + Wisdom extra damage when `p1450`'s reroll lands on the quarry.
+
+    **Written as a triggered payout rather than a gated damage bonus, and
+    `lint.py` is why.** The row used to be `c.bonus("damage", ...)` gated on
+    the quarry, with the narrowing to *rerolled* attacks dropped. Adding
+    `ctx["reroll_by"]` to that gate went red: the damage context does not
+    carry it and cannot, because `resolve.deal_damage` is never handed the
+    `AttackResult` -- so the gate would have been silently false, which is
+    the exact fault that walk exists to catch.
+
+    So it pays out on the settled `Hit` with `c.flat`, which is the shape
+    `invoker_b.f3001` uses for the same sentence. The Wisdom modifier was
+    missing before as well: the card prints "1d6 + your Wisdom modifier" and
+    only the die was here. #496.
+    """
+    c.flat(c.roll("1d6") + c.wis_mod, on=getattr(c.trigger, "target", None))
 
 
 @power("f273", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

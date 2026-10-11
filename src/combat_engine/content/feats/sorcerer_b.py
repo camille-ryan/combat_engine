@@ -46,13 +46,16 @@ from combat_engine.engine import (
     DamageType,
     Forced,
     Gear,
+    Hit,
     Keyword,
+    Miss,
     Trigger,
     When,
+    after_forced_reroll,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import AttackRolled, Bloodied, ForcedMove, Hit
+from combat_engine.engine.events import AttackRolled, Bloodied, ForcedMove
 from combat_engine.engine.types import Usage
 
 #: The cosmic cycle and the Guild-Training-shaped features arrive as
@@ -430,9 +433,30 @@ def f2807(c: Cast) -> None:
 
 @power("f1162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_reroll()",))
+       trigger="p1452 makes an enemy reroll its attack",
+       on=(
+           Trigger(Hit, after_forced_reroll("p1452"),
+                   "the forced reroll hit you"),
+           Trigger(Miss, after_forced_reroll("p1452"),
+                   "the forced reroll missed you"),
+       ))
 def f1162(c: Cast) -> None:
-    """A slide or a shift depending on the parity of `p1452`'s reroll.
-    `c.slide` and `c.shift` are the easy half and the power is a ref, so
-    the whole hold is the roll: `c.reroll_attack` takes a reroll but
-    announces neither that one happened nor what it came up."""
+    """Even reroll: slide the enemy 1. Odd: shift 1. Both after the attack.
+
+    **Hung on the settled outcome rather than on `Rerolled`, because the
+    card says "after the attack".** The reroll event fires while the attack
+    is still being worked out, so sliding there would move the enemy before
+    its own blow landed. `Hit` and `Miss` are the moment the card means, and
+    the face is still readable off the result.
+
+    `result.parity` rather than `natural % 2`: a row elsewhere can dictate
+    that a roll counts as odd, and reading the die by hand ignores it. #496.
+    """
+    result = getattr(c.trigger, "result", None)
+    foe = getattr(c.trigger, "attacker", None)
+    if result is None or foe is None:
+        return
+    if result.parity == "even":
+        c.slide(1, on=foe)
+    else:
+        c.shift(1)
