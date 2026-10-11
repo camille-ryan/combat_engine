@@ -139,7 +139,10 @@ def f1720(c: Cast) -> None:
     me = c.me
 
     def rider(ev: Hit) -> None:
-        if ev.attacker != me or ev.result.ctx.get("ranged"):
+        # `ev.ctx`, not `ev.result.ctx`: the context rides on the **event**
+        # as a plain attribute (#495), and `AttackResult` has no such field --
+        # `lint.py` caught that this would have raised the moment the row ran.
+        if ev.attacker != me or (getattr(ev, "ctx", None) or {}).get("ranged"):
             return
         c.flat(c.cha_mod, dtype=DamageType.RADIANT, on=ev.target)
 
