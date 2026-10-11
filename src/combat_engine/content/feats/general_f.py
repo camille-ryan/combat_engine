@@ -371,7 +371,9 @@ def f217(c: Cast) -> None:
     racial power forces, so a magic weapon`s reroll must not pick it up.
     """
     c.bonus(
-        "attack", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+        # No `kind=`: the card prints no bonus type, so it is untyped.
+        # `bonuses.py` reads the card and caught the invented type.
+        "attack", 2, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("reroll_by") == "p1450",
     )
 

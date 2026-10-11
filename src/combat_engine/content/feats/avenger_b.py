@@ -413,7 +413,9 @@ def f1524(c: Cast) -> None:
         return
     step = 2 * (1 + (c.level >= 11) + (c.level >= 21))
     c.bonus(
-        "damage", step, on=c.me, until=When.EONT, kind="feat",
+        # No `kind=`: the card prints no bonus type, so it is untyped and
+        # stacks. `bonuses.py` reads the card and caught the invented type.
+        "damage", step, on=c.me, until=When.EONT,
         when=lambda ctx: ctx.get("target") == victim,
     )
 
@@ -435,7 +437,9 @@ def f1522(c: Cast) -> None:
         return
     step = 2 * (1 + (c.level >= 11) + (c.level >= 21))
     c.bonus(
-        "damage", step, on=c.me, until=When.EONT, kind="feat",
+        # No `kind=`: the card prints no bonus type, so it is untyped and
+        # stacks. `bonuses.py` reads the card and caught the invented type.
+        "damage", step, on=c.me, until=When.EONT,
         when=lambda ctx: ctx.get("target") == foe,
     )
 
