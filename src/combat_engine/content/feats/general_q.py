@@ -78,6 +78,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    SavingThrow,
     SecondWind,
     Swap,
     Trigger,
@@ -1608,18 +1609,37 @@ def f3308(c: Cast) -> None:
     c.watch(ActionSpent, hustle, on=c.me, until=When.ENCOUNTER)
 
 
-@power("f3309", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SavingThrow.bonus",))
+@power("f3309", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you make a saving throw",
+       on=Trigger(SavingThrow, about_me, "you make a saving throw"))
 def f3309(c: Cast) -> None:
-    """"While you have at least 1 power point" is a gate that reads the
-    pool at the moment the save is rolled, which is what a `when=` does
-    -- the pool empties mid-fight and a bonus laid once would not notice.
+    """+1 to saving throws while you hold a power point, and +3 until the end
+    of your turn if you spend one as the save is rolled.
 
-    Raising it to +3 has to add to a die already down; `SavingThrow`
-    carries `bonus` but only `saved` is read back, so that half is
-    dropped."""
+    "While you have at least 1 power point" is a gate that reads the pool at
+    the moment the save is rolled, which is what a `when=` does -- the pool
+    empties mid-fight and a bonus laid once would not notice.
+
+    **The second clause is written now.** Its note said `SavingThrow`
+    "carries `bonus` but only `saved` is read back", and that was already
+    untrue -- `c.reroll_save` has written to `ev.bonus` and recomputed
+    `ev.saved` for as long as it has existed. `c.boost_roll` (#495) is the
+    verb for adding to a roll already down, and it does both halves.
+
+    The standing bonus is raised to +3 for the rest of the turn as well as
+    the roll in hand, because the card says "until the end of your turn" and
+    a second save this turn gets the better number. The +1 effect is left
+    alone and a +2 laid beside it: both are feat bonuses and so do not
+    stack, but `c.bonus` buckets by type and takes the larger, which is the
+    printed +3 rather than +4. #495.
+    """
     c.bonus("save", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: c.points() > 0)
+    if c.points() < 1 or not c.spend_points(1):
+        return
+    c.boost_roll(2, kind="save")
+    c.bonus("save", 3, on=c.me, until=When.EOT, kind="feat")
 
 
 @power("f3310", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
