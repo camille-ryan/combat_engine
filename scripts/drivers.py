@@ -2238,6 +2238,90 @@ def class_form(out: Result) -> None:
     )
 
 
+def conceal_in(out: Result) -> None:
+    """A zone that conceals whoever stands in it, which `c.conceal` cannot
+    say.
+
+    14 rows print a concealing cloud and every one of them plays with the
+    concealment clause missing. `c.conceal` is per-creature and runs on a
+    clock, so writing the printed line as a plain `c.conceal` concealed the
+    caster's allies **wherever they went, for as long as the duration ran**
+    -- a different and much stronger rule than standing inside something.
+
+    The third of a set: `c.cover_in` and `c.ignores_difficult_in` are the
+    same sentence for cover and difficult terrain, and all three ride on
+    `_while_inside`. #500.
+
+    Three controls, and the first is the whole point of the verb:
+
+    * **outside the zone there is no concealment.** That is the entire
+      difference from `c.conceal`, and a check that only asserts the inside
+      case passes on the bug this replaces.
+    * **a creature walking in later is covered too**, which is why
+      `_while_inside` asks per arrival rather than once over the occupants
+      standing there when the zone was laid.
+    * **the zone ending strips it**, rather than it running out on its own
+      clock. A concealment that outlives the cloud is the same fault as the
+      per-creature version, just slower to notice.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, concealment_of
+    from combat_engine.engine.types import Cover
+
+    world, caster, _ = _board()
+    friend = next((a for a in allies(world, caster) if a != caster), None)
+    out.that(friend is not None, "the board has an ally to shelter")
+    if friend is None:
+        return
+
+    here = world.get(caster, Position).square
+    patch = [(here[0] + 1, here[1]), (here[0] + 1, here[1] + 1)]
+
+    # **Stand the ally well clear first.** The first version laid the zone on
+    # squares beside the caster and asserted the ally was unconcealed before
+    # anything happened -- and it was already standing in one of them, so the
+    # control failed on its own setup while every later assertion passed. A
+    # control that fails because the board was not arranged says nothing
+    # about the verb.
+    outside = (here[0] - 4, here[1] - 4)
+    world.get(friend, Position).square = outside
+
+    c = Cast(world=world, me=caster, ref="drivers:conceal")
+    zone = c.zone(patch, until=When.ENCOUNTER)
+    c.conceal_in(zone, side="team")
+
+    # The ally is standing outside it.
+    out.that(concealment_of(world, friend) is Cover.NONE,
+             "an ally outside the cloud is NOT concealed -- the control, and"
+             " the entire difference from `c.conceal`")
+
+    # Walk it in. The grant has to arrive on arrival, not at laying.
+    world.get(friend, Position).square = patch[0]
+    world.zones.refresh()
+    out.that(concealment_of(world, friend) is Cover.PARTIAL,
+             "walking into the cloud conceals it, even though the zone was"
+             " laid before it arrived")
+
+    # And out again.
+    world.get(friend, Position).square = outside
+    world.zones.refresh()
+    out.that(concealment_of(world, friend) is Cover.NONE,
+             "leaving gives it back")
+
+    # In again, then end the zone itself.
+    world.get(friend, Position).square = patch[0]
+    world.zones.refresh()
+    out.that(concealment_of(world, friend) is Cover.PARTIAL, "in again")
+    world.zones.end(zone, "driver ended it")
+    out.that(concealment_of(world, friend) is Cover.NONE,
+             "the zone ending strips it, rather than it running out on its"
+             " own clock -- a concealment that outlives the cloud is the"
+             " same fault as the per-creature version")
+
+
 def rerolled(out: Result) -> None:
     """Nothing announced that a roll was a reroll, and 18 rows ride on one.
 
@@ -3049,6 +3133,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "conceal_in": (conceal_in,
+                   "a zone that conceals whoever stands in it"),
     "rerolled": (rerolled,
                  "a roll announced as a second one, and gateable as one"),
     "boost_roll": (boost_roll,

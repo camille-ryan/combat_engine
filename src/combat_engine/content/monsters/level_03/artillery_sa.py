@@ -1440,16 +1440,23 @@ def m5802a1(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("1d6", 4, dtype=DamageType.FIRE, kind=LIMITED),
-    dropped=("c.conceal_in()",),
+    dropped=("c.conceal_in(entirely=)",),
 )
 def m5802a2(c: Cast) -> None:
-    """Three of the zone's four clauses land: it lasts the encounter, it is
-    difficult terrain, and it burns whatever ends its turn inside. The partial
-    concealment for a creature entirely within it is the missing one -- nothing
-    holds concealment per zone rather than per creature."""
+    """All four of the zone's clauses are written now: it lasts the
+    encounter, it is difficult terrain, it burns whatever ends its turn
+    inside, and it conceals.
+
+    **What is still short is the footprint.** The card gives concealment to
+    a creature *entirely within* the smoke, and `c.conceal_in` asks only
+    whether the creature is in the zone at all. For anything Medium those
+    are the same square and the same answer; for a Large creature standing
+    half out, this is now generous where the card is not. A narrow
+    remainder, named rather than left silent. #500."""
     if c.first:
         here = c.zone(c.area(), until=When.ENCOUNTER, difficult=True, label=c.ref)
         _ends_its_turn_in(c, here, lambda who: c.flat(2, dtype=DamageType.FIRE, on=who))
+        c.conceal_in(here, side="any")
     if c.strike():
         c.hit()
 

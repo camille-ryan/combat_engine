@@ -97,6 +97,7 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.types import Light
 
 DEFENCES = (AC, FORT, REF, WILL)
 
@@ -1153,12 +1154,18 @@ def p15945(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.vulnerable_in()", "c.conceal_in()"),
+    dropped=("c.vulnerable_in()",),
 )
 def p15946(c: Cast) -> None:
-    """The zone and the teleport stand; a zone cannot yet hold either a
-    vulnerability or concealment for whoever is inside it."""
-    c.zone(c.area(), label=c.ref, until=When.EONT)
+    """**The concealment half was mis-marked and needed no new verb.** The
+    card prints a *lightly obscured* zone, which is terrain and has had a
+    spelling since #424 -- `c.zone(obscured=)`. Concealment is a fact a
+    creature carries; lightly obscured is a fact about the squares, and it
+    dims sight for everybody rather than sheltering a side. `m6061a3` had
+    the same marker for the same reason. #500.
+
+    The vulnerability is the real remainder: nothing hangs one on a zone."""
+    c.zone(c.area(), label=c.ref, until=When.EONT, obscured=Light.DIM)
     c.teleport(5)
 
 

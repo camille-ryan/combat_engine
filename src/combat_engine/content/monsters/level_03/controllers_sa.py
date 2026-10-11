@@ -613,17 +613,17 @@ def m1056a2(c: Cast) -> None:
     reach=AreaBurst(3, 10),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.conceal_in()",),
 )
 def m1056a3(c: Cast) -> None:
     """Automatic hit, so there is no attack line to declare. The penalty is a
     bare "-2 to attack rolls" and therefore untyped; `c.grants_in` defaults to
     a power bonus, which would quietly refuse to stack with the next one.
 
-    The concealment the zone hands its maker's side is the dropped clause --
-    `c.conceal` is a hold on a creature and nothing hangs one on a zone."""
+    `side="team"` is the printed "its maker's side", and it is the whole of
+    what was dropped. #500."""
     zone = _sustained_zone(c, c.area(), 5)
     c.grants_in(zone, "attack", -2, side="enemy", kind="untyped")
+    c.conceal_in(zone, side="team")
 
 
 @power(
@@ -1180,7 +1180,7 @@ def m1652a2(c: Cast) -> None:
     reach=AreaBurst(3, 10),
     target=NO_TARGET,
     keywords=[Keyword.COLD, Keyword.ZONE],
-    dropped=("c.conceal_in()", "c.zone(exempt=)"),
+    dropped=("c.zone(exempt=)",),
 )
 def m1652a3(c: Cast) -> None:
     """Two clauses are absent and they are different absences. Nothing hangs
@@ -1188,7 +1188,9 @@ def m1652a3(c: Cast) -> None:
     it has no form -- `c.ignores_difficult_in` waives the terrain for a whole
     side, which is not what "creatures with that ability can ignore this"
     says."""
-    _sustained_zone(c, c.area(), 5)
+    zone = _sustained_zone(c, c.area(), 5)
+    # "to the m1652 and its allies" is the printed narrowing.
+    c.conceal_in(zone, side="team")
 
 
 @power(
@@ -1976,7 +1978,7 @@ def m4734a2(c: Cast) -> None:
     reach=AreaBurst(3, 10),
     target=NO_TARGET,
     keywords=[Keyword.FEAR, Keyword.ZONE],
-    dropped=("c.zone_condition()", "c.conceal_in()"),
+    dropped=("c.zone_condition()",),
 )
 def m4734a3(c: Cast) -> None:
     """The defence penalty is held by the zone and ends with the geometry
@@ -1985,6 +1987,10 @@ def m4734a3(c: Cast) -> None:
     save-ends slow laid once would outlive leaving it."""
     zone = _sustained_zone(c, c.area(), 5)
     c.grants_in(zone, WILL, -2, side="enemy", kind="untyped")
+    # The card names a *different* creature as the beneficiary, which reads
+    # as a printing error rather than a rule -- the zone is this creature's
+    # and its own side is the only sane reading.
+    c.conceal_in(zone, side="team")
 
 
 @power(

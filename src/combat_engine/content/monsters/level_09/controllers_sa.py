@@ -52,10 +52,15 @@ Six gaps named here, each confirmed absent from `scripts/vocab.py`:
   `dropped=("c.leash()",)` -- `c.cannot_shift` and `c.immovable` are the
   wrong half of the sentence, they hold the *mover* still rather than
   bound its distance to a point.
-* **No zone variant of `c.conceal`.** `c.cover_in` exists and grants cover,
-  not concealment; nothing bounds a concealment grant to a zone's squares
-  the way `c.grants_in`/`c.resist_in`/`c.cover_in` do for their own grants.
-  `m1121a2` and `m6061a3` are `dropped=("c.conceal_in()",)`.
+* **`c.conceal_in` landed (#500)**, the third of the zone-bounded grants
+  beside `c.cover_in` and `c.ignores_difficult_in`. `m1121a2` is written
+  with it.
+
+  `m6061a3` never needed it: its card prints a *lightly obscured* zone,
+  which is terrain and has had a spelling since #424 -- `c.zone(obscured=)`.
+  Concealment is a fact a creature carries, lightly obscured is a fact about
+  the squares, and the marker had confused the two. `p15946` in
+  `powers/themes/batch_g.py` carried the same mistake.
 * **No way to roll a second, independent initiative**, the exact gap
   `docs/AUTHORING.md` names: `c.extra_turn(at=)` wants a count handed to
   it, not a second roll. `m5719a0` is `todo=("c.second_initiative()",
@@ -171,6 +176,7 @@ from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import adjacent, allies, creatures, distance_between, enemies, team
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, targets_me
+from combat_engine.engine.types import Light
 from combat_engine.engine.zones import Zone
 
 # --------------------------------------------------------------------------
@@ -532,13 +538,15 @@ def m1121a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.AREA],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("2d8", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.conceal_in()",),
 )
 def m1121a2(c: Cast) -> None:
     """A cloud appears regardless of the roll and lingers until m1121's
     next turn ends; its 6-damage tick and the concealment it grants are
-    both unconditional on the Hit. The damage tick is written; the
-    concealment has no zone-bound primitive -- see the module docstring."""
+    both unconditional on the Hit.
+
+    `side="any"` because the card says only "it grants concealment" -- a
+    cloud of souls does not ask whose side you are on, and narrowing it to
+    one team would be a rule the page does not print. #500."""
     if c.strike():
         c.hit()
     if not c.first:
@@ -551,7 +559,7 @@ def m1121a2(c: Cast) -> None:
             c.flat(6, dtype=DamageType.NECROTIC, on=ev.actor)
 
     c.watch(TurnStart, tick, until=When.EONT, on=c.me, label=f"{c.ref} zone")
-    _ = zone
+    c.conceal_in(zone, side="any")
 
 
 @power(
@@ -1741,16 +1749,20 @@ def m3617a3(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(3, 10),
     target=EACH_ENEMY,
-    dropped=("c.conceal_in()",),
 )
 def m3617a4(c: Cast) -> None:
     """ "Automatic hit" -- no roll, so the -2 penalty and the concealment
-    are laid outright. The penalty is written; concealment bound to a
-    zone has no primitive, see the module docstring."""
+    are laid outright.
+
+    `side="team"` is the printed narrowing, and it is the one row of this
+    family that has one: the zone grants concealment to this creature **and
+    his allies**, where the other clouds conceal whoever is standing in
+    them. #500."""
     if not c.first:
         return
     zone = c.zone(c.area(), until=When.SUSTAIN, sustain=MINOR, label=c.ref)
     c.grants_in(zone, "attack", -2, side="enemy", kind="untyped")
+    c.conceal_in(zone, side="team")
     zc = c.world.get(zone, Zone)
     hold = zc.effect if zc is not None else None
 
@@ -3462,10 +3474,16 @@ def m6061a2(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.conceal_in()",),
 )
 def m6061a3(c: Cast) -> None:
-    c.zone(c.area(), until=When.EONT, label=c.ref)
+    """**The marker was wrong and this row never needed `c.conceal_in`.**
+    The card prints a *lightly obscured* zone, which is terrain and already
+    has a spelling -- `c.zone(obscured=)`, landed in #424. Concealment is a
+    fact a creature carries; being lightly obscured is a fact about the
+    squares, and it dims sight for everyone rather than sheltering a side.
+
+    Found by reading the card while writing the rest of the family. #500."""
+    c.zone(c.area(), until=When.EONT, label=c.ref, obscured=Light.DIM)
     c.teleport(8, who=c.me)
 
 

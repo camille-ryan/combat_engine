@@ -33,9 +33,12 @@ reused by every row that needs it:
 * **No primitive removes a creature from play and returns it later.**
   `m6109a3` is `todo=("c.remove_from_play()",)` for exactly the shape
   `level_09/controllers_sa.py` named for `m6092a2`.
-* **No zone variant of `c.conceal`.** `m1089a3`, `m2507a3` and `m964a2` are
-  `dropped=("c.conceal_in()",)`, the gap `level_09/controllers_sa.py` first
-  named.
+* **`c.conceal_in` landed (#500)** and `m1089a3` and `m964a2` are written.
+  `m2507a3` is not: its aura conceals "she and any other shadow creatures
+  within it", which narrows by what kind of creature you are rather than by
+  side, and `side=` takes `team`/`ally`/`enemy`/`any` and nothing else. It
+  is `dropped=("c.conceal_in(kind=)",)` now, which says the shape of what is
+  left rather than naming a verb that exists.
 * **Nothing tracks how far a creature moved on its own turn.**
   `c.distance_moved()` would answer "moves more than half its speed" and
   "doesn't move at least 2 squares"; `m1780a1` and `m2507a3` both wait on
@@ -523,13 +526,24 @@ def m1089a2(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.CLOSE],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d12", 4, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("c.conceal_in()",),
 )
 def m1089a3(c: Cast) -> None:
-    """The burn is exact. The aftereffect cloud's concealment has no
-    zone-bound primitive -- see the module docstring."""
+    """The burn is exact, and the cloud it leaves behind is now laid.
+
+    **The zone was not merely missing its concealment -- it was not there at
+    all.** The body was the attack and nothing else, so the printed
+    aftereffect ("the cloud provides concealment, and it remains until the
+    start of its next turn") had no geometry to attach to. Reading the card
+    while writing the family is what found that; the marker had said only
+    that concealment was dropped.
+
+    `side="any"`: the card narrows to nobody, so the cloud shelters whoever
+    stands in it. #500."""
     if c.strike():
         c.hit()
+    if c.first:
+        cloud = c.zone(c.area(), until=When.SONT, label=c.ref)
+        c.conceal_in(cloud, side="any")
 
 
 @power(
@@ -1313,7 +1327,7 @@ def m2507a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC],
-    dropped=("c.conceal_in()", "c.distance_moved()"),
+    dropped=("c.conceal_in(kind=)", "c.distance_moved()"),
 )
 def m2507a3(c: Cast) -> None:
     """The aura, its damage tick and ending it when m2507 uses `m2507a6`
@@ -2153,7 +2167,7 @@ def m3788a3(c: Cast) -> None:
     target=EACH_ENEMY,
     damage=Damage("2d8", 5, half_on_miss=True),
     attack=Attack(vs=FORT, printed=12),
-    dropped=("c.conceal_in()", "c.grant_action(move_zone)"),
+    dropped=("c.grant_action(move_zone)", "c.zone(sight_limit=)"),
 )
 def m3788a4(c: Cast) -> None:
     """The prone, blind and half-on-miss are exact; so is the re-attack on
@@ -2170,7 +2184,12 @@ def m3788a4(c: Cast) -> None:
     if not c.first:
         return
     area = frozenset(c.area())
-    c.zone(area, until=When.SUSTAIN, sustain=MOVE, label=c.ref)
+    haboob = c.zone(area, until=When.SUSTAIN, sustain=MOVE, label=c.ref)
+    # "Creatures within the haboob gain concealment" -- no narrowing. The
+    # second half of that sentence, limiting their line of sight to adjacent
+    # squares, is its own symbol: it cuts sight *out of* the zone rather than
+    # concealing what is in it, and `blocks_sight` is both sides at once.
+    c.conceal_in(haboob, side="any")
 
     def tick(ev: Any) -> None:
         foe = ev.actor
@@ -4839,12 +4858,13 @@ def m964a1(c: Cast) -> None:
     keywords=[Keyword.COLD, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.AREA],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d8", 8, dtype=[DamageType.COLD, DamageType.NECROTIC]),
-    dropped=("c.conceal_in()",),
 )
 def m964a2(c: Cast) -> None:
-    """The damage is exact. The lingering cloud's concealment has no
-    zone-bound primitive -- see the module docstring. The damage tick to
-    anyone starting a turn in the area is written."""
+    """The damage is exact, and so is the tick on anyone starting a turn in
+    the area.
+
+    `side="any"`: the card says "it grants concealment" with no narrowing,
+    so the swarm shelters whoever stands in it. #500."""
     if c.strike():
         c.hit()
     if not c.first:
@@ -4855,6 +4875,8 @@ def m964a2(c: Cast) -> None:
     def tick(ev: TurnStart) -> None:
         if ev.actor in c.in_squares(area, side="any"):
             c.flat(5, dtype=DamageType.COLD, on=ev.actor)
+
+    c.conceal_in(zone, side="any")
 
     hold_handle = c.watch(TurnStart, tick, until=When.EONT, on=c.me, label=f"{c.ref} zone")
     zc = c.world.get(zone, Zone)

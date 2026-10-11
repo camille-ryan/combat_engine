@@ -217,7 +217,7 @@ def m1505a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d6", 2, kind=LIMITED),
-    dropped=("c.conceal_in()",),
+    dropped=("c.conceal_from()",),
 )
 def m1505a1(c: Cast) -> None:
     """"All creatures have concealment against it" makes the target's own

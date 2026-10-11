@@ -8165,6 +8165,35 @@ class Cast:
             side,
         )
 
+    def conceal_in(
+        self, zone: int, *, side: str = "team", total: bool = False
+    ) -> None:
+        """"You and your allies have concealment while within the zone."
+
+        The third of the zone-bounded grants, beside `c.cover_in` and
+        `c.ignores_difficult_in`, and written for the same reason each of
+        those was: `c.conceal` is per-creature and lasts a duration, so a
+        row printing this as a plain `c.conceal` concealed its allies
+        wherever they went and for as long as the clock ran -- a different
+        and much stronger rule than standing in a cloud.
+
+        Hung on the geometry like its two siblings: taken on entering, given
+        back on leaving, and taken off everybody when the zone itself ends.
+        A creature that walks in after the zone was laid is covered, which is
+        what `_while_inside` asks per arrival rather than once.
+
+        `total` is the printed difference between concealment and *total*
+        concealment, which `c.conceal` already carries -- a few of these
+        zones print the stronger word. #500.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.conceal(
+                on=who, until=When.ENCOUNTER, total=total
+            ),
+            side,
+        )
+
     def ignores_difficult_in(self, zone: int, *, side: str = "team") -> None:
         """"You and your allies can ignore difficult terrain in the zone."
 

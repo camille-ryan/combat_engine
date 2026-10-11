@@ -3738,7 +3738,6 @@ def m965a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d8", 3, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.conceal_in()",),
 )
 def m965a2(c: Cast) -> None:
     """A zone that is sustained and swings again each time it is sustained,
@@ -3752,13 +3751,13 @@ def m965a2(c: Cast) -> None:
     A zone's own effect is on the `Zone`, not among the caster's -- its label
     there is `zone <label>` -- so it is read off the zone the call returned.
 
-    The concealment the zone grants is the dropped clause: `c.cover_in` grants
-    cover and nothing bounds a concealment grant to a zone's squares the way
-    `c.grants_in` and `c.resist_in` bound theirs.
+    `side="any"`: the card says only "grants concealment", so the swirling
+    area shelters whoever stands in it. #500.
     """
     if c.first:
         area = c.area()
         zone = c.zone(area, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
+        c.conceal_in(zone, side="any")
         standing = c.world.get(zone, Zone) if zone else None
 
         def again() -> None:
