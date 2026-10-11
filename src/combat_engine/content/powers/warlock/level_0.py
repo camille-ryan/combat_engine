@@ -7,10 +7,27 @@ the weapon table. So `query.holding` has nothing to match: there is no `w:` ref
 for a weapon the character summons.
 
 They play, and what they do not do is refuse a character who is not holding the
-thing. That is one named clause, so `dropped=("c.as_weapon()",)` -- the symbol
-eleven other rows already wait on, which is what makes it the right one rather
-than a fifteenth name for one gap. #236 guessed these "may want a marker rather
+thing. That is one named clause. #236 guessed these "may want a marker rather
 than a predicate", and they do.
+
+**This note used to argue the symbol should be `c.as_weapon()`** -- eleven
+other rows waited on it, and a fifteenth name for one gap looked worse.
+`c.as_weapon` has since landed: it adds a weapon profile to `Gear.weapons`
+so `c.w()`, `c.wielding` and `Gear.main` all find it, which is exactly the
+tool a conjured blade needs. Unifying the fifteen markers onto it turned
+`todo.py` red inside one run -- the symbol exists and the rows are still not
+finished.
+
+The reason is a step further back. **Nothing in the tree creates a pact blade
+at all**: this note says the blade "is conjured by another row", and there is
+no such row -- no conjuration, no summon, nothing under `powers/warlock/`
+that calls `c.as_weapon` or puts a blade in a hand. So the verb is available
+and has no caller, the same shape #499 and #501 both have.
+
+`chargen.pact_blade()` is the honest symbol after all: the warlock has to be
+*given* the blade, which is a chargen question, and `c.as_weapon` is what the
+granting row will use once it exists. A fifteenth name is right where the gap
+genuinely is its own.
 
 Nine of these are the free-action boon every pact prints, and all nine share
 one Trigger written twice: `Dropped` with `by_me` for "you reduce an enemy to
@@ -235,7 +252,7 @@ def p13681(c: Cast) -> None:
     victim = c.target
     dice = 2 + (c.level >= 13) + (c.level >= 23)
     if c.strike():
-        c.damage(c.w(dice), c.cha_mod, dtype=DamageType.FIRE)
+        c.damage(c.w(dice), c.cha_mod, dtypes=(DamageType.FIRE, DamageType.NECROTIC))
     if victim is not None:
         c.bonus(
             "damage", 5, on=c.me, until=When.EONT, once=True,
@@ -256,7 +273,10 @@ def p13681(c: Cast) -> None:
     dropped=("chargen.pact_blade()",),
 )
 def p13682(c: Cast) -> None:
-    c.flat(5 * (1 + (c.level >= 17) + (c.level >= 27)) + c.cha_mod, dtype=DamageType.FIRE)
+    c.flat(
+        5 * (1 + (c.level >= 17) + (c.level >= 27)) + c.cha_mod,
+        dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+    )
     if c.con_mod > 0:
         c.push(c.con_mod)
 
@@ -331,7 +351,7 @@ def p13723(c: Cast) -> None:
     victim = c.target
     dice = 2 + (c.level >= 13) + (c.level >= 23)
     if c.strike():
-        c.damage(c.w(dice), c.cha_mod, dtype=DamageType.PSYCHIC)
+        c.damage(c.w(dice), c.cha_mod, dtypes=(DamageType.PSYCHIC, DamageType.RADIANT))
         spot = _beside(c)
         if spot is not None and victim is not None:
             c.teleport(20, who=victim, to=spot)

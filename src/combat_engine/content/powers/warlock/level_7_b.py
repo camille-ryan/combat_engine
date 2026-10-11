@@ -232,7 +232,7 @@ def p13672(c: Cast) -> None:
 )
 def p13752(c: Cast) -> None:
     """Its Requirement names one particular sword; see `p13672`."""
-    c.flat(5 + c.cha_mod, dtype=DamageType.PSYCHIC)
+    c.flat(5 + c.cha_mod, dtypes=(DamageType.PSYCHIC, DamageType.RADIANT))
     c.insubstantial(on=c.me, until=When.SONT)
     c.shift(1)
 
