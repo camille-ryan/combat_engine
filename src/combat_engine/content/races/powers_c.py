@@ -160,7 +160,17 @@ def p1448(c: Cast) -> None:
     creation, and a racial choice is recorded nowhere -- so the header
     holds one ability, Constitution, which the damage line names anyway.
     `c.element` answers for a character whose *class* build bound an
-    element and is the nearest standing reading of the second half."""
+    element and is the nearest standing reading of the second half.
+
+    **Correction: a racial choice is not "recorded nowhere".** `Build.race`
+    holds the ref, `Build.choices` emits `race:<ref>` unconditionally, and
+    `c.build("race:...")` reads it -- `chargen.meets` already answers 690
+    heroic feats off that field. What is missing is narrower: a race has no
+    **leg** the way a class does, so there is nowhere to record *which*
+    option within the race was taken. That is #235's modelling question
+    asked of a different noun, and #505 records why it should not be
+    answered twice.
+    """
     if c.strike():
         c.damage("1d6", c.con_mod, dtype=c.element(on=c.me) or DamageType.UNTYPED)
 
