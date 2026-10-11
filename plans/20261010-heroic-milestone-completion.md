@@ -76,9 +76,29 @@ landed    #452  armour: 408 rows, 4 kinds
           #459  associate: 88 blocks, 2 defence shapes
           #489  recharge_while, 10 rows
           #492  three tables added to the leak gate's specs walk
-filed     #485 #486 #488 #490 #493 #494
-blocked   2051 -> 1966
+          #495  c.boost_roll, 8 rows written, 10 re-pointed
+          #496  the Rerolled family, 13 rows written, 5 re-pointed
+filed     #485 #486 #488 #490 #493 #494 #497
+blocked   2051 -> 1950
 ```
+
+### The roll family, and what it cost per row
+
+Two issues, 36 marked rows between them, and the split is the lesson:
+
+```
+         rows   written   re-pointed   already done   wanted something else
+#495       18         8            -              2                      8
+#496       18        13            -              -                      5
+```
+
+**Half of #495's rows were not blocked on #495.** Six were the artificer
+banked-charge family, waiting on `events.ShortRested` first; two were
+finished and carrying a stale marker. Of #496's, five wanted a different
+mechanism once the cards were read.
+
+So the per-row cost of a marked family is not the engine work. It is reading
+36 cards to find which 21 of them the verb actually finishes.
 
 **The marker named the wrong gap three times in one day**, and #489 is the
 clearest case: of its ten rows, **five had their predicate already written
