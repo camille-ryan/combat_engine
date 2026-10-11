@@ -82,6 +82,30 @@ filed     #485 #486 #488 #490 #493 #494 #497
 blocked   2051 -> 1950
 ```
 
+### Progress, 2026-10-11
+
+```
+closed    #512  c.leash, 6 rows written, 9 re-pointed
+          #515  c.expose + exposed/contracted split, 15 rows
+          #504  landed, not closed -- 4 rows need two further causes
+filed     #511  the beast's independent mode (8 feats)
+          #513  c.walk_toward, a compulsion (2 rows)
+          #514  the nightly sweep is NOT INSTALLED
+          #515  the exposure split
+blocked   1950 -> 1893
+drivers    289 -> 463 printed rules
+sweeps    2 wide, both clean; silent refs held at 199 throughout
+```
+
+**#514 is the one to read first.** The cadence rule in the root `CLAUDE.md`
+tells a session it may keep per-commit runs narrow *because the nightly pays
+the wide sweep*. There is no nightly: nothing in any `LaunchAgents`
+directory and `launchctl` has never heard of the label.
+`logs/nightly-latest.log` is a manual run from Oct 8. So that sentence has
+been quietly false, and `logs/NIGHTLY-FAILED` being absent reads identically
+to "the last run was green" when the truth is "nothing ran". Not installed
+by me -- it schedules an unattended job on Camille's machine.
+
 ### The leash family: 14 rows, and 8 of them were a different gap
 
 The clearest case yet of the marker naming the wrong thing, and the first
