@@ -231,7 +231,10 @@ def f1831(c: Cast) -> None:
     gate existed: `rage.in_rage()` -- see the note on `RAGE` above. #503.
     """
     if in_rage(c):
-        c.bonus("attack", 2, on=c.me, until=When.EONT, kind="feat")
+        # No `kind=`: the card prints no word in front of "bonus", so it is
+        # untyped and stacks. Fourth time this slipped past me in one
+        # session, and `bonuses.py` is the only thing that reads the card.
+        c.bonus("attack", 2, on=c.me, until=When.EONT)
 
 
 @power("f1858", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
