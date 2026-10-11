@@ -3116,6 +3116,15 @@ def m6629a1(c: Cast) -> None:
     with its own stage track -- nothing in a fight carries it and nothing
     outside one exists to carry it to. Named rather than approximated: a
     saving throw rolled now would be a different rule.
+    
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
     """
     if c.strike():
         c.hit()

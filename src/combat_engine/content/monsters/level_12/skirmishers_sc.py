@@ -472,6 +472,15 @@ def m1140a1(c: Cast) -> None:
     The affliction the hit confers is a block of its own with its own stages
     and the brief gives no ref for it, so the curse relation is laid and the
     stages are the dropped clause.
+    
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
     """
     if c.strike():
         c.curse()
@@ -4157,6 +4166,15 @@ def m6000a3(c: Cast) -> None:
     The affliction a failed saving throw at the end of the fight confers is a
     block of its own, named only by ref in the brief and with no way to apply
     one, so that is the dropped clause.
+    
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
     """
     victim = c.target
     if victim is None:

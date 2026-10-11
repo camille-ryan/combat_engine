@@ -2477,7 +2477,16 @@ def m5610a0(c: Cast) -> None:
 )
 def m5610a1(c: Cast) -> None:
     """The blow is exact; the disease a failed end-of-encounter save hands
-    over has no track to carry it."""
+    over has no track to carry it.
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
+    """
     if c.strike():
         c.hit()
 

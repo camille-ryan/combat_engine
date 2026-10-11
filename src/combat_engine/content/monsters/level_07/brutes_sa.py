@@ -2604,7 +2604,16 @@ def m6112a0(c: Cast) -> None:
 def m6112a1(c: Cast) -> None:
     """The damage and the escalating penalty against a bloodied target both
     play. Contracting the named rot at the end of the encounter does not --
-    no mechanism stands up a disease track for a row to progress."""
+    no mechanism stands up a disease track for a row to progress.
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
+    """
     if not c.strike():
         return
     c.hit()

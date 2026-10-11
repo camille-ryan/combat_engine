@@ -2885,7 +2885,16 @@ def m6619a1(c: Cast) -> None:
 )
 def m6619a2(c: Cast) -> None:
     """The curse of lycanthropy half -- `x5_34` -- has no contraction
-    mechanism to call; the hit and the bloodying both play."""
+    mechanism to call; the hit and the bloodying both play.
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
+    """
     if c.strike():
         c.hit()
 

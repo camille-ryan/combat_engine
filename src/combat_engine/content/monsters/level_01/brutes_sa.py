@@ -1237,7 +1237,16 @@ def m6562a0(c: Cast) -> None:
     """The saving throw is made "at the end of the encounter" and what it
     decides is which stage of a disease the target wakes up on, which is a
     track the engine does not keep and which the card names no ref for. The
-    damage is the half that plays."""
+    damage is the half that plays.
+
+    **Correction: the contraction mechanism exists.** `c.contract(ref,
+    stage=)` and the 69-page `disease` table both landed in #389, and the
+    stage track outlives the fight. What this row actually lacks is a disease
+    *ref* to hand it: the printed disease name contains this creature's name,
+    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
+    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
+    reasoning above it was not. #504.
+    """
     if c.strike():
         c.hit()
 
