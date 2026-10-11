@@ -678,14 +678,18 @@ def i651p1(c: Cast) -> None:
 
 @power("i942x1", level=7, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_squeeze_penalty()",))
+)
 def i942x1(c: Cast) -> None:
-    """Squeezing carries `attack=-5` and `halve_speed`. The attack half is
-    cancelled by a matching untyped bonus; the speed half is a cap rather
-    than a modifier and nothing lifts it. Granting combat advantage is
-    printed as kept, so it is left alone."""
-    c.bonus("attack", 5, on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: c.is_(Condition.SQUEEZING, on=c.me))
+    """Full speed and no attack penalty while squeezing -- **but you still
+    grant combat advantage**, which the card says outright.
+
+    The clearest case for waiving knobs one at a time rather than lifting
+    the condition: two of squeezing's three costs go and the third stays.
+    The old +5 counter-bonus is gone, which is the better change of the two
+    -- cancelling a penalty with a matching bonus leaves both on the sheet
+    and reads as a +5 to anyone inspecting the modifiers. #508.
+    """
+    c.waive(Condition.SQUEEZING, "attack", "halve_speed", on=c.me)
 
 
 @power("i2067x1", level=8, cls=ITEM, action=ActionType.NONE,

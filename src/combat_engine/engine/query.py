@@ -26,7 +26,7 @@ from .components import (
     Side,
     Stats,
 )
-from .conditions import rules
+from .conditions import rules, rules_for
 from .grid import Square, between, linked_spread, spread
 from .types import (
     DEFENCES,
@@ -294,11 +294,14 @@ def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
         base += mods.total("speed", ctx or {})
     halved = False
     for c in active(world, eid):
-        cap = rules(c).speed_cap
+        # `rules_for`, not `rules`: a dozen rows waive part of what a
+        # condition costs without lifting the condition itself. #508.
+        r = rules_for(world, eid, c)
+        cap = r.speed_cap
         if cap is not None:
             base = min(base, cap)
-        halved = halved or rules(c).halve_speed
-        if rules(c).cannot_move:
+        halved = halved or r.halve_speed
+        if r.cannot_move:
             return 0
     if halved:
         base //= 2
@@ -340,17 +343,17 @@ def defence(world: World, eid: int, d: Defense, ctx: dict | None = None) -> int:
     if mods is not None:
         base += mods.total(d.value, ctx or {})
     for c in active(world, eid):
-        base += rules(c).defences.get(d, 0)
+        base += rules_for(world, eid, c).defences.get(d, 0)
     return base
 
 
 def attack_penalty(world: World, eid: int) -> int:
     """What the attacker's own conditions cost it, before modifiers."""
-    return sum(rules(c).attack for c in active(world, eid))
+    return sum(rules_for(world, eid, c).attack for c in active(world, eid))
 
 
 def deals_half(world: World, eid: int) -> bool:
-    return any(rules(c).weakened for c in active(world, eid))
+    return any(rules_for(world, eid, c).weakened for c in active(world, eid))
 
 
 #: Roles whose whole point is to stay out of melee, whatever else they can
@@ -672,7 +675,7 @@ def can_walk(world: World, eid: int) -> bool:
 
 def grants_ca(world: World, eid: int) -> bool:
     """True when the creature grants combat advantage to everyone."""
-    return any(rules(c).grants_ca for c in active(world, eid))
+    return any(rules_for(world, eid, c).grants_ca for c in active(world, eid))
 
 
 def can_flank(world: World, eid: int) -> bool:

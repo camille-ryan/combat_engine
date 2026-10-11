@@ -1399,7 +1399,7 @@ def m5746a2(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.untargetable()", "c.ignore_squeeze_penalty()"),
+    dropped=('c.untargetable()',)
 )
 def m5746a3(c: Cast) -> None:
     """A polymorph rather than a stance -- it is in the shape and may step out
@@ -1424,6 +1424,8 @@ def m5746a3(c: Cast) -> None:
             c.effect(f"{ref} {_MISTED}", until=When.EOT, on=me)
 
     c.watch(TurnStart, dawn, until=When.ENCOUNTER, on=me, label=f"{ref} dawn")
+    # Full speed while squeezing. #508.
+    c.waive(Condition.SQUEEZING, "halve_speed", on=c.me)
 
 
 @power(

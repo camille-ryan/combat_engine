@@ -2238,6 +2238,92 @@ def class_form(out: Result) -> None:
     )
 
 
+def waive(out: Result) -> None:
+    """Switch off part of what a condition costs, without lifting it.
+
+    Twelve rows print a waiver on squeezing -- "you take no penalty to
+    attack rolls", "you move at full speed", "you do not grant combat
+    advantage" -- and `conditions.RULES` held
+    `Rules(grants_ca=True, attack=-5, halve_speed=True)` as a constant with
+    nothing to switch off. #508.
+
+    **The controls are the point, and the first one is why this is not
+    `suppress`.** Suppressing squeezing means you are not squeezing, so you
+    no longer fit where only a squeezing creature fits. These cards keep the
+    condition and relax part of its cost, so the condition must still be
+    *held* afterwards.
+
+    The rest:
+
+    * **each knob is independent** -- waiving the attack penalty must leave
+      the halved speed alone, because three rows waive one and three waive
+      all three;
+    * **a creature with no waiver is untouched**, which matters because
+      `rules_for` is on the path of every speed and every attack in the
+      game;
+    * **the waiver ends with its effect**, and ends only its own words: two
+      rows may waive overlapping sets.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions
+    from combat_engine.engine.conditions import rules, rules_for
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import attack_penalty, grants_ca, speed
+    from combat_engine.engine.types import Condition
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:waive")
+
+    out.that(rules(Condition.SQUEEZING).attack == -5,
+             "the printed table costs a squeezing creature 5 to hit with")
+
+    clean = speed(world, caster)
+    c.condition(Condition.SQUEEZING, on=caster, until=When.ENCOUNTER)
+    held = world.need(caster, Conditions)
+    out.that(held.has(Condition.SQUEEZING), "it is squeezing")
+    out.that(attack_penalty(world, caster) == -5, "and takes the penalty")
+    out.that(speed(world, caster) == clean // 2, "at half speed")
+    out.that(grants_ca(world, caster) is True, "granting advantage")
+
+    # One knob, and only that one.
+    eff = c.waive(Condition.SQUEEZING, "attack")
+    out.that(eff is not None, "a card waives the attack penalty")
+    out.that(attack_penalty(world, caster) == 0, "which is gone")
+    out.that(speed(world, caster) == clean // 2,
+             "and the halved speed is UNTOUCHED -- the control, since three"
+             " rows waive one knob and three waive all three")
+    out.that(grants_ca(world, caster) is True,
+             "as is granting advantage")
+    out.that(held.has(Condition.SQUEEZING),
+             "and it is still squeezing -- the whole difference from"
+             " suppressing, which would mean it no longer fits where it"
+             " squeezed to")
+
+    # The rest.
+    c.waive(Condition.SQUEEZING, "halve_speed", "grants_ca")
+    out.that(speed(world, caster) == clean, "full speed once that is waived")
+    out.that(grants_ca(world, caster) is False, "and no advantage")
+
+    # A creature with no waiver reads the shared table, unchanged.
+    out.that(
+        rules_for(world, caster + 1, Condition.SQUEEZING)
+        is rules(Condition.SQUEEZING),
+        "a creature with no waiver gets the shared table object itself --"
+        " `rules_for` is on the path of every speed and every attack, so it"
+        " must not build one per call",
+    )
+
+    # Ending the effect takes back only its own words.
+    if eff is not None:
+        world.effects.end(eff, "driver ended it")
+    out.that(attack_penalty(world, caster) == -5,
+             "ending the first waiver restores the attack penalty")
+    out.that(speed(world, caster) == clean,
+             "and leaves the second waiver's words alone -- removed by its"
+             " own set, because two rows may waive overlapping knobs")
+
+
 def extend_move(out: Result) -> None:
     """Make a named row move you further, from outside it.
 
@@ -3203,6 +3289,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "waive": (waive,
+              "part of a condition's cost switched off, condition intact"),
     "extend_move": (extend_move,
                     "a named row moves you further, from outside it"),
     "conceal_in": (conceal_in,

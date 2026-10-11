@@ -1935,7 +1935,6 @@ def p16681(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.STANCE],
-    dropped=("c.ignore_squeeze_penalty()",),
     narrative=("skill:acrobatics",),
 )
 def p16682(c: Cast) -> None:
@@ -1950,6 +1949,9 @@ def p16682(c: Cast) -> None:
     c.stance(on=c.me, label=c.ref)
     c.ignores_difficult(on=c.me, until=When.STANCE)
     c.mode("climb", c.speed_of(), until=When.STANCE, on=c.me)
+    # Squeezing at full speed is the one of the three the engine models; climbing is a movement
+    # mode and balancing has no combat meaning. #508.
+    c.waive(Condition.SQUEEZING, "halve_speed", on=c.me)
 
 
 # ---------------------------------------------------------------- x7_937

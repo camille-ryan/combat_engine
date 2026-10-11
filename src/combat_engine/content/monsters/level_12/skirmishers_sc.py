@@ -2983,13 +2983,18 @@ def m4356a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignore_squeeze_penalty()",),
 )
 def m4356a4(c: Cast) -> None:
-    """Every clause of this row is a waiver on squeezing -- the speed, the
-    openings and the attack penalty -- and the penalty is the one the engine
-    applies, with nothing to hang a waiver on. Nothing here lands, so nothing
-    is written."""
+    """Full speed while squeezing and no -5 to attacks.
+
+    The third printed clause -- "provokes no opportunity attacks for
+    squeezing" -- has **nothing to waive**: `conditions.Rules` has no field
+    for provoking, because the engine does not make squeezing provoke in
+    the first place. So the clause is already true by absence rather than
+    dropped, and inventing a knob to switch off a rule that is not there
+    would be a modifier nothing consults. #508.
+    """
+    c.waive(Condition.SQUEEZING, "attack", "halve_speed", on=c.me)
 
 
 @power(

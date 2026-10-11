@@ -856,19 +856,21 @@ def f1698(c: Cast) -> None:
 
 @power("f1699", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_squeeze_penalty()",))
+)
 def f1699(c: Cast) -> None:
-    """Squeezing is a condition whose rules carry `attack=-5` and
-    `halve_speed`, so the printed "-2 instead of -5" is a +3 laid against
-    the standing penalty rather than a replacement.
+    """Full speed while squeezing, -2 to attacks instead of -5, and +2 to
+    one skill.
 
-    `conditions.Rules.halve_speed` is not the gap -- it is the field that
-    imposes the penalty, and it is read in `query.speed`. The gap is the
-    lifting of it: `query.speed` halves *after* it totals the `speed`
-    modifiers, so no bonus a row can lay survives the division, and there
-    is no way to waive one clause of a condition's rules. That is what
-    i942x1 and i2541x1 are already waiting on under the same name."""
+    **The two squeezing clauses take different tools and that is correct.**
+    The speed is a *waiver*: `query.speed` halves after it totals the speed
+    modifiers, so no bonus a row lays survives the division, and the only
+    way through is to switch the halving off. The attack penalty is a
+    *partial* relaxation -- "-2 instead of -5" -- which is a +3 against the
+    standing -5 rather than a waiver, because `c.waive` switches a knob off
+    and cannot turn it down. #508.
+    """
     me = c.me
+    c.waive(Condition.SQUEEZING, "halve_speed", on=me)
     c.bonus("attack", 3, on=me, until=When.ENCOUNTER,
             when=lambda ctx: c.is_(Condition.SQUEEZING, on=me))
     c.bonus("skill:dungeoneering", 2, on=me, until=When.ENCOUNTER,

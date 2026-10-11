@@ -2816,12 +2816,18 @@ def i2494x1(c: Cast) -> None:
 
 @power("i2541x1", level=7, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_squeeze_penalty()",))
+)
 def i2541x1(c: Cast) -> None:
-    """The combat-advantage half is a gate on the condition; the attack
-    penalty squeezing costs is applied where no row can reach it."""
-    c.no_advantage(on=c.me, until=When.ENCOUNTER,
-                   when=lambda ctx: c.is_(Condition.SQUEEZING, on=c.me))
+    """Neither grants combat advantage nor takes the attack penalty while
+    squeezing.
+
+    Both halves are one call now: `c.waive` switches off named parts of what
+    a condition costs and leaves the condition itself in place -- which
+    matters, because a creature that stopped squeezing would no longer fit
+    where it squeezed to. The hand-rolled `c.no_advantage` gate went with
+    it: the waiver says the same thing in the place the rule is read. #508.
+    """
+    c.waive(Condition.SQUEEZING, "attack", "grants_ca", on=c.me)
 
 
 @power("i2541p1", level=7, cls=ITEM, usage=DAILY, action=MOVE,

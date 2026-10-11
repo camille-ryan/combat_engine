@@ -6363,6 +6363,66 @@ class Cast:
                     self.target = was
         return default()
 
+    def waive(
+        self,
+        condition: Condition,
+        *what: str,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Switch off part of what a condition costs, without lifting it.
+
+        `c.waive(Condition.SQUEEZING, "attack", "halve_speed")` is "you take
+        no penalty to attack rolls and move at full speed while squeezing".
+
+        **Not `c.suppress`, and the difference is the whole reason this
+        exists.** Suppressing squeezing would mean you are not squeezing --
+        so you no longer fit in the space you squeezed into. Twelve rows
+        print the other thing: still squeezing, and some of what it costs
+        does not apply. A condition's cost is several knobs and the cards
+        turn them one at a time.
+
+        The words are `Rules` field names, and only the four a printed
+        waiver ever names are accepted -- `attack`, `halve_speed`,
+        `grants_ca`, `speed_cap`. `cannot_act` and the rest are not things a
+        card relaxes, and accepting them would invite a row to try. An
+        unrecognised word is a `KeyError`, which is the answer `c.within`
+        and `c.grants_advantage` both give. #508.
+
+        Defaults to the **caster**: every card printing this is about its own
+        holder, and `c.surge_value` has the other bug on record.
+        """
+        from .components import Conditions
+        from .conditions import _NEUTRAL
+
+        unknown = [w for w in what if w not in _NEUTRAL]
+        if unknown:
+            raise KeyError(
+                f"c.waive takes {sorted(_NEUTRAL)}, not {unknown[0]!r}: a"
+                " condition's other rules are not things a card relaxes"
+            )
+        who = self.me if on is None else on
+        held = self.world.get(who, Conditions) or self.world.add(who, Conditions())
+        words = set(what)
+        if not words:
+            return None
+        before = held.waived.setdefault(condition, set())
+        added = words - before
+        before |= words
+
+        def undo() -> None:
+            left = held.waived.get(condition)
+            if left is not None:
+                left -= added
+                if not left:
+                    held.waived.pop(condition, None)
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} waives {condition.value}",
+            on_end=[undo],
+        )
+
     def extend_move(
         self,
         ref: str,

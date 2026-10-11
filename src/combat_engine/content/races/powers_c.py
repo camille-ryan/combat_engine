@@ -619,12 +619,13 @@ def p16634(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.ignore_squeeze_penalty()",),
 )
 def p16466(c: Cast) -> None:
     pace = c.speed_of()
     c.mode("climb", pace, until=When.EOT)
     c.move(pace)
+    # Full speed while squeezing. #508.
+    c.waive(Condition.SQUEEZING, "halve_speed", on=c.me)
 
 
 # -- r24 --------------------------------------------------------------------

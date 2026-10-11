@@ -512,6 +512,17 @@ class Conditions:
     #: from the counts so that whatever imposed the condition is untouched:
     #: a save-ends daze still has its save to make when this lapses.
     suppressed: set[Condition] = field(default_factory=set)
+    #: Parts of a condition's printed rules this creature does not suffer,
+    #: by condition, naming `Rules` fields -- `{"attack", "halve_speed"}`.
+    #:
+    #: **Not `suppressed`, and the difference is the whole point.** Suppressing
+    #: squeezing would mean you are not squeezing, so you no longer fit in the
+    #: small space you squeezed into. Twelve rows print the other thing: you
+    #: are still squeezing and some of what it costs does not apply to you --
+    #: "you take no penalty to attack rolls", "you move at full speed", "you
+    #: do not grant combat advantage". A condition's cost is three knobs and
+    #: the cards turn them independently. #508.
+    waived: dict[Condition, set[str]] = field(default_factory=dict)
 
     def has(self, c: Condition) -> bool:
         return self.counts.get(c, 0) > 0 and c not in self.suppressed

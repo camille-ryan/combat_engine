@@ -1329,12 +1329,18 @@ def m6531a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignore_squeeze_penalty()",),
 )
 def m6531a2(c: Cast) -> None:
-    """All three halves of this row are the squeezing penalties being lifted --
-    the halved speed, the -5 to attacks and the advantage granted -- and
-    `Condition.SQUEEZING` carries them with nothing to switch off."""
+    """All three of squeezing's costs lifted: full speed, no -5, no advantage
+    granted for it.
+
+    One call, because the card is one sentence. The condition stays, which
+    is what lets the creature keep standing where only a squeezing creature
+    fits. #508.
+    """
+    c.waive(
+        Condition.SQUEEZING, "attack", "halve_speed", "grants_ca", on=c.me
+    )
 
 
 @power(

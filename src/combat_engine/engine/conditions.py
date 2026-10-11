@@ -12,7 +12,8 @@ only one that depends on who is being attacked.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from typing import Any
 
 from .types import Condition, Defense
 
@@ -107,6 +108,40 @@ RULES: dict[Condition, Rules] = {
 
 def rules(c: Condition) -> Rules:
     return RULES.get(c, NOTHING)
+
+
+def rules_for(world: Any, eid: int, c: Condition) -> Rules:
+    """This condition's rules **as they apply to this creature**.
+
+    The table above is what the book prints. A dozen rows print a waiver on
+    part of it -- "you take no penalty to attack rolls while squeezing", "you
+    move at full speed" -- and a waiver is not the same as not having the
+    condition: you are still squeezing, and still fit where only a squeezing
+    creature fits. See `Conditions.waived`.
+
+    Returns the shared table object untouched when nothing is waived, which
+    is every creature almost always -- this is on the path of every speed
+    and every attack. #508.
+    """
+    from .components import Conditions
+
+    base = RULES.get(c, NOTHING)
+    held = world.get(eid, Conditions)
+    waived = held.waived.get(c) if held is not None else None
+    if not waived:
+        return base
+    return replace(base, **{k: _NEUTRAL[k] for k in waived if k in _NEUTRAL})
+
+
+#: What each waivable field becomes when a card switches it off. Only the
+#: fields a printed waiver actually names: `cannot_act` and the rest are not
+#: things a feat relaxes, and listing them would invite a row to try.
+_NEUTRAL: dict[str, Any] = {
+    "attack": 0,
+    "halve_speed": False,
+    "grants_ca": False,
+    "speed_cap": None,
+}
 
 
 #: Conditions that always arrive together. Dropping to 0 hit points gives all

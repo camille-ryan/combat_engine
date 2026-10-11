@@ -1438,20 +1438,19 @@ def f1405(c: Cast) -> None:
 
 @power("f1406", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_squeeze_penalty()",))
+)
 def f1406(c: Cast) -> None:
-    """The combat-advantage half plays, gated on actually squeezing, and
-    so does the re-priced escape -- `actions.legal` reads `escape` off
-    `_granted` the way it reads `stand`. Squeezing's -5 to attacks is a
-    constant in `conditions.Rules`, not a modifier a row can cancel; the
-    marker is re-aimed at the symbol the other three rows wanting that
-    already name."""
+    """A minor-action escape, and neither combat advantage nor an attack
+    penalty while squeezing.
+
+    The two squeezing clauses are one `c.waive` now. It replaces the
+    hand-rolled `c.no_advantage` gate as well as supplying the half that was
+    dropped -- the waiver says both in the place the rule is actually read,
+    where the gate said one of them a layer later. #508.
+    """
     me = c.me
     c.grant_action("escape", MINOR, on=me, until=When.ENCOUNTER)
-    c.no_advantage(
-        on=me, until=When.ENCOUNTER,
-        when=lambda ctx: c.is_(Condition.SQUEEZING, on=me),
-    )
+    c.waive(Condition.SQUEEZING, "attack", "grants_ca", on=me)
 
 
 def _used_racial(world, me: int, ev: Any) -> bool:  # noqa: ANN001

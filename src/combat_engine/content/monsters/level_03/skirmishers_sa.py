@@ -3483,7 +3483,6 @@ def m6583a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.ignore_squeeze_penalty()",),
 )
 def m6583a3(c: Cast) -> None:
     """It thins out, and the printed Sustain Standard is its own hold.
@@ -3499,6 +3498,8 @@ def m6583a3(c: Cast) -> None:
     c.insubstantial(until=When.EONT, on=c.me)
     held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=STANDARD)
     c.on_sustain(held, lambda: c.insubstantial(until=When.EONT, on=c.me))
+    # Full speed and no advantage granted for squeezing, while in this form. #508.
+    c.waive(Condition.SQUEEZING, "halve_speed", "grants_ca", on=c.me)
 
 
 # --------------------------------------------------------------------------
