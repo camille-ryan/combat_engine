@@ -2879,24 +2879,35 @@ def m6619a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d10", 9),
-    dropped=("etl.monster.inline_disease()",),
     requires=_shapes("beast", "hybrid"),
     requires_text="it must be in beast or hybrid form",
 )
 def m6619a2(c: Cast) -> None:
-    """The curse of lycanthropy half -- `x5_34` -- has no contraction
-    mechanism to call; the hit and the bloodying both play.
+    """The hit, the bloodying, and the curse the bloodying exposes.
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    **The ref was wrong here, not only missing.** This docstring named
+    `x5_34`, and the card's resolved sentence is `x5_93` -- two different
+    pages. Nothing could catch it while no row called the verb: a guessed ref
+    in prose reads exactly like a right one.
+
+    `c.expose` and not `c.contract`, and **gated on the bloodying**:
+    "if this attack bloodies the target, the target must make a saving throw
+    at the end of the encounter". A blow that merely hits exposes nobody.
+
+    "If this attack bloodies" is the **crossing and not the state** -- the
+    idiom `m3093a2` records -- so whether the creature was already bleeding
+    is read before the blow and compared with after it. Reading
+    `c.bloodied` alone would expose every target that happened to be
+    bloodied already, which is a different and much commoner sentence.
     """
+    victim = c.target
+    if victim is None:
+        return
+    was = c.bloodied(on=victim)
     if c.strike():
         c.hit()
+        if not was and c.bloodied(on=victim):
+            c.expose("x5_93", on=victim)
 
 
 @power(

@@ -1106,6 +1106,16 @@ class Afflictions:
 
     contracted: dict[str, int] = field(default_factory=dict)
 
+    #: Caught but not settled: the disease's ref mapped to the stage it
+    #: would be contracted at, while the end-of-encounter saving throw is
+    #: still owed. **Nineteen cards distinguish this from `contracted` and
+    #: the model did not** -- "the target is exposed to `x5_59`" at the
+    #: moment of the hit, and the throw at the end of the fight decides
+    #: whether it moves across. `m5100a0`'s trait asks after this one by
+    #: name and had nothing to read, which is what its `c.exposed(pending=)`
+    #: marker has been naming. #515.
+    pending: dict[str, int] = field(default_factory=dict)
+
 
 @dataclass
 class Gear:

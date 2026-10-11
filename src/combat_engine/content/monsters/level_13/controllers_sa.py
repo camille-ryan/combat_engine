@@ -4021,7 +4021,7 @@ def m4329a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.disease_check()", "c.exposed(pending=)"),
+    todo=("c.disease_check()",),
 )
 def m5100a0(c: Cast) -> None:
     """The whole trait is about disease, and `c.contract` is not enough for it.
@@ -4035,12 +4035,17 @@ def m5100a0(c: Cast) -> None:
       a fight, which is the one place `c.contract`'s note says the stage never
       advances. The table carries `check_skills`, `worsen_dc` and
       `improve_dc` now, so the check is writable -- it wants a verb.
-    * **"exposed to a disease" is not "infected".** The card distinguishes a
-      creature that was hit and has a save pending from one that failed it,
-      and `Afflictions.contracted` records only the second.
+    * ~~**"exposed to a disease" is not "infected".**~~ **Landed**, #515:
+      `Afflictions.pending` is the state this asked for and
+      `c.exposed(pending=True)` reads it. The distinction this row named was
+      right and was costing more than this row -- the trait reads
+      "exposed", so before the split it was asking after a dict that only
+      filled in after a throw nothing rolled, and could essentially never
+      find a target.
 
-    The aura is laid because it is what the trait's range *is*, and both
-    clauses pay out inside it once those exist.
+    The aura is laid because it is what the trait's range *is*. One clause
+    to go: the check itself, which is the verb that forces a stage check
+    inside a fight.
     """
     c.aura(2, label=c.ref, until=When.ENCOUNTER)
 

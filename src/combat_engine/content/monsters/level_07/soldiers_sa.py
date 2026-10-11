@@ -1845,25 +1845,22 @@ def m5598a1(c: Cast) -> None:
     attack=Attack(vs=REF, printed=12), damage=Damage("1d8", 6, dtype=DamageType.POISON),
     requires=_shapes("snake", "hybrid"),
     requires_text="it must be in its beast or hybrid form",
-    dropped=("etl.monster.inline_disease()",),
 )
 def m5598a2(c: Cast) -> None:
     """The end-of-encounter disease check has no mechanism; the attack bonus
     while already grabbing the target, and the ongoing poison, both play.
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    Written. The ref resolves (#504) and the throw exists (#515), so
+    `c.expose` records the exposure and the end-of-encounter saving throw
+    settles it -- **not** `c.contract`, which catches the disease outright
+    and would skip the throw this card prints.
     """
     victim = c.target
     grabbing = victim is not None and victim in _holding(c)
     if c.strike(plus=2 if grabbing else 0):
         c.hit()
         c.ongoing(5, DamageType.POISON)
+        c.expose("x5_53")
 
 
 @power(

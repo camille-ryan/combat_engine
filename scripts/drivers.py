@@ -3298,6 +3298,106 @@ def keyword_ban(out: Result) -> None:
              " a single set could not say which direction each meant")
 
 
+def exposure(out: Result) -> None:
+    """Exposed is not contracted, and the throw comes when the fight ends.
+
+    19 stat blocks print "at the end of the encounter, the target makes a
+    saving throw. On a failure, the target contracts `x5_N` (stage 1)", and
+    the engine had neither half: `c.contract` catches it outright, and
+    nothing happened at the end of an encounter.
+
+    The controls that matter here are the ones separating this from
+    `c.contract`:
+
+    * exposure must **not** read as contracted while the throw is owed --
+      the tempting shortcut is to record it in one dict and call the
+      distinction cosmetic, and `m5100a0`'s trait asks after exactly the
+      difference.
+    * the throw must fire **only** when the fight ends. `on_end` is handed
+      no reason, so an implementation that skips the `effects.closing` check
+      settles the disease every time the hold is broken -- including on
+      death, which would infect corpses.
+    * and it must fire **at all**: an effect laid with no `on_end`, or hung
+      on a duration no encounter-end reaches, is a row that silently never
+      pays out. #515.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Afflictions
+    from combat_engine.engine.query import enemies
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:exposure")
+    foe = sorted(enemies(world, me))[0]
+
+    laid = c.expose("x5_23", on=foe)
+    out.that(laid is not None, "exposure is laid as an effect")
+    out.that(c.exposed("x5_23", on=foe, pending=True),
+             "the creature is exposed to it, with a throw owed")
+    out.that(not c.exposed("x5_23", on=foe),
+             "and is NOT yet infected -- the control that separates this from"
+             " c.contract, and the whole of what m5100a0 asks after")
+    out.that(not c.exposed("x5_34", on=foe, pending=True),
+             "and not exposed to a different disease -- the negative control")
+
+    held = world.get(foe, Afflictions)
+    out.that(held is not None and held.pending.get("x5_23") == 1,
+             "pending at the stage it would be caught at")
+    out.that(held is not None and not held.contracted,
+             "with nothing in `contracted` while the throw is owed")
+
+    # Exposing twice is one exposure.
+    out.that(c.expose("x5_23", on=foe) is None,
+             "exposing the same creature to the same disease twice does nothing")
+
+    # **A hold broken early settles nothing.** Without the `closing` check
+    # this is where an implementation infects somebody on the wrong signal.
+    other = c.expose("x5_34", on=foe)
+    assert other is not None
+    world.effects.end(other, "broken early, not the fight ending")
+    out.that(not c.exposed("x5_34", on=foe),
+             "a hold broken early does NOT settle the disease -- `on_end` fires"
+             " for every ending alike and only `effects.closing` tells them"
+             " apart")
+    out.that(not c.exposed("x5_34", on=foe, pending=True),
+             "and the exposure is gone rather than left owed forever")
+
+    # Now the fight ends, which is the printed moment. Through
+    # `Encounter.finish` and not `effects.end_encounter` directly: the whole
+    # claim is that the verb needs no new moment because that chain already
+    # exists, and calling the inner half would assume the outer one.
+    enc = world.encounter
+    out.that(enc is not None, "the board hands back a live encounter to end")
+    assert enc is not None
+
+    # **Both branches, forced.** "Either it caught it or it saved" is true of
+    # any implementation including one that never rolls, so the outcome is
+    # pinned instead: a -30 save cannot succeed and a +30 cannot fail, which
+    # makes each half a real assertion rather than a tautology.
+    c.expose("x5_44", on=foe, bonus=-30)
+    c.expose("x5_51", on=foe, bonus=30)
+
+    from combat_engine.engine.events import SavingThrow
+
+    throws: list[str] = []
+    world.bus.on(SavingThrow, lambda ev: throws.append(ev.against))
+
+    enc.finish()
+
+    out.that(not c.exposed("x5_23", on=foe, pending=True),
+             "the encounter ending settles the throw, so nothing stays pending")
+    out.that("x5_44" in throws and "x5_51" in throws,
+             f"a saving throw was actually rolled for each exposure -- {throws}"
+             " -- which an implementation that laid the effect and never armed"
+             " `on_end` would fail")
+    settled = world.get(foe, Afflictions)
+    out.that(settled is not None and "x5_44" in settled.contracted,
+             "the throw it could not pass contracts the disease")
+    out.that(settled is not None and "x5_51" not in settled.contracted,
+             "and the throw it could not fail does NOT -- the two halves of"
+             " the printed sentence, each pinned so neither can pass by luck")
+
+
 def disease(out: Result) -> None:
     """"...and the target contracts `x5_23`." 47 rows printed this. #389.
 
@@ -3452,6 +3552,9 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "disease": (disease,
                 "catching a disease, and a stage that does not move"),
+    "exposure": (exposure,
+                 "exposed is not contracted, and the throw comes when the"
+                 " fight ends"),
     "keyword_ban": (keyword_ban,
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,

@@ -2174,11 +2174,11 @@ def m5613a1(c: Cast) -> None:
     "m5613a2", level=9, usage=Usage.RECHARGE, recharge=4, action=STANDARD, reach=CloseBlast(3),
     target=EACH_ENEMY, keywords=[Keyword.DISEASE, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14), damage=Damage("2d12", 6, kind=LIMITED),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m5613a2(c: Cast) -> None:
     if c.strike():
         c.hit()
+        c.expose("x5_59")
 
 
 @power(

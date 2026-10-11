@@ -2599,27 +2599,42 @@ def m6112a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=12),
     damage=Damage("2d10", 7),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m6112a1(c: Cast) -> None:
     """The damage and the escalating penalty against a bloodied target both
     play. Contracting the named rot at the end of the encounter does not --
     no mechanism stands up a disease track for a row to progress.
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    Written, and **two faults came out with it.**
+
+    The penalty was laid on *every* saving throw. The card scopes it --
+    "a -2 penalty to any saving throw made at the end of the encounter **to
+    avoid contracting `x5_81`**" -- so it is one throw and not all of them,
+    and an unscoped version was helping the target shake off dazes it should
+    have kept. `when=` is #471's scoped modifier and `c.save(bare=True)`
+    puts the disease's ref in the context as `label`, which is what the
+    predicate reads.
+
+    And "if this attack bloodies the target, the penalty increases to -5"
+    was read as the **state** rather than the crossing: `c.bloodied` alone
+    is true of a target that was already bleeding when the blow landed, and
+    the card asks whether *this* blow did it. `m3093a2` records the idiom.
+
+    The exposure itself is `m6112a2`'s, not this row's. This one only makes
+    that throw harder, which is why it lays a modifier and no `c.expose`.
     """
+    victim = c.target
+    if victim is None:
+        return
+    was = c.bloodied(on=victim)
     if not c.strike():
         return
     c.hit()
-    victim = c.target
-    if victim is not None:
-        c.penalty("save", 5 if c.bloodied(on=victim) else 2, on=victim, until=When.ENCOUNTER)
+    worse = not was and c.bloodied(on=victim)
+    c.penalty(
+        "save", 5 if worse else 2, on=victim, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("label") == "x5_81",
+    )
 
 
 @power(
@@ -2633,13 +2648,13 @@ def m6112a1(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.POISON],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("3d8", 4, dtype=DamageType.POISON, kind=LIMITED, half_on_miss=True),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m6112a2(c: Cast) -> None:
     me = c.me
     _recharge_on(c, DamageApplied, lambda ev: ev.target == me and ev.dtype is DamageType.LIGHTNING)
     if c.strike():
         c.hit()
+        c.expose("x5_81")
     else:
         c.hit(half=True)
 

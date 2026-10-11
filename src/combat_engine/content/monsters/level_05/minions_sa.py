@@ -635,24 +635,21 @@ def m5608a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 5, kind=MINION),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m5608a1(c: Cast) -> None:
     """The blow and the step are exact. The disease the end-of-encounter save
     hands over is a block of its own and nothing carries one, which is the named
     gap.
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    Written. The ref resolves (#504) and the throw exists (#515), so
+    `c.expose` records the exposure and the end-of-encounter saving throw
+    settles it -- **not** `c.contract`, which catches the disease outright
+    and would skip the throw this card prints.
     """
     if c.strike():
         c.hit()
         c.shift(1)
+        c.expose("x5_59")
 
 
 # --------------------------------------------------------------------------
@@ -694,22 +691,19 @@ def m5609a0(c: Cast) -> None:
     keywords=[Keyword.DISEASE],
     attack=Attack(vs=AC, printed=10),
     damage=Damage("", 8, kind=MINION),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m5609a1(c: Cast) -> None:
     """The end-of-encounter saving throw against the disease has no contraction
     mechanism to call; the blow plays.
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    Written. The ref resolves (#504) and the throw exists (#515), so
+    `c.expose` records the exposure and the end-of-encounter saving throw
+    settles it -- **not** `c.contract`, which catches the disease outright
+    and would skip the throw this card prints.
     """
     if c.strike():
         c.hit()
+        c.expose("x5_59")
 
 
 # --------------------------------------------------------------------------

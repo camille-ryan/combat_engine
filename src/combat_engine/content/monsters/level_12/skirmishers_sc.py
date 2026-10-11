@@ -463,7 +463,6 @@ def m1140a0(c: Cast) -> None:
     attack=Attack(vs=WILL, printed=15),
     trigger=_M1140_FELL,
     on=Trigger(Dropped, about_me, _M1140_FELL),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m1140a1(c: Cast) -> None:
     """No damage line -- the hold the hit lays is the whole of the hit, so
@@ -474,16 +473,14 @@ def m1140a1(c: Cast) -> None:
     stages are the dropped clause.
     
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    Written, and with `c.contract` rather than `c.expose`: this card
+    prints no saving throw. "The target is cursed with `x5_51`" is the
+    whole sentence, so the affliction lands on the hit -- which is the
+    handful of rows `c.contract` was always right for.
     """
     if c.strike():
         c.curse()
+        c.contract("x5_51")
 
 
 @power(
@@ -4158,7 +4155,6 @@ def m6000a2(c: Cast) -> None:
     keywords=[Keyword.DISEASE, Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("4d8", 7, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("etl.monster.inline_disease()",),
 )
 def m6000a3(c: Cast) -> None:
     """Three things hang on the domination ending, and `on_end` is the one
@@ -4173,13 +4169,11 @@ def m6000a3(c: Cast) -> None:
     one, so that is the dropped clause.
     
 
-    **Correction: the contraction mechanism exists.** `c.contract(ref,
-    stage=)` and the 69-page `disease` table both landed in #389, and the
-    stage track outlives the fight. What this row actually lacks is a disease
-    *ref* to hand it: the printed disease name contains this creature's name,
-    `etl/monster.py`'s own-name scrub runs first and leaves a hybrid, so
-    `_cross_reference` never resolves it to `x5_N`. The marker is right; the
-    reasoning above it was not. #504.
+    Written. The ref resolves (#504) and the throw exists (#515), so
+    `c.expose` records it and the end-of-encounter saving throw settles
+    it. The exposure is laid beside the domination rather than inside
+    the `hold is None` guard below: the card hangs it on the hit, and a
+    domination that failed to take hold does not un-expose anybody.
     """
     victim = c.target
     if victim is None:
@@ -4190,6 +4184,7 @@ def m6000a3(c: Cast) -> None:
             known.restore(c.ref)
         return
     c.hit()
+    c.expose("x5_66")
     hold = c.condition(Condition.DOMINATED, until=When.SAVE_ENDS)
     gone = c.condition(Condition.REMOVED, until=When.ENCOUNTER, on=c.me)
     if hold is None:

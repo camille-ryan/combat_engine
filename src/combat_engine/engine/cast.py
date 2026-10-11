@@ -5949,11 +5949,81 @@ class Cast:
         caught.contracted[ref] = stage
         return effect
 
-    def exposed(self, ref: str = "", *, on: int | None = None) -> bool:
+    def expose(
+        self,
+        ref: str,
+        *,
+        on: int | None = None,
+        stage: int = 1,
+        bonus: int = 0,
+    ) -> Effect | None:
+        """"At the end of the encounter, the target makes a saving throw. On
+        a failure, the target contracts `x5_59` (stage 1)." 19 rows. #515.
+
+        The exposure is recorded **now** and settled **later**, which is the
+        two-step the cards print and `c.contract` collapses: that verb
+        catches the disease outright, and is right for the handful of rows
+        whose card says so with no throw in between.
+
+        **The throw rides on the effect's own ending**, which is why no new
+        moment had to be invented. `Encounter.finish` calls
+        `effects.end_encounter`, and that fires `on_end` for everything live
+        -- so a `When.ENCOUNTER` effect laid here is handed the end of the
+        fight for free.
+
+        `on_end` is handed no reason, though, and fires for a death and a
+        broken hold alike. `effects.closing` is the discriminator and exists
+        for exactly this: `Cast.aftereffect` reads it to *avoid* firing on a
+        torn-down board, and this reads it to fire **only** then. A creature
+        that dies mid-fight drops its exposure without a throw, which is the
+        right answer and falls out rather than being special-cased.
+
+        The throw itself is `c.save(bare=True)` -- "a saving throw against
+        nothing in particular", which is what this is: there is no save-ends
+        effect to shake off, only a d20 against 10 with the creature's save
+        bonuses on it.
+        """
+        from .components import Afflictions
+
+        who = self._who(on)
+        if who is None:
+            return None
+        caught = self.world.get(who, Afflictions) or self.world.add(
+            who, Afflictions()
+        )
+        if ref in caught.contracted or ref in caught.pending:
+            return None
+        caught.pending[ref] = stage
+        effects = self.world.effects
+
+        def settle() -> None:
+            caught.pending.pop(ref, None)
+            # Only the fight ending settles it. A hold broken early, or a
+            # body leaving the board, takes the exposure with it unsettled.
+            if not effects.closing:
+                return
+            if not self.save(on=who, bare=True, against=ref, bonus=bonus):
+                self.contract(ref, on=who, stage=stage)
+
+        return effects.apply(
+            who, self.me, When.ENCOUNTER,
+            label=f"{self.ref} exposed {ref}",
+            on_end=[settle],
+        )
+
+    def exposed(
+        self, ref: str = "", *, on: int | None = None, pending: bool = False
+    ) -> bool:
         """Has this creature caught a disease -- that one, or any?
 
         With no ref it answers "any", which is what `m5100a0`'s aura asks and
         the commoner of the two printed questions.
+
+        `pending=True` asks the **other** printed question instead: is a
+        throw still owed on it. The two are different states on different
+        dicts and a card that says "exposed" sometimes means either, so this
+        makes a row say which rather than guessing -- the parameter name the
+        tree's own marker asked for. #515.
         """
         from .components import Afflictions
 
@@ -5961,9 +6031,12 @@ class Cast:
         if who is None:
             return False
         caught = self.world.get(who, Afflictions)
-        if caught is None or not caught.contracted:
+        if caught is None:
             return False
-        return bool(caught.contracted) if not ref else ref in caught.contracted
+        held = caught.pending if pending else caught.contracted
+        if not held:
+            return False
+        return bool(held) if not ref else ref in held
 
     def forbid(
         self,
