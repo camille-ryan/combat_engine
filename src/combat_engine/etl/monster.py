@@ -722,4 +722,36 @@ def _ability_spec(body: str, start: int, head: str, a: Ability) -> str:
         line = f"{pair[0]}: {pair[1]}" if pair else text(para)
         if line.strip():
             lines.append(line.strip())
-    return "\n".join(lines).strip()
+    return _unglue("\n".join(lines).strip())
+
+
+#: A word run into the list marker that follows it -- `sickness3.` -- which
+#: happens when `text()` drops an element boundary the source used to break a
+#: numbered list. Three letters minimum, so no ref spelling can match: every
+#: prefix in use is one or two letters (`m`, `p`, `i`, `f`, `r`, `rt`, `cf`,
+#: `x5_`), and a damage die is `2d10` with the digit leading.
+_GLUED_MARKER = re.compile(r"\b([a-z]{3,})(\d+\.)")
+
+
+def _unglue(spec: str) -> str:
+    """Put back the space between a word and the list marker after it.
+
+    **This is a scrub fix, not a tidiness fix.** `scrub` matches on word
+    boundaries and there is no boundary between a letter and a digit, so a
+    name ending where a marker begins is invisible to it: `m5100a2` printed
+    two disease names that survived the swap because the source list came
+    out as `Blinding sickness3. Cackle fever4.` -- and both names reached the
+    spec an author reads.
+
+    Measured before writing it rather than assumed: **3 occurrences in 2
+    specs** across every monster and power spec in the corpus. A first
+    pattern said 674 and was wrong -- it was matching `the m43.`, a ref at
+    the end of a sentence, which is the overwhelming majority of
+    letter-then-digit in this text and exactly what must not be touched.
+
+    The root cause is a step further out: `text()` drops an element without
+    leaving whitespace where the markup was. Fixing it there would be the
+    real repair and would touch every extraction, so this handles the one
+    shape that is known to break a swap. #504.
+    """
+    return _GLUED_MARKER.sub(r"\1 \2", spec)

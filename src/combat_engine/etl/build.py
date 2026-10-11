@@ -806,7 +806,28 @@ def _monsters(
     # because the scrubber only knew the one it was working on -- so 233
     # specs carried somebody else's printed name straight through to an
     # author who is not allowed to see one.
-    index = _creature_names(rows)
+    # **Diseases before the creatures, and both before the scrub.** A stat
+    # block that seeds a disease names it, and `_diseases` runs fifteen lines
+    # *after* this pass -- so `names` held no `x5_` entry at the moment a
+    # monster's spec was scrubbed, and the monster's own name was replaced
+    # inside the disease's. 19 rows came out saying `contracts m6112 rot`
+    # and `contracts slight m6562 fever`: a hybrid matching no index entry,
+    # so `c.contract(ref)` had no ref to be handed.
+    #
+    # `sanitise.scrub` already has the rule that fixes this -- longest first,
+    # so a three-word disease name is caught before the one-word monster name
+    # inside it. It was never given the disease names to apply it to. Nothing
+    # here reorders a pass; it hands `scrub` what it needs to decide.
+    #
+    # **Creature names win a clash**, which is why they are merged second: in
+    # a monster's own rules a shared spelling means the creature.
+    #
+    # Monsters only, deliberately. `power.spec` has the same ordering, and
+    # `p15954` is why it is not fixed the same way: it prints a *stance*
+    # spelled exactly like disease `x5_85`, so a blind swap there would
+    # rewrite a stance into a disease ref. That wants the positional
+    # treatment #506 describes, not this. #504.
+    index = {**_disease_names(source), **_creature_names(rows)}
     for row in rows:
         m = monster_parser.parse(
             row["ID"], row["Txt"], row["Source"], others=index,
@@ -896,6 +917,30 @@ def _creature_names(rows: list) -> dict[str, str]:
             if worth_swapping(nm):
                 out.setdefault(nm, f"{m.ref_id}a{a.index}")
     return out
+
+
+def _disease_names(source: sqlite3.Connection) -> dict[str, str]:
+    """Every disease's printed name mapped to its ref, for the monster pass.
+
+    `_diseases` is the full parse -- stage tracks, DC shapes, the sanitised
+    page -- and it runs after monsters and powers because nothing it writes
+    is needed earlier. Its *names* are, so this reads the two columns that
+    need no parsing at all; the ref is `x5_<id>` straight off the page's own
+    id, which is what makes an early read safe.
+
+    No `worth_swapping` filter, because the population was checked rather
+    than assumed: of the 69 names, six are a single word, **none** is
+    ordinary English by `_COMMON()`, none is built only from mechanical
+    terms and none is shorter than five characters. `Shakes` is the one that
+    reads like a verb and it appears in no spec in the corpus.
+    """
+    return {
+        name.strip(): f"x5_{did}"
+        for did, name in source.execute(
+            "SELECT ID, Name FROM Disease WHERE Name IS NOT NULL ORDER BY ID"
+        )
+        if name and name.strip()
+    }
 
 
 #: The chassis lines every class page prints, in the order they appear.
