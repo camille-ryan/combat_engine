@@ -551,7 +551,7 @@ def f2462(c: Cast) -> None:
 
 
 @power("f2469", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_shift()",))
+       reach=PERSONAL, target=SELF, todo=("c.extend_move(any_of=)",))
 def f2469(c: Cast) -> None:
     """Two extra squares on a shift a martial encounter or daily power
     grants. Nothing adds to the distance somebody else's row moves you,

@@ -698,7 +698,7 @@ def p12341(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_ALLY,
     keywords=ARCANE,
-    dropped=("c.extend_shift()",),
+    dropped=("c.extend_move(any_of=)",),
 )
 def p12342(c: Cast) -> None:
     """The concealment half is exact and hangs off the shift actually

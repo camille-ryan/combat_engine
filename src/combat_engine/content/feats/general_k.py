@@ -449,12 +449,21 @@ def f1670(c: Cast) -> None:
 
 
 @power("f1674", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_shift()",))
+       reach=PERSONAL, target=SELF)
 def f1674(c: Cast) -> None:
-    """Re-aimed: the row it rides on is `rt:r18-t3`, which
-    is declared, so the naming gap is closed. What is left is that
-    nothing lengthens the shift *another named row* makes -- `c.shift`
-    here would be a second, separate shift. Same hold `f2600` carries."""
+    """Shift your **speed** on `rt:r18-t3`, instead of its printed 3.
+
+    The card replaces the distance where `c.extend_move` adds to it, so the
+    addition is the difference -- `3 + (speed - 3)` is speed, and the row
+    reads `c.squares_for` so the arithmetic lands in one move rather than
+    two. `max(0, ...)` because a slowed character's speed can drop below the
+    printed 3, and the card is a *benefit*: it must not shorten the shift.
+
+    Written as an addition rather than asking for a `replaces=` because one
+    verb that both adds and replaces could not say which a second feat
+    should do, and nothing else in the tree needs the replacement. #502.
+    """
+    c.extend_move("rt:r18-t3", max(0, c.speed_of() - 3))
 
 
 def _any_reroll_of_mine(world: World, me: int, ev: Any) -> bool:

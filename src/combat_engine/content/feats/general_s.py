@@ -135,7 +135,8 @@ MODE = ("c.familiar_state()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Lengthening somebody else's printed shift.
-EXTEND = ("c.extend_shift()",)
+#: Folded into `c.extend_move(any_of=)` -- see `rogue_b.EXTEND_SHIFT`. #502.
+EXTEND = ("c.extend_move(any_of=)",)
 
 
 def _concealed_by(c: Cast, ref: str) -> bool:

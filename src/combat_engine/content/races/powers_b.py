@@ -1069,7 +1069,8 @@ def p7443(c: Cast) -> None:
     """`MoveStart`: the distance in the trigger is measured before the move,
     and by `MoveEnd` the enemy is somewhere else."""
     foe = c.trigger.actor
-    c.shift(3)
+    # Read rather than written in, so a feat can lengthen it. #502.
+    c.shift(c.squares_for(c.ref, 3))
     c.bonus(
         "damage", 0, dice="1d6", until=When.EONT, on=c.me,
         when=lambda ctx: ctx["target"] == foe,

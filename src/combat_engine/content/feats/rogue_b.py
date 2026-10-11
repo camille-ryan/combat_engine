@@ -87,7 +87,13 @@ from .styles import hit_with_one_of, used_one_of
 APPLIES = ("c.extra_damage(applies=)",)
 #: One weapon group standing in for another, for named rows only.
 #: Nothing adds to the distance somebody else's shift covers.
-EXTEND_SHIFT = ("c.extend_shift()",)
+#: **Folded into `c.extend_move(any_of=)`.** `c.extend_shift` was a second
+#: symbol for one gap -- `f1393`'s note said so outright, "twelve rows
+#: between the two symbols want it" -- and `c.extend_move` (#502) covers a
+#: shift as readily as a teleport, because both take their distance as an
+#: argument. What is left on these rows is the *class* form: they lengthen
+#: every shift a martial power grants, not one named row.
+EXTEND_SHIFT = ("c.extend_move(any_of=)",)
 
 #: The class feature whose payout half this file keeps reaching for.
 _SNEAK = "cf:rogue-scoundrel-f4"

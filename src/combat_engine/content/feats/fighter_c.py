@@ -261,7 +261,7 @@ def f2359(c: Cast) -> None:
 
 
 @power("f2360", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_shift()",))
+       reach=PERSONAL, target=SELF, dropped=("c.extend_move(any_of=)",))
 def f2360(c: Cast) -> None:
     """The damage half is a standing modifier with two named rows. The
     other clause lengthens a shift by 1, and nothing adds to one."""

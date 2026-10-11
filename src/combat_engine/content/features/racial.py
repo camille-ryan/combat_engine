@@ -560,7 +560,8 @@ def rt_r18_t3(c: Cast) -> None:
     """`SecondWind` is the event that exists for exactly this sentence;
     `SurgeSpent` is not a substitute, since a dozen leader rows spend a
     surge without a second wind being taken."""
-    c.shift(3)
+    # Read rather than written in, so a feat can lengthen it. #502.
+    c.shift(c.squares_for(c.ref, 3))
 
 
 # -- r19 ---------------------------------------------------------------

@@ -755,7 +755,7 @@ def f2335(c: Cast) -> None:
 
 @power("f2361", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.extend_shift()",))
+       dropped=("c.extend_move(any_of=)",))
 def f2361(c: Cast) -> None:
     """Dexterity in place of Strength on the two rows the card names, and
     the shift clause is still a gap.

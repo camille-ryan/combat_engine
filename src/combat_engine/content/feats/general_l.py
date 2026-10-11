@@ -773,21 +773,28 @@ def f2584(c: Cast) -> None:
 
 @power("f2600", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.extend_move(any_of=)", "c.extend_shift()"))
+       )
 def f2600(c: Cast) -> None:
-    """Three clauses on three refs -- `p7441`, `p7442`, `p7443` -- so the
-    naming gap is gone and what is left is not one gap but two.
+    """Three clauses on three refs -- `p7441`, `p7442`, `p7443` -- and all
+    three are written now.
 
-    The middle clause is an ordinary attack modifier gated on the ref,
-    because the attack context carries `power`. The other two lengthen
-    the distance *one named row* moves, which nothing does: `c.teleport`
-    and `c.shift` would be a second, separate move rather than two more
-    squares on the printed one. Same hold `avenger_b.f1527` carries.
+    The middle one is an ordinary attack modifier gated on the ref, because
+    the attack context carries `power`. The other two lengthen the distance
+    *one named row* moves, which is what `c.extend_move` does (#502): a
+    `c.teleport` or `c.shift` written here would be a second, separate move
+    rather than two more squares on the printed one.
+
+    **This row was briefly re-pointed to `c.extend_move(any_of=)` and that
+    was wrong** -- `any_of=` is for a card naming a *class* of rows ("every
+    martial encounter power that lets you shift"), and this one names three
+    refs outright. Re-reading the card is what caught it.
     """
     c.bonus(
         "attack", 2, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: ctx["power"] == "p7442",
     )
+    c.extend_move("p7441", 2)
+    c.extend_move("p7443", 2)
 
 
 @power("f2617", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

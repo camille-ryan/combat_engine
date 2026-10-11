@@ -991,7 +991,8 @@ def p7441(c: Cast) -> None:
     shape = getattr(getattr(row, "reach", None), "kind", "")
     if shape not in ("close_burst", "close_blast", "area_burst"):
         return
-    c.teleport(3)
+    # Read rather than written in, so a feat can lengthen it. #502.
+    c.teleport(c.squares_for(c.ref, 3))
     c.grants_advantage(on=ev.target, to=c.me, until=When.EONT)
     mate = c.choose([a for a in c.allies() if c.can_see(a)], "which ally")
     if mate is not None:
