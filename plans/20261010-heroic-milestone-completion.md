@@ -119,6 +119,51 @@ limit is printed — 20 squares, in the compendium's `Glossary` — so the feat'
 radius is 40 and the row is now written. The row had been re-aimed once
 already on the same false premise.
 
+### The disease family: one marker, three gaps underneath it
+
+Nineteen rows carried `etl.monster.inline_disease()`. The symbol named a real
+ETL fault and the rows needed **three** things, of which it was one:
+
+```
+ 19  rows marked
+ 15  written       -- after the ETL fix AND a new engine verb
+  4  still marked  -- two further causes, neither this
+```
+
+1. **The ETL ordering** (#504). `_monsters` runs at `build.py:650`,
+   `_diseases` at `:665`, so no `x5_` ref existed when a monster was
+   scrubbed. Fixed by handing the monster pass the disease names; `scrub`'s
+   longest-first rule then did work it was already written for.
+2. **An end-of-encounter saving throw, and `exposed` vs `contracted`**
+   (#515). Every card prints a throw when the fight ends, and `c.exposed`
+   read `Afflictions.contracted` -- so the model had one state where the
+   cards have two.
+3. **Position**, for the four that are left: `m4362`'s three rows print a
+   creature and its disease with the same name, and `m3273a2`'s disease has
+   no page at all.
+
+**What the marker could not say.** `todo=`/`dropped=` name a symbol, and a
+row wanting three unrelated things can only name one of them convincingly.
+All 19 docstrings had been *corrected once already* -- each carried a
+"**Correction:** the contraction mechanism exists" paragraph, right about
+#389 and still wrong about what remained. A second reading found the third
+gap, and `m6619a2`'s docstring had a **guessed ref** in it (`x5_34` where
+the card says `x5_93`), which nothing could catch while no row called the
+verb.
+
+**Two rows were wrong rather than unfinished**, and only reading the cards
+found it: `m6112a1` scoped its save penalty to nothing, so it helped targets
+shake off dazes they should have kept, and read "if this attack bloodies the
+target" as the state instead of the crossing.
+
+**And the leak the family was hiding.** Four printed disease names were
+sitting in two monster specs, with `leaks.py` green over them on a full
+sweep. Three closed with the index; the fourth needed `_unglue`, because
+`m5100a2`'s list came out as `Blinding sickness3.` and `\b` finds no
+boundary between a letter and a digit. Noted on #494 as a **fifth** class of
+gate miss -- and the first where the name was registered, plainly spelled,
+and in a covered column. The gate simply did not report it.
+
 ### The roll family, and what it cost per row
 
 Two issues, 36 marked rows between them, and the split is the lesson:
