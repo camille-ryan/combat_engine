@@ -318,15 +318,30 @@ def f1707b(c: Cast) -> None:
 
 
 @power("f1708", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.leash()",))
+       reach=PERSONAL, target=SELF)
 def f1708(c: Cast) -> None:
     """Twenty squares more leash while the familiar is active.
 
-    Re-aimed. The mode is held after all -- `Companion.passive` -- so
-    that half is not missing. What is missing is the thing the feat
-    relaxes: nothing keeps a familiar within any distance of its owner,
-    so there is no limit for twenty squares to be added to, and a row
-    that laid the bonus anyway would be a number nothing reads."""
+    Re-aimed twice. The mode is held (`Companion.passive`), and the thing
+    the feat relaxes is a **printed default**: a familiar may not get more
+    than 20 squares from its owner. So the feat's radius is 40, and
+    `c.leash` is what holds it.
+
+    **"While in active mode" needs no gate.** A passive familiar is off the
+    board with no `Position` at all, and a leash is only ever read by
+    `movement.reachable` deciding where a creature may walk. A radius laid
+    on a stowed familiar restricts nothing, and the moment it comes back
+    out the restriction is the right one -- which is better than watching
+    for a mode switch that emits no event.
+
+    The 20-square default itself is not laid here. It belongs to whatever
+    puts a familiar into active mode, not to one feat that widens it; this
+    row would be wrong to make its own radius the only one in the game.
+    """
+    pet = c.familiar()
+    if pet is None:
+        return
+    c.leash(20 + 20, to=c.me, on=pet, until=When.ENCOUNTER)
 
 
 @power("f1709", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

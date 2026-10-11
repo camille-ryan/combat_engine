@@ -43,6 +43,7 @@ from .events import (
     OpportunityWindow,
 )
 from .grid import Square, distance, footprint, neighbours, spread
+from .grid import distance as grid_distance
 from .query import adjacent, alive, can_move, creatures, enemies, squares
 from .types import Forced, Relation, Size
 
@@ -804,6 +805,22 @@ def reachable(
             sq: path
             for sq, path in paths.items()
             if _can_stop(world, eid, footprint(sq, pos.size))
+        }
+    # **A tether, applied to the destinations rather than to the search.**
+    # Fourteen rows print "cannot move more than N squares from ...", and
+    # filtering here means a square beyond the leash is never offered -- the
+    # UI cannot draw it and `policy/` cannot score it. Filtering the search
+    # instead would also forbid *passing* through a far square to reach a
+    # near one, which no card says. #512.
+    from .query import leash_of
+
+    tie = leash_of(world, eid)
+    if tie is not None:
+        held, radius = tie
+        paths = {
+            sq: path
+            for sq, path in paths.items()
+            if grid_distance(sq, held) <= radius
         }
     return paths
 

@@ -574,13 +574,19 @@ def i2539p1(c: Cast) -> None:
 
 @power("i2854p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(5), target=ONE_CREATURE,
-       attack=Attack(vs=REF, printed=6), dropped=("c.leash()",))
+       attack=Attack(vs=REF, printed=6))
 def i2854p1(c: Cast) -> None:
-    """"Cannot move more than 3 squares from the space it occupies" is a
-    tether, not a stop: `c.immobilized` and `c.no_walk` are both too much
-    and nothing measures distance from a remembered square."""
+    """"Cannot move more than 3 squares from the space it occupies when it
+    is hit" is a tether, not a stop -- `c.immobilized` and `c.no_walk` are
+    both too much.
+
+    No anchor argument: the body runs on the hit, so where the target
+    stands *is* "the space it occupies when it is hit", and that is the
+    default. `save ends` is also the default, so the radius is the only
+    thing this row has to say.
+    """
     if c.strike():
-        c.effect("leash", until=When.SAVE_ENDS)
+        c.leash(3)
 
 
 @power("i3093p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,

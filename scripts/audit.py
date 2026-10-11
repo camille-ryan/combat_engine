@@ -155,6 +155,16 @@ KNOWN_SILENT = {
     # would also have hidden. The real fix is the configurable dummy
     # posing an ally that has a sense (#437), not a wider board.
     "m4736a4": "lends an ally's senses; the board fields it alone",
+    # Two minions whose whole trait is a 20-square tether to the block they
+    # are fielded beside, found by `Ident.ref` because the sentence names a
+    # creature and the name is not ours to write. The board fields each
+    # alone, so there is no anchor and the rows correctly lay nothing: the
+    # printed restriction is *conditional on the parent being present*, and
+    # a tether to where the minion happens to stand would be a restriction
+    # the card does not impose. Same board limit as `m4736a4` above and the
+    # same fix -- a board that can pose the companion block (#437). #512.
+    "m5481a0": "tethers to the block it is fielded beside; the board fields it alone",
+    "m5482a0": "tethers to the block it is fielded beside; the board fields it alone",
     "m135a3": "targets a destroyed undead ally; the board has none",
     # Its printed benefit holds only "while you're not wearing heavy armor",
     # and the board deals this character heavy armour -- so the row correctly

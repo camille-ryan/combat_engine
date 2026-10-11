@@ -2238,6 +2238,80 @@ def class_form(out: Result) -> None:
     )
 
 
+def leash(out: Result) -> None:
+    """A tether: cannot get further than N squares from something.
+
+    Fourteen rows print one and the three near verbs are all wrong --
+    `c.immobilized` and `c.no_walk` stop the creature dead, and nothing else
+    measured distance from a remembered point. #512.
+
+    **The controls are about what a tether is not.**
+
+    * It must still be able to **move**, within the radius. A tether that
+      pins the creature is `c.immobilized` wearing a different name, and
+      that is the mistake the printed lines are distinguished from.
+    * A **creature** anchor must move with it, which is what "no more than 2
+      squares from a held creature" needs: a trap dragging its victim keeps
+      the leash taut rather than snapping it.
+    * It filters **destinations, not the search**. Forbidding passage
+      *through* a far square to reach a near one is a rule no card prints,
+      and would also make a tethered creature unable to walk around a
+      pillar.
+    * A dead anchor **cuts** the leash rather than measuring against the
+      last place a corpse stood.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.movement import reachable
+    from combat_engine.engine.query import enemies, speed
+
+    world, caster, _ = _board()
+    foe = sorted(enemies(world, caster))[0]
+    c = Cast(world=world, me=caster, ref="drivers:leash")
+    here = world.get(caster, Position).square
+    free = reachable(world, caster, speed(world, caster))
+    out.that(len(free) > 8, "untethered, it has a wide choice of squares")
+
+    held = c.leash(2, on=caster, until=When.ENCOUNTER)
+    out.that(held is not None, "a card tethers it")
+    near = reachable(world, caster, speed(world, caster))
+    out.that(near, "it can still MOVE -- the control, since a tether that"
+                   " pins is `c.immobilized` under another name")
+    out.that(len(near) < len(free), "but to fewer squares than before")
+    out.that(all(distance(sq, here) <= 2 for sq in near),
+             "and none of them further than the printed radius")
+
+    # **Destinations are filtered, not the search**, and this is the way to
+    # say it that can fail: every square that was reachable before and is
+    # inside the radius must still be reachable. Filtering the search would
+    # lose the ones whose cheapest route bulges outside it.
+    inside_before = {sq for sq in free if distance(sq, here) <= 2}
+    out.that(set(near) == inside_before,
+             f"every one of the {len(inside_before)} squares that was"
+             " reachable and is inside the radius is still reachable --"
+             " filtering the search instead would drop the ones whose route"
+             " bulges outside it")
+
+    world.effects.end(held, "driver ended it")
+    out.that(len(reachable(world, caster, speed(world, caster))) == len(free),
+             "ending it restores every square")
+
+    # A creature anchor travels.
+    c.leash(1, to=foe, on=caster, until=When.ENCOUNTER)
+    at_foe = world.get(foe, Position)
+    out.that(all(distance(sq, at_foe.square) <= 1
+                 for sq in reachable(world, caster, speed(world, caster))),
+             "tethered to a creature, it stays within a square of it")
+    at_foe.square = (at_foe.square[0] + 3, at_foe.square[1])
+    moved = reachable(world, caster, speed(world, caster))
+    out.that(all(distance(sq, at_foe.square) <= 1 for sq in moved) and moved,
+             "and the anchor MOVING takes the leash with it -- the control"
+             " that distinguishes a creature anchor from a remembered square")
+
+
 def attacks_defence(out: Result) -> None:
     """Move a creature's attacks onto a different defence.
 
@@ -3382,6 +3456,8 @@ DRIVERS = {
                     "powers barred by keyword, in both directions"),
     "recharge_when": (recharge_when,
                       "a printed condition gives a spent row back"),
+    "leash": (leash,
+              "a tether: no further than N squares from something"),
     "attacks_defence": (attacks_defence,
                         "an attack moved onto a different defence"),
     "waive": (waive,

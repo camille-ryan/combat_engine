@@ -6393,6 +6393,60 @@ class Cast:
         ev.vs = defence
         return True
 
+    def leash(
+        self,
+        radius: int,
+        *,
+        to: int | None = None,
+        square: tuple[int, int] | None = None,
+        on: int | None = None,
+        until: When = When.SAVE_ENDS,
+    ) -> Effect | None:
+        """Tether a creature: it may not get further than `radius` from
+        something.
+
+        "Cannot move more than 3 squares from the space it occupies",
+        "cannot move more than 2 squares from a held creature". Fourteen rows
+        print one, and the three near verbs are all wrong: `c.immobilized`
+        and `c.no_walk` stop the creature dead, and nothing else measured
+        distance from a remembered point.
+
+        `to` names a creature, `square` a fixed point, and **neither given
+        anchors it where it stands** -- which is the commonest printed form.
+        A creature anchor moves with it, so a trap dragging its victim keeps
+        the leash taut rather than snapping it.
+
+        Read in `movement.reachable`, so a square beyond the tether is never
+        offered rather than punished afterwards: these lines are
+        restrictions, not penalties, and the UI and `policy/` both read that
+        menu. #512.
+
+        Defaults to `When.SAVE_ENDS`, which is what the cards print -- a
+        tether is something you get out of, not something that times out.
+        """
+        from .components import Leash, Position
+
+        who = self._who(on)
+        if who is None:
+            return None
+        if to is None and square is None:
+            at = self.world.get(who, Position)
+            if at is None:
+                return None
+            square = at.square
+        held = self.world.get(who, Leash) or self.world.add(who, Leash())
+        before = (held.radius, held.to, held.square)
+        held.radius, held.to, held.square = radius, to, square
+
+        def undo() -> None:
+            held.radius, held.to, held.square = before
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} leash {radius}",
+            on_end=[undo],
+        )
+
     def attacks_defence(
         self,
         defence: Defense,

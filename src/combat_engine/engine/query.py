@@ -1343,3 +1343,24 @@ def lingers(world: World, ref: str, *, by: int | None = None) -> bool:
         and (by is None or eff.source == by)
         for eff in world.effects.live.values()
     )
+
+def leash_of(world: World, eid: int) -> tuple[tuple[int, int], int] | None:
+    """Where this creature is tethered and how far it may stray, or None.
+
+    Resolves a creature anchor to that creature's **current** square, which
+    is the half that makes "no more than 2 squares from a held creature"
+    work while the holder moves. A dead or departed anchor returns None --
+    the leash is cut rather than measured against a corpse's last position.
+    #512.
+    """
+    from .components import Leash, Position
+
+    tie = world.get(eid, Leash)
+    if tie is None or tie.radius <= 0:
+        return None
+    if tie.to is not None:
+        if not alive(world, tie.to):
+            return None
+        at = world.get(tie.to, Position)
+        return (at.square, tie.radius) if at is not None else None
+    return (tie.square, tie.radius) if tie.square is not None else None

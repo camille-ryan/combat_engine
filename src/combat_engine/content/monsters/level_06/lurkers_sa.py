@@ -672,12 +672,29 @@ def m3557a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.leash()",),
+    dropped=("c.leash(anchor_ref=)", "c.leash(forced=)"),
 )
 def m3557a2(c: Cast) -> None:
-    """Refused in play: a leash to the thing anchoring the trap, and no ref
-    names that anchor, so there is nothing to measure distance from.
-    `c.leash` does not exist -- the same symbol a level-1 trap waited on."""
+    """A 5-square tether, laid where the creature is fielded.
+
+    **"Cannot *voluntarily* move"** is the word that makes `c.leash` the
+    right verb rather than a penalty on arrival: the leash is read in
+    `movement.reachable`, so a square beyond it is never offered, and a
+    push or a slide -- which do not consult that menu -- carry it out
+    regardless, exactly as the card allows.
+
+    Dropped, both halves of the same sentence:
+
+    * the anchor is the trap, and no ref names it, so this anchors where
+      the haunt stands when the trait arms. Right whenever it is fielded at
+      its trap, which is how the block reads, and wrong by however far it
+      is fielded away from one.
+    * "if it is forced beyond this range it is weakened and cannot use
+      `m3557a1` until it moves back" -- a state that depends on *being*
+      outside the radius, which nothing re-asks once the leash stops
+      offering the squares.
+    """
+    c.leash(5, on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

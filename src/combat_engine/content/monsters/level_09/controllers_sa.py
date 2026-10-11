@@ -3004,12 +3004,19 @@ def m5941a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.FIRE, Keyword.PSYCHIC, Keyword.MELEE],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("c.leash()",),
+    dropped=("c.leash(per_turn=)",),
 )
 def m5941a1(c: Cast) -> None:
-    """Cannot-attack-me and the ongoing burn are written; "cannot
-    willingly end its turn farther away than where it started" has no
-    primitive -- see the module docstring."""
+    """Cannot-attack-me and the ongoing burn are written.
+
+    **Re-pointed off `c.leash()`, which landed and is the wrong shape.**
+    That verb holds a *fixed* radius around a fixed anchor and is read when
+    the move menu is built. This card prints neither half of that: "cannot
+    willingly end its turn farther away than where it started" re-measures
+    the radius at the start of every turn, and it binds at the *end* of the
+    turn rather than on each step -- so a creature may walk wide and come
+    back, which a menu filter would have refused.
+    """
     if not c.strike():
         return
     victim = c.target
@@ -4279,12 +4286,18 @@ def m6484a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM, Keyword.MELEE],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("c.leash()",),
+    dropped=("c.walk_toward(creature)",),
 )
 def m6484a3(c: Cast) -> None:
-    """Cannot-attack is written; "must use a move action to move as
-    close to it as possible, each turn" is the same missing leash
-    `m5941a1` waits on."""
+    """Cannot-attack is written.
+
+    **Re-pointed off `c.leash()`:** that verb restricts where a creature
+    may go, and this card compels it to go somewhere -- "must use a move
+    action to move as close to the angel as possible, on each of its
+    turns". A compulsion spending the target's own move action, which is
+    `c.walk_toward` with a creature for its destination rather than the
+    square `m5452a3` waits on.
+    """
     if not c.strike():
         return
     victim = c.target

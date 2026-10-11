@@ -178,6 +178,33 @@ class Health:
 
 
 @dataclass
+class Leash:
+    """How far this creature may get from something, and from what.
+
+    "Cannot move more than 3 squares from the space it occupies", "cannot
+    move more than 2 squares from a held creature", "cannot willingly end
+    its turn farther away than where it started" -- fourteen rows print a
+    **tether**, and the three verbs that look close are all wrong for it:
+    `c.immobilized` and `c.no_walk` stop the creature dead, and nothing else
+    measured distance from a remembered point.
+
+    `to` names a creature and `square` a fixed point; exactly one is set.
+    A creature anchor moves with it, which is what "from a held creature"
+    needs -- a trap that drags its victim along keeps the leash taut rather
+    than snapping it.
+
+    Read in `movement.reachable`, so a square beyond the tether is never
+    offered: the UI cannot draw it and `policy/` cannot score it. Punishing
+    the move afterwards was the alternative and is worse -- the printed
+    lines are restrictions, not penalties. #512.
+    """
+
+    radius: int = 0
+    to: int | None = None
+    square: tuple[int, int] | None = None
+
+
+@dataclass
 class Movement:
     speed: int = 6
     #: Extra modes and their speeds, e.g. {"fly": 8, "climb": 3}.

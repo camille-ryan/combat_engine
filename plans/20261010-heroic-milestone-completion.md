@@ -82,6 +82,43 @@ filed     #485 #486 #488 #490 #493 #494 #497
 blocked   2051 -> 1950
 ```
 
+### The leash family: 14 rows, and 8 of them were a different gap
+
+The clearest case yet of the marker naming the wrong thing, and the first
+where the symbol was **too small** rather than already-present:
+
+```
+         rows   finished by the verb   re-pointed   source has no page for it
+c.leash()  14                      5            9                         1
+```
+
+Eight of the fourteen are ranger beast-companion feats sharing one helper.
+Their printed clause is *conditional on the beast acting independently* —
+a mode that does not exist, and whose absence `c.leash` does nothing about.
+The tether is half of one sentence of a much larger gap (#511), and the
+other half waives a default — "need not move adjacent to you" — that is
+**not in the compendium at all**: every rules-bearing table returns only
+the eight feat cards.
+
+The remaining six split three ways, and only one way was a leash:
+
+| | rows | |
+|---|---|---|
+| tether | `i2854p1` `m3556a2` `m3557a2` `m5481a0` `m5482a0` | written |
+| compulsion — *toward*, opposite sign | `m5452a3` `m6484a3` | #513 |
+| per-turn anchor, re-measured each turn | `m5941a1` | 1 row, noted |
+
+`c.tether()` (2 rows) and `query.leash()` (1 row) were the same gap under two
+other names, which is the fifth time this session a facility was looked for
+under a name it did not have.
+
+**What reading the cards bought, beyond the rows:** `f1708` was marked
+`todo` on the grounds that *"nothing keeps a familiar within any distance of
+its owner, so there is no limit for twenty squares to be added to."* The
+limit is printed — 20 squares, in the compendium's `Glossary` — so the feat's
+radius is 40 and the row is now written. The row had been re-aimed once
+already on the same false premise.
+
 ### The roll family, and what it cost per row
 
 Two issues, 36 marked rows between them, and the split is the lesson:

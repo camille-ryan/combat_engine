@@ -189,10 +189,17 @@ def m5452a2(c: Cast) -> None:
     target=NO_TARGET,
     trigger=_M5452_STRAY,
     on=Trigger(TurnEnd, when=_master_ended_turn, text=_M5452_STRAY),
-    todo=("c.leash()", "c.walk_toward(square)"),
+    todo=("c.walk_toward(square)",),
 )
 def m5452a3(c: Cast) -> None:
-    """A leash, and one of its two halves can be said now.
+    """A forced walk, and the card prints no restriction beside it.
+
+    **`c.leash()` dropped from the marker, not implemented.** Re-reading the
+    card: "the zombie walks by the most direct route to the nearest
+    unoccupied square that is within 10 squares of you" is a *move*, with
+    the 10 squares describing where the route ends. Nothing here says the
+    creature may not then leave, which is what a tether says, so the symbol
+    was naming a mechanism this row never wanted.
 
     The price of failing to get back -- dropping to 0 hit points -- is
     `c.kill`. What is still absent is the walk: nothing moves a creature

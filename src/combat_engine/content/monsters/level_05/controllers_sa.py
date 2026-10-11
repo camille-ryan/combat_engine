@@ -909,15 +909,27 @@ def m3556a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.leash()",),
+    dropped=("c.leash(every=)",),
 )
 def m3556a2(c: Cast) -> None:
     """"Up to two tentacles at a time" releases the oldest catch when a
-    third lands. "Can't move more than 2 squares from a held creature" has
-    no tether verb and is the dropped half."""
-    me = c.me
+    third lands, and the tether follows the catch.
 
-    def capped(ev: Any) -> None:
+    One watcher for both halves, and it **re-derives** rather than keeps
+    books: whenever the grab set changes, the leash is laid afresh at
+    whatever is held now and lifted when nothing is. Tracking it by hand
+    would need the release path to agree with the catch path about which
+    tentacle let go.
+
+    Dropped: holding *two* creatures, the card ties it to each of them, and
+    `Leash` carries one anchor. The row leashes to the first catch, which
+    under-constrains the two-grab case rather than refusing it -- a
+    permissive miss, so it plays.
+    """
+    me = c.me
+    tether: list[Any] = []
+
+    def regrasp(ev: Any) -> None:
         if ev.kind_ is not Relation.GRABBED_BY or ev.source != me:
             return
         held = c.grabbing()
@@ -925,10 +937,19 @@ def m3556a2(c: Cast) -> None:
             c.world.relations.clear(
                 Relation.GRABBED_BY, me, held[0], "a third catch took its place"
             )
+            held = c.grabbing()
+        while tether:
+            c.end_effect(tether.pop(), why="the catch changed")
+        if held:
+            laid = c.leash(2, to=held[0], on=me, until=When.ENCOUNTER)
+            if laid is not None:
+                tether.append(laid)
 
-    from combat_engine.engine.events import RelationSet
+    from combat_engine.engine.events import RelationCleared, RelationSet
 
-    c.watch(RelationSet, capped, until=When.ENCOUNTER, on=me, label=f"{c.ref} cap")
+    for ev_type in (RelationSet, RelationCleared):
+        c.watch(ev_type, regrasp, until=When.ENCOUNTER, on=me,
+                label=f"{c.ref} grasp")
 
 
 @power(

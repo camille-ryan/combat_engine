@@ -1014,24 +1014,59 @@ def m5230a3(c: Cast) -> None:
 # ==========================================================================
 
 
-@power(
-    "m5481a0",
-    level=12,
-    usage=ENCOUNTER,
-    action=ActionType.NONE,
-    reach=PERSONAL,
-    target=NO_TARGET,
-    todo=("c.tether()",),
-)
-def m5481a0(c: Cast) -> None:
-    """A leash to another stat block, and nothing holds one.
+#: The block these two are fielded beside. A **ref**, which is the only way
+#: to say it: the sentence names its parent creature and the name is not
+#: ours to write. `Ident.ref` is what a fielded monster carries, so the
+#: anchor is found by matching it.
+_HORROR = "m5480"
 
-    `c.bind` makes a servant and `c.guard` makes a protector; neither carries
-    a distance, and no component, relation or verb says "these two may not be
-    more than N squares apart". The whole of the row is that sentence, so it
-    is refused in play rather than half-written.
+
+def _tether_to_parent(ref: str, radius: int) -> Any:
+    """"Can be no more than N squares away from <the parent block>."
+
+    Named for what it does and **not** for the trait, whose printed name is
+    one ordinary word that `identifies()` waives -- so `leaks.py` passed the
+    first spelling of this helper and a hand-read caught it. #476.
+
+    Two minions print the identical trait, so one helper writes both --
+    permitted for a run of rows that genuinely share a marker, and these
+    share the sentence as well.
+
+    No parent on the board means no restriction rather than a tether to
+    nothing: the clause is about keeping the pair together, and a tentacle
+    fielded alone has nothing to be kept together with. Whether `pick`
+    *should* field one alone is the story engine's question, not this
+    row's.
     """
 
+    @power(ref, level=12, usage=ENCOUNTER, action=ActionType.NONE,
+           reach=PERSONAL, target=NO_TARGET)
+    def trait(c: Cast) -> None:
+        from combat_engine.engine.components import Ident
+
+        parent = next(
+            (
+                mate
+                for mate in c.allies()
+                if (whose := c.world.get(mate, Ident)) is not None
+                and whose.ref.startswith(_HORROR)
+            ),
+            None,
+        )
+        if parent is None:
+            return
+        c.leash(radius, to=parent, on=c.me, until=When.ENCOUNTER)
+
+    trait.__name__ = ref
+    trait.__doc__ = (
+        f"A {radius}-square tether to the block it is fielded beside.\n\n"
+        "    A creature anchor, so the tether stays taut as the parent "
+        "moves\n    rather than measuring against where it was first seen."
+    )
+    return trait
+
+
+_tether_to_parent("m5481a0", 20)
 
 @power(
     "m5481a1",
@@ -1089,19 +1124,7 @@ def m5481a3(c: Cast) -> None:
 # ==========================================================================
 
 
-@power(
-    "m5482a0",
-    level=12,
-    usage=ENCOUNTER,
-    action=ActionType.NONE,
-    reach=PERSONAL,
-    target=NO_TARGET,
-    todo=("c.tether()",),
-)
-def m5482a0(c: Cast) -> None:
-    """The same sentence m5481a0 prints, and the same gap: nothing on the
-    board holds two creatures a named distance apart."""
-
+_tether_to_parent("m5482a0", 20)
 
 @power(
     "m5482a1",

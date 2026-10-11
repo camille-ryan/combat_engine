@@ -576,7 +576,7 @@ def f2473(c: Cast) -> None:
 #: need not move adjacent to you but must remain within 10 squares".
 #: There is no independent mode and no leash to lengthen -- the beast
 #: takes no turn of its own -- so the sentence has nowhere to land.
-LEASH = ("c.leash()",)
+LEASH = ("c.beast_independent()",)
 
 
 def _by_the_beast(c: Cast, ev: Any, *, charge: bool) -> int | None:
@@ -598,7 +598,8 @@ def _by_the_beast(c: Cast, ev: Any, *, charge: bool) -> int | None:
 
 
 def _leash(ref: str, what: str, rider: Any, *, charge: bool = False) -> None:
-    """Saves, the leash that cannot be said, and one rider on its attack."""
+    """Saves, the independent-mode clause that cannot be said, and one
+    rider on its attack."""
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
            reach=PERSONAL, target=SELF, dropped=LEASH)
@@ -626,8 +627,15 @@ def _leash(ref: str, what: str, rider: Any, *, charge: bool = False) -> None:
 
     feat.__name__ = ref
     feat.__doc__ = (
-        f"{what}\n\n    The leash is dropped: the beast takes no turn, so "
-        "there is no\n    independent mode for the sentence to lengthen."
+        f"{what}\n\n    Dropped: the sentence is conditional on the beast "
+        "**acting\n    independently**, and there is no such mode. "
+        "`c.instinctive` is not\n    it -- that runs a *summon's* printed "
+        "Instinctive Effect, read off\n    `Powers.summon`, which a beast "
+        "block does not carry.\n\n    Re-pointed off `c.leash()`, which "
+        "landed and finishes none of\n    these. The tether is half of one "
+        "clause; the other half waives a\n    default -- moving adjacent to "
+        "its owner -- that does not exist\n    either, and neither half "
+        "means anything until the mode does."
     )
 
 
