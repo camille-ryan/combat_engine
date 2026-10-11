@@ -789,7 +789,6 @@ def _marked_by_my_side(c: Cast, foe: int) -> bool:
 
 @power("f2332", level=1, cls="", usage=AT_WILL,
        action=ActionType.IMMEDIATE_REACTION, reach=PERSONAL, target=SELF,
-       dropped=("c.retarget_defence()",),
        trigger="an adjacent enemy marked by you or an ally shifts away",
        on=Trigger(Moved, _shifted_away, "an adjacent enemy shifts away"))
 def f2332(c: Cast) -> None:
@@ -799,18 +798,23 @@ def f2332(c: Cast) -> None:
     The printed action is the limit, so this is at-will and an immediate
     reaction rather than a once-a-fight trait (#210).
 
-    Still dropped: `p622` and `p1019` hitting Reflex instead of AC is
-    header data, the same gap `f2331` names.
-    
+    **`p622` and `p1019` hitting Reflex is written now**, and was never
+    header-only: `resolve.roll` reads `vs` off the event, so an interrupt
+    may move it. What cannot is an *ordinary* listener, which runs after the
+    resolve callback has read the field -- `c.attacks_defence` registers in
+    the right window, and that distinction is almost certainly how this
+    family concluded the engine could not do it.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    The grip is asked per attack rather than once, because a weapon can be
+    swapped mid-fight and the swap must go with it. #509.
     """
+    c.attacks_defence(
+        REF, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            ctx.get("power") in ("p622", "p1019")
+            and _grip(c, "hammer", "pick", hands=1)
+        ),
+    )
     if not _grip(c, "hammer", "pick", hands=1):
         return
     if _marked_by_my_side(c, c.trigger.actor):

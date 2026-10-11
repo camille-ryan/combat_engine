@@ -1770,26 +1770,19 @@ def m4617a1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.WEAPON],
-    dropped=("c.retarget_defence()",),
 )
 def m4617a2(c: Cast) -> None:
-    """The swing lands; the choice of defence is the half that cannot be said.
+    """Uses its own attack row, aimed at Reflex instead of AC.
 
-    `c.use_power` runs the other row at this row's cost and leaves its result
-    in `c.result`, so "recharge if the attack misses" is answerable. Sending
-    that attack at Fortitude or Reflex instead of AC is a different operation
-    -- the defence is in the borrowed row's header, which is data -- and
-    nothing redirects it.
-    
+    The card offers "his choice of Fortitude or Reflex" and this takes
+    Reflex, which is the lower of the two on most of what a skirmisher
+    swings at. **`from_=AC` is load-bearing**: without it the swap would
+    move whatever the row declared, and the card narrows to AC.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    Laid before the use rather than after, because `resolve.roll` reads the
+    defence off the event when the attack is declared. #509.
     """
+    c.attacks_defence(REF, from_=AC, on=c.me, until=When.EOT)
     c.use_power("m4617a1")
     if not c.landed:
         c.restore_use(c.ref)

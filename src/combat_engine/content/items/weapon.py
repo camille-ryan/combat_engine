@@ -1687,21 +1687,14 @@ def i1300p1(c: Cast) -> None:
         AttackDeclared, _vs_ac_by_me, "you attack with this weapon against AC",
         window=Window.BEFORE,
     ),
-    dropped=("c.retarget_defence()",),
 )
 def i1318p1(c: Cast) -> None:
-    """Sending the attack at Fortitude instead of AC cannot be said -- the
-    defence is read off the power's own `Attack` line before the roll. The
-    extra damage lands: declared in the `BEFORE` window so the modifier is
-    installed before the triggering attack rolls its damage, and
-    `once=True` spends it there.
+    """Moves the triggering attack onto Fortitude and adds 1d6.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    **The window is the whole of it.** This row's trigger already
+    declares `window=Window.BEFORE`, so its body runs before
+    `resolve.roll` reads `vs` off the event -- which is why setting the
+    field here lands where an ordinary listener's would not. #509.
     """
+    c.retarget_defence(FORT)
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EOT, once=True)

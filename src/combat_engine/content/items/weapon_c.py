@@ -1710,20 +1710,16 @@ def i3091p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.retarget_defence()",),
 )
 def i3148p1(c: Cast) -> None:
-    """Sending an attack at Reflex instead of AC cannot be said: the
-    defence is read off the power's own `Attack` line before the roll.
+    """Until the end of the turn, attacks with this weapon against AC may be
+    made against Reflex instead.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    `from_=AC` is the printed narrowing -- the card moves attacks that
+    declared AC and says nothing about the rest. `When.EOT` is the printed
+    duration. #509.
     """
+    c.attacks_defence(REF, from_=AC, on=c.me, until=When.EOT)
 
 
 @power(

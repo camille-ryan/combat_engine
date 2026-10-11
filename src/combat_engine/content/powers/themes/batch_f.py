@@ -212,7 +212,7 @@ def p12244(c: Cast) -> None:
     keywords=PSIONIC,
     trigger="you are hit by an attack",
     on=Trigger(Hit, hits_me, "you are hit by an attack"),
-    dropped=("c.retarget_defence()",),
+    dropped=("c.retarget()",),
 )
 def p12245(c: Cast) -> None:
     """The swap and the redirection are exact. The +2 against the triggering

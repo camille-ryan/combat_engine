@@ -50,6 +50,7 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     ENCOUNTER,
+    FORT,
     FREE,
     INTERRUPT,
     MINOR,
@@ -59,6 +60,7 @@ from combat_engine.engine import (
     ONE_CREATURE,
     PERSONAL,
     REACTION,
+    REF,
     SELF,
     STANDARD,
     WILL,
@@ -1482,22 +1484,25 @@ def i2807p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.retarget_defence()",),
 )
 def i2895x1(c: Cast) -> None:
-    """The defence a power attacks is header data: `AttackDeclared.vs` is
-    a field but `resolve.attack` reads its own local afterwards, so a
-    listener rewriting it changes nothing. The block's second paragraph
-    is the tome's contents, which is the Power beside this one.
+    """A force power sent through this tome may attack Fortitude instead of
+    Reflex.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    `from_=REF` is the printed narrowing and is load-bearing: without it the
+    swap would move a power that declared AC, which the card never mentions.
+    The keyword gate is asked per attack, because the tome is held rather
+    than worn and can be put down. #509.
     """
+    c.attacks_defence(
+        FORT, from_=REF, on=c.me, until=When.ENCOUNTER,
+        # `keywords_of` takes the Power, not its ref -- and reads the
+        # keywords *for this creature*, which is what picks up a keyword a
+        # feat declared rather than only the printed ones.
+        when=lambda ctx: Keyword.FORCE in c.keywords_of(
+            get(str(ctx.get("power") or ""))
+        ),
+    )
 
 
 @power(

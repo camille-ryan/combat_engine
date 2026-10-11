@@ -89,6 +89,7 @@ from combat_engine.engine import (
     TurnStart,
     Usage,
     When,
+    Window,
     World,
     about_me,
     both,
@@ -1069,22 +1070,22 @@ def i1278p1(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.PSYCHIC],
     trigger="you make an attack that targets AC",
-    on=Trigger(AttackDeclared, _vs_ac_by_me, "you attack against AC"),
-    dropped=("c.retarget_defence()",),
+    on=Trigger(
+        AttackDeclared, _vs_ac_by_me, "you attack against AC",
+        window=Window.BEFORE,
+    ),
 )
 def i1398p1(c: Cast) -> None:
-    """The damage half works: `c.deals` overrides the type before the roll.
-    Moving an in-flight attack from one defence to another has no verb, so
-    that clause is dropped rather than the whole row refused.
+    """Moves the triggering attack onto Will and makes all its damage
+    psychic.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    **The trigger gained `window=Window.BEFORE` and that is the fix.** It
+    was offered in the ordinary window, where `resolve.roll` has already
+    read `vs` off the event -- so the swap would have set the field after
+    anything could read it. The damage half worked there, which is why
+    nothing looked wrong. #509.
     """
+    c.retarget_defence(WILL)
     c.deals(DamageType.PSYCHIC, on=c.me, until=When.EOT, implement=True)
 
 

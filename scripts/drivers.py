@@ -2310,12 +2310,25 @@ def attacks_defence(out: Result) -> None:
     _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
     out.that(rolled[-1] is Defense.AC, "ending the hold puts it back")
 
-    c.attacks_defence(Defense.FORT, until=When.ENCOUNTER,
-                      when=lambda ctx: ctx.get("power") == "drivers:gated")
+    gated = c.attacks_defence(
+        Defense.FORT, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == "drivers:gated")
     _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:vs")
     out.that(rolled[-1] is Defense.AC, "a gated hold declines the wrong row")
     _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:gated")
     out.that(rolled[-1] is Defense.FORT, "and takes the one it names")
+    world.effects.end(gated, "driver ended it")
+
+    # `from_` -- three cards narrow on the defence the attack started from.
+    c.attacks_defence(Defense.WILL, from_=Defense.REF, until=When.ENCOUNTER)
+    _resolve.attack(world, caster, foe, 5, Defense.AC, power="drivers:from")
+    out.that(rolled[-1] is Defense.AC,
+             "`from_=REF` leaves an attack that declared AC alone -- the"
+             " control, since a swap that fired whatever the row declared"
+             " would move an attack the card never mentions")
+    _resolve.attack(world, caster, foe, 5, Defense.REF, power="drivers:from")
+    out.that(rolled[-1] is Defense.WILL,
+             "and moves one that declared Reflex")
 
 
 def waive(out: Result) -> None:

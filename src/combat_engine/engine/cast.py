@@ -6363,10 +6363,41 @@ class Cast:
                     self.target = was
         return default()
 
+    def retarget_defence(self, defence: Defense) -> bool:
+        """Move the **triggering** attack onto another defence.
+
+        **Named for the defence, because `c.retarget` means something else
+        already.** Four rows mark `c.retarget()` for moving an attack onto a
+        different *creature* -- `f3695`'s note calls that "a retarget rather
+        than the `c.redirect` an interrupt row does with its own trigger".
+        Calling this one `retarget` made all four report ready, which
+        `todo.py` said on the first run after. The marker vocabulary already
+        had the right name for this: the twelve rows here spell it
+        `c.retarget_defence()`.
+
+        "The attack targets Will instead", printed on the item blocks and
+        powers that answer an `AttackDeclared`. `c.attacks_defence` is the
+        standing form -- every attack you make, for a duration; this is the
+        one in flight.
+
+        **Only works from a row whose trigger declares `window=Window.BEFORE`.**
+        `resolve.roll` is the resolve callback and reads `vs` off the event
+        after the interrupt window closes, so a row offered in the ordinary
+        window sets the field after it has been read and changes nothing.
+        Returns False when there is no declared attack in hand, which is
+        also what an author gets for forgetting the window. #509.
+        """
+        ev = self.trigger
+        if ev is None or not hasattr(ev, "vs"):
+            return False
+        ev.vs = defence
+        return True
+
     def attacks_defence(
         self,
         defence: Defense,
         *,
+        from_: Defense | None = None,
         when: Callable[[dict[str, Any]], bool] | None = None,
         on: int | None = None,
         until: When = When.ENCOUNTER,
@@ -6392,8 +6423,9 @@ class Cast:
         of the difference and the reason to have a verb rather than twelve
         hand-rolled watches.
 
-        `when` reads the attack context, so "while you are insubstantial" and
-        "with a weapon" are sayable. #509.
+        `from_` narrows to attacks that *started* on a named defence, which
+        three cards print. `when` reads the attack context, so "while you are
+        insubstantial" and "with a weapon" are sayable. #509.
         """
         from .events import AttackDeclared, Window
 
@@ -6401,6 +6433,13 @@ class Cast:
 
         def swap(ev: AttackDeclared) -> None:
             if ev.attacker != who:
+                return
+            # **The defence it started from**, which three of these cards
+            # narrow on: "attacks against AC can instead be made against
+            # Reflex", "a power that attacks Reflex may attack Fortitude
+            # instead". A swap that fired whatever the row declared would
+            # move an attack the card never mentions.
+            if from_ is not None and ev.vs is not from_:
                 return
             if when is not None and not when(getattr(ev, "ctx", None) or {
                 "attacker": ev.attacker, "target": ev.target, "power": ev.power,

@@ -1245,7 +1245,7 @@ def p14329(c: Cast) -> None:
     reach=Ranged(5),
     target=ANY_CREATURE,
     keywords=[Keyword.SHADOW, Keyword.IMPLEMENT, Keyword.FEAR],
-    todo=("c.retarget_defence()",),
+    todo=("Attack(vs=several)",),
 )
 def p15953(c: Cast) -> None:
     """One hole, and the row is nothing without it: a single attack roll
