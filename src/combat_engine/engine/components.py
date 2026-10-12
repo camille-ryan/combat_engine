@@ -1267,8 +1267,9 @@ class Gear:
         hold true" means (#436).
 
         **An unrecognised qualifier does not match**, and that is deliberate.
-        The assassin prints "simple **one-handed** melee" and `Weapon` carries
-        no `hands`, so that band covers nothing here: the class keeps the
+        The assassin prints "simple **one-handed** melee"; `Weapon.hands`
+        exists now and the band key below reads it, so a weapon that records
+        its grip is covered and one that leaves it `""` is not: the class keeps the
         weapons it was dealt through `Gear.trained`, and the band adds
         nothing until the column exists. Withholding is the safe direction --
         the same reasoning `Cast._trained_with` uses for an empty record.

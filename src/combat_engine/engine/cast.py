@@ -1562,7 +1562,7 @@ class Cast:
         group: str,
         proficiency: int = 0,
         properties: frozenset[str] = frozenset(),
-        hands: int = 1,
+        hands: str = "one-handed",
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -1578,6 +1578,12 @@ class Cast:
         is in hand finds it: `c.w()`, `c.wielding`, `Gear.main`. It carries
         the item's own enhancement, which is what "applies its enhancement
         bonus to attack and damage rolls" means.
+
+        **`hands` is the printed phrase, not a count.** `Weapon.hands` is a
+        `str` and `Gear.proficient_with` builds a band key off it --
+        `f"{cat}:{arm.hands.lower()} {reach}"` -- so an `int` here is an
+        `AttributeError` on the first proficiency test for any character with
+        a band. The annotation said `int` and one caller obliged.
 
         **Not held on arrival.** A shield-as-pick is a second weapon the
         character may take up, so it goes to the belt and

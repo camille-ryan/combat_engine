@@ -11,10 +11,15 @@ through it, and it does two jobs:
   of italics under it. Both go. What is left is the lines that carry a
   mechanical label, which is exactly what needs coding.
 * **scrub self-reference.** A stat block names itself in its own rules --
-  "the target contracts <name> filth fever" -- and a power's name turns up
+  "the target contracts <its own name>" -- and a power's name turns up
   inside its own Effect line often enough to matter. Those become the row's
-  id, so the spec reads "contracts m145 filth fever" and the author learns
-  nothing they should not have.
+  id, so the spec reads "contracts m145 x5_23" and the author learns nothing
+  they should not have.
+
+  **Both illustrations named the disease in the clear until 2026-10-12**, as
+  did `scripts/spec.py`'s. The two files whose whole job is removing names
+  each carried one, in the sentence explaining the removal, and `leaks.py`
+  saw neither: two ordinary words, #494's blind spot. Illustrate with a ref.
 """
 
 from __future__ import annotations

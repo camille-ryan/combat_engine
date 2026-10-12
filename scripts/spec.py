@@ -17,7 +17,12 @@ output is a work list rather than a catalogue.
 
 What comes out is the mechanical lines and nothing else. No name, no flavour
 text, and no self-reference: a stat block that names itself in its own rules
-says "contracts m145 filth fever" here instead. The author writes the function
+says "contracts m145 x5_23" here instead -- both halves as refs, which is the
+point. (This example named the disease in the clear until 2026-10-12. The file
+whose whole job is stripping names carried one in its own docstring, and
+`leaks.py` could not see it: two ordinary words, which is #494's blind spot.
+The places that explain the rule are the places that instance a name to
+explain it -- so quote a ref here, never a word.) The author writes the function
 without ever learning what the row is called, which is the arrangement that
 keeps the engine free of a publisher's prose.
 
