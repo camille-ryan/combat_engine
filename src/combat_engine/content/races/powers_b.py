@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from combat_engine.content.powers.augment import lent
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -310,6 +311,7 @@ def p16038(c: Cast) -> None:
 )
 def p1450(c: Cast) -> None:
     """"Use the second roll, even if it's lower" is `keep="new"`."""
+    lent(c)                      # f3158's sibling: f3159 lends this one
     c.reroll_attack(keep="new")
 
 
@@ -915,6 +917,9 @@ def p6189(c: Cast) -> None:
     hit_with = get(ev.power)
     weapon = hit_with is not None and Keyword.WEAPON in hit_with.keywords
     c.damage(c.w() if weapon else "1d8", on=ev.target)
+    # After the damage, because f3161's lent clause reads the type this
+    # dealt -- "the same damage type as the attack that triggered this".
+    lent(c)
 
 
 @power(

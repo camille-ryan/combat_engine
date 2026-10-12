@@ -715,6 +715,23 @@ class Powers:
     #: reached from inside a fight, which is where a row runs. #507-adjacent;
     #: the allowance family is its own thing.
     per_day: dict[str, int] = field(default_factory=dict)
+    #: Augment clauses a **feat** lent to a named row, as `(cost, clause)`.
+    #:
+    #: Four feats print "your <power> gains the augmentable keyword. When you
+    #: would use it, you can spend 1 power point to <effect>" -- an Augment
+    #: line on a card that prints none. The clause is the feat's, not the
+    #: power's, so it cannot live in the power's header and the power's body
+    #: has no way to know it.
+    #:
+    #: **A callable, like `pre_empts` above**, and for the same reason: the
+    #: lending row is the only thing that knows what its clause does.
+    #:
+    #: `content.powers.augment.lent` is the read, and the lent-to row must
+    #: call it -- a lent augment on a row that never asks is a modifier
+    #: nothing consults, which is this component's commonest bug. #507.
+    lent_augments: dict[
+        str, tuple[tuple[int, Callable[[Any], None]], ...]
+    ] = field(default_factory=dict)
     #: What this creature's basic attack is. A monster points at one of its
     #: own abilities; everyone else uses the engine's melee basic.
     basic: str = "mba"

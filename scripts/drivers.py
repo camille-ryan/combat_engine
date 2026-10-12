@@ -3576,6 +3576,68 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def lent_augments(out: Result) -> None:
+    """A feat lends a power an Augment line the card does not print.
+
+    Four feats print "your <power> gains the augmentable keyword. When you
+    would use it, you can spend 1 power point to <effect>". The effect is
+    the *feat's*, so it belongs neither in the power's header nor in its
+    body -- `c.lend_augment` records it against the character and
+    `content.powers.augment.lent` is what the lent-to row asks.
+
+    **Not `Power.augments`**, which the action menu reads before any body
+    runs. Threading the holder through that surface would make header data
+    holder-dependent, which is the rule #507 turned on; all four clauses
+    are body-sayable, so the spend happens at body time instead.
+
+    Three things measured, and the third is the control that matters:
+
+    * **the point is actually spent**, so a lent augment is not free;
+    * **the clause runs**, which is the "both halves" rule -- a lend on a
+      row that never calls `lent` is a modifier nothing consults;
+    * **a character without the feat is offered nothing**, which is the
+      half an implementation that put the augment on the header would get
+      wrong for every holder of the power.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints, Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import When
+
+    def board(lend: bool):  # noqa: ANN202
+        world, me, _ = _board()
+        world.add(me, PowerPoints(points=4))
+        known = world.get(me, Powers) or world.add(me, Powers())
+        known.known = (*tuple(known.known), "p1450")
+        c = Cast(world=world, me=me, ref="drivers:lent")
+        ran = []
+        if lend:
+            c.lend_augment("p1450", 1, lambda _use: ran.append(1),
+                           on=me, until=When.ENCOUNTER)
+        return world, me, ran
+
+    # **With the feat**: the point goes and the clause runs.
+    world, me, ran = board(True)
+    use(world, me, "p1450", targets=[me], spend=False)
+    left = (world.get(me, PowerPoints) or PowerPoints()).points
+    out.that(left == 3,
+             f"using the lent-to row spends the point, so the augment is not"
+             f" free (4 -> {left})")
+    out.that(ran == [1],
+             "and the feat's own clause runs -- the half a lend on a row"
+             f" that never asks gets wrong {ran}")
+
+    # **Without it**: nothing offered, nothing spent.
+    world2, me2, ran2 = board(False)
+    use(world2, me2, "p1450", targets=[me2], spend=False)
+    left2 = (world2.get(me2, PowerPoints) or PowerPoints()).points
+    out.that(left2 == 4 and not ran2,
+             "a character without the feat is offered nothing and pays"
+             " nothing -- the control an augment written into the power's"
+             f" header would fail for every other holder ({left2}, {ran2})")
+
+
 def counts_as_basic(out: Result) -> None:
     """"Counts as a basic attack" and "in place of" are different sentences.
 
@@ -4156,6 +4218,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "lent_augments": (lent_augments,
+                      "a feat lends a power an augment its card omits"),
     "counts_as_basic": (counts_as_basic,
                         "'counts as' is a designation, 'in place of' is not"),
     "empowerment_pool": (empowerment_pool,

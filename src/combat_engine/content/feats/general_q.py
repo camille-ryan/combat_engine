@@ -150,7 +150,23 @@ SWAP = ("chargen.power_swap()",)
 #: warlock's fell might on a power whose card prints no Augment line,
 #: which is an offer laid on another row from outside it. Same symbol the
 #: psionic aspect dailies in `docs/blocked.json` already name.
-AUGMENT = ("c.lend_augment(ref, clause)",)
+#: **Expending something other than power points to augment a row.** Six
+#: warlock feats print "you can also expend your fell might to augment any
+#: power associated with this feat", and seven more print "when you augment
+#: p12887, you can forgo the extra damage the augment would deal to instead
+#: <effect>" -- which needs that augment to exist before it can be forgone.
+#:
+#: **Re-pointed from `c.lend_augment(ref, clause)`, which is implemented.**
+#: That verb lends a *clause* and four rows now use it (#507). These
+#: thirteen want a different thing wearing the same name: a **resource**
+#: standing in for power points. `c.fell_might()` is the resource itself and
+#: is a separate symbol on seven other rows; this is spending it on an
+#: augment, which is a further step and does not arrive with it.
+#:
+#: The "forgo the extra damage" half is `c.pre_empt`, which exists -- so
+#: naming only this one is correct: it is the earliest gap, and the one
+#: without which the rest says nothing.
+AUGMENT = ("c.augment_with(resource)",)
 #: "Choose a power granted by <feature>" -- the features are rows now,
 #: and so are their options, but every option refuses itself off
 #: `c.build` on its first line. Handing one to a character of another

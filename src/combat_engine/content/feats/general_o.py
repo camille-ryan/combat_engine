@@ -116,16 +116,6 @@ FEATURE = ("c.class_feature()",)
 RACIAL = ("c.on_racial_power()",)
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
-#: An augmentable clause: spending power points to change what a named
-#: power does is the power's own business and there is no door in.
-#: **Re-aimed.** `dsl.use(augment=)` arrived: a row declares its augments
-#: in its own header and the spend is settled before targeting. None of
-#: these four is that. Each hangs an augment clause on a *racial* power
-#: from outside that power's card -- "your pNNNN gains the augmentable
-#: keyword, and you can spend 1 power point to ..." -- and nothing adds an
-#: offer to another row's augment. Same symbol the five psionic aspect
-#: dailies in `docs/blocked.json` already name, so they group.
-AUGMENT = ("c.lend_augment(ref, clause)",)
 MELEE_REACH = ("melee", "close_burst", "close_blast")
 ALL_DEFENCES = (AC, FORT, REF, WILL)
 FORCED = ("push", "pull", "slide")
@@ -1835,17 +1825,73 @@ def f3157(c: Cast) -> None:
 
 
 @power("f3158", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3158(c: Cast) -> None:
-    """Gives a named power the augmentable keyword and a new clause to
-    buy with a point. An augment is a branch inside the power's own row,
-    chosen by `dsl.use`, and nothing adds one from outside."""
+    """"Your p1831 power gains the augmentable keyword. When you would use
+    this power, you can spend 1 power point to target Will instead of
+    Reflex. In addition to the normal effects from a hit, the target treats
+    creatures more than 5 squares away from it as having total concealment
+    until the end of your next turn."
+
+    **Written.** The old note was right that nothing added an augment from
+    outside and wrong about where it would have to go: `c.lend_augment`
+    records the clause against the character, and `p1831` asks for it with
+    `augment.lent(c)` before it strikes. The header stays data, which is
+    what #507 turned on.
+
+    **Before the strike, which is why the lend is offered there.** "Target
+    Will instead of Reflex" has to be in force when the roll happens, and
+    `c.attacks_defence` is the verb for it -- scoped to this one row so the
+    character's other attacks are untouched.
+
+    The concealment half is laid on the *target* and is about what **it**
+    can see: "the target treats creatures more than 5 squares away from it
+    as having total concealment", so the grade is total and the gate is the
+    distance from the target to whoever it is swinging at.
+    """
+    def clause(use: Cast) -> None:
+        use.attacks_defence(WILL, on=use.me, until=When.INSTANT,
+                            when=lambda ctx: ctx.get("power") == "p1831")
+        foe = use.target
+        if foe is None:
+            return
+        use.conceal(
+            on=foe, until=When.EONT, total=True,
+            # **Between the target and whoever it is swinging at**, which
+            # is neither creature `c.distance` measures from -- that verb
+            # is always from the caster. `query.distance_between` takes the
+            # two outright.
+            when=lambda ctx: (
+                ctx.get("target") is not None
+                and distance_between(use.world, foe, ctx["target"]) > 5
+            ),
+        )
+
+    c.lend_augment("p1831", 1, clause, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3159", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3159(c: Cast) -> None:
-    """Same shape as f3158, on a different racial power."""
+    """"Your p1450 power gains the augmentable keyword. When you use this
+    power, you can spend 1 power point to gain combat advantage against the
+    target until the end of your next turn."
+
+    The simplest of the four: one clause, no header to rewrite.
+    `c.grants_advantage(to=c.me)` is the target granting it to this
+    character and nobody else -- "against the target" names one creature,
+    and `to="team"` would hand the party an advantage the card does not
+    print.
+
+    `p1450` rerolls an attack and carries no target of its own, so the
+    creature is read off the triggering roll.
+    """
+    def clause(use: Cast) -> None:
+        foe = use.target or getattr(use.trigger, "target", None)
+        if foe is not None:
+            use.grants_advantage(on=foe, to=use.me, until=When.EONT)
+
+    c.lend_augment("p1450", 1, clause, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1875,9 +1921,37 @@ def f3160(c: Cast) -> None:
 
 
 @power("f3161", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3161(c: Cast) -> None:
-    """Same shape as f3158, on a racial power that answers a hit."""
+    """"Your p6189 power gains the augmentable keyword. When you would use
+    p6189, you can spend 1 power point to deal damage to each enemy adjacent
+    to you equal to the higher of your Strength or Dexterity modifier. This
+    damage has the same damage type as the attack that triggered this power."
+
+    **"The same damage type as the attack that triggered this power"** is
+    why `p6189` asks for the lend *after* its own damage line rather than
+    before: the triggering attack is on `c.trigger`, and the type is read
+    off the row that dealt it.
+
+    `max` of the two modifiers, which is the card's "higher of" and not a
+    choice -- there is no board on which the smaller is wanted.
+    """
+    def clause(use: Cast) -> None:
+        amount = max(use.str_mod, use.dex_mod)
+        if amount <= 0:
+            return
+        hit_with = get(getattr(use.trigger, "power", ""))
+        kinds = tuple(hit_with.damage.dtypes) if (
+            hit_with is not None and hit_with.damage is not None
+        ) else ()
+        # `dtype` is not optional and `UNTYPED` is its default, which is the
+        # right answer when the triggering row named no type at all.
+        first = kinds[0] if kinds else DamageType.UNTYPED
+        for foe in use.enemies():
+            if use.adjacent(foe):
+                use.flat(amount, dtype=first, dtypes=kinds, on=foe)
+
+    c.lend_augment("p6189", 1, clause, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3162", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1988,10 +2062,28 @@ def f3167(c: Cast) -> None:
 
 
 @power("f3168", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3168(c: Cast) -> None:
-    """Same shape as f3158: a keyword added to a named power and a
-    clause bought with a point."""
+    """"Your p377 power gains the augmentable and teleportation keywords.
+    When you would use p377, you can spend 1 power point to also teleport 3
+    squares as a free action after you become invisible."
+
+    "**After** you become invisible" is the whole of why `p377` asks for the
+    lend at the end of its body rather than the start -- the invisibility is
+    laid first and the teleport follows it.
+
+    The teleportation keyword the card also grants is `c.counts_as_keyword`,
+    laid on the row rather than on this feat: a keyword is read off the row
+    being used, so a feat that kept its own would answer for nothing. The
+    verb was `c.grant_keyword` in the first draft, which does not exist --
+    `types.py` caught it.
+    """
+    def clause(use: Cast) -> None:
+        use.teleport(3, who=use.me)
+
+    c.counts_as_keyword("p377", Keyword.TELEPORTATION, on=c.me,
+                        until=When.ENCOUNTER)
+    c.lend_augment("p377", 1, clause, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3169", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

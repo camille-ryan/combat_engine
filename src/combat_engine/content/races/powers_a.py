@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.augment import lent
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -547,6 +548,9 @@ def p14384(c: Cast) -> None:
 def p377(c: Cast) -> None:
     """"Until you attack" is the earlier of two clocks, not a shorter one."""
     _until_you_attack(c, c.invisible(on=c.me, until=When.EONT))
+    # After, because f3168's lent clause is "also teleport 3 squares ...
+    # **after** you become invisible".
+    lent(c)
 
 
 @power(

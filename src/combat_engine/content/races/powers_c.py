@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from combat_engine.content.powers.augment import lent
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -484,6 +485,10 @@ def p1831(c: Cast) -> None:
     the two and `query.cover_waived` waives whichever it was. The
     invisibility half is truesight aimed at this one creature, which is
     the shape `c.truesight(of=)` prints."""
+    # **A feat may lend this row an augment**, and the lend has to be
+    # offered before the strike: f3158's clause swaps the defence this
+    # rolls against. #507.
+    lent(c)
     if c.strike():
         c.grants_advantage(to="team", until=When.EONT)
         c.no_cover(until=When.EONT)

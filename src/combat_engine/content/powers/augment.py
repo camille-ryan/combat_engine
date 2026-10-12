@@ -57,6 +57,44 @@ def spent_on(who: int, ref: str) -> int:
     return _LAST.get((who, ref), 0)
 
 
+def lent(c: Cast) -> int:
+    """Offer whatever a feat lent this row, spend it, and run the clause.
+
+    The read half of `c.lend_augment`, and **the lent-to row has to call
+    it**: four feats print "your <power> gains the augmentable keyword. When
+    you would use it, you can spend 1 power point to <effect>", and the
+    power prints no Augment line of its own, so nothing in its header or its
+    body knows the option exists. #507.
+
+    Returns what was spent, 0 when nothing was lent or nothing was chosen,
+    so a row may read it for a rider of its own.
+
+    **Call it before the attack**, not after. One of the four swaps the
+    defence the row rolls against -- "target Will instead of Reflex" -- and
+    `c.strike()` reads that when it rolls. The three that only add an effect
+    do not care, and putting the call in one place for all four is worth
+    more than letting each pick.
+
+    Routed through `augment` above rather than choosing here, so a lent
+    augment is paid for and recorded exactly like a printed one --
+    `_LAST` included, which is what `spent_on` reads while the use is still
+    resolving.
+    """
+    from combat_engine.engine.components import Powers
+
+    known = c.world.get(c.me, Powers)
+    lenders = known.lent_augments.get(c.ref, ()) if known is not None else ()
+    if not lenders:
+        return 0
+    spent = augment(c, *sorted({cost for cost, _ in lenders}))
+    if not spent:
+        return 0
+    for cost, clause in lenders:
+        if cost == spent:
+            clause(c)
+    return spent
+
+
 def augment(c: Cast, *offers: int) -> int:
     """Power points spent on this use. 0 is the form printed above Augment 1.
 

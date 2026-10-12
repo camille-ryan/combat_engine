@@ -6,13 +6,23 @@ Five shapes account for the file.
 
 **The pact pairs (`f3424`-`f3429`).** Each prints a skill bonus *or* a
 payout when a cursed enemy drops, plus an augment clause that spends the
-warlock's fell might. Nothing augments a power from outside its own card
--- `c.lend_augment(ref, clause)`, re-aimed off `dsl.use(augment=)` once
-that arrived and turned out to be a different thing: it settles a spend of
-power points against a row that declares its own augments, and no power
-named here prints an Augment line. The "Associated Powers" line is a
-column the row cannot read, which is `feat.associated_powers`. So the half
-that can be said is said and the augment half is `dropped`.
+warlock's fell might.
+
+**Re-aimed twice, and the second name was wrong too.** It was
+`dsl.use(augment=)` first; that arrived and turned out to settle a spend of
+power points against a row declaring its own augments, which no power named
+here does. Then `c.lend_augment(ref, clause)` -- and **that** is now
+implemented and is still not this. Lending a clause is one thing; spending
+a *resource other than power points* on an augment is another, and these
+rows want the second. `c.augment_with(resource)` names it, with
+`c.fell_might()` the separate symbol for the resource itself.
+
+The lesson is the one the component file states: a marker naming the
+nearest-looking verb reports ready the moment that verb lands. Twice here.
+
+The "Associated Powers" line is a column the row cannot read, which is
+`feat.associated_powers`. So the half that can be said is said and the
+augment half is `dropped`.
 
 **The `f1028` riders (`f3432`, `f3434`, `f3435`).** All three read "when
 you hit with an attack made using `f1028`", and `f1028` is itself marked
@@ -91,7 +101,10 @@ from combat_engine.engine.durations import keywords_of
 #: might -- a different currency entirely -- on a power whose card prints
 #: no Augment line at all, which is an offer added to another row from
 #: outside it. Same symbol the psionic aspect dailies name.
-AUGMENT = ("c.lend_augment(ref, clause)",)
+#: The same gap `general_q.AUGMENT` records, re-pointed with it: a
+#: resource spent in place of power points to augment a row. See there
+#: for why `c.lend_augment(ref, clause)` is no longer the name.
+AUGMENT = ("c.augment_with(resource)",)
 #: The "Associated Powers" line is a column no row can read.
 ASSOCIATED = ("feat.associated_powers",)
 #: The heroic half of a card's "Associated Powers" line, by the feat naming it.

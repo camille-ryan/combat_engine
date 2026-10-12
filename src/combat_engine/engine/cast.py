@@ -5227,6 +5227,62 @@ class Cast:
             on_end=[restore],
         )
 
+    def lend_augment(
+        self,
+        ref: str,
+        cost: int,
+        clause: Callable[[Cast], None],
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Your <power> gains the augmentable keyword": lend it a clause.
+
+        Four feats print an Augment line on a card that prints none -- "when
+        you would use it, you can spend 1 power point to <effect>" -- and the
+        effect is the *feat's*, so it belongs neither in the power's header
+        nor in its body.
+
+        **Not `Power.augments`, and #507 is the record of why that mattered.**
+        A declared augment is read by the action menu *before any body runs*,
+        which is what lets one rewrite a target line or a reach. Threading
+        the holder through that surface would make header data
+        holder-dependent -- the thing `engine/CLAUDE.md`'s first rule
+        protects -- and all four of these clauses are body-sayable anyway: a
+        bonus, some damage, a teleport, a defence swap before the strike. So
+        the lend is per-character state and the spend happens at body time,
+        through the door `content.powers.augment` already owns.
+
+        **The lent-to row must ask**, with `augment.lent(c)`. A lend on a row
+        that never calls it is a modifier nothing consults.
+
+        `clause` takes the `Cast` of the row being used, not of the feat --
+        it is that row's use the effect joins.
+
+        Yours, so it defaults to the caster.
+        """
+        from .components import Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        entry = (cost, clause)
+        was = known.lent_augments.get(ref)
+        known.lent_augments[ref] = (*known.lent_augments.get(ref, ()), entry)
+
+        def restore() -> None:
+            if was is None:
+                known.lent_augments.pop(ref, None)
+            else:
+                known.lent_augments[ref] = was
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} lends {ref} an augment at {cost}",
+            on_end=[restore],
+        )
+
     def no_basic(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
         """Take away what this creature's basic attack *is*, not the ability.
 
