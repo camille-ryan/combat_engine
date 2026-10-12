@@ -103,12 +103,26 @@ wait on different things, they want different symbols.
 `grep -n "def verb" ../engine/cast.py` and `uv run scripts/vocab.py --brief`.
 Most gaps filed here have turned out to exist under another name.
 
-## Never be shown a name
+## Write refs, never names
 
-You are never given a printed name or flavour text and must not go and find
-one. Refs only. Not in a docstring, not in a comment, not in a variable, not
-in a section header — two theme files leaked a feat's name through a comment
-that merely *described* a power, inferred from its keywords.
+**Nothing you write may contain a printed name** — not a docstring, not a
+comment, not a variable, not a section header, not a string. Two theme files
+leaked a feat's name through a comment that merely *described* a power,
+inferred from its keywords.
+
+You *are* shown names, since **2026-10-12**: every spec ends with a
+**glossary** listing each ref the card mentions beside its printed name, with
+your row's own ref marked. Camille's call, because the old arrangement left a
+row unable to tell when a clause meant **itself** — six monster rows sat
+blocked asking for a facility to address another creature's aura when all six
+meant their own.
+
+So: **read the glossary to orient, copy from the body.** The body is still
+all refs, which is what makes it safe to paste from. `leaks.py --cited` is in
+`check.py` and fails if a file prints the name of a ref it cites; it will
+name your file. Its first run found 20 real leaks the older tree-wide check
+had called clean for its whole life — two of them in docstrings that *said*
+they were writing around the name while printing it.
 
 Searching the web for **a mechanic you do not understand is encouraged**.
 Searching for a name is not. Reading `game.db` for **numbers** is fine;
