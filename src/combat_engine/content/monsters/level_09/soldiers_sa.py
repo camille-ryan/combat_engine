@@ -104,6 +104,7 @@ from combat_engine.engine import (
     Melee,
     MeleeOrRanged,
     Mod,
+    OpportunityWindow,
     Ranged,
     Relation,
     Size,
@@ -130,6 +131,7 @@ from combat_engine.engine.events import (
     MoveStart,
     PowerUsed,
     RelationCleared,
+    RelationSet,
     SurgeSpent,
     TurnEnd,
     TurnStart,
@@ -1242,16 +1244,33 @@ def m3288a7(c: Cast) -> None:
 
 @power(
     "m3288a8", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-    todo=("c.grant_trait(mount)",),
 )
 def m3288a8(c: Cast) -> None:
     """Bestows her own sure-footedness on whatever she is riding.
 
-    **Re-pointed.** a7 works now, so the reason this is empty has changed:
-    what is missing is a mount. Nothing on the board records that one
-    creature is riding another, so there is no second creature to lay the
-    trait on and no event that would say when it changes.
+    "Nothing records that one creature is riding another" is stale:
+    `Relation.RIDDEN_BY` does, `c.mount()` reads it back, and `RelationSet`
+    is the event that says when it changes -- so the mount acquired later in
+    the fight is covered too, which a one-shot read at arming time would
+    miss.
+
+    The payload is a7's own effect laid on the mount rather than
+    `c.grant_row`: a granted *trait* goes into `Powers.known` and
+    `arm_traits_of` has already run, so it would sit there unarmed.
     """
+    me = c.me
+
+    def bestow(beast: int | None) -> None:
+        if beast is not None:
+            c.ignores_difficult(on=beast, until=When.ENCOUNTER, when="shift")
+
+    bestow(c.mount())
+
+    def mounted(ev: RelationSet) -> None:
+        if ev.kind_ is Relation.RIDDEN_BY and ev.target == me:
+            bestow(ev.source)
+
+    c.watch(RelationSet, mounted, until=When.ENCOUNTER, on=me, label=f"{c.ref} mount")
 
 
 # ==========================================================================
@@ -1662,12 +1681,14 @@ def m4004a3(c: Cast) -> None:
 @power(
     "m4005a0", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1), target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=16), damage=Damage("2d6", 7),
-    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m4005a0(c: Cast) -> None:
-    """"Cannot make opportunity attacks against it" is narrower than
-    `c.cannot_attack`, which bars everything -- there is no opportunity-only
-    form. The grab and the targeting narrowing both play."""
+    """"Cannot make opportunity attacks against it" is the `from_`/`on` pair
+    of `c.no_provoke`: `on=` is who provokes nothing and `from_=` is the one
+    creature barred from swinging, which leaves the grabbed creature's other
+    attacks alone. The hold lasts as long as the grab does, so the printed
+    narrowing is the `when=` gate re-reading the relation at each opening
+    rather than a duration."""
 
     def not_already_held(who: int) -> bool:
         return who not in c.world.relations.targets(Relation.GRABBED_BY, c.me)
@@ -1675,8 +1696,13 @@ def m4005a0(c: Cast) -> None:
     victim = _restricted_to(c, 1, not_already_held)
     if victim is None or not c.strike(on=victim):
         return
+    me = c.me
     c.hit(on=victim)
     c.grab(on=victim)
+    c.no_provoke(
+        from_=victim, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: victim in c.world.relations.targets(Relation.GRABBED_BY, me),
+    )
 
 
 @power(
@@ -1689,15 +1715,18 @@ def m4005a0(c: Cast) -> None:
     # Flat zero, and flat is an empty dice string. This one *did* call
     # `c.hit()` and raised in play.
     damage=Damage("", 0),
-    dropped=("c.cannot_attack(opportunity=)", "c.sight_range(only=)"),
+    dropped=("c.sight_range(only=)",),
 )
 def m4005a1(c: Cast) -> None:
     """Pulled into its own square, restrained, and burning until the hold
     ends -- tracked by hand rather than given a save-ends duration this
-    engine does not have. "No line of sight but to the swarm" and "cannot
-    make opportunity attacks" both have no verb; see the report. The cap
-    of one creature at a time is left ungated for the same reason the a0
-    cap is approximated rather than modelled square by square."""
+    engine does not have. "Cannot make opportunity attacks" is the
+    `OpportunityWindow` refused on its `actor`, which is the side
+    `c.no_provoke` does not take, and it is gated on the hold rather than
+    on a duration so that it dies with the grab. "No line of sight but to
+    the swarm" still has no verb. The cap of one creature at a time is left
+    ungated for the same reason the a0 cap is approximated rather than
+    modelled square by square."""
     victim = c.target
     if not c.strike():
         return
@@ -1713,6 +1742,15 @@ def m4005a1(c: Cast) -> None:
             c.world.effects.end(ongoing, "the grab ends")
 
     c.watch(RelationCleared, freed, until=When.ENCOUNTER, on=me, label=f"{c.ref} {victim}")
+
+    def takes_no_openings(ev: OpportunityWindow) -> None:
+        if ev.actor == victim and ongoing in c.world.effects.of(victim):
+            ev.cancel(f"{c.ref} swallowed")
+
+    c.watch(
+        OpportunityWindow, takes_no_openings, until=When.ENCOUNTER,
+        window=Window.BEFORE, on=me, label=f"{c.ref} no opportunity attacks",
+    )
 
 
 @power("m4005a2", level=9, usage=AT_WILL, action=FREE, reach=CloseBurst(2), target=EACH_ENEMY,

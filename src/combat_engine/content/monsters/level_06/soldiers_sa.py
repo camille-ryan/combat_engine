@@ -43,6 +43,7 @@ from combat_engine.content.monsters.level_02.lurkers_sa import _twice
 from combat_engine.content.monsters.level_02.soldiers_sa import _armed, _recharge_when_bloodied
 from combat_engine.content.monsters.level_03.skirmishers import _is_bloodied
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
+from combat_engine.content.monsters.level_12.minions_sd import _drags_its_captive
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -1620,13 +1621,24 @@ def m5825a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.drags_grabbed()",),
 )
 def m5825a1(c: Cast) -> None:
-    """Already the named gap `m6621a1` waits on: nothing makes an ordinary
-    move bring a grabbed creature along except the `share=True` a specific
-    call opts into, and this trait would need every future move of its own
-    to opt in."""
+    """**Written: the trait is `_drags_its_captive`, which already exists.**
+
+    The marker claimed nothing can be hung off an ordinary walk. `Moved` is
+    exactly that hook and is the one movement event carrying `from_`, so
+    the captive is slid into the square just vacated -- which is the
+    printed "the creature remains grabbed" rather than a re-grab -- and the
+    waived opportunity attack is laid per captive rather than as a
+    `no_provoke=True` that would waive everybody's. `m5481a1` at level 12
+    is the same card and calls the same helper.
+
+    "Can pull the creature vertically off a solid surface" is a permission,
+    not a second effect: it says the drag is not refused for the captive
+    being on the ground, and the slide into the vacated square tests for
+    no such thing.
+    """
+    _drags_its_captive(c)
 
 
 @power(

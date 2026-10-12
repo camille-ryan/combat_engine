@@ -101,6 +101,7 @@ from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
+from combat_engine.content.monsters.level_08.brutes_sa import _two_turns
 from combat_engine.content.monsters.level_08.controllers import (
     _free_squares_near,
     _hands_the_use_back,
@@ -148,6 +149,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     get,
     power,
@@ -2641,15 +2643,13 @@ def m5655a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.second_initiative()", "c.extra_reaction()"),
 )
 def m5719a0(c: Cast) -> None:
-    """ "Makes two initiative checks and takes a full turn on each" wants
-    a second, independent initiative roll -- `docs/AUTHORING.md` names
-    this exact gap as `c.second_initiative()`. "Can take two immediate
-    actions per round but only one between one turn and the next" is a
-    second, separate budget nothing tracks either."""
-    return
+    """Both sentences, through the shape `_two_turns` settles: a second slot
+    ten counts under its own, and `Budget.immediate_round` stamped out of
+    date at the top of each turn, which is what "two a round but only one
+    between one turn and the next" measures."""
+    _two_turns(c)
 
 
 @power(
@@ -3627,13 +3627,27 @@ def m6092a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.POISON, Keyword.MELEE],
     attack=Attack(vs=FORT, printed=12),
-    dropped=("c.remove_from_play()",),
 )
 def m6092a2(c: Cast) -> None:
-    """Domination is written in full. "While dominated, the m6092 is
-    removed from play [and reappears adjacent on the aftereffect]" has
-    no primitive for taking a creature off the board and bringing it
-    back -- see the module docstring."""
+    """"Removed from play" is `Condition.REMOVED` -- no acting, no moving --
+    plus the refusal `m5746a3` writes for "cannot be attacked": one
+    `AttackDeclared` watch cancelling in the before window. Both halves are
+    needed, because the condition does not lift the body off the grid, and a
+    1-hit-point creature left standing there would be killed by anything
+    where the card puts it out of reach.
+
+    Commands are unaffected by the first half: a dominated creature spends
+    its own action, so nothing here has to be paid by the m6092. `c.dominate`
+    rather than `c.condition` so the relation is filed and the dominator can
+    be read back at all.
+
+    Both come off when the domination does, which is the printed Aftereffect
+    -- and appearing "adjacent to the target" needs no move, since the body
+    never left the square it grabbed from (`f3463`'s argument). The hold is
+    also released when the victim drops, because `c.aftereffect` does not run
+    on a dead owner and the creature would otherwise sit unreachable and
+    unable to act for the rest of the fight.
+    """
     victim = _restricted_to(
         c,
         1,
@@ -3641,7 +3655,30 @@ def m6092a2(c: Cast) -> None:
     )
     if victim is None or not c.strike(on=victim):
         return
-    c.condition(Condition.DOMINATED, until=When.SAVE_ENDS, on=victim)
+    me, ref = c.me, c.ref
+    hold = c.dominate(on=victim)
+    gone = c.condition(Condition.REMOVED, on=me, until=When.ENCOUNTER)
+
+    def unattackable(ev: AttackDeclared) -> None:
+        if ev.target == me:
+            ev.cancel("removed from play")
+
+    watch = c.watch(
+        AttackDeclared, unattackable, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=f"{ref} removed from play",
+    )
+
+    def back() -> None:
+        for held in (gone, watch):
+            if held is not None:
+                c.end_effect(held)
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == victim:
+            back()
+
+    c.aftereffect(hold, back)
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=me, label=f"{ref} host fell")
 
 
 # ==========================================================================

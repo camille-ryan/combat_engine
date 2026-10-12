@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Target,
     Usage,
     When,
+    Window,
     World,
     power,
 )
@@ -85,6 +86,7 @@ from combat_engine.engine.events import (
     DamageRolled,
     Miss,
     MoveStart,
+    OpportunityWindow,
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import distance_between, is_, team
@@ -511,15 +513,33 @@ def m6479a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 3, kind=LIMITED),
-    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m6479a2(c: Cast) -> None:
-    """`c.cannot_attack` takes a whole creature or one named victim away and has
-    no way to say "opportunity attacks only", so that clause is named rather
-    than widened -- forbidding every attack for a round is a far bigger thing
-    than the card prints."""
-    if c.strike():
-        _crit_line(c, "1d8", 19)
+    """The bar is laid on the opportunity **window**, which is where
+    `c.no_provoke` lays the same veto from the provoker's end -- so it covers
+    every creature that could open one, including any that joins later.
+
+    Not `c.cannot_attack`, even narrowed: that refuses at `AttackDeclared`,
+    by which point `triggers._ask` has already charged the target its
+    opportunity action, so the round's action would be spent on an attack
+    that never happens."""
+    victim = c.target
+    if victim is None or not c.strike():
+        return
+    _crit_line(c, "1d8", 19)
+
+    def shut(ev: OpportunityWindow) -> None:
+        if ev.actor == victim:
+            ev.cancel("it cannot make opportunity attacks")
+
+    c.watch(
+        OpportunityWindow,
+        shut,
+        until=When.EONT,
+        window=Window.BEFORE,
+        on=victim,
+        label=f"{c.ref} no opportunity attacks",
+    )
 
 
 @power(

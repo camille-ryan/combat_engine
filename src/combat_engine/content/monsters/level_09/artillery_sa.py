@@ -67,6 +67,7 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    Cover,
     Damage,
     DamageType,
     Keyword,
@@ -87,12 +88,18 @@ from combat_engine.engine.events import (
     DamageApplied,
     Dropped,
     Hit,
+    InitiativeRolled,
     TurnEnd,
     TurnStart,
     ZoneEntered,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import (
+    cover_between,
+    distance_between,
+    light_concealment,
+    team,
+)
 from combat_engine.engine.query import is_ as query_is
 from combat_engine.engine.triggers import Trigger, about_me, by_me, targets_me
 
@@ -109,9 +116,15 @@ _M5559_RAY_OPTIONS = [
 
 def _m5559_ray(c: Cast, pick: str, victim: int) -> None:
     """Ten printed options, each its own roll and effect with no ref of
-    its own -- the two-rays shape from level 5, scaled up. The Death
-    Ray's second failed save is the one step with nowhere to go: nothing
-    here kills a creature outright, only damage can take it to 0."""
+    its own -- the two-rays shape from level 5, scaled up.
+
+    **The save ladder is written now.** `c.kill` exists and was
+    what the old marker named; the two steps are chained the way `sleep` and
+    `petrifying` chain theirs, each `escalate` ending its own hold and
+    laying the next, because a callback fires on a *first* failed save and
+    "second failed saving throw" is the first failure of the step above.
+    `escalate=` goes on `c.condition` rather than `c.dazed`: the
+    condition shortcuts do not take it and raise when the row runs."""
     if pick == "charm":
         if _secondary(c, 14, WILL, victim):
             c.condition(Condition.DOMINATED, until=When.EONT, on=victim)
@@ -154,7 +167,21 @@ def _m5559_ray(c: Cast, pick: str, victim: int) -> None:
             return
         c.damage("2d8", 10, dtype=DamageType.NECROTIC, on=victim)
         if c.bloodied(on=victim):
-            c.dazed(until=When.SAVE_ENDS, on=victim)
+
+            def dies(eff: Any, v: int = victim) -> None:
+                c.world.effects.end(eff, "the second failed save")
+                c.kill(on=v)
+
+            def worsen(eff: Any, v: int = victim) -> None:
+                c.world.effects.end(eff, "the first failed save")
+                c.condition(
+                    Condition.DAZED, Condition.WEAKENED,
+                    until=When.SAVE_ENDS, on=v, escalate=dies,
+                )
+
+            c.condition(
+                Condition.DAZED, until=When.SAVE_ENDS, on=victim, escalate=worsen
+            )
     elif pick == "disintegrate" and _secondary(c, 14, FORT, victim):
         c.damage("1d8", 5, on=victim)
         c.ongoing(10, on=victim)
@@ -738,13 +765,36 @@ def m3601a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("TurnStart.initiative",),
 )
 def m3601a6(c: Cast) -> None:
-    """Becoming hidden off a Stealth check made *at initiative*, on
-    having cover or concealment at that exact moment, has no hook -- there
-    is no event for when initiative is rolled, only for when a creature's
-    own turn starts, so there is no moment to ask this at."""
+    """**Written: there is an event for an initiative check.**
+
+    `InitiativeRolled` is announced "so a row can answer it" -- its own
+    docstring says exactly that -- which is the moment the marker claimed
+    does not exist. `TurnStart.initiative` was the wrong place to look: an
+    initiative check is not a turn. `Encounter.start` arms traits *before*
+    the rolls precisely so a row can be triggered on this.
+
+    The Stealth check itself is not rolled. Nothing in the engine rolls one
+    to become hidden and `c.hide` is the consequence, so the row goes
+    unseen by each enemy whose line to it is already blocked -- which is
+    the reading `_hides_with_cover` settled on at level 2. Both halves of
+    the printed condition are asked: cover from `query.cover_between` and
+    concealment from `query.light_concealment`.
+    """
+    me = c.me
+
+    def rolled(ev: InitiativeRolled) -> None:
+        if ev.actor != me:
+            return
+        for foe in c.enemies():
+            if c.is_hidden(from_=foe):
+                continue
+            if (cover_between(c.world, foe, me) is not Cover.NONE
+                    or light_concealment(c.world, foe, me) is not Cover.NONE):
+                c.hide(from_=foe)
+
+    c.watch(InitiativeRolled, rolled, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # ==========================================================================
@@ -1367,9 +1417,11 @@ def m5559a1(c: Cast) -> None:
     reach=Ranged(10),
     target=UpTo(2),
     no_provoke=True,
-    todo=("Cast.kill()",),
 )
 def m5559a2(c: Cast) -> None:
+    """**Marker removed: `c.kill` exists** (cast.py) and `m1978a5` already
+    says so in its own docstring. The row that wanted it is `m5559a2`
+    and its ladder is written in `_m5559_ray`."""
     for victim in c.targets[:2]:
         pick = c.choose(_M5559_RAY_OPTIONS, f"{c.ref}: which ray") or "wounding"
         _m5559_ray(c, pick, victim)

@@ -293,13 +293,25 @@ _M6403_BASIC = "m6403a2"
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.cover_from()",),
+    dropped=("query._carried_cover(ranged=)",),
 )
 def m6403a0(c: Cast) -> None:
     """Cover held on the geometry, which is what `c.cover_in` is: taken on
-    entering and given back on leaving, following the aura as it moves. The
-    "against ranged attacks" narrowing has nowhere to go -- carried cover is
-    read with an empty context, so a gate on `ranged` there is false forever."""
+    entering and given back on leaving, following the aura as it moves.
+
+    **Re-aimed off `c.cover_from()`, which was standing for two opposite
+    gaps.** `f1296` wants a *reader* -- "nothing asks what cover a creature
+    has" -- and `query.cover_between` has been that reader all along, which
+    is why that symbol arriving would say nothing about this row. This row
+    wants the grant *narrowed* to one kind of attack, and the narrowing is
+    missing at a read site rather than at a door: `cover_between` is told
+    whether the attack is ranged and does not pass it on, and
+    `query._carried_cover` asks the carried `"cover"` modifier with `{}`, so
+    a `when=` gate on `c.cover_in`'s bonus is false forever.
+
+    Until that read site is handed the attack's context this row is **wider
+    than its card** -- allies in the aura are covered against melee too --
+    which is the honest state and the reason for the marker."""
     c.cover_in(c.aura(1, until=When.ENCOUNTER), side="ally")
 
 
@@ -310,13 +322,22 @@ def m6403a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.move_through()",),
+    todo=("c.no_entry()",),
 )
 def m6403a1(c: Cast) -> None:
     """An ordinary creature cannot stand in another's square anyway, so the only
     thing this clause rules out is the exceptions -- a teleport, a phasing
     creature, a shared space. Those all route through the same question about
-    who may occupy whose square, and nothing can answer it from this side."""
+    who may occupy whose square, and nothing can answer it from this side.
+
+    **Re-aimed off `c.move_through()`, which this card is the opposite of.**
+    That symbol is the trampling gap, and `movement.overrun` -- reached from
+    content by `monsters.level_11.skirmishers_sc._through_them` -- really does
+    walk a stated distance through whoever is in the way. This card is a
+    *prohibition*, so overrun arriving would not finish it; overrun is one of
+    the things it forbids. What is missing is a per-creature veto that
+    `movement._clear` and `_can_stop` consult, so that the waivers a phase or
+    a teleport grant can themselves be refused."""
 
 
 @power(

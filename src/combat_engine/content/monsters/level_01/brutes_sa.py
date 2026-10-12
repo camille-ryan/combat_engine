@@ -48,6 +48,7 @@ from combat_engine.engine import (
     STANDARD,
     ActionType,
     Attack,
+    Budget,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -91,6 +92,21 @@ from combat_engine.engine.triggers import (
 #: The label the dormant state is held under. Two rows on the same stat block
 #: have to agree on it: one lays it, the other ends it.
 _STILL = "m5449a0"
+
+
+def _no_actions(c: Cast, who: int) -> None:
+    """No standard, move or minor action this turn. The budget is the ban.
+
+    `Encounter.can_spend` reads the three slots for exactly these three costs
+    and `turns.py` calls `Budget.refresh()` immediately *before* it announces
+    `TurnStart`, so emptying them from a `TurnStart` watch is the whole of it
+    and leaves free, immediate and opportunity actions alone -- which is what
+    the cards printing this line mean. `m290a8` and `m495a1` write it the same
+    way.
+    """
+    budget = c.world.get(who, Budget)
+    if budget is not None:
+        budget.standard = budget.move = budget.minor = 0
 
 
 def _crit_line(c: Cast, dice: str, bonus: int) -> None:
@@ -983,23 +999,30 @@ def m5448a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.restrict_action()", "c.immune(ongoing=)"),
+    dropped=("c.immune(ongoing=)",),
 )
 def m5449a0(c: Cast) -> None:
     """It stops being a creature and starts being scenery whenever nothing is
-    standing next to it. Four of the five halves are sayable: resist 10 to
-    everything, immunity to every condition, immunity to forced movement
-    (`c.resist_forced` with a number no shove reaches, which is what immunity to
-    one is), and immunity to three damage types -- written straight onto
-    `Defences.immune` with an undo, the way `c.vulnerable` writes the mirror of
-    it, because `c.immune` takes conditions and nothing takes a damage type.
+    standing next to it. Resist 10 to everything, immunity to every condition,
+    immunity to forced movement (`c.resist_forced` with a number no shove
+    reaches, which is what immunity to one is), and immunity to three damage
+    types -- written straight onto `Defences.immune` with an undo, the way
+    `c.vulnerable` writes the mirror of it, because `c.immune` takes conditions
+    and nothing takes a damage type.
 
-    Dropped: it also takes no standard, move or minor action while dormant, and
-    nothing restricts an action by name -- `Condition.PETRIFIED` would do it and
-    also make the creature helpless, which the card does not say and which is a
-    much worse bargain than the one it offers. And immunity to ongoing damage,
-    which no verb grants either; with resist 10 standing, a level-one burn gets
-    through none of it anyway, but that is arithmetic rather than the rule.
+    **"No standard, move or minor actions" lands now, and it was never a
+    missing verb.** `Encounter.can_spend` reads `Budget`'s three slots, and
+    `refresh()` fills them just before `TurnStart` is announced -- so a
+    `TurnStart` watch that empties them says the printed sentence exactly, and
+    says nothing about the free action `m5449a2` is, which is the one thing
+    the creature must still be able to do. `Condition.PETRIFIED` was the wrong
+    road: it bars the standard action and makes the creature helpless as well,
+    which the card does not say. Asked on **every** turn rather than only the
+    one it falls asleep on, because the state outlives that turn.
+
+    Still dropped: immunity to ongoing damage, which no verb grants; with
+    resist 10 standing a level-one burn gets through none of it anyway, but
+    that is arithmetic rather than the rule.
 
     The sub-effects are held together and ended off the state's own `on_end`,
     so the row that wakes the creature up has one thing to end.
@@ -1007,7 +1030,12 @@ def m5449a0(c: Cast) -> None:
     me, ref = c.me, c.ref
 
     def settle(ev: TurnStart) -> None:
-        if ev.actor != me or ev.ghost or _still(c) is not None:
+        if ev.actor != me or ev.ghost:
+            return
+        if _still(c) is not None:
+            # Already dormant: the budget is refilled each turn, so the ban
+            # has to be re-applied each turn.
+            _no_actions(c, me)
             return
         if any(c.adjacent(foe) for foe in c.enemies()):
             return
@@ -1035,6 +1063,7 @@ def m5449a0(c: Cast) -> None:
                 shell.immune.discard(kind)
 
         hold.on_end.append(wake)
+        _no_actions(c, me)
 
     c.watch(TurnStart, settle, until=When.ENCOUNTER, on=me, label=f"{ref} settles")
 

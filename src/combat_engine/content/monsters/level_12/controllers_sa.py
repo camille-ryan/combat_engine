@@ -611,11 +611,16 @@ def m1155a4(c: Cast) -> None:
     half-written.
 
     The printed line turns a *suppressed* regeneration back on for its own
-    kind nearby. Suppression is not a thing the engine holds: `_regenerates`
-    takes a `doused` label chosen by whichever row lays it, so there is no
-    way to ask "is this creature's regeneration switched off" and no way to
-    switch it back on from another creature's trait. This stat block is also
-    printed with no regeneration line of its own for the clause to point at.
+    kind nearby, and the asking and the switching are both writable now:
+    `_regenerates(doused=)` holds the suppression as a labelled effect, so
+    the question is a scan of `world.effects.of(other)` and the answer is
+    `c.end_effect` -- provided both blocks share one label constant.
+
+    What is missing is the regeneration itself. This stat block prints six
+    rows and none of them is a regeneration line, so the clause modifies
+    something the creature has not got and there is no label to share. That
+    is a question about the card rather than about the engine and has been
+    referred up; until it is answered there is nothing here to switch on.
     """
 
 

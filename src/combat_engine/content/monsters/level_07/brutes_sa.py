@@ -2403,13 +2403,29 @@ def m5888a3(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=ONE_ALLY,
-    todo=("c.grant_action(charge)",),
 )
 def m5888a4(c: Cast) -> None:
-    """Nothing plays: `c.grant_action` understands `shift`, `stand`,
-    `escape` and `second_wind`, and silently drops anything else --
-    `actions.py` reads none of the words that would be needed for
-    "charge", so the entire printed Effect has nowhere to land."""
+    """"The target can charge as a free action" is `c.charge_at(..., who=)`,
+    whose own docstring names a printed line of exactly this shape as what
+    the parameter is for: the run, then the swing with the charge flag on it,
+    and `use(spend=False)` underneath, which is the free action.
+
+    `c.grant_action("charge", FREE)` stays the wrong road -- that verb lays a
+    `"<what> as <cost>"` modifier and `actions._charges` never reads it, so
+    the word would be carried, cost nothing and do nothing -- but the marker
+    claimed the whole Effect had nowhere to land, and it had.
+
+    The ally picks whom it runs at, and the candidates are measured from the
+    ally rather than from here, because the ally is what runs.
+    """
+    friend = c.target
+    if friend is None:
+        return
+    foes = sorted(c.within(c.speed_of(friend) + 1, of=friend, side="enemy"))
+    victim = c.choose(foes, "who that ally charges")
+    if victim is None:
+        return
+    c.charge_at(victim, who=friend)
 
 
 # ==========================================================================

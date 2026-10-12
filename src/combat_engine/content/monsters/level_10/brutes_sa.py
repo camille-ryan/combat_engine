@@ -39,6 +39,7 @@ from typing import Any
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_07.brutes_sa import _ridden_by_seventh_level
 from combat_engine.content.monsters.level_09.brutes_sa import _revives_once
+from combat_engine.content.monsters.level_10.soldiers_sa import _double_turn
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -58,6 +59,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    Budget,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -80,6 +82,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
@@ -95,7 +98,13 @@ from combat_engine.engine.events import (
     ZoneEntered,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import distance_between, flanked_by, has_combat_advantage, team
+from combat_engine.engine.query import (
+    distance_between,
+    flanked_by,
+    has_combat_advantage,
+    level_term,
+    team,
+)
 from combat_engine.engine.triggers import Trigger, about_me, by_me
 
 # --------------------------------------------------------------------------
@@ -605,13 +614,26 @@ def m2069a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.second_initiative()",),
 )
 def m2069a2(c: Cast) -> None:
-    """"Rolls initiative twice, gets two turns a round" wants a second,
-    independent roll -- `c.extra_turn` only ever takes a count handed to
-    it. The immediate-action refresh each turn has nowhere further to
-    attach once that gap is open."""
+    """Two turns a round, one set of actions to each head: the shape
+    `_double_turn` settled, a second spliced slot ten counts under its own.
+
+    "Immediate actions refresh on each of its turns" is
+    `Budget.immediate_round` -- `can_spend` refuses while that stamp equals
+    the round, so stamping it out of date at the top of each turn is the
+    printed refresh. m193a3 is the worked precedent for the pair."""
+    me = c.me
+    _double_turn(c)
+
+    def refresh(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me:
+            return
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.immediate_round = -1
+
+    c.watch(TurnStart, refresh, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -621,22 +643,25 @@ def m2069a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Effect.keywords",),
 )
 def m2069a3(c: Cast) -> None:
-    """Dazed and stunned both play -- named conditions, read straight off
-    the standing effect. "Charm effects that a save can end" has nowhere
-    to ask from here: an `Effect` carries conditions and a damage type,
-    never the keywords of the row that laid it, so "a charm effect" as
-    opposed to any other save-ends hold cannot be told apart."""
+    """All three clauses play. An `Effect` really does carry no keywords,
+    and it does not have to: its label is the ref of the row that laid it,
+    so `durations.keywords_of` reads that row's keywords back. That is how
+    "a charm effect" is told from any other save-ends hold, and four feats
+    in `general_h.py` narrow the same way."""
     me = c.me
 
     def auto_save(ev: TurnEnd) -> None:
         if ev.ghost or ev.actor != me:
             return
         for eff in list(c.world.effects.of(me)):
-            if eff.when is When.SAVE_ENDS and (
-                Condition.DAZED in eff.conditions or Condition.STUNNED in eff.conditions
+            if eff.when is not When.SAVE_ENDS:
+                continue
+            if (
+                Condition.DAZED in eff.conditions
+                or Condition.STUNNED in eff.conditions
+                or Keyword.CHARM in keywords_of(eff.label)
             ):
                 c.world.effects.end(eff, "automatic save")
 
@@ -1593,12 +1618,26 @@ def m4448a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.second_initiative()",),
 )
 def m4448a4(c: Cast) -> None:
-    """"Rolls initiative once for each opponent it faces" is an
-    open-ended number of independent rolls -- the same gap `c.extra_turn`
-    cannot close for a fixed second slot, only wider."""
+    """One slot per opponent, so the extra slots are one fewer than the
+    opponents -- the creature already has its own.
+
+    The `+10` convention `_double_turn` uses is wrong here: at four
+    opponents it would space four turns evenly round the order, which is
+    not what a roll does. So each extra slot is a genuinely independent
+    check, written with the engine's own formula (`Encounter`'s own reroll
+    is `d20 + Initiative.bonus + level_term`) -- `reroll_initiative` itself
+    is the wrong lever because it *moves* the one slot rather than adding
+    one."""
+    me = c.me
+    init = c.world.get(me, Initiative)
+    if init is None:
+        return
+    extra = c.enemies()[1:]
+    for _ in extra:
+        c.extra_turn(at=c.roll("1d20") + init.bonus + level_term(c.world, me, init.scale))
+    c.note(f"{c.ref}: {len(extra) + 1} turns a round, one initiative check per opponent")
 
 
 @power(

@@ -1960,13 +1960,16 @@ def m5292a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.permit_charge()",),
 )
 def m5303a0(c: Cast) -> None:
-    """"Can charge while burrowing." Nothing found in `actions.charge` or
-    `can_walk` refuses a charge for a burrowing creature, so there is no
-    restriction to lift and no verb that would demonstrate this either
-    way."""
+    """"Can charge while burrowing", and nothing refuses that -- neither
+    `actions.charge` nor `can_walk` narrows a charge by movement mode.
+
+    So the marker was wrong about its own kind: it named a verb to build,
+    and there is no restriction to lift. The printed permission is already
+    the rule, which makes this a finished row with an empty body, the shape
+    `m4005a4` and `m5625a0` already carry. It will audit quiet, because
+    there is nothing for a log to see."""
 
 
 @power(

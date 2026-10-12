@@ -117,6 +117,7 @@ from combat_engine.engine import (
     Miss,
     Moved,
     MoveEnd,
+    OpportunityWindow,
     Position,
     Powers,
     PowerUsed,
@@ -131,6 +132,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     ZoneEntered,
     ZoneExited,
@@ -1576,21 +1578,31 @@ def m5741a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m5741a1(c: Cast) -> None:
-    """Three of the four printed clauses land. "It cannot grab creatures" is
-    the fourth and needs nothing: nothing on this stat block grabs, so the
-    prohibition is already true of the engine.
+    """All four printed clauses land. "It cannot grab creatures" needs
+    nothing: nothing on this stat block grabs, so the prohibition is already
+    true of the engine.
 
-    Not being able to make opportunity attacks is the dropped clause --
-    `c.cannot_attack` bars a creature from attacking altogether or from
-    attacking one creature, and has no way to bar one *kind* of attack.
+    "Cannot make opportunity attacks" is the window refused from the other
+    side. `c.no_provoke` vetoes an `OpportunityWindow` whose *provoker* is
+    this creature -- the clause above it -- and the same event names the
+    creature that would swing as `actor`, so barring its own openings is one
+    gate away and wants no verb.
     """
     me = c.me
     c.ignores_difficult(on=me, until=When.ENCOUNTER)
     c.no_provoke(on=me, until=When.ENCOUNTER)
     c.immune(Condition.SQUEEZING, on=me, until=When.ENCOUNTER)
+
+    def takes_no_openings(ev: OpportunityWindow) -> None:
+        if ev.actor == me:
+            ev.cancel(f"{c.ref} makes no opportunity attacks")
+
+    c.watch(
+        OpportunityWindow, takes_no_openings, until=When.ENCOUNTER,
+        window=Window.BEFORE, on=me, label=f"{c.ref} no opportunity attacks",
+    )
 
 
 @power(

@@ -48,6 +48,7 @@ from combat_engine.engine import (
     STANDARD,
     ActionType,
     Attack,
+    Budget,
     Cast,
     CloseBurst,
     Condition,
@@ -64,7 +65,13 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.events import Bloodied, DamageRolled, Dropped, TurnEnd
+from combat_engine.engine.events import (
+    Bloodied,
+    DamageRolled,
+    Dropped,
+    TurnEnd,
+    TurnStart,
+)
 from combat_engine.engine.monster_math import MINION
 from combat_engine.engine.query import distance_between, enemies, has_combat_advantage
 from combat_engine.engine.triggers import Trigger, about_me, targets_me
@@ -790,26 +797,48 @@ def m820a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.restrict_action()",),
 )
 def m820a1(c: Cast) -> None:
-    """Sunlight burns it to ash, and that half is written now.
+    """Sunlight burns it to ash, and cuts the turn before it down.
 
     `c.kill` is the ash: a reduction to nothing that is not damage, so
-    `c.flat` on whatever it had left was the wrong reading as well as the
-    only one then available. The watch is on the turn *ending* in the light,
-    which is what the card says.
+    `c.flat` on whatever it had left was the wrong reading. The watch is on
+    the turn *ending* in the light, which is what the card says.
 
-    **Re-pointed.** What is still absent is the other half -- cutting a turn
-    down to a single move action is a *ceiling* on the action budget, and
-    `c.grant_action` only ever adds. The sunlight itself is readable, which
-    is why neither marker is a terrain gap.
+    **"Only a single move action" lands now, and no verb was missing.** It is
+    a *ceiling* rather than a grant, which is why `c.grant_action` was never
+    the road -- but `Encounter.can_spend` reads `Budget`'s three slots
+    directly and `turns.py` refills them just before `TurnStart` is
+    announced, so emptying the standard and the minor and leaving the move is
+    exactly the printed sentence. `m290a8` is the same card eight levels up
+    and writes it the same way; `m812a1` settled the arrangement. Asked at
+    each boundary rather than once, because a fight can move into the open.
+
+    The one move may still be spent *as* a minor, and that is the rules
+    rather than a leak: `DOWNGRADES` carries the printed "you can take a
+    minor action instead of a move action", which this card does not suspend.
+
+    **A bug this marker was hiding:** `c.terrain` takes no `on=`, and both
+    watches passed one. A `todo=` row is refused in play, so the watch was
+    never armed and the `TypeError` could not surface -- the audit found it
+    the moment the marker came off.
     """
     me = c.me
 
+    def begins_in_the_light(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me or not c.terrain("sunlight"):
+            return
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.standard = 0
+            budget.minor = 0
+        c.note(f"{c.ref}: sunlight leaves it a single move action")
+
     def ends_in_the_light(ev: TurnEnd) -> None:
-        if ev.actor == me and c.terrain("sunlight", on=me):
+        if ev.actor == me and c.terrain("sunlight"):
             c.kill(on=me)
 
+    c.watch(TurnStart, begins_in_the_light, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} dawn")
     c.watch(TurnEnd, ends_in_the_light, until=When.ENCOUNTER, on=me,
             label=f"{c.ref} ash")

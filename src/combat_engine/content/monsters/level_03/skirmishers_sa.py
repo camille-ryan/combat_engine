@@ -1726,7 +1726,12 @@ def m3227a2(c: Cast) -> None:
     `c.ride` can establish the relation but nothing offers mounting as an
     action, so there is no moment at which this row can become true. Named
     rather than approximated: setting the relation from here would put a
-    rider on it that nobody chose."""
+    rider on it that nobody chose.
+
+    `c.grant_action` is the right verb and the word is not in it: its own
+    docstring says anything outside `actions.legal`'s five words "is carried,
+    costs nothing and does nothing", so the word and the menu reader have to
+    land together, and both are engine work."""
 
 
 # --------------------------------------------------------------------------

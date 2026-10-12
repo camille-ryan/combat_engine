@@ -91,11 +91,13 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Size,
+    Stats,
     Target,
     TurnEnd,
     TurnStart,
     When,
     Window,
+    World,
     about_me,
     both,
     by_melee,
@@ -104,7 +106,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.monster_math import MINION
-from combat_engine.engine.query import cover_between
+from combat_engine.engine.query import cover_between, team
 from combat_engine.engine.triggers import Trigger
 
 # ==========================================================================
@@ -784,6 +786,19 @@ def m5252a2(c: Cast) -> None:
 # ==========================================================================
 
 
+def _ridden_by_thirteenth_level(world: World, me: int) -> bool:
+    """A thirteenth-level copy of `_ridden_by_seventh_level`, whose docstring
+    says why each printed number gets its own function rather than a
+    parameter: the question is asked live, because nobody is in the saddle
+    when a trait of this shape arms."""
+    for rider in world.relations.targets(Relation.RIDDEN_BY, me):
+        if team(world, rider) is team(world, me):
+            stats = world.get(rider, Stats)
+            if stats is not None and stats.level >= 13:
+                return True
+    return False
+
+
 @power(
     "m5822a0",
     level=13,
@@ -808,18 +823,31 @@ def m5822a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.untargetable()",),
 )
 def m5822a1(c: Cast) -> None:
-    """Being an illegal target is the whole of this row, and nothing says it.
+    """"Cannot be the target of any attack" is asked from the attacker's side,
+    and that is where it was already sayable: `AttackDeclared` is a `Decision`
+    and `c.cannot_attack` refuses it there, so nothing is rolled and no rider
+    fires. `c.conceal` and `c.invisible` were the wrong road -- they change the
+    odds -- and `Condition.REMOVED` takes the creature off the board.
 
-    `c.conceal` and `c.invisible` change the odds of being hit and
-    `Condition.REMOVED` takes the creature out of the fight altogether;
-    neither is "cannot be the target of any attack" while it stands there
-    fighting. The rider half is sayable -- `c.rider()` and its level -- but
-    with nothing to gate there is no row to gate, so this is a `todo` and
-    not a `dropped`.
+    Written as **one** watch on the mount rather than one `c.cannot_attack`
+    per enemy, because the verb fixes both ends of the pair and this row fixes
+    neither: the rider mounts and dismounts mid-fight, so the gate has to be
+    asked at the moment of the swing, and an enemy that joins later has to be
+    covered without the row being re-armed. Same event, same window, same
+    cancel.
     """
+    me = c.me
+
+    def refuse(ev: AttackDeclared) -> None:
+        if getattr(ev, "target", None) != me:
+            return
+        if _ridden_by_thirteenth_level(c.world, me):
+            ev.cancel("cannot be the target of an attack")
+
+    c.watch(AttackDeclared, refuse, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=f"{c.ref} untargetable")
 
 
 @power(

@@ -3228,13 +3228,26 @@ def m6062a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.set_origin(by=)",),
+    dropped=("c.share_senses()",),
 )
 def m6115a0(c: Cast) -> None:
-    """Nothing plays: sharing senses with a named sibling and letting that
-    sibling fire its own powers from this creature's square both need a
-    way to authorise a *different* creature's row, which nothing here
-    grants."""
+    """The borrowed square is `c.cast_from`, laid on each sibling with this
+    creature as the lender. Read in `dsl.measured_from`, so a ranged or area
+    line is aimed as well as traced from here, and it falls back to the
+    sibling's own square whenever this one is off the board or out of sight --
+    which is the proviso the card prints rather than an approximation of it.
+    No distance on that sentence, so none is written.
+
+    Lending what it can *sense* is dropped. Nothing hands one creature's
+    sight to another, and `c.cast_from` is not quietly that: it moves an
+    origin, only for a ranged or area range, and a creature hidden from the
+    sibling stays hidden from it.
+
+    Armed as a trait, so a sibling that arrives mid-fight does not get the
+    square -- the same limit `m4853a1` carries."""
+    for mate in c.allies():
+        if _same_row(c, mate, "m6114"):
+            c.cast_from(c.me, on=mate, until=When.ENCOUNTER)
 
 
 _M6115_DOWN = "the m6115 drops to 0 hit points"

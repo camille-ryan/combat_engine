@@ -99,6 +99,7 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.components import Budget, Initiative
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackDeclared,
@@ -118,6 +119,39 @@ from combat_engine.engine.triggers import Trigger, about_me, ally_within, both, 
 # --------------------------------------------------------------------------
 # Shared shapes
 # --------------------------------------------------------------------------
+
+
+def _two_turns(c: Cast) -> None:
+    """"Two initiative checks and a full turn on each", with the immediate
+    action the second sentence of that card always talks about.
+
+    The slot is `c.extra_turn` ten counts under its own, where `_double_turn`
+    and `m193a3` both put one: `c.extra_turn` wants a count rather than a
+    roll, and a second *independent* roll is a question about where the slot
+    sits rather than about whether the creature acts twice.
+
+    The second half is not free, which the rows carrying this card had
+    assumed. `Budget.refresh` does not touch `immediate_round` and
+    `Encounter.can_spend` refuses an immediate while that stamp equals the
+    round -- so a creature with two turns still gets **one** immediate
+    action a round. Stamping it out of date at the top of each of its own
+    turns is the printed line exactly: one between any two turns, two over
+    the round. It has to be on `TurnStart`, which `_begin` emits after the
+    budget is refreshed.
+    """
+    me = c.me
+    init = c.world.get(me, Initiative)
+    if init is not None:
+        c.extra_turn(init.rolled + 10)
+
+    def refresh(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me:
+            return
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.immediate_round = -1
+
+    c.watch(TurnStart, refresh, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 def _kin_adjacent(c: Cast, ref: str) -> bool:
@@ -1192,7 +1226,12 @@ def m3228a0(c: Cast) -> None:
     """The Perception half plays. "Rolls initiative twice, uses the
     higher" is a different distribution from `c.reroll_initiative`, which
     replaces the roll outright rather than keeping the better of two, so
-    it is not substituted here."""
+    it is not substituted here.
+
+    The three other d20 rerolls take `keep=` and this one does not, and the
+    gap is exactly that kwarg: `turns.reroll_initiative` lifts the creature
+    out of the order, rolls, and splices it back, so keeping the higher of
+    two cannot be done from outside without re-splicing by hand."""
     me = c.me
     given: set[int] = set()
 
@@ -1988,15 +2027,14 @@ def m5494a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.second_initiative()",),
 )
 def m5553a0(c: Cast) -> None:
-    """"Two initiative checks, a full turn on each" is the solo's own
-    second-turn shape, but `c.extra_turn` takes an exact count rather than
-    rolling one of its own -- there is no way from here to produce the
-    second, independent roll the card asks for. The immediate-action half
-    rides on the ordinary once-per-turn limit, which already doubles for
-    free with two turns a round."""
+    """Both sentences, through `_two_turns` above.
+
+    The old note here had the immediate-action half backwards: that limit is
+    per *round*, not per turn, so it does not double for free -- it is the
+    stamp `_two_turns` clears at the top of each turn."""
+    _two_turns(c)
 
 
 @power(

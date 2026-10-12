@@ -1910,12 +1910,17 @@ def m5460a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    todo=("c.grant_action(standard)",),
 )
 def m5460a4(c: Cast) -> None:
-    """"Takes a standard action" names no word `actions.legal` knows --
-    `c.grant_action` only ever understands shift, stand, escape and
-    second_wind, and a fifth word is carried and does nothing."""
+    """"Takes a standard action" is handed over rather than spelled out --
+    the creature chooses what to do with it, which a basic attack would
+    decide for it.
+
+    `c.grant_action` was the wrong verb to look at: its four words are what
+    a *cheaper* action costs, and this drops a whole standard action into the
+    budget the turn is spending, which `Encounter.can` reads back.
+    `m5085a2` is the same death throe written the same way."""
+    c.extra_action(STANDARD, on=c.me)
 
 
 # ==========================================================================
@@ -2041,12 +2046,39 @@ def m5840a1(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Attack(vs=)",),
 )
 def m5840a2(c: Cast) -> None:
-    """Retargeting its own ranged attack's defence line is not sayable:
-    `Attack.vs` is fixed at declaration, not switchable per use."""
-    c.bonus("damage", 5, on=c.me, until=When.EOT, when=_physical)
+    """`c.attacks_defence(REF, from_=AC, when=)` is the retarget: it registers
+    in `Window.BEFORE`, which is where `AttackDeclared.vs` is still read, so
+    the defence really moves. `Attack.vs` being fixed at declaration was true
+    and was never the whole question.
+
+    Both benefits are the **next** turn's, which the old row also lost: the
+    move action marks an enemy, and the payout lands at the start of the
+    following turn if it can still be seen, until the end of that turn. The
+    gate narrows to that enemy and to `m5840a1`, the ranged row the card
+    names, where the old `_physical` widened it to every melee or ranged row
+    against anybody.
+    """
+    me, ref = c.me, c.ref
+    foe = _nearest_enemy(c)
+    if foe is None or not c.can_see(foe):
+        return
+    paid = [False]
+
+    def aimed(ctx: dict[str, Any]) -> bool:
+        return ctx.get("target") == foe and ctx.get("power") == "m5840a1"
+
+    def pay(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me or paid[0]:
+            return
+        paid[0] = True
+        if not c.can_see(foe):
+            return
+        c.attacks_defence(REF, from_=AC, when=aimed, on=me, until=When.EOT)
+        c.bonus("damage", 5, on=me, until=When.EOT, when=aimed)
+
+    c.watch(TurnStart, pay, until=When.ENCOUNTER, on=me, label=ref)
 
 
 @power(

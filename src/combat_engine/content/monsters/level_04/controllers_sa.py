@@ -69,7 +69,7 @@ from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _ongoing_of,
     _while_bloodied,
 )
-from combat_engine.content.monsters.level_04.controllers import DEFENCES
+from combat_engine.content.monsters.level_04.controllers import DEFENCES, _level_of
 from combat_engine.content.monsters.level_04.skirmishers import _has_advantage
 from combat_engine.engine import (
     AC,
@@ -135,6 +135,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
+    allies,
     distance_between,
     enemies,
     flanked_by,
@@ -843,16 +844,45 @@ def m3535a2(c: Cast) -> None:
     recharge=0,
     action=MINOR,
     reach=Ranged(10),
-    target=Target("ally", 1, label="one destroyed undead ally of level 6 or lower"),
+    target=Target(
+        "ally", 1,
+        label="one destroyed undead ally of level 6 or lower",
+        conditions=frozenset({Condition.DEAD}),
+        kinds=frozenset({"undead"}),
+    ),
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
-    todo=("query.fallen(world, side)",),
 )
 def m3535a3(c: Cast) -> None:
-    """`c.reanimate` is exactly the printed effect and the level cap and the
-    minion clause are both askable -- what is missing is the target. Nothing
-    enumerates the creatures that have already been destroyed: every pool an
-    author is given (`c.allies`, `c.within`) filters out the dead, so the row
-    cannot find the one creature it is about."""
+    """The pool was there all along: `query.allies` filters self, companions
+    and barriers and **not** the dead, so `not alive` over it enumerates the
+    destroyed. `c.allies` was the wrong door, not the missing one.
+
+    Two of the three narrowings are header fields -- `Condition.DEAD` is one
+    `dsl` makes targetable on purpose, and `kinds` carries the type word. The
+    level cap and the minion clause are not, so they narrow here and
+    **redirect** rather than returning: another corpse in range may qualify
+    where the chooser's pick does not.
+
+    The free-action stand is laid as the card prints it and is correctly
+    inert when nothing holds the body down -- `actions._recovery` only offers
+    `stand` to a creature that is actually prone."""
+
+    def risable(who: int) -> bool:
+        return (
+            not alive(c.world, who)
+            and c.is_kind("undead", on=who)
+            and _level_of(c.world, who) <= c.level + 2
+            and not c.is_minion(on=who)
+        )
+
+    who = c.target if c.target is not None and risable(c.target) else None
+    if who is None:
+        pool = sorted(
+            a for a in allies(c.world, c.me) if risable(a) and c.distance(to=a) <= 10
+        )
+        who = c.choose(pool, "which of the fallen rises") if pool else None
+    if who is not None and c.reanimate(hp=10, on=who):
+        c.grant_action("stand", FREE)
 
 
 # --------------------------------------------------------------------------

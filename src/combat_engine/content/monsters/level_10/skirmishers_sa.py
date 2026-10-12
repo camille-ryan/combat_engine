@@ -2497,7 +2497,7 @@ def _m4325_in_humanoid_form(world: World, eid: int) -> bool:
     narrative=("skill:endurance",),
 )
 def m4325a0(c: Cast) -> None:
-    """"Exposed to" a filth-fever-style disease is a narrative consequence --
+    """"Exposed to" a disease is a narrative consequence --
     nothing on a board rolls an Endurance check against an ongoing disease
     days after the fight."""
     if c.strike():

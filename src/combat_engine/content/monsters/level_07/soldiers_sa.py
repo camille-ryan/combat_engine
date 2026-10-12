@@ -77,6 +77,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    Budget,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -102,6 +103,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import use
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
@@ -1028,19 +1030,27 @@ def m2050a2(c: Cast) -> None:
 
 @power(
     "m2050a3", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
-    target=NO_TARGET, dropped=("Effect.keywords",),
+    target=NO_TARGET,
 )
 def m2050a3(c: Cast) -> None:
-    """Narrowing to a save against an effect carrying the charm or fear
-    keyword cannot be asked -- `Effect` carries conditions and ongoing
-    damage, never the keyword of the power that applied it -- so this fires
-    on any successful save against a save-ends hold instead, the same
-    over-broad approximation `_crit_drops_it` takes elsewhere for a
-    comparable gap."""
+    """The narrowing is asked now, and the approximation is gone.
+
+    `Effect` still carries no keywords and does not need to: its label is the
+    ref of the row that laid it, so `durations.keywords_of` reads the
+    keywords off the row. `SavingThrow.against` is `str(eff)` and
+    `keywords_of` takes the first token of it, which is that label -- and a
+    label that is not a ref (`"death"`) answers the empty set rather than
+    raising, so the death save falls out on its own.
+
+    The audit board never lays a keyword-bearing hold, so this was driven by
+    hand with a charm hold and an untyped one."""
     me = c.me
+    named = frozenset({Keyword.CHARM, Keyword.FEAR})
 
     def answered(ev: SavingThrow) -> None:
         if ev.actor != me or not ev.saved:
+            return
+        if not (named & keywords_of(ev.against)):
             return
         foe = next((f for f in c.enemies() if c.adjacent(f)), None)
         if foe is not None:
@@ -1080,12 +1090,39 @@ def m2233a1(c: Cast) -> None:
 
 @power(
     "m2233a2", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
-    target=NO_TARGET, todo=("Budget.opportunity_turn",),
+    target=NO_TARGET,
 )
 def m2233a2(c: Cast) -> None:
-    """"Can make opportunity attacks against all enemies in reach" lifts the
-    one-opportunity-attack-per-turn budget for every one of them; nothing
-    here can waive `Budget.opportunity_turn`."""
+    """The cap is one stamp: `Encounter.can_spend` refuses an opportunity
+    action while `Budget.opportunity_turn` equals the current turn, and
+    `spend` stamps it. Clearing the stamp after the swing lands lifts the cap
+    without a verb -- content already reaches `Budget` directly.
+
+    **Latched per victim per turn, which is the printed line.** "Against all
+    enemies within its reach" is one swing each, not an unlimited stream at
+    whoever keeps provoking; clearing the stamp unconditionally would be the
+    second thing. Read off `Hit`/`Miss` rather than `ActionSpent`, because
+    that event is emitted *above* the stamp in `spend` and a reset there is
+    overwritten a line later.
+
+    The reach is the creature's own and needs nothing here: the swing is a
+    basic attack and measures itself."""
+    me = c.me
+    answered: dict[tuple[int, int], set[int]] = {}
+
+    def again(ev: Hit | Miss) -> None:
+        if ev.attacker != me or not getattr(ev, "opportunity", False):
+            return
+        seen = answered.setdefault((c.world.round, c.world.turn), set())
+        if ev.target in seen:
+            return
+        seen.add(ev.target)
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.opportunity_turn = -1
+
+    for announced in (Hit, Miss):
+        c.watch(announced, again, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # ==========================================================================
@@ -1720,8 +1757,12 @@ def m5576a2(c: Cast) -> None:
         c.hit()
         c.push(3)
         victim = c.target
-        mods = [(victim, Mod(what=d, value=-2, kind="untyped", label=c.ref)) for d in ALL_DEFENCES]
-        c.world.effects.apply(victim, c.me, When.SAVE_ENDS, label=c.ref, mods=mods)
+        if victim is None:
+            return
+        mods = [(victim, Mod(what=d, value=-2, kind="untyped", label=c.ref))
+                for d in ALL_DEFENCES]
+        c.world.effects.apply(victim, c.me, When.SAVE_ENDS, label=c.ref,
+                              mods=mods)
 
 
 @power(

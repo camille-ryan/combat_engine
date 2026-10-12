@@ -2593,7 +2593,6 @@ def m4204a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.charging()",),
 )
 def m4204a4(c: Cast) -> None:
     """The printed Requirement -- a rider of 12th level or better -- is asked
@@ -2606,10 +2605,18 @@ def m4204a4(c: Cast) -> None:
     is where the four goes, untyped. The rider's copy is renewed at the top
     of each of this creature's turns, because whoever is on its back changes.
 
-    "When it makes charge attacks" is the dropped clause. The context an
-    opportunity attack's modifier is read with carries that attacker's
-    `charge`, not this creature's, and nothing asks whether a named creature
-    is mid-charge -- so the waiver is wider than the card prints.
+    "When it makes charge attacks" is asked now. The old note was right that
+    the context carries the *attacker's* `charge` and not this creature's --
+    and wrong that nothing asks the second question: `c.moving_as` takes
+    `on=`, and `movement.step` writes the step's kind into `Movement.using`
+    for everything but a walk, so "charge" is what it holds through a charge.
+    Asked inside the gate rather than snapshotted, because the predicate is
+    re-read at each swing.
+
+    One looseness worth naming: `using` is documented as held *past* the end
+    of the move, so a creature that charges and then never moves again keeps
+    the waiver until its next step. That is narrower than the ungated bonus
+    this replaced, not wider.
     """
     me, world = c.me, c.world
 
@@ -2621,7 +2628,11 @@ def m4204a4(c: Cast) -> None:
         return stats is not None and stats.level >= 12
 
     def guard(_ctx: dict[str, Any]) -> bool:
-        return bool(_ctx.get("opportunity")) and carried()
+        return (
+            bool(_ctx.get("opportunity"))
+            and carried()
+            and c.moving_as("charge", on=me)
+        )
 
     c.bonus(AC, 4, on=me, until=When.ENCOUNTER, when=guard)
     held: list[Effect] = []

@@ -2078,13 +2078,25 @@ def m4306a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.move(through=)",),
 )
 def m4306a1(c: Cast) -> None:
-    """Entering an enemy's square mid-move has no verb; the move and the
-    attack that follows it are written in full."""
-    c.move(c.speed_of())
-    foe = next(iter(_adjacent_foes(c)), None)
+    """**Written: entering an occupied square is `c.overrun`.**
+
+    The marker said the move had no verb. `movement.overrun` walks straight
+    through whoever is in the way and names each creature entered, and
+    `c.overrun` with no destination picks the line that tramples the most
+    -- which is what "moves its speed and can enter enemies' spaces" asks
+    for, where `c.move` refuses an occupied square outright.
+
+    One attack and not one per creature entered: the card prints a single
+    attack line after the move. Aimed at somebody the move went through
+    where it ended up beside one, since that is what the permission buys,
+    and otherwise at whoever it is standing next to.
+    """
+    trampled = c.overrun()
+    foe = next((f for f in trampled if c.adjacent(f)), None)
+    if foe is None:
+        foe = next(iter(_adjacent_foes(c)), None)
     if foe is not None and c.attack(9, REF, on=foe):
         c.damage("1d6", 6, on=foe)
         c.prone(on=foe)
@@ -3102,11 +3114,21 @@ def m6655a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.move(through=)",),
+    todo=("Movement.through_creatures",),
 )
 def m6655a1(c: Cast) -> None:
-    """Entering an occupied square has no verb; everything that leans on it
-    below instead reads "adjacent" for "in its square"."""
+    """**Re-aimed, not written.** The old symbol said entering an occupied
+    square has no verb, and `movement.overrun` is one -- but it is the wrong
+    shape for this card. A trample is a *stated move*: it is handed a
+    destination, walks a line and reports who it crossed. This trait is a
+    **standing permission** over every move the creature makes for the rest
+    of the fight, including the ones other rows and the AI policy take, and
+    nothing on `Movement` records that a creature may step through an
+    occupied square. `m4306a1` in this file prints the stated move and is
+    written with `c.overrun`; this one is not that sentence.
+
+    Everything that leans on it below still reads "adjacent" for "in its
+    square"."""
 
 
 @power(

@@ -702,7 +702,7 @@ def m4185a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.no_mode(name)", "c.move_through()"),
+    dropped=("c.no_mode(name)", "Grid.aperture"),
 )
 def m4185a4(c: Cast) -> None:
     """Everything the shape installs is tied to the form's own hold, or the
@@ -713,6 +713,12 @@ def m4185a4(c: Cast) -> None:
     `c.mode` keeps the larger of the old and new speeds, by design -- so
     "cannot fly" has no expression. Nor has folding through an aperture a Tiny
     creature could manage: the grid has no apertures.
+
+    **Re-aimed, not written.** The second symbol was `c.move_through()`, and
+    `movement.overrun` -- which exists, and which `level_11`'s `_through_them`
+    already calls -- is not this clause: a trample covers a stated distance
+    straight *through creatures*, where this is fitting through a gap in the
+    terrain. The gap is in the grid, so no `Cast` verb would close it.
     """
     me = c.me
     shape = c.form(modes={"climb": 6}, until=When.EONT, revert=FREE, label=c.ref)

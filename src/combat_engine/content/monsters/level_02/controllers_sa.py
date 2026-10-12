@@ -1016,15 +1016,20 @@ def _by_hand(ctx: dict[str, Any]) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.move_through()",),
+    dropped=("Grid.aperture",),
 )
 def m5431a1(c: Cast) -> None:
     """A swarm's square is enterable by whoever likes and costs them, which is
     `c.shares_space` and not `c.shift(share=True)` -- that one is an argument to
     one move made by the mover. The immunity to shoves is narrowed to the
     attacks that print it rather than written as `c.immovable`, which would be a
-    row stronger than its card. Squeezing through an opening is the clause with
-    nowhere to go: the board has no apertures to fit through."""
+    row stronger than its card.
+
+    **Re-aimed, not written.** The old symbol was `c.move_through()`, and
+    `movement.overrun` -- which does exist -- is not it: a trample covers a
+    stated distance *through creatures*, where this clause is about fitting
+    through a gap in the terrain. The board has no apertures to fit through,
+    so the gap is in the grid and nothing on `Cast` would close it."""
     c.shares_space(difficult=True)
     c.resist_forced(99, when=_by_hand)
 

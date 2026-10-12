@@ -86,6 +86,7 @@ from typing import Any
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
+from combat_engine.content.monsters.level_08.brutes_sa import _two_turns
 from combat_engine.content.monsters.level_10.lurkers import EVERY_DEFENCE
 from combat_engine.content.monsters.level_11.controllers import _held_and_softened
 from combat_engine.content.monsters.level_12.artillery import _one_hold, _wilted
@@ -460,18 +461,19 @@ def m1003a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.second_initiative()", "c.extra_reaction()"),
 )
 def m1003a6(c: Cast) -> None:
-    """The solo double turn, and neither half can be said.
+    """The solo double turn, and both halves are sayable.
 
-    `c.extra_turn` splices a slot at a count handed to it; there is nothing
-    that rolls a *second independent* initiative, which is the printed line
-    and which five rows across four levels already name. "Its ability to take
-    immediate actions refreshes on each of its turns" is the second gap: the
-    budget carries one immediate action a round and nothing hands another
-    back.
+    `c.extra_turn` splices the second slot ten counts under its own, where
+    every other double turn in the tree puts one; the independent roll is a
+    question about where the slot sits rather than about acting twice.
+    "Its ability to take immediate actions refreshes on each of its turns"
+    is `Budget.immediate_round` -- `Encounter.can_spend` refuses one while
+    that stamp equals the round, so clearing it on each `TurnStart` *is* the
+    refresh. `_two_turns` holds both.
     """
+    _two_turns(c)
 
 
 @power(

@@ -115,6 +115,7 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Attack,
+    AttackDeclared,
     AttackRolled,
     Bloodied,
     Cast,
@@ -1192,19 +1193,33 @@ def m1978a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.surges_of(ref)",),
 )
 def m1978a5(c: Cast) -> None:
-    """Nothing kills outright. `c.coup_de_grace` finishes a helpless creature
-    through an attack and the printed line is not an attack; dropping a
-    creature to 0 is not death, which is the distinction the row turns on.
-    The languages and the memories are not a combat clause at all.
+    """`SurgeSpent` carries the whole read this waited on: who spent, who
+    caused it, and how many are `left`. So "reduced to 0 healing surges by an
+    m1978" is `ev.source == me and ev.left == 0` and nobody's pool has to be
+    fetched -- `c.surges_of(ref)` was aiming at a reader that is not needed.
+    `m1978a2` is the row that takes them, through `c.spend_surge`, which
+    stamps both fields.
 
-    **Re-pointed.** `c.kill` exists now and is not what this waits on: the
-    kill is conditional on a creature being *reduced to 0 healing surges*
-    by this creature, and nothing tracks another creature's surges or
-    spends them from outside. The death is the easy half.
+    A creature that was already out of surges is not reduced to 0 by this
+    one: `resolve.spend_surge` has nothing to decrement and announces
+    nothing, which is the right answer.
+
+    The dust, the languages and the memories carry no combat meaning and are
+    waiting on nothing; `c.kill` is the death.
     """
+    me = c.me
+
+    def drained(ev: SurgeSpent) -> None:
+        if ev.source != me or ev.actor == me or ev.left > 0:
+            return
+        c.kill(on=ev.actor)
+
+    c.watch(SurgeSpent, drained, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+
 # ==========================================================================
 # m2088
 # ==========================================================================
@@ -1798,18 +1813,34 @@ def m2615a5(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC, Keyword.RADIANT],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("2d4", 5, dtype=[DamageType.PSYCHIC, DamageType.RADIANT]),
-    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m2788a0(c: Cast) -> None:
-    """Two clauses short of the card and both are narrowings.
+    """One blow of two types is the header's `dtype` list.
 
-    One blow of two types keeps the first in the header. And `c.cannot_attack`
-    can bar every attack against one creature but not one *kind* of attack,
-    which is what "cannot make opportunity attacks against it" asks -- barring
-    the lot would take away the ordinary swing the card leaves alone.
+    "Cannot make opportunity attacks against the m2788" is `c.cannot_attack`
+    narrowed by one flag: `resolve.attack` stamps `opportunity` onto the very
+    `AttackDeclared` that verb refuses at, so the refusal is written out here
+    with the gate the verb has no kwarg for. Barring the lot, which is what
+    `c.cannot_attack(on=foe, against=me)` would do, would take away the
+    ordinary swing the card leaves alone.
     """
-    if c.strike():
-        c.hit()
+    if not c.strike():
+        return
+    c.hit()
+    me, foe = c.me, c.target
+
+    def no_opportunity(ev: AttackDeclared) -> None:
+        if (
+            ev.attacker == foe
+            and ev.target == me
+            and getattr(ev, "opportunity", False)
+        ):
+            ev.cancel("cannot make opportunity attacks against it")
+
+    c.watch(
+        AttackDeclared, no_opportunity, until=When.EONT, on=me,
+        window=Window.BEFORE, label=f"{c.ref} no opportunity attacks",
+    )
 
 
 @power(
@@ -2375,15 +2406,32 @@ def m4460a3(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("2d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.sustain_free()",),
 )
 def m4460a4(c: Cast) -> None:
-    """The grab lands and the printed Sustain Free does not: a sustain is held
-    at minor, move or standard and a free one is not a cost the sustain
-    machinery takes, so the toll it pays out has nowhere to hang."""
+    """A free sustain **is** a cost the machinery takes: `Effect.sustain_cost`
+    is typed `ActionType | None` and `actions._sustaining` only asks
+    `can_spend`, which a free action satisfies. So the hold carries the
+    printed payout through `c.on_sustain`.
+
+    Laid once for the burst rather than once per target, and the payout hits
+    everything the creature is still holding -- "sustains the grab" is one
+    clause about the whole grip, and a hold per victim would charge the free
+    action several times over.
+    """
     if c.strike():
         c.hit()
         c.grab()
+    if not c.first:
+        return
+    grip = c.effect(
+        f"{c.ref} grip", until=When.SUSTAIN, on=c.me, sustain=ActionType.FREE,
+    )
+
+    def again() -> None:
+        for held in c.grabbing():
+            c.hit(on=held)
+
+    c.on_sustain(grip, again)
 
 
 @power(
@@ -2462,13 +2510,20 @@ def _m4488_spent(world: World, me: int, ev: ActionPointSpent) -> bool:
     target=NO_TARGET,
     trigger=_M4488_SPENT,
     on=Trigger(ActionPointSpent, when=_m4488_spent, text=_M4488_SPENT),
-    todo=("c.grant_action(standard)",),
 )
 def m4488a2(c: Cast) -> None:
-    """"Takes a standard action as a free action" names no word
-    `actions._granted` is ever read for -- it knows instinctive, command,
-    stand, escape and shift -- so a sixth is carried and does nothing. The
-    trigger itself is exact: `ActionPointSpent` names the spender."""
+    """An ally is handed a standard action, which is what the printed line
+    gives it: the ally chooses what to spend it on.
+
+    `c.grant_action`'s closed word list was the wrong place to look -- that
+    one says what a *named cheaper* action costs. `c.extra_action` drops a
+    whole action into the budget the turn is already spending, takes an
+    `on=`, and announces `ActionGranted`; `i1541p1` hands one to an ally the
+    same way. The trigger was already exact: `ActionPointSpent` names the
+    spender."""
+    nearby = c.within(5, side="ally")
+    if nearby:
+        c.extra_action(STANDARD, on=nearby[0])
 
 
 _M4488_LANDED = "it hits with an attack"
@@ -3204,7 +3259,14 @@ def m5870a2(c: Cast) -> None:
     """Both clauses are about where this creature may go, and the engine only
     says the opposite: `c.shares_space` lets everybody into *its* square,
     which is a different sentence, and `c.phasing` crosses solid rock, which
-    is a larger one. Nothing lets one creature stand in another's space."""
+    is a larger one. Nothing lets one creature stand in another's space.
+
+    **Re-pointed.** `movement.overrun` is not it either, which is the near
+    miss worth recording: overrun is a *move that tramples*, resolved once
+    per creature entered and against their will, where this is a standing
+    permission to be there and to stop there. Writing it as an overrun would
+    make a trait that does nothing on its own into an attack. The aperture
+    half -- openings of any size -- is a grid question and a second symbol."""
 
 
 @power(

@@ -83,6 +83,8 @@ from combat_engine.engine import (
     Condition,
     Damage,
     DamageType,
+    Health,
+    Initiative,
     Keyword,
     Melee,
     MeleeOrRanged,
@@ -781,6 +783,29 @@ def m1873a1(c: Cast) -> None:
 _M1873_BLOODIED = "it is first bloodied"
 
 
+def _onto_my_count(c: Cast, made: int) -> None:
+    """Move a creature just summoned onto the summoner's initiative count.
+
+    `Encounter.join` rolls the newcomer an initiative of its own and splices
+    by it, so "acts on the m1873's initiative count" has to undo that: the
+    slot comes out, `Initiative.rolled` is set to the summoner's, and
+    `extra_turn` puts it back at that count. `_acts_after_its_creator` is the
+    same splice written on the clone's side, a count lower, for the card that
+    says "immediately after" instead of "on".
+    """
+    enc = c.world.encounter
+    mine = c.world.get(c.me, Initiative)
+    theirs = c.world.get(made, Initiative)
+    if enc is None or mine is None or theirs is None or made not in enc.order:
+        return
+    was = enc.order.index(made)
+    enc.order.pop(was)
+    if was < enc.index:
+        enc.index -= 1
+    theirs.rolled = mine.rolled
+    enc.extra_turn(made, mine.rolled)
+
+
 @power(
     "m1873a2",
     level=9,
@@ -790,14 +815,50 @@ _M1873_BLOODIED = "it is first bloodied"
     target=NO_TARGET,
     trigger=_M1873_BLOODIED,
     on=Trigger(Bloodied, about_me, _M1873_BLOODIED),
-    todo=("Cast.summon(hp=)",),
 )
 def m1873a2(c: Cast) -> None:
-    """Splitting into two independent creatures sharing one initiative
-    count, each at half the current hit points, needs a clone summoned at
-    a chosen hp -- `c.summon` always brings in the ref's own full stat
-    block and rolls its own initiative, so there is no way to make the
-    second body here."""
+    """It comes apart into two of itself, each with half of what the original
+    had left, both acting on the original's count.
+
+    **`c.summon(hp=)` was the wrong gap.** The verb hands back the new eid,
+    and a content body may write a component directly -- which is how
+    `_strips_resistance` and `_take_resistances` edit `Defences` -- so
+    "hit points equal to one-half the original's current" is two writes to
+    `Health.hp` and needs no parameter. `max_hp` is left where the stat block
+    put it, because the card halves the hit points and not the creature.
+
+    The shared count is the same splice `_acts_after_its_creator` does from
+    the clone's side: `Encounter.join` has already rolled the newcomer an
+    initiative of its own, so the slot comes back out and goes in at this
+    creature's count, with `Initiative.rolled` moved to match so anything
+    spliced in later sorts against a count it can see.
+
+    "Effects applied to the original do not apply to either of the
+    individuals" is read as the ones somebody *else* put there: the clone is
+    born clean, and the original's are ended by source, which leaves its own
+    standing holds alone. The printed refusal while at 0 hit points is the
+    `hp <= 0` guard -- `Bloodied` is announced whether or not the blow that
+    crossed the line also finished the creature.
+
+    The halves recombining after five minutes out of combat has no horizon
+    here: this engine has no clock between fights.
+    """
+    me = c.me
+    health = c.world.get(me, Health)
+    if health is None or health.hp <= 0:
+        return
+    half = max(1, health.hp // 2)
+    twin = c.summon(_ref_of(c, me))
+    if not twin:
+        return
+    health.hp = half
+    theirs = c.world.get(twin, Health)
+    if theirs is not None:
+        theirs.hp = half
+    for eff in list(c.world.effects.of(me)):
+        if eff.source != me:
+            c.world.effects.end(eff, f"{c.ref} split")
+    _onto_my_count(c, twin)
 
 
 # ==========================================================================
@@ -2233,13 +2294,31 @@ _M5625_DOWN = "it drops to 0 hit points"
     target=NO_TARGET,
     trigger=_M5625_DOWN,
     on=Trigger(Dropped, about_me, _M5625_DOWN),
-    todo=("Cast.summon(ref=)",),
 )
 def m5625a4(c: Cast) -> None:
-    """Four allies are supposed to appear in its place. Spawning them
-    needs the ally's own ref, and finding it would mean reading the
-    printed name this spec already stripped, so there is no ref here to
-    summon."""
+    """Four of its lesser kin stand up where it fell, on its own count.
+
+    **The marker was wrong about the spec.** It said the printed name had
+    been stripped and left nothing to summon; the card names the arrival by
+    **ref**, which is exactly what `c.summon` takes, so nothing had to be
+    read to write this.
+
+    `at=None` lets `c.summon` take a free adjacent square, which is the
+    printed "in unoccupied squares adjacent to it". The other half of that
+    placement line -- "in its space" -- is unreachable rather than dropped: a
+    creature at 0 hit points still occupies its square here, so the space is
+    never unoccupied, and only as many appear as there is room for. Team
+    follows the summoner's, which is the only reading of allies arriving.
+
+    "Act on the m5625's initiative" is the splice `_onto_my_count` does.
+    "Worth no experience points" has no combat meaning and nothing to hold
+    it: there is no experience in this engine.
+    """
+    for _ in range(4):
+        made = c.summon("m5623")
+        if not made:
+            break
+        _onto_my_count(c, made)
 
 
 # ==========================================================================

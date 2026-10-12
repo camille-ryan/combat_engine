@@ -524,9 +524,9 @@ def m1402a5(c: Cast) -> None:
 )
 def m1659a0(c: Cast) -> None:
     """The third damage die is conditional on a creature being "under the
-    effects of" another card, and the extraction names that card nowhere -- so
-    there is no ref to ask about and guessing one would read a different
-    power's effect."""
+    effects of" another card, and the extraction prints that card as prose
+    where every other block in this file prints a ref -- so there is no ref to
+    ask about and guessing one would read a different power's effect."""
     if c.strike():
         c.hit()
         c.damage("1d6", dtype=DamageType.COLD)
@@ -804,16 +804,23 @@ def m3547a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d12", 3),
-    dropped=("c.as_basic(charge=)", "query.charging()"),
+    dropped=("c.as_basic(charge=)", "Power.standing"),
 )
 def m3547a1(c: Cast) -> None:
     """The swing is exact. Two clauses are not.
 
     "It can use this in place of a melee basic attack when charging" wants a
     stand-in filed for the charge window specifically; `c.as_basic` files one
-    for a window but takes no charge. And "while bloodied its movement during a
-    charge does not provoke" wants the opportunity window to know the step was
-    part of a charge, which `ctx["why"]` does not say.
+    for a window but takes no charge.
+
+    "While bloodied its movement during a charge does not provoke" is sayable
+    now -- `c.no_provoke(when=)` is handed `ctx["kind"]`, which is `"charge"`
+    for a charge step, so the gate is one lambda. What it has nowhere to be
+    *armed* from: the clause is standing, and `turns.arm_traits` arms only
+    `action=NONE` rows. This stat block has none, and laying it from this
+    body is too late by construction -- a charge's movement happens before
+    the attack it ends in, so the very charge the clause is about has already
+    provoked. Hence a header field rather than a verb.
 
     The printed Requirement is a particular weapon. It is left unmarked: the
     stat block always has it, so the gate is true in every fight.
@@ -1119,7 +1126,14 @@ def m4312a1(c: Cast) -> None:
 def m4312a2(c: Cast) -> None:
     """The secondary attack is rolled with the level taken back out by hand --
     only the primary line fits in the header. What it would do if it landed is
-    the gap: nothing narrows a creature's attacks down to a basic one."""
+    the gap: nothing narrows a creature's attacks down to a basic one.
+
+    `Condition.SHAPED` is not it. That is `no_standard=True` and nothing else,
+    so it takes away the melee basic attack this card explicitly leaves and
+    every other standard action besides. Nor is refusing at `AttackDeclared`
+    the way `c.cannot_attack` does: the printed line narrows the *choice* and
+    a veto there spends the action and throws it away. The bar belongs in
+    `actions.legal`, where the menu is built."""
     if c.strike():
         c.hit()
         c.attack(c.world.scaling.trim(5, c.level), WILL)
@@ -1136,8 +1150,8 @@ def m4312a2(c: Cast) -> None:
 )
 def m4312a3(c: Cast) -> None:
     """The bonus plays. The parenthetical half sets off another stat block's
-    attack and the extraction gives that block no ref, so there is nothing to
-    reach for."""
+    attack, and the extraction prints that block as prose where a ref belongs,
+    so there is nothing to reach for."""
     c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=_while_bloodied(c))
 
 
@@ -2159,9 +2173,18 @@ def m6579a0(c: Cast) -> None:
 )
 def m6579a1(c: Cast) -> None:
     """Both damage expressions are written out, because the bigger one replaces
-    the smaller rather than adding to it. The reach that grows with the size is
-    the gap: `Range(alt=)` is a *choice* between two shapes, which is a
-    different thing from a reach that follows a state."""
+    the smaller rather than adding to it.
+
+    "Melee 2 while Large" is still dropped, and the route is **broken rather
+    than absent**, which is worse: `c.bonus("reach", 1)` is read by
+    `dsl._stretched` where the *area* is worked out, so the longer reach is
+    offered -- the area grew 9 squares to 36 on a board -- but
+    `dsl._within_reach` reads `p.reach_of(...)` raw and consults no modifier,
+    so `use` then refuses the swing it had just offered. Driven on a Large
+    m6579 with a foe two squares off its footprint: area yes, `_within_reach`
+    no, no attack rolled. A modifier here would read as a finished row that
+    cannot reach. `Range(alt=)` is not the tool either: that is a *choice*
+    between two shapes, not a reach that follows a state."""
     if c.strike():
         if c.size_of(c.me) is Size.LARGE:
             c.damage("2d10", 9)
@@ -2202,7 +2225,13 @@ def m6579a2(c: Cast) -> None:
 def m6579a3(c: Cast) -> None:
     """`c.resize` shoves whoever is standing in the squares it comes to occupy,
     because that is the printed consequence of growing rather than a separate
-    line -- so the second sentence needs nothing of its own."""
+    line -- so the second sentence needs nothing of its own.
+
+    The square of reach m6579a1 prints while Large would belong here, gated to
+    that row by `ctx["power"]` -- a modifier has to be standing before the area
+    is taken and an at-will attack cannot put one up for its own use. It is not
+    written, because `dsl._within_reach` does not read the modifier `area_of`
+    does; see m6579a1."""
     c.resize(Size.LARGE, until=When.EONT, on=c.me)
 
 

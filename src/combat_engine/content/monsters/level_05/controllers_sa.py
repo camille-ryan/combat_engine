@@ -68,6 +68,7 @@ from combat_engine.content.monsters.level_05.brutes_sa import (
     _aura_penalty,
     _burn_and_backlash,
 )
+from combat_engine.content.monsters.level_05.lurkers_sa import _hides_if_it_can
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -117,6 +118,7 @@ from combat_engine.engine.events import (
     EffectApplied,
     Hit,
     Miss,
+    MoveEnd,
     PowerUsed,
     SavingThrow,
     TurnStart,
@@ -2528,12 +2530,30 @@ def m6152a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.hide(auto=)",),
 )
 def m6344a0(c: Cast) -> None:
-    """"If it has partial concealment, it can make a Stealth check to
-    become hidden" is an active attempt a trait has no action to spend on;
-    nothing here arms a standing permission to try, so nothing works yet."""
+    """A standing permission that costs what the printed line costs.
+
+    The objection was that a trait has no action to spend on an attempt.
+    `c.arm_trigger` is the answer: it charges the watcher the action a trigger
+    costs out of the same budget, so the minor action the Stealth check is
+    goes with it -- twice in a turn is refused, and so is a turn whose minor
+    is already gone.
+
+    Hung on its own `MoveEnd` because that is when a lurker breaks sight, and
+    the two rows that already hide this way hide after a move. Whether it has
+    cover or concealment decides it outright: `_hides_if_it_can` is the
+    tree's simplification, there being no opposed Stealth roll to make."""
+    me = c.me
+    c.arm_trigger(
+        MoveEnd,
+        lambda _ev: _hides_if_it_can(c),
+        when=lambda ev: ev.actor == me,
+        cost=MINOR,
+        until=When.ENCOUNTER,
+        on=me,
+        label=f"{c.ref} hide",
+    )
 
 
 @power(

@@ -116,6 +116,7 @@ from combat_engine.engine.events import (
     Miss,
     Moved,
     PowerUsed,
+    SavingThrow,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -134,6 +135,10 @@ from combat_engine.engine.triggers import (
     targets_me,
 )
 from combat_engine.engine.zones import Zone
+
+#: What "a slowing effect or an immobilizing effect" means, read off the hold
+#: the saving throw names rather than off the throw.
+_HOLDS_IN_PLACE = frozenset({Condition.SLOWED, Condition.IMMOBILIZED})
 
 #: The four conditions the undead leader's finisher looks for.
 _HELPLESS_ENOUGH = (
@@ -1728,9 +1733,17 @@ def m4589a2(c: Cast) -> None:
     todo=("c.light(square=)",),
 )
 def m4589a3(c: Cast) -> None:
-    """The whole printed Effect is light: nothing else happens. The engine has
-    no light level, so there is nothing here that works and the row is refused
-    in play rather than offered as a minor action that does nothing."""
+    """The whole printed Effect is light: nothing else happens.
+
+    **Re-pointed.** There is a light model now -- `query.light_level` reads
+    it and `c.light` lays a radius -- but the radius is *carried by an
+    entity* and this card lights a square or an object. The object half is
+    reachable (`c.light(4, on=<scenery>)`); an unoccupied square has nothing
+    to carry it, and painting `Grid.light` bright does not answer either,
+    since a dark zone wins over the terrain map and only a carrier beats a
+    zone. `c.light(square=)` is the kwarg that is still owed, and with the
+    printed target line being one choice of two, the row waits rather than
+    playing only on a board that happens to have a crate in range."""
 
 
 @power(
@@ -2964,8 +2977,14 @@ def m6269a0(c: Cast) -> None:
     todo=("query.in_sunlight(world, square)",),
 )
 def m6269a1(c: Cast) -> None:
-    """The whole trait is a toll for standing in sunlight, and the engine has
-    no light level to ask about, so there is nothing here that works."""
+    """The whole trait is a toll for standing in *direct sunlight*.
+
+    **Re-pointed.** There is a light model now, and it is not the one this
+    needs: `Light` holds bright, dim and dark, and bright is both daylight
+    and a torch -- and it is the *default* for every square of every board,
+    so reading it would charge this creature 5 radiant damage at the top of
+    every turn of every fight indoors. The distinction the card turns on is
+    the one the model does not hold."""
 
 
 @power(
@@ -3609,16 +3628,37 @@ def m6585a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.auto_save(against=)",),
 )
 def m6671a0(c: Cast) -> None:
-    """"Automatically succeed on saving throws against slowing and
-    immobilizing effects" is the whole of this trait and nothing says it.
-    `c.unsave` is the opposite half -- it makes a save fail -- and there is no
-    verb for forcing one to pass, so nothing here works. Immunity is not a
-    substitute: that would stop the condition landing at all rather than
-    letting the creature shake it off at the end of its turn, which is
-    stronger than the card and in a way a reader could not see."""
+    """`SavingThrow` is a `Decision` whose `saved` is read back, so forcing a
+    throw to pass is `ev.saved = True` -- `items.armour._auto_save` is the
+    same line, matched on the printed words in `against`.
+
+    Which hold the throw is against is read off the **saver** and not off the
+    event: `against` is `str(eff)` and carries no conditions, so the standing
+    effect it names is found on the creature and its conditions checked there,
+    the way `items.arms._my_save_against_hold` does it.
+
+    Immunity is still not the substitute it looks like -- that would stop the
+    condition landing at all rather than letting a bloodied ally shake it off.
+    """
+    me = c.ref
+    owner = c.me
+    c.aura(5, label=me)
+
+    def passes(ev: SavingThrow) -> None:
+        who = ev.actor
+        if who not in c.allies() or not c.bloodied(on=who):
+            return
+        if not c.in_my_aura(who, label=me):
+            return
+        if any(
+            str(eff) == ev.against and _HOLDS_IN_PLACE & set(eff.conditions)
+            for eff in c.world.effects.of(who)
+        ):
+            ev.saved = True
+
+    c.watch(SavingThrow, passes, until=When.ENCOUNTER, on=owner, label=me)
 
 
 @power(

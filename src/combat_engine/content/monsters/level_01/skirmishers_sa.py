@@ -2418,15 +2418,28 @@ def m6621a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.drags_grabbed()",),
+    todo=("actions.move_grabbed()",),
 )
 def m6621a1(c: Cast) -> None:
-    """It can haul what it is holding along with any move it makes.
+    """It can attempt to haul what it is holding as part of any action it
+    also moves in.
 
-    There is no standing form of that. One row's body can pull a held creature
-    after it -- `m4591a1` does -- but this is a *trait*: it has to apply to
-    every move the creature makes, including ones the engine chose, and
-    nothing can be hung off a walk to make the grabbed creature follow.
+    **Re-aimed, because `c.drags_grabbed()` was standing for two different
+    cards and the claim that nothing can be hung off a walk is false.**
+    `monsters.level_12.minions_sd._drags_its_captive` watches `Moved` for the
+    whole encounter and slides every captive into the square just vacated,
+    and `m5481a1` calls it -- but that card reads "when it moves, it pulls
+    with it any creature grabbed by it", unconditionally, and waives the
+    captive's opportunity attack as well.
+
+    This card says it *can attempt* to move a grabbed target, and says so
+    about any action it moves in -- a relaxation of the printed manoeuvre,
+    which is its own action and a Strength attack against the captive's
+    Fortitude. That manoeuvre is not in this engine: `actions.legal` offers
+    bull rush, grab and the two aids and nothing for a captive, and
+    `movement.py` never mentions a grab. So there is nothing here for the
+    permission to relax, and writing the automatic pull instead would be a
+    stronger rule than the card carrying a waiver the card never grants.
     """
 
 

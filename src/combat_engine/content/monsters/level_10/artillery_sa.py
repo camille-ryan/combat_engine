@@ -42,6 +42,7 @@ from combat_engine.content.monsters.level_02.soldiers_sa import _missed_me_in_me
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_05.artillery_sa import _shot_me_from_afar
+from combat_engine.content.monsters.level_10.soldiers_sa import _double_turn
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -64,6 +65,7 @@ from combat_engine.engine import (
     ActionType,
     AreaBurst,
     Attack,
+    Budget,
     Cast,
     CloseBlast,
     CloseBurst,
@@ -256,14 +258,29 @@ def m1142a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.second_initiative()",),
 )
 def m115739a0(c: Cast) -> None:
-    """"Two initiative checks, a full turn on each" wants a second,
-    independent roll -- `c.extra_turn` only ever takes a count handed to
-    it, never rolls one of its own. "Two immediate actions a round but
-    only one between turns" is a second, separate budget nothing tracks
-    either."""
+    """Two turns a round, by the shape `_double_turn` settled: a second
+    spliced slot ten counts under its own, which is where every other
+    stat block of this kind puts one.
+
+    "Two immediate actions a round but only one between turns" is not a
+    second budget -- it is `Budget.immediate_round`, which `can_spend`
+    refuses against while the stamp equals the round. Stamping it out of
+    date at the top of each of its two turns gives exactly two a round and
+    one between any two of them. On `TurnStart`, which `_begin` emits
+    after the refresh rather than before (m193a3 is the precedent)."""
+    me = c.me
+    _double_turn(c)
+
+    def refresh(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me:
+            return
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.immediate_round = -1
+
+    c.watch(TurnStart, refresh, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -685,15 +702,17 @@ def m2079a6(c: Cast) -> None:
     keywords=[Keyword.COLD],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("2d6", 4, dtype=DamageType.COLD),
-    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m3128a0(c: Cast) -> None:
-    """The blow lands. "Cannot make opportunity attacks against m3128" is
-    narrower than anything `c.cannot_attack` says -- that one bars every
-    attack against a named creature, which would also refuse a plain
-    ranged shot the card leaves open."""
+    """"Cannot make opportunity attacks against m3128" is `c.no_provoke`
+    read the way its own `from_` is documented: `on=` is who provokes
+    nothing and `from_=` is the one creature barred from swinging, so the
+    pair says this sentence exactly and leaves every other attack alone.
+    The duration is the caster's next turn, which is `EONT`."""
     if c.strike():
         c.hit()
+        if c.target is not None:
+            c.no_provoke(from_=c.target, on=c.me, until=When.EONT)
 
 
 @power(

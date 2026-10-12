@@ -441,13 +441,26 @@ def m2779a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("Attack(vs=)",),
 )
 def m2779a3(c: Cast) -> None:
-    """Refused in play: switching which defence its own attack targets,
-    conditioned on combat advantage, is not sayable -- `Attack.vs` is fixed
-    at the row's own declaration, and that is the row's whole printed
-    effect."""
+    """**Written: the engine has always allowed this.**
+
+    `c.attacks_defence` moves a creature's attacks onto another defence,
+    `from_=` narrows to the ones that started on a named one, and `when=`
+    reads the attack context -- which carries `advantage`. Its docstring is
+    written against exactly the conclusion this row had reached: a plain
+    `c.watch` rewriting `AttackDeclared.vs` is too late, because `resolve
+    .roll` runs before ordinary listeners, and the verb registers in
+    `Window.BEFORE` instead.
+
+    `from_=AC` because the card says "instead of AC" and not "instead of
+    whatever it was aiming at": a row of its own that already targets
+    Reflex is untouched.
+    """
+    c.attacks_defence(
+        REF, from_=AC, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(ctx.get("advantage")),
+    )
 
 
 @power(

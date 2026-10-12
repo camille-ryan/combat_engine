@@ -1451,6 +1451,11 @@ def m5302a0(c: Cast) -> None:
     dropped=("query.in_sunlight(world, square)",),
 )
 def m5302a1(c: Cast) -> None:
+    """The radiant half is exact. Direct sunlight is not askable: `Light` has
+    three values and the brightest of them is a torch as much as a noon sky,
+    so `query.light_level` cannot tell the clause's own circumstance from an
+    ordinary lit room -- and gating on BRIGHT would fire on every board, every
+    fight, since an unlit `Grid.light` reads BRIGHT by default."""
     me = c.me
 
     def scorched(ev: DamageApplied) -> None:
@@ -1825,9 +1830,17 @@ def m5838a0(c: Cast) -> None:
     attack=Attack(vs=REF, printed=8),
     requires=_not_grabbing,
     requires_text="it must not be grabbing a creature",
-    dropped=("c.cover_from()",),
 )
 def m5838a1(c: Cast) -> None:
+    """Superior cover is a cover a creature *carries* rather than one it
+    stands behind, which is the `"cover"` modifier `query._carried_cover`
+    reads -- `c.cover_in` lays the same key from a zone. Read into
+    `cover_between`'s answer rather than added beside it, so it takes the
+    larger with a traced pillar or with concealment instead of stacking,
+    which is the printed rule. `kind="cover"` for the same reason.
+
+    Tied to the grab's own hold and not to the clock: the card ends it when
+    the grab ends, and an escape is earlier than the duration."""
     victim = c.target
     if victim is None or not c.strike():
         return
@@ -1836,6 +1849,11 @@ def m5838a1(c: Cast) -> None:
         return
     c.immovable(on=c.me, until=When.EONT)
     c.immovable(on=victim, until=When.EONT)
+    shelter = c.bonus(
+        "cover", int(Cover.SUPERIOR), on=c.me, until=When.EONT, kind="cover"
+    )
+    if shelter is not None:
+        held.on_end.append(lambda: c.world.effects.end(shelter, "the grab ended"))
     timer = c.effect(f"{c.ref} grab clock", until=When.EONT, on=c.me)
     if timer is not None:
         timer.on_end.append(lambda: c.world.effects.end(held, "grab timed out"))

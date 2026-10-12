@@ -733,24 +733,40 @@ def m3441a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d8", 1),
-    dropped=("c.restrict_action()", "c.aura_effect()"),
+    dropped=("c.aura_effect()",),
 )
 def m3519a0(c: Cast) -> None:
-    """The hold and the two defences it buys are the playable half, and both are
-    gated on still holding somebody rather than fixed when the row resolves.
+    """The hold, the two defences it buys and the narrowed claw all play, and
+    the defences are gated on still holding somebody rather than fixed when
+    the row resolves.
 
-    Two clauses have nowhere to go: "it can claw only the grabbed target"
-    narrows what the creature may choose rather than barring one creature, and
-    "that target takes 6 damage instead of 2 from the aura" edits a *different*
-    block's aura from here.
+    "It can claw only the grabbed target" is a redirect, not a bar: while it
+    holds somebody this row aims there and nowhere else, which is the printed
+    sentence read from the side of the only attack it restricts.
+    `c.restrict_action()` was the wrong symbol -- that one takes an action
+    away outright, which this card never does.
+
+    `stacks=False` because the +2 is one standing modifier: untyped bonuses
+    add, so clawing three times used to come to +6 to AC.
+
+    What still has nowhere to go is "that target takes 6 damage instead of 2
+    from the aura" -- it edits a *different* block's aura from here.
     """
-    if not c.strike():
+    victim = c.target
+    held = c.grabbing()
+    if held:
+        victim = victim if victim in held else next(
+            (h for h in held if c.distance(h) <= 1), None
+        )
+        if victim is None:
+            return
+    if not c.strike(on=victim):
         return
-    c.hit()
-    c.grab()
+    c.hit(on=victim)
+    c.grab(on=victim)
     for defence in (AC, REF):
         c.bonus(
-            defence, 2, on=c.me, until=When.ENCOUNTER,
+            defence, 2, on=c.me, until=When.ENCOUNTER, stacks=False,
             when=lambda ctx: bool(c.grabbing()),
         )
 
@@ -910,7 +926,12 @@ def m4388a2(c: Cast) -> None:
 )
 def m4388a3(c: Cast) -> None:
     """The whole of this row is a bonus to the roll that drags a held creature
-    about, and nothing announces that roll for a modifier to find."""
+    about, and nothing announces that roll for a modifier to find.
+
+    **Not `c.grab_attempt`**, which rolls to *take* hold and stamps
+    `as_="grab"` for the modifiers that gate on it. Moving something already
+    held is a separate manoeuvre with no roll of its own anywhere in the
+    engine, so there is still nothing for the +5 to attach to."""
 
 
 # --------------------------------------------------------------------------
@@ -1399,20 +1420,31 @@ def m5746a2(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    dropped=('c.untargetable()',)
 )
 def m5746a3(c: Cast) -> None:
     """A polymorph rather than a stance -- it is in the shape and may step out
     of it -- so `revert` is what leaving costs. Everything the shape installs is
     tied to the form's own hold, or the bans would outlive it.
 
-    "Cannot be attacked" has no expression: nothing bars a creature from being
-    a target. Nor has moving at full speed while squeezing.
+    "Cannot be attacked" is the same refusal `c.cannot_attack` makes, read
+    from the other side: cancel at `AttackDeclared` in the before window and
+    nothing is rolled and no rider fires. Written as one watch of its own
+    rather than a `c.cannot_attack(on=foe, against=me)` per enemy, because
+    the verb has to name the attacker -- so the per-enemy spelling covers
+    whoever is on the board when the shape is assumed and misses anything
+    that arrives or is summoned afterwards, which this does not.
     """
     me, ref = c.me, c.ref
     shape = c.form(until=When.ENCOUNTER, revert=FREE, label=f"{ref} shapeless")
+
+    def unattackable(ev: AttackDeclared) -> None:
+        if ev.target == me:
+            ev.cancel("cannot be attacked")
+
     for held in (
         c.cannot_attack(on=me, until=When.ENCOUNTER),
+        c.watch(AttackDeclared, unattackable, until=When.ENCOUNTER, on=me,
+                window=Window.BEFORE, label=f"{ref} unattackable"),
         c.no_healing(on=me, until=When.ENCOUNTER),
         c.shares_space(difficult=True),
     ):

@@ -85,10 +85,11 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     power,
 )
-from combat_engine.engine.components import Health, Ident
+from combat_engine.engine.components import Health, Ident, Trap
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackDeclared,
@@ -98,6 +99,7 @@ from combat_engine.engine.events import (
     EffectApplied,
     Fell,
     Hit,
+    OpportunityWindow,
     PowerUsed,
     TurnEnd,
     TurnStart,
@@ -1245,12 +1247,24 @@ def m1526a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.reset_trap()",),
 )
 def m1526a2(c: Cast) -> None:
     """"Resets an adjacent triggered trap it is aware of" -- read as a trap,
     not a second copy of itself; the number repeats because the extraction
-    has nowhere else to put "trap". No verb resets one."""
+    has nowhere else to put "trap".
+
+    One field write, onto a component built to anticipate it: `Trap.sprung`
+    is "a pressure plate that has gone off and not reset", and
+    `terrain.arm`'s `EnterSquare` watcher is gated on it, so clearing it
+    arms the plate again with nothing else to do. "Even one that has been
+    disabled" needs nothing either -- `sprung` is the only state a trap
+    carries, so there is no disabled flag to work around."""
+    me = c.me
+    for eid, trap in sorted(c.world.each(Trap)):
+        if trap.sprung and c.adjacent_to(eid, me):
+            trap.sprung = False
+            c.note(f"{c.ref}: resets {trap.ref}")
+            return
 
 
 @power(
@@ -3550,12 +3564,12 @@ def m6024a3(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 3, kind=LIMITED, half_on_miss=True),
-    dropped=("c.cannot_attack(opportunity=)",),
 )
 def m6024a4(c: Cast) -> None:
-    """The ongoing damage and the drag land. "Cannot make opportunity
-    attacks" is not a `Condition` this engine has, which is the gap
-    `c.cannot_attack(opportunity=)` already names."""
+    """"Cannot make opportunity attacks" wants no `Condition`: it is the
+    `OpportunityWindow` refused on its `actor`, the side `c.no_provoke`
+    does not take. Gated on the ongoing hold rather than given its own
+    `SAVE_ENDS` clock, because the card saves against both at once."""
     if not c.strike():
         c.hit(half=True)
         return
@@ -3574,6 +3588,15 @@ def m6024a4(c: Cast) -> None:
             c.slide(4, on=victim)
 
     c.watch(TurnStart, drag, until=When.SAVE_ENDS, on=victim, label=f"{c.ref} drag")
+
+    def takes_no_openings(ev: OpportunityWindow) -> None:
+        if ev.actor == victim and hold in c.world.effects.of(victim):
+            ev.cancel(f"{c.ref} cannot make opportunity attacks")
+
+    c.watch(
+        OpportunityWindow, takes_no_openings, until=When.SAVE_ENDS, on=victim,
+        window=Window.BEFORE, label=f"{c.ref} no opportunity attacks",
+    )
 
 
 @power(
