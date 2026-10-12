@@ -54,6 +54,10 @@ class Instrument:
 CHECKS = (
     Instrument("ruff", ("uv", "run", "scripts/lint.py"),
                "style, dead imports, undefined names, shadowed methods"),
+    Instrument("types", ("uv", "run", "scripts/types.py"),
+               "signatures mean what the call says, on the files that moved"),
+    Instrument("refs", ("uv", "run", "scripts/refs.py"),
+               "every ref a row's prose names resolves to something"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
     Instrument("leaks", ("uv", "run", "scripts/leaks.py"),
