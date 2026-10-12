@@ -3576,6 +3576,99 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def fell_might(out: Result) -> None:
+    """The warlock's pact boon: one charge, an extra die, and a trade.
+
+    **`c.fell_might()` was never a gap**, which is the finding this records.
+    It was a marker on seven rows and the whole resource was already in the
+    verb surface: the boon is a row with `usage=ENCOUNTER`, so its charge
+    *is* a use of that feature. `c.expend_row` spends one without running
+    the row, `c.times` asks whether it is still there, and `c.restore_use`
+    hands it back. The seventh time this project has found a marked
+    facility present under another name.
+
+    Three things measured:
+
+    * **the charge is one.** A second spend in the same encounter must
+      refuse, which is what `c.expend_row` returning False is for -- and
+      that False is the printed "if you spend your fell might".
+    * **spending it buys the extra die.** p12887's own rider, which its
+      comment had called unwritable for a build that exists.
+    * **a feat can forgo that die for something else.** Seven feats print
+      it, and the clause has to be *replaced* rather than added beside --
+      so the control is that the damage does **not** also land.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers, Stats
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Ability
+
+    BOON = "cf:warlock-f1s4"
+
+    def warlock(seed: int = 1):  # noqa: ANN202
+        world, me, _ = _board(seed=seed)
+        known = world.get(me, Powers) or world.add(me, Powers())
+        known.known = (*tuple(known.known), BOON, "p12887")
+        # **Charisma, or the row never hits.** p12887 rolls Cha against
+        # Fortitude and the board's creature is a monster with a default
+        # ability line, so at +0 every attempt missed and both halves of
+        # the damage rule read 0 -- which looked like the trade working.
+        stats = world.get(me, Stats) or world.add(me, Stats())
+        stats.scores[Ability.CHA] = 24
+        return world, me, known
+
+    # **One charge an encounter.**
+    world, me, _known = warlock()
+    c = Cast(world=world, me=me, ref="drivers:fell")
+    spends = [c.expend_row(BOON) for _ in range(2)]
+    out.that(spends == [True, False],
+             "the pact boon is one charge an encounter -- the second spend"
+             f" refuses, and that refusal is the printed clause {spends}")
+
+    # And a cursed kill hands it back.
+    out.that(c.restore_use(BOON),
+             "and it comes back when the card says it does -- the regain"
+             " `cf:warlock-f1s4` watches for")
+    out.that(c.expend_row(BOON),
+             "which leaves it spendable again")
+
+    # **The trade replaces the die rather than joining it.** Measured as
+    # damage dealt, with and without a feat that forgoes it.
+    # **`variant=1` is how the trade is taken**, which is #479's design: a
+    # pre-empted clause fires only when the *use* names the substitution,
+    # because the dispatcher offers it as its own menu entry beside taking
+    # the printed clause. Written without it first and both runs dealt the
+    # same damage -- which read as the trade failing when it was the
+    # harness never asking for it.
+    #
+    # The seed varies too. `_board()` defaults to one, so twenty runs of it
+    # are twenty copies of the same fight and `max` over them is a single
+    # sample dressed as a spread.
+    def hurt(seed: int, traded: bool) -> int:
+        from combat_engine.engine.dsl import use
+
+        world, me, _ = warlock(seed)
+        foe = sorted(enemies(world, me))[0]
+        if traded:
+            Cast(world=world, me=me, ref="drivers:fell-trade").pre_empt(
+                "p12887", "fell_might_damage", lambda using: None)
+        hp = world.get(foe, Health)
+        before = hp.hp if hp is not None else 0
+        use(world, me, "p12887", targets=[foe], spend=False,
+            variant=1 if traded else 0)
+        now = world.get(foe, Health)
+        return before - (now.hp if now is not None else 0)
+
+    seeds = range(1, 9)
+    plain = [hurt(n, False) for n in seeds]
+    traded = [hurt(n, True) for n in seeds]
+    out.that(all(t <= q for q, t in zip(plain, traded, strict=True)) and traded != plain,
+             "forgoing the extra damage really gives it up, on every seed --"
+             " a trade written as an addition would leave the die in"
+             f" (kept {plain}, traded {traded})")
+
+
 def lent_augments(out: Result) -> None:
     """A feat lends a power an Augment line the card does not print.
 
@@ -4218,6 +4311,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "fell_might": (fell_might,
+                   "the pact boon's one charge, its die, and the trade"),
     "lent_augments": (lent_augments,
                       "a feat lends a power an augment its card omits"),
     "counts_as_basic": (counts_as_basic,

@@ -29,6 +29,8 @@ already carry them are in the report.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.content.features.builds import on_leg
 from combat_engine.content.features.strikers import extra_damage
 from combat_engine.engine import (
@@ -161,18 +163,38 @@ def warlock_f1s3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("c.fell_might()",),
 )
 def warlock_f1s4(c: Cast) -> None:
-    """The at-will is granted; the boon is the clause that is dropped.
+    """The at-will, and the pact boon that enhances a power.
 
-    That boon is a once-per-encounter charge, declared before the attack
-    roll of whatever power it enhances, and nothing holds a resource
-    across uses or lets a power be augmented from outside its own card.
+    **Written, and `c.fell_might()` was never a gap.** The old note said
+    "nothing holds a resource across uses", and the thing that does was
+    sitting in the verb surface the whole time: the boon is a row with
+    `usage=ENCOUNTER`, so its charge **is** a use of this feature.
+    `c.expend_row` spends one without running the row -- "a use is spent and
+    the row never runs" is its own docstring -- `c.times` asks whether it is
+    still there, and `c.restore_use` hands it back. Three verbs, all
+    existing, and the seventh time this project has found a marked facility
+    already present under another name.
+
+    "You start each encounter with your fell might unspent" needs no code:
+    `Powers.used` is the per-encounter counter and both rests clear it.
+
+    "When a creature affected by your cf:warlock-f4 drops to 0 hit points,
+    your pact boon triggers" -- the regain is watched here rather than
+    declared, because this row is also the thing that grants the at-will
+    and a row holds a trigger **or** standing work, not both.
     """
     if not c.build("sorcerer-king"):
         return
     c.grant_row("p12887")
+
+    def fell(ev: Any) -> None:
+        if cursed_by_me(c.world, c.me, ev):
+            c.restore_use(c.ref)
+
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} regain")
 
 
 @power(

@@ -1980,14 +1980,26 @@ def f3405(c: Cast) -> None:
 
 
 @power("f3416", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3416(c: Cast) -> None:
-    """Trades an augment's extra damage for a decaying vulnerability on
-    `p12887`. Re-aimed: the ref arrives now, so the naming gap is closed
-    and the augment machinery is the whole of what is left. The skill
-    bonus is what plays."""
+    """"Forgo the extra damage the augment would deal to instead grant the
+    target vulnerability to all damage equal to your Intelligence modifier
+    until the start of your next turn."
+
+    "Vulnerability to **all** damage" is `c.vulnerable`'s default and not a
+    damage type: `dtype=None` means "takes `amount` extra from every hit",
+    which is the sentence. Written as `DamageType.ALL` first -- a member
+    that does not exist, caught by `types.py`.
+    """
     c.bonus("skill:diplomacy", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
+
+    def soften(using: Cast) -> None:
+        foe = using.target
+        if foe is not None and using.int_mod > 0:
+            using.vulnerable(using.int_mod, on=foe, until=When.SONT)
+
+    c.pre_empt("p12887", "fell_might_damage", soften)
 
 
 #: "In addition to regaining the use of your fell might, whenever you drop
@@ -2060,17 +2072,42 @@ def f3417(c: Cast) -> None:
 
 
 @power("f3418", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3418(c: Cast) -> None:
-    """Same shape as f3416: a skill bonus that plays and an augment.
+    """"Once per encounter when you enhance hand of blight, you can forgo
+    the extra damage and instead cause the target to shift its speed away
+    from you along the safest, fastest path."
 
-    **Re-aimed off `spec.power_ref()`.** The power is `p12887` -- the
-    one its three siblings `f3416`, `f3420` and `f3422` name by ref in
-    the same printed sentence. Only this block's copy went unscrubbed,
-    so the row looked like it was waiting on a name when the augment
-    machinery was the whole of what it wanted."""
+    **Re-aimed off `spec.power_ref()` earlier.** The power is `p12887` --
+    the one its three siblings f3416, f3420 and f3422 name by ref in the
+    same printed sentence; only this block's copy went unscrubbed.
+
+    **"Shift its speed away from you" is the target's own move**, not a
+    push -- so it is `c.shift(who=foe, away_from=c.me)` and not `c.slide`.
+    Those differ: a slide is forced movement, which "cannot be slid"
+    refuses and which this card does not describe. `c.shift` already takes
+    both parameters; the first draft of this row named a `c.move_away` that
+    does not exist, and said so in a docstring while the body did nothing.
+
+    `c.speed_of(foe)` is "its speed", the target's and not the warlock's --
+    which is the default that verb's own docstring warns about.
+
+    "Along the safest, fastest path" needs no code: `_nearest_first` orders
+    the options and a headless run takes the first.
+
+    "Once per encounter" is the pact boon's own limit rather than a second
+    counter -- fell might is one charge an encounter, so there is no second
+    enhancement for this to refuse.
+    """
     c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER,
             kind="feat")
+
+    def retreat(using: Cast) -> None:
+        foe = using.target
+        if foe is not None:
+            using.shift(using.speed_of(foe), who=foe, away_from=using.me)
+
+    c.pre_empt("p12887", "fell_might_damage", retreat)
 
 
 @power("f3419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2099,11 +2136,27 @@ def f3419(c: Cast) -> None:
 
 
 @power("f3420", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3420(c: Cast) -> None:
-    """A skill bonus and an augment on `p12887` that teleports instead of
-    hurting. Re-aimed with f3416: only the augment hold is left."""
+    """"Forgo the extra damage the augment would deal to instead teleport
+    the target a number of squares equal to your Intelligence modifier to an
+    unoccupied square adjacent to an ally you can see."
+
+    The destination is the printed constraint and the reason this is
+    `c.teleport(toward=)` rather than a bare distance: the square has to be
+    beside an ally, which is what `toward` offers closest-first.
+    """
     c.bonus("skill:nature", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+
+    def fling(using: Cast) -> None:
+        foe = using.target
+        mates = [a for a in using.allies() if a != using.me]
+        if foe is None or not mates or using.int_mod <= 0:
+            return
+        using.teleport(using.int_mod, who=foe,
+                       toward=using.choose(mates, "beside which ally"))
+
+    c.pre_empt("p12887", "fell_might_damage", fling)
 
 
 @power("f3421", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2121,11 +2174,21 @@ def f3421(c: Cast) -> None:
 
 
 @power("f3422", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT)
+       reach=PERSONAL, target=SELF)
 def f3422(c: Cast) -> None:
-    """A skill bonus and an augment on `p12887` that weakens instead of
-    hurting. Re-aimed with f3416: only the augment hold is left."""
+    """"Forgo the extra damage the augment would deal to instead weaken the
+    target until the end of your next turn."
+
+    The simplest of the seven: one condition, the printed duration.
+    """
     c.bonus("skill:bluff", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+
+    def sap(using: Cast) -> None:
+        foe = using.target
+        if foe is not None:
+            using.weakened(on=foe, until=When.EONT)
+
+    c.pre_empt("p12887", "fell_might_damage", sap)
 
 
 @power("f3423", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

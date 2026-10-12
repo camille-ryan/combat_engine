@@ -208,12 +208,29 @@ def _while_insubstantial(c: Cast, fn, *, due_to: str = "") -> None:  # noqa: ANN
 
 
 @power("f3424", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT + FORGO)
+       reach=PERSONAL, target=SELF)
 def f3424(c: Cast) -> None:
-    """The skill bonus is the whole of the half that can be said: the
-    invisibility is bought by giving up an augment's extra damage, and
-    neither the augment nor the trade has anything to hang on."""
+    """"Forgo the extra damage the augment would deal to instead become
+    invisible to the target until the end of your next turn."
+
+    **Written, and neither symbol it carried was the gap.** p12887's
+    fell-might rider had never been written -- its own comment said the
+    sorcerer-king rider "has no build to ask for", and that was false.
+    With the rider written and offered through
+    `c.instead_of("fell_might_damage")`, `c.pre_empt` replaces it. #507.
+
+    **Invisible to one creature, not to the board.** `c.invisible(to=)` is
+    the scoped form; a bare `c.invisible` would hide the warlock from
+    everything, which is wider than the card by every other enemy on it.
+    """
     c.bonus("skill:streetwise", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+
+    def vanish(using: Cast) -> None:
+        foe = using.target
+        if foe is not None:
+            using.invisible(on=using.me, to=foe, until=When.EONT)
+
+    c.pre_empt("p12887", "fell_might_damage", vanish)
 
 
 @power("f3425", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -234,10 +251,20 @@ def f3425(c: Cast) -> None:
 
 
 @power("f3426", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT + FORGO)
+       reach=PERSONAL, target=SELF)
 def f3426(c: Cast) -> None:
-    """Skill bonus only; the daze is an augment's traded damage."""
+    """"Forgo the extra damage the augment would deal to instead daze the
+    target until the end of your next turn." The sibling of f3424 and the
+    same mechanism; see there for what unblocked it.
+    """
     c.bonus("skill:streetwise", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+
+    def reel(using: Cast) -> None:
+        foe = using.target
+        if foe is not None:
+            using.dazed(on=foe, until=When.EONT)
+
+    c.pre_empt("p12887", "fell_might_damage", reel)
 
 
 @power("f3427", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -280,10 +307,20 @@ def f3427(c: Cast) -> None:
 
 
 @power("f3428", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT + FORGO)
+       reach=PERSONAL, target=SELF)
 def f3428(c: Cast) -> None:
-    """Skill bonus only; the immobilisation is an augment's traded damage."""
+    """"Forgo the extra damage the augment would deal to instead immobilize
+    the target until the end of your next turn." The sibling of f3424; see
+    there for what unblocked it.
+    """
     c.bonus("skill:history", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+
+    def root(using: Cast) -> None:
+        foe = using.target
+        if foe is not None:
+            using.immobilized(on=foe, until=When.EONT)
+
+    c.pre_empt("p12887", "fell_might_damage", root)
 
 
 @power("f3429", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

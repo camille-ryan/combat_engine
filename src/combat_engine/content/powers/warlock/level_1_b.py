@@ -206,12 +206,37 @@ def p12308(c: Cast) -> None:
     attack=Attack(CHA, vs=FORT),
 )
 def p12887(c: Cast) -> None:
-    """Both branches roll the same line, so no `attack_alt` is declared."""
+    """Both branches roll the same line, so no `attack_alt` is declared.
+
+    **The sorcerer-king rider is written now**, and the old note was wrong
+    about what was missing: the build exists (`cf:warlock-f1s4` asks
+    `c.build("sorcerer-king")` on its first line) and so does the resource.
+    Fell might is a use of that feature, which carries `usage=ENCOUNTER` --
+    so `c.expend_row` spends the charge without running the row, and its
+    False **is** the printed "if you spend your fell might".
+
+    **Decided before the attack roll**, which the pact boon's own card
+    requires: "you must decide whether or not to spend your fell might when
+    you choose to use a power, before you make any attack rolls or apply any
+    of that power's effects." So the spend is settled above `c.strike()` and
+    the extra damage is held until the hit, rather than asked for after the
+    roll -- which would let a player buy it only on hits.
+
+    The extra damage goes through `c.instead_of` because seven feats print
+    "you can forgo the extra damage the augment would deal to instead
+    <effect>". That is the clause they replace, and it has to be offered as
+    one for `c.pre_empt` to reach it.
+    """
+    boon = "cf:warlock-f1s4"
+    spent = c.may("spend your fell might") and c.expend_row(boon)
     if c.strike():
         c.damage("1d8", c.cha_mod, dtype=DamageType.NECROTIC)
         c.grants_advantage(to="team")
-    # The sorcerer-king rider -- spend your fell might for 1d8 more -- has
-    # no build to ask for.
+        if spent:
+            c.instead_of(
+                "fell_might_damage",
+                lambda: c.damage("1d8", dtype=DamageType.NECROTIC),
+            )
 
 
 @power(
