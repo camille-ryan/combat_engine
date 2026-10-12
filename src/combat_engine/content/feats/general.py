@@ -892,10 +892,20 @@ def f396(c: Cast) -> None:
 
 
 @power("f419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.bull_rush()",))
+       reach=PERSONAL, target=SELF)
 def f419(c: Cast) -> None:
-    """+4 to the bull rush attack roll, 6 at 11th and 8 at 21st. There is no
-    bull rush action for the bonus to sit on."""
+    """+4 to the bull rush attack roll, 6 at 11th and 8 at 21st.
+
+    **Written.** There is a bull rush action for the bonus to sit on now, and
+    `as_` rides the attack context so "a bull rush attack roll" is one gate
+    rather than a guess.
+
+    The tier steps are read off the level rather than written as three rows,
+    the way every other scaling feat bonus in this file is.
+    """
+    step = 4 + 2 * sum(c.level >= n for n in (11, 21))
+    c.bonus("attack", step, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("as_") == "bull_rush")
 
 
 @power("f433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

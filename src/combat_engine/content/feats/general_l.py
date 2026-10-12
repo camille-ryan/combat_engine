@@ -2246,24 +2246,64 @@ def f2723(c: Cast) -> None:
 
 
 @power("f2585", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BULL_RUSH)
+       reach=PERSONAL, target=SELF)
 def f2585(c: Cast) -> None:
-    """A bull rush is an action nothing in this engine performs, so
-    "whenever you push with one" has no moment either."""
+    """"Whenever you push a target with a bull rush, you can also push one
+    enemy adjacent to that target 1 square."
+
+    **Written.** A bull rush is an action now, and `Hit` carries `as_`, so
+    "whenever you push with one" is a watch on that rather than a new event.
+
+    "Either before or after you resolve the bull rush" is why the second
+    enemy is chosen from who is adjacent **now**, after the first target has
+    moved: the later reading is the wider one, and the card explicitly
+    allows it.
+    """
+    me = c.me
+
+    def shoved(ev: Hit) -> None:
+        if ev.attacker != me or getattr(ev, "as_", "") != "bull_rush":
+            return
+        beside = [f for f in c.enemies()
+                  if f != ev.target and c.adjacent_to(ev.target, f)]
+        if not beside:
+            return
+        also = c.choose(beside, "which enemy beside it to push") or beside[0]
+        c.push(1, on=also)
+
+    c.watch(Hit, shoved, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2592", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BULL_RUSH)
+       reach=PERSONAL, target=SELF)
 def f2592(c: Cast) -> None:
-    """Same gap as f2585."""
+    """"Whenever you hit a target with a bull rush, you can slide that target
+    rather than push it."
+
+    **Written**, and the same registration `f2280` makes -- `c.bull_rush`
+    offers its push as a replaceable clause, so swapping it keeps the shift
+    that follows. This one carries no form gate: the card gives it to
+    anybody.
+    """
+    c.pre_empt("manoeuvre:bull_rush", "push",
+               lambda using: using.slide(1, on=using.target))
 
 
 @power("f2607", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*BULL_RUSH, "c.opportunity_instead()"))
+       reach=PERSONAL, target=SELF, todo=("c.opportunity_instead()",))
 def f2607(c: Cast) -> None:
-    """Both halves are gaps: there is no bull rush, and the opportunity
-    window offers an attack with nothing else allowed in it -- which is
-    the hold `general_d.f942` carries."""
+    """A bull rush in place of an opportunity attack, and combat advantage.
+
+    **Half written, and the remaining half is named more narrowly now.** The
+    bull rush exists, so `c.bull_rush()` is no longer the gap -- what is left
+    is electing one *inside the opportunity window*, which offers an attack
+    and nothing else. That is `c.opportunity_instead()`, the hold
+    `general_d.f942` already carries, and it is one symbol rather than two.
+
+    `c.as_basic` is the near miss and does not fit: it files **refs** under a
+    window, and a manoeuvre has no ref to file -- it is an action kind, not a
+    row. Whatever closes `c.opportunity_instead` has to carry both.
+    """
 
 
 @power("f2609", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

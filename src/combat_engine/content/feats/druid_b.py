@@ -349,16 +349,45 @@ def f2279(c: Cast) -> None:
 
 
 @power("f2280", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BULL_RUSH)
+       reach=PERSONAL, target=SELF)
 def f2280(c: Cast) -> None:
-    """Slides rather than pushes on a shove. There is no shove."""
+    """+2 Athletics, and a bull rush in beast form slides instead of pushing.
+
+    **Written.** `c.bull_rush` offers its push through `c.instead_of("push",
+    ...)`, so a feat replaces that one clause and the manoeuvre keeps the
+    shift that follows it -- the same bargain `p5330` makes for its own
+    pull.
+
+    Only the slide is gated on beast form. The Athletics bonus is not: the
+    card prints it as its own sentence before the form clause, and reading
+    the gate onto both would withhold a skill bonus the feat always gives.
+    """
+    c.bonus("skill:athletics", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+    if not c.in_form("beast"):
+        return
+    c.pre_empt("manoeuvre:bull_rush", "push",
+               lambda using: using.slide(1, on=using.target))
 
 
 @power("f1884", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BULL_RUSH)
+       reach=PERSONAL, target=SELF)
 def f1884(c: Cast) -> None:
-    """An attack bonus to a shove, and a shove against any size. Same
-    gap as f2280 and f419."""
+    """+2 to a bull rush attack roll, and a bull rush against any size.
+
+    **Written**, and both halves are gated on beast form rather than one of
+    them: the card says "while you are in beast form" once and the comma
+    carries it to the second clause.
+
+    The size waiver is `c.any_size_manoeuvre`, which `Cast._manoeuvrable`
+    reads -- the printed rule on a bull rush is "smaller than you, the same
+    size category, or one category larger", and this feat is one of two that
+    waive it.
+    """
+    if not c.in_form("beast"):
+        return
+    c.bonus("attack", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("as_") == "bull_rush")
+    c.any_size_manoeuvre(on=c.me)
 
 
 @power("f2282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

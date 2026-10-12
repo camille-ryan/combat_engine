@@ -82,6 +82,11 @@ class _Decline:
         return False
 
 
+#: The hold that waives the printed size rule on a basic manoeuvre. Two
+#: feats grant it and `Cast._manoeuvrable` is the one reader.
+_ANY_SIZE = "manoeuvre:any-size"
+
+
 @dataclass
 class Cast:
     """One use of one power, aimed at one target."""
@@ -3242,12 +3247,41 @@ class Cast:
         The printed size rule, which is the same sentence on bull rush and on
         grab: one category larger is the ceiling, and there is no floor.
         """
+        if self.lingers_label(_ANY_SIZE):
+            return True
         order = list(Size)
         mine = self.size_of(self.me)
         theirs = self.size_of(who)
         if mine is None or theirs is None:
             return True
         return order.index(theirs) - order.index(mine) <= self._MANOEUVRE_REACH
+
+    def any_size_manoeuvre(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER
+    ) -> Effect | None:
+        """"You can bull rush targets of any size."
+
+        Waives the printed size rule for this creature, which two feats
+        grant and which `_manoeuvrable` is the one reader of. A labelled hold
+        rather than a flag, so it suspends and lapses with everything else.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.effect(_ANY_SIZE, on=who, until=until)
+
+    def lingers_label(self, label: str, *, on: int | None = None) -> bool:
+        """Is a hold with this label standing on the creature?
+
+        The reading half of a labelled `c.effect`, which rows have been doing
+        by hand -- `any(e.label == X for e in world.effects.of(eid))` appears
+        in several content files. One door, so a rename cannot leave half of
+        them behind.
+        """
+        who = self._who(on)
+        if who is None:
+            return False
+        return any(e.label == label for e in self.world.effects.of(who))
 
     def bull_rush(self, *, on: int | None = None) -> bool:
         """"Push the target 1 square, and shift into the vacated space."
@@ -3278,7 +3312,12 @@ class Cast:
         where = before.square if before is not None else None
         if not self.attack(self.str_, Defense.FORT, on=who, as_="bull_rush"):
             return False
-        if not self.push(1, on=who):
+        # **The push is the clause a feat replaces**, so it is offered through
+        # `instead_of`: two feats print "you can slide the target rather than
+        # push it", and swapping the whole manoeuvre would cost it the shift.
+        # `manoeuvre:bull_rush` is the ref those registrations name.
+        moved = self.instead_of("push", lambda: self.push(1, on=who))
+        if not moved:
             return False
         after = self.world.get(who, Position)
         if where is not None and after is not None and after.square != where:
