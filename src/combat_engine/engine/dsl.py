@@ -766,6 +766,28 @@ class Power:
     #: right for an arrow and wrong for a paladin throwing radiance five
     #: squares with a longsword -- that row could never be used at all.
     thrown_by_hand: bool = False
+    #: This row **counts as** a basic attack: `"melee"` or `"ranged"`.
+    #:
+    #: **A header field and not per-character state**, which is the whole
+    #: argument. Two authors reached for one independently -- *"the Special
+    #: line ... has no header field"* and *"the header has no field that sets
+    #: it"* -- and they were right: "counts as a melee basic attack" is a
+    #: fact about the card, true for everybody who holds it, so the UI and
+    #: `policy/` can read it without running a body. #522.
+    #:
+    #: **Different from `c.as_basic`, and 4e means them differently.**
+    #: Camille's wording: *"'In place of a melee basic attack' means it could
+    #: be used when a melee basic attack could be used, but it is NOT a melee
+    #: basic attack. 'Counts as' or 'can be used as' a basic attack means
+    #: that it would benefit from modifiers to basic attacks."* So this
+    #: declares both halves -- the offer **and** the designation -- where
+    #: `c.as_basic` declares only the offer and deliberately leaves
+    #: `Powers.basic` alone.
+    #:
+    #: `dsl.basics_of` is the read, and both of its callers matter:
+    #: `basic_options`, so a granted swing offers the row, and
+    #: `resolve._is_basic`, so `ctx["basic"]` lets a modifier ask.
+    basic: str = ""
     #: The second branch's Requirement. A dual row's printed one is usually
     #: the two joined by "or" -- "two melee weapons **or** a ranged weapon"
     #: is the melee branch's requirement and the ranged branch's, and
@@ -1278,6 +1300,7 @@ def power(
     requires_text: str = "",
     charges: bool = False,
     thrown_by_hand: bool = False,
+    basic: str = "",
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
@@ -1391,6 +1414,7 @@ def power(
             requires_text=requires_text,
         charges=charges,
         thrown_by_hand=thrown_by_hand,
+        basic=basic,
             requires_alt=requires_alt,
             trigger=trigger,
             on=on,
@@ -1682,6 +1706,47 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Squ
     return []
 
 
+def basics_of(world: World, actor: int, window: str = "") -> tuple[str, ...]:
+    """Every ref that **is** a basic attack for this creature.
+
+    The designated melee row (`Powers.basic`, which a monster points at one
+    of its own abilities) and the ranged one, plus every row this creature
+    knows whose header declares `basic=`. `window="ranged"` asks the ranged
+    half alone and `"melee"` the melee half; the default asks both, which is
+    what a "with basic attacks" modifier wants.
+
+    **`Powers.instead` is deliberately absent.** A row swung *in place of* a
+    basic attack is not one, so it must not pick up a basic-attack modifier
+    -- that is the distinction #522 is about, and conflating them is the bug
+    an implementation falls into. `drivers.counts_as_basic` asserts the
+    negative half, which is the one that matters: a check asserting only
+    that the designation works passes on an implementation that conflated
+    the two.
+
+    Scanned off `Powers.all` rather than read out of a second store, because
+    the declaration is header data -- and a row the creature does not hold
+    is not its basic attack however the card reads.
+    """
+    from .components import Powers
+
+    known = world.get(actor, Powers)
+    if known is None:
+        return ()
+    out: list[str] = []
+    if window != "ranged":
+        out.append(known.basic)
+    if window != "melee":
+        out.append(known.ranged)
+    want = {"ranged"} if window == "ranged" else (
+        {"melee"} if window == "melee" else {"melee", "ranged"}
+    )
+    for ref in known.all:
+        p = get(ref)
+        if p is not None and p.basic in want:
+            out.append(ref)
+    return tuple(dict.fromkeys(r for r in out if r))
+
+
 def basic_options(world: World, actor: int, window: str, own: str = "") -> list[str]:
     """What may be swung where the game *grants* a basic attack.
 
@@ -1710,7 +1775,18 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
     own = own or (known.ranged if window == "ranged" else known.basic)
     free: list[str] = []
     costly: list[str] = []
-    for ref in known.instead_of_basic(window):
+    # **A row that counts as a basic attack is offered here too.** "Counts
+    # as" implies the offer -- if a row *is* a ranged basic attack then it is
+    # usable wherever one is handed out -- and the eleven rows printing that
+    # line were in no store at all, so none of the 259 printed sites granting
+    # a swing could reach them. A warlock whose ally granted a ranged basic
+    # attack could not use its own at-will. #522.
+    #
+    # `basics_of` returns the designated row as well, which `own` above
+    # already covers; the dedupe at the end is what keeps it from appearing
+    # twice.
+    designated = basics_of(world, actor, "ranged" if window == "ranged" else "melee")
+    for ref in dict.fromkeys((*known.instead_of_basic(window), *designated)):
         p = get(ref)
         # An associated-powers list names rows the character may not
         # possess, and `usable` is what says so -- along with refusing a

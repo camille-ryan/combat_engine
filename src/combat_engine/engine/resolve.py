@@ -274,6 +274,16 @@ def attack(
             # derives the legal key set from this dict, and a key minted
             # elsewhere is a gate on a key no context carries. #501.
             "as_": as_,
+            # **Is this a basic attack**, which the context could not say at
+            # all. It carried eight shape keys and none of them answered the
+            # commonest gate a feat prints -- "with basic attacks" -- so
+            # every such row had to reach for `Powers` itself and compare
+            # against a pair of refs, which missed the eleven rows printing
+            # "counts as a basic attack". `Powers.every_basic` is the one
+            # answer: the designated melee and ranged rows plus everything
+            # that counts as one, and **not** the `instead` list, since a row
+            # swung in place of a basic attack is not one. #522.
+            "basic": _is_basic(world, attacker, power),
             # **Is this the second roll, and whose doing?** Declared here,
             # with the defaults that say "no", because this is where the
             # attack context is built -- `lint.py` derives the legal key set
@@ -559,6 +569,20 @@ def spent_action_point(world: World, eid: int) -> bool:
         and points.spent_round == world.round
         and world.turn == eid
     )
+
+
+def _is_basic(world: World, attacker: int, power: str) -> bool:
+    """Does this attack count as a basic attack for this creature?
+
+    Off `dsl.basics_of`, which folds the designated melee and ranged rows
+    together with every known row whose header declares `basic=`. Separate
+    from `_is_ranged` beside it because this one is about the creature as
+    well as the row: the same ref is a basic attack for the warlock who
+    took the card and is not one for anybody else.
+    """
+    from .dsl import basics_of
+
+    return bool(power and power in basics_of(world, attacker))
 
 
 def _is_ranged(ref: str, branch: int = 0) -> bool:

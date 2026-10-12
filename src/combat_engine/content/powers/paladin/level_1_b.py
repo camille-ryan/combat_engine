@@ -399,6 +399,7 @@ def p3272(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
     attack=Attack(CHA, vs=AC),
+    basic="melee",
 )
 def p3687(c: Cast) -> None:
     """The Special line -- this row may be used as a melee basic attack --

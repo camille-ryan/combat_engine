@@ -3576,6 +3576,102 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def counts_as_basic(out: Result) -> None:
+    """"Counts as a basic attack" and "in place of" are different sentences.
+
+    Camille's wording, which is the whole of #522: *"'In place of a melee
+    basic attack' means it could be used when a melee basic attack could be
+    used, but it is NOT a melee basic attack. 'Counts as' or 'can be used
+    as' a basic attack means that it would benefit from modifiers to basic
+    attacks."*
+
+    **The negative control is the rule that matters**, and it is the second
+    one below. A check asserting only that the designation works passes on
+    an implementation that conflated the two -- which is the bug this
+    driver exists for. So a row registered with `c.as_basic` is asserted to
+    be offered where a swing is granted **and** to be absent from
+    `basics_of`, which is what a basic-attack modifier reads.
+
+    Nine content rows declare `basic=` in their headers. `p1333` is the one
+    used here because its card is the clearest case of the phrase.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        basic_options,
+        basics_of,
+        use,
+    )
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+
+    world, me, _ = _board()
+    known = world.get(me, Powers) or world.add(me, Powers())
+
+    out.that(REGISTRY["p1333"].basic == "ranged",
+             "a row whose card reads 'counts as a ranged basic attack'"
+             " declares it in its header, which the UI and policy/ read"
+             f" without running anything ({REGISTRY['p1333'].basic!r})")
+
+    # **The designation.** Held, so it is a basic attack for this creature.
+    known.known = (*tuple(known.known), "p1333")
+    designated = basics_of(world, me, "ranged")
+    out.that("p1333" in designated,
+             "holding it makes it one of this creature's ranged basic"
+             f" attacks ({designated})")
+    out.that("p1333" in basic_options(world, me, "ranged"),
+             "and it is offered where a ranged basic attack is granted --"
+             " 259 printed sites hand one out and none could reach it")
+
+    # **The negative control**, which is the point of the whole issue.
+    #
+    # The stand-in has to be a row this creature possesses: `c.as_basic`
+    # files rows a character may not have, and `basic_options` drops those
+    # at the moment the swing is offered. Written without the `known.known`
+    # line first, and the control then failed for the wrong reason -- which
+    # would have read as the engine refusing a stand-in rather than as the
+    # harness never offering one.
+    known.known = (*tuple(known.known), "p1341")
+    c = Cast(world=world, me=me, ref="drivers:counts-as")
+    c.as_basic("p1341", window="ranged")
+    stands_in = basic_options(world, me, "ranged")
+    out.that("p1341" in stands_in,
+             f"a row filed with c.as_basic is offered too ({stands_in})")
+    out.that("p1341" not in basics_of(world, me),
+             "but is NOT one of this creature's basic attacks -- 'in place"
+             " of' is explicitly not 'counts as', and a reader that folded"
+             " the two would hand every stand-in a basic-attack modifier")
+
+    # **The context key**, which is the other reader #522 names and the one
+    # a feat actually gates on. The attack context carried eight shape keys
+    # and none of them said whether the attack was a basic one, so "+2
+    # damage with basic attacks" had nothing to ask -- every such row
+    # reached for `Powers` itself and compared against a pair of refs.
+    seen: list[tuple[str, bool]] = []
+    world.bus.on(AttackRolled, lambda ev: seen.append(
+        (ev.power, bool((getattr(ev, "ctx", None) or {}).get("basic")))))
+    foe = sorted(enemies(world, me))[0]
+    use(world, me, "p1333", targets=[foe], spend=False)
+    use(world, me, "p1341", targets=[foe], spend=False)
+    answers = dict(seen)
+    out.that(answers.get("p1333") is True,
+             "the attack context says a designated row IS a basic attack --"
+             f" ctx['basic'], which nothing carried before ({answers})")
+    out.that(answers.get("p1341") is False,
+             "and says a c.as_basic stand-in is not, on the same key --"
+             " the negative control again, this time where a modifier"
+             f" reads it ({answers})")
+
+    # A creature holding neither has only its designated pair.
+    world2, me2, _ = _board()
+    plain = basics_of(world2, me2)
+    out.that("p1333" not in plain,
+             "and a creature that does not hold the card does not get the"
+             f" designation off the header alone ({plain})")
+
+
 def empowerment_pool(out: Result) -> None:
     """The artificer's per-day allowance: one pool, two separate limits.
 
@@ -4010,6 +4106,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "counts_as_basic": (counts_as_basic,
+                        "'counts as' is a designation, 'in place of' is not"),
     "empowerment_pool": (empowerment_pool,
                          "one per-day pool, two limits, and the order"),
     "aid_grants": (aid_grants,

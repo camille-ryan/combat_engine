@@ -151,6 +151,7 @@ def _hits_an_ally(world: World, me: int, ev: Event) -> bool:
     target=ONE_CREATURE,
     keywords=DIVINE_WEAPON,
     attack=Attack(WIS, vs=AC),
+    basic="melee",
 )
 def p12205(c: Cast) -> None:
     """The penalty rides on the target, because the mods read for a damage

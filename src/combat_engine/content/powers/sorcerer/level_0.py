@@ -204,6 +204,7 @@ def p16227(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack(CHA, vs=REF),
+    basic="ranged",
 )
 def p16222(c: Cast) -> None:
     if c.strike():

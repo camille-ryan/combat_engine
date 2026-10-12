@@ -242,13 +242,26 @@ def _basic_refs(c: Cast, *, ranged: bool = True) -> tuple[str, ...]:
     `Powers.basic` is a monster's own row more often than `mba`, so a
     damage gate comparing against the engine's default alone is false for
     anything that replaced it.
+
+    **And the designated pair is not the whole answer.** Eleven rows print
+    "counts as" or "can be used as a basic attack", which 4e means as *is
+    one* -- so a feat reading "with basic attacks" has to reach them.
+    `Powers.counts_as` is where they are, and returning only the pair
+    skipped every one of them. #522.
+
+    Rows registered with `c.as_basic` are **not** here, and must not be: "in
+    place of a basic attack" is explicitly not a basic attack.
     """
+    from combat_engine.engine.dsl import basics_of
+
     known = c.world.get(c.me, Powers)
     melee = (known.basic if known else "") or MELEE
     if not ranged:
-        return (melee,)
+        return tuple(dict.fromkeys((melee, *basics_of(c.world, c.me, "melee"))))
     shot = (known.ranged if known else "") or RANGED
-    return (melee, shot)
+    return tuple(dict.fromkeys(
+        (melee, shot, *basics_of(c.world, c.me))
+    ))
 
 
 def _rba(c: Cast) -> str:

@@ -108,6 +108,7 @@ def p1323(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=ARCANE_IMPLEMENT,
     attack=Attack((CHA, CON), vs=REF),
+    basic="ranged",
 )
 def p1333(c: Cast) -> None:
     # Printed as "Charisma or Constitution", fixed once at 1st level. The

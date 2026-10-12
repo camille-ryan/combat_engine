@@ -457,6 +457,7 @@ def p3701(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
     attack=Attack(CHA, vs=FORT),
+    basic="ranged",
 )
 def p3705(c: Cast) -> None:
     """"Can be used as a ranged basic attack" -- see p10319."""

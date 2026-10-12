@@ -579,6 +579,7 @@ def p6857(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.WEAPON],
     attack=Attack(CHA, vs=AC),
+    basic="melee",
 )
 def p7402(c: Cast) -> None:
     if c.strike():

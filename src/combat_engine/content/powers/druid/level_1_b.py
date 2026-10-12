@@ -86,6 +86,7 @@ def p5034(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
+    basic="melee",
 )
 def p5036(c: Cast) -> None:
     """Melee touch is reach 1. The printed Special -- usable as a melee basic
@@ -131,6 +132,7 @@ def p5037(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
+    basic="melee",
 )
 def p5038(c: Cast) -> None:
     if c.strike():
