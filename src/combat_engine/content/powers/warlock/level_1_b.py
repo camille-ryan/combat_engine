@@ -23,6 +23,7 @@ already does for `p1333`.
 
 from __future__ import annotations
 
+from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.warlock.shared import backlash
 from combat_engine.engine import (
     AC,
@@ -209,11 +210,13 @@ def p12887(c: Cast) -> None:
     """Both branches roll the same line, so no `attack_alt` is declared.
 
     **The sorcerer-king rider is written now**, and the old note was wrong
-    about what was missing: the build exists (`cf:warlock-f1s4` asks
-    `c.build("sorcerer-king")` on its first line) and so does the resource.
-    Fell might is a use of that feature, which carries `usage=ENCOUNTER` --
-    so `c.expend_row` spends the charge without running the row, and its
-    False **is** the printed "if you spend your fell might".
+    about where the charge lives. The build exists (`cf:warlock-f1s4` asks
+    `c.build("sorcerer-king")` on its first line); the resource is **not**
+    that row's encounter use. A trait's single use is spent by
+    `turns.arm_traits` before round 1, so `c.expend_row` returned False
+    here every time and this rider never fired. It is `c.spend_charge` on
+    the key `features.warlock.FELL`, whose False **is** the printed "if you
+    spend" clause. #529.
 
     **Decided before the attack roll**, which the pact boon's own card
     requires: "you must decide whether or not to spend your fell might when
@@ -227,8 +230,7 @@ def p12887(c: Cast) -> None:
     <effect>". That is the clause they replace, and it has to be offered as
     one for `c.pre_empt` to reach it.
     """
-    boon = "cf:warlock-f1s4"
-    spent = c.may("spend your fell might") and c.expend_row(boon)
+    spent = c.may("spend the boon") and c.spend_charge(FELL)
     if c.strike():
         c.damage("1d8", c.cha_mod, dtype=DamageType.NECROTIC)
         c.grants_advantage(to="team")

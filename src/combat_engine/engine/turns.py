@@ -670,6 +670,11 @@ def short_rest(world: World) -> None:
             declared = get(ref)
             if declared is None or declared.usage is not Usage.DAILY:
                 powers.restore(ref)
+        # Per-encounter charges go back whole. They are not rows, so the
+        # daily test above cannot be asked about them, and there is nothing
+        # to ask: a charge is per-encounter by definition -- that is what
+        # distinguishes it from `Powers.per_day`. #529.
+        powers.charges.clear()
         rested.append(eid)
     # **After the restore, and in a second pass.** A row answering the rest
     # asks what it has available -- an artificer's banked charge, a
@@ -697,6 +702,7 @@ def extended_rest(world: World) -> None:
         powers.last_round.clear()
         powers.recharging.clear()
         powers.forbidden.clear()
+        powers.charges.clear()
     for _, health in world.each(Health):
         health.hp = health.max_hp
         health.temp = 0

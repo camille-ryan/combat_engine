@@ -407,24 +407,26 @@ def p12250(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_ALLY,
     keywords=PSIONIC,
-    dropped=("c.regain_points()",),
 )
 def p12251(c: Cast) -> None:
-    """`c.spend_surge` is "spend a surge and gain nothing for it", which is
-    exactly "the target loses a healing surge". Handing the points back to
-    the caster is the half nothing can say.
+    """Both halves. `c.spend_surge` is "spend a surge and gain nothing for
+    it", which is exactly "the target loses a healing surge", and
+    `c.regain_points` is the mirror the pool was missing.
 
-    **`c.transfer_points` is not it, checked.** That moves points *out* of
-    the caster's pool into somebody else's and returns 0 when the caster has
-    none -- the opposite direction, and these points come from nowhere.
-    `PowerPoints.points` is a public field and `refresh` writes it, but
-    `_pool` is private to `Cast` and every verb on the surface spends,
-    augments or reads -- `c.regain_surge` is the mirror the healing-surge
-    pool has and this one does not. The Level 23 line is paragon and out of
-    scope."""
+    The old note had the diagnosis right and the conclusion wrong: it
+    checked `c.transfer_points` and correctly refused it -- that moves
+    points *out* of the caster's pool and returns 0 when the caster has
+    none, the opposite direction. The missing verb was a self-targeting
+    regain, which is what `c.regain_points` now is.
+
+    The ally pays first, because the card is one sentence: an ally with no
+    surge left means no points. The Level 23 line is paragon and out of
+    scope.
+    """
     mate = c.target
-    if mate is not None:
-        c.spend_surge(on=mate)
+    if mate is None or not c.spend_surge(on=mate):
+        return
+    c.regain_points(2)
 
 
 # -- x7_950 -----------------------------------------------------------------

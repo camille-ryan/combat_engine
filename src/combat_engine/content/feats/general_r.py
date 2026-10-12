@@ -1468,11 +1468,20 @@ def f3624(c: Cast) -> None:
 
 
 @power("f3625", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.regain_points()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.grant_points(expiring=)",))
 def f3625(c: Cast) -> None:
     """The surge half plays; an augmented at-will is a psionic power like
     any other, so the keyword covers both arms of the printed trigger.
-    Turning a surge back into power points is the dropped half."""
+
+    **Re-pointed off `c.regain_points()`, which arrived and does not fit.**
+    The second printed sentence trades a surge for "2 power points that
+    expire at the end of your turn", and a regain is the wrong shape twice
+    over: it caps at the pool's maximum, where these sit on top of it, and
+    it has no duration, where these end on a named beat. What is wanted is
+    a *grant* with an expiry, which is a different verb and arrives with
+    `i1793p1`'s identical gap rather than with this one.
+    """
     _surge_when_it_lands(c, lambda p: Keyword.PSIONIC in p.keywords)
 
 

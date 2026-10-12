@@ -14,8 +14,11 @@ power points against a row declaring its own augments, which no power named
 here does. Then `c.lend_augment(ref, clause)` -- and **that** is now
 implemented and is still not this. Lending a clause is one thing; spending
 a *resource other than power points* on an augment is another, and these
-rows want the second. `c.augment_with(resource)` names it, with
-`c.fell_might()` the separate symbol for the resource itself.
+rows want the second. `c.augment_with(resource)` names it, and it is the
+only gap left here: the resource itself exists now as `c.spend_charge` on a
+key the owning row coins, which is what `c.fell_might()` had been standing
+in for (#529). So the marker is down to one symbol, and that symbol is the
+augment step rather than the pool.
 
 The lesson is the one the component file states: a marker naming the
 nearest-looking verb reports ready the moment that verb lands. Twice here.

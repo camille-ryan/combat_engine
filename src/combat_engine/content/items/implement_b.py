@@ -50,6 +50,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.druid.forms import BEAST, in_beast_form
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
@@ -1750,13 +1751,20 @@ def i1954p1(c: Cast) -> None:
     target=SELF,
     trigger="an ally within 5 squares misses with an augmented psionic power",
     on=Trigger(Miss, _ally_miss_within(5), "an ally within 5 squares misses"),
-    todo=("c.regain_points()",),
 )
 def i1972p1(c: Cast) -> None:
-    """The trigger is real now -- `Miss` names the swinger `attacker`, and
-    an augmented use is one `Pool.augmented` has a number for. Only the
-    payout is missing: `c.spend_points` takes power points away and
-    `c.points` counts what is left, and nothing puts any back."""
+    """Written: `c.regain_points` is the payout that was missing.
+
+    The trigger was already real -- `Miss` names the swinger `attacker`,
+    and an augmented use is one `Pool.augmented` has a number for. The
+    gap was only that `c.spend_points` took points away, `c.points`
+    counted what was left, and nothing put any back.
+
+    The *ally's* miss is the trigger and the *wielder* regains, so the
+    payout takes no `on=`: `c.regain_points` defaults to the caster, which
+    is this item's owner and not the creature that missed.
+    """
+    c.regain_points(2)
 
 
 @power(
@@ -2088,10 +2096,10 @@ def i2312p1(c: Cast) -> None:
 def i2324x1(c: Cast) -> None:
     """**Re-aimed: the feature is modelled, the moment is not announced.**
 
-    `c.fell_might()` was the wrong symbol -- the boon is a declared row
-    with `usage=ENCOUNTER` and `c.expend_row` spends its charge, which is
-    what `i2324p1` beside this now does. What this row needs is the
-    *announcement*: `c.expend_row` emits a bare `Note`, which carries
+    `c.fell_might()` was the wrong symbol -- the boon's charge exists, as
+    `c.spend_charge` on the key `features.warlock.FELL`, which is what
+    `i2324p1` beside this now spends. What this row needs is the
+    *announcement*: spending a charge emits a bare `Note`, which carries
     `text` and nothing else -- no actor, no ref -- so there is no event a
     trigger can read to know a charge went. Watching `i2324p1` instead
     would pay the temporary hit points on a use that found nothing to
@@ -2113,19 +2121,26 @@ def i2324x1(c: Cast) -> None:
     ),
 )
 def i2324p1(c: Cast) -> None:
-    """**Written: the cost had a spelling all along.**
+    """**The cost is a charge, not the boon row's encounter use.**
 
-    The boon the card spends is a declared row with `usage=ENCOUNTER`, so
+    The first version spent `c.expend_row("cf:warlock-f1s4")` on the
+    reasoning that "the boon is a declared row with `usage=ENCOUNTER`, so
     its charge *is* a use of the feature -- `features/warlock.py` says so
-    outright -- and `c.expend_row` spends one without running it. Its
-    False is the printed Requirement, which is why the row now returns
-    rather than paying the burn for free; before this it was offered
-    unconditionally to warlocks who had already spent it.
+    outright". Both halves were wrong together: a trait's single use is
+    spent by `turns.arm_traits` before round 1, so `c.expend_row` returned
+    False for every warlock and **this row returned early every time it
+    fired** -- inert in play, not merely missing a clause. It was the
+    `features/warlock.py` note that was wrong, and it has been corrected.
+    #529.
+
+    `c.spend_charge(FELL)` is the cost. Its False is still the printed
+    Requirement, which is why the row returns rather than paying the burn
+    for free.
 
     Only the one leg's boon is named, because that is the only leg whose
     boon this card's wording can be spending.
     """
-    if not c.expend_row("cf:warlock-f1s4"):
+    if not c.spend_charge(FELL):
         return
     foe = _struck(c)
     if foe is not None:
@@ -3667,13 +3682,21 @@ def i1511x1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_ALLY,
-    dropped=("c.regain_points()",),
 )
 def i1511p1(c: Cast) -> None:
-    """The cost lands on the ally and the payout does not: nothing puts
-    power points back."""
-    if c.target is not None:
-        c.spend_surge(on=c.target)
+    """Both halves now: the ally pays a surge and the wielder gets the
+    points. `c.regain_points` is the payout -- it defaults to the caster
+    and caps at the pool's maximum, which is what a *regain* means.
+
+    The ally pays first and the points follow only if they did, because
+    `c.spend_surge` returns False for an ally with none left and the card
+    is one sentence: no surge, no points.
+
+    The paragon and epic lines are out of scope, as every item's are.
+    """
+    if c.target is None or not c.spend_surge(on=c.target):
+        return
+    c.regain_points(2)
 
 
 @power(
@@ -3774,10 +3797,22 @@ def i1980p2(c: Cast) -> None:
     target=SELF,
     trigger="you miss with an augmented attack power using this orb",
     on=Trigger(Miss, by_me, "you miss with this orb"),
-    todo=("c.regain_points()",),
 )
 def i1987p1(c: Cast) -> None:
-    """`c.points_spent` says how many went in; nothing hands any back."""
+    """"The power points you spent to augment the power" is this use's
+    number, so `c.augmented` and **not** `c.points_spent`.
+
+    The two differ exactly here: `c.points_spent` is the encounter's
+    running total for a row, so a second miss would hand back everything
+    spent on every earlier use as well. `c.augmented` is what bought the
+    latest use, which is the one that just missed.
+
+    The ref comes off the trigger rather than from `c.ref` -- the row that
+    missed is the augmented attack, not this orb.
+    """
+    missed = getattr(c.trigger, "power", "")
+    if missed:
+        c.regain_points(c.augmented(missed))
 
 
 @power(
@@ -3997,10 +4032,18 @@ def i2629p1(c: Cast) -> None:
     target=SELF,
     trigger="you hit an enemy with an augmented psionic attack power",
     on=Trigger(Hit, by_me, "you hit with an attack"),
-    todo=("c.regain_points()",),
 )
 def i2649p1(c: Cast) -> None:
-    """Nothing puts power points back."""
+    """`c.regain_points` is the payout, and it exists now.
+
+    The printed trigger says *augmented psionic*; the declared one is a
+    plain hit of the wielder's, so the augmented half is read in the body
+    off the row that hit. An unaugmented hit regains nothing, which is the
+    Requirement.
+    """
+    hit_with = getattr(c.trigger, "power", "")
+    if hit_with and c.augmented(hit_with):
+        c.regain_points(2)
 
 
 @power(

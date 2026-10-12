@@ -50,6 +50,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.warlock import BOON_REGAIN
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
@@ -174,9 +175,11 @@ SWAP = ("chargen.power_swap()",)
 #: **Re-pointed from `c.lend_augment(ref, clause)`, which is implemented.**
 #: That verb lends a *clause* and four rows now use it (#507). These
 #: thirteen want a different thing wearing the same name: a **resource**
-#: standing in for power points. `c.fell_might()` is the resource itself and
-#: is a separate symbol on seven other rows; this is spending it on an
-#: augment, which is a further step and does not arrive with it.
+#: standing in for power points. The resource itself is built --
+#: `c.spend_charge` on a key the owning row coins, which is what
+#: `c.fell_might()` was standing in for (#529) -- and spending it *on an
+#: augment* is the further step that did not arrive with it. So this symbol
+#: is still the gap and is now the only one.
 #:
 #: The "forgo the extra damage" half is `c.pre_empt`, which exists -- so
 #: naming only this one is correct: it is the earliest gap, and the one
@@ -1445,27 +1448,35 @@ def f3231(c: Cast) -> None:
 
 
 @power("f3232", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.fell_might()", "c.regain_points()"))
+       reach=PERSONAL, target=SELF)
 def f3232(c: Cast) -> None:
     """Swaps one pact boon's payout for a power point.
 
-    **Both facilities exist and the row still cannot be written.** The
-    charge is held after all -- `cf:warlock-f1s4` is `action=NONE` with
-    `usage=ENCOUNTER`, so arming spends its one use and that use *is* the
-    fell might, which its own `Dropped` watch hands back on a cursed kill.
-    And handing a point over is a write to `PowerPoints.points`, which
-    `c.transfer_points` already makes.
+    **Written, and the three things that were in the way are all gone.**
+    The old note was right that this needed the word *instead* and wrong
+    about why the rest could not be said:
 
-    What is missing is the word **instead**: suppressing another row's
-    clause from outside it. `c.pre_empt`/`c.instead_of` are exactly that
-    mechanism, and they need `cf:warlock-f1s4` to wrap its own
-    `c.restore_use` in `c.instead_of` -- a change in `features/warlock.py`,
-    not here. Undoing the restore from this side cannot be made to work:
-    both rows answer the same `Dropped`, `Powers.restore` clears the count
-    rather than decrementing it, and `c.expend_row` refuses once the use is
-    already spent, so whichever handler the arming order happens to run
-    first decides the outcome. Written without it, the row pays twice."""
+    * the charge is no longer the boon row's encounter use, which arming
+      spent before round 1 -- it is `features.warlock.FELL`, a
+      `c.spend_charge` key (#529);
+    * `c.regain_points()` exists now. The old note reached for
+      `c.transfer_points`, which **refuses self-targeting** and returns 0
+      for `who == self.me`, so there was genuinely nothing to write;
+    * `cf:warlock-f1s4` now offers its regain as the named clause
+      `BOON_REGAIN` through `c.instead_of_now`, so this can replace it from
+      outside.
+
+    The old worry about two handlers racing on one `Dropped` is answered by
+    the shape rather than by ordering: this row does not watch `Dropped` at
+    all. It registers a substitution once, and the boon's own watcher runs
+    it *in place of* handing the charge back -- so there is exactly one
+    handler and no arming order to depend on.
+
+    A trait, so this is registered once at the start of the fight and the
+    trade is settled for the whole encounter, which is what the card says.
+    """
+    c.pre_empt("cf:warlock-f1s4", BOON_REGAIN,
+               lambda using: using.regain_points(1))
 
 
 @power("f3233", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2005,7 +2016,7 @@ def f3329(c: Cast) -> None:
 
 @power("f3389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.regain_points()",))
+       dropped=("PowerPoints.spent_until_extended_rest",))
 def f3389(c: Cast) -> None:
     """The feature is a row, so "you gain it" is `c.grant_row`.
 
@@ -2022,10 +2033,17 @@ def f3389(c: Cast) -> None:
     is left alone deliberately: the point sits over the pool's own ceiling,
     exactly as a transferred one does and for the same reason.
 
-    What is left is the printed restriction. Once spent it does not come
-    back until an extended rest, and `PowerPoints.refresh` restores the
-    whole pool every encounter -- a rule about rests, which is nothing this
-    row can call and nothing one encounter can show.
+    What is left is the printed restriction, and the marker now names it
+    rather than the pool write. Once spent this point does not come back
+    until an extended rest, and `PowerPoints.refresh` restores the whole
+    pool every encounter -- a rule about rests, which is nothing this row
+    can call and nothing one encounter can show.
+
+    **Re-pointed off `c.regain_points()`, which arrived and is not this.**
+    That verb caps at the pool's maximum, by design: a regain refills what
+    was spent. This point sits *over* the ceiling, exactly as a
+    transferred one does, so the existing write is the right one and
+    swapping it for the new verb would hand the character nothing at all.
     """
     c.grant_row("cf:psion-f1", on=c.me, until=When.ENCOUNTER)
     key = (id(c.world), c.ref, c.me)

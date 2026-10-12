@@ -6471,6 +6471,68 @@ class Cast:
         known.per_day[ref] = known.per_day.get(ref, 0) + 1
         return True
 
+    def charge_left(self, key: str, limit: int = 1) -> int:
+        """How much of a per-encounter charge is left, for this creature.
+
+        A charge is a resource a row holds **across uses within one fight**
+        and which is not the row's own use: the warlock's pact boon is the
+        shape, one charge, spent to buy a rider and handed back on a cursed
+        kill.
+
+        **`Powers.used` is not it, and the reason is worth knowing before
+        reaching for it.** A trait is `action=NONE` with no declared
+        trigger, so `turns.arm_traits` calls `dsl.use(..., spend=True)` on
+        every one at the start of a fight -- which means a trait declared
+        `usage=ENCOUNTER` has its single use **spent at arming**, before
+        round 1. Seven rows were written against that use and none of them
+        could ever spend it. #529.
+
+        `key` is a `<ref>:<what>` string the owning row coins, so two
+        resources on one row stay apart and nothing collides with a real
+        ref. `limit` is what the card prints, as `c.per_day_left` takes it.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None:
+            return limit
+        return max(0, limit - known.charges.get(key, 0))
+
+    def spend_charge(self, key: str, limit: int = 1, *, on: int | None = None) -> bool:
+        """Take one from a per-encounter charge. False when none is left.
+
+        Returns whether the spend happened, so the row can gate what it was
+        paying for -- and that False **is** the printed "if you spend" on
+        every card of this shape. A row ignoring the answer has bought
+        something for nothing, which is why this is not a bare increment.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
+        if known is not None and known.charges.get(key, 0) >= limit:
+            return False
+        known = known if known is not None else self.world.add(who, Powers())
+        known.charges[key] = known.charges.get(key, 0) + 1
+        return True
+
+    def restore_charge(self, key: str, *, on: int | None = None) -> bool:
+        """Hand a spent charge back. False if none had been spent.
+
+        The inverse of `c.spend_charge`, and the same shape as
+        `c.restore_use` beside it: False when there was nothing to give
+        back, which is the Requirement these lines print.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
+        if known is None or known.charges.get(key, 0) <= 0:
+            return False
+        known.charges[key] -= 1
+        self.world.bus.emit(Note(text=f"{who} regains a charge of {key}"))
+        return True
+
     def exposed(
         self, ref: str = "", *, on: int | None = None, pending: bool = False
     ) -> bool:
@@ -9926,6 +9988,36 @@ class Cast:
             Note(text=f"{self.me} transfers {gone} power point(s) to {who}")
         )
         return gone
+
+    def regain_points(self, n: int = 1, *, on: int | None = None) -> int:
+        """"You regain 1 power point." Yours, so it defaults to the caster.
+
+        Not `c.transfer_points`, which is the verb this was first marked
+        against and which **refuses self-targeting** -- `who == self.me`
+        returns 0, correctly, because a transfer to yourself is not a
+        printed line and would be free points. A row that gains a point
+        from somewhere other than another character's pool had nothing to
+        say.
+
+        **Capped at the pool's maximum**, unlike a transfer: a transferred
+        point is deliberately allowed over the receiver's ceiling, because
+        the giver paid for it out of their own. Nobody pays for this one,
+        so it may only refill what was spent. Returns how many were
+        actually regained, which is 0 for a full pool -- and that 0 is the
+        answer a row trading something away for a point needs, so it does
+        not pay twice.
+        """
+        who = self._who(on) if on is not None else self.me
+        if who is None or n <= 0:
+            return 0
+        pool = self._pool(who)
+        room = max(0, pool.maximum - pool.points)
+        got = min(n, room)
+        if got <= 0:
+            return 0
+        pool.points += got
+        self.world.bus.emit(Note(text=f"{who} regains {got} power point(s)"))
+        return got
 
     # -- the spellbook -------------------------------------------------------
 

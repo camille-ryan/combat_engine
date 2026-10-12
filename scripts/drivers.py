@@ -3688,19 +3688,27 @@ def compelled_walk(out: Result) -> None:
 def fell_might(out: Result) -> None:
     """The warlock's pact boon: one charge, an extra die, and a trade.
 
-    **`c.fell_might()` was never a gap**, which is the finding this records.
-    It was a marker on seven rows and the whole resource was already in the
-    verb surface: the boon is a row with `usage=ENCOUNTER`, so its charge
-    *is* a use of that feature. `c.expend_row` spends one without running
-    the row, `c.times` asks whether it is still there, and `c.restore_use`
-    hands it back. The seventh time this project has found a marked
-    facility present under another name.
+    **This rule passed over a broken mechanism, and that is the finding.**
+    Its first version recorded `c.fell_might()` as "never a gap": the boon
+    is a row with `usage=ENCOUNTER`, so its charge *is* a use of that
+    feature, spent with `c.expend_row`. Wrong, and the rule could not see it
+    because it **never armed the trait** -- it called `c.expend_row` straight
+    off a fresh board, which is the one state in which the charge is still
+    there. In play `turns.arm_traits` spends a trait's single use before
+    round 1, so the rider never fired. #529.
 
-    Three things measured:
+    So this now **arms first, then spends**, which is the shape of every
+    driver here that has caught something real: set the board up the way
+    play does, not the way the verb does. The charge is `c.spend_charge` on
+    its own key, and arming is free.
 
+    Four things measured:
+
+    * **arming does not spend the charge**, which is the regression this
+      rule exists for and the one it used to be blind to;
     * **the charge is one.** A second spend in the same encounter must
-      refuse, which is what `c.expend_row` returning False is for -- and
-      that False is the printed "if you spend your fell might".
+      refuse, which is what `c.spend_charge` returning False is for -- and
+      that False is the printed "if you spend" clause.
     * **spending it buys the extra die.** p12887's own rider, which its
       comment had called unwritable for a build that exists.
     * **a feat can forgo that die for something else.** Seven feats print
@@ -3708,9 +3716,11 @@ def fell_might(out: Result) -> None:
       so the control is that the damage does **not** also land.
     """
     from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.warlock import FELL
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Health, Powers, Stats
+    from combat_engine.engine.components import Build, Health, Powers, Stats
     from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import arm_traits
     from combat_engine.engine.types import Ability
 
     BOON = "cf:warlock-f1s4"
@@ -3719,6 +3729,13 @@ def fell_might(out: Result) -> None:
         world, me, _ = _board(seed=seed)
         known = world.get(me, Powers) or world.add(me, Powers())
         known.known = (*tuple(known.known), BOON, "p12887")
+        # **The leg, or the row gates itself out.** `cf:warlock-f1s4` opens
+        # with `c.build("sorcerer-king")` and now carries
+        # `requires=on_leg(...)` as well, so a character without the leg is
+        # not even armed -- which is the point of the gate and would make
+        # this rule measure nothing.
+        held = world.get(me, Build) or world.add(me, Build())
+        held.choices = (*tuple(held.choices), "sorcerer-king")
         # **Charisma, or the row never hits.** p12887 rolls Cha against
         # Fortitude and the board's creature is a monster with a default
         # ability line, so at +0 every attempt missed and both halves of
@@ -3727,19 +3744,28 @@ def fell_might(out: Result) -> None:
         stats.scores[Ability.CHA] = 24
         return world, me, known
 
-    # **One charge an encounter.**
-    world, me, _known = warlock()
+    # **Arming must not spend the charge.** This is the control the old
+    # version of this rule lacked, and the reason it passed over a boon
+    # nobody could spend.
+    world, me, known = warlock()
     c = Cast(world=world, me=me, ref="drivers:fell")
-    spends = [c.expend_row(BOON) for _ in range(2)]
+    arm_traits(world, me)
+    out.that(c.charge_left(FELL) == 1,
+             "arming the trait leaves the charge alone -- the boon's own"
+             f" encounter use is spent at arming ({known.used.get(BOON)}),"
+             " which is why the charge cannot live there")
+
+    # **One charge an encounter**, after arming, which is the state play is in.
+    spends = [c.spend_charge(FELL) for _ in range(2)]
     out.that(spends == [True, False],
              "the pact boon is one charge an encounter -- the second spend"
              f" refuses, and that refusal is the printed clause {spends}")
 
     # And a cursed kill hands it back.
-    out.that(c.restore_use(BOON),
+    out.that(c.restore_charge(FELL),
              "and it comes back when the card says it does -- the regain"
              " `cf:warlock-f1s4` watches for")
-    out.that(c.expend_row(BOON),
+    out.that(c.spend_charge(FELL),
              "which leaves it spendable again")
 
     # **The trade replaces the die rather than joining it.** Measured as
@@ -3758,6 +3784,14 @@ def fell_might(out: Result) -> None:
         from combat_engine.engine.dsl import use
 
         world, me, _ = warlock(seed)
+        # **Arm here too, and this is the half the plant test caught.**
+        # Arming was added to the control above and *not* to this helper, so
+        # the damage assertions still ran on an unarmed board -- the one
+        # state where the old broken mechanism works. Planting `p12887` back
+        # onto `c.expend_row` left every number identical and the rule
+        # green, which is the original #529 blindness surviving the fix to
+        # the rule that was written for it.
+        arm_traits(world, me)
         foe = sorted(enemies(world, me))[0]
         if traded:
             Cast(world=world, me=me, ref="drivers:fell-trade").pre_empt(
@@ -3776,6 +3810,126 @@ def fell_might(out: Result) -> None:
              "forgoing the extra damage really gives it up, on every seed --"
              " a trade written as an addition would leave the die in"
              f" (kept {plain}, traded {traded})")
+
+
+def points_regained(out: Result) -> None:
+    """A power point put *back*, which nothing on the surface could say.
+
+    `c.regain_points` closed eight markers, and the interesting half is
+    what it **refuses**: it caps at the pool's maximum. That cap is not a
+    detail, it is the reason three of those eight rows were re-pointed
+    instead of written -- `f3389`, `f3625` and `i1793p1` all create a point
+    *over* the ceiling, so the new verb would hand a full-pool character
+    nothing. If the cap were dropped to make those rows pass, they would be
+    silently wrong rather than honestly marked, so it is measured here.
+
+    Three things:
+
+    * **a spent point comes back**, which is the eight rows' printed line;
+    * **a full pool regains nothing**, which is the cap, and is why three
+      rows still carry a marker;
+    * **`c.transfer_points` still refuses self-targeting**, which is the
+      verb the marker originally named. It returning 0 is what made a
+      self-regain unsayable, and it must keep returning 0 -- a transfer to
+      yourself would be free points.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import PowerPoints
+
+    world, me, _ = _board(seed=1)
+    pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+    pool.maximum, pool.points = 3, 1
+    c = Cast(world=world, me=me, ref="drivers:points")
+
+    got = c.regain_points(2)
+    out.that(got == 2 and pool.points == 3,
+             "a spent power point comes back, which is what eight rows"
+             f" printed and nothing could say (regained {got}, pool"
+             f" {pool.points})")
+
+    again = c.regain_points(2)
+    out.that(again == 0 and pool.points == 3,
+             "and a full pool regains nothing -- the cap three re-pointed"
+             f" rows depend on (regained {again}, pool {pool.points})")
+
+    # Measured as a *delta*, not against the literal 3. Written as
+    # `pool.points == 3` first, which made this assertion fail whenever the
+    # cap above was broken -- two red lines for one fault, and the second
+    # one's message blamed transfers. An assertion that only holds while
+    # its neighbours do is not an independent measurement.
+    before = pool.points
+    moved = c.transfer_points(1)
+    out.that(moved == 0 and pool.points == before,
+             "while a transfer to yourself is still refused, which is the"
+             " verb the markers first named and the reason a self-regain"
+             f" had to exist (moved {moved}, pool {before} -> {pool.points})")
+
+
+def boon_traded(out: Result) -> None:
+    """A feat replaces the pact boon's regain with a power point.
+
+    `f3232` is the row, and the whole of it is one `c.pre_empt`. Three
+    things had to be true at once and each had been written down as
+    impossible at some point:
+
+    * the charge is **not** the boon row's encounter use, which
+      `turns.arm_traits` spends before round 1 (#529);
+    * `c.regain_points()` exists -- `c.transfer_points` refuses
+      self-targeting and returns 0, so there was genuinely nothing to call;
+    * `cf:warlock-f1s4` offers its regain as a named clause through
+      `c.instead_of_now`, because the regain fires inside a watcher that row
+      installed and `c.variant` is therefore 0 for ever.
+
+    **The negative control is the whole rule.** Asserting only that a point
+    arrives would pass on an implementation that pays the point *and* hands
+    the charge back -- which is the "written without it, the row pays twice"
+    the old docstring predicted. So the measurement is both sides: with the
+    feat the charge stays spent and a point arrives; without it the charge
+    comes back and no point does.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.warlock import FELL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, PowerPoints, Powers
+    from combat_engine.engine.events import Dropped
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import arm_traits
+    from combat_engine.engine.types import Relation
+
+    BOON = "cf:warlock-f1s4"
+
+    def play(with_feat: bool) -> tuple[int, int]:
+        """Returns (charge left after a cursed kill, points gained)."""
+        world, me, _ = _board(seed=1)
+        known = world.get(me, Powers) or world.add(me, Powers())
+        refs = [BOON, "p12887", *(["f3232"] if with_feat else [])]
+        known.known = (*tuple(known.known), *refs)
+        held = world.get(me, Build) or world.add(me, Build())
+        held.choices = (*tuple(held.choices), "sorcerer-king")
+        # A pool with room in it, or `c.regain_points` correctly returns 0
+        # for a full one and the trade would read as not happening.
+        pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+        pool.maximum, pool.points = 2, 0
+        arm_traits(world, me)
+
+        c = Cast(world=world, me=me, ref="drivers:boon")
+        c.spend_charge(FELL)
+        foe = sorted(enemies(world, me))[0]
+        world.relations.set(Relation.CURSED_BY, me, foe)
+        world.bus.emit(Dropped(actor=foe))
+        return c.charge_left(FELL), pool.points
+
+    left_with, points_with = play(True)
+    out.that(left_with == 0 and points_with == 1,
+             "with the feat the charge stays spent and a power point"
+             f" arrives instead (charge {left_with}, points {points_with})")
+
+    left_without, points_without = play(False)
+    out.that(left_without == 1 and points_without == 0,
+             "and without it the printed clause is untouched -- the charge"
+             f" comes back and no point does (charge {left_without},"
+             f" points {points_without})")
 
 
 def lent_augments(out: Result) -> None:
@@ -4426,6 +4580,10 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "points_regained": (points_regained,
+                        "a power point put back, and the cap that refuses one"),
+    "boon_traded": (boon_traded,
+                    "a feat takes a power point instead of the boon's regain"),
     "lent_augments": (lent_augments,
                       "a feat lends a power an augment its card omits"),
     "counts_as_basic": (counts_as_basic,

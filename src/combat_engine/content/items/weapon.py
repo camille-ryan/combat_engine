@@ -969,17 +969,22 @@ def i1771p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.regain_points()",),
+    todo=("c.grant_points(expiring=)",),
 )
 def i1793p1(c: Cast) -> None:
     """A power point out of nowhere, held until the end of your next turn.
 
-    Re-aimed on to the eleven-row group that names the same gap.
-    `c.transfer_points` moves a point between creatures and
-    `c.spend_points` spends one; nothing puts one into a pool, whether
-    that is a point regained or -- as here -- one over the maximum. The
-    "only to augment a psionic attack power" half rides on the same verb:
-    a point nothing can create cannot be earmarked either."""
+    **Re-pointed off `c.regain_points()`, which arrived and is not this.**
+    A regain refills what was spent and is capped at the pool's maximum;
+    this point is created *over* the ceiling and expires on a named beat.
+    Spending it on the new verb would give a character with a full pool
+    nothing, and a character with a spent one a permanent point -- wrong
+    in both directions.
+
+    The "only to augment a psionic attack power" half still rides on the
+    same verb: a point nothing can create cannot be earmarked either.
+    `f3625` prints the same mechanism and now names the same symbol.
+    """
 
 
 @power(

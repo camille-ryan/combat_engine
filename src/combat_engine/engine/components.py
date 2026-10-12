@@ -715,6 +715,26 @@ class Powers:
     #: reached from inside a fight, which is where a row runs. #507-adjacent;
     #: the allowance family is its own thing.
     per_day: dict[str, int] = field(default_factory=dict)
+    #: Per-encounter resources that are **not** a row's use, keyed by a
+    #: `<ref>:<what>` string the owning row coins. Cleared with `used` by
+    #: both rests.
+    #:
+    #: `used` could not hold these, and #529 is the measurement: a trait is
+    #: `action=NONE` with no trigger, so `turns.arm_traits` calls
+    #: `dsl.use(..., spend=True)` on it, and a trait declared
+    #: `usage=ENCOUNTER` therefore has its single use **spent at arming** --
+    #: before round 1. All seven warlock pact boons were written against
+    #: that use on the reasoning that "the boon is a row with
+    #: `usage=ENCOUNTER`, so its charge *is* a use of that feature", and the
+    #: charge was gone before any row could reach it. Driven: `used` goes
+    #: 0 -> 1 across `arm_traits` for all seven, and `c.expend_row` then
+    #: returns False.
+    #:
+    #: So arming a trait and holding a resource on it are two different
+    #: things that wanted two different counters. `c.spend_charge` is the
+    #: write and `c.charge_left` the read; `c.restore_charge` hands one
+    #: back, which is what a boon that regains on a kill needs.
+    charges: dict[str, int] = field(default_factory=dict)
     #: Augment clauses a **feat** lent to a named row, as `(cost, clause)`.
     #:
     #: Four feats print "your <power> gains the augmentable keyword. When you

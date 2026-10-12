@@ -63,6 +63,22 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
 #: under. A curse from anywhere else has to use the same one.
 CURSE = "cf:warlock-f4"
 
+#: The sorcerer-king boon's charge. A `c.spend_charge` key, **not** the
+#: leg's own encounter use, and the distinction is #529: a trait is
+#: `action=NONE` with no trigger, so `turns.arm_traits` spends its single
+#: use at arming, before round 1. This row was written against that use and
+#: the charge was gone before `p12887` could ever reach it -- driven, 0 -> 1
+#: across `arm_traits` for all seven legs, with `c.expend_row` then False.
+#:
+#: Named here because three files spend or restore it and a second spelling
+#: of the key would be two resources that look like one.
+FELL = "cf:warlock-f1s4:boon"
+
+#: The clause name `cf:warlock-f1s4` offers its regain under, so a feat can
+#: replace it. `f3232` is the one that does -- it takes a power point
+#: instead of the charge coming back.
+BOON_REGAIN = "boon_regain"
+
 _A_CURSED_ENEMY_FALLS = "an enemy under your curse drops to 0 hit points"
 
 
@@ -78,6 +94,8 @@ _A_CURSED_ENEMY_FALLS = "an enemy under your curse drops to 0 hit points"
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
+    requires=on_leg("dark"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s0(c: Cast) -> None:
     """This leg's boon is spent through a row, so the row is granted along
@@ -99,6 +117,8 @@ def warlock_f1s0(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL],
     dropped=("c.deals(ref=)",),
+    requires=on_leg("elemental"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s1(c: Cast) -> None:
     """The affinity itself is `Build.element`, rolled once at chargen rather
@@ -127,6 +147,8 @@ def warlock_f1s1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
+    requires=on_leg("fey"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s2(c: Cast) -> None:
     """The at-will is granted; this leg's boon is one of the two
@@ -145,6 +167,8 @@ def warlock_f1s2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
+    requires=on_leg("infernal"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s3(c: Cast) -> None:
     """As the leg above: the at-will is granted and the boon stays with
@@ -163,22 +187,24 @@ def warlock_f1s3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
+    requires=on_leg("sorcerer-king"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s4(c: Cast) -> None:
     """The at-will, and the pact boon that enhances a power.
 
-    **Written, and `c.fell_might()` was never a gap.** The old note said
-    "nothing holds a resource across uses", and the thing that does was
-    sitting in the verb surface the whole time: the boon is a row with
-    `usage=ENCOUNTER`, so its charge **is** a use of this feature.
-    `c.expend_row` spends one without running the row -- "a use is spent and
-    the row never runs" is its own docstring -- `c.times` asks whether it is
-    still there, and `c.restore_use` hands it back. Three verbs, all
-    existing, and the seventh time this project has found a marked facility
-    already present under another name.
+    **The charge is its own state, and the first version of this row was
+    wrong about that.** It read "the boon is a row with `usage=ENCOUNTER`,
+    so its charge *is* a use of this feature" -- and a trait's single use is
+    spent by `turns.arm_traits` at the start of the fight, so the charge was
+    gone before `p12887` could reach it. Driven: `Powers.used` goes 0 -> 1
+    across `arm_traits` for all seven legs, and `c.expend_row` then returns
+    False every time. `c.times` does not exist either; that note named a
+    verb that was never in the surface. #529.
 
-    "You start each encounter with your fell might unspent" needs no code:
-    `Powers.used` is the per-encounter counter and both rests clear it.
+    So the charge is `FELL`, a `c.spend_charge` key. Arming is free,
+    spending is explicit, and both rests clear it -- which is what "you
+    start each encounter with your boon unspent" needs.
 
     "When a creature affected by your cf:warlock-f4 drops to 0 hit points,
     your pact boon triggers" -- the regain is watched here rather than
@@ -191,7 +217,14 @@ def warlock_f1s4(c: Cast) -> None:
 
     def fell(ev: Any) -> None:
         if cursed_by_me(c.world, c.me, ev):
-            c.restore_use(c.ref)
+            # **Offered as a named clause, because a feat replaces it.**
+            # `f3232` trades this regain for a power point, and "instead"
+            # cannot be said from outside a row that does not offer the
+            # clause. `instead_of_now` rather than `instead_of`: this fires
+            # inside a watcher this row installed, so there was never a
+            # menu entry and `c.variant` is 0 for ever -- the case that
+            # verb's own docstring describes.
+            c.instead_of_now(BOON_REGAIN, lambda: c.restore_charge(FELL))
 
     c.watch(Dropped, fell, until=When.ENCOUNTER, on=c.me,
             label=f"{c.ref} regain")
@@ -206,6 +239,8 @@ def warlock_f1s4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
+    requires=on_leg("star"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s5(c: Cast) -> None:
     """Both halves are rows and both are written -- the at-will has a
@@ -227,6 +262,8 @@ def warlock_f1s5(c: Cast) -> None:
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
     dropped=("c.active_vestige()",),
+    requires=on_leg("vestige"),
+    requires_text="needs the pact that prints it",
 )
 def warlock_f1s6(c: Cast) -> None:
     """The leg exists; the choice *within* the leg does not.
