@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 class Action:
     #: power | move | run | shift | charge | stand | escape | second_wind |
     #: total_defence | coup_de_grace |
+    #: bull_rush | grab | aid_attack | aid_defence |
     #: sustain | drop | wield | item | instinctive | command | end
     kind: str
     cost: ActionType
@@ -121,6 +122,7 @@ def legal(
     out.extend(_picking_up(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
+    out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
@@ -1021,6 +1023,45 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+def _manoeuvres(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """The three basic manoeuvres anybody may elect: bull rush, grab, aid.
+
+    **The menu offered some of 4e's basic manoeuvres and not others, and
+    which made it in looked accidental**: coup de grace and total defence
+    were first-class, grab existed as a verb nobody could choose, and bull
+    rush and aid another were absent entirely. 26 rows *modify* one of the
+    three and none of them makes one, so what was missing was the action and
+    not a verb. #501, #510.
+
+    Each is a standard action against an adjacent creature, so the offer is
+    one walk over who is next to this one. A bull rush and a grab are
+    attacks and respect the printed size rule; the two aid actions are not
+    attacks at all and grant outright.
+
+    **Aid is offered per enemy, and the ally is chosen when it resolves.**
+    The printed line picks an adjacent *enemy* first -- "it chooses an enemy
+    adjacent to it" -- and the ally second, which is the opposite way round
+    from how it reads. Offering the cross product of enemies and allies
+    would put a dozen near-identical entries on one menu and give `policy/`
+    a dozen things to score that differ only in a pick it can make later.
+    """
+    out: list[Action] = []
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return out
+    for foe in enemies(world, actor):
+        if not alive(world, foe) or distance_between(world, actor, foe) > 1:
+            continue
+        out.append(Action(kind="bull_rush", cost=ActionType.STANDARD,
+                          targets=(foe,)))
+        out.append(Action(kind="grab", cost=ActionType.STANDARD,
+                          targets=(foe,)))
+        out.append(Action(kind="aid_attack", cost=ActionType.STANDARD,
+                          targets=(foe,)))
+        out.append(Action(kind="aid_defence", cost=ActionType.STANDARD,
+                          targets=(foe,)))
+    return out
+
+
 # --------------------------------------------------------------------------
 # Doing it
 # --------------------------------------------------------------------------
@@ -1246,6 +1287,35 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
                     targets=list(action.targets),
                     target=action.targets[0] if action.targets else None)
         return cast.coup_de_grace()
+
+    if action.kind in ("bull_rush", "grab", "aid_attack", "aid_defence"):
+        # **No row, so no ref**, the same as a coup de grace: a manoeuvre is
+        # an action taken on its own and nothing declares it. The `Cast` is
+        # built on the manoeuvre's own name so `c.ref` says which one this is
+        # -- which is what a `Note` and the log read.
+        from .cast import Cast
+        from .query import allies as _allies
+
+        if not action.targets:
+            return False
+        foe = action.targets[0]
+        cast = Cast(world=world, me=actor, ref=f"manoeuvre:{action.kind}",
+                    targets=[foe], target=foe)
+        if action.kind == "bull_rush":
+            return cast.bull_rush(on=foe)
+        if action.kind == "grab":
+            return cast.grab_attempt(on=foe)
+        # The two aid actions choose the ally here rather than at offer time
+        # -- see `_manoeuvres`. With nobody to help, aiding is not an action
+        # this creature can usefully take, so it is refused rather than
+        # spending a standard action on nothing.
+        friends = [a for a in _allies(world, actor) if alive(world, a)]
+        if not friends:
+            return False
+        ally = cast.choose(friends, "which ally to aid") or friends[0]
+        if action.kind == "aid_attack":
+            return cast.aid_attack(foe, ally) is not None
+        return cast.aid_defence(foe, ally) is not None
 
     if action.kind == "stand":
         for eff in world.effects.of(actor):

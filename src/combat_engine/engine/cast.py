@@ -3231,6 +3231,117 @@ class Cast:
             mods=mods,
         )
 
+    #: The size rule all three basic manoeuvres print: "smaller than you, the
+    #: same size category as you, or one category larger than you". One
+    #: constant because three verbs quote it and a fourth will.
+    _MANOEUVRE_REACH = 1
+
+    def _manoeuvrable(self, who: int) -> bool:
+        """Is this a creature a basic manoeuvre may be tried on?
+
+        The printed size rule, which is the same sentence on bull rush and on
+        grab: one category larger is the ceiling, and there is no floor.
+        """
+        order = list(Size)
+        mine = self.size_of(self.me)
+        theirs = self.size_of(who)
+        if mine is None or theirs is None:
+            return True
+        return order.index(theirs) - order.index(mine) <= self._MANOEUVRE_REACH
+
+    def bull_rush(self, *, on: int | None = None) -> bool:
+        """"Push the target 1 square, and shift into the vacated space."
+
+        A standard action **every creature has**, which is why it is here and
+        not on a row: 14 rows add to a bull rush -- its attack roll, its push
+        distance, a trigger on it -- and none of them makes one, so what was
+        missing was the manoeuvre rather than a verb. #501.
+
+        Strength against Fortitude, and **no weapon modifiers**, which the
+        card states and which is why this rolls `c.attack(self.str_, FORT)`
+        longhand rather than going near a weapon.
+
+        `as_="bull_rush"` is what the 14 modifiers gate on. It rides the
+        attack context, declared in `resolve` beside the other shape keys.
+
+        **"Impossible Push: if there's no square you can push the target
+        into, your bull rush has no effect."** So the push is tried first and
+        the shift follows only if the target actually moved -- a hit that
+        could not move anybody is not a hit that moves the attacker.
+        """
+        who = self._who(on)
+        if who is None or not self._manoeuvrable(who):
+            return False
+        from .components import Position
+
+        before = self.world.get(who, Position)
+        where = before.square if before is not None else None
+        if not self.attack(self.str_, Defense.FORT, on=who, as_="bull_rush"):
+            return False
+        if not self.push(1, on=who):
+            return False
+        after = self.world.get(who, Position)
+        if where is not None and after is not None and after.square != where:
+            self.shift(1, to=where)
+        return True
+
+    def grab_attempt(self, *, on: int | None = None) -> bool:
+        """The grab **anybody** may try, as opposed to one a row applies.
+
+        `c.grab` is the applying half -- "the target is grabbed" on a card --
+        and `i2393x1` records that it is "applied, not rolled and not
+        measured". This is the elective manoeuvre: a standard action, a
+        Strength attack against Reflex with no weapon modifiers, and a hit
+        grabs. #501, #510.
+
+        "You must have at least one hand free to make a grab attempt", which
+        is read off `Gear` -- a creature with both hands full cannot try.
+        """
+        who = self._who(on)
+        if who is None or not self._manoeuvrable(who):
+            return False
+        gear = self.world.get(self.me, Gear)
+        if gear is not None and len(gear.held) >= 2:
+            return False
+        if not self.attack(self.str_, Defense.REF, on=who, as_="grab"):
+            return False
+        self.grab(on=who)
+        return True
+
+    def aid_attack(self, enemy: int, ally: int, *, until: When = When.EONT) -> Effect | None:
+        """"That ally gains a +2 bonus to its next attack roll against the
+        chosen enemy."
+
+        **No roll.** The combat aid actions grant outright -- the DC-10-plus-
+        half-level check is the *skill* version of aid another and is a
+        different printed block, which is worth saying because the two get
+        conflated and one of them would make this miss.
+
+        Scoped to the one enemy, which is #471's machinery: a bare +2 to the
+        ally's next attack would pay out against anything it swung at.
+        `once=True` is "its next attack roll", and the duration is the
+        **aider's** next turn, not the ally's -- the card says so and they
+        are different clocks.
+        """
+        return self.bonus(
+            "attack", 2, on=ally, until=until, kind="power", once=True,
+            when=lambda ctx: ctx.get("target") == enemy,
+        )
+
+    def aid_defence(self, enemy: int, ally: int, *, until: When = When.EONT) -> Effect | None:
+        """"That ally gains a +2 bonus to all defences against the chosen
+        enemy's next attack against it."
+
+        The sibling of `aid_attack` and the same shape, scoped the other way
+        round: the gate is on who is *attacking*, not who is being hit.
+        `Defense.ANY` is "all defences", which #360 added for exactly this
+        kind of line.
+        """
+        return self.bonus(
+            Defense.ANY, 2, on=ally, until=until, kind="power", once=True,
+            when=lambda ctx: ctx.get("attacker") == enemy,
+        )
+
     def coup_de_grace(self, *, on: int | None = None) -> bool:
         """Finish a helpless creature. An automatic critical, and nothing added.
 

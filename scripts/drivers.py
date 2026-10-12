@@ -3458,6 +3458,117 @@ def short_rest(out: Result) -> None:
              " show it the spent list")
 
 
+def manoeuvres(out: Result) -> None:
+    """The three basic manoeuvres anybody may elect, and what each prints.
+
+    26 rows modify a bull rush, a grab or an aid action and **none of them
+    makes one**, so the gap was the manoeuvre rather than a verb. The menu
+    offered coup de grace and total defence as first-class actions, had grab
+    as a verb nobody could choose, and did not have the other two at all.
+
+    The controls are the printed clauses that an implementation gets wrong
+    by being too generous:
+
+    * **bull rush shifts only if the push happened.** "If there's no square
+      you can push the target into, your bull rush has no effect" -- so a
+      hit against a target with its back to a wall must not walk the
+      attacker forward.
+    * **aid is scoped to the chosen enemy.** A bare +2 to an ally's next
+      attack pays out against anything it swings at, which is wider than
+      the card by every other creature on the board.
+    * **the aid duration is the aider's next turn**, not the ally's. Two
+      different clocks, and the card names the harder one to implement.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import enemies
+
+    world, me, _ = _board()
+    enc = world.encounter
+    assert enc is not None
+    foe = sorted(enemies(world, me))[0]
+
+    kinds = {a.kind for a in legal(world, enc, me)}
+    for kind in ("bull_rush", "grab", "aid_attack", "aid_defence"):
+        out.that(kind in kinds,
+                 f"{kind} is on the action menu -- it was absent, which is"
+                 " what left 26 rows with nothing to modify")
+
+    c = Cast(world=world, me=me, ref="drivers:manoeuvres")
+
+    # **Aid is scoped.** The ally's bonus must answer for the chosen enemy
+    # and not for anybody else.
+    friends = [a for a in world.having_team(me)] if hasattr(world, "having_team") else []
+    ally = friends[0] if friends else me
+    c.aid_attack(foe, ally)
+    other = next((f for f in sorted(enemies(world, me)) if f != foe), None)
+    hit_chosen = c.total("attack", ally, {"actor": ally, "target": foe})
+    out.that(hit_chosen >= 2,
+             f"the aided ally gets its +2 against the chosen enemy ({hit_chosen})")
+    if other is not None:
+        hit_other = c.total("attack", ally, {"actor": ally, "target": other})
+        out.that(hit_other < hit_chosen,
+                 "and NOT against a different enemy -- the control that keeps"
+                 f" aid from being a bonus to everything ({hit_other})")
+
+    # A bull rush against a target it cannot move does nothing to either.
+    from combat_engine.engine.components import Position
+
+    was_there = world.get(foe, Position)
+    target_before = was_there.square if was_there is not None else None
+    mine = world.get(me, Position)
+    me_before = mine.square if mine is not None else None
+    pushed = c.bull_rush(on=foe)
+    mine_after = world.get(me, Position)
+    me_after = mine_after.square if mine_after is not None else None
+
+    # **The invariant, which is failable both ways.** Either nothing moved
+    # the attacker -- a miss, or a target with nowhere to go -- or it is
+    # standing exactly where the target was. Anything else means the shift
+    # went somewhere the card does not send it.
+    out.that(me_after in (me_before, target_before),
+             "after a bull rush the attacker is either where it started or"
+             f" in the square the target vacated, never a third place"
+             f" (start {me_before}, target was {target_before}, now"
+             f" {me_after})")
+    if pushed:
+        out.that(me_after == target_before,
+                 "and on a push that landed, it followed into the vacated"
+                 " square -- the second half of the printed Hit line")
+
+    # **The impossible push.** "If there's no square you can push the target
+    # into, your bull rush has no effect" -- so the attacker must not walk
+    # forward.
+    #
+    # **This assertion is a guard, not a verified check, and the difference
+    # is worth stating.** Three plants failed to make it fail: dropping the
+    # push-succeeded return, dropping the did-the-target-actually-move
+    # check, and dropping both. The clause survives all three because
+    # `c.shift` refuses to enter an occupied square and the target is still
+    # standing in it -- so the behaviour is right for a reason one layer
+    # below this verb. It would start earning its place the day somebody
+    # moves the attacker with `place` instead, which is exactly the change
+    # that would break it quietly.
+    from combat_engine.engine.movement import place
+
+    width, height = world.grid.width, world.grid.height
+    corner = (width - 1, height - 1)
+    beside = (width - 2, height - 1)
+    place(world, foe, corner)
+    place(world, me, beside)
+    for _ in range(12):            # push away from `me` is off the map
+        stuck_before = world.get(me, Position)
+        at = stuck_before.square if stuck_before is not None else None
+        c.bull_rush(on=foe)
+        now = world.get(me, Position)
+        out.that(now is not None and now.square == at,
+                 "a bull rush against a target with nowhere to go moves"
+                 " nobody -- the printed Impossible Push clause, and the"
+                 " one an unconditional shift gets wrong")
+        break
+
+
 def long_rest(out: Result) -> None:
     """A long rest announces itself, and a daily does come back.
 
@@ -3675,6 +3786,8 @@ DRIVERS = {
     "forms": (forms, "which shape a creature is in, and two at once"),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
+    "manoeuvres": (manoeuvres,
+                   "bull rush, grab and aid another, electable by anybody"),
     "long_rest": (long_rest,
                   "a long rest announces itself, and a daily comes back"),
     "short_rest": (short_rest,

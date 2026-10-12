@@ -267,6 +267,13 @@ def attack(
             # a rider gated on an off-hand attack read a key the context
             # did not carry, which is silently false rather than wrong.
             "hand": hand,
+            # **Which named swing this is**, empty for an ordinary attack.
+            # `as_` already rode the events for the counter-attack case; the
+            # context did not carry it, so a modifier on "a bull rush attack
+            # roll" had nothing to gate on. Declared here because `lint.py`
+            # derives the legal key set from this dict, and a key minted
+            # elsewhere is a gate on a key no context carries. #501.
+            "as_": as_,
             # **Is this the second roll, and whose doing?** Declared here,
             # with the defaults that say "no", because this is where the
             # attack context is built -- `lint.py` derives the legal key set
