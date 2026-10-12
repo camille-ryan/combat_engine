@@ -186,6 +186,17 @@ def _holding(c: Cast, *groups: str) -> bool:
     return gear is not None and any(w.group in groups for w in gear.held)
 
 
+def _implement_attack(ctx: dict[str, Any]) -> bool:
+    """Is the roll being modified an implement attack?
+
+    The four feats that narrow to one implement all gate on this *and* on
+    what is in hand, because the card names both: "implement attack rolls
+    that you make with a tome" is a kind of attack and a thing held. #517.
+    """
+    row = get(str(ctx.get("power", "") or ""))
+    return row is not None and Keyword.IMPLEMENT in row.keywords
+
+
 def _holding_ref(c: Cast, *refs: str) -> bool:
     gear = _gear(c)
     return gear is not None and any(w.ref in refs for w in gear.held)
@@ -979,7 +990,7 @@ def f3733(c: Cast) -> None:
 
 @power("f3736", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*WEAPON_REF, "Defences.immune_keywords"))
+       dropped=("Defences.immune_keywords",))
 def f3736(c: Cast) -> None:
     """A tome is one implement among many and the engine's only implement
     group is "implement", so the accuracy half cannot be narrowed to it.
@@ -993,6 +1004,12 @@ def f3736(c: Cast) -> None:
     condition to stand for it, so the gap is keyword immunity on the
     creature and not a reader.
     """
+
+    # The accuracy half, which was not written: "a tome" had nothing to name,
+    # so the row carried only its conjuration clause. `w:tome` exists now.
+    c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: (_implement_attack(ctx)
+                              and _holding_ref(c, "w:tome")))
 
     def ring(ev: Any) -> None:
         if ev.actor != c.me:
@@ -1023,13 +1040,17 @@ def f3738(c: Cast) -> None:
 
 
 @power("f3739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=(*WEAPON_REF, "c.reload()"))
+       reach=PERSONAL, target=SELF, dropped=("c.reload()",))
 def f3739(c: Cast) -> None:
     """Crossbow is a group; a wand is not. Drawing, stowing and loading
     are gear handling the engine does not spend actions on, so the free
     actions the card grants have nothing to make cheaper."""
+    # "with a crossbow **or a wand**". The wand half had no way to be said:
+    # crossbow is a group and a wand is one implement among eight, so this
+    # asks the group for one and the ref for the other.
     c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
-            when=lambda ctx: _holding(c, "crossbow"))
+            when=lambda ctx: (_holding(c, "crossbow")
+                              or _holding_ref(c, "w:wand")))
 
 
 @power("f3740", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1058,7 +1079,7 @@ def _one_handed_melee(c: Cast) -> bool:
 
 @power("f3741", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=WEAPON_REF)
+)
 def f3741(c: Cast) -> None:
     """The shield half is a bonus laid on everybody else and typed
     `shield`, so a second source of one does not stack with it -- which
@@ -1071,6 +1092,13 @@ def f3741(c: Cast) -> None:
     """
     c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _one_handed_melee(c))
+    # The second half of the same sentence, and a separate bonus: the card
+    # gives one for a one-handed melee weapon **and** one for implement
+    # attacks with a holy symbol. Narrowed now rather than being laid on
+    # every implement attack, which over-granted on a staff.
+    c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: (_implement_attack(ctx)
+                              and _holding_ref(c, "w:holy-symbol")))
     gear = _gear(c)
     if gear is not None and gear.shield:
         for friend in c.allies():
@@ -1079,7 +1107,7 @@ def f3741(c: Cast) -> None:
 
 @power("f3742", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=WEAPON_REF)
+)
 def f3742(c: Cast) -> None:
     """The second clause is written: `c.no_provoke` takes a `when=` now, so
     "ranged and area attacks do not provoke" has somewhere to go.
@@ -1098,9 +1126,16 @@ def f3742(c: Cast) -> None:
         when=lambda ctx: _holding_two_handed(c),
     )
 
+    c.bonus("attack", 1, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: (_implement_attack(ctx)
+                              and _holding_ref(c, "w:holy-symbol")))
+
     def with_a_symbol(ctx: dict[str, Any]) -> bool:
+        # "a holy symbol" exactly, where this read `Keyword.IMPLEMENT` as a
+        # stand-in for it -- so an orb bought the same exemption.
         row = _provoking_row(ctx)
         return (row is not None and Keyword.IMPLEMENT in row.keywords
+                and _holding_ref(c, "w:holy-symbol")
                 and _holding_two_handed(c))
 
     c.no_provoke(on=c.me, until=When.ENCOUNTER, when=with_a_symbol)

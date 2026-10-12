@@ -155,6 +155,19 @@ def _groups(world: Any, eid: int) -> set[str]:
     return {w.group for w in gear.held} if gear is not None else set()
 
 
+def _holding_ref(c: Cast, *refs: str) -> bool:
+    """Is one of these exact things in hand?
+
+    By **ref**, which is the only way to name one kind of implement: all
+    eight share `group="implement"` and have to, because `dsl.usable` reads
+    that group to mean "not something you can hit anybody with". #517.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.ref in refs for w in gear.held)
+
+
 def _keyword(ref: str, word: Keyword) -> bool:
     p = get(ref)
     return p is not None and word in p.keywords
@@ -1088,7 +1101,7 @@ def f3521(c: Cast) -> None:
 
 
 @power("f3522", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=WEAPON_REF)
+       reach=PERSONAL, target=SELF)
 def f3522(c: Cast) -> None:
     """A rod is not one of the ten weapon groups, so the attack bonus is
     narrowed to implement attacks -- which is the widest true statement --
@@ -1101,8 +1114,11 @@ def f3522(c: Cast) -> None:
     context has, and reading it here would be silently false."""
     me = c.me
     c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
-            when=lambda ctx: _keyword(ctx.get("power", ""), Keyword.IMPLEMENT))
-    if "implement" in _groups(c.world, me):
+            when=lambda ctx: (_keyword(ctx.get("power", ""), Keyword.IMPLEMENT)
+                              and _holding_ref(c, "w:rod")))
+    # "When you hold a rod", not "when you hold an implement" -- the shield
+    # bonus was keyed on the group, so an orb bought it too.
+    if _holding_ref(c, "w:rod"):
         c.bonus(AC, 1, kind="shield", on=me, until=When.ENCOUNTER)
         c.bonus(REF, 1, kind="shield", on=me, until=When.ENCOUNTER)
 

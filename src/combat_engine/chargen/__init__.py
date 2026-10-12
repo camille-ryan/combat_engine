@@ -313,8 +313,15 @@ TOTEM = Weapon(ref="w:totem", damage="1d4", proficiency=0, group="implement")
 #: damage die and no proficiency bonus, so there is no stat line to load.
 WAND = Weapon(ref="w:wand", damage="1d4", proficiency=0, group="implement")
 KI_FOCUS = Weapon(ref="w:ki-focus", damage="1d4", proficiency=0, group="implement")
+#: The eighth, and the only one a feat asked for before anything carried
+#: it: `f3736` narrows its accuracy to a tome and there was no tome to
+#: narrow to. #517.
+TOME = Weapon(ref="w:tome", damage="1d4", proficiency=0, group="implement")
 
-IMPLEMENTS = {w.ref: w for w in (ROD, ORB, HOLY_SYMBOL, STAFF, TOTEM, WAND, KI_FOCUS)}
+IMPLEMENTS = {
+    w.ref: w
+    for w in (ROD, ORB, HOLY_SYMBOL, STAFF, TOTEM, TOME, WAND, KI_FOCUS)
+}
 
 
 def _printed_weapons() -> dict[str, Weapon]:
