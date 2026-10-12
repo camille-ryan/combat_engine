@@ -817,6 +817,29 @@ class ExtendedRested(Event):
 
 
 @dataclass
+class Boosted(Event):
+    """A roll already made was added to, and by which row.
+
+    The sibling of `Rerolled` below, filed for the same reason and found the
+    same way: `c.boost_roll` mutates the result in place and said nothing, so
+    the four feats printing a rider on **"an attack benefiting from"** a
+    banked charge had no subject. `artificer_b._banked`'s own docstring
+    records the pair of blockers -- the charge needing a rest to be laid at,
+    and a landed roll needing something that can add to it -- and this is
+    what was left once both of those landed.
+
+    `by` is the ref of the row that paid for the boost, which is what lets a
+    rider keyed to one feature ignore a boost somebody else's row bought.
+    `amount` is what went on, after the row decided it.
+    """
+
+    actor: int = 0
+    amount: int = 0
+    by: str = ""
+    kind: str = ""
+
+
+@dataclass
 class Rerolled(Event):
     """A d20 was rolled again, and by which row.
 

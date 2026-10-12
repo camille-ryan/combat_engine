@@ -971,21 +971,43 @@ def f3040(c: Cast) -> None:
 #: subject. One symbol, one gap, which is what the pair could not say.
 BANKED = ("events.ShortRested",)
 
+#: What `cf:artificer-f0s0` banks, printed on its card as +2. A constant
+#: because `f2110` doubles it and two rows writing `2` would drift.
+_BANKED_BONUS = 2
+
+#: The key `f2110` adds to and `cf:artificer-f0s0` reads. A modifier rather
+#: than an override, so a second feat touching the same number would add
+#: rather than overwrite -- which is what `Mods.total` is for.
+#: Must match `features.martial_leaders.BANKED_CHARGE_KEY`.
+_BANKED_KEY = "artificer:banked-charge"
+
 
 def _banked(ref: str, what: str) -> None:
-    """`cf:artificer-f0s0` is declared now, and refused in play.
+    """All three of this family's old blockers landed, and a fourth appeared.
 
-    The feature banks a +2 to one attack roll, spent as a free action
-    *after* the roll. Both ends are missing and the marker now says so:
-    the charge is laid during a short rest and nothing announces one, and
-    a roll that has already landed cannot be added to -- `c.bonus` is
-    read by the next roll, not by the one on the table. Nothing lays the
-    charge, so nothing is "benefiting from" it and these four have no
-    subject; the feature being named in prose was never what stopped
-    them.
+    The docstring here used to name two, and both are gone: the charge is
+    laid at a rest and `events.ShortRested` announces one, and a landed roll
+    can be added to -- `c.boost_roll` (#495) does exactly that, and
+    `events.Boosted` now says when it happened and which row paid.
+
+    **What is left is whose hand the charge is in.** Every one of these four
+    is about an *ally* or a *wielder*: "when an ally hits with an attack
+    benefiting from", "a creature wielding an implement benefiting from".
+    `cf:artificer-f0s0` lays the reservoir on the artificer itself, which is
+    narrower than its own card -- choosing which item is empowered belongs to
+    `cf:artificer-f0`'s allowance and is not written -- so there is no ally
+    holding a charge for these to find.
+
+    Narrower and honest: the subject exists now, the *other* holder does
+    not -- `c.empower(on=ally)` is the gap, which is `cf:artificer-f0s0`
+    being able to lay its reservoir on somebody else's weapon.
+
+    `f2110` is out of this family for that reason: it changes the size of
+    the bonus rather than asking who carries it, so it is written.
     """
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=BANKED)
+           reach=PERSONAL, target=SELF,
+           todo=("c.empower(on=ally)",))
     def feat(c: Cast) -> None: ...
 
     feat.__name__ = ref
@@ -995,8 +1017,27 @@ def _banked(ref: str, what: str) -> None:
 #: `cf:artificer-f0` is a declared row, so this is not a naming gap -- the
 #: +2 it banks is the thing nothing lays, which is what its own sub-option
 #: waits on too.
-_feature("f2110", "Doubles the attack bonus one feature banks in a weapon.",
-         todo=BANKED)
+@power("f2110", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2110(c: Cast) -> None:
+    """Doubles the attack bonus `cf:artificer-f0s0` banks in a weapon.
+
+    **Written, and it is out of the `_banked` family deliberately.** The
+    other three ask *who carries the charge*, which is still narrower than
+    the cards (see `_banked`). This one only changes how big the bonus is,
+    and the artificer carrying its own charge is enough for that.
+
+    A modifier on a named key, which `cf:artificer-f0s0` reads when it
+    spends the charge. **Not `c.change_dice`**: that store holds dice
+    strings and the banked bonus is a plain number, so putting "4" in it
+    would be a misuse that happened to work.
+
+    "Doubles" is written as `+_BANKED_BONUS` on top of the printed one
+    rather than as a 4, so the two stay in step if the card's number is ever
+    read off the page instead of written here.
+    """
+    c.bonus(_BANKED_KEY, _BANKED_BONUS, on=c.me, until=When.ENCOUNTER,
+            kind="untyped")
 _banked("f3029", "Damage to an enemy beside an ally that charge helped.")
 _banked("f3036", "An initiative bonus for whoever carries the banked charge.")
 _banked("f3044", "Lends a racial power's benefit to the charge's wielder.")

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from .components import Gear, Health, Mod, Mods, Position, Stats
 from .durations import Effect, When
-from .events import Event, ItemPowerUsed, Note, PowerUsed
+from .events import Boosted, Event, ItemPowerUsed, Note, PowerUsed
 from .grid import Square, spread
 from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
@@ -3009,20 +3009,33 @@ class Cast:
                 or result.natural >= floor
                 or (result.natural != 1 and result.total >= result.target_defence)
             )
-            return True
+            return self._boosted(amount, kind)
 
         if hasattr(ev, "saved") and kind in ("", "save"):
             ev.bonus += amount
             # 10 is the printed threshold and `c.reroll_save` uses the same
             # literal; there is one saving throw DC in the game.
             ev.saved = ev.natural + ev.bonus >= 10
-            return True
+            return self._boosted(amount, kind)
 
         if isinstance(ev, SkillCheck) and kind in ("", "check"):
             self.boost_check(amount)
-            return True
+            return self._boosted(amount, kind)
 
         return False
+
+    def _boosted(self, amount: int, kind: str) -> bool:
+        """Say that a roll already made was added to, and return True.
+
+        All three of `boost_roll`'s paths come through here -- an attack, a
+        saving throw, a skill check -- because a rider on "an attack
+        benefiting from" a charge must not fire on a boosted save, and the
+        only way to tell them apart afterwards is to say which it was.
+        """
+        self.world.bus.emit(
+            Boosted(actor=self.me, amount=amount, by=self.ref, kind=kind)
+        )
+        return True
 
     def terrain(self, word: str) -> bool:
         """Is the fight being had in that sort of place? `c.terrain("aquatic")`.

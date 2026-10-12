@@ -77,6 +77,12 @@ _REST = "events.ShortRested"
 EMPOWERMENTS = 1
 EMPOWERMENTS_REF = "cf:artificer-f0"
 
+#: What the reservoir is worth, and the key a feat adds to it on. `f2110`
+#: doubles the bonus and writes the difference there; this row reads it when
+#: it spends, so the feat may arrive after the charge was banked.
+BANKED_CHARGE = 2
+BANKED_CHARGE_KEY = "artificer:banked-charge"
+
 
 # -- artificer --------------------------------------------------------------
 
@@ -176,7 +182,12 @@ def artificer_empower_reservoir(c: Cast) -> None:
         def spend(roll: Any) -> None:
             if getattr(roll, "actor", None) != holder:
                 return
-            c.boost_roll(2)
+            # The printed +2, plus whatever a feat has added to it -- `f2110`
+            # doubles it and lays the difference on this key. Read here
+            # rather than closed over, so the feat can arrive after the
+            # charge is banked.
+            extra = c.total(BANKED_CHARGE_KEY, holder, {"actor": holder})
+            c.boost_roll(BANKED_CHARGE + extra)
 
         from combat_engine.engine.events import AttackRolled
 
