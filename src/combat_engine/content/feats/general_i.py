@@ -1482,19 +1482,49 @@ def f1410(c: Cast) -> None:
     c.temp_hp(5, on=c.me)
 
 
+#: Weapon training: proficiency and a +2 feat bonus to damage with a named
+#: set. **Refs, never slugs.** `Gear.proficient_with` takes a
+#: `weapon:<slug>` band and that is the wrong road here: `talenta boomerang`,
+#: `talenta tangat` and `drow long knife` are all in `names.json` under their
+#: `w` refs, so a slug in this file would be a printed name in tracked
+#: source. `Gear.trained` is a set of refs and `Cast._trained_with` reads it,
+#: so the grant is sayable without one. #506.
+_TALENTA = ("w3670", "w3667", "w3666")
+_XENDRIK = ("w3665", "w3671")
+
+
+def _weapon_training(c: Cast, refs: tuple[str, ...]) -> None:
+    """Proficiency with these, and +2 damage while one of them is in hand."""
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return
+    gear.trained = gear.trained | frozenset(refs)
+    c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: any(w.ref in refs for w in gear.held))
+
+
 @power("f1411", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.weapon_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1411(c: Cast) -> None:
-    """Proficiency and damage with three named weapons. `chargen` can
-    deal a weapon now, but only by ref, and the three reach the spec as
-    printed names -- so there is nothing to name in the grant and nothing
-    for the damage bonus to gate on."""
+    """Proficiency and +2 damage with three weapons, named by ref.
+
+    **The marker said the spec gives no ref to gate on, and that was never
+    the obstacle.** `general_s.f3794` has been doing exactly this -- a +2
+    feat damage bonus gated on `_holding_ref(c, "w3597", "w3602")` -- for
+    another weapon-training card the whole time. The refs come off the
+    `weapon` table; nothing has to be resolved out of the spec text.
+
+    The prerequisite is a column `chargen.meets` enforces, not this row's
+    business.
+    """
+    _weapon_training(c, _TALENTA)
 
 
 @power("f1415", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.weapon_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1415(c: Cast) -> None:
-    """Two more named weapons, blocked the same way as f1411."""
+    """Two weapons, the same shape as `f1411`."""
+    _weapon_training(c, _XENDRIK)
 
 
 @power("f1423", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
