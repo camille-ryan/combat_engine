@@ -3700,7 +3700,9 @@ def empowerment_pool(out: Result) -> None:
         empowerments,
     )
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
     from combat_engine.engine.durations import When
+    from combat_engine.engine.turns import short_rest
 
     world, me, _ = _board()
     c = Cast(world=world, me=me, ref="drivers:empowerments")
@@ -3716,6 +3718,54 @@ def empowerment_pool(out: Result) -> None:
     out.that(took == [True, False],
              "the allowance is spent down and refuses when the day is out"
              f" -- a pool that always says yes is free {took}")
+
+    # **A rest between encounters runs the rest clause**, which is the whole
+    # of #498's second half and the thing that was silently broken. The
+    # three features and five feats written against `events.ShortRested`
+    # were all dead in both of `fight.py`'s paths: the rest is called
+    # before `encounter.start()`, so no trait had laid a watcher. They
+    # audited green because the audit board arms first and then provokes.
+    world4, me4, _ = _board()
+    known4 = world4.get(me4, Powers) or world4.add(me4, Powers())
+    known4.known = (*tuple(known4.known), "cf:artificer-f0s0")
+    enc = world4.encounter
+    assert enc is not None
+    enc.arm_traits_of(me4)
+    for eff in list(world4.effects.of(me4)):
+        world4.effects.end(eff, "the encounter ended")
+    world4.encounter = None          # what fight.py's order amounts to
+    short_rest(world4)
+    out.that(known4.per_day.get(EMPOWERMENTS_REF) == 1,
+             "a short rest taken between encounters banks the empowerment --"
+             " with no encounter nothing is armed, so the row had laid no"
+             f" watcher and the rest reached nothing ({dict(known4.per_day)})")
+
+    # **And a rest *during* an encounter must not arm anything twice.**
+    # `Encounter.start` has already armed, and a second pass lays a second
+    # copy of every standing modifier -- the seventy-one-watchers bug
+    # `turns._arm_traits` records, in one step rather than over seven
+    # rounds. Added because a plant removing the guard in `_rest_window`
+    # left all 507 rules green: the guard was reasoned and unmeasured.
+    # Measured as **how many times the rest clause ran**, not as a count of
+    # live effects: a mid-encounter rest legitimately adds one, the banked
+    # charge itself, and the first version of this rule asserted the count
+    # was unchanged and went red on correct code. The pool is raised to 3
+    # first, because at the printed 1 the second bank is refused by the
+    # allowance and the two cases look identical.
+    world5, me5, _ = _board()
+    known5 = world5.get(me5, Powers) or world5.add(me5, Powers())
+    known5.known = (*tuple(known5.known), "cf:artificer-f0s0")
+    enc5 = world5.encounter
+    assert enc5 is not None
+    enc5.arm_traits_of(me5)
+    Cast(world=world5, me=me5, ref="drivers:headroom").change_amount(
+        EMPOWERMENTS_REF, 3, on=me5, until=When.ENCOUNTER)
+    short_rest(world5)
+    banked = known5.per_day.get(EMPOWERMENTS_REF, 0)
+    out.that(banked == 1,
+             "a rest taken while an encounter is running arms nothing a"
+             " second time -- a second copy of the trait would lay a second"
+             f" rest watcher and bank twice off one rest ({banked})")
 
     # f3791's raise, on a fresh day.
     world2, me2, _ = _board()

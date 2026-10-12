@@ -33,6 +33,59 @@ if TYPE_CHECKING:
     from .ecs import World
 
 
+def arm_traits(world: World, eid: int) -> None:
+    """Turn on one creature's traits. Needs no encounter, by design.
+
+    **Lifted out of `Encounter.arm_traits_of` because a rest needs it.** A
+    rest happens *between* encounters -- `scripts/fight.py` calls
+    `short_rest(world)` and only then `encounter.start()` -- so at the
+    moment a rest event fires there is no encounter, nothing has been armed,
+    and a row whose printed effect happens during a rest had laid no
+    watcher. #498 predicted this exactly: the event would be "correct,
+    observable in the log, and reach no row", which is this component's
+    commonest failure shape.
+
+    It was not a prediction either. Three features and five feats were
+    written against `events.ShortRested`, all of them audited green, and all
+    of them dead in both of `fight.py`'s paths -- they fire only when a rest
+    happens *inside* an encounter, which is the one place a rest does not
+    happen. The audit board arms traits and then provokes, so it could not
+    see it.
+
+    Nothing in the loop ever needed the encounter: it reads `Powers` off the
+    world and calls `dsl.use`. The method above is now a hop to this.
+    """
+    from .components import Powers
+    from .dsl import get, use
+    from .types import ActionType
+
+    known = world.get(eid, Powers)
+    if known is None:
+        return
+    # **Re-read, because arming can lengthen the list.** `Powers.all`
+    # builds a fresh list, so a ref `c.grant_row` appended while this
+    # loop was walking the old one was never armed -- and a feat whose
+    # whole printed benefit is "you gain class feature X" is exactly
+    # that shape, so it sat inert. Passes rather than an index, so the
+    # first pass keeps the order it has always had and anything handed
+    # over during it is armed after, which is the order it happens in.
+    seen: set[str] = set()
+    while True:
+        fresh = [ref for ref in known.all if ref not in seen]
+        if not fresh:
+            return
+        seen.update(fresh)
+        for ref in fresh:
+            p = get(ref)
+            # A trait is simply *true*: no action and nothing to wait
+            # for. A no-action row that declares a trigger is a
+            # different thing -- it happens when its trigger does --
+            # and arming it at the start would fire it once, out of
+            # nowhere, and never again.
+            if p is not None and p.action is ActionType.NONE and not p.triggers:
+                use(world, eid, ref, spend=True)
+
+
 class Encounter:
     """One fight. Owns the clock; owns nothing else."""
 
@@ -141,36 +194,11 @@ class Encounter:
         so a summoned monster had no aura, no regeneration and none of the
         things that are simply true of it. Every summon in the tree was
         quietly weaker than its stat block.
-        """
-        from .components import Powers
-        from .dsl import get, use
-        from .types import ActionType
 
-        known = self.world.get(eid, Powers)
-        if known is None:
-            return
-        # **Re-read, because arming can lengthen the list.** `Powers.all`
-        # builds a fresh list, so a ref `c.grant_row` appended while this
-        # loop was walking the old one was never armed -- and a feat whose
-        # whole printed benefit is "you gain class feature X" is exactly
-        # that shape, so it sat inert. Passes rather than an index, so the
-        # first pass keeps the order it has always had and anything handed
-        # over during it is armed after, which is the order it happens in.
-        seen: set[str] = set()
-        while True:
-            fresh = [ref for ref in known.all if ref not in seen]
-            if not fresh:
-                return
-            seen.update(fresh)
-            for ref in fresh:
-                p = get(ref)
-                # A trait is simply *true*: no action and nothing to wait
-                # for. A no-action row that declares a trigger is a
-                # different thing -- it happens when its trigger does --
-                # and arming it at the start would fire it once, out of
-                # nowhere, and never again.
-                if p is not None and p.action is ActionType.NONE and not p.triggers:
-                    use(self.world, eid, ref, spend=True)
+        A thin hop to `arm_traits` below, which took the loop out of this
+        class because **a rest needs it and has no encounter**. See there.
+        """
+        arm_traits(self.world, eid)
 
     def _roll_initiative(self) -> list[int]:
         """Everybody rolls, then the rolls are announced, then they are read.
@@ -586,6 +614,42 @@ class Encounter:
             pass  # the turn ends normally; `advance` skips the dead
 
 
+def _rest_window(world: World, rested: list[int]) -> None:
+    """Arm each resting creature's traits, so a rest clause has a listener.
+
+    **#498's second half, and it was needed exactly as that issue said.**
+    Emitting the rest event is the easy part and on its own reaches nothing:
+    a trait lays its watcher when an encounter arms it, and a rest happens
+    *between* encounters -- `scripts/fight.py` calls `short_rest(world)` and
+    only then `encounter.start()`.
+
+    It was not a prediction by the time this was written. Three class
+    features and five feats had been written against `events.ShortRested`,
+    all audited green, and every one of them was dead in both of
+    `fight.py`'s paths. They fire only when a rest happens *inside* an
+    encounter, which is the one place a rest does not happen. The audit
+    board arms traits and then provokes, so it could not see it.
+
+    **Not a dispatcher**, which is what #498 sketched. A rest has no turns,
+    no action windows and no interrupts, and what a rest-clocked row needs
+    is simply to have run its trait body -- which is what arming *is*.
+    Reusing `arm_traits` is a dozen lines against a second
+    `Triggers`-shaped object that would have to make every window and every
+    interrupt meaningful with no turn order.
+
+    **A no-op while an encounter is running.** `Encounter.start` has already
+    armed everything, and arming twice lays a second copy of every standing
+    modifier -- the seventy-one-watchers bug `_arm_traits` documents, in one
+    step rather than over seven rounds. A rest mid-fight is not a printed
+    situation; the audit board is where it happens, and that board arms
+    first.
+    """
+    if world.encounter is not None:
+        return
+    for eid in rested:
+        arm_traits(world, eid)
+
+
 def short_rest(world: World) -> None:
     """Five minutes: encounter powers come back, daily ones do not.
 
@@ -612,6 +676,7 @@ def short_rest(world: World) -> None:
     # sorcerer's phase -- so it has to see the refreshed list. Collected
     # first because emitting inside `world.each` would let a listener that
     # grants a power mutate what is being walked.
+    _rest_window(world, rested)
     for eid in rested:
         world.bus.emit(ShortRested(actor=eid))
 
@@ -647,7 +712,9 @@ def extended_rest(world: World) -> None:
     # grants a power cannot mutate what is being walked.
     from .events import ExtendedRested
 
-    for eid in [eid for eid, _ in world.each(Powers)]:
+    woken = [eid for eid, _ in world.each(Powers)]
+    _rest_window(world, woken)
+    for eid in woken:
         world.bus.emit(ExtendedRested(actor=eid))
 
 
