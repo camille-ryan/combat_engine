@@ -113,6 +113,7 @@ from .events import (
     RoundStart,
     SavingThrow,
     SecondWind,
+    ShortRested,
     SkillCheck,
     Summoned,
     SurgeSpent,

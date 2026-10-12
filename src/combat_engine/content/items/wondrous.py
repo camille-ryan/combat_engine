@@ -1500,19 +1500,37 @@ def i523p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("events.ShortRested",),
 )
 def i961x1(c: Cast) -> None:
-    """The whole benefit steps the phase of the source the card names by
-    ref, and that row is itself refused: `cf:sorcerer-f0s0` is a state
-    machine clocked on a rest nothing announces, so there is no phase to
-    step.
+    """"When you use your second wind, you can choose to change your phase
+    to the next higher-numbered phase."
 
-    The marker named that row, which went red the day it was written --
-    a ref resolves against the registry, and a row that is declared but
-    refused is still declared. So it names what the row is *waiting on*
-    instead, which is the same thing this one waits on and is the honest
-    answer: nothing announces a rest, so no row can run inside one."""
+    **Written.** The phase exists now: `events.ShortRested` landed, so
+    `cf:sorcerer-f0s0` holds one, and `features.sorcerer.step_phase`
+    advances it -- stars wrapping back to sun.
+
+    No check for the feature. `step_phase` returns `""` for a creature in no
+    phase, which is every character without Cosmic Magic, so the printed "if
+    you have the sorcerer class feature" enforces itself rather than being
+    asked separately.
+
+    **"Can choose" is a choice**, so it asks rather than stepping: the
+    higher phase is not always the better one, and a tattoo that advanced
+    the cycle without consent would be a downgrade on the turn a sorcerer
+    wanted the stars' teleport.
+    """
+    from combat_engine.content.features.sorcerer import phase_of, step_phase
+    from combat_engine.engine.events import SecondWind
+
+    me = c.me
+
+    def winded(ev: SecondWind) -> None:
+        if getattr(ev, "actor", None) != me or not phase_of(c):
+            return
+        if c.choose([True, False], "step the cosmic phase on"):
+            step_phase(c)
+
+    c.watch(SecondWind, winded, until=When.ENCOUNTER, on=me)
 
 
 # -- level 7 ----------------------------------------------------------------

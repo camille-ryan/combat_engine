@@ -47,6 +47,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     NO_TARGET,
     PERSONAL,
+    STR,
     ActionType,
     Build,
     Cast,
@@ -54,7 +55,10 @@ from combat_engine.engine import (
     Gear,
     Hit,
     Keyword,
+    Miss,
     PowerUsed,
+    ShortRested,
+    TurnStart,
     When,
     World,
     get,
@@ -117,6 +121,70 @@ def _on_bolt_hit(c: Cast, fn: Callable[[Hit], None]) -> None:
     c.watch(Hit, watcher, until=When.ENCOUNTER, on=me, label=f"{c.ref} bolt")
 
 
+#: The three cosmic phases, in the page's own numbering -- sun, moon, stars.
+#: The order is load-bearing: "your phase immediately changes to the next
+#: higher-numbered phase (or back to the phase of the sun if you are in the
+#: phase of the stars)" is arithmetic on it.
+_PHASES = ("sun", "moon", "stars")
+
+#: Resist 5, rising to 10 at 11th and 15 at 21st, which the page states once
+#: for all three phases rather than per phase.
+def _resistance(level: int) -> int:
+    return 15 if level >= 21 else 10 if level >= 11 else 5
+
+
+def enter_phase(c: Cast, which: str, *, guard: int = 0) -> None:
+    """Hold `which` as the phase, replacing whatever was held, and lay it.
+
+    **Module level and not a closure**, because `i961x1` steps this
+    sorcerer's phase from another file -- a tattoo whose whole property is
+    "when you use your second wind you can change your phase to the next
+    higher-numbered phase". A closure inside the feature row could not be
+    reached from there.
+    """
+    from combat_engine.engine.types import DamageType as _DT
+
+    me = c.me
+    ward = guard or _resistance(c.level)
+    for eff in list(c.world.effects.of(me)):
+        if eff.label.startswith("cf:sorcerer-f0s0 phase "):
+            c.world.effects.end(eff, "the cycle moved on")
+    c.effect(f"cf:sorcerer-f0s0 phase {which}", on=me, until=When.ENCOUNTER)
+    shield = {"sun": _DT.COLD, "moon": _DT.PSYCHIC, "stars": _DT.RADIANT}[which]
+    c.resist(ward, shield, on=me, until=When.ENCOUNTER)
+
+
+def step_phase(c: Cast) -> str:
+    """Advance to the next higher-numbered phase, wrapping stars to sun.
+
+    Returns the new phase, or "" when this creature is in none -- which is
+    every character without the feature, and is why the callers do not have
+    to ask whether it has one.
+    """
+    here = phase_of(c)
+    if not here:
+        return ""
+    nxt = _PHASES[(_PHASES.index(here) + 1) % len(_PHASES)]
+    enter_phase(c, nxt)
+    return nxt
+
+
+def phase_of(c: Cast) -> str:
+    """Which phase this sorcerer is in, or "" before the first rest.
+
+    Held as a labelled `c.effect` rather than a component: the phase is
+    chosen at a rest and changes mid-fight, so it is encounter state, and an
+    effect is the thing this engine already suspends, resumes and tears down
+    with everything else. `Build.choices` is the wrong home for the same
+    reason `c.element` is right to live there and this is not -- an element
+    is picked once at build time and never moves.
+    """
+    for eff in c.world.effects.of(c.me):
+        if eff.label.startswith("cf:sorcerer-f0s0 phase "):
+            return eff.label.rsplit(" ", 1)[-1]
+    return ""
+
+
 # -- the two sources with no leg -------------------------------------------
 
 
@@ -129,10 +197,26 @@ def _on_bolt_hit(c: Cast, fn: Callable[[Hit], None]) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=("events.ShortRested",),
+    dropped=("c.bonus(compute=)",),
 )
 def sorcerer_f0s0(c: Cast) -> None:
-    """The source that cycles through three phases, and has no leg.
+    """The source that cycles through three phases.
+
+    **Written.** `events.ShortRested` landed, which is the moment the phase
+    is chosen at, so the state machine has somewhere to live: the phase is
+    held as a labelled `c.effect` (see `_phase_of`), the sun burns what
+    stands beside it at the start of each turn, the stars step out of the
+    way of a miss, and becoming bloodied once advances the cycle -- stars
+    wrapping back to sun, which is why `_PHASES` order is load-bearing.
+
+    Dropped, one clause: the phase of the moon gives "a bonus to AC equal to
+    the number of conscious enemies adjacent to you", and a modifier carries
+    the value it was laid with. `f2440` names that gap as
+    `c.bonus(compute=)` for the same reason. Its resistance is laid; the AC
+    is not, which under-grants rather than over-grants.
+
+    The paragraph below is kept because its reasoning about the leg still
+    holds and is the reason `chargen.BUILDS` is not on this marker.
 
     **`chargen.BUILDS` dropped from the marker, because this row's own reasoning
     already rules it out.** The paragraph below says a leg "with only a third of
@@ -151,8 +235,52 @@ def sorcerer_f0s0(c: Cast) -> None:
     the same gap five artificer and bard rows name. A leg for it with only
     a third of the feature
     behind it would deal a sorcerer two of three phases that never arrive,
-    so the whole row is refused rather than part of it offered.
+    so the whole row was refused rather than part of it offered. Two thirds
+    of it arrive now, and the third is a number that is too small rather
+    than absent.
     """
+    me = c.me
+
+    # **Chosen at the end of a rest**, which is the moment this row waited on.
+    def chosen(ev: Any) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        enter_phase(c, c.choose(list(_PHASES), "which cosmic phase"))
+
+    c.watch(ShortRested, chosen, until=When.ENCOUNTER, on=me)
+
+    # The phase of the sun burns what stands next to it, at the start of each
+    # of this sorcerer's turns.
+    def burn(ev: Any) -> None:
+        if getattr(ev, "actor", None) != me or phase_of(c) != "sun":
+            return
+        for foe in c.enemies():
+            if c.adjacent_to(me, foe):
+                c.flat(c.mod(STR), DamageType.FIRE,
+                       dtypes=(DamageType.RADIANT,), on=foe)
+
+    c.watch(TurnStart, burn, until=When.ENCOUNTER)
+
+    # The phase of the stars steps out of the way of a miss.
+    def slip(ev: Any) -> None:
+        if getattr(ev, "target", None) != me or phase_of(c) != "stars":
+            return
+        if getattr(ev, "attacker", 0) in c.enemies():
+            c.teleport(c.mod(STR), on=me)
+
+    c.watch(Miss, slip, until=When.ENCOUNTER)
+
+    # **The cycle, which is the half with no moment of its own until now.**
+    # "The first time you become bloodied during an encounter" -- once, so
+    # the watch ends with its own firing.
+    def advance(ev: Any) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        step_phase(c)
+
+    from combat_engine.engine.events import Bloodied
+
+    c.watch(Bloodied, advance, until=When.ENCOUNTER, on=me, once=True)
 
 
 @power(
