@@ -57,6 +57,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.features.strikers import extra_damage
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -112,6 +113,7 @@ from combat_engine.engine import (
     by_me,
     by_melee,
     by_ranged,
+    cursed_by_me,
     get,
     power,
     query,
@@ -574,15 +576,30 @@ def i1875p1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     trigger="an ally you can see scores a critical hit",
     on=Trigger(Hit, _ally_crit, "an ally you can see scores a critical hit"),
-    dropped=("c.uncrit()",),
 )
 def i1920p1(c: Cast) -> None:
-    """Giving the critical back is the price of the surge and nothing can
-    downgrade a hit that has already been declared critical, so the ally
-    gets the surge for free here."""
-    mate = getattr(c.trigger, "attacker", None)
-    if mate is not None:
-        c.surge(on=mate)
+    """The critical can be given back, which is the price of the surge. A
+    `Hit` carries the live `AttackResult` and the outcome is recomputed from
+    that object, so writing `critical` on the event **and** on the result
+    demotes the blow -- `_next_blow_of_mine_crits` in
+    `monsters/level_11/soldiers_sa.py` promotes one by the same two
+    assignments, and for the same reason: `c.hit` and `c.damage` read
+    `c.crit` off the result, so rigging the event alone would change the log
+    and not the damage. The window is early enough because the attacker's
+    body deals its damage after `Hit` has been announced.
+
+    The ally is asked, since the card offers a trade rather than a gift."""
+    ev = c.trigger
+    mate = getattr(ev, "attacker", None)
+    if ev is None or mate is None:
+        return
+    if not c.may("hit normally and spend a healing surge", who=mate):
+        return
+    ev.critical = False
+    result = getattr(ev, "result", None)
+    if result is not None:
+        result.critical = False
+    c.surge(on=mate)
 
 
 @power(
@@ -769,17 +786,25 @@ def i2274p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.boost_roll(extra=)",),
 )
 def i2295x1(c: Cast) -> None:
-    """**Re-aimed again: `c.boost_roll` landed in #495 and is the wrong
-    half.** That verb adds to a roll already made, which is what `p6186`
-    does; this property adds 1 to the **d6 `p6186` itself rolls**, and only
-    for a divine attack power used through this implement.
+    """Written, and it needs no modifier on the amount of another row's
+    boost. `p6186` asks `c.dice_for` for the die it adds, and the expression
+    it is handed may carry a flat term -- `rng.roll` parses `NdM+K` and the
+    bonus rides in the `Roll` -- so "add +1 to the d6 roll" is
+    `c.change_dice` with `"1d6+1"`, the same one line `f999` and `f1836`
+    already write against this row with a bigger die.
 
-    The gap is a modifier on the amount of another row's boost. `f718` is
-    the same sentence with a different keyword and a different +1, so the
-    two share one symbol and should land together."""
+    The context `p6186` hands over says which kind of roll it is and which
+    power rolled it, so the narrowing is exact. "Through this rod" is not
+    gated; see the module note."""
+
+    def divine_attack(ctx: dict[str, Any]) -> bool:
+        return ctx.get("kind") == "attack" and Keyword.DIVINE in _keywords_of(
+            str(ctx.get("power", ""))
+        )
+
+    c.change_dice("p6186", "1d6+1", on=c.me, when=divine_attack)
 
 
 @power(
@@ -884,21 +909,14 @@ def i2314x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.fell_might()",),
 )
 def i2318p1(c: Cast) -> None:
-    """Gives back a pact boon's once-per-encounter charge.
-
-    **Re-aimed off `spec.power_ref()`.** The brief does print the thing by
-    name and give no ref, but that is not the gap: what the card restores is
-    `cf:warlock-f1s4`'s boon charge, and the compendium describes that boon in
-    the warlock class text rather than filing it as a row. `cf:warlock-f1s4`
-    is the feature and it is a row; the charge inside it is not, which is
-    exactly what that row's own `c.fell_might()` marker says.
-
-    `c.restore_use` is ready for the moment there is a use to restore. Four
-    other rows wait on the same charge, so this joins a group that means
-    something instead of a group that cannot be satisfied."""
+    """Gives back a pact boon's once-per-encounter charge, and the charge
+    was never a gap -- `cf:warlock-f1s4` has retracted its own note. That
+    boon is a row with `usage=ENCOUNTER`, so its charge **is** a use of the
+    row, and `c.restore_use` hands one back; the feature's own watch already
+    does exactly this when a cursed enemy drops."""
+    c.restore_use("cf:warlock-f1s4", on=c.me)
 
 
 @power(
@@ -1385,7 +1403,10 @@ def i2819x1(c: Cast) -> None:
 def i2900x1(c: Cast) -> None:
     """`c.on_sustain` answers the sustaining of an effect *this row* made,
     and this pays out when some other row is sustained. The second half --
-    a tome holding two chosen daily powers -- has no store."""
+    a tome holding two chosen daily powers -- has no store, and
+    `c.borrow_row` is not one: it samples the set when a row is used and
+    records no pick. `i2900p1` is written off that sampling; this clause is
+    the pick surviving acquisition, which is `chargen`'s to hold."""
 
 
 @power(
@@ -1397,10 +1418,20 @@ def i2900x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    todo=("c.tome_powers()",),
+    dropped=("c.expend_row(among=)",),
 )
 def i2900p1(c: Cast) -> None:
-    """Nothing holds the two powers the tome contains."""
+    """The twin of `i2899p1` a tier down and in the other element, and
+    written the same way: `c.borrow_row` reads the set the tome would have
+    been stocked from off the registry, walking down from the tome's rung,
+    and `uses=1` is "during this encounter". The dropped clause is the same
+    price -- nothing enumerates the bearer's unspent dailies to charge
+    it."""
+    for lvl in range(2, 0, -1):
+        if c.borrow_row(
+            cls="wizard", level=lvl, usage=DAILY, keyword=Keyword.FIRE, uses=1
+        ):
+            return
 
 
 @power(
@@ -1437,7 +1468,17 @@ def i2911p1(c: Cast) -> None:
     todo=("c.power_range()",),
 )
 def i2962x1(c: Cast) -> None:
-    """A row's reach is header data and nothing lengthens another row's."""
+    """A row's reach is header data and nothing lengthens another row's.
+
+    **`dsl._stretched` is not the route.** Its `"range"` modifier is read by
+    `area_of`, which decides what may be aimed at, and *not* by
+    `_within_reach`, which `actions.perform` re-asks before spending the
+    action -- so the longer range is offered and then silently refused.
+    Driven on a board this round; see `i2771x1`.
+
+    Two things would also be wanted if it worked: "utility" is not a column,
+    so the narrowing would have to be read off the absence of an attack
+    line."""
 
 
 @power(
@@ -2584,11 +2625,33 @@ def i1952p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack made with this orb",
-    todo=("c.extend_effect()",),
+    on=HIT_BY_ME,
 )
 def i1960p1(c: Cast) -> None:
-    """A live effect's duration is fixed when it is applied and nothing
-    lengthens one afterwards."""
+    """A live effect's duration is **not** fixed: `Effect` is a mutable
+    dataclass and the clock is a field on it, which is how `p5052` holds a
+    zone a turn longer. One due to end at the end of this turn is moved onto
+    the end-of-next-turn clock, and `latch` is what carries it past the
+    boundary it was about to die on -- without it the very next `TurnEnd`
+    ends the thing this row just lengthened.
+
+    Only effects this character laid and clocked on its own turn are
+    offered, which is what "one of your powers" comes to."""
+    mine = sorted(
+        (
+            eff
+            for eff in c.world.effects.clocked_on(c.me)
+            if eff.when is When.EOT and eff.source == c.me
+        ),
+        key=lambda eff: eff.id,
+    )
+    held = c.choose(mine, "which of your powers lasts a turn longer")
+    if held is None:
+        return
+    held.when = When.EONT
+    held.clock = c.me
+    held.latch = True
+    c.note(f"{c.ref}: {held.label or held} lasts until the end of your next turn")
 
 
 @power(
@@ -2630,11 +2693,31 @@ def i1964x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.sustain_free()",),
 )
 def i1964p1(c: Cast) -> None:
-    """The sustain cost is a field on the effect, set when it was made.
-    Nothing pays one off from outside."""
+    """The cost does not have to be paid off from outside -- the sustain can
+    simply be performed from here. `Effects.sustaining` lists what this
+    character is keeping going, which is the same reader
+    `actions._sustaining` builds the menu from, and `Effects.sustain` is the
+    payout half: it stamps the round the clock reads and runs the effect's
+    `on_sustain`. So a free action doing that is the printed line, and the
+    minor the effect asks for is never spent.
+
+    Narrowed to the effects whose printed cost is a minor, which is what the
+    card says."""
+    minors = sorted(
+        (
+            eff
+            for eff in c.world.effects.sustaining(c.me)
+            if eff.sustain_cost is MINOR
+        ),
+        key=lambda eff: eff.id,
+    )
+    held = c.choose(minors, "which power is sustained for free")
+    if held is None:
+        return
+    c.world.effects.sustain(held)
+    c.note(f"{c.ref}: {held.label or held} is sustained without a minor action")
 
 
 @power(
@@ -2683,12 +2766,20 @@ def i1967p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.initiative_bonus()",),
 )
 def i1970x1(c: Cast) -> None:
-    """`c.initiative` moves a creature in an order that has already been
-    rolled; a trait is armed after the rolls, so there is no way to add to
-    the check itself."""
+    """Being armed after the rolls is exactly the case `adjust_initiative`
+    was built for, and its own comment says so: `Encounter.started` is set
+    *after* `_arm_traits`, so a trait bumping the count during the opening
+    rolls re-splices the order rather than writing a number nothing reads --
+    and the order is the only thing an initiative check is for. `lint.py`
+    already names `c.initiative` as the replacement for the unread
+    `"initiative"` modifier key.
+
+    The printed type word has nowhere to go: moving a creature in the order
+    is not a modifier, so two of these would both splice. One implement is
+    the only case that arises."""
+    c.initiative(c.enhancement, on=c.me)
 
 
 @power(
@@ -2916,11 +3007,28 @@ def i2133p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_pact_boon()",),
 )
 def i2289x1(c: Cast) -> None:
-    """A pact boon is a class feature that pays out when a cursed enemy
-    drops, and nothing announces one."""
+    """The moment **is** announced. A pact boon pays out when an enemy under
+    this character's curse drops, and that pair of facts is a `Dropped`
+    guarded by `cursed_by_me` -- every boon row in `features/warlock.py` is
+    declared on it, and `cf:warlock-f1s4` reads the same moment as a watch
+    for its own regain. Watched rather than declared here because this row
+    is a property and a row holds a trigger or standing work, not both.
+
+    One choice for the whole slide rather than one per enemy: the card
+    offers the clause once."""
+
+    def boon(ev: Dropped) -> None:
+        if not cursed_by_me(c.world, c.me, ev):
+            return
+        held = [foe for foe in c.enemies() if c.cursed(on=foe)]
+        if not held or not c.may("slide each cursed enemy a square"):
+            return
+        for foe in held:
+            c.slide(1, on=foe)
+
+    c.watch(Dropped, boon, until=When.ENCOUNTER, on=c.me)
 
 
 @power(
@@ -2990,10 +3098,41 @@ def i2291p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_pact_boon()",),
+    dropped=("c.decline_boon()",),
 )
 def i2296x1(c: Cast) -> None:
-    """Nothing announces a pact boon."""
+    """A pact boon is announced after all: it pays when an enemy under this
+    character's curse drops, which is a `Dropped` guarded by
+    `cursed_by_me`, the pair every boon in `features/warlock.py` declares
+    on.
+
+    The transfer is written. `c.curse` only sets the state, so the curse's
+    extra damage is armed here too, as `cf:warlock-f1c11` does -- **one**
+    watch over the whole set, because one per creature carries its own latch
+    and would pay the printed once-a-round damage several times in a round.
+
+    Dropped: "instead of taking its normal benefit". The benefit is paid by
+    `cf:warlock-f1`'s own watch and by rows of its own, and nothing lets a
+    row forgo it, so this pays on top of the boon rather than in place of
+    it."""
+
+    def boon(ev: Dropped) -> None:
+        if not cursed_by_me(c.world, c.me, ev):
+            return
+        moved = [
+            foe
+            for foe in c.within(5, of=ev.actor, side="enemy")
+            if not c.cursed(on=foe)
+        ]
+        if not moved or not c.may("move the curse to the enemies around it"):
+            return
+        for foe in moved:
+            c.curse(on=foe)
+        extra_damage(
+            c, "1d6", applies=lambda who: who in moved, label="cf:warlock-f4"
+        )
+
+    c.watch(Dropped, boon, until=When.ENCOUNTER, on=c.me)
 
 
 @power(
@@ -3406,13 +3545,20 @@ def i2759p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
-    todo=("c.extend_effect()",),
+    todo=("c.mark(lapses=)",),
 )
 def i2762p1(c: Cast) -> None:
-    """Re-aimed: the feature is `p805` and arrives as a ref now, so the
-    naming gap is closed. What is left is the whole of the row -- nothing
-    lengthens an effect that is already live, and "even if it would
-    normally end" is exactly that."""
+    """Re-aimed twice. The feature is `p805` and arrives as a ref, so the
+    naming gap is closed; and lengthening a live effect is not the hold
+    either -- `Effect` is a mutable dataclass and `i1960p1` writes the clock
+    on one, the way `p5052` does.
+
+    The hold is on the other side of the sentence. `p805` lays its mark
+    `until=When.ENCOUNTER` and nothing ends it early, so "even if it would
+    normally end" has nothing to prevent and there is no duration here to
+    postpone -- moving that mark onto an end-of-next-turn clock would
+    *shorten* it. The row waits on `p805`'s mark being able to lapse at
+    all."""
 
 
 @power(
@@ -3425,7 +3571,19 @@ def i2762p1(c: Cast) -> None:
     todo=("c.power_range()",),
 )
 def i2771x1(c: Cast) -> None:
-    """A row's reach is header data and nothing lengthens another row's."""
+    """A row's reach is header data and nothing lengthens another row's.
+
+    **`dsl._stretched` is not the route, and it looks like one.** It reads a
+    `"range"` modifier, but only from `area_of`, which decides what may be
+    *aimed* at -- `_within_reach` reads `p.reach_of(...)` raw, and
+    `actions.perform` re-asks it before spending the action. So the longer
+    range is offered and then refused, which is a dropped clause wearing a
+    finished row. Driven on a board this round. `_reach_of`'s weapon branch
+    throws the stretch away a second time.
+
+    The printed area half is further off still: a burst reads
+    `"blast_size"`, which is the burst's own radius, where this card
+    lengthens the `within` an area burst may be *placed* at."""
 
 
 @power(
@@ -3534,12 +3692,20 @@ def i2897x1(c: Cast) -> None:
     target=SELF,
     trigger="you use a summoning power",
     on=Trigger(PowerUsed, _my_summoning, "you use a summoning power"),
-    dropped=("c.restrict_action()",),
+    dropped=("c.extra_action(what=)",),
 )
 def i2897p1(c: Cast) -> None:
     """The extra move action is handed out at the start of each of your
     turns; "that you can use only to command the creature" cannot be said,
-    so it is an unrestricted move action."""
+    so it is an unrestricted move action.
+
+    Re-aimed, because `Condition.SHAPED` is not the narrowing: that bars
+    **every** standard action and is a shape the creature is in, where this
+    clause bars nothing at all -- it restricts what one granted action may
+    be *spent* on, and `Budget` holds counts with no record of what bought
+    them. The granted-word carrier is no use either: `actions._commands` is
+    the only reader of a granted `"command"` and it deliberately skips a
+    summon, whose doors are `Cast.command` and `_instinctives`."""
 
     def each_round(ev: TurnStart) -> None:
         if ev.actor == c.me:
@@ -3561,7 +3727,13 @@ def i2899x1(c: Cast) -> None:
     """The rider is written for any slowed creature carrying an effect of
     mine, since "a cold power through this tome" is not in the movement
     event. The second paragraph -- two chosen daily powers the tome holds
-    -- has no store."""
+    -- has no store.
+
+    `c.borrow_row` is **not** that store, though it is what `i2899p1` was
+    written with: it samples the set at the moment of use and records
+    nothing, and its own note says a campaign carrying between fights would
+    want `chargen` to hold the pick. This clause is the pick surviving
+    acquisition, so the marker stays."""
 
     def bleed(ev: Moved) -> None:
         who = ev.actor
@@ -3580,10 +3752,27 @@ def i2899x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.IMPLEMENT],
-    todo=("c.tome_powers()",),
+    dropped=("c.expend_row(among=)",),
 )
 def i2899p1(c: Cast) -> None:
-    """Nothing holds the two powers the tome contains."""
+    """Written. `c.borrow_row` is the verb for "the card names a set and
+    asks the character to take one of it", which is what a tome's two
+    chosen powers are: it reads the set off the registry by class, level and
+    usage -- the place that membership is written down -- and `uses=1` is
+    the printed "during this encounter". The ladder is walked from the
+    tome's own rung down, because the card says "equal to or lower than that
+    of the tome".
+
+    Dropped is the price: "expend an unused daily of an equal or higher
+    level" needs the bearer's own unspent dailies enumerated, and
+    `c.expend_row` takes one ref. Same shape as `i2898p1`, and the set may
+    be empty in the tree today -- that is a content gap and fills itself the
+    day such a power is written."""
+    for lvl in range(3, 0, -1):
+        if c.borrow_row(
+            cls="wizard", level=lvl, usage=DAILY, keyword=Keyword.COLD, uses=1
+        ):
+            return
 
 
 @power(
@@ -3593,11 +3782,16 @@ def i2899p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.curse_damage()",),
 )
 def i2987x1(c: Cast) -> None:
-    """The curse's own damage dice are a class feature's, not this row's,
-    and nothing reaches them."""
+    """The curse's dice are reachable: `features/strikers.extra_damage`
+    asks `c.dice_for` for them under the label `cf:warlock-f4` rather than
+    closing over the string, precisely so that a feat or an item can change
+    it -- so `c.change_dice` against that label is the whole sentence.
+
+    Heroic tier rolls one die; the paragon step is out of scope. "With this
+    rod" is not gated; see the module note."""
+    c.change_dice("cf:warlock-f4", "1d8", on=c.me, until=When.ENCOUNTER)
 
 
 @power(

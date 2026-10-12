@@ -185,6 +185,35 @@ def _the_mount(c: Cast) -> int | None:
     return c.me if c.rider() is not None else None
 
 
+#: Characters whose surge pool a property has already raised, keyed
+#: `(world, eid)`. A trait arms at the start of every fight and "your number
+#: of healing surges increases by one" is a fact about the sheet, so the
+#: write has to happen once however often the row is armed.
+#: `feats/paladin.py` holds the same latch for the same reason.
+_SURGES_RAISED: dict[tuple[int, int], bool] = {}
+
+
+def _keep_better_initiative(c: Cast) -> int:
+    """"Roll twice and use the higher result", for want of `keep=`.
+
+    `c.reroll_initiative` always takes the new number, so the second roll is
+    made and then undone when it is worse: `Encounter.adjust_initiative` --
+    which is what `c.initiative` calls -- writes `Initiative.rolled` back by
+    the delta and re-splices the order, so the undo restores both halves of
+    what the first roll had. The cost is a reroll announced and then
+    reversed, which `keep=` on `c.reroll_initiative` would not pay.
+    """
+    from combat_engine.engine.components import Initiative
+
+    held = c.world.get(c.me, Initiative)
+    before = held.rolled if held is not None else 0
+    after = c.reroll_initiative()
+    if after < before:
+        c.initiative(before - after, on=c.me)
+        return before
+    return after
+
+
 def _square_of(c: Cast, eid: int) -> Square | None:
     pos = c.world.get(eid, Position)
     return None if pos is None else pos.square
@@ -734,11 +763,24 @@ def i1066p1(c: Cast) -> None:
     offsets, the size and the hover are written, and `dsl.Summon` could
     take the attack line too.
 
-    What stops it is "your highest ability": `Attack` takes one named
-    ability or a printed number, and nothing answers "whichever of mine is
-    largest". Fifty-four rows print the phrase. Without the attack line
-    the Instinctive Effect has nothing to fire, so both wait on it and the
-    summon commands with whatever row drives it."""
+    "Your highest ability" is now half answered and half not, and the
+    marker is the half that is not. The **attack** line is sayable:
+    `Attack(Pick.HIGHEST, plus=4, vs=AC)` resolves per caster in
+    `Attack.ability_for`, and `c.command` rolls it through `bonus_for`. The
+    **damage** line is not. `Damage.bonus` is a flat number or an ability
+    named as a string, and `Cast._bonus_of` resolves it with
+    `Ability(bonus.lower())` -- which raises on anything else and is caught,
+    returning **0 silently**. So "1d8 + your highest ability modifier"
+    written there is the weapon dice and nothing, which is the failure this
+    project exists to refuse.
+
+    Two further holds found while running this down, both reportable rather
+    than writable here: `c.summon_inline` **discards** `spec.attack` and
+    `spec.damage` -- it reads only hp, speed, defences, size and modes --
+    while `c.command` reads the attack line off the *header's* `summon=`
+    field. So an inline block's attack line has nowhere to live, and the
+    header is where the ability modifier cannot be computed. Without the
+    attack line the Instinctive Effect has nothing to fire, so both wait."""
     c.summon_inline(
         Summon(per_defence={"ac": 2, "fort": 2}, speed=0, modes={"fly": 6}),
     )
@@ -1012,8 +1054,19 @@ def i2374x1(c: Cast) -> None:
 @power("i2426x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.insubstantial(when=)",))
 def i2426x1(c: Cast) -> None:
-    """Both halves hang on "a creature that cannot see you", and the damage
-    context carries no attacker to ask it of."""
+    """Both halves hang on "a creature that cannot see you". The reason is
+    not the context -- `dmg_ctx` has carried `source` since #302 and
+    `resist_ctx` is `{**dmg_ctx, ...}`, so the attacker is askable. It is
+    that halving is not a resistance: `query.takes_half` reads the
+    `INSUBSTANTIAL` condition off the *creature*, and `c.insubstantial`'s
+    only narrowing is `except_`, which is damage types in
+    `Defences.half_except`. There is nowhere to hang a predicate on who is
+    swinging, and halving by hand on `DamageRolled` would be a number
+    standing in for a named trait -- it would miss `half_except` and the
+    attacker's "ignores insubstantial" both.
+
+    The miss-damage half ("no damage from its attacks that deal damage on a
+    miss") needs the same gate besides."""
 
 
 @power("i2426p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
@@ -1652,15 +1705,61 @@ def i3367p1(c: Cast) -> None:
 
 
 @power("i3382p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.set_defence()",))
+       reach=PERSONAL, target=SELF)
 def i3382p1(c: Cast) -> None:
     """"During this movement" has no duration, so the two bonuses run to
     the end of the turn -- which is the window the opportunity attacks
-    they are for happen in. Using an attack roll as a defence afterwards
-    has no method at all."""
+    they are for happen in.
+
+    "Use the attack result as your defense" needs no absolute-set field:
+    `query.defence` returns the live value, level and conditions included,
+    so the difference between it and the roll's total is a gated modifier --
+    the shape `cf:ardent-f0` and `m3842a3` already use. It is laid per
+    defence because the two numbers differ, and only where the roll is the
+    *better* of the two, since the card says "you can".
+
+    The latch is the part that needed writing rather than reusing.
+    `once=True` is spent by the first `Hit` or `Miss` against the owner
+    whatever defence it rolled against, so two one-shot bonuses would both
+    be eaten by an intervening attack on Fortitude -- which the card does
+    not spend them on. So the gate reads a flag of its own and a watch sets
+    it, on an attack against AC or Reflex and nothing else. `vs` is a plain
+    attribute on both events."""
     c.bonus(AC, 4, on=c.me, until=When.EOT, kind="power")
     c.bonus(REF, 4, on=c.me, until=When.EOT, kind="power")
     c.move(c.speed_of())
+
+    spent = [False]
+    taken = [False]
+    guarded = (AC, REF)
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return not spent[0]
+
+    def used(blow: Hit | Miss) -> None:
+        if blow.target == c.me and getattr(blow, "vs", None) in guarded:
+            spent[0] = True
+
+    def shield(ev: Hit) -> None:
+        # The *next* melee attack this turn, so the first one that lands
+        # claims it -- `once=` on the watch cannot say that, because it
+        # would be spent by somebody else's blow before this one swung.
+        if taken[0] or not by_melee(c.world, c.me, ev) or ev.attacker != c.me:
+            return
+        result = getattr(ev, "result", None)
+        if result is None:
+            return
+        taken[0] = True
+        for defence in guarded:
+            now = query.defence(c.world, c.me, defence)
+            if result.total > now:
+                c.bonus(defence, result.total - now, on=c.me,
+                        until=When.EONT, when=gate)
+        for kind in (Hit, Miss):
+            c.watch(kind, used, until=When.EONT)
+
+    c.watch(Hit, shield, until=When.EOT,
+            label="the next melee attack you make this turn")
 
 
 @power("i3388p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MOVE,
@@ -1696,10 +1795,23 @@ def i3399p1(c: Cast) -> None:
 
 
 @power("i3454x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.max_surges()",))
+       reach=PERSONAL, target=SELF)
 def i3454x1(c: Cast) -> None:
-    """The size of the surge pool is a character's, set at build time, and
-    nothing raises it."""
+    """`Health.max_surges` is the pool an extended rest refills to and
+    `turns` refills to it, so the sentence is a write on the component --
+    which `feats/paladin.py` already makes by hand for this same printed
+    line. The latch is that row's too, and it is the whole difficulty: a
+    trait arms at the start of **every** fight and this is a fact about the
+    sheet, so an unlatched `+= 1` would raise the ceiling once per
+    encounter. The extra surge is handed over as well, or raising the
+    ceiling does nothing in the fight the property armed in."""
+    key = (id(c.world), c.me)
+    health = c.world.get(c.me, Health)
+    if health is None or _SURGES_RAISED.get(key):
+        return
+    _SURGES_RAISED[key] = True
+    health.max_surges += 1
+    c.regain_surge(1, on=c.me)
 
 
 @power("i3454p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -1920,21 +2032,53 @@ def i2966x1(c: Cast) -> None:
 
 
 @power("i2966p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_initiative(keep=)",))
+       reach=PERSONAL, target=SELF,
+       trigger="you would make an initiative check",
+       on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def i2966p1(c: Cast) -> None:
-    """Re-aimed at the argument rather than a verb. `c.reroll_initiative`
-    exists and always takes the new number; "roll twice and use the
-    higher result" is `keep="best"`, which every other reroll on `Cast`
-    already understands."""
+    """"Roll twice and use the higher result" is `_keep_better_initiative`:
+    `c.reroll_initiative` has no `keep=`, so the second roll is made and
+    undone when it is worse.
+
+    The printed Trigger is *before* the check and this answers the check
+    itself, which is the same distribution and the only window there is --
+    nothing announces a check about to be made. Safe against its own
+    announcement, because `Encounter.reroll_initiative` emits
+    `InitiativeRolled` again and a daily is spent by its first use.
+
+    The Requirement is asked in the body rather than in `requires=`: a
+    distance can become true later in a fight, and a trait refused once at
+    arming is never armed again."""
+    beast = c.companion()
+    if beast is not None and c.distance(beast) <= 5:
+        _keep_better_initiative(c)
 
 
 @power("i2980p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=CloseBurst(1), target=NO_TARGET, keywords=[Keyword.ZONE],
        dropped=("c.grant_inline()",))
 def i2980p1(c: Cast) -> None:
-    """The zone is exact. The minor-action attack it offers once a round
-    has no ref of its own and nothing grants a power a row defines
-    inline."""
+    """The zone is exact. The minor-action attack it offers once a round has
+    no ref of its own, and the route round that is to coin one and hand it
+    over with `c.grant_row` -- which is what `f1253b` and every `rt:`/`cf:`
+    ref already do. Two things stop it being written here rather than one,
+    and neither is `c.grant_inline`:
+
+    * **there is no coined-ref convention for an item block.** A feat's
+      second card is `fNNNb`; an item's blocks are `iNNNpN`/`iNNNxN` read
+      straight off columns in `game.db`, so a coined second `p` block here
+      would read as one the database is missing rather than as one content
+      invented. (Spelled out rather than written as the ref it would be:
+      `refs.py` holds every ref in prose to resolving, and cannot tell a
+      spelling somebody is arguing *against* coining from a citation.)
+      That is a spelling for Camille to settle, not for a row to assume.
+    * **"once per round" has no `Usage`.** The four are at-will, encounter,
+      daily and recharge, so the cadence is a `c.world.round` latch on the
+      granted row and not a header field.
+
+    The attack bonus itself is fine: it is the item's level plus 5, which is
+    `_item_level(c)` through `c.attack(bonus, vs)` -- not `printed=`, which
+    `world.scaling.trim` would re-level against the *holder*."""
     c.zone(c.area(), until=When.ENCOUNTER, difficult=True)
 
 
@@ -2051,11 +2195,18 @@ def i3446p1(c: Cast) -> None:
 
 
 @power("i811p1", level=5, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_initiative(keep=)",))
+       reach=PERSONAL, target=SELF,
+       trigger="the encounter begins, before you roll initiative",
+       on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def i811p1(c: Cast) -> None:
-    """Re-aimed to the same argument as `i2966p1`. The mount rolls with
-    the rider's own modifier and the better of the two is kept, so it is
-    two checks and one slot however the card phrases it."""
+    """The mount rolls with the rider's own modifier and the better of the
+    two is kept, so it is two checks on one slot however the card phrases
+    it -- which is `_keep_better_initiative`, as `i2966p1`. The animal
+    never needs its own check made: using the rider's modifier is what
+    makes the two rolls the same distribution, and only one creature holds
+    the slot the result is for."""
+    if _the_mount(c) is not None:
+        _keep_better_initiative(c)
 
 
 @power("i940x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -2354,11 +2505,49 @@ def i1255p1(c: Cast) -> None:
 
 
 @power("i1704x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.conceal(from_light=)",))
+       reach=PERSONAL, target=SELF)
 def i1704x1(c: Cast) -> None:
-    """Concealment from obscured squares is not kept per square, so there
-    is nothing to carry out of the square the wearer is leaving."""
+    """"Obscured squares" is the square's own light, which
+    `query.light_level` reads -- worst wins over the terrain map and any
+    darkening zone standing on it. So the trait watches the start of the
+    turn, asks the squares the wearer is standing on, and lays a *carried*
+    concealment for the window, which is what "even if you leave the square"
+    wants: `light_concealment` is recomputed from wherever the creature is
+    and cannot follow it out.
+
+    Gated on the looker rather than laid flat, because light conceals from
+    whoever cannot see in it. `c.conceal(when=)` is handed the attack
+    context and that carries `attacker`, so the gate asks `query.sees_in` of
+    the creature swinging -- laid flat this would conceal from darkvision,
+    which never had the penalty to keep. Cover and concealment take the
+    larger, so while the wearer is still standing in the dark the carried
+    one changes nothing."""
+    def carry(ev: TurnStart) -> None:
+        from combat_engine.engine.types import Light
+
+        if ev.actor != c.me:
+            return
+        levels = {
+            query.light_level(c.world, square)
+            for square in query.squares(c.world, c.me)
+        }
+        if Light.DARK in levels:
+            worst, total = Light.DARK, True
+        elif Light.DIM in levels:
+            worst, total = Light.DIM, False
+        else:
+            return
+
+        def gate(ctx: dict[str, Any]) -> bool:
+            foe = ctx.get("attacker")
+            if foe is None:
+                return True
+            far = query.distance_between(c.world, foe, c.me)
+            return not query.sees_in(c.world, foe, worst, far)
+
+        c.conceal(on=c.me, until=When.EONT, total=total, when=gate)
+
+    c.watch(TurnStart, carry, until=When.ENCOUNTER)
 
 
 @power("i1704p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
@@ -2432,12 +2621,21 @@ def i2159x1(c: Cast) -> None:
 
 
 @power("i2159p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.unseen_by(sense=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you roll initiative",
        on=Trigger(InitiativeRolled, about_me, "you roll initiative"))
 def i2159p1(c: Cast) -> None:
-    """Hiding is exact; nothing models blindsight or tremorsense, so the
-    clause that beats them has nothing to beat."""
+    """The clause that beats blindsight and tremorsense asks for nothing
+    the hide does not already have. `query.hidden_from` is the
+    `HIDDEN_FROM` relation less `query.sees_through`, and `sees_through`
+    consults see-invisible and truesight and nothing else -- neither sense
+    is wired to defeat hiding, so a creature with one already cannot see a
+    hidden creature. Both senses do exist on the board and have working
+    ranges; they answer `query.sees_in`, which is the light model and not
+    this.
+
+    If `sees_through` ever learns them, this is the row the narrowing has
+    to come back to."""
     c.hide(until=When.EONT)
 
 
@@ -2758,7 +2956,16 @@ def i3386p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("c.insubstantial(when=)",))
 def i3401x1(c: Cast) -> None:
     """Insubstantial is a property of the creature and not of one
-    attacker's blows, and the damage context carries no attacker."""
+    attacker's blows. The damage context *does* carry the attacker -- #302
+    added `source` -- so the stale half of this was the context; what is
+    still absent is a `when=` on `c.insubstantial`, whose only narrowing is
+    `except_` and that is damage types. `query.takes_half` reads the
+    condition off the target and asks nothing else. See `i2426x1`.
+
+    Total concealment is readable: `query.concealment_of` returns
+    `Cover.SUPERIOR` for it and the attack context carries `attacker`, so
+    the gate's own half is there and only the thing it would gate is
+    not."""
 
 
 @power("i3401p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,

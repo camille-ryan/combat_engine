@@ -81,6 +81,8 @@ from combat_engine.engine import (
     Melee,
     Miss,
     Moved,
+    MoveEnd,
+    MoveStart,
     Powers,
     PowerUsed,
     Ranged,
@@ -516,15 +518,38 @@ def i3238x1(c: Cast) -> None:
 
 
 @power("i3245x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.charging()",))
+       reach=PERSONAL, target=SELF)
 def i3245x1(c: Cast) -> None:
-    """The attack context carries `opportunity`, so half of the gate is
-    exact. The other half is not: `actions.run` walks a charge's path with
-    the ordinary `walk`, so the openings it provokes are indistinguishable
-    from any other step and `c.charge` is asked of a *use* that has not
-    happened yet. Marked rather than dropped because the whole benefit is
-    the narrowing -- standing +4 against every opportunity attack in the
-    fight is a strictly better item than the printed one."""
+    """The attack context carries `opportunity`, and the other half is read
+    off the *move* rather than off the swing. `ctx["charge"]` cannot answer
+    it: that key says the **attacker** is charging, and an opportunity
+    attack provoked by my charge is made by somebody standing still.
+
+    `actions.execute` now walks a charge as `kind="charge"` (#301), so
+    `movement.walk` brackets the whole movement in `MoveStart`/`MoveEnd`
+    carrying `kind_`, and every opportunity window `step` opens falls
+    between them -- so a flag set there is exactly "during the charge's
+    movement" and nothing wider. The charge's own attack is used after
+    `walk` returns, by which time the flag is down."""
+    charging = {"now": False}
+
+    def began(ev: MoveStart) -> None:
+        if ev.actor == c.me and ev.kind_ == "charge":
+            charging["now"] = True
+
+    def ended(ev: MoveEnd) -> None:
+        if ev.actor == c.me and ev.kind_ == "charge":
+            charging["now"] = False
+
+    c.watch(MoveStart, began, until=When.ENCOUNTER, on=c.me)
+    c.watch(MoveEnd, ended, until=When.ENCOUNTER, on=c.me)
+
+    def provoked(ctx: dict[str, Any]) -> bool:
+        return bool(ctx.get("opportunity")) and charging["now"]
+
+    # No `kind=`: the card prints no bonus type in front of the +4.
+    for defence in _ALL_DEFENCES:
+        c.bonus(defence, 4, on=c.me, until=When.ENCOUNTER, when=provoked)
 
 
 @power("i488x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -1189,19 +1214,31 @@ def i1290x1(c: Cast) -> None:
 
 
 @power("i2406x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, dropped=("query.race_named()",))
 def i2406x1(c: Cast) -> None:
-    """Two of the three clauses name a creature word `c.is_kind` can read.
-    The third names a race by ref, and a character's race is a build-time
-    choice with no word on the board."""
+    """The clause naming a race **by ref** is written: `c.race_of` reads the
+    `race:<ref>` that `Build.choices` has carried all along (#411), so a
+    character ally's race is on the board after all.
+
+    Still dropped, and re-aimed: the other two clauses name a race by its
+    printed *word*, and nothing bridges a word to a ref. `query.race_of`
+    answers a ref; the `race` table carries no word at all -- no `slug`
+    column, the way `weapon` has one -- so there is nothing to match against.
+    `c.is_kind` finds a monster ally carrying the word on its type line and
+    a character of that race is missed, which in a party is the usual case."""
 
     def beside(word: str) -> bool:
-        return any(c.is_kind(word, on=a) for a in c.within(10, side="ally")
-                   if a != c.me)
+        return any(c.is_kind(word, on=a) for a in c.within(10, side="ally"))
+
+    def beside_race(ref: str) -> bool:
+        return any(c.race_of(on=a) == ref for a in c.within(10, side="ally"))
 
     if beside("drow"):
         c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER, kind="item")
         c.bonus("skill:stealth", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+    if beside_race("r3"):
+        c.bonus("skill:arcana", 2, on=c.me, until=When.ENCOUNTER, kind="item")
+        c.bonus("skill:history", 2, on=c.me, until=When.ENCOUNTER, kind="item")
     if beside("elf"):
         c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER, kind="item")
         c.bonus("skill:nature", 2, on=c.me, until=When.ENCOUNTER, kind="item")
@@ -1649,18 +1686,40 @@ def i3560x1(c: Cast) -> None:
        dropped=("c.restrict_action()",))
 def i3560p1(c: Cast) -> None:
     """`c.form` holds the shape and gives back the minor action that ends
-    it. The tremorsense is written now, at the printed 10.
+    it. The tremorsense is written at the printed 10.
 
-    Still dropped: what the shape forbids -- everything but a second wind."""
-    c.form(until=When.ENCOUNTER, revert=MINOR, label="statue")
-    c.resist(20, on=c.me, until=When.ENCOUNTER)
-    c.tremorsense(10, until=When.ENCOUNTER)
+    The standard action is barred now: `Condition.SHAPED` is `no_standard`
+    and nothing else, carried by the form's **own** effect so it lifts the
+    moment the shape does -- and the one action the card exempts is handed
+    back at the price the card prints, through the `second_wind as <cost>`
+    carrier `actions._recovery` reads. Without the grant, `SHAPED` would bar
+    the second wind too, which is the clause's whole point.
+
+    Everything the form gives is tied to the form's end for the same reason.
+    At `When.ENCOUNTER` alone -- which is what this row did -- stepping out
+    of the shape early kept resist 20 and the temporary hit points for the
+    rest of the fight.
+
+    Still dropped: the move actions and the *other* minor actions. The card
+    allows exactly two things, and a bar is per action cost -- there is no
+    way to leave one minor action open and close the rest."""
+    shape = c.form(until=When.ENCOUNTER, revert=MINOR, label="statue",
+                   conditions=(Condition.SHAPED,))
 
     def hardening(ev: TurnStart) -> None:
         if getattr(ev, "actor", None) == c.me:
             c.temp_hp(5, on=c.me)
 
-    c.watch(TurnStart, hardening, until=When.ENCOUNTER, on=c.me)
+    for held in (
+        c.resist(20, on=c.me, until=When.ENCOUNTER),
+        c.tremorsense(10, until=When.ENCOUNTER),
+        c.grant_action("second_wind", MINOR, on=c.me, until=When.ENCOUNTER),
+        c.watch(TurnStart, hardening, until=When.ENCOUNTER, on=c.me),
+    ):
+        if held is not None:
+            shape.on_end.append(
+                lambda e=held: c.world.effects.end(e, "the form ended")
+            )
 
 
 @power("i491p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1756,17 +1815,18 @@ def i1077x1(c: Cast) -> None:
 
 
 @power("i1077p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, attack=Attack(CHA, vs=WILL),
-       dropped=("chargen.race_choice()",))
+       reach=Melee(1), target=ONE_CREATURE, attack=Attack(CHA, vs=WILL))
 def i1077p1(c: Cast) -> None:
     """"Charisma or Constitution" is the better of the two, reached by
     topping up the declared Charisma attack with the difference.
 
-    The second creature the line names is a **race**, by ref, and a
-    character's race is a build-time choice with no word on the board --
-    the same gap `i2406x1` has, named the same way."""
+    The second creature the line names is a race **by ref**, which
+    `c.race_of` answers off `Build.choices` (#411); the first is a type word
+    only a stat block carries. So the row asks both, which is what
+    `query.race_of`'s own docstring prescribes for a line meaning either."""
     foe = c.target
-    if foe is None or not c.is_kind("devil", on=foe):
+    if foe is None or not (c.is_kind("devil", on=foe)
+                           or c.race_of(on=foe) == "r8"):
         return
     plus = c.enhancement + max(0, c.con_mod - c.cha_mod)
     if c.strike(plus=plus):

@@ -72,12 +72,14 @@ from combat_engine.engine import (
     EffectApplied,
     Forced,
     ForcedMove,
+    Gear,
     Healed,
     Health,
     Hit,
     Keyword,
     Melee,
     Miss,
+    Mods,
     Movement,
     PowerUsed,
     Ranged,
@@ -1221,9 +1223,18 @@ def i1419p2(c: Cast) -> None:
     todo=("c.teleport_bonus()",),
 )
 def i1616x1(c: Cast) -> None:
-    """Lengthens every teleport the wielder makes. `c.teleport` takes the
-    distance the row printed and nothing adds to it; the ritual half is
-    out of the fight either way."""
+    """Lengthens **every** teleport the wielder makes, which is the shape
+    `c.extend_move` cannot hold.
+
+    That verb keys `Powers.extra_squares` by the ref of one row and is read
+    by that row calling `c.squares_for`, so a blanket line has nothing to
+    aim at: naming every teleportation row the character knows when the
+    trait arms goes stale the moment one is lent, and the rows that
+    hard-code their distance -- `i1616p1` below is one -- would consult it
+    anyway. `c.teleport` reads no modifier of its own, where a reach and a
+    range both do through `dsl._stretched`.
+
+    The ritual half is out of the fight either way."""
 
 
 @power(
@@ -1657,14 +1668,42 @@ def i2872p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.crit_damage()",),
 )
 def i2964x1(c: Cast) -> None:
-    """How much the critical rider paid out is a `Mod` rolled inside
-    `resolve.deal_damage` and never announced, so healing "equal to the
-    damage dealt by this weapon's critical property" has no number to
-    read. The retype beside it is whole."""
+    """The retype is whole, and the heal reads the critical rider itself.
+
+    `crit_damage` is an ordinary `Mods` key -- `resolve.deal_damage` sums it
+    inside the critical branch with `_split_mods` -- and the rider this
+    item's column laid is one `Mod` in that list, found by its own label.
+    `Mod.amount()` rolls it, which is how the engine reads it too.
+
+    **It is a second sample of the same dice rather than the share the blow
+    dealt.** Nothing announces that share: every part of a crit is folded
+    into one number before `DamageApplied`, so the dealt figure exists only
+    inside `deal_damage`'s locals. Same dice and same ladder, and the
+    difference cannot be seen from the board.
+
+    By label rather than through `c.total("crit_damage")`, because that one
+    adds every crit rider the character is carrying and the card says "this
+    weapon's".
+    """
     c.deals(DamageType.NECROTIC, on=c.me)
+
+    def paid_out(ev: Hit) -> None:
+        if ev.attacker != c.me or not ev.critical:
+            return
+        mods = c.world.get(c.me, Mods)
+        if mods is None:
+            return
+        rider = sum(
+            m.amount()
+            for m in mods.items
+            if m.what == "crit_damage" and m.label.endswith(":i2964")
+        )
+        if rider:
+            c.heal(rider, on=c.me)
+
+    c.watch(Hit, paid_out, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(
@@ -1957,12 +1996,28 @@ def i690x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.make_thrown()",),
 )
 def i968x1(c: Cast) -> None:
-    """Gives a melee weapon the heavy thrown property and a range.
-    `c.as_ranged` is the one-shot version and says "the next melee attack";
-    a standing property of the weapon has no door."""
+    """The line goes on the character's own copy of the weapon.
+
+    `Gear.weapons` holds per-character `replace(w)` copies, so writing
+    `Weapon.thrown` and the property onto the one this item is laid on
+    needs no reader of its own: `Gear.thrown` is what `dsl.area_of` asks
+    how far a thrown weapon flies, and `Pick.BY_WEAPON` reads "heavy
+    thrown" to roll Strength rather than Dexterity. Same write as
+    `c.weapon_dice` makes, on the same object.
+
+    `c.as_ranged` was the wrong half and is why this looked blocked: it is
+    one attack's worth of reach, spent on the next swing, where this is a
+    standing line on the weapon.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return
+    for weapon in gear.weapons:
+        if weapon.item == "i968":
+            weapon.properties = weapon.properties | {"heavy thrown"}
+            weapon.thrown = (5, 10)
 
 
 @power(
@@ -2379,7 +2434,19 @@ def i2730p1(c: Cast) -> None:
     the hold. What is missing is the word **instead** -- the basic
     attack has already been declared when this free action is taken,
     and only an interrupt can call it off. Twenty rows want the same
-    verb."""
+    verb.
+
+    **`c.as_basic` is not it, and the two differ in the moment rather
+    than in the mechanism.** That verb files a standing offer read where
+    a swing is *handed out*, which is why `f987` can use it: a feat is a
+    trait and has nowhere else to put the offer. This row prints a Free
+    Action with a Trigger, and `actions._powers` refuses to offer any row
+    carrying a printed trigger -- so reaching the offer would mean
+    re-filing the card as a trait, and the offer `as_basic` lays is spent
+    by nothing, where the card prints one use per encounter. Nothing
+    announces that a swing was taken in place of the granted basic
+    (`ctx["basic"]` leaves the `instead` list out deliberately, #522), so
+    there is no moment to charge the use at either."""
 
 
 @power(

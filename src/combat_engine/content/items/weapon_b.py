@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.items.feet import _grabbing
 from combat_engine.engine import (
     AC,
     CHA,
@@ -4478,11 +4479,23 @@ def i1153p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.grab(bonus=)",),
 )
 def i1468x1(c: Cast) -> None:
-    """A grab with a weapon, and a bonus to the attempt. `c.grab` simply
-    takes hold -- there is no roll for a modifier to reach."""
+    """"There is no roll for a modifier to reach" was looking at `c.grab`,
+    which is the applying half. The *grab action* is `c.grab_attempt`: it
+    rolls Strength against Reflex with `as_="grab"`, and `resolve` puts
+    `as_` in the attack context, which is the key the bull rush modifiers
+    already gate on.
+
+    The other two printed clauses need nothing. "You can use this weapon
+    to grab" is already allowed -- `grab_attempt`'s free-hand test is
+    `len(gear.held) >= 2`, which counts *held items* and not hands, so one
+    polearm does not fail it -- and nothing here stops a grabber attacking
+    what it holds."""
+    c.bonus(
+        "attack", c.enhancement, on=c.me, until=When.ENCOUNTER, kind="item",
+        when=_grabbing,
+    )
 
 
 @power(

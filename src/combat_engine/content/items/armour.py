@@ -315,6 +315,15 @@ def _hit_my_ac(world: World, me: int, ev: Event) -> bool:
     return getattr(ev, "target", None) == me and getattr(ev, "vs", None) == AC
 
 
+def _declared_on_my_ref(world: World, me: int, ev: Event) -> bool:
+    """An attack aimed at my Reflex, read off the declaration.
+
+    `AttackDeclared`, not `AttackRolled`: the defence has to be moved before
+    `resolve.roll` reads it, and the roll *is* that read.
+    """
+    return getattr(ev, "target", None) == me and getattr(ev, "vs", None) == REF
+
+
 def _relation_on_me(kind: Relation):  # noqa: ANN202
     """A mark, a grab or a domination landing on me.
 
@@ -355,6 +364,8 @@ def _adjacent_enemy_moves(*kinds: str):  # noqa: ANN202
         if not _enemy(world, me, who):
             return False
         if kinds and getattr(ev, "kind_", "") not in kinds:
+            return False
+        if who is None:
             return False
         return query.distance_between(world, me, who) <= 1
 
@@ -557,6 +568,74 @@ def _no_provoke_for_attacks(c: Cast) -> None:
     c.watch(
         OpportunityWindow, veto, until=When.ENCOUNTER, on=c.me,
         window=Window.BEFORE,
+    )
+
+
+def _no_armour_penalty(c: Cast, *, check: bool = False, speed: bool = False) -> None:
+    """"This armor has no armor check penalty" / "no penalty to speed".
+
+    Both penalties are real and are charged in two different places, which
+    is why waiving them takes two different levers:
+
+    * the **check** penalty is added by `skills._armour_penalty` *after*
+      `skills.modifier` has summed the modifiers, so cancelling it is a
+      positive `skill` modifier of the same size. It has to be gated to
+      `skills.ENCUMBERED`: ungated it would also pay for Diplomacy, which
+      the penalty never charged.
+    * the **speed** penalty is folded into `Movement.speed` by `chargen`
+      when the character is built, so there is nothing on the creature
+      saying what it cost. The size is read back off the same table and
+      handed to the `speed` modifier `query.speed` sums.
+
+    **The armour's share only.** These cards say "this armor has no ...
+    penalty", so a heavy shield's -2 goes on being charged; `_armour_penalty`
+    adds the two and this cancels one of them.
+    """
+    from combat_engine.chargen import ARMOUR_CHECK, ARMOUR_SPEED
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.skills import ENCUMBERED
+
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return
+    if check and (cost := ARMOUR_CHECK.get(gear.armour, 0)):
+        c.bonus(
+            "skill", -cost, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("skill") in ENCUMBERED,
+        )
+    if speed and (cost := ARMOUR_SPEED.get(gear.armour, 0)):
+        c.bonus("speed", -cost, on=c.me, until=When.ENCOUNTER)
+
+
+def _is_swarm(world: World, who: int | None) -> bool:
+    """A swarm, off the stat block's own keyword line.
+
+    `query.kinds_of` reads the `keywords` column, which is where the word
+    lives for the 60 stat blocks that print it -- so "a swarm" is a
+    question about the creature and not about the attack.
+    """
+    return who is not None and "swarm" in query.kinds_of(world, who)
+
+
+def _ally_flanking_melee_hit(world: World, me: int, ev: Event) -> bool:
+    """"An ally within 5 squares hits an enemy with a melee attack and is
+    flanking it" -- asked off the damage rather than off the hit.
+
+    `DamageApplied` is the event carrying the number this row pays out, and
+    `by_melee` reads a damage event's `detail` for the reach, so the whole
+    printed trigger is askable here. On `Hit` it would be askable and the
+    payout would not.
+    """
+    who = getattr(ev, "source", None)
+    if who is None or who == me:
+        return False
+    victim = getattr(ev, "target", None)
+    if victim is None or query.team(world, who) is not query.team(world, me):
+        return False
+    return (
+        query.distance_between(world, me, who) <= 5
+        and by_melee(world, me, ev)
+        and query.flanked_by(world, victim, who)
     )
 
 
@@ -788,19 +867,36 @@ def i1859x1(c: Cast) -> None:
 
 
 @power("i1872x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("query.armour_penalty(world, eid)",))
+       reach=PERSONAL, target=SELF)
 def i1872x1(c: Cast) -> None:
-    """Armour imposes no check or speed penalty in the first place, so
-    there is nothing for this to cancel."""
+    """Both penalties are charged -- the check one by `skills._armour_penalty`
+    and the speed one by `chargen` at build time -- so both have something to
+    cancel. `_no_armour_penalty` says which lever each takes."""
+    _no_armour_penalty(c, check=True, speed=True)
 
 
 @power("i2137x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.resist_from()", "c.move_through()"))
+       dropped=("c.move_through()",))
 def i2137x1(c: Cast) -> None:
-    """All three clauses turn on who is dealing the damage or whose square
-    is being crossed, and the damage context carries neither."""
+    """Two of the three clauses turn on *who* rather than on the attack, and
+    both are askable: `dmg_ctx` has carried `source` since #302, and
+    `OpportunityWindow`'s context names whoever would swing. The creature
+    being a swarm is `query.kinds_of`.
+
+    The move-through clause stays dropped, and `c.overrun` is not it: that
+    tramples whoever is in the way, where this is a standing *permission*
+    to cross a square. `c.shares_space` is the nearest thing and sits on the
+    creature being entered, so laying it on the swarm would open its square
+    to everybody on the board -- strictly stronger than print."""
+    c.resist(
+        5, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: _is_swarm(c.world, ctx.get("source")),
+    )
+    c.no_provoke(
+        on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: _is_swarm(c.world, ctx.get("actor")),
+    )
 
 
 @power("i2140x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -1115,10 +1211,17 @@ def i1103p1(c: Cast) -> None:
 
 @power("i1176x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.teleport_bonus()", "query.armour_penalty(world, eid)"))
+       dropped=("c.teleport_bonus()",))
 def i1176x1(c: Cast) -> None:
-    """A teleport's distance is the number the row asks for; nothing adds
-    to every one of them."""
+    """The penalty half plays: both are really charged, and
+    `_no_armour_penalty` cancels this armour's share of each.
+
+    The teleport half stays dropped. `c.extend_move` lengthens a **named**
+    row's move and `c.squares_for` reads the entry back under that exact
+    ref, with no wildcard -- so "every teleport you make", which is what
+    this card prints, has no key to hang on and would have to be written
+    once per teleporting row in the game."""
+    _no_armour_penalty(c, check=True, speed=True)
 
 
 @power("i1288x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1154,13 +1257,21 @@ def i1529x1(c: Cast) -> None:
 
 
 @power("i1558p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.resist_from()",))
+       reach=PERSONAL, target=SELF)
 def i1558p1(c: Cast) -> None:
-    """Half the marker is gone: `powers.avenger.oath.oath_target` names
-    the sworn enemy. What is still missing is the gate -- `resolve` builds
-    no `attacker` into the damage context, so "resistance against attacks
-    by that one creature" cannot be told from resistance against
-    everything, which is strictly stronger than print."""
+    """The other half of the marker is gone too: `dmg_ctx` has carried
+    `source` -- who is dealing it -- since #302, and `c.resist(when=)` reads
+    that context, so "attacks by that one creature" is now a gate rather
+    than resistance against everything.
+
+    The oath is asked **inside** the predicate, not once here: the sworn
+    enemy changes during an encounter, and the card says "your current"
+    one."""
+    c.resist(
+        c.enhancement, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("source") is not None
+        and ctx["source"] == oath_target(c),
+    )
 
 
 @power("i1654p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
@@ -1438,11 +1549,21 @@ def i2870p1(c: Cast) -> None:
 
 
 @power("i2983p1", level=3, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       todo=("query.armour_penalty(world, eid)",))
+       reach=PERSONAL, target=SELF)
 def i2983p1(c: Cast) -> None:
-    """Trading AC for the armour's penalties is half a bargain: nothing
-    charges the penalty, so only the cost would be real."""
+    """Both sides of the bargain are real now, so it is worth taking.
+
+    **A toggle, not a switch**: the printed line ends it with a second
+    minor action, so a standing hold is taken off rather than a second one
+    laid. Without that an at-will that re-applies its own state is taken
+    every single turn and the AC cost compounds."""
+    standing = [e for e in c.world.effects.of(c.me) if e.label.startswith(c.ref)]
+    if standing:
+        for held in standing:
+            c.end_effect(held)
+        return
+    c.penalty(AC, 1, on=c.me, until=When.ENCOUNTER)
+    _no_armour_penalty(c, check=True, speed=True)
 
 
 def _shoved_or_charged(world: World, me: int, ev: Any) -> bool:
@@ -1680,10 +1801,13 @@ def i1175p1(c: Cast) -> None:
 
 
 @power("i1181x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("query.armour_penalty(world, eid)",))
+       reach=PERSONAL, target=SELF)
 def i1181x1(c: Cast) -> None:
-    """Armour costs no speed, so there is no penalty to waive."""
+    """Armour does cost speed -- `chargen` folds `ARMOUR_SPEED` into
+    `Movement.speed` when the character is built -- so the penalty is real
+    and waiving it is a `speed` modifier of the same size. This card prints
+    the speed clause alone and no check clause."""
+    _no_armour_penalty(c, speed=True)
 
 
 @power("i1181p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1905,11 +2029,55 @@ def i2088p1(c: Cast) -> None:
         c.charge_at(foe)
 
 
+def _my_at_will_attacks(c: Cast) -> list[str]:
+    """The at-will attack *powers* this character owns.
+
+    The card names a set rather than a row, so the set is read off
+    `Powers.all` the way `_spend_unused` reads its own in `implement_c`.
+
+    **The engine's own two basics are not powers and are left out.** `mba`
+    and `rba` are at-will and carry an attack, so an unfiltered read picks
+    them up -- and filing the melee basic as a stand-in for the melee basic
+    is a no-op, while filing the *ranged* basic into the charge window
+    offers a bow shot at the end of a charge, which is not what "instead of
+    a melee basic attack" says. Driven: without this the row filed
+    `("mba", "p10469", "rba")`.
+    """
+    from combat_engine.engine.basic import MELEE, RANGED
+
+    known = c.world.get(c.me, Powers)
+    if known is None:
+        return []
+    out = []
+    for ref in sorted(known.all):
+        if ref in (MELEE, RANGED):
+            continue
+        p = get(ref)
+        if p is not None and p.usage is AT_WILL and p.attack is not None:
+            out.append(ref)
+    return out
+
+
 @power("i2088p2", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.charge_with()",))
+       reach=PERSONAL, target=SELF)
 def i2088p2(c: Cast) -> None:
-    """`c.charge_at` takes a ref but the charge is already resolving by
-    the time this row could answer it."""
+    """`c.as_basic` is the answer to the old note's objection, which was
+    about *timing*: it files the stand-in under the window that hands the
+    swing out, and `actions._charges` reads its swings from
+    `basic_options(world, actor, "charge")` -- so the swap is in place when
+    the charge offers the attack rather than after the charge has resolved,
+    which is where `c.charge_at` arrived.
+
+    Several refs because the card names a set, not a row. Nothing is
+    checked here on purpose: `basic_options` drops a row the character turns
+    out not to own at the moment the swing is offered, which is later than
+    this and therefore righter.
+
+    `When.EOT`, so a free action bought for this turn's charge does not
+    still be standing for the next one."""
+    refs = _my_at_will_attacks(c)
+    if refs:
+        c.as_basic(*refs, window="charge", until=When.EOT)
 
 
 @power("i2089x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -1958,10 +2126,37 @@ def i2151x1(c: Cast) -> None:
 
 
 @power("i2158p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
-       reach=PERSONAL, target=SELF, todo=("c.defend_with()",))
+       reach=PERSONAL, target=SELF,
+       trigger="an attack targets your Reflex defence",
+       on=Trigger(AttackDeclared, _declared_on_my_ref,
+                  "an attack targets your Reflex"))
 def i2158p1(c: Cast) -> None:
-    """Answering one defence with another's number is not something
-    `query.defence` can be told to do."""
+    """The **defender's** side of a defence swap, which is why
+    `c.attacks_defence` is not the verb: that one moves *this creature's own
+    attacks* and gates on `ev.attacker`, so laying it on the triggering
+    enemy would move all of that enemy's attacks against everybody, and
+    would still miss every other attacker the printed duration covers.
+
+    So it is written as the watch that verb is built out of.
+    `AttackDeclared` carries `vs` and `resolve.roll` reads
+    `vs = declared.vs`, so rewriting the field is the whole mechanism --
+    but only in `Window.BEFORE`: `roll` is the resolve callback and an
+    ordinary listener sees the event once the defence has been read.
+
+    The triggering attack is rewritten directly rather than left to the
+    watch, which is not yet laid when this interrupt runs."""
+    ev = c.trigger
+    if getattr(ev, "vs", None) == REF:
+        ev.vs = AC
+
+    def onto_ac(later: AttackDeclared) -> None:
+        if later.target == c.me and later.vs == REF:
+            later.vs = AC
+
+    c.watch(
+        AttackDeclared, onto_ac, until=When.EONT, on=c.me,
+        window=Window.BEFORE,
+    )
 
 
 @power("i2162x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -2019,7 +2214,16 @@ def i2401p1(c: Cast) -> None:
 @power("i2413x1", level=4, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.unseen_by(sense=)",))
 def i2413x1(c: Cast) -> None:
-    """Tremorsense is not a sense the board has."""
+    """Re-diagnosed, and still blocked -- but not on the sense. "Tremorsense
+    is not a sense the board has" is stale: `c.tremorsense` grants it,
+    `query.has_sense` asks after it and `query.sees_in` answers for it.
+
+    The gap is one level in. This card takes a *bypass* away, and the engine
+    has no bypass to take: `sees_in` makes tremorsense answer the **light**
+    question and nothing else, so a creature with it already needs line of
+    sight exactly as this card demands. There is no model of detection
+    without sight for the row to narrow, so writing anything here would
+    either do nothing or invent a rule the engine does not have."""
 
 
 @power("i2413p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
@@ -2332,16 +2536,21 @@ def i1522x1(c: Cast) -> None:
 
 @power("i2013p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.HEALING],
-       todo=("Hit.damage",))
+       trigger="an ally within 5 squares hits a flanked enemy with a melee attack",
+       on=Trigger(DamageApplied, _ally_flanking_melee_hit,
+                  "an ally hits a flanked enemy in melee"))
 def i2013p1(c: Cast) -> None:
-    """Half the marker named something that already exists under another
-    name: `query.flanked_by(world, victim, attacker)` answers the flanking
-    clause, and the rest of the trigger -- an ally within 5, a melee
-    attack -- is ordinary.
+    """The last of the marker was "`DamageApplied` names no power", and it
+    does: `detail` is the ref of whatever dealt the blow, and
+    `triggers._power_of` reads exactly that field to look the reach up --
+    which is how `by_melee` tells a melee swing from a burst or a burn on a
+    damage event.
 
-    What is left is the number. The heal is half the attack's damage and
-    `Hit` carries none; `DamageApplied` carries one and names no power, so
-    it cannot tell a melee attack from a burst or a burn."""
+    So the whole trigger is askable on the event that also carries the
+    number, and the row is declared there rather than on `Hit`, where the
+    trigger would be askable and the payout would not."""
+    ev = c.trigger
+    c.heal(ev.amount // 2, on=ev.source)
 
 
 @power("i2049p1", level=5, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
@@ -2762,19 +2971,38 @@ def i1039p1(c: Cast) -> None:
 
 
 @power("i1261x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.grant_weapon()",))
+       reach=PERSONAL, target=SELF)
 def i1261x1(c: Cast) -> None:
-    """An item is a base item with properties laid on it and never a new
-    one, so a suit of armour that *is* also a weapon has nowhere to put
-    the weapon: nothing adds one to `Gear.weapons` from a body."""
+    """"Nothing adds one to `Gear.weapons` from a body" is stale --
+    `c.as_weapon` does, and was written for the same shape, a shield that is
+    also a weapon. It carries the item's own enhancement, which is this
+    card's last sentence.
+
+    Two approximations, both the verb's and both recorded in its docstring.
+    It files the profile as a simple weapon where this card prints a
+    military one and then grants proficiency anyway, so the outcome the card
+    describes is the one that lands. And the claw arrives **stowed** rather
+    than held, so `actions._wielding` offers it: laying it in hand would
+    silently disarm whatever the wearer was already holding."""
+    c.as_weapon(
+        damage="1d8", group="light blade", proficiency=3, hands=1,
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power("i1261p1", level=7, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
        reach=CloseBurst(1), target=EACH_ENEMY,
-       dropped=("c.grant_weapon()",))
+       dropped=("c.basic(with_=)",))
 def i1261p1(c: Cast) -> None:
-    """The burst of basic attacks plays; each one swings whatever the
-    wearer is actually holding rather than the armour's claw."""
+    """Re-aimed, because the half it was waiting on landed and a narrower
+    half did not. The claw now exists -- `i1261x1` above puts the profile in
+    `Gear.weapons` -- so `c.grant_weapon()` is no longer what this wants.
+
+    What is still missing is naming it in the swing. `c.basic` deliberately
+    uses "whichever row that creature's basic attack *is*" and takes `on`,
+    `who`, `ranged` and `window` but nothing saying *with what*, and `as_`
+    on `c.attack` names which swing it is rather than which weapon. So the
+    burst plays and each blow is struck with whatever the wearer holds."""
     c.basic()
 
 

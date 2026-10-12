@@ -733,11 +733,26 @@ def i481p2(c: Cast) -> None:
 
 
 @power("i725x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.grant_weapon()",))
+       reach=PERSONAL, target=SELF, dropped=("c.as_weapon(enhancement=)",))
 def i725x1(c: Cast) -> None:
-    """The whole property is a new weapon in the wearer's hands --
-    proficiency, dice, enhancement and basic-attack standing -- and
-    nothing puts one there."""
+    """**`todo` became `dropped`: `c.as_weapon` puts a weapon there.**
+
+    The marker said nothing adds a profile to `Gear.weapons` from a body.
+    `c.as_weapon` does exactly that -- it was written for the shields and
+    rods that print a full weapon profile on something that is not a
+    weapon, which is this card's shape -- and it leaves the profile stowed
+    so `actions._wielding` offers the draw rather than silently emptying
+    the main hand. Proficiency, dice and the group are the printed ones;
+    "counts as a melee basic attack" needs nothing said, because a profile
+    in `Gear.weapons` is what the basic attack swings.
+
+    What is dropped is the gore's **own** enhancement bonus. `as_weapon`
+    takes no `enhancement=` and fills the field from `c.enhancement`, which
+    is the wearer's held magic rather than the number this card prints --
+    a helmet has no enhancement column for it to read. `Level 17:`/`27:`
+    are paragon and out of scope either way.
+    """
+    c.as_weapon(damage="1d10", group="unarmed", proficiency=2)
 
 
 @power("i725p1", level=7, cls=ITEM, usage=DAILY, action=FREE,

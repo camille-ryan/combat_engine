@@ -2175,10 +2175,17 @@ def i2708x1(c: Cast) -> None:
     todo=("c.teleport_as()",),
 )
 def i2830x1(c: Cast) -> None:
-    """The whole benefit is a new way to spend a minor action, and
-    `c.grant_action` understands only shift and stand -- anything else is
-    carried, costs nothing and does nothing. `c.shift_as` is the shape this
-    wants and there is no teleport counterpart."""
+    """The whole benefit is a new way to spend a minor action, and the word
+    has to be one `actions` reads back off the `"<what> as <cost>"` carrier
+    `c.grant_action` lays. Counted: `shift` (`actions._movement`), `stand`
+    and `escape` and `second_wind` (`_recovery`), `instinctive`, `command`,
+    and a **power ref** (`_recasts`, the `c.recast` path). Nothing else, and
+    anything else "is carried, costs nothing and does nothing".
+
+    So a seventh word is a reader in `actions.legal` and not this row's to
+    write, and the ref path is no way round it: the card prints no row to
+    grant, and minting one would be inventing a ref. `c.teleport` itself
+    works, and `c.shift_as` is this sentence for a shift."""
 
 
 @power(
@@ -2343,15 +2350,33 @@ def i475x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.boost_attack()",),
+    dropped=("query.race_named()",),
 )
 def i780x1(c: Cast) -> None:
-    """The whole benefit adds to a roll after the die is down, which is
-    the same gap `i1509p2` names -- so it names it with the same symbol.
-    `c.reroll_attack` takes a bonus for the roll *it* makes; the reroll
-    here is p1450's, made inside another row's body, and a `c.bonus` laid
-    around it is read by the next attack rather than by that one.
-    `c.boost_check` is the shape, for skill checks."""
+    """A **standing** modifier gated on `reroll_by`, not a triggered one,
+    and that is the whole simplification. `c.reroll_attack` re-sums the
+    attack with `reroll_by` set to the ref that forced the roll and takes
+    the *difference*, so a bonus laid once at arming reaches exactly the
+    roll `p1450` buys and nothing else -- not the next attack, and not a
+    magic weapon's reroll. `f217` is the same sentence without the ally
+    clause. Untyped: the card prints no word in front of the bonus.
+
+    The ally clause is asked inside the gate rather than at arming, because
+    the card asks it at the moment of the reroll and allies move.
+
+    Still dropped: of the two allies the line names, one is a race **by
+    ref**, which `c.race_of` answers, and one is a race by its printed
+    *word*. Nothing bridges a word to a ref -- the `race` table carries no
+    word column, unlike `weapon.slug` -- so the second finds only a monster
+    carrying it on its type line, never a character of that race."""
+
+    def rerolling(ctx: dict[str, Any]) -> bool:
+        if ctx.get("reroll_by") != "p1450":
+            return False
+        return any(c.is_kind("drow", on=a) or c.race_of(on=a) == "r3"
+                   for a in c.within(10, side="ally"))
+
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=rerolling)
 
 
 @power(
@@ -2640,14 +2665,26 @@ def i3352x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.move_through_enemies()",),
+    dropped=("c.shift_through_enemies()",),
 )
 def i3441x1(c: Cast) -> None:
-    """Dropped: shifting through an enemy's space. `c.phasing` goes
-    through walls, not through people, and the acid damage is paid only
-    for entering a space that way -- so without the movement the damage
-    has no trigger either. The escape bonus is a skill."""
+    """Dropped, and re-aimed off `c.move_through_enemies()`, which is three
+    different sentences in the tree. This one is a **standing permission on
+    the mover** and there is nothing to lay it on: `share=True` is a
+    permission on one *step*, passed by whoever calls `movement.shift`, and
+    `movement._occupied` consults only the occupant's `shares_space` -- so a
+    property cannot change what a shift the player chooses later is allowed
+    to do. `c.overrun` is a trample, which this card does not print, and
+    `c.phasing` goes through walls rather than through people. Without the
+    movement the acid damage has no trigger either.
+
+    The escape bonus is written and is not a skill bonus: `escape.attempt`
+    sums an `escape` key off the struggling creature -- deliberately not
+    `skill:acrobatics`, because a bonus to getting out of a grab is not a
+    bonus to tumbling -- which is exactly "skill checks made as part of the
+    escape action"."""
     c.set_origin("elemental", until=When.ENCOUNTER)
+    c.bonus("escape", 5, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power(

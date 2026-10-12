@@ -7,14 +7,18 @@ that needs a body.
 
 "Class X can use this weapon as an implement" is the commonest property in
 the slot -- eleven blocks in the first sixty -- and `c.as_implement` is the
-verb for it. The one thing the corpus keeps asking for that still cannot be
-said is a change to the **weapon's own columns**: "this weapon can be used
-as a heavy thrown weapon, range N/M" and "increase this weapon's range",
-marked `c.make_thrown()` and `c.weapon_range()`. `Weapon.ranged` and
-`Weapon.properties` are fields on the object in `Gear`, and writing to them
-from a body is not a change a body may make: clearing `ranged` is what
-takes a weapon out of `Gear.melee`, so hanging a thrown range on a hammer
-would stop it being a hammer.
+verb for it.
+
+A change to the **weapon's own columns** -- "this weapon can be used as a
+heavy thrown weapon, range N/M", "increase this weapon's range" -- used to
+be the one thing here that could not be said, marked `c.make_thrown()` and
+`c.weapon_range()`. It is written now; see `_make_thrown` and
+`_longer_range`. The objection this said -- that clearing `ranged` takes a
+weapon out of `Gear.melee`, so hanging a thrown range on a hammer would
+stop it being a hammer -- was aimed at the wrong field. `Weapon.thrown` is
+a separate column *because* of that, and it is the one a printed thrown
+range belongs in; `c.weapon_dice` is the standing precedent that a body may
+write a `Weapon` at all, because `Gear.weapons` holds per-character copies.
 
 "The damage ignores resistance" **is** sayable -- `c.ignore_resistance`
 landed and two rows here use it.
@@ -33,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.feats.warlord_b import _covering
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -85,6 +90,69 @@ from combat_engine.engine import (
 )
 
 ITEM = "item"
+
+
+def _make_thrown(c: Cast, short: int, long: int) -> bool:
+    """Give this weapon the heavy thrown property and a range, in hand.
+
+    `c.weapon_dice` is the precedent that a body may rewrite a `Weapon`:
+    `Gear.weapons` holds `replace(w)` copies made per character, so the
+    write reaches every reader and needs none of its own.
+
+    **`thrown`, never `ranged`.** The two are separate fields on purpose --
+    `ranged` is "can be fired", and clearing or setting it is what moves a
+    weapon in and out of `Gear.melee`, which is the objection this file's
+    docstring used to raise against the whole clause. `Weapon.thrown` is
+    "how far it goes when thrown", it is what `dsl._reach_of` falls back to
+    for a ranged line, and the six ranges it was built for are exactly the
+    ones these blocks print.
+
+    Both writes are absolute, so arming the trait twice says the same thing
+    twice.
+    """
+    weapon = c.my_weapon()
+    if weapon is None:
+        return False
+    weapon.thrown = (short, long)
+    weapon.properties = weapon.properties | {"heavy thrown"}
+    return True
+
+
+def _longer_range(c: Cast, *, normal: int = 0, long: int = 0) -> bool:
+    """Push this weapon's own range out. A step, so it latches.
+
+    Unlike `_make_thrown` above this one adds to what is there, so arming
+    the trait a second time on the same board would say it twice. The latch
+    is an attribute on the world, which cannot outlive the board -- a module
+    dict keyed on `id(world)` is the reuse hazard #262 was.
+
+    `thrown` as well as `ranged`, because the base-item restriction on these
+    blocks is "any ranged **or any thrown**" and the field a thrown weapon
+    answers with is the other one.
+    """
+    weapon = c.my_weapon()
+    if weapon is None:
+        return False
+    done: set[tuple[int, str]] = getattr(c.world, "_range_pushed", None) or set()
+    # A plain attribute on `World` is not declared, so `ty` refuses it;
+    # `setattr` is the same store without the false claim of a field.
+    setattr(c.world, "_range_pushed", done)  # noqa: B010
+    key = (id(weapon), c.ref)
+    if key in done:
+        return False
+    # **Latched only once the write has actually happened.** Latching first
+    # spent the one chance on a weapon that had neither field filled, so the
+    # row did nothing ever after -- driven on a board, with the weapon given
+    # a range afterwards and the push still refused.
+    if weapon.ranged is not None:
+        weapon.ranged = (weapon.ranged[0] + normal, weapon.ranged[1] + long)
+    elif weapon.thrown is not None:
+        weapon.thrown = (weapon.thrown[0] + normal, weapon.thrown[1] + long)
+    else:
+        return False
+    done.add(key)
+    return True
+
 
 #: Size order, for "a creature larger than you". `Size` is a `StrEnum`, so
 #: its members do not compare by rank on their own.
@@ -200,11 +268,13 @@ def _hit_big(world: World, me: int, ev: Any) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.weapon_range()",),
 )
 def i1101x1(c: Cast) -> None:
-    """Normal range +5 and long range +10: a change to the weapon itself,
-    and `Weapon.ranged` is a column no body can reach."""
+    """"`Weapon.ranged` is a column no body can reach" is stale --
+    `c.weapon_dice` rewrites a `Weapon` field from a body and needs no
+    reader, because `Gear.weapons` holds per-character copies, and
+    `c.my_weapon` says which weapon this block is. See `_longer_range`."""
+    _longer_range(c, normal=5, long=10)
 
 
 @power(
@@ -428,12 +498,13 @@ def i1138x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.make_thrown()",),
 )
 def i1150x1(c: Cast) -> None:
-    """Gives a melee weapon the heavy thrown property and a range.
-    `c.as_ranged` is the one-shot version and says "the next melee attack";
-    a standing property of the weapon has no door."""
+    """`c.as_ranged` is the wrong lever and f1841 measured why: it is a
+    one-shot reach bonus, and standing it would stretch every melee swing
+    with any weapon. The property is a write onto the weapon's own
+    `thrown` and `properties`. See `_make_thrown`."""
+    _make_thrown(c, 6, 12)
 
 
 @power(
@@ -480,11 +551,16 @@ def i1168x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.make_thrown()",),
+    dropped=("c.recall_weapon()",),
 )
 def i1252x1(c: Cast) -> None:
-    """Heavy thrown with a range, plus a class-feature clause that recalls
-    the blade from a mile away -- out of combat either way."""
+    """The thrown half is a write onto the weapon's own columns -- see
+    `_make_thrown`. The recall stays dropped and is the same gap `f612`
+    carries: a weapon on the floor is an `Item` with `owner=0` and no
+    record of whose it was, so "call **your** blade back" cannot pick it
+    out, and `actions._picking_up` tests the square the actor is standing
+    in rather than a distance."""
+    _make_thrown(c, 5, 10)
 
 
 @power(
@@ -735,13 +811,29 @@ def i1568x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.cover_from()",),
 )
 def i1580x1(c: Cast) -> None:
-    """Damage to whichever creature was granting the target cover cannot
-    be said: `query.cover_between` answers how much cover there is, never
-    who is giving it."""
+    """"Never who is giving it" is stale. Cover is stored nowhere -- it is
+    traced corner to corner at the moment of the attack -- so *which*
+    creature casts it is asked the same way, by tracing the line once per
+    candidate with that candidate as the only blocker. `_covering` is that
+    walk and `f2070` already ships on it.
+
+    Written as though every swing is this weapon's, which is this file's
+    standing judgement: the attack context carries no weapon."""
     c.as_implement(on=c.me)
+    me = c.me
+
+    def punish(ev: Any) -> None:
+        if ev.attacker != me:
+            return
+        plus = c.enhancement
+        if plus <= 0:
+            return
+        for blocker in _covering(c, ev.target):
+            c.flat(plus, on=blocker, dtype=DamageType.THUNDER)
+
+    c.watch(Hit, punish, on=me, until=When.ENCOUNTER, label=f"{c.ref} cover punished")
 
 
 @power(
@@ -751,10 +843,11 @@ def i1580x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.make_thrown()",),
 )
 def i1582x1(c: Cast) -> None:
-    """Heavy thrown with a range, as a standing property of the weapon."""
+    """Heavy thrown with a range, as a standing property of the weapon --
+    two absolute writes onto the weapon in hand. See `_make_thrown`."""
+    _make_thrown(c, 10, 20)
 
 
 @power(
@@ -856,7 +949,10 @@ def i1771p1(c: Cast) -> None:
     paid = c.choose(spendable, "which arcane power is given up")
     if paid is None:
         return
-    cap = get(paid).level
+    priced = get(paid)
+    if priced is None:
+        return
+    cap = priced.level
     back = [r for r in spent if (p := get(r)) is not None and p.level <= cap]
     if not back or not c.expend_row(paid):
         return
@@ -1469,12 +1565,14 @@ def i3140x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.weapon_range()",),
 )
 def i3156x1(c: Cast) -> None:
-    """Waiving the long-range penalty is a verb, so that half is written;
-    the +10 to long range is a column on the weapon."""
+    """Both halves land. Waiving the long-range penalty is a verb; the +10
+    is a write onto this weapon's own column, which `c.weapon_dice` is the
+    precedent for. The base item here may be thrown rather than fired, so
+    `_longer_range` pushes whichever of the two fields is filled."""
     c.ignores_long_range(on=c.me, until=When.ENCOUNTER)
+    _longer_range(c, long=10)
 
 
 @power(

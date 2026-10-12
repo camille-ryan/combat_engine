@@ -46,6 +46,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
+    DEX,
     ENCOUNTER,
     FORT,
     FREE,
@@ -68,7 +69,9 @@ from combat_engine.engine import (
     Cast,
     Condition,
     DamageApplied,
+    DamageRolled,
     DamageType,
+    Dropped,
     Forced,
     Healed,
     Hit,
@@ -84,18 +87,21 @@ from combat_engine.engine import (
     TotalDefence,
     Trigger,
     When,
+    Window,
     World,
     about_me,
     both,
     by_me,
     by_melee,
     by_ranged,
+    cursed_by_me,
     get,
     granted_via,
     power,
     query,
     targets_me,
 )
+from combat_engine.engine.components import Powers as _Powers
 
 ITEM = "item"
 
@@ -107,6 +113,11 @@ RAMPAGE = "cf:barbarian-f3"
 
 #: One of r3's racial traits, which only an r3 character carries.
 R3 = "rt:r3-t5"
+
+#: The curse `cf:warlock-f4` lays, and the `detail` its extra damage is dealt
+#: under -- `features.strikers.extra_damage` passes the label straight through
+#: to `c.damage`, so it arrives on `DamageRolled` as the thing to recognise.
+CURSE = "cf:warlock-f4"
 
 
 # -- shared reading of the board --------------------------------------------
@@ -454,10 +465,21 @@ def i2947p1(c: Cast) -> None:
 
 @power("i673p1", level=4, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       todo=("c.on_pact_boon()",))
+       trigger="your pact boon triggers",
+       on=Trigger(Dropped, cursed_by_me,
+                  "a creature you cursed drops to 0 hit points"))
 def i673p1(c: Cast) -> None:
-    """Nothing announces a pact boon, so the trigger cannot be declared
-    and the teleport would never happen."""
+    """"Your pact boon triggers" is not announced as itself, but the moment
+    it names is: every boon is the pair `Dropped` + `cursed_by_me`, which is
+    what `cf:warlock-f1s4` already watches for the same sentence.
+
+    No gate on *having* a boon is needed. The curse is laid by
+    `cf:warlock-f4` and `cursed_by_me` reads the relation, so a wearer with
+    no pact has nothing cursed and the trigger never fires.
+
+    "In addition to the other effect" costs nothing to say: the boon is its
+    own row and pays itself."""
+    c.teleport(3)
 
 
 @power("i893x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -482,14 +504,24 @@ def i893x1(c: Cast) -> None:
 
 
 @power("i903x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.grant_weapon()",), narrative=("skill:athletics",))
+       reach=PERSONAL, target=SELF, narrative=("skill:athletics",))
 def i903x1(c: Cast) -> None:
-    """Two different absences. The blades are a real gap -- a weapon the
-    wearer is proficient with changes what can be swung. Climbing is not:
-    the flat athletics bonus is laid, and narrowing it to a climb would
-    need a check nothing on a board ever calls for."""
+    """The blade is `c.as_weapon` -- a printed profile on a thing the weapon
+    table has no row for, which is the case that verb was written for. It
+    lands in `Gear.weapons` stowed, so `actions._wielding` offers taking it
+    up rather than silently emptying the main hand, and `Weapon.proficiency`
+    is what "the wearer gains proficiency with this weapon" buys.
+
+    One profile, not two. The pair is the same numbers twice and nothing
+    records which hand a stowed weapon came off, so a second identical entry
+    would only be the same weapon listed again.
+
+    Climbing is the other clause and is not a gap: the flat athletics bonus
+    is laid, and narrowing it to a climb would need a check nothing on a
+    board ever calls for."""
     _skills(c, 1, "athletics")
+    c.as_weapon(damage="1d4", group="light blade", proficiency=2,
+                properties=frozenset({"off-hand"}))
 
 
 # -- level 5 ----------------------------------------------------------------
@@ -925,10 +957,34 @@ def i1388x1(c: Cast) -> None:
 
 
 @power("i1431x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.curse_damage()",))
+       reach=PERSONAL, target=SELF)
 def i1431x1(c: Cast) -> None:
-    """The curse's extra damage is rolled inside the curse and there is no
-    hook that says what type it comes out as."""
+    """`DamageRolled.dtype` is writable and `deal_damage` reads it back off
+    the event after the emit -- "setting `dtype` alone is the older and
+    commoner sentence, *this weapon deals fire instead*" -- so retyping the
+    curse's payout is a watch rather than a missing hook. The payout is a
+    `DamageRolled` of its own with `detail` set to the feature's label, which
+    is how it is told apart from the attack that carried it.
+
+    Not `c.deals`: that is gated on the row being a weapon or an implement
+    attack and `cf:warlock-f4` is neither, and it would recolour every blow
+    rather than this one.
+
+    The caveat `resolve` prints applies and is the card's own doing: the
+    damage context was built before the retype, so a separate "+1 to your
+    cold damage" rider reads the type the blow started as. Untyped is on the
+    list because the card offers leaving it alone."""
+    kinds = [DamageType.ACID, DamageType.COLD, DamageType.FIRE,
+             DamageType.UNTYPED]
+
+    def rolled(ev: DamageRolled) -> None:
+        if ev.source != c.me or ev.detail != CURSE:
+            return
+        picked = c.choose(kinds, f"{c.ref}: which type the curse deals")
+        if picked is not None:
+            ev.dtype = picked
+
+    c.watch(DamageRolled, rolled, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i1431p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
@@ -1227,10 +1283,40 @@ def i3332x1(c: Cast) -> None:
 
 
 @power("i3460x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.basic_ability()",))
+       reach=PERSONAL, target=SELF)
 def i3460x1(c: Cast) -> None:
-    """Which ability a basic attack swings with is fixed on the row it
-    is, and nothing swaps one out for a turn."""
+    """`c.rolls_with` records the swap against the *creature* rather than
+    against the row, which is the whole reason it exists -- a basic attack
+    is one shared header and could not be edited for one wearer. The damage
+    follows on its own: `basic._melee_basic` rolls `c.attack_mod` and not
+    `c.str_mod`, precisely so a swapped ability moves both halves.
+
+    "Once per turn" is counted off `PowerUsed`, which `dsl.use` announces
+    **before** the body runs and therefore before `Attack.ability_for` is
+    consulted -- so the count is already right when the swap is asked for.
+    The stamp is the round plus whose turn it is, because the printed
+    restriction resets on every turn and not only on the wearer's: an
+    opportunity attack on somebody else's turn is a fresh one.
+
+    Gated on Dexterity actually being the better modifier, which is what
+    "you can" means for a choice nothing else in the fight turns on."""
+    if c.dex_mod <= c.str_mod:
+        return
+    known = c.world.get(c.me, _Powers)
+    basic = (known.basic if known is not None else "mba") or "mba"
+    seen: list[Any] = [None, 0]
+
+    def swung(ev: PowerUsed) -> None:
+        if ev.actor != c.me or ev.power != basic:
+            return
+        stamp = (c.world.round, c.world.turn)
+        seen[1] = seen[1] + 1 if seen[0] == stamp else 1
+        seen[0] = stamp
+
+    c.watch(PowerUsed, swung, until=When.ENCOUNTER, on=c.me,
+            window=Window.BEFORE)
+    c.rolls_with(basic, DEX, on=c.me, until=When.ENCOUNTER,
+                 when=lambda _w, _e: seen[1] == 1)
 
 
 @power("i3460p1", level=10, cls=ITEM, usage=ENCOUNTER, action=REACTION,

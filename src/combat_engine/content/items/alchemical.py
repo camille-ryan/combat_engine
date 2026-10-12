@@ -97,6 +97,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
+from combat_engine.engine.components import Budget
 
 ITEM = "item"
 
@@ -1145,24 +1146,35 @@ def i3320p1(c: Cast) -> None:
 
 @power("i3479p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(1, 10), target=EACH_CREATURE,
-       keywords=[Keyword.POISON], attack=Attack(vs=FORT, printed=8),
-       dropped=("c.restrict_action()",))
+       keywords=[Keyword.POISON], attack=Attack(vs=FORT, printed=8))
 def i3479p1(c: Cast) -> None:
-    """Re-aimed from `todo` to `dropped`, and the row now plays.
+    """**The bar is real now, and the marker is gone.**
 
-    "Cannot take a standard action" is still not sayable -- it is not
-    dazed, which leaves one action of any kind, and nothing takes one kind
-    of action away -- so the hold is laid as a labelled effect that reads
-    in the log and stops nothing, the shape i2854p1 uses for its tether.
+    It said nothing takes one kind of action away, and `Budget.standard` is
+    that: `Encounter.can_spend` reads the slot, so zeroing it at the top of
+    the victim's turn is exactly "cannot take a standard action" -- not
+    dazed, which leaves one action of any kind, and not `Condition.SHAPED`,
+    whose rules say the same thing under a label that would read wrongly on
+    a poisoned creature. `m193a3` already writes a `Budget` field from
+    content for the mirror-image reason.
 
-    The aftereffect was the other half of the old marker and is not
-    missing: `_after` hangs it on that hold's ending. Writing it is the
-    difference between a row refused in play and a row that does most of
-    what the card prints."""
+    Stamped on `TurnStart` and not once: `_begin` refreshes the budget and
+    *then* emits the event, so anything set before the turn is overwritten.
+    The labelled hold stays, because it is what the aftereffect hangs on --
+    `_after` fires when it ends."""
     if not c.strike():
         return
     victim = c.target
     held = c.effect(f"{c.ref} cannot take a standard action", until=When.EONT)
+
+    def barred(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != victim:
+            return
+        budget = c.world.get(victim, Budget)
+        if budget is not None:
+            budget.standard = 0
+
+    c.watch(TurnStart, barred, until=When.EONT, on=victim, label=c.ref)
     _after(c, held, lambda: c.slowed(on=victim, until=When.EOTNT))
 
 
@@ -1219,18 +1231,27 @@ def i3321p1(c: Cast) -> None:
 @power("i1311p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.ZONE],
        attack=Attack(vs=FORT, printed=10),
-       dropped=("c.unseen_by(sense=)",))
+       )
 def i1311p1(c: Cast) -> None:
     """The free Stealth check is `c.hide(from_=)`, which is what being
     hidden from one enemy is. The smoke is the zone and `_obscured` is the
     light obscuring of it.
 
-    Re-aimed: what is left is "creatures that do not rely on sight are
-    immune", which is the blindsight gap."""
+    **Written: the immunity was never a gap.** The marker said blindsight
+    and tremorsense are not senses the board keeps. They are -- both are
+    granted as `Mods` keys with working ranges, `query.sees_in` answers for
+    either, and `c.has_sense` asks after one on somebody *else*, which is
+    the direction this clause needs. "Creatures that do not rely on sight
+    to detect other creatures" is those two, asked per target, so the
+    smoke still obscures and only the hiding is skipped."""
     if c.first:
         area = c.area()
         _obscured(c, c.zone(area, until=When.EONT), area, until=When.EONT)
     if c.strike() and c.target is not None:
+        if c.has_sense("blindsight", on=c.target) or c.has_sense(
+            "tremorsense", on=c.target
+        ):
+            return
         c.hide(from_=c.target, until=When.EOT)
 
 
@@ -1331,10 +1352,23 @@ def i1412p1(c: Cast) -> None:
 
 
 @power("i1470p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.unseen_by(sense=)",))
+       reach=PERSONAL, target=SELF)
 def i1470p1(c: Cast) -> None:
-    """Blindsight is not a sense the board keeps, so there is nothing to
-    be invisible to."""
+    """**Written: blindsight is a sense the board keeps.**
+
+    `c.blindsight` grants it as a `Mods` key with a range and
+    `query.sees_in` answers for it, so `c.has_sense("blindsight", on=foe)`
+    is the printed "creatures that see using blindsight" asked of each
+    enemy. `c.invisible(to=foe)` is unseen by one creature and not by
+    everybody, which is the narrowing this card prints; its default
+    duration is already the printed "until the start of your next turn".
+
+    It does nothing against an enemy without the sense, which is the card
+    being odd rather than the row being wrong -- the oil hides you from the
+    one thing ordinary concealment does not."""
+    for foe in c.enemies():
+        if c.has_sense("blindsight", on=foe):
+            c.invisible(to=foe, on=c.me, until=When.SONT)
 
 
 @power("i1671p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

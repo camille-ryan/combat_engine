@@ -104,6 +104,7 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
+from combat_engine.engine.query import squares
 
 ITEM = "item"
 
@@ -392,10 +393,22 @@ def i640x1(c: Cast) -> None:
 
 
 @power("i657x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_weapon(natural=)",))
+       reach=PERSONAL, target=SELF)
 def i657x1(c: Cast) -> None:
-    """An improvised or unarmed attack is not a `Weapon`, so nothing can be
-    told to count as a club."""
+    """There is no improvised attack to tag, so the profile *is* the row.
+    An empty hand rolls `1d4` through `c.w` with no proficiency and nothing
+    records that as a weapon, so "as if you were armed with a club" has
+    nothing to modify -- and `c.as_weapon` mints the profile instead. The
+    numbers are the `weapon` row `w3593`: 1d6, proficiency 2, mace group,
+    simple, one-handed, no properties.
+
+    It goes to the belt, as the four other rows printing a weapon profile on
+    something that is not a weapon do, which is what keeps it from being
+    strictly better than the card: a character holding a real weapon keeps
+    swinging it, `Gear.main` is unchanged, and `actions._wielding` offers
+    the draw to one that has nothing."""
+    c.as_weapon(damage="1d6", group="mace", proficiency=2,
+                hands="one-handed")
 
 
 @power("i2993x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -751,11 +764,50 @@ def i2746x1(c: Cast) -> None:
 
 
 @power("i593p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(1), target=NO_TARGET,
-       todo=("c.flank_from_square()",))
+       reach=CloseBurst(1), target=NO_TARGET)
 def i593p1(c: Cast) -> None:
-    """Flanking is computed from two creatures' positions; an empty square
-    cannot stand in for one of them."""
+    """A phantom flanker is not a creature, so `query.flanked_by` can never
+    find it -- but that is not the only route into combat advantage.
+    `has_combat_advantage` reads a `gains_ca_when` modifier on the
+    **attacker** with the pair in its context, and `c.gains_advantage` lays
+    one: the gate asks `Grid.flanks` against the chosen square at the moment
+    of the swing, so everybody keeps moving and the answer follows them.
+    `Grid.flanks` already requires both squares to be adjacent to the
+    victim, which is the whole of the printed rule.
+
+    The square is offered best-first -- one that completes a flank right now
+    -- because an engine with nobody playing takes the first option. Ranked
+    for the whole side and not for the wearer, because the wearer can never
+    be the one it helps: a square adjacent to you is adjacent to you, so the
+    square opposite an enemy you are standing next to is two away. This is
+    an item that sets a flank up for somebody else.
+
+    Laid on the wearer and the allies on the board: the hold is one round,
+    and there is no creature to lay a modifier on for an ally that arrives
+    inside it."""
+    options = sorted(spread({c.here}, 1) - {c.here})
+    if not options:
+        return
+
+    def pairs(spot: Square, attacker: int, victim: int) -> bool:
+        """Would somebody standing on `spot` flank `victim` with `attacker`?"""
+        space = squares(c.world, victim)
+        return any(c.world.grid.flanks(a, spot, space)
+                   for a in squares(c.world, attacker))
+
+    friends = sorted({c.me, *c.allies()})
+    useful = [sq for sq in options
+              if any(pairs(sq, who, foe) for who in friends for foe in c.enemies())]
+    spot = c.choose(useful or options, "which square counts as an ally")
+    if spot is None:
+        return
+
+    def flanking(ctx: dict[str, Any]) -> bool:
+        who, foe = ctx.get("attacker"), ctx.get("target")
+        return who is not None and foe is not None and pairs(spot, who, foe)
+
+    for friend in friends:
+        c.gains_advantage(flanking, on=friend, until=When.EOTNT)
 
 
 @power("i645p1", level=8, cls=ITEM, usage=DAILY, action=FREE,
@@ -842,14 +894,29 @@ def i643p1(c: Cast) -> None:
     c.vulnerable(c.level // 2, on=c.me, until=When.EONT)
 
 
+#: Characters whose surge ceiling `i648x1` has already lifted, keyed by
+#: `(world, entity)`. A property is armed at the start of every fight and the
+#: sentence is about the character sheet, so without the latch the pool would
+#: climb once an encounter. `feats/paladin.py` keeps the same flag for the
+#: same printed line.
+_SURGE_RAISED: dict[tuple[int, int], bool] = {}
+
+
 @power("i648x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.max_surges()",))
+       reach=PERSONAL, target=SELF)
 def i648x1(c: Cast) -> None:
-    """`Health.max_surges` is a field, but writing it from a property is
-    wrong twice over: a property is re-armed at the start of every fight, so
-    the ceiling would climb once an encounter, and `c.regain_surge` refills
-    the pool without lifting the ceiling at all. What is missing is a verb
-    that raises it idempotently for the day."""
+    """`Health.max_surges` is the ceiling an extended rest refills to and a
+    body may write it -- `feats/paladin.py:104` raises it for this exact
+    sentence. The idempotence this row named as the gap is the latch above
+    and not a verb: `c.regain_surge` then hands the extra surge over, which
+    is the half that lifting the ceiling alone does not do."""
+    key = (id(c.world), c.me)
+    health = c.world.get(c.me, Health)
+    if health is None or _SURGE_RAISED.get(key):
+        return
+    _SURGE_RAISED[key] = True
+    health.max_surges += 1
+    c.regain_surge(1, on=c.me)
 
 
 @power("i648p1", level=9, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
@@ -872,12 +939,21 @@ def i648p1(c: Cast) -> None:
 
 
 @power("i895x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF, dropped=("query.race_named()",))
 def i895x1(c: Cast) -> None:
     """The saving-throw context carries the ongoing damage's type, so
-    "against poison effects" is a real gate. "Nondwarf" is not: a character's
-    race is not on the board, so every ally in the burst is helped."""
+    "against poison effects" is a real gate.
+
+    The exclusion is the half nothing can ask, and the marker is re-aimed at
+    why. A character's race **is** on the board -- `c.race_of` reads it off
+    `Build.choices` (#411) -- but it is a **ref**, and the card prints a
+    *word*. The `race` table carries no word at all, unlike `weapon.slug`,
+    so there is nothing for content to match the word against. A monster ally
+    carrying the word on its type line is excluded here; a character of that
+    race is not, and in a party that is the case that matters."""
     for friend in c.within(3, side="ally"):
+        if c.is_kind("dwarf", on=friend):
+            continue
         c.bonus("save", 5, on=friend, until=When.ENCOUNTER, kind="item",
                 when=_poison_save)
 

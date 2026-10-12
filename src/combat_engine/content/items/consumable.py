@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Condition,
     DamageApplied,
     DamageType,
+    Defense,
     Event,
     Forced,
     ForcedMove,
@@ -109,6 +110,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.components import PowerPoints
 from combat_engine.engine.grid import distance as squares_apart
 from combat_engine.engine.grid import neighbours
 from combat_engine.engine.query import allies, distance_between, squares
@@ -144,6 +146,83 @@ def _element(c: Cast, *among: DamageType) -> DamageType:
     """
     pool = list(among or _ELEMENTS)
     return c.choose(pool, "the item's damage type") or pool[0]
+
+
+def _wards(c: Cast, d: Defense, to: int) -> None:
+    """"Once this encounter, your <defence> equals N against one attack."
+
+    **Two moments, so the row arms rather than acts**, exactly as `i1186p1`
+    does: drinking is the minor action this power spends, and the interrupt
+    is bought later, off a roll the drinker does not like the look of.
+
+    **A replaced defence is a delta, not a set.** `AttackRolled` carries the
+    number the die was judged against, and `resolve.attack` then reads the
+    defence *again* after announcing the roll -- that second read is there
+    precisely so an interrupt can raise a guard and turn a hit into a miss
+    -- so a modifier of `N - ev.defence` laid in that window makes the
+    comparison come out at N exactly, whether the creature's own defence is
+    lower than N or higher. Nothing needs a field that sets one outright.
+
+    "When you would be hit" is `ev.result.hit`, the provisional outcome the
+    roll announces for this window, and `once=True` on the modifier is
+    "against a single attack": a one-shot on a defence is spent by the
+    `Hit` or `Miss` that follows, not by the next roll.
+
+    The interrupt's own action cost is not charged, which is the standing
+    judgement for every banked one-shot in this file.
+    """
+
+    def guard(ev: Any) -> None:
+        if ev.target != c.me or ev.vs is not d or not ev.result.hit:
+            return
+        if not c.may("replace that defence", who=c.me):
+            return
+        c.bonus(d, to - ev.defence, on=c.me, until=When.EOT, once=True)
+
+    c.watch(AttackRolled, guard, until=When.ENCOUNTER, on=c.me,
+            once=True, label=f"{c.ref} ward")
+
+
+def _ending_after_one_blow(c: Cast, who: int, held: Any) -> None:
+    """"Against a single attack": take the hold off after the first blow.
+
+    `DamageApplied` is announced *after* resistance has come off, so the
+    blow that spent the one-shot keeps its benefit and the next one does
+    not. `c.watch(once=True)` is spent only when the handler did something,
+    so damage landing on somebody else leaves the watch armed.
+    """
+    if held is None:
+        return
+
+    def spent(ev: Any) -> None:
+        if ev.target == who:
+            c.end_effect(held, why="one attack")
+
+    c.watch(DamageApplied, spent, until=When.EOT, on=who, once=True,
+            label=f"{c.ref} spent")
+
+
+def _missed_all_augmented(world: World, me: int, ev: Event) -> bool:
+    """"You miss all targets with an augmented psionic attack power."
+
+    `PowerResolved` is the only event carrying every roll one use made, so
+    "all targets" is a question about the set rather than about one `Miss`;
+    an empty set is a use that did not attack, which did not miss either.
+
+    `PowerPoints.last` is what *this* use was bought with, which is the
+    question the card asks -- `augmented` is the encounter's running total
+    and would read as augmented for the rest of the fight. Unlike
+    `items/misc.py:_missed_everything` there is no usage filter here: an
+    augmentable row is an at-will, so filtering those out would refuse
+    every use this row is about.
+    """
+    if getattr(ev, "actor", None) != me or not getattr(ev, "rolls", ()):
+        return False
+    pool = world.get(me, PowerPoints)
+    if pool is None or pool.last.get(getattr(ev, "power", ""), 0) <= 0:
+        return False
+    return all(not getattr(roll, "hit", False)
+               for roll in getattr(ev, "rolls", ()))
 
 
 def _on_my_next_hit(c: Cast, fn: Callable[[Hit], None],
@@ -647,18 +726,22 @@ def i2753p1(c: Cast) -> None:
 @power("i930p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you miss all targets with an augmented psionic power",
-       todo=("c.regain_points()",))
+       on=Trigger(PowerResolved, _missed_all_augmented,
+                  "you miss every target of an augmented power"))
 def i930p1(c: Cast) -> None:
-    """**One half is sayable after all.** "Miss all targets" is a question
-    about the whole set of rolls and `PowerResolved` carries them, so
-    `Miss.all_targets` named a field that does not exist while the answer
-    sat on another event -- see `items/misc.py:_missed_everything`.
+    """The payout is a write to the pool the engine already keeps.
 
-    What is still missing is the payout: nothing hands a power point back,
-    so the row is `todo` rather than `dropped` and the trigger is left
-    undeclared. Declaring a trigger whose body can do nothing would make
-    this read as a row that fires and is silent, which is worse than one
-    that refuses."""
+    `PowerPoints.points` is what is left and `maximum` is the ceiling, so
+    handing one back is that write clamped to the ceiling -- the same reach
+    into a component `c.transfer_points` makes for somebody else's pool,
+    and the same shape `feats/paladin.py` uses for a surge ceiling. The
+    old note said nothing hands a point back; nothing *named* one.
+
+    The ladder's 2 and 4 points are paragon and out of scope."""
+    pool = c.world.get(c.me, PowerPoints)
+    if pool is None:
+        return
+    pool.points = min(pool.maximum, pool.points + 1)
 
 
 # -- level 5 ----------------------------------------------------------------
@@ -1067,7 +1150,18 @@ def i566p1(c: Cast) -> None:
        todo=("c.sustain_free()",))
 def i1071p1(c: Cast) -> None:
     """Sustaining costs an action the engine spends; nothing waives it for
-    one round."""
+    one round.
+
+    **`sustain_cost=ActionType.FREE` is not the waiver, and would kill the
+    power.** `actions._sustaining` does ask `can_spend`, which answers True
+    for a free action -- but that menu entry is only the deliberate path.
+    What actually keeps a sustained effect alive is
+    `durations._sustain_by_default`, which reads `getattr(budget,
+    cost.value)` and decrements it, and `Budget` has `standard`, `move` and
+    `minor` and no `free`. So a free cost reads as a slot at zero, the
+    effect is ended "not sustained", and the row would be worse than
+    absent. What the symbol wants is a no-charge branch there, or a slot
+    for it to spend."""
 
 
 @power("i1188p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1111,14 +1205,25 @@ def i1720p1(c: Cast) -> None:
 
 
 @power("i2074p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.resist(once=)",))
+       reach=PERSONAL, target=SELF)
 def i2074p1(c: Cast) -> None:
-    """The interrupt is banked as a one-shot. "Against a single attack"
-    is the missing half: the resistance stands for the turn instead."""
+    """The interrupt is banked as a one-shot, and "against a single attack"
+    is that hold ending itself on the first blow it could shrug off:
+    `c.resist` hands back the effect it laid, and `DamageApplied` is
+    announced after the resistance has already come off, so the one blow
+    the card pays for is resisted and the next one is not.
+
+    **Not `c.bonus(once=True)`.** A one-shot modifier is spent by its
+    *owner's* next attack roll, and the owner of a resistance is the
+    creature being hit, so a one-shot resist would never be spent at all --
+    the same shape the defence and damage branches of that method were each
+    wrong in once. `_ending_after_one_blow` is the content-side answer."""
     c.spend_surge(on=c.me)
 
     def brace(who: int) -> None:
-        c.resist(15, DamageType.NECROTIC, on=who, until=When.EOT)
+        _ending_after_one_blow(
+            c, who, c.resist(15, DamageType.NECROTIC, on=who, until=When.EOT)
+        )
 
     c.give(fn=brace, on=c.me, cost=ActionType.IMMEDIATE_INTERRUPT)
 
@@ -1231,22 +1336,28 @@ def i1186p1(c: Cast) -> None:
 
 
 @power("i1190p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.set_defence()",))
+       reach=PERSONAL, target=SELF)
 def i1190p1(c: Cast) -> None:
-    """"Your Fortitude equals 25 against that attack" replaces a defence
-    rather than adding to it, and a modifier cannot say that."""
+    """A replaced defence is a delta laid in the window the roll is
+    re-judged in -- `_wards` has the argument. The old note said a modifier
+    cannot say "equals 25"; one laid at the right moment says exactly that.
+
+    25 is this rung; the paragon numbers are out of scope."""
+    _wards(c, FORT, 25)
 
 
 @power("i1192p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.set_defence()",))
+       reach=PERSONAL, target=SELF)
 def i1192p1(c: Cast) -> None:
     """As i1190p1, for Reflex."""
+    _wards(c, REF, 25)
 
 
 @power("i1194p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.set_defence()",))
+       reach=PERSONAL, target=SELF)
 def i1194p1(c: Cast) -> None:
     """As i1190p1, for Will."""
+    _wards(c, WILL, 25)
 
 
 @power("i1770p1", level=8, cls=ITEM, usage=DAILY,
@@ -1270,15 +1381,19 @@ def i2043p1(c: Cast) -> None:
 
 
 @power("i2080p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.resist(once=)",))
+       reach=PERSONAL, target=SELF)
 def i2080p1(c: Cast) -> None:
     """The choice of lightning or thunder is made when the one-shot is
-    spent, not when the potion is drunk."""
+    spent, not when the potion is drunk. "Against a single attack" is the
+    hold ending on the first blow -- see i2074p1."""
     c.spend_surge(on=c.me)
 
     def brace(who: int) -> None:
-        c.resist(15, _element(c, DamageType.LIGHTNING, DamageType.THUNDER),
-                 on=who, until=When.EOT)
+        _ending_after_one_blow(
+            c, who,
+            c.resist(15, _element(c, DamageType.LIGHTNING, DamageType.THUNDER),
+                     on=who, until=When.EOT),
+        )
 
     c.give(fn=brace, on=c.me, cost=ActionType.IMMEDIATE_INTERRUPT)
 
@@ -1347,9 +1462,16 @@ def i3273p1(c: Cast) -> None:
 
 
 @power("i3276p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.set_defence()",))
+       reach=PERSONAL, target=SELF)
 def i3276p1(c: Cast) -> None:
-    """A defence set to a number, as i1190p1."""
+    """A defence set to a number, as i1190p1.
+
+    *Which* defence is fixed when the elixir is made and is carried by no
+    column, so it is asked of the decider each time the row runs, the way
+    `_element` asks for a damage type rather than guessing one here.
+
+    The card prints 17 plus the item's level, which is 25 at this rung."""
+    _wards(c, c.choose([FORT, REF, WILL, AC], "the warded defence") or FORT, 25)
 
 
 @power("i3279p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

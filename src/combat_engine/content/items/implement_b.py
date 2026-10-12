@@ -25,13 +25,25 @@ Three judgements run through the whole file.
   `c.grant_attack(c.me, ref=...)` where the row is a swing.
 
 Recurring gaps, each marked with the symbol it wants rather than
-approximated: `c.pact_boon()`, `c.fell_might()`, `c.regain_points()`,
-`c.store_points()` and `c.tome_powers()`. Four class features the cards
-lean on are not verbs at all but undeclared rows, so the markers name the
-refs: `cf:monk-f0c0`..`c4` for the monk's per-tradition attack flurry and
-`cf:warlock-f1c0` for the star pact's boon. "Ongoing 5 fire and radiant
-damage" is one number of two types and not two numbers, and
-`c.ongoing(dtypes=)` is it.
+approximated: `c.pact_boon()`, `c.regain_points()` and
+`c.store_points()`. "Ongoing 5 fire and radiant damage" is one number of
+two types and not two numbers, and `c.ongoing(dtypes=)` is it.
+
+**Four of those markers were stale and are gone.** The monk's attack
+flurry is `FLURRIES` -- five declared rows, one per tradition -- and
+`c.flurry_of_blows()` names whichever one a carrier holds, so the blocks
+that named `cf:monk-f0c0`..`c4` are written. `c.fell_might()` was
+likewise never a gap: the boon is a row with `usage=ENCOUNTER`, so
+`c.expend_row` spends its charge. `c.tome_powers()` named a store that
+turns out to have no business in a round -- `_tome_power` is what a fight
+reaches the tome's dailies through. And `c.curse_damage()` named two
+numbers that `features/strikers.py` publishes by label: the flat bonus is
+`c.total(f"{CURSE} damage")` and the die is `c.dice_for(CURSE, ...)`.
+
+A row's **range** is reachable too, which three markers denied:
+`dsl.area_of` hands `dsl._stretched` a context naming the row, so a gated
+`c.bonus("range", ...)` lengthens exactly the rows a card names. An area
+burst's `within` is the one part of that still missing.
 """
 
 from __future__ import annotations
@@ -39,6 +51,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.powers.druid.forms import BEAST, in_beast_form
+from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -110,15 +123,49 @@ from combat_engine.engine.events import PowerResolved
 
 ITEM = "item"
 
-#: The monk's attack flurry is one row per monastic tradition and none of
-#: the five is declared, so the four blocks that lean on it name the refs.
-FLURRY = (
-    "cf:monk-f0c0",
-    "cf:monk-f0c1",
-    "cf:monk-f0c2",
-    "cf:monk-f0c3",
-    "cf:monk-f0c4",
-)
+#: The warlock's curse rider, labelled as `features/strikers.py` labels it.
+#: Both halves of it are reachable by that name: the flat bonus it pays is
+#: `c.total(f"{CURSE} damage")` and the die it rolls is
+#: `c.dice_for(CURSE, ...)`, which is the read half `c.change_dice` needs.
+CURSE = "cf:warlock-f4"
+
+
+def _one_more_die(dice: str) -> str:
+    """"An extra die of it" -- one more of whatever is being rolled.
+
+    Read back rather than assumed, so a feat that has already raised the
+    die keeps its own face.
+    """
+    count, _, face = dice.partition("d")
+    return f"{int(count or 1) + 1}d{face}" if face.isdigit() else dice
+
+def _from_a_flurry(ev: Any) -> bool:
+    """Was this damage dealt by the carrier's own attack flurry?
+
+    `DamageApplied` carries no `power` field at all -- `detail` is "what
+    dealt it, a power ref where one did" -- so the gate reads that.
+    """
+    return getattr(ev, "detail", "") in FLURRIES
+
+
+def _opportunity_hit_on_me(world: World, me: int, ev: Any) -> bool:
+    """"An enemy hits you with an opportunity attack."
+
+    `Hit` does not declare `opportunity`; `resolve.attack` sets it as a
+    plain attribute after the fact, so it is read with `getattr`.
+    """
+    return (getattr(ev, "target", None) == me
+            and bool(getattr(ev, "opportunity", False)))
+
+
+def _i_used_a_flurry(world: World, me: int, ev: Any) -> bool:
+    """"You use your <class feature> power" -- whichever of the five it is."""
+    return getattr(ev, "actor", None) == me and getattr(ev, "power", "") in FLURRIES
+
+
+def _my_flurry_damaged(world: World, me: int, ev: Any) -> bool:
+    """"You damage an enemy with your <class feature> power.\""""
+    return getattr(ev, "source", None) == me and _from_a_flurry(ev)
 
 
 def _struck(c: Cast) -> int | None:
@@ -1032,15 +1079,25 @@ def i1197x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="an enemy hits you with an opportunity attack",
-    on=Trigger(Hit, hits_me, "an enemy hits you"),
-    todo=FLURRY,
+    on=Trigger(Hit, _opportunity_hit_on_me, "an enemy hits you with an opportunity"),
 )
 def i1197p1(c: Cast) -> None:
-    """Re-aimed at the refs. The payout is not a verb: `cf:monk-f0` hands
-    out one attack row per monastic tradition and none of the five is
-    declared, so there is nothing for `c.use_power(..., again=True)` --
-    which is exactly "even if you have already used it this round" -- to
-    point at."""
+    """**Written: the payout had a ref all along.** The marker named
+    `cf:monk-f0c0`..`c4`, which are not rows; the five are `FLURRIES` and
+    `c.flurry_of_blows()` names whichever one the tradition granted.
+
+    `again=True` is the printed "even if you have already used it during
+    this round" -- it waives `once_per_round`, which every one of the five
+    declares. `spend=` is left alone because the flurry is at-will.
+
+    Aimed at `ev.attacker`: the enemy made the opportunity attack, so it is
+    the creature in reach, and the flurry's own line targets one creature.
+    The row's own `target=SELF` is the trigger's subject, not the swing's.
+    """
+    flurry = c.flurry_of_blows()
+    foe = getattr(c.trigger, "attacker", None)
+    if flurry and foe is not None:
+        c.use_power(flurry, on=foe, again=True)
 
 
 @power(
@@ -1177,11 +1234,40 @@ def i1533p2(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=FLURRY,
+    trigger="you use your class feature's attack flurry",
+    on=Trigger(PowerUsed, _i_used_a_flurry, "you use that class power"),
 )
 def i1588p1(c: Cast) -> None:
-    """Re-aimed at the refs. Both the trigger and the payout are the
-    monk's per-tradition attack row, and none of the five is declared."""
+    """**Written: both halves had a ref all along.** The marker named
+    `cf:monk-f0c0`..`c4`; the five rows are `FLURRIES`.
+
+    Declared on `PowerUsed`, which `dsl.use` announces *before* running the
+    body -- which is the only window in which a damage modifier can be in
+    place for the flurry's own roll. The push is the other way round, so it
+    hangs on a one-shot `PowerResolved` watch: pushing first would move the
+    creature before the extra damage it is owed.
+
+    The extra damage is gated on the power rather than spent `once=True`,
+    because "each target" is plural on the card; `until=When.EOT` cannot
+    leak to a second flurry, since all five are `once_per_round`.
+    """
+    enh = c.enhancement
+    c.bonus(
+        "damage", enh, on=c.me, until=When.EOT,
+        when=lambda ctx: ctx.get("power") in FLURRIES,
+    )
+
+    me = c.me
+
+    def shoved(ev: PowerResolved) -> None:
+        # Gated, not `once=True`: this row's own `PowerResolved` lands
+        # first and would eat a one-shot watch.
+        if ev.actor != me or ev.power not in FLURRIES:
+            return
+        for foe in ev.targets:
+            c.push(enh, on=foe)
+
+    c.watch(PowerResolved, shoved, until=When.EOT, on=me, label=c.ref)
 
 
 @power(
@@ -1216,15 +1302,42 @@ def i1594p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.curse_damage()", "c.extend_range()"),
+    dropped=("c.within(extend=)",),
 )
 def i1825x1(c: Cast) -> None:
-    """Re-aimed. `p6855` is printed and declared, so the ref was never the
-    hold here -- both printed clauses are. Lengthening the reach at which
-    that row picks its second creature means reaching into another row's
-    own range line, which is the same hold `i2635x1` has; and the curse's
-    damage dice, which the other half adds to, are not a thing any verb
-    rolls -- the same hold as `i1833x1`."""
+    """The curse-damage half is written; the reach half is dropped.
+
+    **`todo` became `dropped` and both symbols were re-aimed.** The curse's
+    extra damage was never unreachable: `features/strikers.extra_damage`
+    pays it as `c.damage(rolled, c.total(f"{CURSE} damage"), ...)`, so a
+    modifier on that key *is* the printed "+1 bonus to it". Laid in
+    `Window.BEFORE` off the triggering `Hit`, because the striker's own
+    payout is an ordinary `AFTER` watch on the same event and the bonus has
+    to be standing by the time it reads the total.
+
+    `until=When.EOT` rather than a one-shot: the striker's latch is per
+    round and pays on the first qualifying hit, which -- once the bonus is
+    laid -- is this one, so "for that attack" and "until the end of the
+    turn" come to the same payment.
+
+    What is left is the other clause. The distance at which `p6855` picks
+    its second creature is the literal 3 in `c.within(3, of=victim, ...)`
+    inside *that row's body*, and no modifier reaches a literal.
+    `c.bonus("range", ...)` -- which the old marker pointed at -- is the
+    wrong lever: it lengthens a row's own printed range line, which p6855
+    already gets right.
+    """
+    me = c.me
+
+    def on_hit(ev: Hit) -> None:
+        if ev.attacker != me or ev.power != "p6855":
+            return
+        c.bonus(f"{CURSE} damage", 1, on=me, until=When.EOT)
+
+    c.watch(
+        Hit, on_hit, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=c.ref,
+    )
 
 
 @power(
@@ -1367,11 +1480,44 @@ def i1830p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.curse_damage()",),
 )
 def i1833x1(c: Cast) -> None:
-    """`c.curse` marks a creature but the curse's own damage dice are not
-    a thing any verb rolls, so "an extra die of it" cannot be added."""
+    """**Written: the curse's die is `c.dice_for`, not an unreachable roll.**
+
+    `features/strikers.extra_damage` rolls it as `c.dice_for(CURSE,
+    "1d6", {"target": ev.target})` -- which is exactly the read half
+    `c.change_dice` says a row must have to be changed. "An extra die of
+    it" is therefore one more of whatever the warlock is currently
+    rolling, read back rather than assumed, so a feat that has already
+    raised the die keeps its own face.
+
+    Laid in `Window.BEFORE` off the triggering `Hit`, like `i1825x1`: the
+    striker pays from an ordinary `AFTER` watch on the same event, and
+    "with the p3403 power" is not a key the `dice_for` context carries --
+    only `target` is -- so that narrowing has to be made at the moment
+    rather than in the gate.
+
+    "At maximum hit points" is read on the `Hit`, which is announced
+    before any damage is rolled, so the creature is still whole there.
+    """
+    me = c.me
+
+    def on_hit(ev: Hit) -> None:
+        if ev.attacker != me or ev.power != "p3403":
+            return
+        foe = ev.target
+        if c.wounded(on=foe) or not c.cursed(foe):
+            return
+        bigger = _one_more_die(c.dice_for(CURSE, "1d6", {"target": foe}))
+        c.change_dice(
+            CURSE, bigger, on=me, until=When.EOT,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
+
+    c.watch(
+        Hit, on_hit, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=c.ref,
+    )
 
 
 @power(
@@ -1508,11 +1654,21 @@ def i1837p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=FLURRY,
 )
 def i1856x1(c: Cast) -> None:
-    """Re-aimed at the refs. Adds to the damage of the monk's
-    per-tradition attack row, and none of the five is declared."""
+    """**Written: the five rows the marker named as missing are `FLURRIES`.**
+
+    A trait, armed once, laying one untyped point on the flurry's damage --
+    the shape `feats/defenders.py` already uses for the same family.
+
+    "When it is triggered by an attack using this ki focus" is the file's
+    standing judgement: the damage context carries no weapon, so a property
+    phrased that way is armed always-on for as long as the item is worn.
+    """
+    c.bonus(
+        "damage", 1, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in FLURRIES,
+    )
 
 
 @power(
@@ -1857,12 +2013,25 @@ def i1999p1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    todo=FLURRY,
+    trigger="you damage an enemy with your class feature's attack flurry",
+    on=Trigger(DamageApplied, _my_flurry_damaged, "your flurry damages an enemy"),
 )
 def i2115p1(c: Cast) -> None:
-    """Re-aimed at the refs. The trigger is the monk's per-tradition
-    attack row, and none of the five is declared; `c.basic` is waiting
-    for it on the other side."""
+    """**Written: the trigger had a ref all along.** The marker named
+    `cf:monk-f0c0`..`c4`; the five rows are `FLURRIES`.
+
+    `DamageApplied` rather than `Hit`: the card says *damage*, and the
+    flurry's payout is a flat addition that can be resisted away to
+    nothing. `detail` is the field that names the row -- `DamageApplied`
+    has no `power`.
+
+    `on=` is passed explicitly. The header declares `ONE_CREATURE`, so
+    `c.target` is whoever the chooser picked, and the card means the
+    creature the flurry hurt.
+    """
+    foe = getattr(c.trigger, "target", None)
+    if foe is not None:
+        c.basic(on=foe)
 
 
 @power(
@@ -1914,11 +2083,19 @@ def i2312p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.fell_might()",),
+    todo=("events.RowExpended",),
 )
 def i2324x1(c: Cast) -> None:
-    """The trigger is spending one named class feature, which nothing
-    models and nothing announces."""
+    """**Re-aimed: the feature is modelled, the moment is not announced.**
+
+    `c.fell_might()` was the wrong symbol -- the boon is a declared row
+    with `usage=ENCOUNTER` and `c.expend_row` spends its charge, which is
+    what `i2324p1` beside this now does. What this row needs is the
+    *announcement*: `c.expend_row` emits a bare `Note`, which carries
+    `text` and nothing else -- no actor, no ref -- so there is no event a
+    trigger can read to know a charge went. Watching `i2324p1` instead
+    would pay the temporary hit points on a use that found nothing to
+    spend, since the row still resolves when the Requirement refuses it."""
 
 
 @power(
@@ -1934,11 +2111,22 @@ def i2324x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.ARCANE)), "you hit with an arcane power"
     ),
-    dropped=("c.fell_might()",),
 )
 def i2324p1(c: Cast) -> None:
-    """The burn is the payout and it works; spending the class feature is
-    the cost, and nothing models it, so the row plays for free."""
+    """**Written: the cost had a spelling all along.**
+
+    The boon the card spends is a declared row with `usage=ENCOUNTER`, so
+    its charge *is* a use of the feature -- `features/warlock.py` says so
+    outright -- and `c.expend_row` spends one without running it. Its
+    False is the printed Requirement, which is why the row now returns
+    rather than paying the burn for free; before this it was offered
+    unconditionally to warlocks who had already spent it.
+
+    Only the one leg's boon is named, because that is the only leg whose
+    boon this card's wording can be spending.
+    """
+    if not c.expend_row("cf:warlock-f1s4"):
+        return
     foe = _struck(c)
     if foe is not None:
         c.ongoing(
@@ -2309,11 +2497,29 @@ def i2620p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.extend_range()",),
+    dropped=("dsl._stretched(within=)",),
 )
 def i2635x1(c: Cast) -> None:
-    """A power's range is a header field read before the run; nothing
-    reaches in and lengthens it for one creature."""
+    """The ranged half is written; the area half is the dropped clause.
+
+    **`todo` became `dropped`, and the symbol was re-aimed.** A ranged
+    line's range really is reachable: `dsl.area_of` hands `_stretched` a
+    context of `{"power": p.ref, "kind": r.kind}` and it reads
+    `Mods.total("range", ctx)`, so a gated `c.bonus("range", ...)` is the
+    printed sentence for every ranged arcane power.
+
+    An **area** power is the half that is still missing, and the card's own
+    worked example is exactly it -- the number that grows is the `within`
+    an area burst may be placed at. `_stretched` deliberately does not
+    touch that: for an area kind it reads `"blast_size"`, which is the
+    burst's own radius, and growing that would widen the blast instead of
+    reaching further. So the symbol is the missing parameter rather than a
+    new mechanism.
+    """
+    c.bonus(
+        "range", c.enhancement, on=c.me, until=When.ENCOUNTER,
+        when=_has_keyword(Keyword.ARCANE),
+    )
 
 
 @power(
@@ -2652,12 +2858,15 @@ def i2894p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tome_powers()",),
 )
 def i2898x1(c: Cast) -> None:
-    """The crit range works. The second paragraph -- two daily powers
-    chosen at acquisition and added to the spellbook -- is a store the
-    item does not have."""
+    """The crit range works.
+
+    **Marker removed, as `i2717x1`.** The second paragraph describes what
+    the tome holds; the one moment a fight reaches those powers is
+    `i2898p1`, which `_tome_power` already writes. Choosing them at
+    acquisition and adding them to a spellbook both happen before a
+    board."""
     c.bonus(
         "crit_range", 1, on=c.me, until=When.ENCOUNTER,
         when=_has_keyword(Keyword.LIGHTNING),
@@ -2725,11 +2934,26 @@ def i2912x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.extend_range()",),
 )
 def i3017x1(c: Cast) -> None:
-    """The cover half works and the range half does not, so the row plays
-    with one clause named as missing rather than being refused entire."""
+    """**Both halves written: the range was reachable all along.**
+
+    `dsl.area_of` measures a row's range through `dsl._stretched`, which
+    reads `Mods.total("range", ctx)` with `ctx = {"power": p.ref, "kind":
+    r.kind}` -- so a gated `c.bonus("range", ...)` lengthens exactly the
+    rows the card names and nothing else. The marker's claim that a range
+    is a header field nothing reaches was false.
+
+    The gate asks only the keyword. It needs no test for a ranged line:
+    `_stretched` reads the `"range"` key **only** on a ranged kind -- a
+    blast or a burst reads `"blast_size"` instead -- so the modifier is
+    unreachable from anything else by construction. `Level 14:`/`24:` are
+    paragon and out of scope, so the printed heroic 2 is the number.
+    """
+    c.bonus(
+        "range", 2, on=c.me, until=When.ENCOUNTER,
+        when=_has_keyword(Keyword.CHARM),
+    )
     c.ignore_cover(
         on=c.me,
         until=When.ENCOUNTER,
@@ -3407,9 +3631,20 @@ def i719x1(c: Cast) -> None:
     todo=("c.min_die()",),
 )
 def i1076x1(c: Cast) -> None:
-    """A floor under each individual die of a damage roll. `c.damage`
-    rolls the expression whole and hands back a total; the dice are gone
-    by the time anything can look at them."""
+    """**The premise was wrong; the symbol is still right.**
+
+    The old note said the dice are gone by the time anything can look at
+    them. They are not: `Cast._roll_damage` has them in hand, which is
+    where `c.maximise` and `c.reroll_ones` are both read, and
+    `_rolled_above` already works per die rather than per expression.
+
+    But `c.reroll_ones(below=3)` is not this card. `_rolled_above`
+    **rerolls** each low die until it is not low -- its own docstring says
+    "until it shows a different number" -- where this card *sets* the die
+    to 3. On a d6 that is an average of 4.5 against a flat 3, so writing
+    the row with the existing verb would be a stronger item than the
+    printed one. What is missing is a floor that replaces rather than
+    rerolls, which is what `c.min_die()` names."""
 
 
 @power(
@@ -3815,12 +4050,20 @@ def i2654p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tome_powers()",),
 )
 def i2717x1(c: Cast) -> None:
     """`Hit` does not declare `opportunity`; it rides as a plain attribute
-    set afterwards, so it is read with `getattr`. The second paragraph --
-    two daily powers the tome carries -- is the dropped clause."""
+    set afterwards, so it is read with `getattr`.
+
+    **Marker removed: the second paragraph is not a missing clause.** It
+    says what the tome *contains* -- two dailies at or below its level,
+    chosen when it is acquired, addable to the spellbook. The only thing a
+    fight does with them is `i2717p1`, which is "you gain the use of the
+    chosen power during this encounter", and that is written: `_tome_power`
+    walks the ladder from the tome's rung down through `c.borrow_row`. The
+    choice itself happens before any board exists and the spellbook line is
+    chargen's; there is no round in which this property owes anything
+    further."""
 
     def on_hit(ev: Hit) -> None:
         if ev.attacker != c.me or not getattr(ev, "opportunity", False):
@@ -3995,12 +4238,15 @@ def i2796p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tome_powers()",),
 )
 def i3012x1(c: Cast) -> None:
     """The temporary hit points and the daze-for-more trade both work off
     `PowerUsed`, which is safe here: the row reads only the declaration,
-    not anything the body does. The tome's two stored powers are dropped."""
+    not anything the body does.
+
+    **Marker removed, as `i2717x1`.** The tome's two stored powers are
+    reached by `i3012p1` through `_tome_power`, and nothing else in a
+    fight asks after them."""
 
     def used(ev: PowerUsed) -> None:
         if ev.actor != c.me:

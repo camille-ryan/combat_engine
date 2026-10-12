@@ -106,6 +106,16 @@ def _skills(c: Cast, value: int, *names: str, kind: str = "item") -> None:
         c.bonus(f"skill:{name}", value, on=c.me, until=When.ENCOUNTER, kind=kind)
 
 
+def _grabbing(ctx: dict[str, Any]) -> bool:
+    """Is the roll being modified a grab attempt?
+
+    `c.grab_attempt` rolls `as_="grab"` and `resolve` declares `as_` in the
+    attack context beside the other shape keys, which is the same door the
+    bull rush modifiers use.
+    """
+    return ctx.get("as_") == "grab"
+
+
 def _holding(*conditions: Condition) -> Callable[[dict[str, Any]], bool]:
     """Save gate: the effect being saved against imposes one of these."""
     wanted = set(conditions)
@@ -991,17 +1001,25 @@ def i765x1(c: Cast) -> None:
 
 
 @power("i774x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_grab_attack()",))
+       reach=PERSONAL, target=SELF)
 def i774x1(c: Cast) -> None:
-    """A grab is an ordinary attack the engine does not label, so the
-    attack half of the property has nothing to gate on."""
+    """"A grab is an attack the engine does not label" is stale:
+    `c.grab_attempt` rolls Strength against Reflex with `as_="grab"`, and
+    `resolve` puts `as_` in the attack context, which is the key the bull
+    rush modifiers already gate on."""
     _skills(c, 2, "athletics")
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=_grabbing)
 
 
 @power("i774p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.on_grab_attack()",))
+       reach=PERSONAL, target=SELF)
 def i774p1(c: Cast) -> None:
+    """The grab half gates on `ctx["as_"]`, as i774x1's does. "Gain a +4
+    bonus to all" is both halves at the same number, and the 19th and 29th
+    level lines are paragon and out of scope."""
     c.bonus("skill:athletics", 4, on=c.me, until=When.EONT, kind="item")
+    c.bonus("attack", 4, on=c.me, until=When.EONT, kind="item", when=_grabbing)
 
 
 # -- level 10 ---------------------------------------------------------------

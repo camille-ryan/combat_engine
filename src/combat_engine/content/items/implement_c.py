@@ -471,15 +471,19 @@ def i724p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.tome_powers()",),
 )
 def i744x1(c: Cast) -> None:
     """The first half plays: a wizard fire power used through this tome
     reduces the target's fire resistance by 10, which from the
     attacker's side is ten points walked through. Heroic, so 10.
 
-    The second is dropped -- a tome's two stored powers are not a thing
-    the engine holds."""
+    "A tome's two stored powers are not a thing the engine holds" is stale,
+    and the marker is gone rather than re-aimed: the contents are reached by
+    `implement_b._tome_power`, which walks `c.borrow_row` down the level
+    ladder this card prints. They are also not a *combat* clause of this
+    property -- choosing them happens when the tome is acquired, and the
+    only thing that ever spends them is `i744p1` beside this, which now
+    does."""
 
     def wizard_fire(ctx: dict[str, Any]) -> bool:
         p = get(ctx.get("power", ""))
@@ -501,14 +505,21 @@ def i744x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    todo=("c.tome_powers()",),
 )
 def i744p1(c: Cast) -> None:
-    """Re-aimed to one gap. The price half is sayable now -- `c.expend_row`
-    spends a use without running the row, and `i1098p1` beside this writes
-    it -- but there is nothing to buy: the chosen power is one of the two
-    the tome stores, and nothing holds a tome's contents. The row can
-    never run, so the price is not written either."""
+    """There is something to buy after all. `implement_b._tome_power` is the
+    tome's contents: `c.borrow_row` is "the card names a set and asks the
+    character to take one of it", which is exactly what two chosen dailies
+    are, and it walks the ladder down from the tome's own rung because the
+    card says "equal to or lower than that of the tome".
+
+    The price is charged first and its False is the printed Requirement --
+    there is no loan when there is no unused attack power to expend, and the
+    card prints that as a cost rather than as an option."""
+    from combat_engine.content.items.implement_b import _tome_power
+
+    if _spend_unused(c, cls="wizard", level=5, attacks=True):
+        _tome_power(c, 5, Keyword.FIRE)
 
 
 @power(
@@ -661,12 +672,25 @@ def i1968p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.extra_area_target()",),
+    dropped=("c.extra_area_target()",),
 )
 def i1098x1(c: Cast) -> None:
-    """Both halves hang on a second target for `p2273`: nothing widens
-    another row's target line, and the attack bonus is gated on a use that
-    would not exist."""
+    """Split: the bonus half plays and the second target does not.
+
+    The bonus is gated on a use that does exist -- `i1098p1` beside this
+    grants `p2273` for the encounter -- so "to attack rolls to destroy them"
+    is a modifier narrowed to that ref, and `item` is the word the card
+    prints in front of "bonus".
+
+    The second target stays dropped, and `c.add_target` is not it, twice
+    over: it appends a **creature** to a use running *below an immediate
+    interrupt*, where this is a standing property whose extra target is a
+    conjuration or a zone. `running_below` refuses it outright from a
+    trait, and the target line being widened is not a creature line."""
+    c.bonus(
+        "attack", 2, on=c.me, until=When.ENCOUNTER, kind="item",
+        when=lambda ctx: ctx.get("power") == "p2273",
+    )
 
 
 @power(
@@ -861,11 +885,36 @@ def i2306p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.strip_resistance()",),
 )
 def i2309x1(c: Cast) -> None:
-    """`c.resist` grants one and nothing takes one away, so "loses resist
-    poison" has nowhere to land."""
+    """"`c.resist` grants one and nothing takes one away" is false of
+    `c.resist` itself: its negative branch is the other printed sentence,
+    "the target loses resist 10 to fire", and it is arithmetic -- the
+    standing number is remembered and the hold's `undo` puts it back, which
+    is what makes a save end this rather than leave it stripped.
+
+    So the amount is read off the target first: "loses resist poison" is all
+    of whatever it had, not a printed number.
+
+    Declared on `RelationSet` because that is what `c.curse` emits -- it
+    lays `Relation.CURSED_BY` and announces it -- so "when you place a curse
+    upon a target" is that event with the source asked. The paragon
+    vulnerability lines are out of scope."""
+    from combat_engine.engine.components import Defences
+    from combat_engine.engine.events import RelationSet
+
+    def cursed(ev: RelationSet) -> None:
+        if ev.kind_ is not Relation.CURSED_BY or ev.source != c.me:
+            return
+        defences = c.world.get(ev.target, Defences)
+        standing = defences.resist.get(DamageType.POISON, 0) if defences else 0
+        if standing > 0:
+            c.resist(
+                -standing, DamageType.POISON, on=ev.target,
+                until=When.SAVE_ENDS,
+            )
+
+    c.watch(RelationSet, cursed, until=When.ENCOUNTER, on=c.me)
 
 
 @power(
@@ -1165,20 +1214,25 @@ def i2776p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.item_set()", "chargen.race_choice()"),
+    dropped=("c.item_set()",),
 )
 def i2777x1(c: Cast) -> None:
-    """The two increases are a race and a completed set. Neither can be
-    asked after -- nothing on `Cast` or `query` reads a character's race,
-    and `c.kinds_of` answers off a stat block's type line, which a
-    character has not got -- so every ally gets the base 5. Re-aimed: the
-    race half was not named before and is a gap of its own."""
+    """"Nothing on `Cast` or `query` reads a character's race" is stale:
+    `c.race_of` does, and the note's own reasoning about `c.kinds_of` is why
+    it has to -- `kinds_of` answers *origin*, which 21 races share, so it
+    cannot tell one race from another. `c.race_of` returns the ref off the
+    `race:<ref>` that `Build.choices` carries, which is the question this
+    card asks about the ally rather than about the caster.
+
+    The set half stays dropped; a completed item set is still not a thing
+    the engine holds."""
 
     def ward(ev: Healed) -> None:
         if ev.source != c.me or not _my_side(c.world, c.me, ev.target):
             return
         pick = c.choose(list(_ELEMENTS), "which damage type")
-        c.resist(5, pick or DamageType.FIRE, on=ev.target, until=When.EONT)
+        amount = 5 + (5 if c.race_of(on=ev.target) == "r1" else 0)
+        c.resist(amount, pick or DamageType.FIRE, on=ev.target, until=When.EONT)
 
     c.watch(Healed, ward, until=When.ENCOUNTER)
 
@@ -1976,8 +2030,20 @@ def i2321x1(c: Cast) -> None:
     todo=("c.extend_effect()",),
 )
 def i2323x1(c: Cast) -> None:
-    """A duration is fixed when the effect is laid and nothing lengthens a
-    live one by a round."""
+    """Re-diagnosed, and the gap is narrower and harder than the old note.
+
+    Finding the effects is not the problem. `c.resist` labels its hold
+    `"<ref> resist"` and a label leads with the laying row's ref, so
+    "resistance granted by your artificer powers" is readable off
+    `world.effects.of(c.me)`.
+
+    The duration is. `p5052` lengthens a zone by **writing `effect.when`**,
+    and that works because it moves `When.EOT` to `When.EONT` -- a rung that
+    exists. This card asks for the end of the caster's turn on the round
+    *after* next, and `When` has no such value: the ladder is EOT, EONT,
+    SONT, EOTNT, SOTNT, and EONT is already the top of it for a
+    source-clocked hold. So what is wanted is a rung or a round counter on
+    the `Effect`, not a `Cast` door onto one."""
 
 
 @power(
@@ -2075,11 +2141,16 @@ def i2343p1(c: Cast) -> None:
     todo=("c.pact_boon()",),
 )
 def i2343p2(c: Cast) -> None:
-    """Re-read and still blocked, for the second half rather than the
-    first. The trigger is sayable now -- `i2343p1` above declares it off
-    the same `Dropped` -- but the Effect adds a number to the bonus the
-    star pact gives, and `cf:warlock-f1` pays that leg nothing. There is
-    no bonus to add to."""
+    """Re-read a third time and still blocked, in the same place. The
+    trigger is sayable -- `i2343p1` above declares it off the same
+    `Dropped` -- and `c.amount_for` is the right read for "adds a number to
+    the bonus that leg gives".
+
+    What it cannot do from here is make the bonus readable. The leg pays a
+    hard-coded `c.bonus("attack", 1)` in `features/warlock.py`, and
+    `c.amount_for` only answers for a row that asks it; the one content line
+    that would close this is in that file and not in this one, so the row
+    stays marked until it lands."""
 
 
 @power(

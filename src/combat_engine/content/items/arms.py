@@ -491,13 +491,35 @@ def i1527x1(c: Cast) -> None:
 
 
 @power("i1673x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.charging()",))
+       reach=PERSONAL, target=SELF)
 def i1673x1(c: Cast) -> None:
-    """The damage context carries `opportunity`, so the resistance is exact
-    against every opening; nothing says the *run* was a charge, so it also
-    covers the openings an ordinary walk gives. The second sentence turns
-    on `AttackDeclared.charge`, which is on the event."""
-    c.resist(5, on=c.me, until=When.ENCOUNTER, when=_opportunity)
+    """"Openings you provoke **from charging**" is two facts, and the
+    resist gate holds neither pair. It carries `opportunity` and `charge`,
+    but `charge` there is whether the blow *being resolved* was a charge --
+    an enemy's opening never is -- so the resistance used to cover the
+    openings an ordinary walk gives as well.
+
+    `OpportunityWindow.kind_` is `movement.step`'s own word for the run
+    that opened the window, so the window is read in a `BEFORE` watch and
+    the gate asks the flag it sets. The opening is swung inside that same
+    emit -- `policy.on_window` answers it there -- so the flag is live
+    exactly while the damage it covers is rolled, and the next window
+    overwrites it. A window a move did not open carries `kind_ == ""`,
+    which is the ranged-power opening and correctly gets nothing.
+
+    The second sentence turns on `AttackDeclared.charge`, which is on the
+    event.
+    """
+    charged_run = [False]
+
+    def opened(ev: OpportunityWindow) -> None:
+        if ev.provoker == c.me:
+            charged_run[0] = ev.kind_ == "charge"
+
+    c.watch(OpportunityWindow, opened, until=When.ENCOUNTER,
+            window=Window.BEFORE, on=c.me)
+    c.resist(5, on=c.me, until=When.ENCOUNTER,
+             when=lambda ctx: charged_run[0] and _opportunity(ctx))
 
     def charged(ev: AttackDeclared) -> None:
         if ev.attacker == c.me and getattr(ev, "charge", False):
