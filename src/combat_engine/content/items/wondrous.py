@@ -739,11 +739,20 @@ def i1509p1(c: Cast) -> None:
     target=SELF,
     trigger="you miss with an attack",
     on=Trigger(Miss, by_me, "you miss with an attack"),
-    todo=("c.boost_attack()",),
 )
 def i1509p2(c: Cast) -> None:
-    """Adding to a roll that has already been compared is not `c.reroll_attack`
-    -- that throws the die away -- and there is nothing else."""
+    """"Roll 1d6 and add the result to the triggering attack roll."
+
+    **Written.** `c.boost_roll` is the verb the old note said did not exist:
+    it adds to a roll already made and recomputes the outcome from the
+    untouched natural, so a 1 stays a miss and a boost cannot manufacture a
+    critical. That is the whole difference from `c.reroll_attack`, which
+    throws the die away -- and the card says *add*.
+
+    `kind="attack"` rather than the bare call, because the same verb serves
+    saving throws and skill checks and this row answers only a `Miss`.
+    """
+    c.boost_roll(c.roll("1d6"), kind="attack")
 
 
 @power(

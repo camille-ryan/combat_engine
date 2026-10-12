@@ -776,17 +776,28 @@ def i1247x1(c: Cast) -> None:
             c.bonus(d, 1, on=fam, until=When.ENCOUNTER, kind="item")
 
 
+def _my_own_throw(world: World, me: int, ev: Any) -> bool:
+    """A saving throw this creature just made. `SavingThrow.actor` rolls it."""
+    return getattr(ev, "actor", None) == me
+
+
 @power("i1354p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="a saving throw you have just rolled",
-       todo=("c.boost_save()",))
+       on=Trigger(SavingThrow, _my_own_throw, "a throw you just rolled"))
 def i1354p1(c: Cast) -> None:
-    """Re-aimed. Adding to a saving throw already on the table is not a
-    reroll, so `c.reroll_save` is the wrong half of the pair; what is
-    missing is `c.boost_check`'s twin. `Effects.save` announces the
-    outcome before acting on it and reads `saved` back afterwards --
-    which is the window `c.unsave` already writes in -- so the verb is
-    that one's opposite and nothing deeper."""
+    """"Gain a +2 power bonus to a saving throw you just rolled; use the
+    new result."
+
+    **Written.** The old note had the shape exactly right -- "`c.unsave`'s
+    opposite, and nothing deeper" -- and `c.boost_roll` is that verb: it
+    bumps `SavingThrow.bonus` and recomputes `saved` against the 10 the
+    rules print once, which is the "use the new result" half.
+
+    `kind="save"` because this card names the throw; the bare call would
+    also answer an attack roll, which this one does not.
+    """
+    c.boost_roll(2, kind="save")
 
 
 @power("i1579x1", level=3, cls=ITEM, action=ActionType.NONE,

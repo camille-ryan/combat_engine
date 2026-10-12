@@ -1669,13 +1669,36 @@ def f3310(c: Cast) -> None:
 
 
 @power("f3311", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.boost_attack()",))
+       reach=PERSONAL, target=SELF)
 def f3311(c: Cast) -> None:
-    """The attack context carries `opportunity`, so the standing +1 is a
-    plain gated bonus. The +2 is bought *after* the attack is declared
-    and nothing adds to an attack roll once it is down."""
+    """"A +1 bonus to opportunity attack rolls. When you make an
+    opportunity attack, you can spend 1 power point to gain a +2 power
+    bonus to the attack roll."
+
+    The standing +1 is a plain gated bonus -- the attack context carries
+    `opportunity`.
+
+    **The +2 is a watch, not a declared trigger.** This row already lays a
+    standing modifier, and a row holds one or the other: with an `on=` the
+    body would run only when the trigger fired and the +1 would never be
+    laid at all. So the trait arms its own listener.
+
+    `c.boost_roll` is what the old note said did not exist -- it adds to a
+    roll already down and recomputes the outcome from the untouched
+    natural. The point is spent **first** and the boost is abandoned if the
+    pool is empty, because the card sells the bonus for the point.
+    """
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: bool(ctx.get("opportunity")))
+
+    def bought(ev: Any) -> None:
+        if ev.attacker != c.me or not getattr(ev, "opportunity", False):
+            return
+        if c.may("spend a power point") and c.spend_points(1):
+            c.boost_roll(2, kind="attack")
+
+    c.watch(AttackRolled, bought, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} bought")
 
 
 @power("f3312", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

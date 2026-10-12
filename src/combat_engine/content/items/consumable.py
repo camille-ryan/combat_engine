@@ -1203,10 +1203,30 @@ def i1008p1(c: Cast) -> None:
 
 
 @power("i1186p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.boost_attack()",))
+       reach=PERSONAL, target=SELF)
 def i1186p1(c: Cast) -> None:
-    """A bonus added to an attack roll already made: nothing reaches back
-    into a roll that has landed."""
+    """"You drink the elixir. Once before the end of the encounter, you can
+    use a free action when you make an attack roll and dislike the result.
+    You gain a +2 bonus to that attack roll."
+
+    **Two moments, so the row arms rather than acts.** Drinking is the
+    minor action this power spends; the +2 is bought later, on a roll the
+    drinker dislikes. `once=True` is "once before the end of the
+    encounter" and `until=When.ENCOUNTER` is the rest of that sentence.
+
+    "Dislikes the result" is `c.may`: the holder is asked, because a +2 on
+    a roll that already hit is wasted and the card gives the choice.
+
+    `c.boost_roll` is the verb the old note said did not exist -- it
+    reaches into a roll that has landed and recomputes the outcome from
+    the untouched natural, so a 1 stays a miss.
+    """
+    def dislikes(ev: Any) -> None:
+        if ev.attacker == c.me and c.may("add 2 to that attack roll"):
+            c.boost_roll(2, kind="attack")
+
+    c.watch(AttackRolled, dislikes, until=When.ENCOUNTER, on=c.me,
+            once=True, label=f"{c.ref} regret")
 
 
 @power("i1190p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,

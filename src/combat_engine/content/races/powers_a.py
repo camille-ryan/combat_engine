@@ -1167,15 +1167,20 @@ def p16379(c: Cast) -> None:
         Trigger(Miss, by_me, "you miss with an attack"),
         Trigger(SavingThrow, _failed_save, "you fail a saving throw"),
     ),
-    todo=("c.boost_attack()", "c.boost_save()"),
 )
 def p13213(c: Cast) -> None:
-    """A bonus laid on a roll already made. A reroll is a different thing
-    and would turn a near miss into a fresh die.
+    """"You gain a +4 racial bonus to the attack roll or the saving throw."
 
-    `c.boost_check` is this verb for the third kind of roll and is the
-    shape both halves want; the attack and the saving throw have no twin,
-    so the marker names those two rather than one umbrella."""
+    **Written.** Both halves are one call: `c.boost_roll` routes on the
+    event that fired, and this row declares both triggers already -- a
+    `Miss` and a failed `SavingThrow` -- so the unnamed kind answers
+    whichever arrived.
+
+    A reroll is the wrong half of the pair and the old note said so: it
+    would turn a near miss into a fresh die, where the card adds to the one
+    on the table.
+    """
+    c.boost_roll(4)
 
 
 @power(

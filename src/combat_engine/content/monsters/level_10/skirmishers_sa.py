@@ -1104,16 +1104,21 @@ def m1796a2(c: Cast) -> None:
         Trigger(SavingThrow, _my_own_roll, "it makes a saving throw"),
         Trigger(SkillCheck, _my_own_roll, "it makes a skill check"),
     ),
-    dropped=("c.boost_attack()", "c.boost_save()"),
 )
 def m1796a3(c: Cast) -> None:
-    """Only the skill-check branch has a verb that adds to a roll already
-    made -- `c.boost_check`. An attack roll or a saving throw can only be
-    rerolled whole, a different printed effect, so those two branches are
-    dropped rather than faked with a reroll."""
-    ev = c.trigger
-    if isinstance(ev, SkillCheck):
-        c.boost_check(c.roll("1d6"))
+    """"Adds 1d6 to a d20 roll it just made" -- any of the three.
+
+    **All three branches now, and the bare `c.boost_roll` is the point.**
+    The card says "a d20 roll", not an attack roll, so the kind is left
+    unnamed and the verb routes on whichever event fired: it reads
+    `result` for an attack, `saved` for a throw, and defers to
+    `c.boost_check` for a check. Naming a kind here would re-narrow the one
+    card in this family that is deliberately wide.
+
+    The old note was right that only the check branch had a verb; it was
+    written before `c.boost_roll` existed.
+    """
+    c.boost_roll(c.roll("1d6"))
 
 
 # ==========================================================================
