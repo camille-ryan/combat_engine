@@ -436,6 +436,19 @@ def by_power(ref: str) -> Callable[[World, int, Any], bool]:
     return check
 
 
+def after_short_rest() -> Callable[[World, int, Any], bool]:
+    """This creature's own short rest.
+
+    `ShortRested` is emitted once per creature, so the predicate is a
+    self-check: a party of five rests and each row answers for its own
+    holder rather than five times over.
+    """
+    def ok(world: World, eid: int, ev: Any) -> bool:
+        return getattr(ev, "actor", None) == eid
+
+    return ok
+
+
 def rerolled_by(ref: str, *, roll: str = "") -> Callable[[World, int, Any], bool]:
     """A `Rerolled` bought by this row, optionally of one kind of roll.
 

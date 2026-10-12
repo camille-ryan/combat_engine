@@ -3398,6 +3398,66 @@ def exposure(out: Result) -> None:
              " the printed sentence, each pinned so neither can pass by luck")
 
 
+def short_rest(out: Result) -> None:
+    """Five minutes announces itself, once per creature, after the restore.
+
+    `turns.short_rest` was written, correct and silent: it restored
+    encounter powers and said nothing, so 17 rows clocked on a rest had no
+    moment to hang from.
+
+    The controls are the three ways an implementation of this goes wrong:
+
+    * **once per creature**, not once for the party -- every printed clause
+      is about what *you* get back, so a single party-wide event makes every
+      listener re-derive who it is about.
+    * **after the restore**, because a row answering the rest asks what it
+      has available. Emitting first shows it the spent list.
+    * **a daily stays spent.** That is the whole distinction between the two
+      rests and the thing a restore loop gets wrong by being too eager.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import ShortRested
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.turns import short_rest as rest
+
+    world, me, _ = _board()
+    foe = sorted(enemies(world, me))[0]
+
+    heard: list[int] = []
+    available_when_heard: list[bool] = []
+    mine = world.get(me, Powers)
+    assert mine is not None
+
+    # Spend something that comes back, and something that does not.
+    mine.note_use("drivers:encounter-power", world.round)
+    mine.note_use("drivers:daily-power", world.round)
+
+    def listen(ev: ShortRested) -> None:
+        heard.append(ev.actor)
+        if ev.actor == me:
+            available_when_heard.append(
+                "drivers:encounter-power" not in (world.get(me, Powers) or mine).used
+            )
+
+    world.bus.on(ShortRested, listen)
+    rest(world)
+
+    out.that(bool(heard), "a short rest announces itself at all -- it restored"
+                          " powers and said nothing before this")
+    out.that(me in heard, "the creature that rested hears its own rest")
+    out.that(len(heard) == len(set(heard)),
+             f"once each and not twice -- {len(heard)} events for"
+             f" {len(set(heard))} creatures")
+    out.that(foe in heard,
+             "every creature with powers hears it, not only the caster --"
+             " a rest is party-wide and the event is per-creature")
+    out.that(available_when_heard and available_when_heard[0],
+             "the power is already back when the event lands: a row answering"
+             " a rest asks what it has, so emitting before the restore would"
+             " show it the spent list")
+
+
 def disease(out: Result) -> None:
     """"...and the target contracts `x5_23`." 47 rows printed this. #389.
 
@@ -3550,6 +3610,9 @@ DRIVERS = {
     "forms": (forms, "which shape a creature is in, and two at once"),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
+    "short_rest": (short_rest,
+                   "five minutes announces itself, once per creature, after"
+                   " the restore"),
     "disease": (disease,
                 "catching a disease, and a stage that does not move"),
     "exposure": (exposure,

@@ -773,6 +773,30 @@ class Escaped(Event):
 
 
 @dataclass
+class ShortRested(Event):
+    """Five minutes passed, for this creature.
+
+    **`turns.short_rest` existed and announced nothing**, so every card
+    clocked on a rest -- "after a short rest you regain the use of this
+    power", "at the end of a short rest choose a phase" -- had no moment to
+    hang from. 17 rows named this; for 13 of them it was the only thing they
+    were waiting for.
+
+    **One per creature, not one for the party.** A rest is a party-wide
+    thing, and every printed clause is about what *you* get back, so a row
+    filtering on `actor` is the common case and a single party event would
+    make every listener re-derive who it is about. `short_rest` already
+    walks the creatures that have `Powers`.
+
+    Emitted **after** the restore, so a row that asks what it has available
+    sees the refreshed list rather than the spent one. #506-adjacent; the
+    rest family is its own thing.
+    """
+
+    actor: int = 0
+
+
+@dataclass
 class Rerolled(Event):
     """A d20 was rolled again, and by which row.
 

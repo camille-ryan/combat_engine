@@ -598,12 +598,22 @@ def short_rest(world: World) -> None:
     the pool itself does not refill. That is `Cast.surge`, not this.
     """
     from .dsl import get
+    from .events import ShortRested
 
-    for _, powers in world.each(Powers):
+    rested: list[int] = []
+    for eid, powers in world.each(Powers):
         for ref in list(powers.used):
             declared = get(ref)
             if declared is None or declared.usage is not Usage.DAILY:
                 powers.restore(ref)
+        rested.append(eid)
+    # **After the restore, and in a second pass.** A row answering the rest
+    # asks what it has available -- an artificer's banked charge, a
+    # sorcerer's phase -- so it has to see the refreshed list. Collected
+    # first because emitting inside `world.each` would let a listener that
+    # grants a power mutate what is being walked.
+    for eid in rested:
+        world.bus.emit(ShortRested(actor=eid))
 
 
 def extended_rest(world: World) -> None:
