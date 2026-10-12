@@ -123,7 +123,7 @@ from combat_engine.engine.events import PowerResolved
 
 ITEM = "item"
 
-#: The warlock's curse rider, labelled as `features/strikers.py` labels it.
+#: The cf:warlock-f4 rider, labelled as `features/strikers.py` labels it.
 #: Both halves of it are reachable by that name: the flat bonus it pays is
 #: `c.total(f"{CURSE} damage")` and the die it rolls is
 #: `c.dice_for(CURSE, ...)`, which is the read half `c.change_dice` needs.
@@ -2042,7 +2042,7 @@ def i2115p1(c: Cast) -> None:
     action=ActionType.IMMEDIATE_REACTION,
     reach=PERSONAL,
     target=SELF,
-    trigger="an enemy under your Warlock's Curse drops to 0 hit points",
+    trigger="an enemy under your cf:warlock-f4 drops to 0 hit points",
     on=Trigger(Dropped, _my_cursed_drop, "a creature you cursed drops"),
     dropped=("c.pact_boon()",),
 )

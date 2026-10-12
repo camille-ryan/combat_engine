@@ -2,7 +2,7 @@
 
 `cf:ranger-f1` no longer closes over its dice: `extra_damage` pays
 `c.total("cf:ranger-f1 damage")` on top of them, so "add 3 to the extra
-damage you deal with Hunter's Quarry" is a modifier under that name and
+damage you deal with cf:ranger-f1" is a modifier under that name and
 nothing else. A plain +3 against the quarry would be strictly more than
 printed -- it would pay on every attack rather than on the once-a-round
 rider.

@@ -28,7 +28,7 @@ prints "the m1173 shifts"), a sentence that names a restriction this row's
 own attack never imposes (`m2065a4`, `m2250a4` both read "even if the target
 isn't taking ongoing poison damage" against a power that has no such
 restriction to begin with, and each names the *other* one's own ref inside
-its own text), and one block whose aura trait excludes "nonjovoc" creatures
+its own text), and one block whose aura trait excludes m5136-kind creatures
 -- a species word, not a kind this file will repeat. Each is read for its
 plain mechanical meaning and flagged in the report rather than silently
 reproduced or guessed into something more specific than the text supports.

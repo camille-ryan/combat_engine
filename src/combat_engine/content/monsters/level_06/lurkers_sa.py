@@ -23,7 +23,7 @@ this file leans hard on `level_02..05/lurkers_sa.py`: `_edge_damage`,
 `_disliked_my_roll`/`_DISLIKED_ROLL` and `_ridden_by`.
 
 One name leak in the raw text, written around rather than copied, per
-report: m999a2's "Veserabs" is this creature's own species name. It is
+report: m999a2's species word is m999's own name. It is
 never written; the immunity it describes is matched by this row's own ref
 instead.
 """
@@ -1469,7 +1469,7 @@ def m999a1(c: Cast) -> None:
     damage=Damage("2d6", 3, dtype=DamageType.POISON, kind=LIMITED),
 )
 def m999a2(c: Cast) -> None:
-    """The brief's "Veserabs are immune" names this creature's own species;
+    """The brief's "<m999> are immune" names this creature's own species;
     written here as a ref match instead of the word, per the report."""
     me = c.me
     victim = c.target

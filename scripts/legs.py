@@ -13,7 +13,7 @@ That is the failure this repository keeps finding: the row is written,
 the tests pass, the audit sees it fire, and the clause does nothing. 118
 riders were in that state when this was written, across seven classes --
 the invoker's three covenants, the warden's four, the shaman's spirits,
-the avenger's censures, the warlord's three commands. Every one had been
+the avenger's cf:avenger-f1 set, the warlord's three commands. Every one had been
 written against legs that were never added.
 
 The reverse is checked too. A leg no row asks about is usually harmless,

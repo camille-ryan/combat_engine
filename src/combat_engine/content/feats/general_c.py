@@ -423,7 +423,7 @@ def f768(c: Cast) -> None:
     Something does announce it. Both striker features roll their extra
     damage through `features/strikers.extra_damage`, which stamps the
     feature's own ref as the `detail` of the `DamageRolled` -- so "you
-    deal cf:rogue-scoundrel-f4 or Hunter's Quarry damage" is that field,
+    deal cf:rogue-scoundrel-f4 or cf:ranger-f1 damage" is that field,
     and the moment to add to is that roll.
 
     "The target of your p1831 power" is `c.suffering`, since an effect's

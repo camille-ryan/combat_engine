@@ -541,7 +541,7 @@ def m1079a4(c: Cast) -> None:
 )
 def m1079a5(c: Cast) -> None:
     """A trait, whatever the compendium's action column claims -- "a r1
-    gains a racial bonus" is this creature's own printed Dragonborn Fury,
+    gains a racial bonus" is this creature's own printed m1079a5,
     `r1` standing in for the race the way `cls` does on a racial row."""
     me = c.me
     c.bonus(

@@ -488,6 +488,143 @@ def tracked() -> list[Path]:
         ]
 
 
+#: Ref shapes, as `scripts/spec.py` writes them. Deliberately a second copy
+#: rather than an import: `spec.py` is an instrument and this is an
+#: instrument, and the one thing worse than two copies of a regex is a gate
+#: that silently stops gating because the thing it watches changed shape.
+#: `--cited` prints its own count of refs found, so a divergence shows up as
+#: a number falling rather than as a clean run.
+CITED_REF = re.compile(
+    r"\b(?:cf|rt|comp|b|t|q):[A-Za-z0-9][A-Za-z0-9:_.-]*"
+    r"|\b[pmifrax]\d+(?:[apx]\d+)?(?::augment\d+)?\b"
+)
+
+#: Below this many characters a name is not evidence of anything -- it is a
+#: word. The multi-word rule below does the real work; this only keeps
+#: three-letter names from matching inside other words.
+CITED_MIN = 4
+
+
+def cited() -> int:
+    """A file may not print the name of a ref it also cites.
+
+    **This is the gate that replaced the construction guarantee**, on
+    2026-10-12. Until then an author was shown no name at all, so nothing
+    needed checking at the row level; Camille's call was to show the name
+    beside its ref so a row can tell when a clause means *itself*, which
+    costs the guarantee and buys it back here. See `scripts/spec.py`.
+
+    The question is narrower than the tree-wide walk in `main`, and the
+    narrowness is the whole point: that walk compares every file against all
+    36,060 names, so it **must** waive a two-ordinary-word name in running
+    prose -- `f3`'s name is two words a rules file says all day -- and that
+    waiver is #494's blind spot, which has hidden about 44 real names and two
+    in the docstrings of the two files whose job is removing them.
+
+    **This docstring instanced `f3`'s name in the clear for its first ten
+    minutes, and this check caught it.** Nobody planted it; the sentence
+    explaining the blind spot demonstrated the blind spot, which is the trap
+    `scripts/CLAUDE.md` names -- the places that explain the rule are the
+    places that instance a name to explain it. An unintentional plant is
+    better evidence than a deliberate one, so this check is load-bearing on
+    the strength of its own first run.
+
+    Scoped to *the refs a file cites*, no waiver is needed. The coincidence
+    rate collapses: a file that cites `f3` and also contains that exact
+    phrase is not a coincidence worth protecting. So:
+
+    * **a name whose every word is mechanical vocabulary is waived.** This is
+      the one that had to be measured rather than reasoned: the first version
+      waived nothing and reported **1,379** hits, 287 of them monster
+      abilities, because a monster ability's printed name is *very often* a
+      generic combat phrase. A file citing that ability and saying "makes a
+      double attack" in prose is not leaking anything. So the premise
+      "coincidence collapses once the search is scoped to cited refs" is
+      **true for invented names and false for mechanical ones**, and the
+      remedy is `_trusted_vocabulary()` -- the judgement the tree-wide walk
+      already makes, reused rather than reinvented.
+    * **everything else is matched exactly, one word or several**, which is
+      the case the tree-wide walk cannot see.
+
+    1,379 raw matches, 1,358 waived as mechanical, **21 left -- and every one
+    of the 21 was a real leak**, hand-read: five feature names in one SQL
+    comment in `etl/build.py`, four race names, two creature species words in
+    docstrings that say they are writing around the name while writing it,
+    and `cf:ranger-f1`'s name at five sites including `engine/cast.py`. The
+    tree-wide walk reported "no printed names in tracked files" over all of
+    them, on every run on record.
+
+    One of the 21 was in a **`trigger=` string**, which is the surface the
+    page renders -- tier 1 in Camille's #447 ordering, the only tier worth
+    building an instrument for. The other 20 were tier 2. Writing the ref
+    there is not a downgrade: `refs.py` already holds every ref in prose to
+    resolving, so a ref in rendered text becomes the name when
+    `localization/` is present and stays a ref when it is not, which is the
+    behaviour wanted in both cases.
+
+    **Plant-tested, and the plant is what proves the pair of them.**
+    `cf:ranger-f1`'s name written into a content file beside its own ref:
+    this goes red naming the file, and the tree-wide walk in `main` prints
+    "no printed names in tracked files" in the same run. That is #494's blind
+    spot shown twice over in one command, and it is why this is a separate
+    instrument rather than more waiver-tuning on the other one.
+    """
+    names = localisation()
+    if not names:
+        print(
+            "localization/names.json is missing, so there is nothing to check "
+            "against. Run: uv run scripts/build.py",
+            file=sys.stderr,
+        )
+        return 0
+
+    mechanical = _trusted_vocabulary()
+    hits: list[tuple[str, str, str]] = []
+    files = 0
+    refs_seen = 0
+    for path in tracked():
+        if path.suffix not in {".py", ".md", ".js", ".html", ".css", ".json", ".sh"}:
+            continue
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        found = set(CITED_REF.findall(text))
+        if not found:
+            continue
+        files += 1
+        refs_seen += len(found)
+        folded = _fold(text).lower()
+        for ref in sorted(found):
+            name = (names.get(ref) or {}).get("name", "")
+            if len(name) < CITED_MIN:
+                continue
+            if _fold(name).lower() not in folded:
+                continue
+            # Possessives are stripped because the mechanical word is the
+            # stem: a feature whose name is "<class>'s <mechanic>" is two
+            # mechanical words, and leaving the `'s` on made it look invented.
+            words = [w.strip("'s").lower() for w in re.findall(r"[A-Za-z']+", name)]
+            if words and all(w in mechanical for w in words):
+                continue
+            hits.append((str(path.relative_to(ROOT)), ref, name))
+
+    print(f"  {files} file(s) cite {refs_seen} ref(s)")
+    for where, ref, _name in hits:
+        # **The name is not printed.** This is a tracked instrument whose
+        # output lands in terminals, transcripts and commit messages, and a
+        # leak detector that prints the leak to report it is the same
+        # mistake one layer up. The ref and the file are enough to find it.
+        print(f"  {where} prints the name of {ref}")
+    if hits:
+        print(f"\n{len(hits)} file(s) name a ref they cite -- fix the file")
+        return 1
+    print("\nno file prints the name of a ref it cites")
+    return 0
+
+
 def specs() -> int:
     """Every spec column, checked the way a tracked file is.
 
@@ -780,6 +917,8 @@ def history() -> int:
 
 
 def main() -> int:
+    if "--cited" in sys.argv:
+        return cited()
     if "--specs" in sys.argv:
         return specs()
     if "--history" in sys.argv:

@@ -64,6 +64,18 @@ CHECKS = (
                "no printed name reached the tree"),
     Instrument("specs", ("uv", "run", "scripts/leaks.py", "--specs"),
                "no printed name reached what an author is shown"),
+    # **The gate that replaced a construction guarantee**, 2026-10-12: an
+    # author is now shown each ref's name so a row can tell when a clause
+    # means itself, so something has to ask whether one was written down.
+    # Beside `leaks` rather than folded into it because it asks a *narrower*
+    # question -- only the refs a file cites -- and therefore needs none of
+    # the waivers that give `leaks` its #494 blind spot. Proven by planting
+    # `cf:ranger-f1`'s name in a content file: this went red naming the file,
+    # and `leaks` in the same run still said "no printed names in tracked
+    # files". Twenty real leaks on its first run, including five in one SQL
+    # comment and one in a `trigger=` string the page renders.
+    Instrument("cited", ("uv", "run", "scripts/leaks.py", "--cited"),
+               "no file prints the name of a ref it cites"),
     Instrument("todo", ("uv", "run", "scripts/todo.py"),
                "no `todo=` waits on a symbol that now exists"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),

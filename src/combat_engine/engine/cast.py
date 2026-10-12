@@ -9071,7 +9071,7 @@ class Cast:
         """The dice the ranger's quarry rider pays out, as an expression.
 
         It lives in a closure inside `cf:ranger-f1` and nothing could
-        read it back, so "extra damage equal to your Hunter's Quarry damage"
+        read it back, so "extra damage equal to your cf:ranger-f1 damage"
         -- a line two rows hand to somebody else -- had no number to name.
         Kept as one expression beside that feature's rather than derived
         from the printed per-tier table, so the two cannot disagree.

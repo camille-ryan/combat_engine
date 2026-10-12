@@ -1,5 +1,5 @@
 """The later controllers' class-page features: the druid's aspect, the
-invoker's covenant, the seeker's bond, and three more bonus-feat rituals.
+invoker's covenant, cf:seeker-f1, and three more bonus-feat rituals.
 
 None of these four classes had a single `cf:` row before this file. Their
 compendium `Feature` rows -- the wild shape, the two channelled invocations,

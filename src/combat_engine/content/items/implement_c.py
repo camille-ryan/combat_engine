@@ -40,7 +40,7 @@ engine was read rather than its prose:
   leg. So "when your <pact> boon triggers" is that event plus those two
   questions, and only the star leg -- which `cf:warlock-f1` pays nothing
   for -- is still out of reach.
-* **Warlock's Curse damage carries its label.** `features.strikers.
+* **cf:warlock-f4 damage carries its label.** `features.strikers.
   extra_damage` stamps `detail="cf:warlock-f4"` on the blow, so
   `DamageApplied.detail` is where "when you deal your curse damage"
   is asked. The die size is the feature's own 1d6 at heroic and is

@@ -21,7 +21,7 @@ Conventions, inherited from the level-1 to level-5 sweeps:
 
 Two name leaks in the raw text, both written around rather than copied,
 per report: m3238a2's "the Wand" (a capitalised proper noun standing in
-for "it"), and m999a2's "Veserabs" (this creature's own species name).
+for "it"), and m999a2's own species word (m999's name, printed in its text).
 Neither word appears anywhere below; m999's immunity is written by
 matching this row's own ref instead.
 

@@ -534,7 +534,7 @@ def p13773(c: Cast) -> None:
     """The Prerequisite is a race, and a character's race is not a question
     the engine answers -- `c.kinds_of` reads a monster's type line and is
     empty for a character. It is kept as printed text rather than written as
-    a gate that would refuse the row to every eladrin as well.
+    a gate that would refuse the row to every r3 as well.
     """
     foe = _triggering_foe(c)
     if foe is None:

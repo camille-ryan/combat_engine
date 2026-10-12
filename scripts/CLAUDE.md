@@ -98,6 +98,30 @@ it improves, red when it regresses, never a bare allowance. #372.
   phrase before posting, and be most careful quoting a docstring out of this
   repo -- the places that explain the rule are the places that instance names
   to explain it. #461.
+
+  **`--cited` is the narrow version of the same question, and it is the one
+  that works.** It asks only whether a file prints the name of a ref *it also
+  cites*, which needs no waiver at all, so it has none of the blind spot
+  above. First run: **20 real leaks** the wide walk had called clean on every
+  run on record -- five feature names in one SQL comment in `etl/build.py`,
+  four race names, two species words in docstrings that say they are writing
+  around the name while writing it, and one in a `trigger=` string the page
+  renders.
+
+  The plant test is the clearest evidence in this file of why narrow beats
+  tuned: a printed name planted in a content file beside its own ref turns
+  `--cited` red naming the file, and in the **same run** the wide walk prints
+  "no printed names in tracked files". Stop improving the wide search (#494
+  has a budget ceiling); ask the narrow question instead.
+
+  **The lesson about the first draft is worth as much.** `--cited` first ran
+  with no waiver and reported 1,379 hits -- 287 of them monster abilities,
+  because a monster ability's printed name is very often a generic combat
+  phrase and a file saying "makes a double attack" in prose leaks nothing.
+  The premise "coincidence collapses once the search is scoped to cited refs"
+  is **true for invented names and false for mechanical ones**. The fix was
+  `_trusted_vocabulary()` -- the judgement the wide walk already makes --
+  rather than a new one: 1,358 waived, 21 left, and all 21 were real.
 * **Measure before optimising.** `audit.py`'s ten minutes were blamed on
   `chunksize`; benchmarking showed the current setting is already the best
   available and repeat runs of the same config vary 15%. The conclusion is in
@@ -176,7 +200,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `check.py` | runs every instrument; `--fast`, `--all`, `--history` |
 | `audit.py` | fire every declared row; catches raises and silent rows |
 | `lint.py` | ruff, plus two structural walks. Python only — never `web/` |
-| `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--history`, `--issues`, `--staged` |
+| `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--cited`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
 | `coverage.py` | written / not written / half-written on purpose |

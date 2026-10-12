@@ -182,8 +182,8 @@ CREATE TABLE class_feature (
   -- `cf:...c<N>` refs are cited across the tree and docs, and
   -- `_sub_features` already records that renumbering once "moved
   -- `cf:rogue-scoundrel-f4` under somebody else's feet". The 20 cards with
-  -- no match are the genuine feature powers -- Hunter's Quarry, Wild Shape,
-  -- Lay On Hands, Oath of Enmity, Warlock's Curse -- and they keep theirs.
+  -- no match are the genuine feature powers -- cf:ranger-f1,
+  -- cf:warlock-f4 and three more like them -- and they keep theirs.
   --
   -- NULL means "this card is its own row". Authors should write the `p` ref
   -- where one is named here.
@@ -1220,7 +1220,7 @@ _SUB_HEAD = re.compile(
 )
 
 #: A whole power card printed inside a feature section -- the same shape
-#: `feat._CARD` reads, and for the same reason. The warlock's curse and
+#: `feat._CARD` reads, and for the same reason. cf:warlock-f4 and
 #: the ranger's quarry are printed nowhere else, so deleting the card
 #: left the two most-cited class features in the corpus with no ref.
 _FEATURE_CARD = re.compile(r'<h1[^>]*class="[a-z-]*power"', re.I)
@@ -1358,7 +1358,7 @@ def _sub_features(
 
     * a title-case sub-option, one of the build choices listed under the
       capitalised heading, which is the thing a feat is actually gated on;
-    * a power card, which for the warlock's curse and the ranger's quarry
+    * a power card, which for cf:warlock-f4 and cf:ranger-f1
       is the only place the name is printed at all.
 
     Suffixed off the parent (`...-f3s0`, `...-f3c0`) exactly as
@@ -2873,7 +2873,7 @@ def _cross_reference_rest(
         # `cf:warlock-f4` and `cf:warlock-f4c0` -- and that is one
         # feature, not a choice: the shortest ref is the undivided one
         # the builds share. Listing both would make 34 specs read as
-        # though the warlock's curse were two different things.
+        # though cf:warlock-f4 were two different things.
         classes: dict[str, str] = {}
         for one in sorted(set(refs), key=lambda r: (len(r), r)):
             classes.setdefault(re.sub(r"-f\d.*$", "", one[3:]), one)
@@ -3620,7 +3620,7 @@ def _believable(run: list[str], name: str, ref: str, rules: set[str]) -> bool:
     real name of that shape. The class features most cited in the corpus
     are exactly that shape -- two plain English words, one of them often
     the class's own noun -- so taking that clause here would refuse the
-    warlock's curse, the paladin's challenge and the rogue's attack,
+    cf:warlock-f4, the paladin's challenge and the rogue's attack,
     which between them are most of what the queue is asking for.
 
     What replaces it is the position, and it is the same argument

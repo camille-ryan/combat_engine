@@ -259,7 +259,7 @@ def p10632(c: Cast) -> None:
     attack_alt=Attack(DEX, vs=AC),
 )
 def p10633(c: Cast) -> None:
-    """The last sentence adds two dice to Hunter's Quarry damage against this
+    """The last sentence adds two dice to cf:ranger-f1 damage against this
     target. That damage is a rider held inside `cf:ranger-f1`, closed
     over its own dice string, and nothing reaches into it from here -- so the
     clause is left unwritten rather than paid out as flat damage, which is a
@@ -366,7 +366,7 @@ def p10704(c: Cast) -> None:
     attack=Attack(DEX, vs=AC),
 )
 def p11575(c: Cast) -> None:
-    """The Effect rerolls low Hunter's Quarry dice. Those dice are rolled
+    """The Effect rerolls low cf:ranger-f1 dice. Those dice are rolled
     inside `cf:ranger-f1`'s own rider and nothing here can reach the
     roll, so the clause is left unwritten -- see `p10633`."""
     if c.strike():

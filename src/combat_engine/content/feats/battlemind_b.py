@@ -362,7 +362,7 @@ def f3316(c: Cast) -> None:
         c.bonus(defence, 2, on=c.me, until=When.SONT, kind="power")
 
 
-# -- wild focus, forced movement, and the marked --------------------------
+# -- p12418, forced movement, and the marked ------------------------------
 
 
 @power("f3219", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

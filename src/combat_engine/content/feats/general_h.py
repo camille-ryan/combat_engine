@@ -333,7 +333,7 @@ def f1225(c: Cast) -> None:
     paying, after the curse this feat laid had ended.
 
     `c.total(f"{CURSE} damage")` is the same number the feature rolls, so
-    a build feature that raises a warlock's curse damage raises this too.
+    a build feature that raises cf:warlock-f4 damage raises this too.
     """
     foe = c.target
     if foe is None:
