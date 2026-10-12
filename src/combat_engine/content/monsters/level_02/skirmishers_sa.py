@@ -975,10 +975,16 @@ def m1508a1(c: Cast) -> None:
     damage=Damage("1d8", 1, kind=LIMITED),
 )
 def m1508a2(c: Cast) -> None:
+    """All three clauses hang off the hit, and the shift did not.
+
+    The card prints no Effect line: "1d8+1 damage, the target is dazed ...,
+    **and** the creature shifts 1 square" is one sentence after `+4 vs AC`.
+    The shift sat outside the `if`, so a miss bought a free step.
+    """
     if c.strike():
         c.hit()
         c.dazed()
-    c.shift(1)
+        c.shift(1)
 
 
 @power(
