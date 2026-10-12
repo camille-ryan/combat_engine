@@ -13,8 +13,10 @@ declares under its own `p` ref -- `cf:barbarian-f1c0` and `p4809` are one
 card with two ids -- and `chargen.second_card` only recognises the `p5106b`
 shape, so declaring both would deal a character the card twice with a use
 counter each. The extraction is being fixed at the source; the pairs are in
-the report. `cf:barbarian-f2c0` is the one that stayed, because `p4807` is
-blocked and has never been declared.
+the report. `cf:barbarian-f2c0` is the one that stayed, because `p4807` has
+never been declared and the card has to live under some ref. It is written
+now; `p4807` was also its marker, which is a symbol that could not have
+closed.
 
 **`cf:barbarian-f1s0` is not here either, and `docs/blocked.json` asks for
 it.** It is the first of the four options and the only one whose text was on
@@ -31,11 +33,13 @@ honest order is: re-aim `f1009`, move the option's body out of
 
 Two things are worth saying once about what did get written.
 
-* **A leg per option is what the riders want and `chargen.BUILDS` has
-  fewer.** The barbarian's five legs cover its four options exactly. The
-  ardent has two legs for three mantles and the assassin two for three
-  guild methods, so one row in each class is gated on a leg it shares with
-  a sibling. Marked where it changes what plays.
+* **A leg per option is what the riders want, and `chargen.BUILDS` now has
+  one each.** The barbarian's five legs cover its four options exactly, and
+  the ardent's three mantles and the assassin's three guild methods have a
+  leg apiece -- `f0s0..f0s2` and `f1s0..f1s2`, named for the option rather
+  than for a secondary ability. The note here said each class was a leg
+  short and shared one between two siblings; it is not true any more, and
+  `c.build("f1s1")` is an exact gate.
 * **"Your attack bloodies an enemy" is `Bloodied.source`.** The event now
   names whoever struck the blow, exactly as `Dropped` does, so all three
   barbarian riders answer only the enemies this barbarian put past the
@@ -46,6 +50,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import on_leg
+from combat_engine.content.powers.barbarian.rage import raging
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -66,8 +72,12 @@ from combat_engine.engine import (
     Effect,
     Keyword,
     Melee,
+    Powers,
     PowerUsed,
+    Usage,
     When,
+    World,
+    get,
     power,
 )
 from combat_engine.engine.query import distance_between, team
@@ -388,23 +398,73 @@ def barbarian_whirling(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    todo=("p4807",),
 )
 def barbarian_rage(c: Cast) -> None:
-    """Two sentences and neither can be said.
+    """Two sentences, and the only one with a subject is the grant.
 
-    Every daily attack power of the class carries a keyword nothing
-    declares, so no row can be told to be a rage; and the level-5 row the
-    second sentence grants is `cf:barbarian-f2c0`, which is blocked on that
-    same keyword. This is the `cf:barbarian-rage` entry in
-    `docs/blocked.json`, which now has a ref.
+    **"A keyword nothing declares" is stale.** `Keyword.RAGE` exists (#503)
+    and every daily the class prints carries it, from `level_1_b.py`'s
+    `PRIMAL_RAGE` to `level_9.py`. So the first sentence is a fact about
+    those cards and there is nothing here to lay.
 
-    **The marker named `c.expend()` and no longer does.** Spending a row's use
-    without running it is `c.expend_row`, which exists -- so that half was never
-    missing and the marker was reporting a gap that was not one. `todo.py` could
-    not notice, because it fires on the marker string and nothing relates
-    `c.expend()` to `c.expend_row`. #418.
+    The second is the grant at 5th level, and the card is
+    `cf:barbarian-f2c0`. **The marker was unclosable:** `p4807` is the
+    compendium's other id for that same card and is never going to be
+    declared beside it, so nothing could ever have turned the symbol green.
+    `chargen.loadout` does not deal the feature's card either -- checked at
+    5 and at 10 -- so this grant is what puts it in hand.
+
+    (The marker named `c.expend()` before that, and that too was a facility
+    which existed as `c.expend_row`. #418.)
     """
+    if c.level >= 5:
+        c.grant_row("cf:barbarian-f2c0")
+
+
+def _unused_rages(world: World, eid: int) -> list[str]:
+    """"An unused barbarian rage power", by ref.
+
+    A registry filter and not a list: `Power.cls`, the daily usage and
+    `Keyword.RAGE` pick the set out, so a level landing adds itself. Read
+    off what the creature actually holds, and `Powers.times` is the "unused"
+    half -- a spent daily is no longer one of these.
+    """
+    known = world.get(eid, Powers)
+    if known is None:
+        return []
+    return sorted(
+        ref
+        for ref in known.all
+        if known.times(ref) == 0
+        and (p := get(ref)) is not None
+        and p.cls == "barbarian"
+        and p.usage is Usage.DAILY
+        and Keyword.RAGE in (p.keywords or ())
+    )
+
+
+def _can_burn_a_rage(world: World, eid: int) -> bool:
+    """The printed Requirement, as a `requires=` gate.
+
+    Safe here where it would not be on a trait: this row is a standard
+    action, so `usable` asks it at the moment of use rather than once at
+    arming -- and both halves of it become true mid-fight, which is the
+    whole shape `turns.arm_traits_of` would have refused for ever.
+    """
+    return raging(world, eid) and bool(_unused_rages(world, eid))
+
+
+#: The printed ladder: dice by the **level of the power burned**, not by the
+#: character's. Only the first three steps are reachable while the project
+#: stops at 10; the rest is on the card and costs nothing to carry.
+_BURN_DICE = ((29, 9), (25, 8), (19, 7), (15, 6), (9, 5), (5, 4))
+
+
+def _dice_for_burning(level: int) -> int:
+    for at, dice in _BURN_DICE:
+        if level >= at:
+            return dice
+    return 3
 
 
 @power(
@@ -418,27 +478,38 @@ def barbarian_rage(c: Cast) -> None:
     keywords=PRIMAL_WEAPON,
     attack=Attack(STR, vs=AC),
     uses=2,
+    requires=_can_burn_a_rage,
     requires_text="must be raging and have at least one unused rage power",
-    todo=("p4807",),
 )
-def barbarian_rage_strike(c: Cast) -> None:
+def barbarian_burn_a_rage(c: Cast) -> None:
     """The card `cf:barbarian-f2` grants, and the first ref it has ever had.
 
     `p4807` is the same card and has never been declared -- `docs/blocked.csv`
-    carries it, and the two rows elsewhere that gate on the card now name
-    this ref instead: `f2706` and `i2947p1`.
+    carries it, and the two rows elsewhere that gate on the card name this
+    ref instead: `f2706` and `i2947p1`. It was also this row's marker, which
+    could not have closed: the symbol was a second id for the row carrying
+    it.
 
-    The attack and the miss half are ordinary; the whole point of the row
-    is not. The dice are the level of the rage power you burn to make it,
-    and nothing can name a rage power or spend one without using it.
-    `c.forbid` removes a row, which `Powers` is explicit is not the same as
-    spending it, so the damage would be keyed to a choice that costs
-    nothing. Refused in play rather than written at 3[W] forever.
+    **Both halves the old docstring called unsayable now exist.**
+    `Keyword.RAGE` names a rage power (#503) and `c.expend_row` spends a use
+    *without running the row*, which is the printed "to make this attack you
+    expend an unused rage power" -- and is the thing `c.forbid` is explicitly
+    not. So the dice are keyed to a choice that really costs something.
+
+    The expend comes **before** the swing, as the Attack line prints it: on a
+    miss the power is still gone. Its False is the Requirement a second time,
+    for the case where the gate passed and the pick was taken away in
+    between.
     """
+    ref = c.choose(_unused_rages(c.world, c.me), "which rage power to channel")
+    if ref is None or not c.expend_row(ref):
+        return
+    burnt = get(ref)
+    dice = _dice_for_burning(burnt.level if burnt is not None else 1)
     if c.strike():
-        c.damage(c.w(3), c.str_mod)
+        c.damage(c.w(dice), c.str_mod)
     else:
-        c.half_damage(c.w(3), c.str_mod)
+        c.half_damage(c.w(dice), c.str_mod)
 
 
 # --------------------------------------------------------------- assassin
@@ -475,22 +546,52 @@ def assassin_shrouds(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=SHADOW,
-    todo=("c.no_encounter_attacks()",),
+    requires=on_leg("f1s1"),
+    requires_text="needs the second of the three options printed under the feature",
 )
-def assassin_night_stalker(c: Cast) -> None:
-    """The second guild method: it has a leg now, and still no way to pay.
+def assassin_second_method(c: Cast) -> None:
+    """The second guild method, and both sides of its trade.
 
-    The grant is a no-op: `p13799` is a level-0 row of the class and
-    `chargen.loadout` has already dealt it. The loss -- every encounter
-    attack power in the class -- would be a hand-listed set of refs that
-    goes stale the moment a level lands, and a half-written version leaves
-    an assassin holding the powers its method says it never learned. So
-    the row is still refused: the whole of it is the trade, and only one
-    side of the trade can be written.
+    The grant is a no-op for a dealt assassin: `p13799` is a level-0 row of
+    the class and `chargen.loadout` has already handed it over.
+
+    **The loss is a registry filter, which is what the refusal said it could
+    not be.** `Power.cls`, the encounter usage and an attack line pick out
+    exactly "assassin encounter attack powers", so a level landing adds
+    itself and nothing goes stale. The walk is over what this creature
+    *holds*, because taking away a row nobody has says nothing -- the same
+    shape `_no_limited_attacks` settled for a whole usage band. The
+    `attack is not None` test is load-bearing and not tidiness: `p13799` is
+    itself an encounter row of the class, and without it this would forbid
+    the power it had just granted.
+
+    `c.forbid` for the fight is as near as a board gets to "does not gain":
+    the printed sentence is about what the character *learns*, which is a
+    chargen fact, and a row unreachable for the whole encounter is that
+    sentence from the inside. `until=` is not optional -- the default is
+    save ends and no save is printed here.
+
+    **The leg moved from the body into `requires=`**, which is the shape the
+    three swordmage children use and is safe for the reason `AUTHORING`
+    gives: a `requires=` on a trait is only safe when its Requirement cannot
+    change mid-fight, and a build leg is chosen before the fight starts. It
+    also makes the row visible to its own instruments -- `chargen.build_for`
+    picks the leg a row is *usable* on, and with the gate inside the body
+    every leg looked usable, so the audit fielded this on the first one and
+    reported it silent while it was correct.
     """
-    if not c.build("f1s1"):
-        return
     c.grant_row("p13799")
+    known = c.world.get(c.me, Powers)
+    for ref in known.all if known is not None else ():
+        p = get(ref)
+        if (
+            p is None
+            or p.cls != "assassin"
+            or p.usage is not Usage.ENCOUNTER
+            or p.attack is None
+        ):
+            continue
+        c.forbid(ref, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

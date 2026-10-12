@@ -101,6 +101,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.components import Defences
 from combat_engine.engine.grid import Square, spread
 from combat_engine.engine.skills import SKILLS
 
@@ -1885,19 +1886,44 @@ def p16585(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    dropped=("c.strip_resistance()",),
 )
 def p16586(c: Cast) -> None:
     """Both aftereffects are hung on the condition ending, which is the one
-    announcement a save makes. Losing all resistance on the first failed
-    save is the dropped half -- `escalate` has the hook and nothing takes
-    a creature's resistances away."""
+    announcement a save makes.
+
+    "Nothing takes a creature's resistances away" is stale twice over:
+    `Defences.resist` is a plain dict that `resolve.deal_damage` reads and
+    `Mods` never consults, so taking entries out of it and handing them
+    back on the hold's own `on_end` is how both
+    `monsters/level_12/controllers_sa._strips_resistance` and
+    `level_11/brutes._take_resistances` say it. All of them rather than one
+    type here, and on the `escalate` hook, because the clause is the Hit
+    branch's First Failed Saving Throw and nothing else."""
     who = c.target
     if who is None:
         return
     held = Condition.PETRIFIED if c.attack(max(c.int_, c.cha_), vs=FORT) and c.landed \
         else Condition.IMMOBILIZED
-    c.condition(held, on=who, until=When.SAVE_ENDS)
+
+    def lose_resistance(_: Any) -> None:
+        shell = c.world.get(who, Defences)
+        if shell is None or not shell.resist:
+            return
+        had = dict(shell.resist)
+        shell.resist.clear()
+
+        def give_back() -> None:
+            shell.resist.update(had)
+
+        c.world.effects.apply(
+            who, c.me, When.SAVE_ENDS, label=c.ref, on_end=[give_back]
+        )
+
+    # Only the Hit branch prints a First Failed Saving Throw line.
+    c.condition(
+        held, on=who, until=When.SAVE_ENDS,
+        escalate=lose_resistance if held is Condition.PETRIFIED else None,
+    )
 
     def after(ev: ConditionEnded) -> None:
         if ev.target == who and ev.condition is held:

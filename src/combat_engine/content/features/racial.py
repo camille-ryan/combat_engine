@@ -74,6 +74,7 @@ from combat_engine.engine import (
     Ident,
     InitiativeRolled,
     Keyword,
+    OpportunityWindow,
     Powers,
     SavingThrow,
     SecondWind,
@@ -188,7 +189,7 @@ def _origin(
     power(
         f"rt:{race}-origin",
         level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
-        reach=PERSONAL, target=SELF, **({"dropped": dropped} if dropped else {}),
+        reach=PERSONAL, target=SELF, dropped=dropped or (),
     )(body)
 
 
@@ -283,15 +284,22 @@ def rt_r2_t3(c: Cast) -> None:
 
 
 @power("rt:r2-t4", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("query.knocked_prone()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r2_t4(c: Cast) -> None:
-    """One square less of any forced move is exactly `c.resist_forced`.
+    """One square less of any forced move is exactly `c.resist_forced`, and
+    it is the whole of this trait's spec.
 
-    The prone half is dropped: `ConditionApplied` says who applied the
-    condition and not whether an *attack* did, so a save laid on every
-    prone would also answer a row that puts you down as an Effect line,
-    which the printed trait does not.
+    **The dropped prone half is not in this row's spec.** The marker named
+    `query.knocked_prone()` for a save against being knocked prone by an
+    attack, and `racial_trait.spec` for this ref carries no such sentence --
+    it is the forced-move clause and nothing else. (`r2` is also missing a
+    `t1` row entirely, so something of the race did not survive extraction.)
+    A marker for a clause the spec does not carry can never go from absent
+    to present, which is the one thing a marker has to be able to do, so it
+    is referred up instead of kept. If the compendium does print that save
+    on *this* trait, the symbol belongs back here and narrower than it was:
+    `ConditionApplied` says who applied the condition, never whether an
+    *attack* did.
     """
     c.resist_forced(1, on=c.me, until=_HOLDS)
 
@@ -717,22 +725,40 @@ def rt_r24_t0(c: Cast) -> None:
 
 
 @power("rt:r24-t2", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("query.charging()",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r24_t2(c: Cast) -> None:
-    """The attack context's `charge` is the *attacker's* charge, and the
-    printed narrowing is to opportunity attacks provoked during **your**
-    charge -- which nothing records. Widened to every opportunity attack
-    would be the other race's trait, so the narrowing is dropped and the
-    bonus is laid on what can be asked.
+    """The printed narrowing is to opportunity attacks provoked during
+    **your own** charge, which is two facts in two different places.
 
-    `OpportunityWindow.why` is not the missing piece, checked: the only
-    thing `movement` ever puts in it is "moved away". `c.charge_at` runs
-    the walk through `run_at` and only then sets the flag on the *swing*,
-    so the run itself is an ordinary move to everything watching it.
+    The attack context's `charge` is the *attacker's* charge and is false
+    for every swing taken at a charger, so it answers nothing here -- that
+    much of the old docstring stands. What has changed is the other side:
+    `OpportunityWindow.kind_` carries `movement.step`'s own kind (#301), so
+    the window that opens as the run leaves a square says `charge`, and the
+    opportunity attack is taken *inside* that emit. So the window sets the
+    fact and the modifier's own `opportunity` gate spends it.
+
+    A flag rather than a bonus laid in the watch, because nothing closes the
+    window again and an effect laid there would have to guess when to come
+    off. It can only be read wrong if an opportunity attack reaches this
+    creature without a window naming it the provoker, and an opportunity
+    attack is made at the provoker by definition.
+
+    `Window.BEFORE` is not optional: the policy answers the window from an
+    ordinary listener, so an AFTER watch sets the flag once the swing it was
+    for has already been rolled.
     """
-    c.bonus(AC, 2, kind="racial", on=c.me, until=_HOLDS,
-            when=lambda ctx: bool(ctx.get("opportunity")))
+    me = c.me
+    provoked = {"charging": False}
+
+    def opened(ev: OpportunityWindow) -> None:
+        if ev.provoker == me:
+            provoked["charging"] = ev.kind_ == "charge"
+
+    c.watch(OpportunityWindow, opened, until=_HOLDS, window=Window.BEFORE,
+            on=me, label=f"{c.ref} charge openings")
+    c.bonus(AC, 2, kind="racial", on=me, until=_HOLDS,
+            when=lambda ctx: bool(ctx.get("opportunity")) and provoked["charging"])
 
 
 # -- r25 ---------------------------------------------------------------

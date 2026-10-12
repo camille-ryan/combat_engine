@@ -1316,12 +1316,19 @@ def p16567(c: Cast) -> None:
 
 @power("p16568", level=10, cls="x7_999", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.DIVINE, Keyword.POLYMORPH],
-       dropped=("c.reach_of(power=)",))
+       keywords=[Keyword.DIVINE, Keyword.POLYMORPH])
 def p16568(c: Cast) -> None:
     """"Change between forms as a minor action" is `revert=`, which is what
-    that argument is for. Longer melee reach is written as the opportunity
-    threat only: nothing widens the reach a melee row is *used* at."""
+    that argument is for.
+
+    **The reach was never dropped and the marker was wrong.** `c.threatens(2)`
+    lays *two* modifiers -- the `threatening_reach` flag and `reach` at
+    `squares_ - 1` -- and `dsl._stretched` reads `reach` for a melee range and
+    adds it to the range *before* the area is cut, so the extra square decides
+    what may be aimed at and not merely what the opportunity window covers.
+    Driven both ways: a melee 1 row offered a target two squares off with this
+    standing and none without it. One call says both halves of the printed
+    sentence, so a second `c.bonus("reach", 1)` would be a square too far."""
     c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
     c.bonus(WILL, 2, kind="power", on=c.me, until=When.ENCOUNTER)
     c.threatens(2, on=c.me, until=When.ENCOUNTER)

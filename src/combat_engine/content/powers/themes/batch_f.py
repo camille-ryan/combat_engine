@@ -412,7 +412,16 @@ def p12250(c: Cast) -> None:
 def p12251(c: Cast) -> None:
     """`c.spend_surge` is "spend a surge and gain nothing for it", which is
     exactly "the target loses a healing surge". Handing the points back to
-    the caster is the half nothing can say."""
+    the caster is the half nothing can say.
+
+    **`c.transfer_points` is not it, checked.** That moves points *out* of
+    the caster's pool into somebody else's and returns 0 when the caster has
+    none -- the opposite direction, and these points come from nowhere.
+    `PowerPoints.points` is a public field and `refresh` writes it, but
+    `_pool` is private to `Cast` and every verb on the surface spends,
+    augments or reads -- `c.regain_surge` is the mirror the healing-surge
+    pool has and this one does not. The Level 23 line is paragon and out of
+    scope."""
     mate = c.target
     if mate is not None:
         c.spend_surge(on=mate)

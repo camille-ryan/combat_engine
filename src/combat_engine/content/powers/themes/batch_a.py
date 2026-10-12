@@ -244,8 +244,21 @@ def p12406(c: Cast) -> None:
 )
 def p12407(c: Cast) -> None:
     """Seeing round a corner really does change what a fight allows, so this
-    is not the narrative half of anything: `query.line_of_effect` measures
-    from the creature's own square and nothing can move where it looks from."""
+    is not the narrative half of anything.
+
+    **`c.cast_from` is the near miss and it is two things away.** That verb
+    lends an origin, but `Relation.CASTS_FROM` holds an *entity* and
+    `dsl.measured_from` returns one, so there is nowhere to put the square
+    this card names -- and the card names a square it can see, not a
+    creature standing in one. Second, `measured_from` is consulted only for
+    `ranged`, `area_burst` and `wall` ranges, so it moves where an attack is
+    measured from and not what the creature can *see*:
+    `query.line_of_effect(world, a, b)` and `c.can_see(to)` both trace from
+    the looker's own `Position` and neither consults the relation.
+
+    So the gap is a square-valued sight origin that those two readers
+    honour, which is why the marker stays rather than being written off
+    `c.cast_from`."""
 
 
 @power(
@@ -412,8 +425,21 @@ def p15900(c: Cast) -> None:
         on=foe,
         until=When.SAVE_ENDS,
         ongoing=(10, DamageType.COLD),
-        escalate=lambda _e: c.prone(on=foe),
+        escalate=_knocks_down(c, foe),
     )
+
+
+def _knocks_down(c: Cast, foe: int):  # noqa: ANN202
+    """A failed save knocks the target down.
+
+    A `def` rather than a lambda because `escalate` is typed to return
+    `None` and `c.prone` hands back the `Effect` it laid -- a lambda would
+    return it and `ty` rejects the shape.
+    """
+    def worse(_e: object) -> None:
+        c.prone(on=foe)
+
+    return worse
 
 
 # -- x7_877 ------------------------------------------------------------------
@@ -673,17 +699,34 @@ PRIMAL = [Keyword.PRIMAL]
     target=SELF,
     keywords=[*PRIMAL, Keyword.POLYMORPH],
     once_per_round=True,
-    dropped=("c.as_weapon(natural=)",),
 )
 def p14205(c: Cast) -> None:
-    """"Special: once per round" is the header field, not a body check. The
-    bite is a weapon with its own proficiency and damage die and nothing can
-    make one; the form and the speed are exact. The shift on changing back
-    is the *other* direction of a row that toggles, which one call cannot
-    say -- it is inside the same dropped clause as the bite, since both wait
-    on the form carrying a weapon."""
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
+    """"Special: once per round" is the header field, not a body check.
+
+    **Both halves of the old dropped clause are written, and neither waited
+    on what the marker named.** `c.as_weapon` mints a full profile --
+    damage, group, proficiency -- and appends it to `Gear.weapons`, which is
+    "nothing can make one" answered; the `natural=` tag the marker asked for
+    is read by no line of the engine, so it was a label and not a mechanism.
+    The group is `unarmed`, which is the table's own word for a natural
+    attack rather than an invented one.
+
+    The enhancement comes from the verb, which reads the magic weapon in
+    hand -- the card's "the enhancement bonus of your primary weapon". Its
+    documented fallback to 1 for a character holding nothing magic is a
+    plus the card would price at 0, and it is the verb's call rather than
+    this row's.
+
+    The shift on changing back was **folded into the same symbol and does
+    not belong to it**: `c.endable(effect, cost, then=)` is "ending it
+    deliberately buys something", `then` runs for the deliberate drop and
+    for nothing else, and `p14207` sixty lines below already uses it for a
+    surge. So the toggle pays its square without a weapon being involved.
+    """
+    shape = c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
+    c.endable(shape, MINOR, then=lambda: c.shift(1, who=c.me))
     c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)
+    c.as_weapon(damage="1d8", group="unarmed", proficiency=3, until=When.ENCOUNTER)
 
 
 @power(
@@ -744,11 +787,14 @@ def p14207(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*PRIMAL, Keyword.POLYMORPH],
-    dropped=("c.as_weapon(natural=)",),
 )
 def p14208(c: Cast) -> None:
-    """Same bite, same reason. Everything else is exact."""
+    """Same bite as `p14205`, and written the same way -- see there for why
+    the `natural=` tag was a label rather than a gap. This form keeps its
+    equipment and uses it normally, so the profile joins what is already
+    carried rather than replacing it."""
     c.form(until=When.ENCOUNTER, revert=FREE, label=c.ref)
+    c.as_weapon(damage="1d8", group="unarmed", proficiency=3, until=When.ENCOUNTER)
     c.temp_hp(10 + c.con_mod, on=c.me)
     c.bonus(FORT, 2, on=c.me, until=When.ENCOUNTER, kind="power")
     c.bonus("skill:athletics", 2, on=c.me, until=When.ENCOUNTER, kind="power")

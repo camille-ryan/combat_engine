@@ -428,7 +428,14 @@ def fighter_talent_arena(c: Cast) -> None:
       other rows wait on -- and `Weapon.proficiency` is a column, not
       something a feature can raise.
     * Two chosen weapons become proficient. `c.chosen_weapon_group()` is the
-      standing request for "a weapon this character picked at build time".
+      standing request for "a weapon this character picked at build time",
+      and it is a **chargen** gap rather than a reader one: `Build.choices`
+      is an open string set and `c.build(word)` would read it, but the only
+      things written into it are the leg's name, `primary:`, `element:`,
+      `beast:` and `race:`. The `weapon:<slug>` tokens in that spelling are
+      `ClassLine.bands` -- a class's printed proficiency line, not a choice
+      this character made -- so a row asking `c.build("weapon:...")` today
+      is false for every build in the tree.
     * Feat bonuses earned for one of the two apply to the other. This used
       to be marked `feat.associated_powers`, which was simply the wrong
       symbol -- this card prints no Associated Powers list and the clause
@@ -560,13 +567,18 @@ def fighter_talent_brawling(c: Cast) -> None:
 
     The second of the three `cf:fighter-weaponmaster-f3` leaves out.
 
-    The two defences are written. The three attack bonuses are dropped and
-    the symbols say why: `c.off_hand()` is the standing request for "the
-    attack was made with the empty hand", which is what the unarmed bonus
-    needs and which no attack context carries, and `c.on_grab_attack()` is
-    the same for a grab attempt and for an attack to move whoever is already
-    held. Without either, all three would have to be laid on every attack
-    roll, which is a much larger number than the card prints.
+    The two defences and the grab bonus are written. **`c.grab_attempt`
+    rolls with `as_="grab"` and `resolve.attack` stamps that into the attack
+    context** (#501), so "the attack rolls of grab attacks" is an ordinary
+    gate; the card prints no type word, so untyped.
+
+    Two of the three attack bonuses are still dropped and the symbols say
+    why. `c.off_hand()` is the standing request for "the attack was made
+    with the empty hand", which is what the unarmed bonus needs and which no
+    attack context carries. `c.on_grab_attack()` now names only the other
+    half -- an attack to *move* a creature already held, which is a
+    manoeuvre with no `as_` of its own, the same hold `m4388a3` waits on.
+    Laid without it, that one would pay on every attack roll instead.
 
     The Requirement is read once, when the trait is armed, so a fighter who
     puts a second weapon in hand mid-fight keeps the bonus. That is the same
@@ -583,6 +595,10 @@ def fighter_talent_brawling(c: Cast) -> None:
         return
     c.bonus(AC, 1, until=When.ENCOUNTER, on=c.me)
     c.bonus(FORT, 2, until=When.ENCOUNTER, on=c.me)
+    c.bonus(
+        "attack", 2, until=When.ENCOUNTER, on=c.me,
+        when=lambda ctx: ctx.get("as_") == "grab",
+    )
 
 
 @power(

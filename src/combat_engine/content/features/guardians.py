@@ -151,20 +151,27 @@ def paladin_hands_feature(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.bonus_feat()",),
 )
 def ranger_style_ranged(c: Cast) -> None:
-    """One of the five fighting styles, and its whole benefit is a bonus
-    feat the spec names in prose and not by ref.
+    """One of the five fighting styles, and its whole benefit is a bonus feat.
 
-    The tree has feats and `c.grant_row` can hand one over, so the gap is
-    not a verb: it is that the extractor resolved one style's feat to an id
-    -- `cf:ranger-f0s3` is handed `f172` outright -- and left this one's as
-    a printed name, which is the one thing this project may not go and look
-    up. `c.bonus_feat()` is the symbol for "grant the feat this line
-    names", and both ranger styles here that are a bonus feat and nothing
-    else want it.
+    **Written: the marker was stale.** It said the extractor had left this
+    style's feat as a printed name while resolving `cf:ranger-f0s3`'s to
+    `f172`. The spec carries `f127` now, so there is nothing to look up and
+    `c.bonus_feat()` was only ever standing in for a missing ref.
+
+    Written the way `cf:ranger-f0s3` writes `f172`, and for its reasons:
+    `f127` is a general feat, `cls=""`, so `chargen.loadout` never deals it
+    to a ranger; and granting a trait is not arming it, because
+    `Encounter.arm_traits_of` walks a snapshot of `Powers.all` taken before
+    this row ran -- so `use` arms it on the spot.
     """
+    from combat_engine.engine.dsl import use
+
+    if c.feat("f127"):
+        return
+    c.grant_row("f127", on=c.me, until=When.ENCOUNTER)
+    use(c.world, c.me, "f127", spend=False)
 
 
 @power(
@@ -254,17 +261,29 @@ def ranger_style_marauder(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.MARTIAL],
-    todo=("c.bonus_feat()",),
 )
 def ranger_style_two_blade(c: Cast) -> None:
-    """The two-weapon style, and the same gap as `cf:ranger-f0s0`.
+    """The two-weapon style. **Written: the marker was stale.**
 
     Its first clause -- wielding a one-handed weapon in the off hand as
     though it were an off-hand weapon -- is a permission `chargen` already
     grants: the two blades a ranger is dealt are both off-hand weapons, as
-    `cf:ranger-f0` says, so there is nothing to lift. The bonus feat is
-    named in prose and is the whole of what is left.
+    `cf:ranger-f0` says, so there is nothing to lift.
+
+    The second was blocked on the feat being named in prose, and the spec
+    carries `f171` now. Granted exactly as `cf:ranger-f0s0` grants `f127`.
+    `f171` is itself unfinished -- it raises a maximum hit point total and
+    carries its own `todo=("c.max_hp()",)` -- so `use` declines to arm it,
+    which is right: that gap belongs to `f171` and naming it twice would
+    make one symbol serve two rows. Handing the row over is the whole of
+    what this feature prints.
     """
+    from combat_engine.engine.dsl import use
+
+    if c.feat("f171"):
+        return
+    c.grant_row("f171", on=c.me, until=When.ENCOUNTER)
+    use(c.world, c.me, "f171", spend=False)
 
 
 # -- runepriest -------------------------------------------------------------

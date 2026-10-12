@@ -385,7 +385,7 @@ def wizard_tome_mastery_binding(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    todo=("c.stored_row()", "c.tome_powers()"),
+    todo=("c.stored_row()",),
 )
 def wizard_tome_mastery_readiness(c: Cast) -> None:
     """A power the wizard does not know, held ready and paid for in kind.
@@ -396,7 +396,18 @@ def wizard_tome_mastery_readiness(c: Cast) -> None:
     row is still nothing without the rest. There is nowhere to record a
     power that is stored rather than known -- `Powers` holds known,
     prepared and expended, and a stored row is a fourth state the tome
-    owns -- and nothing narrows a choice to the wizard's tome list.
+    owns.
+
+    **`c.tome_powers()` came off, and it was aimed at the wrong half of the
+    card.** The choice this row makes is from the *class* list -- "an attack
+    power of your level or lower that you don't already know" -- and
+    `c.borrow_row(cls=, level=, usage=, attacks=)` is precisely "the card
+    names a set and asks the character to take one of it", reading the set
+    off the registry by class, level and usage and recording the pick. The
+    implement that must be held is a Requirement and not a list, so no
+    second power list was ever owed here. The other ten rows carrying that
+    symbol are item blocks whose own page stocks the powers, which is a
+    different gap and keeps the symbol.
 
     `c.prepare` is the near miss and it is the wrong tool: it swaps a row
     out of the spellbook for one that is in it, and the stored power is by

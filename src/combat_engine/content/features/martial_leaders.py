@@ -499,14 +499,21 @@ def bard_word_feature(c: Cast) -> None:
 def swordmage_bond(c: Cast) -> None:
     """Only one clause of this has a reading inside a fight -- calling the
     bonded blade back to hand as a standard action from ten squares away --
-    and it has nothing to change.
+    and it still has nothing to change.
 
-    `c.disarm` drops a weapon into the disarmed creature's square and
-    nothing anywhere picks one back up, and `Gear` records what is held,
-    stowed and worn but not what is *owned and elsewhere*. So the recall
-    would be a standard action that moves nothing. The rest of the card is
-    an hour of meditation between fights. `docs/blocked.json` has the same
-    two wants under this ref.
+    **"Nothing anywhere picks one back up" is no longer true, and the clause
+    is no closer.** `actions._picking_up` takes a disarmed weapon off the
+    floor, but only out of the actor's **own square**, for a **minor**
+    action, offered in the action menu -- there is no `Cast` verb, so a body
+    cannot reach that path at all, and the printed line is a standard action
+    at ten squares. The retrieval wants the same three lines without the
+    adjacency test, which is an engine door and not a row.
+
+    `Gear` is the other half and is untouched: it records what is held,
+    stowed and worn, never what is *owned and elsewhere*, so nothing says
+    which blade is bonded or that it is away. The rest of the card is an
+    hour of meditation between fights. `docs/blocked.json` has the same two
+    wants under this ref.
     """
 
 
@@ -618,8 +625,7 @@ def swordmage_aegis_shield_choice(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=MARTIAL,
-    todo=("c.attacks_with(ability=)", "chargen.armor_proficiency()",
-          "chargen.second_fork()"),
+    todo=("chargen.armor_proficiency()", "chargen.second_fork()"),
 )
 def warlord_archer(c: Cast) -> None:
     """Three clauses and none of them has a subject.
@@ -631,9 +637,25 @@ def warlord_archer(c: Cast) -> None:
     per class*, which is a different shape from a longer list of legs.
 
     Two are proficiency, which nothing models in either direction -- the
-    row drops two and adds one. The third rewrites which ability a ranged
-    basic attack rolls, and `basic.RANGED` fixes that in its own header
-    where no modifier can reach it. `chargen.BUILDS` is wanted as well and
+    row drops two and adds one.
+
+    **`c.attacks_with(ability=)` is off the marker and the clause is still
+    not written.** The third sentence rewrites which ability a ranged basic
+    attack rolls, and `c.rolls_with("rba", Ability.STR, when=...)` says
+    exactly that -- `Attack.ability_for` reads the swap *before* the header,
+    `rba`'s body reads `c.attack_mod`, so the attack roll and the damage
+    roll both move, and the `(world, eid)` gate is what "with a bow" wants
+    (`query.holding(world, eid, "bow")`, a printed weapon group). The
+    sentence it refused on -- that the header fixes the ability where no
+    modifier can reach it -- is the problem `rolls_with` was built to
+    solve, so keeping the symbol named a gap that is not one.
+
+    What stops the line being written is the gate below, not the mechanism:
+    the swap belongs to whoever *chose* this feature, and nothing records
+    that choice, so laying it here would hand every warlord a
+    Strength-rolled bow. Write it the moment there is a leg to ask for.
+
+    `chargen.BUILDS` is wanted as well and
     **adding legs does not supply it**: the class's six legs are already
     spent on the six options of a different printed fork, and a character
     takes one leg and stays on it, so an archer leg would make this choice

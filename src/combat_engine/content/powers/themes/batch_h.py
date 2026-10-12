@@ -691,16 +691,25 @@ def p15893(c: Cast) -> None:
 @power(
     "p15894", level=10, cls=X7_917, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    dropped=("Weapon.brutal", "story.rest(hours=)"),
+    dropped=("c.reroll_ones(when=)", "story.rest(hours=)"),
 )
 def p15894(c: Cast) -> None:
     """The slow is written and is gated on the aura rather than on a clock,
     so a sustained aura keeps slowing and a lapsed one stops.
 
-    Brutal 2 is the dropped half -- nothing rerolls a weapon damage die that
-    comes up low -- and it is named now with the symbol two other rows
-    already use (`f2099`, and `c.brutal()` on `i1467x1`, which are the same
-    mechanic under two names).
+    Brutal 2 stays dropped and the stated reason was wrong.
+    `c.reroll_ones(below=3, keyword=Keyword.WEAPON)` *is* "reroll any weapon
+    damage die that shows 1 or 2" -- `_rolled_above` replaces each die under
+    the floor individually -- so "nothing rerolls a weapon damage die that
+    comes up low" was false. What cannot be said is the **narrowing**: the
+    floor is read by `Cast._reroll_floor`, which asks
+    `Mods.total("reroll_damage_below")` with no context at all, so a `when=`
+    gate is false forever and "against enemies in the aura" has nowhere to
+    sit. Laid ungated it would reroll against every enemy on the board, which
+    is a stronger power than the card. Re-aimed off `Weapon.brutal`: that
+    symbol is the missing *column* `f2099` and `i1467x1` want, where a weapon
+    carries brutal as a standing property, and it arriving would not finish
+    this row.
 
     **`events.ExtendedRested` was the wrong symbol and I replaced it with a
     worse one first.** That event landed and does not help: the Special line
@@ -1230,7 +1239,6 @@ def p16063(c: Cast) -> None:
     "p16064", level=10, cls=X7_944, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ELEMENTAL],
     requires=_on_the_ground, requires_text="you must be on the ground",
-    dropped=("c.ignores_difficult_in(who=)",),
 )
 def p16064(c: Cast) -> None:
     """The sustain payout is written, hung on the aura's own effect --
@@ -1243,12 +1251,16 @@ def p16064(c: Cast) -> None:
     own side waived inside it, bounded by the zone rather than board-wide.
     Found by `triage.py`'s first calibration run.
 
-    **One clause still dropped, and it is narrower than it was:** "enemies
-    that lack earth walk". The waiver is per *side*, so a particular enemy
-    cannot be exempted from ground everybody else finds difficult. Named as
-    `c.ignores_difficult_in(who=)` rather than as the aura, which now works.
+    **"Enemies that lack earth walk" lands too, and it is the label rather
+    than a per-creature waiver.** Earth walk is three `c.ignores_difficult`
+    words -- `rt:r66-t0` writes them -- and `World.difficult(for_=)` drops a
+    square whose kind the mover ignores, so giving the ground one of those
+    three names exempts every earth walker on the board without naming one.
+    `p16470` is the same write. A string `difficult=` is what `Zone.difficult`
+    carries through to `Zones.difficult_squares` as the terrain kind; `True`
+    gave the squares an empty label nobody could be at home in.
     """
-    aura = c.aura(2, until=When.EONT, sustain=MINOR, difficult=True)
+    aura = c.aura(2, until=When.EONT, sustain=MINOR, difficult="rubble")
     c.ignores_difficult_in(aura)
 
     def payout() -> None:

@@ -93,6 +93,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.query import allies, distance_between, flanked_by
 from combat_engine.engine.triggers import Trigger
 
@@ -110,6 +111,23 @@ _BINDING = (
     Condition.IMMOBILIZED,
     Condition.SLOWED,
 )
+
+
+def _saving_against(*words: Keyword):  # noqa: ANN202
+    """Gate: the hold this saving throw is against was laid by a row with
+    one of these keywords.
+
+    `durations.keywords_of` reads them off the effect's label -- the label
+    is the ref of the row that laid it -- and `Effects.roll_saves` puts the
+    answer in the save modifier's context under `keywords`. So "against
+    charm and fear effects" is a gate on the bonus and needs no field on
+    `SavingThrow`.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        return bool(set(words) & set(ctx.get("keywords", ())))
+
+    return gate
 
 
 def _best(c: Cast) -> int:
@@ -678,11 +696,37 @@ def p14123(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    todo=("c.sustain(ref)",),
+    dropped=("Power.action_alt",),
 )
 def p14124(c: Cast) -> None:
-    """Sustaining somebody's standing effect out of turn has no verb --
-    `c.on_sustain` is the payout half and cannot start one."""
+    """Sustains one of my own holds now, without paying the minor for it.
+
+    `Effects.sustaining(me)` is the same list the action menu offers from
+    and `Effects.sustain` is what the menu calls, so the free action is
+    those two with a choice between them -- the door was missing and the
+    mechanism was already driving itself. `c.on_sustain` is still only the
+    payout half, which is what the old note was right about.
+
+    Narrowed to the holds printing a **minor** to sustain, because that is
+    what the card pays for. The Special line sustains a move-action one and
+    charges a minor for doing it, which no header field can say: `reach`
+    has an `alt`, and `attack_alt`, `damage_alt` and `requires_alt` all
+    exist, and there is no second action cost.
+    """
+    held = [
+        eff
+        for eff in c.world.effects.sustaining(c.me)
+        if eff.sustain_cost is ActionType.MINOR
+    ]
+    if not held:
+        return
+    pick = held[0]
+    if len(held) > 1:
+        # By label rather than by the effect itself: `c.choose` hands its
+        # options to the decider, which a player answers over the wire.
+        label = c.choose([eff.label for eff in held], "which power to sustain")
+        pick = next((eff for eff in held if eff.label == label), held[0])
+    c.world.effects.sustain(pick)
 
 
 @power(
@@ -701,9 +745,17 @@ def p14124(c: Cast) -> None:
     todo=("c.reach_of(power=)",),
 )
 def p14125(c: Cast) -> None:
-    """Nothing rewrites another row's range, and targeting is already done
-    by the time this could fire -- which is the same wall the header-side
-    augments hit."""
+    """Targeting is already done by the time this could fire, which is the
+    same wall the header-side augments hit.
+
+    The *rewriting* half is no longer a gap: `dsl.area_of` hands
+    `_stretched` a context carrying the row's ref, so `c.bonus("range", n,
+    when=...)` lengthens one named row. Two things are left. The trigger is
+    `AttackDeclared`, which the engine emits per target already chosen, so
+    a modifier laid there widens the *next* use of that power and not the
+    one that fired this. And "double" is proportional where a modifier is a
+    fixed number, so the base has to be read at the moment of use -- which
+    is the moment this cannot reach."""
 
 
 @power(
@@ -1050,14 +1102,20 @@ def p16000(c: Cast) -> None:
         Trigger(Bloodied, about_me, "you are bloodied by an attack"),
         Trigger(DamageApplied, _hurt_while_bloodied, "you are damaged while bloodied"),
     ),
-    dropped=("SavingThrow.effect", "c.appears_unbloodied()"),
+    dropped=("c.appears_unbloodied()",),
 )
 def p16001(c: Cast) -> None:
-    """The save bonus is laid whole: a saving throw's context carries the
-    effect's label and no keyword, so "against charm and fear effects"
-    cannot be narrowed. Nothing hides a creature's bloodied state either."""
+    """The save bonus is narrowed off the hold's own keywords -- see
+    `_saving_against`; the context carries them and the old note here was
+    reading the event rather than the modifier's context.
+
+    Nothing hides a creature's bloodied state, which is the clause that
+    stays dropped."""
     c.second_wind(on=c.me, cost=ActionType.FREE)
-    c.bonus("save", 5, kind="power", on=c.me, until=When.ENCOUNTER)
+    c.bonus(
+        "save", 5, kind="power", on=c.me, until=When.ENCOUNTER,
+        when=_saving_against(Keyword.CHARM, Keyword.FEAR),
+    )
 
 
 @power(
@@ -1415,20 +1473,37 @@ def p16377(c: Cast) -> None:
         both(targets_me, either(by_keyword(Keyword.CHARM), by_keyword(Keyword.PSYCHIC))),
         "you are hit by a charm or a psychic attack",
     ),
-    dropped=("SavingThrow.effect",),
+    dropped=("c.save_order()",),
 )
 def p16438(c: Cast) -> None:
-    """The augment moves the save to the start of the turn; which effects it
-    may be spent on -- charm and psychic ones -- is what cannot be asked, so
-    the extra save is offered against whatever stands."""
+    """Both halves read the keywords of the hold rather than the throw.
+
+    The bonus is gated with `_saving_against`, and the augment's early
+    throw picks the standing charm or psychic hold by label instead of
+    taking whichever save-ends effect `c.save` happens to find first.
+
+    **Re-aimed, and the residue is the word "instead".** The augment moves
+    the throw from the end of the turn to the start; this offers it at the
+    start and the ordinary one still comes at the end, because nothing says
+    which of a turn's two throws is being rolled -- the hold f1941, f2553
+    and f2554 all share."""
     c.resist(5, DamageType.PSYCHIC, until=When.EONT, on=c.me)
-    c.bonus("save", 2, kind="power", on=c.me, until=When.EONT)
+    c.bonus(
+        "save", 2, kind="power", on=c.me, until=When.EONT,
+        when=_saving_against(Keyword.CHARM, Keyword.PSYCHIC),
+    )
     if not augment(c, 1):
         return
 
     def early(ev: TurnStart) -> None:
-        if ev.actor == c.me:
-            c.save(on=c.me)
+        if ev.actor != c.me:
+            return
+        for eff in c.world.effects.of(c.me):
+            if eff.when is not When.SAVE_ENDS:
+                continue
+            if {Keyword.CHARM, Keyword.PSYCHIC} & keywords_of(eff.label):
+                c.save(on=c.me, against=eff.label)
+                return
 
     c.watch(TurnStart, early, until=When.ENCOUNTER, on=c.me)
 
@@ -1462,11 +1537,13 @@ def p16439(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.PSIONIC],
-    dropped=("c.regain_points()",),
 )
 def p16440(c: Cast) -> None:
-    """Three of the four faces are sayable; handing power points back is
-    not, and `c.spend_points` only takes them."""
+    """All four faces. The fourth hands power points back, which is the
+    write `Cast.transfer_points` already makes on a pool
+    (`theirs.points += gone`) -- clamped by `PowerPoints.maximum`, because
+    regained points are ones that were spent. `c.spend_points` only taking
+    them out was a statement about the door, not about the state."""
     face = c.roll("1d4")
     if augment(c, 1):
         face = c.choose([face, c.roll("1d4")], "which of the two rolls to keep")
@@ -1477,6 +1554,12 @@ def p16440(c: Cast) -> None:
             c.bonus(defence, 2, kind="power", on=c.me, until=When.ENCOUNTER)
     elif face == 3:
         c.forces(2, on=c.me, until=When.ENCOUNTER)
+    else:
+        from combat_engine.engine.components import PowerPoints
+
+        pool = c.world.get(c.me, PowerPoints)
+        if pool is not None:
+            pool.points = min(pool.points + 2, max(pool.maximum, pool.points))
 
 
 @power(

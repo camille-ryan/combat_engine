@@ -142,8 +142,35 @@ def _failed_save(world: Any, me: int, ev: Any) -> bool:
     return ev.actor == me and not ev.saved
 
 
-def _made_save(world: Any, me: int, ev: Any) -> bool:
-    return ev.actor == me and ev.saved
+#: The two conditions p16040 names. The event carries no conditions at all,
+#: so the narrowing is checked on the effect that is still standing.
+_A_HOLD = frozenset({Condition.DAZED, Condition.STUNNED})
+
+
+def _the_hold(world: Any, me: int, against: str) -> Any:
+    """The dazing or stunning effect a saving throw was made against.
+
+    `SavingThrow.against` is `str(eff)` and nothing else, so the effect is
+    found by that rendering over the ones standing on the saver -- the route
+    `items/arms._my_save_against_hold` already takes.
+    """
+    for eff in world.effects.of(me):
+        if str(eff) == against and _A_HOLD & set(eff.conditions):
+            return eff
+    return None
+
+
+def _saved_a_hold(world: Any, me: int, ev: Any) -> bool:
+    """"You save against a dazing or stunning effect."
+
+    The narrowing is here and not in the body so a save against anything
+    else does not spend the daily.
+    """
+    return bool(
+        ev.actor == me
+        and ev.saved
+        and _the_hold(world, me, getattr(ev, "against", "")) is not None
+    )
 
 
 def _my_kill(world: Any, me: int, ev: Any) -> bool:
@@ -1192,15 +1219,29 @@ def p13213(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you save against a dazing or stunning effect",
-    on=Trigger(SavingThrow, _made_save, "you make a saving throw"),
-    todo=("SavingThrow.effect",),
+    on=Trigger(SavingThrow, _saved_a_hold, "you save against a daze or a stun"),
 )
 def p16040(c: Cast) -> None:
-    """The row is "was it a daze or a stun", "who laid it" and "lay it on
-    them instead" -- all three of which are the `Effect` that was saved
-    against, and the event carries only `against=str(eff)`, a rendering.
-    One symbol rather than two: the field is the effect, and its `source`
-    and its `conditions` come with it."""
+    """**Written: the effect is still standing when the save is announced.**
+
+    `SavingThrow` is announced *before* it is acted on -- its own docstring
+    says exactly that -- so the hold it names is still on the saver while
+    this row runs and `str(eff) == ev.against` finds it over
+    `world.effects.of`. The old marker wanted one field for three
+    questions, and the effect answers all three without it: "was it a daze
+    or a stun" is `eff.conditions`, "who laid it" is `eff.source`, and
+    "lay it on them instead" is `c.condition`.
+
+    Re-laid as the conditions it carries rather than by moving the effect:
+    the printed duration here is the end of *your* next turn, not whatever
+    the original ran on, so a fresh hold is the faithful reading."""
+    held = _the_hold(c.world, c.me, getattr(c.trigger, "against", ""))
+    if held is None:
+        return
+    foe = getattr(held, "source", None)
+    if foe is None or foe == c.me:
+        return
+    c.condition(*held.conditions, until=When.EONT, on=foe)
 
 
 @power(

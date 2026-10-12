@@ -56,6 +56,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
+    Mod,
     PowerUsed,
     ShortRested,
     TurnStart,
@@ -63,6 +64,7 @@ from combat_engine.engine import (
     World,
     get,
     power,
+    query,
 )
 
 #: The armour the resilience clause rules out, in the page's own wording --
@@ -197,7 +199,6 @@ def phase_of(c: Cast) -> str:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=("c.bonus(compute=)",),
 )
 def sorcerer_f0s0(c: Cast) -> None:
     """The source that cycles through three phases.
@@ -209,11 +210,20 @@ def sorcerer_f0s0(c: Cast) -> None:
     way of a miss, and becoming bloodied once advances the cycle -- stars
     wrapping back to sun, which is why `_PHASES` order is load-bearing.
 
-    Dropped, one clause: the phase of the moon gives "a bonus to AC equal to
-    the number of conscious enemies adjacent to you", and a modifier carries
-    the value it was laid with. `f2440` names that gap as
-    `c.bonus(compute=)` for the same reason. Its resistance is laid; the AC
-    is not, which under-grants rather than over-grants.
+    **The moon's AC is laid now, and `c.bonus(compute=)` was the wrong name
+    for the gap.** The clause is "a bonus to AC equal to the number of
+    conscious enemies adjacent to you", and the old note said a modifier
+    carries the value it was laid with. `Mod.roll` is the half that note
+    missed: it is "called once per time the modifier is read, which is once
+    per roll", so a crowd that changes between swings is counted at each
+    one. `c.bonus` only reaches it through a `dice` string, but a body may
+    build its own `Mod` and hand it to `effects.apply(mods=)` -- 103 call
+    sites in 65 files here already do -- so no `Cast` door was in the way.
+    Untyped, because the card prints no type word in front of "bonus".
+
+    `f2440` still names the symbol and is left alone: its other half is
+    `c.mark_penalty()`, so whether the same reasoning frees it is a question
+    about that row and not this one.
 
     The paragraph below is kept because its reasoning about the leg still
     holds and is the reason `chargen.BUILDS` is not on this marker.
@@ -265,6 +275,36 @@ def sorcerer_f0s0(c: Cast) -> None:
                        dtypes=(DamageType.FIRE, DamageType.RADIANT), on=foe)
 
     c.watch(TurnStart, burn, until=When.ENCOUNTER)
+
+    # The phase of the moon is worth whatever the crowd is, so the number is
+    # **read** at the roll rather than laid at arming: enemies close in and
+    # step away between swings, and `Mod.roll` is consulted once per read.
+    def crowd() -> int:
+        return sum(
+            1
+            for foe in c.enemies()
+            if query.conscious(c.world, foe) and c.adjacent_to(me, foe)
+        )
+
+    c.world.effects.apply(
+        me,
+        me,
+        When.ENCOUNTER,
+        label=f"{c.ref} moon AC",
+        mods=[
+            (
+                me,
+                Mod(
+                    what=AC.value,
+                    value=0,
+                    kind="untyped",
+                    label=c.ref,
+                    when=lambda ctx: phase_of(c) == "moon",
+                    roll=crowd,
+                ),
+            )
+        ],
+    )
 
     # The phase of the stars steps out of the way of a miss.
     def slip(ev: Any) -> None:
@@ -459,19 +499,39 @@ def elementalist_f2(c: Cast) -> None:
     keywords=ARCANE,
     requires=on_leg("air"),
     requires_text="needs the air specialty",
-    todo=("c.vulnerable(by=)",),
 )
 def elementalist_f2s0(c: Cast) -> None:
-    """Which type the bolt deals is on the leg, and the resistance is on the
-    parent, so this specialty is left holding one clause and it cannot be
-    said.
+    """Which type the bolt deals is on the leg and the resistance is on the
+    parent, so this specialty is left holding one clause: "on a hit, its
+    target gains vulnerable 3 to **your** elemental attacks until the end of
+    your next turn".
 
-    "Vulnerable 3 to **your** elemental attacks": `c.vulnerable` takes an
-    amount and a damage type with nothing on the attacker's side, and
-    vulnerability to the type is a larger sentence -- every other creature's
-    lightning would land harder too. With nothing else of its own, the row
-    is refused rather than offered as a rider that does nothing.
+    **Written.** The old note said `c.vulnerable` "takes an amount and a
+    damage type with nothing on the attacker's side", which predates #471:
+    `when=` keeps the entry as a triple on `Defences.vulnerable_when` and
+    `resolve.deal_damage` reads it beside resistance, against the same
+    damage context. So the scope is a gate on two keys that context already
+    carries -- `source` is who is dealing it and `power` is the row that
+    rolled it -- and the scope narrows to this sorcerer rather than making
+    every other creature's lightning land harder, which was the objection.
+
+    Scoped by **keyword and not by a list of refs**: the card says "your
+    elemental attacks", and `Keyword.ELEMENTAL` is what the class's rows
+    carry, the bolt included. No type is passed, because the vulnerability
+    is to the attacks rather than to a damage type.
     """
+    me = c.me
+
+    def mine(ctx: dict[str, Any]) -> bool:
+        if ctx.get("source") != me:
+            return False
+        rolled = get(str(ctx.get("power") or ""))
+        return rolled is not None and Keyword.ELEMENTAL in rolled.keywords
+
+    def exposed(ev: Hit) -> None:
+        c.vulnerable(3, until=When.EONT, on=ev.target, when=mine)
+
+    _on_bolt_hit(c, exposed)
 
 
 @power(

@@ -30,6 +30,7 @@ from combat_engine.engine import (
     DEFENCES,
     EACH_OTHER,
     ENCOUNTER,
+    FORT,
     FREE,
     INTERRUPT,
     MELEE,
@@ -318,7 +319,10 @@ def p11808(c: Cast) -> None:
     spirit = c.conjure(until=When.EONT, sustain=None)
     c.aura(1, on=spirit, until=When.EONT, label=c.ref)
 
-    where = c.world.get(spirit, Position).square
+    seat = c.world.get(spirit, Position)
+    if seat is None:
+        return
+    where = seat.square
 
     def dismissed() -> None:
         near = spread({where}, 1)
@@ -1123,14 +1127,31 @@ def p14176(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL],
-    dropped=("c.cover_from()",),
 )
 def p14177(c: Cast) -> None:
-    """The hide itself is `c.hide`; what is missing is the test the card
-    gates it on -- whether the square you stopped in gives partial cover or
-    partial concealment -- so the free Stealth check has no condition."""
+    """The gate is asked per enemy rather than per square, because every one
+    of its three halves is a fact about who is looking: `query.cover_between`
+    traces corner to corner from the attacker, `query.light_concealment` is
+    cancelled by that attacker's own senses, and `query.concealment_of` reads
+    the attack context. So "a square with partial cover or partial
+    concealment" is asked of each nonadjacent enemy and `c.hide(from_=)`
+    lays the hide against the ones it is true of -- which is also the
+    printed narrowing to nonadjacent enemies."""
+    from combat_engine.engine.types import Cover
+
     c.shift(1, who=c.me)
     c.move(c.speed_of(c.me), who=c.me)
+    for foe in c.enemies():
+        if c.distance(foe) <= 1:
+            continue
+        hidden = (
+            query.cover_between(c.world, foe, c.me) >= Cover.PARTIAL
+            or query.light_concealment(c.world, foe, c.me) >= Cover.PARTIAL
+            or query.concealment_of(c.world, c.me, {"attacker": foe})
+            >= Cover.PARTIAL
+        )
+        if hidden:
+            c.hide(from_=foe)
 
 
 @power(
@@ -1236,6 +1257,20 @@ def p14329(c: Cast) -> None:
 # -- x7_927: the flesh warper ------------------------------------------------
 
 
+def _also_hits(c: Cast, res: Any, defence: Any) -> bool:
+    """The roll already made, compared with a second defence.
+
+    A natural 20 hits whatever the number is and a natural 1 misses whatever
+    it is, which is the rule the resolver applies to the defence it rolled
+    against; anything else is the total against `query.defence`.
+    """
+    if res.natural == 20:
+        return True
+    if res.natural == 1:
+        return False
+    return res.total >= query.defence(c.world, c.target, defence)
+
+
 @power(
     "p15953",
     level=0,
@@ -1245,29 +1280,27 @@ def p14329(c: Cast) -> None:
     reach=Ranged(5),
     target=ANY_CREATURE,
     keywords=[Keyword.SHADOW, Keyword.IMPLEMENT, Keyword.FEAR],
-    todo=("Attack(vs=several)",),
+    attack=Attack((Ability.INT, Ability.WIS, Ability.CHA), vs=FORT),
 )
 def p15953(c: Cast) -> None:
-    """One hole, and the row is nothing without it: a single attack roll
-    compared against Fortitude, Reflex **and** Will, each with its own Hit
-    line. Nothing re-aims a roll that has already been made at a second
-    defence.
+    """"You make a single attack roll and use it against each defense", so
+    there is one roll and three comparisons -- not three attacks. Fortitude
+    is the one the header declares and the resolver announces; `_also_hits`
+    compares the same total with the other two through `query.defence`,
+    which reads the live value including level, modifiers and conditions.
 
-    **`c.ability_for(ref)` is off the marker and was never the hold.** The
-    caster's choice of Intelligence, Wisdom or Charisma is `c.choose` plus
-    `c.rolls_with`, both of which exist -- `ability_for` *reads* which
-    ability a line rolls and choosing is a different question. So the ability
-    half is one line whenever the row has an attack to hang it on, and the
-    marker now names only what is missing.
-
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    The printed choice of Intelligence, Wisdom or Charisma is the tuple
+    branch of `Attack.ability_for`, which resolves it per caster to whichever
+    the holder is best at -- the pick a player would make, and the only one
+    makeable without asking mid-roll.
     """
+    res = c.strike()
+    if res:
+        c.prone()
+    if _also_hits(c, res, REF):
+        c.grants_advantage(until=When.EONT)
+    if _also_hits(c, res, WILL):
+        c.push(c.speed_of(c.target))
 
 
 @power(
@@ -1381,11 +1414,17 @@ def p15956(c: Cast) -> None:
     keywords=[Keyword.PSIONIC, Keyword.ELEMENTAL, Keyword.WEAPON],
     trigger="an adjacent enemy misses you with a melee attack",
     on=Trigger(Miss, both(targets_me, by_melee), "an adjacent enemy misses you"),
-    todo=("c.best_ability()",),
+    attack=Attack(Pick.HIGHEST, vs=REF),
 )
 def p16065(c: Cast) -> None:
-    """"Highest ability modifier vs. Reflex" -- the whole row is the attack
-    and its riders, so there is nothing to keep without it."""
+    """"Highest ability modifier vs. Reflex" is `Pick.HIGHEST`, resolved per
+    caster in `Attack.ability_for` -- the theme spelling, since a theme does
+    not know which class took it. The damage line prints no ability modifier
+    beside the weapon dice, so none is added."""
+    if c.strike():
+        c.damage(c.w())
+        c.slide(2)
+        c.grants_advantage(until=When.EONT)
 
 
 @power(
@@ -1528,17 +1567,19 @@ def _arcane_power(ref: str) -> bool:
     reach=CloseBurst(2),
     target=ONE_ALLY,
     keywords=[Keyword.ARCANE],
-    dropped=("c.resist_from()",),
 )
 def p16372(c: Cast) -> None:
-    """The damage context carries `power` but no attacker, so "your arcane
-    powers" can only be narrowed to arcane ones -- an ally caught by a
-    second wizard's fireball is spared as well."""
+    """"**Your** arcane attack powers" is both halves of a gate on the damage
+    context: `power` for the keyword and `source` for whose blow it is.
+    `resolve` builds `resist_ctx` as `{**dmg_ctx, ...}`, and `dmg_ctx` has
+    carried `source` since #302 -- so the ally is no longer spared a second
+    caster's burst as well as this one's."""
+    mine = c.me
     c.resist(
         1000,
         on=c.target,
         until=When.EONT,
-        when=lambda ctx: _arcane_power(ctx["power"]),
+        when=lambda ctx: ctx.get("source") == mine and _arcane_power(ctx["power"]),
     )
 
 
@@ -1558,7 +1599,15 @@ def p16372(c: Cast) -> None:
 def p16373(c: Cast) -> None:
     """"As many of the damage dice as you like, and you must use the second
     result" -- `c.reroll_damage` is the other sentence, roll twice and keep
-    the higher, and using it here would be a strictly better power."""
+    the higher, and using it here would be a strictly better power.
+
+    `c.reroll_ones(below=)` is not it either, for two reasons that are both
+    about *when*: it is a standing hold read inside `_roll_damage`, and this
+    is a no-action daily answering a roll already made. Its own docstring
+    names the hole -- "`DamageRolled` carries a total with no dice behind
+    it" -- so there is nothing on the event to reroll, whatever the
+    threshold. What the row wants is the faces on the event and a reactive
+    door onto them."""
 
 
 # -- x7_986: the underdark hand ----------------------------------------------
@@ -1593,9 +1642,13 @@ def p16433(c: Cast) -> None:
     todo=("c.cover_from()",),
 )
 def p16434(c: Cast) -> None:
-    """Both halves hang on the cover: nothing grants partial cover from a
-    piece of terrain, and the second clause fires only while you have it, so
-    writing the second alone would be a rider that is never true."""
+    """Both halves hang on the cover, and the half that is missing is
+    *granting* it. `query.cover_between` reads cover by tracing two
+    positions, which is what `p14177` needed and now uses; there is no
+    modifier key a row can write to say "you have partial cover", the way
+    `c.conceal` writes one for concealment. Standing next to blocking
+    terrain gives no traced cover from most angles, so the second clause
+    written alone would be a rider that is almost never true."""
 
 
 @power(
@@ -1846,14 +1899,21 @@ def p16539(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
-    dropped=("c.best_ability()", "c.cannot_speak()"),
+    attack=Attack(Pick.HIGHEST, plus=2, vs=WILL),
+    dropped=("c.cannot_speak()",),
 )
 def p16619(c: Cast) -> None:
-    """A named hold so the thing can be seen and saved against. What it
-    should stop -- speech, and any effect delivered by it -- is not a
-    condition the engine has, and the attack is "highest ability modifier"
-    besides."""
-    c.effect(c.ref, until=When.SAVE_ENDS, on=c.target)
+    """"Highest ability modifier + 2 vs. Will" is `Pick.HIGHEST` with
+    `plus=2`, resolved per caster. What the hold should stop -- speech, and
+    any effect delivered by it -- is still not a condition the engine has, so
+    the named hold stands in for it: it can be seen and saved against.
+
+    The card prints the clause as an Effect rather than a Hit, beside an
+    attack line that then decides nothing; it is hung on the hit here,
+    because a roll with no consequence is the less likely reading of the two.
+    Worth confirming against the page."""
+    if c.strike():
+        c.effect(c.ref, until=When.SAVE_ENDS, on=c.target)
 
 
 @power(
