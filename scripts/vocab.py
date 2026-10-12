@@ -53,15 +53,120 @@ GROUPS = [
 ]  # fmt: skip
 
 
+def _find(words: list[str]) -> int:
+    """Search what the code *says it does*, not what it is called.
+
+    **This is the instrument for the commonest and most expensive mistake in
+    this project**: filing a gap for something that already exists under
+    another name. `content/CLAUDE.md` has warned about it in as many words
+    for a long time -- "most gaps filed here have turned out to exist under
+    another name" -- and it kept happening, because the rule asks you to
+    search and the only search was `grep` over a name you do not know.
+
+    349 verbs across 10,486 lines of `cast.py`, with near-synonyms
+    throughout: `as_basic`/`no_basic`/`counts_as`, `instead_of`/
+    `instead_of_now`/`pre_empt`, `extend_move`/`extend_shift`. Knowing a
+    facility exists does not tell you what it is called.
+
+    Seven families in one session were marked for a gap that was already
+    filled -- `c.contract` for "no contraction mechanism", `rage.raging()`
+    for "nothing says a barbarian is raging", `race:<ref>` on
+    `Build.choices` for "a racial choice is recorded nowhere". Those three
+    live in three different places, which is why this searches wider than
+    `Cast`:
+
+    * `Cast` methods -- the verb surface;
+    * `query`, `triggers`, `dsl` functions -- the readers;
+    * `components` fields and their `#:` notes -- where state lives;
+    * module-level helpers in `content/` -- `rage.raging`, `_holding_ref`.
+
+    Matching is on the **docstring and the surrounding note**, not the name.
+    A name search is what already failed.
+    """
+    import re as _re
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parents[1]
+    wanted = [w.lower() for w in words]
+
+    def hit(text: str) -> bool:
+        low = text.lower()
+        return all(w in low for w in wanted)
+
+    found: list[tuple[str, str, str]] = []
+
+    # Cast, and the three reader modules, through their own docstrings.
+    import combat_engine.engine.dsl as _dsl
+    import combat_engine.engine.query as _query
+    import combat_engine.engine.triggers as _triggers
+    from combat_engine.engine.cast import Cast as _Cast
+
+    for label, obj in (("c.", _Cast), ("query.", _query),
+                       ("triggers.", _triggers), ("dsl.", _dsl)):
+        for name, member in sorted(vars(obj).items()):
+            if name.startswith("__") or not callable(member):
+                continue
+            doc = inspect.getdoc(member) or ""
+            if hit(f"{name} {doc}"):
+                first = doc.strip().splitlines()[0] if doc.strip() else "(no docstring)"
+                found.append((f"{label}{name}", first[:96], "verb"))
+
+    # Component fields, whose `#:` notes say what the state is for.
+    comp = (root / "src/combat_engine/engine/components.py").read_text()
+    for blk in _re.split(r"\n(?=@dataclass)", comp):
+        cls = _re.search(r"\nclass (\w+)", blk)
+        if not cls:
+            continue
+        for m in _re.finditer(r"((?:\s*#:[^\n]*\n)+)\s*(\w+)\s*:", blk):
+            note, field = m.group(1), m.group(2)
+            if hit(f"{field} {note}"):
+                line = " ".join(note.replace("#:", "").split())
+                found.append((f"{cls.group(1)}.{field}", line[:96], "state"))
+
+    # Helpers the content tree shares between its own rows.
+    for path in sorted((root / "src/combat_engine/content").rglob("*.py")):
+        if "__pycache__" in str(path):
+            continue
+        src = path.read_text(errors="replace")
+        for m in _re.finditer(r'\ndef (\w+)\([^)]*\)[^:]*:\n\s+"""(.*?)"""', src, _re.S):
+            name, doc = m.group(1), m.group(2)
+            if hit(f"{name} {doc}"):
+                rel = path.relative_to(root / "src/combat_engine/content")
+                first = " ".join(doc.split())[:88]
+                found.append((f"{rel.as_posix().removesuffix('.py').replace('/', '.')}.{name}",
+                              first, "helper"))
+
+    if not found:
+        print(f"nothing in the vocabulary mentions {' + '.join(words)!r}.")
+        print("That is weak evidence of absence -- try one word, or a synonym.")
+        return 1
+    print(f"{len(found)} place(s) mention {' + '.join(words)}:\n")
+    for kind in ("verb", "state", "helper"):
+        rows = [f for f in found if f[2] == kind]
+        if not rows:
+            continue
+        print(f"  -- {kind} --")
+        for name, blurb, _ in rows[:24]:
+            print(f"  {name:46} {blurb}")
+        if len(rows) > 24:
+            print(f"  ... and {len(rows) - 24} more")
+        print()
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    ap.add_argument("--find", nargs="+", metavar="WORD",
+                    help="what already does this? searches docstrings, not names")
     ap.add_argument("--brief", action="store_true", help="signatures only")
     ap.add_argument("--header", action="store_true", help="the @power arguments")
     ap.add_argument("--examples", action="store_true", help="only the worked rows")
     args = ap.parse_args()
 
+    if args.find:
+        return _find(args.find)
     if args.header:
         _header()
         return 0
