@@ -3502,6 +3502,26 @@ def long_rest(out: Result) -> None:
              "and the long rest cleared what was spent, which is the half"
              " that makes 'per day' mean something")
 
+    # **The daily allowance, which is what "per day" was decided for.** The
+    # counter lives on `story.Sheet` so it outlives a fight; these are the
+    # two rules that make it a *day* rather than an encounter.
+    from combat_engine.story import Party, Sheet
+
+    sheet = Sheet(cls="artificer", level=1)
+    party = Party(sheets=[sheet])
+    sheet.per_day["cf:artificer-f0"] = 1
+    party.rest(extended=False)
+    out.that(sheet.per_day.get("cf:artificer-f0") == 1,
+             "a short rest does NOT give a daily allowance back -- the"
+             " control that separates per-day from per-encounter, and the"
+             " reason `Powers.used` was the wrong counter")
+    party.rest(extended=True)
+    out.that(not sheet.per_day,
+             "and a long rest does, which is what 'per day' was decided to"
+             " mean")
+    out.that(Sheet(cls="x", per_day={"r": 1}).per_day_left("r", 1) == 0,
+             "an allowance spent to its limit reads as nothing left")
+
 
 def disease(out: Result) -> None:
     """"...and the target contracts `x5_23`." 47 rows printed this. #389.

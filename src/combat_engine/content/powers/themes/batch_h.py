@@ -691,7 +691,7 @@ def p15893(c: Cast) -> None:
 @power(
     "p15894", level=10, cls=X7_917, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    dropped=("Weapon.brutal",),
+    dropped=("Weapon.brutal", "story.rest(hours=)"),
 )
 def p15894(c: Cast) -> None:
     """The slow is written and is gated on the aura rather than on a clock,
@@ -702,12 +702,17 @@ def p15894(c: Cast) -> None:
     already use (`f2099`, and `c.brutal()` on `i1467x1`, which are the same
     mechanic under two names).
 
-    **`events.ExtendedRested` dropped from the marker, not satisfied by it.**
-    That event landed, and it does not help: the Special line is *"you
-    require only 4 hours to gain the benefits of an extended rest"*, which
-    is a **duration** and not a moment. No clock exists for a rest to take
-    six hours or four, and shortening one changes nothing inside a fight --
-    so the clause has no combat meaning rather than a missing mechanism.
+    **`events.ExtendedRested` was the wrong symbol and I replaced it with a
+    worse one first.** That event landed and does not help: the Special line
+    is *"you require only 4 hours to gain the benefits of an extended
+    rest"*, which is a **duration** rather than a moment. I then wrote that
+    off as having no combat meaning, and Camille's correction is that it has
+    meaning in the **story engine** -- where a day is the unit and how long
+    a rest takes decides how many fit in one.
+
+    `story.Party.rest(extended=)` is where it belongs, and that method's own
+    docstring already says "five minutes, or six hours" -- so the length is
+    known in prose and is not data. `story.rest(hours=)` is the gap.
     """
     c.aura(1, until=When.EONT, sustain=MINOR)
 

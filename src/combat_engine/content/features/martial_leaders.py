@@ -69,6 +69,14 @@ _DEFENCES = (AC, FORT, REF, WILL)
 #: printed effect happens *during* a rest has nowhere to hang.
 _REST = "events.ShortRested"
 
+#: The artificer's daily empowerments, and the ref the count is keyed on.
+#: One at the start of a day; the card adds one per milestone and nothing
+#: counts those (`c.milestone()`, six rows). A constant rather than a number
+#: written twice, because `cf:artificer-f0` owns the allowance and the two
+#: `-f0s*` options spend from it.
+EMPOWERMENTS = 1
+EMPOWERMENTS_REF = "cf:artificer-f0"
+
 
 # -- artificer --------------------------------------------------------------
 
@@ -82,21 +90,41 @@ _REST = "events.ShortRested"
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=(_REST,),
+    dropped=("c.milestone()",),
 )
 def artificer_empower(c: Cast) -> None:
     """The per-day allowance the two `-f0s*` options spend.
 
-    Not narrative -- both options it pays for have a reading in a fight --
-    but the allowance is granted and spent only inside a rest, and nothing
-    announces one. `turns.short_rest` runs and restores encounter powers;
-    it emits nothing, so a row that is supposed to *do* something while it
-    runs has no moment to be called at.
+    **Written.** Three things had to exist and now all three do: a rest that
+    announces itself (`events.ShortRested`), a day for "per day" to mean --
+    Camille's answer, a long rest -- and somewhere for the count to live
+    between fights.
 
-    `docs/blocked.json`'s `cf:artificer-items` named the item half of this
-    before `Gear.worn` and `ItemPowerUsed` existed; those two have landed
-    since, which is why that entry is out of date and this is not.
+    That last one existed already and could not be reached. `story.Sheet`
+    has carried `per_day: dict[str, int]` and `per_day_left(ref, limit)` for
+    a while, and its own note says "this is the counter they wanted; the rows
+    still have to read it". A row runs on a board and has a `Cast`, not a
+    sheet -- so the gap was the bridge, not the counter. `Powers.per_day`
+    mirrors it in and out the way `Sheet.spent`/`Powers.used` already did,
+    and `c.per_day_left`/`c.spend_per_day` are the reading.
+
+    **The allowance is 1.** "You begin each day with the ability to empower a
+    magic item, and you gain one additional arcane empowerment for each
+    milestone you reach" -- and nothing counts milestones, which is
+    `c.milestone()`, already a symbol on six other rows, three of which
+    record the same thing independently. So the dropped half makes this
+    under-grant at a milestone rather than over-grant before one.
+
+    This row holds the count and spends nothing. The spending is
+    `cf:artificer-f0s0`'s and `-f0s1`'s, each of which asks this allowance
+    first -- which is why the limit is a module constant rather than a
+    number written twice.
     """
+    # Nothing to do at encounter start: the allowance is a count read at the
+    # rest, and `Powers.per_day` already holds whatever the day has spent.
+    # Declared so the count has an owner and a ref to be keyed on.
+    c.note(f"{c.ref}: {c.per_day_left(EMPOWERMENTS_REF, EMPOWERMENTS)}"
+           f" of {EMPOWERMENTS} empowerment(s) left today")
 
 
 @power(
@@ -133,6 +161,12 @@ def artificer_empower_reservoir(c: Cast) -> None:
 
     def bank(ev: Any) -> None:
         if getattr(ev, "actor", None) != me:
+            return
+        # **The reservoir costs an empowerment.** `cf:artificer-f0` holds the
+        # day's allowance and this is one of the two things it pays for, so
+        # banking without spending would make the feature free. The spend
+        # answers False when the day is out, and then nothing is banked.
+        if not c.spend_per_day(EMPOWERMENTS_REF, EMPOWERMENTS):
             return
         # The thing empowered is what this artificer is holding. A party
         # member's weapon would want `cf:artificer-f0`'s allowance to say

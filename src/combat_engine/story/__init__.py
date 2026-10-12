@@ -332,6 +332,11 @@ def _wear(world: World, eid: int, sheet: Sheet) -> None:
         for ref, round_ in sheet.spent.items():
             if ref in powers.known:
                 powers.used[ref] = round_
+        # The day's allowances, unfiltered: a `per_day` count is keyed on the
+        # row that *grants* the allowance, which for a class feature is not in
+        # `powers.known` at all. Filtering it the way `spent` is filtered
+        # would drop every one of them.
+        powers.per_day = dict(sheet.per_day)
 
 
 def harvest(world: World, party: Party) -> None:
@@ -370,6 +375,7 @@ def harvest(world: World, party: Party) -> None:
         powers = world.get(eid, Powers)
         if powers is not None:
             sheet.spent = dict(powers.used)
+            sheet.per_day = dict(powers.per_day)
 
 
 def mixed(pool: list[str]) -> list[str]:

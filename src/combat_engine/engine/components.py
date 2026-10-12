@@ -705,6 +705,16 @@ class Powers:
     last_round: dict[str, int] = field(default_factory=dict)
     #: Recharge powers that came back up this turn, and those still down.
     recharging: dict[str, int] = field(default_factory=dict)
+    #: How many times each row has been used **today**, by ref. The board
+    #: half of `story.Sheet.per_day`, mirrored in by `story._wear` and back
+    #: out by `story.harvest`, exactly as `used`/`spent` already are.
+    #:
+    #: `used` is per encounter and both rests clear it, so "a number of times
+    #: per day" had nothing to count against and those rows were written as
+    #: once per fight. The counter existed on the sheet and could not be
+    #: reached from inside a fight, which is where a row runs. #507-adjacent;
+    #: the allowance family is its own thing.
+    per_day: dict[str, int] = field(default_factory=dict)
     #: What this creature's basic attack is. A monster points at one of its
     #: own abilities; everyone else uses the engine's melee basic.
     basic: str = "mba"

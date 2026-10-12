@@ -6011,6 +6011,42 @@ class Cast:
             on_end=[settle],
         )
 
+    def per_day_left(self, ref: str, limit: int) -> int:
+        """How many of a daily allowance are left today, for this creature.
+
+        "A number of times per day" is a count that outlives an encounter,
+        and `Powers.used` is not it -- both rests clear that, so a row
+        counting against it is once per fight. `story.Sheet.per_day` is the
+        real counter and its own note says "the rows still have to read it";
+        this is the reading, off the board-side mirror.
+
+        `limit` is what the card prints, because the card is the only place
+        it is stated and it is often a modifier rather than a constant.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me, Powers)
+        if known is None:
+            return limit
+        return max(0, limit - known.per_day.get(ref, 0))
+
+    def spend_per_day(self, ref: str, limit: int) -> bool:
+        """Take one from a daily allowance. False when none is left.
+
+        Returns whether the spend happened, so a row can gate the thing it
+        was paying for -- and a row that ignores the answer has bought
+        something for free, which is why this is not a bare increment.
+        """
+        from .components import Powers
+
+        if self.per_day_left(ref, limit) <= 0:
+            return False
+        known = self.world.get(self.me, Powers) or self.world.add(
+            self.me, Powers()
+        )
+        known.per_day[ref] = known.per_day.get(ref, 0) + 1
+        return True
+
     def exposed(
         self, ref: str = "", *, on: int | None = None, pending: bool = False
     ) -> bool:
