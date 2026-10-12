@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from combat_engine.content.monsters.level_11.skirmishers_sc import _through_them
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -1143,6 +1144,12 @@ def p16591(c: Cast) -> None:
 
 # --------------------------------------------------------------- x7_1018 --
 
+#: p16677's second clause is a permission handed to p16675's shift for the
+#: rest of the turn, so the two rows have to agree on one label. A bare
+#: `c.effect` is how one row tells another something with no mechanical
+#: content of its own, and `c.suffering` reads it back.
+_THROUGH = "p16677:through"
+
 
 @power("p16675", level=0, cls="x7_1018", usage=ENCOUNTER, action=MOVE,
        reach=PERSONAL, target=SELF)
@@ -1150,8 +1157,19 @@ def p16675(c: Cast) -> None:
     """The Stealth check is gated on actually having cover or concealment
     at the end of the shift, which is asked of the board rather than
     assumed -- `query.cover_between` needs somebody to measure from, so the
-    check is against whoever can still see the caster."""
-    c.shift(c.speed_of(c.me), who=c.me)
+    check is against whoever can still see the caster.
+
+    The shift reads p16677's hold, because that card's whole second clause
+    is a permission granted to *this* row's movement for the rest of the
+    turn. With the hold up the shift goes through `movement.overrun`, the
+    only op that crosses an occupied square, at `kind="shift"` so no
+    opportunity window opens; without it nothing changes.
+    """
+    if c.me in c.suffering(_THROUGH, include_self=True):
+        if query.can_shift(c.world, c.me):
+            _through_them(c, c.speed_of(c.me), kind="shift")
+    else:
+        c.shift(c.speed_of(c.me), who=c.me)
     watchers = c.enemies()
     if not watchers:
         return
@@ -1185,18 +1203,27 @@ def _two_adjacent(world: World, eid: int) -> bool:
 
 @power("p16677", level=6, cls="x7_1018", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, requires=_two_adjacent,
-       requires_text="at least two creatures within 1 square that can see and hear you",
-       dropped=("c.move_through()",))
+       requires_text="at least two creatures within 1 square that can see and hear you")
 def p16677(c: Cast) -> None:
     """One Bluff check against the best passive Insight adjacent, because
-    beating one creature beats all of them. The rider on the theme's own
-    move -- shifting through enemy spaces -- has no verb."""
+    beating one creature beats all of them.
+
+    The second clause is a rider on p16675, the theme's own move power and
+    the only one of the four that shifts. It is laid as a hold until the end
+    of this turn and read there -- "on the same turn after using this power"
+    is a window, not an effect on anything -- and p16675 then shifts with
+    `movement.overrun` instead of `c.shift`. The permission cannot live on
+    this row: nothing a modifier could say reaches the destinations
+    `movement.reachable` offers, so the row that moves is the row that has
+    to ask.
+    """
     near = [w for w in c.within(1) if w != c.me]
     if not near:
         return
     told = c.check("bluff")
     if any(told.total > c.passive("insight", of=w) for w in near):
         c.hide(until=When.ENCOUNTER)
+    c.effect(_THROUGH, until=When.EOT, on=c.me)
 
 
 @power("p16678", level=10, cls="x7_1018", usage=DAILY, action=STANDARD,

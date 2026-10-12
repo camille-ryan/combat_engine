@@ -42,6 +42,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.monsters.level_11.skirmishers_sc import _through_them
 from combat_engine.content.powers.avenger.oath import oath_target
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.engine import (
@@ -145,6 +146,25 @@ def _defences(c: Cast, value: int, **kw: Any) -> None:
     the set, and writing one would not be read by `query.defence`."""
     for d in _ALL_DEFENCES:
         c.bonus(d, value, **kw)
+
+
+def _shift_through(c: Cast, squares_: int) -> None:
+    """A shift of a printed length that may cross occupied squares.
+
+    `c.shift` cannot be told to do this: `movement.shift(share=True)` lands
+    *in* somebody's square rather than passing over it, and the destinations
+    `c.shift` offers come from `movement.reachable`, which routes a walk
+    around bodies. `movement.overrun` is the one op that walks through them,
+    and `kind="shift"` is what keeps it a shift -- `step` opens no
+    opportunity window for a kind in `movement._SAFE`. `_through_them` is
+    the settled wrapper for the pair.
+
+    The one thing it leaves out is `query.can_shift`, which `movement.shift`
+    asks and `overrun` does not, so a creature barred from shifting is
+    refused here instead.
+    """
+    if query.can_shift(c.world, c.me):
+        _through_them(c, squares_, kind="shift")
 
 
 def _foe(c: Cast) -> int | None:
@@ -1300,11 +1320,19 @@ def i2391x1(c: Cast) -> None:
 
 
 @power("i2434p1", level=3, cls=ITEM, usage=DAILY, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.move_through()",))
+       reach=PERSONAL, target=SELF)
 def i2434p1(c: Cast) -> None:
-    """Crossing an occupied square is not something a shift can be told
-    to do; the distance is the half that plays."""
-    c.shift(3)
+    """Whole card now: `_shift_through` is `movement.overrun` with
+    `kind="shift"`, which crosses occupied squares without opening a
+    window, and its shuffle into a free square at the end is the printed
+    "you must end your move in a legal space".
+
+    The walk is a straight line to the chosen square, so the three squares
+    are spent exactly -- a line is as long as the distance to its end -- but
+    a route that bends round a corner is not available. That is
+    `overrun`'s shape, not this card's, and it is the same limit the five
+    monster rows that print this line carry."""
+    _shift_through(c, 3)
 
 
 @power("i2460p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
@@ -2847,9 +2875,12 @@ def i2541x1(c: Cast) -> None:
 
 
 @power("i2541p1", level=7, cls=ITEM, usage=DAILY, action=MOVE,
-       reach=PERSONAL, target=SELF, dropped=("c.move_through()",))
+       reach=PERSONAL, target=SELF)
 def i2541p1(c: Cast) -> None:
-    c.shift(max(1, c.speed_of() // 2))
+    """Half the speed, crossing enemies' squares: see `_shift_through`. The
+    floor of one square is this file's, not the card's -- half of a speed of
+    1 is nothing to spend a daily on."""
+    _shift_through(c, max(1, c.speed_of() // 2))
 
 
 @power("i2725x1", level=7, cls=ITEM, action=ActionType.NONE,

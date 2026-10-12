@@ -137,6 +137,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Defences
 from combat_engine.engine.durations import keywords_of
+from combat_engine.engine.movement import overrun
 
 ITEM = "item"
 
@@ -1763,35 +1764,67 @@ def i686p1(c: Cast) -> None:
             dtype=DamageType.FIRE)
 
 
-def _beside_something_bigger(world: World, eid: int) -> bool:
-    """"Adjacent to a creature whose size category is larger than yours."
+def _something_bigger(world: World, eid: int) -> int | None:
+    """The adjacent creature of a larger size category, if there is one.
 
     `Size` is a `StrEnum`, so `>` on the values compares spelling; `.order`
-    is the sequence.
+    is the sequence. The row needs the creature and the gate needs only the
+    answer, so the search is in one place and the gate reads it.
     """
     from combat_engine.engine import query
 
     mine = world.get(eid, Position)
     if mine is None:
-        return False
+        return None
     for other in query.creatures(world):
         theirs = world.get(other, Position)
         if other == eid or theirs is None:
             continue
         if query.adjacent(world, eid, other) and theirs.size.order > mine.size.order:
-            return True
-    return False
+            return other
+    return None
+
+
+def _beside_something_bigger(world: World, eid: int) -> bool:
+    """"Adjacent to a creature whose size category is larger than yours.\""""
+    return _something_bigger(world, eid) is not None
 
 
 @power("i901p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MOVE,
        reach=PERSONAL, target=SELF,
        requires=_beside_something_bigger,
-       requires_text="must be adjacent to a larger creature",
-       dropped=("c.move_through()",))
+       requires_text="must be adjacent to a larger creature")
 def i901p1(c: Cast) -> None:
-    """The shift is exact; entering the larger creature's space during it
-    is a movement permission nothing grants."""
-    c.shift(5)
+    """Whole card now. `movement.overrun` is the only op that crosses an
+    occupied square, which is the printed permission to enter the larger
+    creature's space on the way, and `kind="shift"` keeps it a shift --
+    `step` opens no opportunity window for a kind in `movement._SAFE`.
+
+    The destination is *filtered* rather than ranked, because the card makes
+    "a square adjacent to the larger creature" a condition and not a
+    preference; `c.shift(toward=)` only sorts by it. Gathered off the grid
+    rather than from `movement.reachable`, which routes around bodies and so
+    would never offer the far side of the creature being stepped through --
+    the same reason `_trample_to` does it this way. Occupied squares are left
+    out, which is the move ending somewhere legal.
+    """
+    big = _something_bigger(c.world, c.me)
+    if big is None or not query.can_shift(c.world, c.me):
+        return
+    here = query.squares(c.world, c.me)
+    beside = spread(query.squares(c.world, big), 1)
+    options = sorted(
+        sq
+        for sq in (spread(here, 5) - here) & beside
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    )
+    if not options:
+        return
+    overrun(
+        c.world, c.me,
+        c.world.decide(c.me, "shift", options, f"{c.ref}: shift beside"),
+        kind="shift",
+    )
 
 
 @power("i972x1", level=4, cls=ITEM, action=ActionType.NONE,
