@@ -28,9 +28,13 @@ these rows:
   heroic number is written.
 
 Recurring gaps, each named with the symbol it wants rather than
-approximated: `c.reshape_area()`, `c.no_teleport()`, `c.kill()` and
-`c.darkvision()`. "Ongoing 5 fire **and** necrotic damage" is one number
-of two types and not two numbers, and `c.ongoing(dtypes=)` is it.
+approximated: `c.reshape_area()`, `c.kill()` and `c.darkvision()`.
+"Ongoing 5 fire **and** necrotic damage" is one number of two types and
+not two numbers, and `c.ongoing(dtypes=)` is it.
+
+`c.no_teleport()` was on that list and was never the gap: "cannot use
+teleportation powers" is `c.forbid(keyword=Keyword.TELEPORTATION)`, and
+what remains unsayable is only being another power's *target*.
 
 Three gaps this file recorded in an earlier wave have since closed, and
 the rows that named them are written:
@@ -1570,11 +1574,22 @@ def i2908x1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit an enemy with a primal implement power using this totem",
-    todo=("c.no_teleport()",),
+    on=HIT_BY_ME,
+    dropped=("c.untargetable(keyword=)",),
 )
 def i2908p1(c: Cast) -> None:
-    """`c.forbid` takes one named row away; barring a whole keyword, in
-    both directions, is the thing nothing says."""
+    """Barring a whole keyword *is* said: `c.forbid(keyword=)` refuses every
+    row the creature has that carries the keyword, which is the first half
+    of the printed line.
+
+    The second half is a different sentence and is still missing -- being
+    the *target* of somebody else's teleportation power. `c.forbid` takes
+    rows away from the creature it sits on, so it cannot refuse an ally's
+    power that names this creature."""
+    foe = _struck(c)
+    if foe is None:
+        return
+    c.forbid(keyword=Keyword.TELEPORTATION, on=foe, until=When.SAVE_ENDS)
 
 
 @power(

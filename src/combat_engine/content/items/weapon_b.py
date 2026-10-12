@@ -1886,14 +1886,15 @@ def i691p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with an attack using the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    dropped=("c.no_teleport()",),
 )
 def i828p1(c: Cast) -> None:
-    """Barring one mode of movement cannot be said: `c.no_walk` takes away
-    walking and nothing takes away a blink."""
+    """"Cannot teleport" is `c.forbid(keyword=Keyword.TELEPORTATION)`, the
+    half of that verb that bars rows *having* the keyword. It hangs on the
+    aberrant branch and on the restraint's own clock, as printed."""
     c.dazed(until=When.EONT)
     if "aberrant" in c.kinds_of():
         c.condition(Condition.RESTRAINED, until=When.EONT)
+        c.forbid(keyword=Keyword.TELEPORTATION, until=When.EONT)
 
 
 @power(

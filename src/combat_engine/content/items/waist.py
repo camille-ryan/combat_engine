@@ -1283,10 +1283,30 @@ def i733x1(c: Cast) -> None:
 
 @power("i1341x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
-       todo=("c.no_teleport()",))
+       trigger="you hit an enemy with an attack using this ammunition",
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
+       dropped=("c.no_teleport_within()",))
 def i1341x1(c: Cast) -> None:
-    """Nothing bars a creature from teleporting, and nothing fences off the
-    squares around one: `c.immovable` refuses forced movement only."""
+    """The enemy's own half is `c.forbid(keyword=Keyword.TELEPORTATION)` --
+    the "powers that have the keyword" half of that verb -- on the target's
+    own clock, because the printed duration is the end of *its* next turn.
+
+    The second half is still missing and is a different mechanism: fencing
+    off the squares around a creature against anybody's teleport, following
+    it as it moves. Nothing refuses a teleport by where it lands.
+
+    One hold per creature, refreshed rather than stacked: a quiver is shot
+    round after round, and `Powers.forbidden_keywords` is an uncounted set,
+    so an older hold expiring would lift the newer shot's bar."""
+    if not c.ammunition():
+        return
+    foe = c.target
+    if foe is None:
+        return
+    for eff in list(c.world.effects.of(foe)):
+        if eff.source == c.me and eff.label.startswith(f"{c.ref} forbids"):
+            c.world.effects.end(eff, "a later shot replaces it")
+    c.forbid(keyword=Keyword.TELEPORTATION, on=foe, until=When.EOTNT)
 
 
 @power("i551x1", level=9, cls=ITEM, action=ActionType.NONE,

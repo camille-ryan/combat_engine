@@ -515,7 +515,6 @@ _M1589_PINNED: dict[int, Effect] = {}
     reach=Ranged(20),
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=18),
-    dropped=("c.no_teleport()",),
 )
 def m1589a4(c: Cast) -> None:
     """A gaze that pins one creature at a time.
@@ -525,13 +524,23 @@ def m1589a4(c: Cast) -> None:
 
     "The effect ends if it uses this on another target" is `_release_earlier`
     -- the printed sentence is about which creature is held, not about the
-    row being unavailable while somebody is. The teleport half is dropped:
-    nothing bars a teleport, and `c.immovable` is push, pull and slide.
+    row being unavailable while somebody is. It matches on the label, which
+    is the row's ref, so only the slow is found; the teleport bar hangs off
+    that hold and goes with it.
+
+    "Cannot teleport" is `c.forbid(keyword=Keyword.TELEPORTATION)`, the half
+    of that verb that bars rows *having* the keyword. Hung on the slow's
+    `on_end` so the printed "save ends both" is one saving throw.
     """
     if not c.strike():
         return
     _release_earlier(c, c.ref)
-    c.slowed(until=When.SAVE_ENDS)
+    hold = c.slowed(until=When.SAVE_ENDS)
+    barred = c.forbid(keyword=Keyword.TELEPORTATION, until=When.SAVE_ENDS)
+    if hold is not None and barred is not None:
+        hold.on_end.append(
+            lambda: c.world.effects.end(barred, "the gaze ended")
+        )
 
 
 @power(

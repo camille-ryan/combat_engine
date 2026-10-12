@@ -1148,11 +1148,29 @@ def i1185p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.no_teleport()",),
 )
 def i1275x1(c: Cast) -> None:
-    """Bars one way of moving and leaves the rest. `c.immobilized` stops
-    everything and `c.cannot_shift` stops the shift; neither is a teleport."""
+    """"Cannot teleport" is `c.forbid(keyword=Keyword.TELEPORTATION)` -- the
+    verb's own docstring names this sentence, and the half it wants is
+    `keyword=`, which bars the rows that *have* the keyword. `lacking=` is
+    the opposite reading and belongs to the form powers.
+
+    A trait with a `c.watch`, like the rest of this file's hit riders: the
+    property is standing, and only the hit it sees names the creature.
+
+    One hold per creature, refreshed rather than stacked:
+    `Powers.forbidden_keywords` is a set with no count, so a second hold
+    expiring would lift a bar the later hit is still owed."""
+
+    def struck(ev: Hit) -> None:
+        if ev.attacker != c.me:
+            return
+        for eff in list(c.world.effects.of(ev.target)):
+            if eff.source == c.me and eff.label.startswith(f"{c.ref} forbids"):
+                c.world.effects.end(eff, "a later hit replaces it")
+        c.forbid(keyword=Keyword.TELEPORTATION, on=ev.target, until=When.EONT)
+
+    c.watch(Hit, struck, until=When.ENCOUNTER)
 
 
 @power(
@@ -2825,12 +2843,15 @@ def i553p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with an attack using the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    dropped=("c.no_teleport()",),
 )
 def i553p2(c: Cast) -> None:
+    """The aberrant half's "cannot teleport" is `c.forbid(keyword=)`, which
+    bars every row carrying the keyword; it rides the same end-of-next-turn
+    clock as the restraint rather than a save, as printed."""
     c.dazed(until=When.EONT)
     if "aberrant" in c.kinds_of():
         c.condition(Condition.RESTRAINED, until=When.EONT)
+        c.forbid(keyword=Keyword.TELEPORTATION, until=When.EONT)
 
 
 @power(
