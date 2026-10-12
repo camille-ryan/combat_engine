@@ -706,11 +706,23 @@ def i1149p1(c: Cast) -> None:
 
 
 @power("i2368x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bull_rush()",))
+       reach=PERSONAL, target=SELF)
 def i2368x1(c: Cast) -> None:
-    """A bull rush is not an attack the engine names. The forced-movement
-    half is exact: `c.forces` is handed `how` and `power`."""
+    """"+2 item bonus to bull rush attacks, and increase the push or slide
+    effect of any close or melee attack you perform by 1 square."
+
+    **Written.** The forced-movement half was always exact -- `c.forces` is
+    handed `how` and `power` -- and the attack bonus is what had nothing to
+    sit on. A bull rush is an attack the engine names now, and `as_` is how
+    a modifier asks.
+
+    The two halves stay separate on purpose: the second is about *any* close
+    or melee push, which includes a bull rush's but is not about it, so
+    folding them would make the item's own sentence unreadable.
+    """
     close = _reach_gate("close", "melee")
+    c.bonus("attack", 2, kind="item", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("as_") == "bull_rush")
     c.forces(1, on=c.me,
              when=lambda ctx: (
                  ctx.get("how") in (Forced.PUSH, Forced.SLIDE)

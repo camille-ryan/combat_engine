@@ -1693,11 +1693,14 @@ def m4643a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.bull_rush()",),
 )
 def m4643a4(c: Cast) -> None:
-    """Nothing plays: there is no bull rush action for this trait to
-    modify the push of."""
+    """The same trait `m1804a2` prints, and the same one square on top of
+    the printed push rather than a 2 replacing it.
+    """
+    from combat_engine.engine.cast import MANOEUVRE_BULL_RUSH
+
+    c.extend_move(MANOEUVRE_BULL_RUSH, 1, on=c.me, until=When.ENCOUNTER)
 
 
 _M4643_DOWN = "the m4643 is reduced to 0 hit points or fewer"

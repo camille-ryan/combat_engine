@@ -59,9 +59,6 @@ from combat_engine.engine.events import (
 from combat_engine.engine.query import allies, team
 from combat_engine.engine.triggers import both, by_charge, by_me, by_melee, targets_me
 
-#: Shoving somebody, which nothing in the tree does.
-BULL_RUSH = ("c.bull_rush()",)
-
 
 def _hit_with(ref: str):  # noqa: ANN202
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001

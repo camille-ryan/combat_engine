@@ -138,6 +138,7 @@ from .triggers import (
     ally_within,
     both,
     by_action_point,
+    by_bull_rush,
     by_charge,
     by_keyword,
     by_me,

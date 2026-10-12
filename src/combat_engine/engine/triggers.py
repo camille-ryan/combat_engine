@@ -727,6 +727,17 @@ def by_charge(world: World, me: int, ev: Event) -> bool:
     return bool(getattr(ev, "charge", False))
 
 
+def by_bull_rush(world: World, me: int, ev: Event) -> bool:
+    """Was this a bull rush? "An enemy hits or misses you with a bull rush."
+
+    Reads `as_`, which rides the outcome as a plain attribute and is the only
+    thing naming the manoeuvre -- a bull rush is an action kind, so it carries
+    no ref a trigger could name. `by_charge` beside it answers the sibling
+    question off `ev.charge`, and two cards print the pair together.
+    """
+    return getattr(ev, "as_", "") == "bull_rush"
+
+
 def granted_by_me(world: World, me: int, ev: Event) -> bool:
     """"When an ally makes an attack you granted." Whose doing was it?
 

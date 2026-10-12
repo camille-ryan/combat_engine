@@ -86,6 +86,18 @@ class _Decline:
 #: feats grant it and `Cast._manoeuvrable` is the one reader.
 _ANY_SIZE = "manoeuvre:any-size"
 
+#: The ref a bull rush is keyed on -- what `perform` builds its `Cast` with,
+#: what `c.extend_move` lengthens and what `c.pre_empt` replaces a clause of.
+#: A manoeuvre is an action kind and not a row, so it has no declared ref and
+#: this is the one it borrows.
+MANOEUVRE_BULL_RUSH = "manoeuvre:bull_rush"
+#: How far the attacker follows a bull rush, as against how far the target
+#: goes. A separate symbol from `MANOEUVRE_BULL_RUSH` because the printed
+#: clauses come apart: a belt lengthens the push and says nothing about the
+#: shift, while p14383 lengthens both. One symbol serving the two made the
+#: belt walk the attacker three squares for free.
+MANOEUVRE_BULL_RUSH_FOLLOW = "manoeuvre:bull_rush-follow"
+
 
 @dataclass
 class Cast:
@@ -3306,23 +3318,65 @@ class Cast:
         who = self._who(on)
         if who is None or not self._manoeuvrable(who):
             return False
-        from .components import Position
-
-        before = self.world.get(who, Position)
-        where = before.square if before is not None else None
         if not self.attack(self.str_, Defense.FORT, on=who, as_="bull_rush"):
             return False
         # **The push is the clause a feat replaces**, so it is offered through
         # `instead_of`: two feats print "you can slide the target rather than
         # push it", and swapping the whole manoeuvre would cost it the shift.
         # `manoeuvre:bull_rush` is the ref those registrations name.
-        moved = self.instead_of("push", lambda: self.push(1, on=who))
-        if not moved:
-            return False
-        after = self.world.get(who, Position)
-        if where is not None and after is not None and after.square != where:
-            self.shift(1, to=where)
-        return True
+        # **How far, read rather than fixed at 1.** Five rows lengthen the
+        # push -- a belt, a pair of boots, two monster traits and a racial
+        # power -- and `Powers.extra_squares` is the store they write to,
+        # keyed on this manoeuvre's own ref. `c.squares_for` is the read.
+        #
+        # **Both allowances are read before the push, and that is why they
+        # can be read at all.** A row lengthening a bull rush fires on the
+        # `Hit` this attack just emitted, which is over by the line above --
+        # so a listener that wrote `extra_squares` during it is in the store
+        # by now. A rider that tried to lengthen the push *after* the fact
+        # would have nothing to lengthen, which is the shape p14383 was first
+        # written in and the reason it pushed the wrong way.
+        far = 1 + self.squares_for(MANOEUVRE_BULL_RUSH, 0)
+        follows = 1 + self.squares_for(MANOEUVRE_BULL_RUSH_FOLLOW, 0)
+        return bool(
+            self.instead_of("push", lambda: self._shove(who, far, follows))
+        )
+
+    def _shove(self, who: int, far: int, follows: int) -> bool:
+        """The push half of a bull rush: `far` squares, following `follows`.
+
+        **One square at a time, not one push of `far`.** The printed rider on
+        p14383 is "shifting into each square the target leaves", which a
+        single long push cannot honour -- the attacker would have to cross
+        squares the target was never in. Stepping also stops exactly where
+        the target stops, which is the Impossible Push clause applied to
+        every square rather than only the first.
+
+        For the ordinary bull rush `far` and `follows` are both 1 and this is
+        the printed sentence. They come apart on purpose: a belt lengthening
+        the push does **not** let the attacker follow further -- the printed
+        shift is one square and nothing on those items says otherwise -- so
+        `far` can be 3 with `follows` still 1.
+        """
+        from .components import Position
+
+        moved = False
+        for step in range(far):
+            was = self.world.get(who, Position)
+            vacated = was.square if was is not None else None
+            if not self.push(1, on=who):
+                break
+            after = self.world.get(who, Position)
+            # **Impossible Push, per square.** "If there's no square you can
+            # push the target into, your bull rush has no effect" -- a push
+            # that returned true without moving anybody must not walk the
+            # attacker forward either.
+            if vacated is None or after is None or after.square == vacated:
+                break
+            moved = True
+            if step < follows:
+                self.shift(1, to=vacated)
+        return moved
 
     def grab_attempt(self, *, on: int | None = None) -> bool:
         """The grab **anybody** may try, as opposed to one a row applies.
@@ -7426,6 +7480,31 @@ class Cast:
             label=label or f"{self.ref} on attack",
         )
 
+    def my_weapon(self) -> Weapon | None:
+        """The weapon **this row's item sits on**, or None.
+
+        Factored out of `c.enhancement`, which needed exactly this and is
+        now its first reader. The second is `i2842x1`, which prints "the
+        proficiency bonus and enhancement bonus of this weapon" -- two
+        columns off one object, so asking twice by two different routes
+        was how the answers would have drifted apart.
+
+        **Matched by `Weapon.item`, not by whatever magic is in hand.** A
+        character carrying a magic sword and a magic bow has two, and the
+        row belongs to one of them.
+
+        `on=self.me`, not the default. `c.held` follows `c.target` like
+        everything else that is about somebody else's body -- and this is
+        about the caster's hand. Written without it first, and it returned
+        1 for a +2 axe in silence, which is the fourth time this default
+        has caught somebody on this project.
+        """
+        mine = self.ref.split("x")[0].split("p")[0]
+        for w in self.held(on=self.me, what="magic"):
+            if w.item == mine:
+                return w
+        return None
+
     @property
     def enhancement(self) -> int:
         """The plus of the magic item **this row belongs to**.
@@ -7446,16 +7525,11 @@ class Cast:
         then to 1. A row that read 0 would do nothing at all, which on an
         audit board looks exactly like a row that is broken.
         """
+        own = self.my_weapon()
+        if own is not None:
+            return own.enhancement
         mine = self.ref.split("x")[0].split("p")[0]
-        # `on=self.me`, not the default. `c.held` follows `c.target` like
-        # everything else that is about somebody else's body -- and this
-        # is about the caster's hand. Written without it first, and it
-        # returned 1 for a +2 axe in silence, which is the fourth time
-        # this default has caught somebody on this project.
         magic = self.held(on=self.me, what="magic")
-        for w in magic:
-            if w.item == mine:
-                return w.enhancement
         # Neither is a suit of armour or anything in the small slots, and
         # "a bonus equal to the armour's enhancement bonus" is printed on
         # a dozen of them -- they were all reading the plus of whatever

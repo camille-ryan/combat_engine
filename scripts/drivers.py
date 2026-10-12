@@ -3569,6 +3569,70 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def bull_rush_riders(out: Result) -> None:
+    """A row that lengthens a bull rush does, and the two allowances differ.
+
+    `p14383` prints "increase the push by a number of squares up to your
+    Constitution modifier, **shifting into each square the target leaves**",
+    which is the only clause in the tree that lengthens the *follow* as well
+    as the push. A belt lengthens the push alone.
+
+    So this measures both separately, and the measurement is the count of
+    moves rather than the distance covered -- displacement is clipped by the
+    board edge and by whoever is standing in the vacated square, which is
+    what made the first three readings of this look wrong when the code was
+    right. Counting `MoveEnd` is board-independent.
+
+    **Why it needs a driver at all.** `audit.py` reports `p14383` UNUSED and
+    always will: the audit board never elects a manoeuvre, so no row
+    triggering off one can fire there. That is a harness limit rather than a
+    row fault, and this is the thing that actually exercises it.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import events
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers, Stats
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Ability
+
+    def follows(rider: bool) -> int | None:
+        world, me, _ = _board()
+        foe = sorted(enemies(world, me))[0]
+        stats = world.get(me, Stats) or world.add(me, Stats())
+        stats.scores[Ability.CON] = 18       # +4, so a rider is unmistakable
+        stats.scores[Ability.STR] = 24       # land the Fortitude attack
+        known = world.get(me, Powers) or world.add(me, Powers())
+        if rider:
+            known.known = (*tuple(known.known), "p14383")
+        place(world, me, (2, 7))
+        place(world, foe, (3, 7))
+        seen = [0]
+        world.bus.on(events.MoveEnd, lambda ev: seen.__setitem__(
+            0, seen[0] + (getattr(ev, "kind_", "") == "shift"
+                          and ev.actor == me)))
+        if not Cast(world=world, me=me, ref="drivers:riders").bull_rush(on=foe):
+            return None
+        return seen[0]
+
+    plain = next((f for f in (follows(False) for _ in range(40))
+                  if f is not None), None)
+    laden = next((f for f in (follows(True) for _ in range(40))
+                  if f is not None), None)
+    # **This one is bounded by the push, and that is worth saying.** The base
+    # bull rush pushes one square, so the loop takes one step and the follow
+    # cannot exceed it whatever the allowance says -- a plant setting the base
+    # follow to 2 stays green here. What it does catch is a follow of 0, which
+    # is the whole second half of the printed sentence. Reworded from "exactly
+    # one square, and no more", which claimed the plant it cannot fail.
+    out.that(plain == 1,
+             "an ordinary bull rush follows the square it pushed -- the"
+             f" printed shift, which a dropped follow makes 0 ({plain})")
+    out.that(laden == 5,
+             "and with p14383 held it follows 1 + the Constitution modifier,"
+             f" which is the clause's second half ({laden} with CON 18)")
+
+
 def long_rest(out: Result) -> None:
     """A long rest announces itself, and a daily does come back.
 
@@ -3788,6 +3852,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "bull_rush_riders": (bull_rush_riders,
+                         "a row lengthens the push and the follow apart"),
     "long_rest": (long_rest,
                   "a long rest announces itself, and a daily comes back"),
     "short_rest": (short_rest,

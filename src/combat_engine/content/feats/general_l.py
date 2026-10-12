@@ -102,8 +102,6 @@ PROFICIENCY = ("chargen.proficiency()",)
 #: Was `("c.total_defence()",)`. The action exists and announces itself as
 #: `TotalDefence` now, so the three rows that carried this say their sentence.
 _HUNKER = "you take the total defence action"
-#: Nothing models a bull rush.
-BULL_RUSH = ("c.bull_rush()",)
 #: Trading one power for another out of a named pool, which is settled
 #: when the character is built and recorded nowhere. `chargen.BUILDS`
 #: was the old marker and it is the wrong one: that dict exists, and

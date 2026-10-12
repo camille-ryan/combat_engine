@@ -2613,10 +2613,43 @@ def i2729p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.bull_rush()",),
 )
 def i2842x1(c: Cast) -> None:
-    """Adds to a bull rush attempt, and nothing makes one."""
+    """"Add the proficiency bonus and enhancement bonus of this weapon to
+    your attack roll when making a bull rush."
+
+    **The point of the sentence is that a bull rush gets neither.** It is
+    Strength against Fortitude with no weapon modifiers at all -- `c.bull_rush`
+    rolls `c.attack(c.str_, FORT)` longhand for exactly that reason -- so this
+    property is not a bonus on top of the usual weapon terms, it is the only
+    place they appear. An implementation that added a flat +2 would be right
+    for a common weapon and wrong for every other, which is the quiet way to
+    get this one wrong.
+
+    `c.my_weapon()` is the read: both numbers come off the one object this
+    block is enchanting, matched by `Weapon.item`, rather than off whatever
+    magic is in the other hand.
+
+    Laid as a `when=` gate on `as_` and not as a trigger, because there is no
+    moment here -- it is a standing term that answers only when the attack
+    being rolled is a bull rush.
+
+    **Two calls, because the card names two bonus types.** Written first as
+    one `kind="item"` bonus of the sum, which `bonuses.py` caught against the
+    printed words -- and it was right to: proficiency and enhancement are
+    separate types, and folding them into a third makes the pair stack with
+    anything typed that a later row lays on the same roll. Nothing collides
+    on a bull rush today, since the manoeuvre takes no weapon terms at all;
+    the stacking rule is what keeps that true tomorrow.
+    """
+    own = c.my_weapon()
+    if own is None:
+        return
+    bull_rush = lambda ctx: ctx.get("as_") == "bull_rush"  # noqa: E731
+    c.bonus("attack", own.proficiency, kind="proficiency", on=c.me,
+            until=When.ENCOUNTER, when=bull_rush)
+    c.bonus("attack", own.enhancement, kind="enhancement", on=c.me,
+            until=When.ENCOUNTER, when=bull_rush)
 
 
 @power(

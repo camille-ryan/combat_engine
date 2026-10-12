@@ -75,6 +75,10 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
+from combat_engine.engine.cast import (
+    MANOEUVRE_BULL_RUSH,
+    MANOEUVRE_BULL_RUSH_FOLLOW,
+)
 from combat_engine.engine.query import line_of_effect, squares, unseen_by
 from combat_engine.engine.skills import modifier
 
@@ -216,6 +220,18 @@ def p13211(c: Cast) -> None:
     c.second_wind(on=c.me, cost=ActionType.MINOR)
 
 
+
+def _bull_rushed(world: World, me: int, ev: Any) -> bool:
+    """This creature's own bull rush, landed.
+
+    `as_` rides the `Hit` as a plain attribute, which is what makes "you
+    successfully bull rush a target" askable at all -- the manoeuvre is an
+    action kind and carries no ref a trigger could name.
+    """
+    return (getattr(ev, "attacker", None) == me
+            and getattr(ev, "as_", "") == "bull_rush")
+
+
 @power(
     "p14383",
     level=2,
@@ -225,11 +241,44 @@ def p13211(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you successfully bull rush a target",
-    todo=("c.bull_rush()",),
+    on=Trigger(Hit, _bull_rushed, "you successfully bull rush a target"),
 )
 def p14383(c: Cast) -> None:
-    """Nothing in the engine is a bull rush, so neither the trigger nor the
-    extra squares of push can be declared."""
+    """"Increase the push by a number of squares up to your Constitution
+    modifier, shifting into each square the target of your bull rush leaves."
+
+    **Both halves, and they are two different allowances.** The push gets
+    longer and so does the follow -- "shifting into each square the target
+    leaves" is the only printed clause in the tree that lengthens the shift,
+    which is why `MANOEUVRE_BULL_RUSH_FOLLOW` exists apart from the push's
+    own symbol. A belt that lengthens the push alone must not also walk its
+    wearer three squares.
+
+    **This fires inside the `Hit`, before the push, and that is the point.**
+    The first shape of this row waited for the bull rush to finish and then
+    pushed again by hand, which read as the more literal translation of
+    "increase the push" and was wrong twice over: the target ended up on the
+    far side of the attacker, and the row duplicated a clause the manoeuvre
+    already owns. `c.bull_rush` reads both allowances *after* the attack
+    returns, so writing them here lands in time and the manoeuvre does the
+    moving.
+
+    "Up to" is a choice the card gives, and the full modifier is what gets
+    written -- the engine has no way to ask for less and no reason to want
+    it, since a longer push is strictly the better end of every board this
+    power is used on.
+
+    **`until=When.EOT`, and it overshoots by one clause.** The allowance
+    belongs to the bull rush that triggered it and nothing finer than a turn
+    is sayable, so a *second* bull rush in the same turn -- an action point,
+    or a second standard somehow -- would get the squares again. The default
+    `ENCOUNTER` was worse by a wide margin: every bull rush for the rest of
+    the fight. Named here rather than left to be rediscovered.
+    """
+    c.extend_move(MANOEUVRE_BULL_RUSH, c.con_mod, until=When.EOT, on=c.me)
+    c.extend_move(
+        MANOEUVRE_BULL_RUSH_FOLLOW, c.con_mod, until=When.EOT, on=c.me
+    )
 
 
 # -- r3 ---------------------------------------------------------------------

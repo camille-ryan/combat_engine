@@ -108,6 +108,7 @@ from combat_engine.engine import (
     World,
     about_me,
     both,
+    by_bull_rush,
     by_charge,
     by_me,
     by_melee,
@@ -1416,16 +1417,31 @@ def i2983p1(c: Cast) -> None:
     charges the penalty, so only the cost would be real."""
 
 
+def _shoved_or_charged(world: World, me: int, ev: Any) -> bool:
+    """A bull rush **or** a charge, which is one printed clause."""
+    return by_bull_rush(world, me, ev) or by_charge(world, me, ev)
+
+
 @power("i3015p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an enemy hits or misses you with a bull rush or a charge",
-       on=(Trigger(Hit, both(targets_me, by_charge), "an enemy charges you"),
-           Trigger(Miss, both(targets_me, by_charge),
-                   "an enemy charges you")),
-       dropped=("c.bull_rush()",))
+       on=(Trigger(Hit, both(targets_me, _shoved_or_charged),
+                   "an enemy hits or misses you with a bull rush or charge"),
+           Trigger(Miss, both(targets_me, _shoved_or_charged),
+                   "an enemy hits or misses you with a bull rush or charge")))
 def i3015p1(c: Cast) -> None:
-    """Both halves of "hits or misses" are declared. A bull rush is not an
-    attack the engine has."""
+    """"An enemy hits or misses you with a bull rush or charge attack: the
+    triggering enemy takes 1d6 damage per plus and is knocked prone."
+
+    **Both halves of "hits or misses" and both halves of "bull rush or
+    charge".** The charge half was already declared and the bull rush half
+    was the whole of the `dropped=`; `by_bull_rush` reads `as_` off the
+    outcome, which is what the manoeuvre puts there.
+
+    Four `Trigger`s in two, because the two events are separate classes and
+    the predicate is the same sentence for both -- a `Miss` on a card that
+    pays out either way is the half rows of this shape usually forget.
+    """
     foe = _foe(c)
     if foe is None:
         return

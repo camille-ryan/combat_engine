@@ -357,11 +357,20 @@ def m1804a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.bull_rush()",),
 )
 def m1804a2(c: Cast) -> None:
-    """Nothing plays: there is no bull rush action in the engine for this
-    trait to lengthen the push of."""
+    """"When this creature makes a bull rush attack, he pushes the target 2
+    squares instead of 1."
+
+    **Written.** A trait, so it is laid once and read when the manoeuvre
+    measures its push. One square **on top of** the printed one rather than
+    a 2 written over it: `Powers.extra_squares` adds, so a belt and a trait
+    on the same creature should stack, which is what the two printed
+    sentences separately say.
+    """
+    from combat_engine.engine.cast import MANOEUVRE_BULL_RUSH
+
+    c.extend_move(MANOEUVRE_BULL_RUSH, 1, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

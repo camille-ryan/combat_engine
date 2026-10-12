@@ -78,6 +78,23 @@ BORROWED = {
     ("f2095", "racial"),   # extends rt:r5-t0's save bonus
     ("f3163", "racial"),   # replaces rt:r24-t2's +2
     ("f2398", "racial"),   # raises rt:r8-t0' +1 to +2
+    # **A third shape: the card adds an object's own bonus to a roll.**
+    # "Add the proficiency bonus and enhancement bonus of this weapon to
+    # your attack roll when making a bull rush" names two types, and
+    # `_AS_TYPE` rejects the second of them on purpose -- it wants an
+    # article before "enhancement bonus", because "equal to the
+    # enhancement bonus" is a card pointing at a number rather than
+    # handing a type out, and reading it loosely put `kind="enhancement"`
+    # on two cards that plainly print "item bonus".
+    #
+    # Here the number is being applied *as itself*, to an attack roll
+    # that otherwise gets no weapon terms at all -- so both halves carry
+    # their own type, which is what keeps them from stacking with a
+    # second proficiency or enhancement bonus later. One card, so a
+    # waiver rather than a wider rule: narrowing this reader is how the
+    # file grew its false positives, and the parse is not wrong about the
+    # phrasing it was built for. #523.
+    ("i2842x1", "enhancement"),
 }
 
 #: Rows where a `c.bonus` call is **not** the card's printed bonus, so

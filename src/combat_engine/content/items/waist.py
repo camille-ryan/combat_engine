@@ -406,12 +406,22 @@ def i2993p1(c: Cast) -> None:
 
 
 @power("i1415x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bull_rush()",))
+       reach=PERSONAL, target=SELF)
 def i1415x1(c: Cast) -> None:
-    """A bull rush is not its own action here, so the extra square is paid
-    on every push the wearer makes rather than on that one manoeuvre."""
-    c.forces(1, on=c.me, until=When.ENCOUNTER,
-             when=lambda ctx: ctx.get("how") == "push")
+    """"When you bull rush a target, you push it 1 additional square."
+
+    **Written, and it stops over-granting.** The square used to be paid on
+    *every* push the wearer made, because a bull rush was not its own action
+    -- declared in the old docstring rather than hidden, but wider than the
+    card by every other push in the game.
+
+    `c.bull_rush` reads its distance off `Powers.extra_squares` through
+    `c.squares_for`, keyed on the manoeuvre's own ref, so this is
+    `c.extend_move` and lands on that one manoeuvre.
+    """
+    from combat_engine.engine.cast import MANOEUVRE_BULL_RUSH
+
+    c.extend_move(MANOEUVRE_BULL_RUSH, 1, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1657p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -785,11 +795,23 @@ def i1152p1(c: Cast) -> None:
 
 @power("i1455x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.bull_rush()", "c.grab_check()"))
+       dropped=("c.grab_check()",))
 def i1455x1(c: Cast) -> None:
-    """Neither manoeuvre is rolled: `c.grab` is applied outright and a bull
-    rush is a push, so there is no attack for the bonus to sit on and no
-    size comparison being made to relax."""
+    """"+2 item bonus on Strength attacks to bull rush or grab a target."
+
+    **Written.** Both manoeuvres roll a Strength attack now -- Fortitude for
+    a bull rush, Reflex for a grab -- and `as_` names which, so the pair is
+    one predicate.
+
+    The old docstring was right at the time and is worth keeping the shape
+    of: `c.grab` is applied outright, which is still true of the *applying*
+    half, and `c.grab_attempt` is the elective one this bonus is about.
+
+    Dropped: the escape side, which is `c.grab_check()` and is this row's
+    other clause rather than this one.
+    """
+    c.bonus("attack", 2, kind="item", on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("as_") in ("bull_rush", "grab"))
 
 
 @power("i2163x1", level=9, cls=ITEM, action=ActionType.NONE,
