@@ -64,6 +64,7 @@ from combat_engine.engine import (
     Defences,
     Dropped,
     Gear,
+    Health,
     Hit,
     Keyword,
     Melee,
@@ -487,14 +488,33 @@ def f1127(c: Cast) -> None:
 # -- initiative, which is a component rather than a modifier ----------------
 
 
+#: Whose surge pool has already been raised, by world and creature. The
+#: sentence is about the character sheet and a trait re-arms every fight,
+#: so the ceiling has to move exactly once.
+_RAISED: dict[tuple[int, int], bool] = {}
+
+
 @power("f1031", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.max_surges()",))
+       reach=PERSONAL, target=SELF)
 def f1031(c: Cast) -> None:
     """`c.initiative`, not `c.bonus("initiative", ...)`: the component is
-    read before the d20 and a modifier to it is never consulted. The
-    extra healing surge is dropped -- `Health.max_surges` is set when the
-    character is built and nothing raises it."""
+    read before the d20 and a modifier to it is never consulted.
+
+    **The extra surge is written now.** It was marked `c.max_surges()` on
+    the argument that nothing raises the pool. `Health.max_surges` is an
+    ordinary field a body can reach, `turns` refills to it, and
+    `feats/paladin.py` already writes it for the same printed sentence --
+    so what was missing was only a door, and the body does not need one.
+    Latched per character, and the surge itself is handed over because a
+    character arriving at the old ceiling is otherwise one short."""
     c.initiative(3, on=c.me)
+    key = (id(c.world), c.me)
+    health = c.world.get(c.me, Health)
+    if health is None or _RAISED.get(key):
+        return
+    _RAISED[key] = True
+    health.max_surges += 1
+    c.regain_surge(1, on=c.me)
 
 
 @power("f1074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -586,14 +606,22 @@ def f1122(c: Cast) -> None:
 
 
 @power("f1059", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reach_of(power=)",))
+       reach=PERSONAL, target=SELF)
 def f1059(c: Cast) -> None:
-    """The critical rider plays. Widening one named power's burst is the
-    dropped half, and the marker was re-aimed: `c.widen_areas` exists,
-    but it widens *every* close attack the creature makes and takes no
-    gate, so the gap is naming one row's range line -- which is what
-    `c.reach_of(power=)` is already asking for elsewhere."""
+    """The critical rider and the wider burst.
+
+    **The burst is written.** The marker said naming one row's range line
+    was the gap, and it is already named: `dsl.area_of` hands `_stretched`
+    a context carrying the ref being measured, so a gated
+    `c.bonus("blast_size", ...)` widens exactly one power and leaves every
+    other close attack alone -- which is what `c.widen_areas` could not
+    do. p5599 is a close burst, one of the three kinds `_stretched` reads
+    `blast_size` for. No type word printed, so untyped."""
     me = c.me
+    c.bonus(
+        "blast_size", 1, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == "p5599",
+    )
 
     def on_crit(ev: Any) -> None:
         if ev.attacker == me and ev.critical and ev.power == "p5599":
@@ -1249,12 +1277,40 @@ def f715(c: Cast) -> None:
 # -- build-time choices -----------------------------------------------------
 
 
-@power("f922", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+@power("f922", level=1, cls="", usage=DAILY, action=ActionType.MINOR,
+       reach=PERSONAL, target=SELF)
 def f922(c: Cast) -> None:
-    """Changes an elemental manifestation mid-day and hands back the
-    encounter power that goes with it. The manifestation is a racial
-    choice and there is no race on a character to hold one."""
+    """Changes which elemental manifestation the character is on.
+
+    **Written: the manifestation is a row, not a word.** The marker said
+    there is no race on a character to hold one, and that is stale twice
+    over -- `Build.race` exists, and `RaceLine.granted` puts exactly one
+    of r33's thirteen powers into `Powers.known` because its block says to
+    choose. So the manifestation *is* whichever of `R33` the creature
+    holds, and changing it is `c.forbid` on the one it has and
+    `c.grant_row` on the one it takes.
+
+    Read off this creature's own `Powers.all`. `c.knows` answers who on
+    the board holds a row, so it is true for a character merely standing
+    next to another manifestation.
+
+    The second sentence needs nothing extra: the new row is a different
+    ref, so its own use is unspent whatever was done with the old one.
+    Within one fight `When.ENCOUNTER` is the whole horizon, which is also
+    why the once-a-day limit is the header's `DAILY` and not a counter."""
+    known = c.world.get(c.me, Powers)
+    if known is None:
+        return
+    held = [ref for ref in known.all if ref in R33]
+    options = [r for r in R33 if r not in held and get(r) is not None]
+    if not held or not options:
+        return
+    taken = c.choose(options, "which elemental manifestation now")
+    if taken is None:
+        return
+    for ref in held:
+        c.forbid(ref, on=c.me, until=When.ENCOUNTER)
+    c.grant_row(taken, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1115", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1292,29 +1348,31 @@ def f1125(c: Cast) -> None:
 
 
 @power("f621", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.counts_as(property=)",))
+       reach=PERSONAL, target=SELF)
 def f621(c: Cast) -> None:
     """One named weapon rolls a d8, and becomes high crit.
 
-    The die is written -- `c.weapon_dice` edits the character's own copy of
-    the weapon, and `w3627` is in the database at the d6 the card
-    is raising.
+    **Both halves are the same write, and neither needs a door.**
+    `Gear.weapons` holds `replace(w)` copies made per character by
+    `chargen.spawn` -- the whole argument `c.weapon_dice` makes for
+    needing no reader -- and `Weapon.properties` has had a reader since
+    #240: `Cast._high_crit` pays a rolled extra `[W]` on a critical and
+    looks for the printed word in that field. So the property goes on this
+    character's own copy directly, the way `feats/paladin.py` reaches
+    `Health`. A set union, so arming the trait twice says the same thing
+    twice.
 
-    **High crit is the dropped clause, and the gap moved from the reader to the
-    writer.** It was `Weapon.high_crit` on the argument that nothing in the
-    engine read the property at all -- printed on 18 weapons and acted on by
-    none. That is no longer true: `Cast._high_crit` pays a rolled extra `[W]`
-    on a critical (#240). So what is left is the half this row actually needs,
-    which is a way to *add* the property to one character's weapon after the
-    fact. `c.counts_as(property=)`, the same symbol f3785 and f3786 wait on.
-
-    Re-aimed twice before that. The first marker named `c.bonus('crit_range')`,
-    which **exists** and is wrong twice over -- high crit is extra damage on a
-    critical, not a wider one, and the modifier sits on the wielder where the
-    property belongs to the weapon. The second named `c.counts_as(property=)`,
-    a writer, when the writer turned out to be the half that was easy."""
+    Re-aimed three times before this. `c.bonus('crit_range')` **exists**
+    and is wrong twice over -- high crit is extra damage on a critical,
+    not a wider one, and the modifier sits on the wielder where the
+    property belongs to the weapon. Then `Weapon.high_crit`, on the
+    argument that nothing read the field, which stopped being true. Then
+    `c.counts_as(property=)`, a new verb for a write a body can make."""
     c.weapon_dice("1d8", ref="w3627", on=c.me)
+    gear = c.world.get(c.me, Gear)
+    for weapon in gear.weapons if gear else ():
+        if weapon.ref == "w3627":
+            weapon.properties = weapon.properties | {"high crit"}
 
 
 @power("f999", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1366,7 +1424,16 @@ def f921(c: Cast) -> None:
 def f725(c: Cast) -> None:
     """Turns a named power's close blast into an area burst. Reach is
     header data the action menu reads before anything runs, and
-    `c.recast` rewrites the action a row costs and nothing else."""
+    `c.recast` rewrites the action a row costs and nothing else.
+
+    **The near miss is worth naming, because it is one row away.** A gated
+    `c.bonus("blast_size", ...)` really does rewrite one named power's
+    range line through `dsl._stretched` -- `f1059` above is written that
+    way. But `_stretched` only adds to the size of the kind the header
+    already declares, and this card changes the *kind*: `reach.kind`
+    decides provoking, `c.ranged`, `by_ranged` and the `ranged` context
+    key, so a bigger blast would say the wrong rule as well as the wrong
+    shape."""
 
 
 def _melee_or_close_at_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -1397,29 +1464,70 @@ def f935(c: Cast) -> None:
 
 
 @power("f928", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.grant_weapon()",))
+       reach=PERSONAL, target=SELF)
 def f928(c: Cast) -> None:
     """A natural weapon with its own group, dice, proficiency and off-hand
-    property, held whenever the hands are empty. Nothing puts a weapon
-    into a creature's `Gear` from a row."""
+    property, held whenever the hands are empty.
+
+    **Written: `c.as_weapon` is the verb.** The marker said nothing puts a
+    weapon into `Gear.weapons` from a row, and that is exactly what the
+    verb does -- it was written for a shield that is also a weapon, which
+    is the same shape. The profile is hand-written because the weapon
+    table has no row for a claw, as the four item rows using the verb
+    hand-write theirs.
+
+    Two things the verb does not cover. The proficiency bonus is this
+    card's own grant, so the ref is recorded in `Gear.trained`: otherwise
+    `Cast._trained_with` withholds it from any creature that *has* a
+    record, which is every built character. And "in each hand while you
+    aren't holding anything" is a second profile with both in hand rather
+    than on the belt -- `as_weapon` stows what it lays, which is right for
+    a character already holding something, because then the claw is the
+    draw `actions._wielding` offers.
+
+    Enchanting them is not a fight."""
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return
+    empty = not gear.held
+    for _ in range(2 if empty else 1):
+        c.as_weapon(
+            damage="1d6", group="light blade", proficiency=3,
+            properties=frozenset({"off-hand"}), hands="one-handed",
+            until=When.ENCOUNTER,
+        )
+    gear.trained = gear.trained | {c.ref}
+    if empty:
+        gear.stowed.discard(c.ref)
 
 
 # -- the rest of the gaps ---------------------------------------------------
 
 
 @power("f718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.boost_roll(extra=)",))
+       reach=PERSONAL, target=SELF)
 def f718(c: Cast) -> None:
-    """**Re-aimed: `c.boost_roll` landed in #495 and is not what this
-    wants.** The verb adds to a roll already made, which is what `p6186`
-    does. This feat adds one more to *what `p6186` is contributing*, and
-    only when the roll being improved belongs to an arcane power.
+    """+1 to the roll `p6186` is improving, when that roll belongs to an
+    arcane power.
 
-    So the gap is a modifier on the **amount of somebody else's boost** --
-    nothing says "a boost is being spent into this roll, here is what it
-    comes to, and here is a chance to change it". `i2295x1` is the same
-    gap from the other side and the two should land together.
-    """
+    **Written, and the row this one was waiting for has landed.** The
+    marker asked for a modifier on the amount of somebody else's boost and
+    named `i2295x1` as the same gap from the other side; that row is
+    written, and its answer is the one line below. `p6186` asks
+    `c.dice_for` for what it adds and `rng.roll` parses `NdM+K` with the
+    flat term riding in the `Roll`, so "+1 to the triggering roll" is the
+    same die with a `+1` on it. The context `p6186` hands over says which
+    kind of roll it is and which power rolled it, so the narrowing is
+    exact rather than every roll the race improves.
+
+    Neither `c.boost_roll` nor `c.change_dice` alone would have said it:
+    the first adds to a roll already made, and a bare `change_dice` swaps
+    the die rather than adding to the result."""
+
+    def arcane_attack(ctx: dict[str, Any]) -> bool:
+        return ctx.get("kind") == "attack" and _arcane_row(ctx)
+
+    c.change_dice("p6186", "1d6+1", on=c.me, when=arcane_attack)
 
 
 @power("f933", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1486,7 +1594,14 @@ def f1021(c: Cast) -> None:
     two radiant on a hit. `c.may` asks a yes-or-no inside a body that is
     already running; nothing offers a choice from a standing modifier,
     so the penalty would be compulsory and the row strictly worse than
-    not having it."""
+    not having it.
+
+    **`c.pre_empt` is not the near miss it looks like.** That verb keys a
+    substitute to a `(ref, what)` pair and `Powers.pre_empts` turns each
+    registration into its own entry in the action menu. This card names no
+    row -- the trade is on *any* implement attack -- so there is nothing to
+    key it to and no menu entry it could become. The two siblings below
+    each name their rows and are a different gap for that reason."""
 
 
 @power("f1099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1497,10 +1612,18 @@ def f1099(c: Cast) -> None:
     than refused: it was marked `todo` whole and threw a working clause
     away.
 
-    Re-aimed: both riders now arrive as refs, so the naming gap is closed
-    and only one hold is left. Both are "you can forgo X to instead Y",
-    which nothing offers. A plain "+2 bonus" with the word "bonus" and no
-    type in front of it, so untyped.
+    Both riders arrive as refs and both are "you can forgo X to instead
+    Y", which is `c.pre_empt(ref, what, clause)` exactly -- **and what is
+    missing is the read site, not the verb.** `c.instead_of` has to be
+    called by the row being changed, and p836 lays its attack penalty and
+    p1580 its two AC bonuses directly. Wrapping those is one line each in
+    `powers/paladin/level_1.py` and `powers/cleric/level_1.py`, not here;
+    registering from this side alone lays a substitute nothing reads and
+    would look finished. `f3232` is the same shape and says the same
+    thing about `features/warlock.py`.
+
+    A plain "+2 bonus" with the word "bonus" and no type in front of it,
+    so untyped.
     """
     c.bonus("skill:intimidate", 2, on=c.me, until=When.ENCOUNTER)
 
@@ -1525,11 +1648,23 @@ def f1098(c: Cast) -> None:
     body: a `Hit` watcher fires while p839 is still mid-strike and the
     opening has not been handed over yet.
 
-    Dropped: p1458 wants `c.deals` to name a row rather than override a
-    creature's weapon type, and p833's "in lieu of gaining temporary hit
-    points" is a trade nothing offers from a standing modifier. The
-    Diplomacy bonus is a check."""
+    **Dropped, and both for a read site rather than a verb.** p1458
+    retypes one named row's damage against one kind of target, and
+    `c.deals` is an override keyed only to `Keyword.WEAPON` or
+    `Keyword.IMPLEMENT`: `Cast._retyped` reads that label and nothing
+    else, so narrowing it to a ref -- let alone to the target's origin --
+    is a change at `cast.py`'s own read site. p833's "in lieu of gaining
+    temporary hit points" is `c.pre_empt`, which needs p833 to ask
+    `c.instead_of("temp_hp", ...)`; `powers/warlock/level_1.py` already
+    does precisely that with the same clause word, and p833 lays its temp
+    hit points directly, so the one line owed is in
+    `powers/paladin/level_1.py`.
+
+    The Diplomacy bonus was called "a check" and left unwritten, which
+    was wrong: `skill:` bonuses are consulted, and the sibling f1099
+    writes the same sentence about Intimidate. Untyped, no type word."""
     me = c.me
+    c.bonus("skill:diplomacy", 2, on=me, until=When.ENCOUNTER)
 
     def opening(ev: Any) -> None:
         if ev.actor != me or ev.power != "p839":

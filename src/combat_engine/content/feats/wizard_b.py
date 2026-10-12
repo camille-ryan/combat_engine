@@ -41,6 +41,7 @@ from combat_engine.engine import (
     Dropped,
     Hit,
     Keyword,
+    SavingThrow,
     Trigger,
     Usage,
     When,
@@ -52,12 +53,6 @@ from combat_engine.engine.events import PowerResolved, ZoneEntered
 
 #: A class feature the benefit names in prose with no ref.
 FEATURE = ("c.class_feature()",)
-#: A `SavingThrow` says who rolled, and `against` is the effect printed as
-#: a string -- not the effect itself, so neither whoever laid it nor the
-#: row it came from can be reached. **Re-aimed** off `c.on_save()`, which
-#: named the moment: the moment is announced and readable, and the one
-#: field that is missing is the effect.
-ON_SAVE = ("SavingThrow.effect",)
 
 
 def _keyword(ref: str, *words: Keyword) -> bool:
@@ -70,6 +65,42 @@ def _hit_with(*words: Keyword):  # noqa: ANN202
         return ev.attacker == me and _keyword(ev.power, *words)
 
     return when
+
+
+def _shook_off(word: Keyword):  # noqa: ANN202
+    """"An enemy saves against an effect bestowed by your <word> attack."
+
+    Three questions and none of them is on the event. `against` is
+    `str(eff)`, so the effect is found by matching that string over the
+    saver's own live effects -- `items.arms._my_save_against_hold` is the
+    same lookup and `i3556p1` ships on it. `Effect.source` is whoever laid
+    it and `Effect.label` is the ref of the row that did, which
+    `durations.keywords_of` turns into that row's keywords.
+
+    `p.attack is not None` is the word "attack": a utility of mine with the
+    same keyword bestows effects too and the card does not pay for those.
+    """
+
+    def saved(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        from combat_engine.engine.durations import keywords_of
+        from combat_engine.engine.query import team
+
+        saver = ev.actor
+        if saver == me or not ev.saved:
+            return False
+        if team(world, saver) is team(world, me):
+            return False
+        for eff in world.effects.of(saver):
+            if str(eff) != ev.against or eff.source != me:
+                continue
+            p = get(eff.label.split()[0]) if eff.label else None
+            if p is not None and p.attack is not None and word in keywords_of(
+                eff.label
+            ):
+                return True
+        return False
+
+    return saved
 
 
 def _wizard_hit_with(*words: Keyword):  # noqa: ANN202
@@ -180,34 +211,67 @@ def f1997(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("c.reach_bonus()",))
 def f1995(c: Cast) -> None:
     """Every wizard power reaches further, on a sliding scale, areas
-    included. A row's range is header data -- `Range.size` and
-    `Range.within` -- read by the targeting layer before the body runs
-    so the interface can draw it, and nothing rewrites it for a
-    creature. Same symbol f986 names for the melee side of it."""
+    included. Same symbol f986 names for the melee side of it.
+
+    **A `"range"` modifier exists and is the wrong half of the answer**,
+    which the old docstring's "nothing rewrites it" missed in both
+    directions. Driven on a board, both printed halves still fail:
+
+    * the ranged half **widens the offer and not the swing** -- `area_of`
+      adds `dsl._stretched` to `Range.size`, so a foe at 11 is offered to a
+      `Ranged 10` row carrying `+2`, and `dsl._within_reach` never asks
+      `_stretched`, so `use()` and `actions.perform` refuse that very
+      target. An engine fault, not this clause's;
+    * the area half has **nothing to write to at all**. The card lengthens
+      `Range.within` -- where an area burst may be *placed* -- and
+      `"blast_size"` is the burst's own radius: laying `+2` turned a
+      `burst 1 within 10` from 9 squares into 49. `_stretched`'s docstring
+      says outright that no printed line of this shape lengthens `within`,
+      and this is that line.
+    """
 
 
 # -- the racial fire family ------------------------------------------------
 
 
-@power("f2134", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=ON_SAVE)
+@power("f2134", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy saves against an effect your fire attack bestowed",
+       on=Trigger(SavingThrow, _shook_off(Keyword.FIRE),
+                  "an enemy saves against a fire effect of yours"))
 def f2134(c: Cast) -> None:
     """Fire damage when an enemy shakes off something a fire attack of
     yours laid.
 
-    `SavingThrow` is announced and readable, and the label inside
-    `against` is the ref of the row that laid the effect -- but it is
-    there as part of a rendered string, and the event carries neither
-    the effect nor its source. Recovering the ref by splitting that
-    string would be a workaround that breaks the day `Effect.__str__`
-    changes, and it still would not answer "*your* attack". The same
-    hold as f1088 and f1024."""
+    **The effect is reachable after all, off the saver rather than off the
+    event.** `SavingThrow.against` is `str(eff)`, so the effect it names is
+    found by matching that string across `world.effects.of(ev.actor)` --
+    the route `items.arms._my_save_against_hold` takes and `i3556p1` ships
+    on. `Effect.source` then answers "*yours*" and `durations.keywords_of`
+    answers "fire", off the ref the label holds. Nothing is split out of
+    the rendered string.
+
+    At-will, because the card prints no limit; an encounter usage would
+    have fired this once a fight.
+    """
+    c.flat(5 + c.cha_mod, dtype=DamageType.FIRE, on=c.trigger.actor)
 
 
-@power("f2135", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=ON_SAVE)
+@power("f2135", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="an enemy saves against an effect your fear attack bestowed",
+       on=Trigger(SavingThrow, _shook_off(Keyword.FEAR),
+                  "an enemy saves against a fear effect of yours"))
 def f2135(c: Cast) -> None:
-    """Same hold as f2134, knocking the saver prone instead."""
+    """Same route as f2134 -- see `_shook_off` -- knocking the saver prone
+    instead.
+
+    The keyword is read off the laying row's header, which is where
+    `keywords_of` reads it, so a feat that *grants* the keyword to an
+    attack is invisible here. That is the shape `keywords_of` records
+    against `f1538` and it is that row's marker to carry, not this one's.
+    """
+    c.prone(on=c.trigger.actor)
 
 
 @power("f2136", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

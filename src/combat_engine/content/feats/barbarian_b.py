@@ -295,22 +295,38 @@ def f2296(c: Cast) -> None:
 
 
 @power("f2705", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.reroll_ones(when=)",))
+       reach=PERSONAL, target=SELF)
 def f2705(c: Cast) -> None:
     """Reroll any weapon damage die showing a 1, while raging and wielding a
     two-handed reach weapon.
 
-    **Re-pointed, and the rage half was never the gap.** `rage.in_rage()`
-    answers that and always did; `c.wielding` answers the weapon. What is
-    missing is that `c.reroll_ones` takes `below`, `keyword`, `ref`, `on`
-    and `until` and **no `when=`**, so there is nowhere to hang either
-    condition -- and writing it ungated would reroll every 1 the character
-    ever rolls, which is a much larger rule than the card prints.
+    **Written, and no verb was needed.** `c.reroll_ones` takes no `when=`,
+    but it is one line -- `self.bonus("reroll_damage_below...", below,
+    stacks=False)` -- and `c.bonus` has always taken a gate, which
+    `Mods.total` asks on every read. So the hold is laid through the verb
+    and the gate is set on the modifier it laid, rather than by
+    hand-writing the engine's own key here: `reroll_ones` is the only
+    thing that knows how the keyword narrowing is spelled.
 
-    `c.reroll_damage` is the other near neighbour and is a different thing
-    again: it rolls the whole expression twice and keeps the higher. #503.
+    `keyword=Keyword.WEAPON` is the "weapon damage die" half --
+    `_reroll_floor` asks the *rolling* row for its keywords -- and the two
+    standing conditions are read inside the gate rather than when the
+    trait arms, exactly as `f2707` reads the same grip: a barbarian can
+    change hands and can stop raging.
+
+    **"When making melee attacks" is carried by the grip, not asked.**
+    `_reroll_floor` reads the hold with no context at all, so there is no
+    `kind` for a gate to look at. It costs nothing here: both hands are on
+    the weapon, so `Gear.ranged` is empty and `can_branch` refuses every
+    ranged weapon branch, and the class prints no ranged weapon row to
+    begin with. #503.
     """
+    def armed(_ctx: dict[str, Any]) -> bool:
+        return in_rage(c) and c.wielding("two-handed") and c.wielding("reach")
+
+    held = c.reroll_ones(keyword=Keyword.WEAPON, on=c.me)
+    for _owner, mod in held.mods if held is not None else ():
+        mod.when = armed
 
 
 @power("f2885", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -363,12 +379,22 @@ def f1834(c: Cast) -> None:
 
 
 @power("f1878", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_distance(ref, n)",))
+       reach=PERSONAL, target=SELF, todo=("c.movement_instead(squares=)",))
 def f1878(c: Cast) -> None:
-    """Lengthens the shift `cf:barbarian-f1s3` grants. That feature is a
-    declared row now, so this is no longer a naming gap -- but the 2 is a
-    literal inside its own closure and the shift is offered from there, so
-    there is nothing outside it to lengthen."""
+    """Shift Dexterity modifier squares instead of 2, on `cf:barbarian-f1s3`.
+
+    **Re-pointed at the group that holds the same gap.** The engine half
+    landed under another name: `c.extend_move(ref, n)` is "make a named row
+    move you further", entries add so `dex_mod - 2` says "instead of 2", and
+    `c.squares_for` is the read. What is missing is the read -- that feature
+    says `c.shift(2, who=me)` with the number in hand -- which is the
+    identical complaint `f980` files against p971, p2105 and p1505, so this
+    waits on the same symbol rather than on a verb of its own.
+
+    Not written as a second shift off the same `Bloodied`, the way `f1880`
+    duplicates a burn: the feature measures who grants combat advantage
+    *from where its shift ended*, so stepping further afterwards would read
+    the wrong squares and prompt twice for one printed shift."""
 
 
 @power("f1880", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -464,9 +490,21 @@ def f2884(c: Cast) -> None:
 @power("f1841", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=THROWN)
 def f1841(c: Cast) -> None:
-    """Throw an off-hand blade like a handaxe, at 5/10. `Weapon` holds
-    its properties and its range as data read before a row runs, and
-    nothing rewrites either."""
+    """Throw an off-hand blade like a handaxe, at 5/10.
+
+    **Half right, and the surviving half is the one that blocks.**
+    `c.weapon_dice` proves a body *can* rewrite a `Weapon` -- `Gear.weapons`
+    holds per-character copies -- so `thrown=(5, 10)` is writable here and
+    was the easy half. It buys nothing: the only reader of `Gear.thrown` is
+    `dsl._reach`, and a ranged weapon branch never gets that far, because
+    `Power.can_branch` asks `gear.ranged is not None` and a blade cannot be
+    *fired*. Setting `ranged` instead is worse -- `Gear.melee` is "held and
+    not ranged", so it takes the weapon out of the melee hand entirely.
+
+    A standing `c.bonus("reach", 4)` is the other near miss. It is what
+    `c.as_ranged` lays, but that one is `once=True` on the creature's *next*
+    melee attack; standing, it would reach five squares with the greataxe in
+    the main hand, which is not this card."""
 
 
 @power("f1843", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -475,7 +513,8 @@ def f1843(c: Cast) -> None:
     """The same for whatever is lying about, plus a feat bonus when one
     is thrown. The bonus half cannot stand on its own either: an
     improvised weapon is not a thing `Gear` holds, so there is nothing
-    for the gate to ask about."""
+    for the gate to ask about -- and the throwing half is blocked at the
+    same read site as `f1841`, see there."""
 
 
 # -- an event nothing emits ------------------------------------------------

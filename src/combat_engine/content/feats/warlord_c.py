@@ -49,6 +49,7 @@ from combat_engine.engine import (
     ConditionEnded,
     ForcedMove,
     Gear,
+    Health,
     Hit,
     InitiativeRolled,
     Keyword,
@@ -565,13 +566,37 @@ def f2466(c: Cast) -> None:
 # -- the rest, each gap named -----------------------------------------------
 
 
+#: Raised once per character, not once per fight. The sentence is about
+#: the character sheet and a trait is armed at the start of every
+#: encounter, so a bare `+= 1` in the body would climb all day.
+#: `feats/paladin.py` keeps the same latch for the same reason.
+_RAISED: dict[tuple[int, int], bool] = {}
+
+
 @power("f2396", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("chargen.armor_proficiency()", "c.max_surges()"))
+       dropped=("chargen.armor_proficiency()",))
 def f2396(c: Cast) -> None:
-    """Armour proficiency and one more healing surge. Proficiency is a
-    chargen column nothing writes to from a row, and `Health` counts
-    surges spent against a maximum that no verb moves."""
+    """The surge half plays; the armour half is dropped.
+
+    Re-read: no verb moves the maximum, but the field is not the gap.
+    `Health.max_surges` is the pool `turns` refills to, and a content
+    row raising it by hand is the established route rather than a
+    workaround -- `feats/paladin.py` already takes it for the same
+    printed sentence. `surges` and `max_surges` are separate fields, so
+    raising the refill target hands nothing over now: `c.regain_surge`
+    is the surge itself, and is also what keeps the row from auditing
+    silent.
+
+    Dropped: armour proficiency is a chargen column and nothing writes
+    to one from a row."""
+    health = c.world.get(c.me, Health)
+    key = (id(c.world), c.me)
+    if health is None or _RAISED.get(key):
+        return
+    _RAISED[key] = True
+    health.max_surges += 1
+    c.regain_surge(1, on=c.me)
 
 
 def _my_grant(c: Cast, ev: Any, *refs: str) -> bool:

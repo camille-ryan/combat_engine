@@ -1124,11 +1124,31 @@ def f3522(c: Cast) -> None:
 
 
 @power("f3523", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.uncrit()",))
+       reach=PERSONAL, target=SELF)
 def f3523(c: Cast) -> None:
-    """A critical is settled inside `resolve.attack` and `AttackResult`
-    carries it as a fact, so there is no moment at which a roll can put it
-    back to an ordinary hit."""
+    """The moment is the `Hit`'s interrupt window, and the critical is a
+    field on the live `AttackResult` rather than a fact: `resolve.attack`
+    recomputes the outcome from that object and `c.hit()` reads `c.crit` off
+    the same one, so the event's own field has to be written too or the log
+    and the damage disagree. f281b is the same demotion from a declared
+    interrupt and `_next_blow_of_mine_crits` writes both fields the other
+    way; this one is a standing watch because the card is not a choice.
+
+    `result.hit` is left alone -- the attack is still a hit, which is what
+    "a normal hit, not a critical hit" says, and touching it would make
+    `resolve.attack` re-announce the outcome as a miss."""
+    me = c.me
+
+    def glancing(ev: Hit) -> None:
+        if ev.target != me or not ev.critical or c.roll("1d20") < 10:
+            return
+        ev.critical = False
+        result = getattr(ev, "result", None)
+        if result is not None:
+            result.critical = False
+
+    c.watch(Hit, glancing, until=When.ENCOUNTER, window=Window.BEFORE, on=me,
+            label=f"{c.ref} glancing blow")
 
 
 @power("f3524", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1221,7 +1241,13 @@ def f3530(c: Cast) -> None:
     a declared racial trait, and one that is refused in play because
     nothing records which aspect was chosen or when. So there is no
     moment to hang this on; and resistance spent by the first hit that
-    reads it is a shape `c.resist` has no flag for either."""
+    reads it is a shape `c.resist` has no flag for either.
+
+    `c.bonus(once=)` is not that flag forwarded. Its gated path lays a
+    `"resist <type>"` mod, which is neither a `Defense` nor `damage`,
+    `save` or `crit_range` -- so `once=` falls through to the attack-roll
+    branch and the resistance would be spent by the *resisting* creature's
+    own next swing. Fifth key that method has read in the wrong place."""
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

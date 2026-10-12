@@ -776,11 +776,28 @@ def f1939(c: Cast) -> None:
 
 
 @power("f1839", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.armour_ability()",))
+       reach=PERSONAL, target=SELF)
 def f1839(c: Cast) -> None:
-    """Replaces the ability term in the armour-class formula with a flat
-    +2. AC is computed before any row runs and nothing reaches the term
-    it is built from -- `c.bonus(AC, 2)` would add to it instead."""
+    """**Written: the formula needs no reaching into.**
+
+    The marker said AC is computed before any row runs and nothing reaches
+    the ability term it is built from. True, and beside the point:
+    `features/guardians._ability_for_ac` settled this shape for two class
+    features by laying the **difference** as an untyped modifier --
+    `instead - max(dex_mod, int_mod)` -- which is arithmetically the
+    substitution, because `chargen.defences` already takes the better of
+    Dexterity and Intelligence for light armour.
+
+    Laid only when the difference is positive, which is the printed "you
+    can": nobody chooses the worse number. Hide is read off `Gear.armour`,
+    the same question `f1873` below asks about heavy armour, and
+    `chargen.LIGHT` is where the word comes from."""
+    gear = c.world.get(c.me, Gear)
+    if gear is None or gear.armour != "hide":
+        return
+    gain = 2 - max(c.dex_mod, c.int_mod)
+    if gain > 0:
+        c.bonus(AC, gain, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1873", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

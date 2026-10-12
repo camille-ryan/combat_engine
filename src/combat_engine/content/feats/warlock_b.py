@@ -9,21 +9,27 @@ asked of an event, and the relation is *relational* -- two warlocks on a
 board read their own curse and not each other's. So "against a creature
 you have cursed" is an ordinary gate.
 
-**The curse's extra damage is a different thing, and it is half open.**
-`cf:warlock-f4` pays through `features/strikers.py:extra_damage`,
-which adds `c.total("cf:warlock-f4 damage")` on top of the dice. A
-feat that *adds* to the curse's damage therefore has a hook and is
-written. A feat that changes the **dice** (`c.change_dice()`), rerolls
-them (`c.reroll_ones()`) or deals the curse's damage a second time in a
-turn (`c.curse_damage()`) has none: the die string and the once-a-round
-latch both live inside that closure.
+**The curse's extra damage is open, and used to read as closed.**
+`cf:warlock-f4` pays through `features/strikers.py:extra_damage`, which
+asks `c.dice_for` for the die and adds `c.total("cf:warlock-f4 damage")`
+on top. So *adding* to the payout is a modifier (f1121), changing the
+dice is `c.change_dice` (f2764), rerolling them is `c.reroll_ones(ref=)`
+(f2760), and paying the damage a second time is those same two lines
+written again (f1124, f2036). Only one thing in that closure is still
+out of reach: the **once-a-round latch**, which is why f2036 settles at
+`PowerResolved` rather than guessing whether the feature has paid.
 
-**The pact boon is the hole.** `cf:warlock-f1` pays out on a `Dropped`,
-and nothing announces the payout, so every feat reading "when your pact
-boon is triggered" carries `c.on_pact_boon()`. The one exception is
-f2193, which *replaces* the boon rather than riding on it -- and a watch
-armed by `c.watch` is owned by its effect, so ending that effect
-disarms the feature. That is the whole of "replace your pact boon".
+**The pact boon is three holes, not one.** `c.on_pact_boon()` was
+carrying all of them. Where the boon's card has a ref -- `p2094` -- the
+rider is an ordinary declared trigger and `feats/warlock.py` already
+writes three of them (f291, f292, f293); f1358 is the fourth. Where the
+row turns on *which* remnant the warlock bargained with, it waits on
+`c.active_vestige()` with `cf:warlock-f1s6` and its two cards. Where the
+row has to **cause** a boon rather than watch one, it waits on
+`c.pact_boon()` with `i698x1` and `i2305p1`. f2193 is the fourth case
+and needs nothing: it *replaces* the boon, and a watch armed by
+`c.watch` is owned by its effect, so ending that effect disarms the
+feature.
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    ActionPointSpent,
     ActionType,
     AttackDeclared,
     Cast,
@@ -49,10 +56,14 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     EffectApplied,
+    Healed,
     Hit,
     Keyword,
+    Moved,
+    PowerResolved,
     PowerUsed,
     SavingThrow,
+    SecondWind,
     SurgeSpent,
     Trigger,
     When,
@@ -63,6 +74,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health, Position
+from combat_engine.engine.grid import spread
 
 #: The class feature that lays the curse, and the name its extra damage
 #: reads its bonus under. `extra_damage` pays
@@ -75,9 +87,10 @@ CURSE_DAMAGE = f"{CURSE} damage"
 PACT = "cf:warlock-f1"
 SHADOW = "cf:warlock-f3"
 
-#: Nothing announces a pact boon paying out, and nothing invokes one on
-#: purpose. Four rows here turn on that moment.
-PACT_BOON = ("c.on_pact_boon()",)
+#: Which remnant a vestige warlock is speaking for. Nothing holds it, so
+#: neither the at-will nor the boon it gates can tell which one it is.
+#: `cf:warlock-f1s6` and its two cards carry the same symbol.
+VESTIGE = ("c.active_vestige()",)
 #: A class feature named in prose with no ref -- the vestiges, which are
 #: a whole subsystem the engine has never heard of.
 FEATURE = ("c.class_feature()",)
@@ -292,32 +305,127 @@ def f1121(c: Cast) -> None:
     )
 
 
+def _pay_curse(c: Cast, victim: int) -> None:
+    """The curse's extra damage, dealt on purpose.
+
+    `extra_damage`'s own two lines said again: the die is asked for rather
+    than written down, so f2764's d8s are honoured, and whatever f1121 is
+    adding comes through `c.total`. Paid under the curse's own `detail`,
+    so a rider watching the payout -- f2766's shape -- sees this helping
+    too, and so does anything counting them.
+
+    **One divergence, and it is in `_reroll_floor` rather than here.**
+    `c.reroll_ones(ref=)` keys on the ref of the row doing the rolling, so
+    f2760's reroll covers the class feature's helping and not a feat's.
+    Narrowing a reroll by the damage's *label* is what would close that,
+    and no card in this file prints it.
+    """
+    c.damage(
+        c.dice_for(CURSE, "1d6", {"target": victim}),
+        c.total(CURSE_DAMAGE), on=victim, detail=CURSE,
+    )
+
+
 @power("f1124", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.curse_damage()",))
+       reach=PERSONAL, target=SELF)
 def f1124(c: Cast) -> None:
-    """A second helping of curse damage in a turn bought with an action
-    point. `ActionPointSpent` is a real event, so the trigger is
-    sayable; the payout is not. The once-a-round latch and the dice both
-    live inside `extra_damage`'s closure and nothing reaches either, so
-    there is no way to deal the curse's damage on purpose."""
+    """A second helping of curse damage in a turn bought with an action point.
+
+    A trait with two watches rather than a declared trigger, because the
+    printed condition is "you have **already** dealt your curse damage
+    during your current turn" -- which has to have been remembered before
+    the point is spent, and a declared trigger's body runs only when it
+    fires.
+
+    **The once-a-round latch is not reached and does not have to be.** The
+    card's own condition is what guarantees the class feature's hold is
+    already closed for the round, so the helping armed here is the only one
+    left to pay and the two never land on one blow. See `_pay_curse` for
+    the payout.
+    """
+    me = c.me
+    dealt: set[int] = set()
+
+    def note(ev: DamageApplied) -> None:
+        if ev.source == me and ev.detail == CURSE:
+            dealt.add(c.world.round)
+
+    def again(ev: ActionPointSpent) -> None:
+        if ev.actor != me or c.world.round not in dealt:
+            return
+        paid: list[bool] = []
+
+        def second(hit: Hit) -> None:
+            if paid or hit.attacker != me or not _cursed(c, hit.target):
+                return
+            paid.append(True)
+            _pay_curse(c, hit.target)
+
+        c.watch(Hit, second, until=When.EOT, on=me, label=f"{c.ref} second")
+
+    c.watch(DamageApplied, note, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} tally")
+    c.watch(ActionPointSpent, again, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2036", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.curse_damage()",))
+       reach=PERSONAL, target=SELF)
 def f2036(c: Cast) -> None:
-    """The same gap as f1124, hung on another feat's granted card.
-    `f2023b` is a ref and `Hit` names it, so only the paying half is
-    missing."""
+    """The curse's extra damage on a named card's hit, latch or no latch.
+
+    **Settled at `PowerResolved` rather than on the `Hit`**, and that is
+    the whole of why this is writable without reaching the latch. This row
+    and `extra_damage` watch the same `Hit` in the same window and nothing
+    decides which runs first, so paying blind would double the damage on
+    every blow where the feature's hold was still open. Once `f2023b` has
+    finished resolving the feature has either paid or not, and a
+    `DamageApplied` under the curse's own `detail` is how that is read --
+    by sequence, so a payment made *before* the blow cannot be mistaken for
+    one made on it. "Even if you have already used your extra curse damage
+    this turn" is then the only case left to pay.
+    """
+    me = c.me
+    struck: list[tuple[int, int]] = []
+    paid: list[tuple[int, int]] = []
+
+    def landed(ev: Hit) -> None:
+        if ev.attacker == me and ev.power == "f2023b" and _cursed(c, ev.target):
+            struck.append((ev.target, ev.seq))
+
+    def noted(ev: DamageApplied) -> None:
+        if ev.source == me and ev.detail == CURSE:
+            paid.append((ev.target, ev.seq))
+
+    def settle(ev: PowerResolved) -> None:
+        if ev.actor != me or ev.power != "f2023b":
+            return
+        for foe, blow in struck:
+            if not any(who == foe and at > blow for who, at in paid):
+                _pay_curse(c, foe)
+        struck.clear()
+        paid.clear()
+
+    c.watch(Hit, landed, until=When.ENCOUNTER, on=me, label=f"{c.ref} hit")
+    c.watch(DamageApplied, noted, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} tally")
+    c.watch(PowerResolved, settle, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2760", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.curse_damage()",))
+       reach=PERSONAL, target=SELF)
 def f2760(c: Cast) -> None:
-    """Rerolls a 1 on the curse's damage dice. Two rows already want
-    `c.reroll_ones()`; what is particular here is that the dice are the
-    class feature's, rolled inside `extra_damage`, so even a general
-    reroll would have nothing to attach to."""
+    """Rerolls a 1 on the curse's damage dice.
+
+    `c.reroll_ones` is the verb and `ref=` is the narrowing -- its own
+    docstring names the curse damage as what that parameter is for. The
+    objection this row carried was that the dice live inside
+    `extra_damage`'s closure, which is true of the die *string* and not of
+    the roll: the payout goes through `c.damage` on `cf:warlock-f4`'s own
+    `Cast`, and `_reroll_floor` is read from there with the dice in hand.
+
+    Default `below=2`, which is "a result of 2 or higher" exactly.
+    """
+    c.reroll_ones(ref=CURSE)
 
 
 @power("f2764", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -536,42 +644,93 @@ def f2291(c: Cast) -> None:
 
 
 @power("f1166", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()",))
+       reach=PERSONAL, target=SELF, todo=VESTIGE)
 def f1166(c: Cast) -> None:
-    """Swaps the active vestige when the pact boon fires.
-    `cf:warlock-f1s6` is declared, so the feature is not the hold -- the
-    boon is, as it is for the eight other rows naming it."""
+    """Swaps the active remnant when the pact boon fires.
+
+    Re-aimed. The boon's moment is not what holds this: `cf:warlock-f1s6`
+    is declared, every boon fires off `Dropped` under `cursed_by_me`, and
+    `feats/warlock.py` writes three riders that way already. What is
+    missing is the thing `cf:warlock-f1s6` and both its cards wait on --
+    nothing holds which remnant is active, so there is no state to change
+    and no record of the ones held earlier for the card to choose among.
+    """
 
 
 @power("f2035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_pact_boon()", "cf:warlock-f4c0"))
+       reach=PERSONAL, target=SELF, todo=VESTIGE)
 def f2035(c: Cast) -> None:
-    """Adds a vestige with its own pact boon and augment. The boon hook is
-    the standing gap; the curse the boon reads, `cf:warlock-f4c0`, has a
-    ref and no row."""
+    """Adds a remnant whose boon slides a second cursed creature.
+
+    Re-aimed, and the payout is the half that *is* writable: `Dropped`
+    plus `cursed_by_me` is the moment, `c.cursed` finds the others and
+    `c.slide` moves one Intelligence modifier of squares. What cannot be
+    said is **when** the warlock has it. The boon is printed as the one
+    that pays while this remnant is active, so a row that paid it
+    unconditionally would hand the warlock a second boon beside the one
+    its own leg already pays -- which is `cf:warlock-f1c12`'s argument for
+    the same symbol, word for word. The augment line is a clause of that
+    remnant's at-will and waits on the same state.
+
+    The old marker's second symbol, `cf:warlock-f4c0`, is stale: the spec
+    names `cf:warlock-f4` here and that row is declared.
+    """
 
 
-@power("f1358", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PACT_BOON)
+@power("f1358", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p2094",
+       on=Trigger(PowerUsed, _used("p2094"), "your pact boon pays"))
 def f1358(c: Cast) -> None:
-    """Leaves difficult ground behind a pact teleport. The ground is
-    sayable -- `c.zone(difficult=True)` over the square and its
-    neighbours, with `c.ignores_difficult` on the caster for the "to
-    everyone but you" -- but the teleport it hangs on is a pact boon and
-    nothing announces one."""
+    """Difficult ground left behind a pact teleport.
+
+    **The boon this names is a card with a ref**, `p2094`, and
+    `feats/warlock.py` already hangs f291, f292 and f293 off `p2094`,
+    `p2095` and `p2263` exactly this way -- so "when your pact boon
+    triggers" is an ordinary declared trigger and the symbol this row
+    carried was answering a question it never asked.
+
+    `PowerUsed` rather than `PowerResolved`, because the square wanted is
+    the one *left*: a `Moved` watch armed before the hop reads `from_` off
+    the step itself, which is both the printed words and proof the teleport
+    happened at all. `kind_` is asked so that an ordinary walk later in the
+    turn cannot spend the watch, and the hand latch is not needed --
+    `c.watch(once=True)` means "fire once", measured by whether the handler
+    did anything.
+
+    "To everyone but you" is the zone's `difficult` **label** plus
+    `c.ignores_difficult` under the same word: a bare `difficult=True`
+    labels the squares with the empty string, and an exemption with no kind
+    is every sort of rough ground on the board.
+    """
+    me = c.me
+
+    def behind(ev: Moved) -> None:
+        if ev.actor != me or getattr(ev, "kind_", "") != "teleport":
+            return
+        c.zone(spread({ev.from_}, 1), label=c.ref, difficult=c.ref,
+               until=When.SONT)
+        c.ignores_difficult(c.ref, on=me, until=When.SONT)
+
+    c.watch(Moved, behind, until=When.EOT, on=me, once=True, label=c.ref)
 
 
 @power("f2759", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PACT_BOON)
+       reach=PERSONAL, target=SELF, todo=("c.pact_boon()",))
 def f2759(c: Cast) -> None:
     """Takes the boon early, when a cursed enemy is first bloodied,
     and pays for it with the curse.
 
-    The trigger is declarable -- `Bloodied` plus `cursed_by_me` -- and
-    the price is too, since the curse is a labelled effect that
-    `Effects.end` would lift. What is missing is the benefit: nothing
-    invokes a pact boon on purpose, so writing this would be the cost
-    with nothing bought.
+    Re-aimed, and the re-aim is the finding. `Dropped` plus `cursed_by_me`
+    is how a boon *announces itself*, and this row does not watch a boon --
+    it **causes** one, off `Bloodied`, which is the opposite operation and
+    was sitting under the same symbol. Both halves of the price are sayable
+    (the curse is a labelled hold `Effects.end` would lift); the thing
+    bought is not. The seven legs pay seven different boons, two of them
+    inside `cf:warlock-f1`'s own watch, so there is no one payout to
+    invoke. `i698x1` ("a second trigger on the feature") and `i2305p1`
+    ("instead of triggering your pact boon") are the same gap and the
+    symbol they already carry.
     """
 
 
@@ -734,15 +893,51 @@ def f2081(c: Cast) -> None:
     because that is the character whose level the card means.
     """
     c.pre_empt("p2095", "temp_hp", _f2081_damage)
-@power("f2194", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+
+
+@power("f2194", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.forgo_healing()",))
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f2194(c: Cast) -> None:
-    """Regain nothing from a second wind and take a +2 to attacks, saves
-    and damage instead. `SecondWind` is the moment; declining the healing
-    is the same gap f2081 names, and it is the whole row. The errata's
-    deletion of defences from the list is already reflected: they are not
-    written."""
+    """Regain nothing from a second wind, for a bonus to three rolls instead.
+
+    **Not the same gap as f2081.** That row suppresses a clause of another
+    row's *body*; this one refuses hit points, and `Healed` is a `Decision`
+    whose `amount` a listener may write -- which is how `c.half_healing`
+    halves a heal rather than clawing it back afterwards. `Cast.second_wind`
+    announces `SecondWind` **before** it spends the surge and before
+    `world.heal`, so the watch armed here is in place for the heal it is
+    about to zero. `c.no_surges` is the wrong lever: that stops the surge
+    being spent at all, and this card spends it.
+
+    The latch is written out rather than `once=True`, because `once` is
+    spent only when the handler *did* something and writing a field on an
+    event announces nothing -- so the hold would never come off.
+
+    `SecondWind.healed` is the number about to come back, so the choice is
+    put to the decider with it in hand; at full hit points it costs
+    nothing.
+
+    Untyped -- the card prints no word before "bonus" -- and the errata
+    deletes defences from the list, so only the three rolls are laid.
+    """
+    me = c.me
+    coming = getattr(c.trigger, "healed", 0)
+    if not c.may(f"regain none of the {coming} hit points", who=me):
+        return
+    done: list[bool] = []
+
+    def none(ev: Healed) -> None:
+        if done or ev.target != me:
+            return
+        done.append(True)
+        ev.amount = 0
+
+    c.watch(Healed, none, until=When.EOT, on=me, window=Window.BEFORE,
+            label=c.ref)
+    for roll in ("attack", "save", "damage"):
+        c.bonus(roll, 2, on=me, until=When.EONT)
 
 
 @power("f2195", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -761,6 +956,12 @@ def f2195(c: Cast) -> None:
     the same event with the same `detail`. Nothing on `DamageApplied`
     says which half of a row dealt it, so the splash also fires on the
     first payment, which is one extra 5 fire damage per use.
+
+    Re-read and still dropped. `from_attack` is an **argument** to
+    `resolve.deal_damage` and is not a field on the event it emits, so
+    there is nothing for a content row to read; i1826x1 holds the same
+    marker for the same two blows. This is a one-field widening of
+    `DamageApplied`, not a row that can be written today.
     """
     me = c.me
 

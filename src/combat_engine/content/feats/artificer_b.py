@@ -58,6 +58,7 @@ from combat_engine.engine import (
     Keyword,
     Moved,
     PowerResolved,
+    Powers,
     PowerUsed,
     SavingThrow,
     Size,
@@ -79,6 +80,10 @@ AC_INFUSION = "p7635"
 #: Resistance to a damage type the target chooses.
 RESIST_INFUSION = "p10187"
 INFUSIONS = (HEAL_INFUSION, AC_INFUSION, RESIST_INFUSION)
+#: The two of the three that lay an effect with a duration. `p4128` is a
+#: heal and resolves on the spot, so a rider printed as lasting "until the
+#: effect ends" has nothing to hang on there.
+WARDS = (AC_INFUSION, RESIST_INFUSION)
 
 
 
@@ -100,6 +105,10 @@ def _used(ref: str):  # noqa: ANN202
 
 def _used_infusion(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power in INFUSIONS
+
+
+def _used_ward(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return ev.actor == me and ev.power in WARDS
 
 
 def _familiar_active(c: Cast) -> int | None:
@@ -364,7 +373,15 @@ def f1709b(c: Cast) -> None:
     one through. `c.use_power(..., who=familiar)` is the near miss to
     avoid -- it makes the familiar the caster, so the infusion would be
     rolled with the familiar's ability modifiers instead of moving one
-    burst's origin, and the heal in particular would come out wrong."""
+    burst's origin, and the heal in particular would come out wrong.
+
+    Checked once more and the marker stands. `dsl.use` takes
+    `origin: Square | None` and `area_of`/`candidates` already measure
+    from it; `Cast.use_power` is the only content route and it does not
+    declare the parameter, so there is no surface to say this with.
+    `Range.from_ == "companion"` is the other route the engine has and it
+    is header data on the row being *borrowed*, which a feat cannot
+    reach. One forwarded kwarg closes it."""
 
 
 @power("f1710", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -643,18 +660,71 @@ def f3027(c: Cast) -> None:
             c.save(on=who)
 
 
-@power("f3032", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
+#: The nine legs this card prints, in the order the race offers them, by
+#: the racial power `RaceLine.granted` deals for each -- which **is** the
+#: whole record of the choice, and is what `rt:r33-t0` forks on. Seven of
+#: the nine are a resistance; `p1767` and `p1770` are the saving-throw
+#: pair and are branched on by name below. The race has four more legs and
+#: this card prints none of them.
+_WARD_LEGS = ("p1766", "p1767", "p1769", "p1770", "p1828",
+              "p10043", "p10044", "p10045", "p10046")
+_WARD_RESIST = {
+    "p1766": DamageType.FIRE,
+    "p1769": DamageType.LIGHTNING,
+    "p1828": DamageType.COLD,
+    "p10043": DamageType.ACID,
+    "p10044": DamageType.FIRE,
+    "p10045": DamageType.POISON,
+    "p10046": DamageType.PSYCHIC,
+}
+
+
+def _ongoing_save(ctx: dict[str, Any]) -> bool:
+    """A save context's "against ongoing damage".
+
+    The same gate `features/racial.py` builds for the race's own legs,
+    duplicated for the reason `_ladder` above is: it is private over
+    there, and one predicate either way is cheaper than a cross-file hook.
+    """
+    return bool(ctx.get("ongoing"))
+
+
+@power("f3032", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p7635 or p10187",
+       on=Trigger(PowerUsed, _used_ward, "you use one of those infusions"))
 def f3032(c: Cast) -> None:
     """Nine legs, one per racial manifestation, seven of them a
     resistance and two a saving-throw bonus.
 
-    Re-aimed to name the gap rather than the thing that does exist:
-    `chargen.BUILDS` is there and has a leg for every class that prints
-    a choice, and `c.element` reads `element:` off the build those legs
-    make. A *race* that prints a choice has nowhere to record one, so
-    every branch of this would be silently false. The same hold as the
-    warden's racial leg."""
+    The old marker said a race printing a choice has nowhere to record
+    one. It has: the choice **is** which of the race's thirteen racial
+    powers `RaceLine.granted` dealt, and `rt:r33-t0` already forks on
+    exactly that. So no new chargen field was needed.
+
+    The read is `Powers.all` and deliberately **not** `c.knows`, which
+    answers who *on the board* holds a row -- true for an artificer
+    standing next to somebody else's manifestation, and so the wrong
+    question here. `rt:r33-t0`'s own helper says why.
+
+    Only the two infusions that lay a lasting effect can carry this, and
+    both lay theirs `until=When.ENCOUNTER` -- so the rider ends with them
+    rather than approximating the printed "until that effect ends".
+    """
+    known = c.world.get(c.me, Powers)
+    held = known.all if known is not None else ()
+    taken = next((ref for ref in _WARD_LEGS if ref in held), "")
+    if not taken:
+        return
+    for who in c.trigger.targets:
+        if taken in _WARD_RESIST:
+            c.resist(_ladder(c.level), _WARD_RESIST[taken],
+                     until=When.ENCOUNTER, on=who)
+        elif taken == "p1767":
+            c.bonus("save", 1, until=When.ENCOUNTER, on=who)
+        else:
+            c.bonus("save", 2, until=When.ENCOUNTER, on=who,
+                    when=_ongoing_save)
 
 
 def _wields_infusion(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -821,10 +891,10 @@ def f3041(c: Cast) -> None:
     """Widens the trigger of a racial power to an ally taking damage, and
     makes both of you invisible when it goes off that way.
 
-    The old marker said the shielding elixir arrives as a name with no
-    ref. It does not have to: this file matches the three infusions to
-    their refs by mechanic, and f2111's own card quotes the resistance
-    that `p10187` grants. So "affected by your shielding elixir" is
+    The old marker said the infusion arrives as a name with no ref. It
+    does not have to: this file matches the three infusions to their refs
+    by mechanic, and f2111's own card quotes the resistance that `p10187`
+    grants. So "affected by your <that infusion>" is
     `c.suffering(p10187)`, which is the gate the row was missing.
 
     "Until you attack" is not a duration the engine holds, so it is
@@ -1016,6 +1086,22 @@ def _banked(ref: str, what: str) -> None:
     Narrower and honest: the subject exists now, the *other* holder does
     not -- `c.empower(on=ally)` is the gap, which is `cf:artificer-f0s0`
     being able to lay its reservoir on somebody else's weapon.
+
+    Checked again and the marker stands, with a second half worth writing
+    down: even once the reservoir can be laid elsewhere, **nothing reads
+    back who is holding one**. Both of `cf:artificer-f0s0`'s watches take
+    `c.watch`'s default label, which is `"<ref> trigger"`, so the outer
+    watch for the rest and the inner one for the banked roll are
+    indistinguishable to `c.suffering` -- an artificer with no charge at
+    all looks exactly like one carrying it. A distinct label on the inner
+    watch, or a component field, is what these three would read.
+
+    `f3036` has a third obstacle on top of both, and it is the one that
+    would still refuse the row: the bonus is to an **initiative check**,
+    `Encounter.start` rolls initiative and *then* arms traits, and the
+    reservoir is banked at a rest. `RaceLine.initiative`'s own note is
+    this gap, and `c.initiative` moves a count rather than laying a
+    standing bonus on a roll that has not happened.
 
     `f2110` is out of this family for that reason: it changes the size of
     the bonus rather than asking who carries it, so it is written.

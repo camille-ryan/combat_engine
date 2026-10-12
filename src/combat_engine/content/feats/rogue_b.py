@@ -23,10 +23,15 @@ worth keeping apart:
 * the **condition**, the `applies=` callable that closure closes over.
   Widening it from outside would mean a second latch beside the first
   and two payouts in a turn, which is why f2076 still waits.
-* the **dice**, which are rolled inside `c.damage` and gone. `c.bonus`
-  reaches the total -- `c.bonus("cf:rogue-scoundrel-f4 damage", n)` is
-  what `extra_damage` adds on top, and `dice=` puts a whole die there --
-  but no modifier takes a die back out or rerolls one that came up low.
+* the **dice**, which are rolled inside `c.damage` and gone *by the time
+  `DamageRolled` carries them*. `c.bonus` reaches the total --
+  `c.bonus("cf:rogue-scoundrel-f4 damage", n)` is what `extra_damage`
+  adds on top, and `dice=` puts a whole die there -- and rerolling a low
+  one is no longer missing: `c.reroll_ones` is a floor read *before* the
+  roll, inside `Cast._roll_damage`, narrowed by the ref of the row doing
+  the rolling. f1661 is written against that. What is still shut is
+  taking a die back **out**, which f952 wants: a `DamageRolled` listener
+  has one summed number and no die to decline.
 
 **The weapon gate is a ref, not a group, wherever the group is wider
 than the card.** `chargen` carries ten weapons. A card reading "while
@@ -759,14 +764,38 @@ def f952(c: Cast) -> None:
     dressed up as the printed one."""
 
 
-@power("f1661", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(sneak=)",))
+@power("f1661", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p8278",
+       on=Trigger(PowerUsed, used_one_of("p8278"), "you use p8278"))
 def f1661(c: Cast) -> None:
-    """Rerolls the low dice of the extra damage when `p8278`'s necrotic
-    rides along. The payout is announced and the racial power is a ref,
-    so neither the naming nor the moment is the gap; `DamageRolled`
-    carries one total and the individual faces are gone by the time
-    anything sees it."""
+    """Re-read: the old note was looking at the wrong event.
+
+    `DamageRolled` does carry one total with the faces gone -- but
+    `c.reroll_ones` is not read there. It records a floor that
+    `Cast._roll_damage` consults *before* rolling, where the dice are in
+    hand, and `_reroll_floor` narrows by `@<ref>` against the ref of the
+    row doing the rolling. `strikers.extra_damage` rolls through the
+    feature's own `Cast`, so that ref is `_SNEAK` and the floor lands on
+    the extra dice alone. `below=3` is the card's "a 1 or a 2", and
+    `_rolled_above` loops per die, which is its "reroll until a given die
+    has a result greater than 2".
+
+    `p8278` carries the necrotic keyword itself, so the printed damage
+    type needs no second gate. The hold is opened above the body and
+    shut on `PowerResolved` rather than left to the end of the turn:
+    the rogue may pay its extra damage again on somebody else's turn,
+    and only this power's swing is meant to reroll."""
+    me = c.me
+    held = c.reroll_ones(below=3, ref=_SNEAK, on=me, until=When.EOT)
+    if held is None:
+        return
+
+    def shut(ev: PowerResolved) -> None:
+        if ev.actor == me and ev.power == "p8278":
+            c.end_effect(held)
+
+    c.watch(PowerResolved, shut, until=When.EOT, on=me, label=c.ref)
 
 
 @power("f2076", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -799,7 +828,7 @@ def _counts_as(
     """
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, **({"todo": wants} if wants else {}))
+           reach=PERSONAL, target=SELF, todo=wants or ())
     def feat(c: Cast) -> None:
         for holding, satisfies in waives:
             c.counts_as(satisfies, holding=holding)

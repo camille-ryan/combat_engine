@@ -50,6 +50,8 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     Ranged,
+    Relation,
+    RelationSet,
     Trigger,
     When,
     power,
@@ -575,11 +577,52 @@ def f2400(c: Cast) -> None:
 
 
 @power("f2427", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_grab_attack()",))
+       reach=PERSONAL, target=SELF)
 def f2427(c: Cast) -> None:
-    """A critical hit with a grab attack. `c.grab` sets the relation and
-    rolls nothing, so there is no roll to crit with -- the same gap a
-    general feat wanting +4 to the grab's attack roll names."""
+    """The two halves of the printed line are read at two different
+    moments, and the old note that "there is no roll to crit with" was
+    stale: `c.grab_attempt` rolls Strength against Reflex as_ `"grab"`
+    and `resolve` stamps that onto the `Hit`, so the manoeuvre is asked
+    outright.
+
+    The other half -- a martial power that *allows* a grab -- is data
+    nowhere: no header field says a row's attack can grab. So it is read
+    off the consequence instead. `c.grab` is applied from the body after
+    the `Hit` is announced, so the crit is already remembered when the
+    `GRABBED_BY` relation lands, and the effect's label names the row
+    that laid it -- which is what keeps a crit in round 1 from paying out
+    on an unrelated grab in round 5.
+
+    The narrowing that buys: a power permitting a grab nobody takes pays
+    nothing. `Power.grabs` is what would close that, and `f2478` carries
+    it -- a miss has no consequence to read.
+    """
+    me = c.me
+    crit: dict[int, str] = {}
+
+    def on_crit(ev: Any) -> None:
+        if not _i_crit(c.world, me, ev):
+            return
+        if getattr(ev, "as_", "") == "grab":
+            c.prone(on=ev.target)
+        elif _i_hit_with_martial(c.world, me, ev):
+            crit[ev.target] = ev.power
+
+    def on_grab(ev: Any) -> None:
+        ref = crit.get(ev.target)
+        if ref is None or ev.kind_ is not Relation.GRABBED_BY or ev.source != me:
+            return
+        for effect in c.world.effects.of(ev.target):
+            held = any(
+                k is Relation.GRABBED_BY and s == me for k, s, _t in effect.relations
+            )
+            if held and effect.label.startswith(ref):
+                del crit[ev.target]
+                c.prone(on=ev.target)
+                return
+
+    c.watch(Hit, on_crit, on=me, until=When.ENCOUNTER)
+    c.watch(RelationSet, on_grab, on=me, until=When.ENCOUNTER)
 
 
 @power("f2432", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -593,10 +636,29 @@ def f2432(c: Cast) -> None:
 
 
 @power("f2478", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_grab_attack()",))
+       reach=PERSONAL, target=SELF, dropped=("Power.grabs",))
 def f2478(c: Cast) -> None:
-    """Damage on a **missed** grab. Same gap as f2427 from the other
-    side: nothing announces an attack as one that would have grabbed."""
+    """Damage on a **missed** grab. The manoeuvre half is written: a grab
+    attempt rolls as_ `"grab"` and `resolve` stamps that onto the `Miss`,
+    which is the one attack that is only ever a grab.
+
+    Dropped is the rest of the phrase -- a martial power that would have
+    grabbed on a hit. `f2427` reads that off the grab landing, and here
+    nothing lands, so there is no consequence to read the permission
+    from; no header field declares that a row's attack can grab, which
+    is the symbol.
+    """
+    me = c.me
+
+    def on_miss(ev: Any) -> None:
+        if (
+            ev.attacker == me
+            and getattr(ev, "as_", "") == "grab"
+            and ev.target in enemies(c.world, me)
+        ):
+            c.damage(0, c.dex_mod, on=ev.target)
+
+    c.watch(Miss, on_miss, on=me, until=When.ENCOUNTER)
 
 
 # -- the mark ---------------------------------------------------------------
@@ -811,16 +873,22 @@ def f2438(c: Cast) -> None:
 
 @power("f2448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_miss_all()",))
+       todo=("c.reroll_attack(rolls=)",))
 def f2448(c: Cast) -> None:
-    """Spends the racial power to reroll every attack roll of a power
-    that missed everything. Two of the three holds have gone:
-    `c.expend_row` charges a row from outside it, and a level-11 monster
-    wave declared `m4421a6`, so there is now something to charge.
+    """Spends the racial power to reroll every attack roll of a use that
+    missed everything. Two of the three holds had already gone, and the
+    third was named wrong: **the condition is askable.** `PowerResolved`
+    carries every `AttackResult`, so "missed every target" is
+    `bool(ev.rolls) and not any(r.hit for r in ev.rolls)` -- written
+    three times over in the tree.
 
-    What is left is the condition itself. `Miss` is announced per target
-    and says nothing about the others, so "missed every target" cannot
-    be asked -- which is the one symbol this row still waits on."""
+    It is the reroll that cannot move there. By `PowerResolved` every
+    miss has resolved, so a roll turned into a hit lands no damage and
+    no rider, and `c.reroll_attack` reaches only the single attack on
+    `c.trigger`. Re-aimed at the symbol `i1675p1` and `p10354` already
+    carry. Written on `Miss` instead it would spend a daily racial power
+    on the first roll of a use whose other rolls may yet hit, so the row
+    stays refused rather than wrong."""
 
 
 @power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

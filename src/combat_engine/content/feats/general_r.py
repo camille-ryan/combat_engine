@@ -1065,18 +1065,32 @@ def f3609(c: Cast) -> None:
             when=bigger)
 
 
-@power("f3610", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.maximise(dice=)",))
+@power("f3610", level=1, cls="", usage=AT_WILL, action=NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p12668 with a pick",
+       on=Trigger(PowerUsed, _used("p12668"), "you use p12668"))
 def f3610(c: Cast) -> None:
-    """Re-aimed. The old marker said the attack roll could not be read,
-    and it can: `AttackRolled` carries `natural`, so "if your attack roll
-    was 18-20" is an ordinary watcher.
+    """Re-read: the payout half was wrong about `c.maximise`.
 
-    The payout is the half that cannot be said. `c.maximise` tops a blow
-    up to the maximum of the **header's** `damage=` line, and `p12668`
-    has none -- its extra damage is rolled in its body -- so the listener
-    reads `damage_of(0)`, finds nothing and returns. Maximising a damage
-    expression a body rolls has no verb."""
+    It lays **two** things, and the old note only saw the first. The
+    `DamageRolled` listener does read the header's `damage=` line and
+    does give up on `p12668`, which has none -- but the verb also
+    appends a `maximise` modifier, and that one is consumed inside
+    `_roll_damage`, "the one place the dice are actually in hand",
+    written for exactly the case where a body rolls the expression.
+
+    Declared on `PowerUsed` rather than on the `Hit`, because that
+    modifier is one-shot: announced above `p12668`'s body, the next
+    damage roll the character makes is that body's `1[W]`. The roll is
+    read off `PowerUsed.trigger` -- the `Hit` that provoked the free
+    action -- where the live `AttackResult` rides as a plain
+    attribute."""
+    ev = c.trigger
+    landed = getattr(ev, "trigger", None) if ev is not None else None
+    result = getattr(landed, "result", None)
+    if result is None or result.natural < 18 or not _holding(c, "pick"):
+        return
+    c.maximise(on=c.me, ref="p12668", until=When.EOT)
 
 
 @power("f3611", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -2017,10 +2031,20 @@ def f3669(c: Cast) -> None:
 
 
 @power("f3670", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.share_space()",))
+       reach=PERSONAL, target=SELF, todo=("c.cover(when=)",))
 def f3670(c: Cast) -> None:
-    """Two creatures in one square is not a thing the grid allows, so the
-    condition the whole benefit is gated on can never be true."""
+    """Re-aimed, and the old reason was false. Two creatures in one
+    square **is** a thing the grid allows -- `c.shares_space` is the
+    standing property and `movement.shares_space` reads it back -- so
+    the gate the benefit hangs on can be true and can be asked.
+
+    The payout is what is missing. Carried cover is a `"cover"`
+    modifier, but `query._carried_cover` reads it as
+    `mods.total("cover", {})`: the context is empty, so a `when=` on it
+    is silently false and the only cover a row can hand out is cover
+    against *everything*. This card gives it against melee and ranged
+    attacks and not against a burst, and over-delivering that is worse
+    than not playing it."""
 
 
 @power("f3671", level=1, cls="", usage=ENCOUNTER, action=NONE,

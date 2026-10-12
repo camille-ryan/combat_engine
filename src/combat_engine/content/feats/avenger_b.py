@@ -259,9 +259,23 @@ def f2163(c: Cast) -> None:
 @power("f2162", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("c.floor_damage_dice()",))
 def f2162(c: Cast) -> None:
-    """Treats a 1 or 2 on a damage die as a 3. Reaching into the dice a
-    row rolls, which `c.reroll_damage` does not substitute for -- that
-    rolls the whole expression twice, a different and larger change."""
+    """Treats a 1 or 2 on a damage die as a 3.
+
+    Re-read against `c.reroll_ones(below=3)`, which is the nearest thing
+    in the tree and is **not** this card twice over.
+
+    `Cast._rolled_above` is the right hook and the wrong operation: it
+    *rerolls* each die under the floor, so a 1 on a d6 becomes 2-6 and
+    averages 4, where the printed line pins it to exactly 3. Flooring is
+    strictly weaker than rerolling on every die the game prints, so
+    writing one as the other would be a feat better than its card. What is
+    wanted is the same loop taking `max(face, floor)` and no reroll.
+
+    The narrowing does not reach either. `_reroll_floor` is asked inside
+    `_roll_damage` with the row being rolled and nothing else, so
+    "with a weapon attack" has `keyword=` but "against a target of your
+    p3069" has nothing -- there is no target in hand at that point.
+    """
 
 
 @power("f2165", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

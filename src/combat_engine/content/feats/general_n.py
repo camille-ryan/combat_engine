@@ -1670,8 +1670,7 @@ def f2442(c: Cast) -> None:
 @power("f2450", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p1452",
-       on=Trigger(PowerUsed, _used("p1452"), "you use that racial power"),
-       dropped=("c.uncrit()",))
+       on=Trigger(PowerUsed, _used("p1452"), "you use that racial power"))
 def f2450(c: Cast) -> None:
     """Nothing announces that a roll is a second one, but nothing has to:
     `PowerUsed` is announced *above* the body, so at this moment p1452's
@@ -1680,14 +1679,42 @@ def f2450(c: Cast) -> None:
     blow that provoked the racial power, and it is the only thing that
     names the attacker -- the row itself is `SELF`.
 
-    The one-shot is spent on the next attack roll that attacker makes,
-    which is the reroll. Denying the critical is the dropped half.
+    **The critical half is written now, and `c.uncrit()` was never the
+    hold.** `f976` says it outright -- a critical can be demoted -- and
+    `monsters/level_11/soldiers_sa._next_blow_of_mine_crits` is the same
+    lever pointed the other way: both the event's own field *and* the live
+    `AttackResult` are set in the `Hit`'s `Window.BEFORE`, because
+    `resolve.attack` recomputes the outcome from that object and `c.hit`
+    reads `c.crit` off it -- so rigging the event alone would change the
+    log and leave the damage maximised.
+
+    Spent on the first attack of that enemy's that resolves, hit **or**
+    miss, which is what "that roll" means: a miss that was not demoted
+    must not leave the denial standing for a later swing.
     """
     blow = getattr(c.trigger, "trigger", None)
     foe = getattr(blow, "attacker", None)
     if foe is None:
         return
     c.penalty("attack", 5, on=foe, until=When.EOT, once=True)
+
+    spent: list[bool] = []
+
+    def plain(ev: Hit) -> None:
+        if ev.attacker != foe or spent:
+            return
+        spent.append(True)
+        ev.critical = False
+        result = getattr(ev, "result", None)
+        if result is not None:
+            result.critical = False
+
+    def missed(ev: Miss) -> None:
+        if ev.attacker == foe:
+            spent.append(True)
+
+    c.watch(Hit, plain, until=When.EOT, window=Window.BEFORE, on=foe, label=c.ref)
+    c.watch(Miss, missed, until=When.EOT, on=foe, label=f"{c.ref} spent")
 
 
 @power("f2244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

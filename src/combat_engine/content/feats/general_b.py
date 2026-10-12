@@ -550,10 +550,17 @@ def f652(c: Cast) -> None:
 
 
 @power("f658", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-    reach=PERSONAL, target=SELF, todo=("c.on_grab_attack()",))
+    reach=PERSONAL, target=SELF)
 def f658(c: Cast) -> None:
-    """+4 to the attack roll of the grab action. `c.grab` sets the relation
-    and rolls nothing, so there is no roll to raise."""
+    """`c.grab` applies a grab and rolls nothing, but the *grab action* is
+    `c.grab_attempt`, which rolls Strength against Reflex with
+    `as_="grab"` -- and `resolve` puts `as_` in the attack context, which
+    is the key the bull rush modifiers already gate on. The 11th and 21st
+    level steps are paragon and epic, so the heroic number stands."""
+    c.bonus(
+        "attack", 4, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: ctx.get("as_") == "grab",
+    )
 
 
 @power("f664", level=1, cls="", usage=ENCOUNTER, action=FREE,

@@ -485,7 +485,7 @@ def f3443(c: Cast) -> None:
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.on_pact_boon()",),
+       todo=("c.pact_boon()",),
        trigger="you drop an enemy you have cursed to 0 hit points",
        on=Trigger(Dropped, both(by_me, cursed_by_me),
                   "you drop an enemy you have cursed"))
@@ -817,12 +817,17 @@ def f3467(c: Cast) -> None:
 
 
 @power("f3470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_save()",))
+       reach=PERSONAL, target=SELF, todo=("c.prone(save_ends=)",))
 def f3470(c: Cast) -> None:
-    """Prone is applied on the encounter clock and is never saved against,
-    and `SavingThrow.against` is the label of whatever effect is being
-    shaken off -- so "a saving throw to avoid being knocked prone" is a
-    moment that does not exist to answer."""
+    """**Re-aimed: the hook exists, the moment does not.**
+
+    `c.on_save()` was the wrong name for this. A saving throw *is*
+    answerable -- `Trigger(SavingThrow, ...)` is declared and `i3556p1`
+    ships on it -- so nothing is missing on that side. What is missing is
+    the throw itself: `c.prone` lays prone on a clock and never as
+    something a save can avoid, so `SavingThrow.against` never names it
+    and there is no success to answer. The symbol is the parameter that
+    would make one happen."""
 
 
 # -- the small standing ones ------------------------------------------------

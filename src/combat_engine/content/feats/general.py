@@ -39,10 +39,13 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Gear,
+    Health,
     Hit,
     Keyword,
     Melee,
     Ranged,
+    Relation,
+    RelationSet,
     SavingThrow,
     Size,
     Trigger,
@@ -208,24 +211,62 @@ def f27(c: Cast) -> None:
     c.bonus("skill:athletics", 1, kind="feat", on=c.me, until=When.ENCOUNTER)
 
 
+#: The four skills the mount rolls off its rider's modifier.
+_LENT = ("athletics", "acrobatics", "endurance", "stealth")
+
+
+def _lend_skills(c: Cast, beast: int, done: set[int]) -> None:
+    """Hand the mount the difference between the two modifiers.
+
+    "Using your modifier in place of its own" is a swap, and the engine has
+    no swap -- but `skills.modifier` is the same sum for both creatures and
+    `c.passive` reads it for either, so the delta laid on the mount comes to
+    the rider's number. Only when it is the better one: the card says the
+    creature *can*, so a rider who climbs worse than the beast it is sitting
+    on lends it nothing.
+    """
+    if beast in done:
+        return
+    done.add(beast)
+    for skill in _LENT:
+        delta = c.passive(skill) - c.passive(skill, of=beast)
+        if delta > 0:
+            c.bonus(f"skill:{skill}", delta, on=beast, until=When.ENCOUNTER)
+
+
 @power("f30", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.lend_skills()",))
+       reach=PERSONAL, target=SELF)
 def f30(c: Cast) -> None:
     """Riding: waive the mount's attack penalty, and let it use your skill
     modifier for four skills.
 
-    The first half is not a gap and the marker no longer claims it is.
-    The engine imposes no attack penalty on a mount at all -- `c.ride`,
-    `c.mount` and `c.rider` carry the relation and nothing anywhere
-    subtracts 2 -- so there is nothing for this to waive and writing it
-    would change no roll. `c.no_mount_penalty()` named a verb for
-    undoing something that does not happen, and sat alone in its own
-    group saying so.
+    The first half is not a gap. The engine imposes no attack penalty on a
+    mount at all -- `c.ride`, `c.mount` and `c.rider` carry the relation and
+    nothing anywhere subtracts 2 -- so there is nothing to waive and writing
+    it would change no roll.
 
-    The second half is the real one: a creature cannot borrow another's
-    skill modifier, which is `c.lend_skills()` and four rows elsewhere.
+    The second half is the difference of two `c.passive` readings, laid on
+    the mount. Asked again when a mount is taken mid-fight, because "while
+    you are riding" is not true at the moment a trait arms; `done` is what
+    keeps a remount from lending twice.
+
+    Judgement: `skills.modifier` is the rider's whole modifier, so a feat
+    bonus armed before this one is inside the number the card excludes with
+    "not including any temporary bonuses". Arming order is the only way it
+    can differ and it is worth less than a square of error.
     """
+    me = c.me
+    done: set[int] = set()
+
+    def mounted(ev: RelationSet) -> None:
+        if ev.kind_ is Relation.RIDDEN_BY and ev.target == me:
+            _lend_skills(c, ev.source, done)
+
+    beast = c.mount()
+    if beast is not None:
+        _lend_skills(c, beast, done)
+    c.watch(RelationSet, mounted, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} lent skills")
 
 
 @power("f36", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -284,11 +325,27 @@ def f127(c: Cast) -> None:
     c.bonus(AC, 2, on=c.me, until=When.ENCOUNTER, when=_opportunity)
 
 
+#: Characters whose surge ceiling this file has already lifted, by world and
+#: creature. A trait arms at the start of every fight; the sentence is about
+#: the character sheet, so it must not climb once an encounter.
+_RAISED: dict[tuple[int, int], bool] = {}
+
+
 @power("f131", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.max_surges()",))
+       reach=PERSONAL, target=SELF)
 def f131(c: Cast) -> None:
-    """Two more healing surges. `c.regain_surge` hands back spent ones and
-    cannot raise the ceiling."""
+    """Two more healing surges, written the way f1085 writes its one:
+    `Health.max_surges` is the ceiling a rest refills to, so the pool is
+    raised and the two surges handed over in the same breath -- `story`
+    clamps `surges` to the sheet's number before the fight, so lifting the
+    ceiling alone would give the character nothing to spend."""
+    key = (id(c.world), c.me)
+    health = c.world.get(c.me, Health)
+    if health is None or _RAISED.get(key):
+        return
+    _RAISED[key] = True
+    health.max_surges += 2
+    c.regain_surge(2, on=c.me)
 
 
 @power("f139", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

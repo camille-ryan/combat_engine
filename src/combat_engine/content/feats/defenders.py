@@ -289,17 +289,31 @@ def f2602(c: Cast) -> None:
 
 
 @power("f1985", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_reach(ref)",))
+       reach=PERSONAL, target=SELF)
 def f1985(c: Cast) -> None:
     """Lengthens the reach of one target of the class feature.
 
-    **Re-aimed.** The rows are `FLURRIES` and the spear is `c.wielding`,
-    so neither half of the gate is missing any more. What is missing is
-    the payload: all five cards are `reach=Melee(1)`, that is header data
-    read when targets are picked, and nothing in the vocabulary stretches
-    one row's reach for one use. `c.threatens` is the neighbouring verb
-    and speaks only for the opportunity window.
+    "Header data read when targets are picked" is the right diagnosis and
+    the wrong conclusion: `dsl.area_of` is where targets are picked, and it
+    calls `_stretched` with `{"power": p.ref, "kind": r.kind}` and applies
+    the modifier's own gate to that -- so `c.bonus("reach", ...)` keyed on
+    a ref stretches exactly one row, and its docstring says the stretch is
+    applied there "so the extra square decides what may be aimed at".
+
+    All five `FLURRIES` are `reach=Melee(1)` and `target=ONE_CREATURE`, so
+    the printed "one target of that power" is the only target and +1 is
+    exact.
+
+    The spear is asked **inside** the gate, not at arming time: a weapon
+    can change hands mid-fight, and a `requires=` on a trait is refused
+    once and never re-armed. "An attack that you make with a spear" is the
+    *triggering* attack's weapon, which no context carries -- this file's
+    standing approximation is what is in hand when the clause is read.
     """
+    c.bonus(
+        "reach", 1, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in FLURRIES and c.wielding("spear"),
+    )
 
 
 @power("f2589", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

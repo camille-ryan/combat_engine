@@ -29,6 +29,7 @@ from combat_engine.content.powers.paladin.marks import burning_mark
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    CHA,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -36,6 +37,7 @@ from combat_engine.engine import (
     PERSONAL,
     REF,
     SELF,
+    STR,
     WILL,
     ActionType,
     AttackDeclared,
@@ -791,11 +793,33 @@ def f1560(c: Cast) -> None:
 
 
 @power("f2128", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.basic_ability()",))
+       reach=PERSONAL, target=SELF)
 def f2128(c: Cast) -> None:
     """Replaces a racial power with the card below, which `c.grant_row`
-    says. The ability swap on melee basic attacks is dropped: nothing
-    changes which modifier a basic attack rolls."""
+    says.
+
+    The ability swap is `c.rolls_with`, which was already the answer:
+    the swap is recorded against the **creature** and `Attack.ability_for`
+    reads it before the header, so one paladin rolls the basic attack
+    differently without editing a row every creature on the board shares.
+
+    It moves the damage roll too and nothing extra is said for that half
+    -- `engine/basic.py` pays its damage off `c.attack_mod`, which
+    resolves through the same `ability_for`, and its comment says this is
+    why. So the one call is both sentences of the printed clause.
+
+    `Powers.basic` rather than the literal `mba`: a creature may point its
+    basic attack at another row, and the card means whichever row that is.
+
+    The printed "you **can**" is read as a choice worth making, so the
+    swap is laid only where it is not a downgrade. Ability scores do not
+    move during a fight, so asking once at arming is the same answer as
+    `rolls_with`'s own `when` gate would give every swing.
+    """
+    known = c.world.get(c.me, Powers)
+    basic = (known.basic if known is not None else "") or "mba"
+    if c.stats.mod(CHA) > c.stats.mod(STR):
+        c.rolls_with(basic, CHA, on=c.me, until=When.ENCOUNTER)
     c.grant_row("f2128b", on=c.me, until=When.ENCOUNTER)
 
 

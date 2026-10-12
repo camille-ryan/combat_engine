@@ -28,9 +28,11 @@ laid it, so `c.suffering(ref, include_self=True)` answers it, and three
 of the four rows written against that hold are written now. "Instead
 of" is not one either: `ForcedMove` is a cancellable `Decision` that
 names the row shoving, so one feature's slide can be declined by ref
-and replaced. What is left is the saving throw the class rolls at the
-start of its turn -- nothing says which of a turn's two throws is being
-rolled, or what the effect under it was.
+and replaced. What the effect under a saving throw was is no gap either:
+the hold is still standing while the throw is announced, so `str(eff) ==
+ev.against` finds it and `durations.keywords_of` reads its keywords. What
+is left is which of a turn's two throws is being rolled, which is the
+start-of-turn throw the class's own feature makes.
 
 `usage=AT_WILL` throughout except `f1950`, which is the one card here
 printing "the first time during an encounter". `triggers._answers` asks
@@ -58,12 +60,14 @@ from combat_engine.engine import (
     Keyword,
     PowerUsed,
     Relation,
+    SavingThrow,
     SecondWind,
     Trigger,
     When,
     power,
 )
 from combat_engine.engine.dsl import get
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     ActionPointSpent,
     Bloodied,
@@ -83,9 +87,6 @@ R33 = (
     "p10043", "p10044", "p10045", "p10046",
     "p14073", "p14074", "p14075", "p14076",
 )
-#: Which effect a saving throw was rolled against.
-SAVE_KEYWORDS = ("SavingThrow.keywords",)
-
 
 def _holding(c: Cast, *groups: str) -> bool:
     return any(holding(c.world, c.me, g) for g in groups)
@@ -522,21 +523,33 @@ def f1874(c: Cast) -> None:
 
 @power("f1941", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*SAVE_KEYWORDS, "c.save_order()"))
+       dropped=("c.save_order()",))
 def f1941(c: Cast) -> None:
-    """Temporary hit points for shaking off one sort of effect.
+    """Temporary hit points for shaking off a poison effect.
 
-    Two holds, and the second was unnamed. `cf:warden-f0` is the ref that
-    rolls the throw and `SavingThrow` carries whether it succeeded --
-    what is missing is which keywords the effect it was rolled against
-    had. The save *modifier* context carries them, but this row answers
-    the event, whose `against` is the effect's `__str__`: the label is
-    inside that string and only inside it, so reading a ref back out
-    would be parsing a repr, which is the sort of thing that breaks
-    silently the day the repr changes.
+    **No repr is parsed and no field was needed.** `SavingThrow.against` is
+    the effect's `__str__`, and the effect is still standing on the saver
+    while the throw is announced -- `Effects.save` emits first and ends the
+    hold afterwards -- so the row matches `str(eff)` back to the effect the
+    way `items.arms._my_save_against_hold` does and reads
+    `durations.keywords_of(eff.label)` off it. That lookup was written for
+    exactly this and the old note here missed it.
 
-    "At the start of your turn" is the second: nothing on the throw says
-    which of the turn's two it is, the hold f2553 names."""
+    "At the start of your turn" is the hold that stays, shared with f2553
+    and f2554: nothing on the throw says which of the turn's two it is, so
+    the pool is also paid for the ordinary end-of-turn throw."""
+    me = c.me
+
+    def paid(ev: SavingThrow) -> None:
+        if ev.actor != me or not ev.saved:
+            return
+        if any(
+            str(eff) == ev.against and Keyword.POISON in keywords_of(eff.label)
+            for eff in c.world.effects.of(me)
+        ):
+            c.temp_hp(c.con_mod, on=me)
+
+    c.watch(SavingThrow, paid, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 _ELEMENTAL = (Keyword.ACID, Keyword.COLD, Keyword.FIRE,
@@ -745,6 +758,13 @@ def f1947(c: Cast) -> None:
 @power("f1945", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
 def f1945(c: Cast) -> None:
-    """Marks whatever a racial trait's chosen power hits. The power is
-    picked at build time out of another class's list and nothing records
-    which one, the same gap f604 named."""
+    """Marks whatever a racial trait's chosen power hits.
+
+    **Not the same shape as f1944 above, and that is why it is still
+    blocked.** There the race prints thirteen powers of its own, all
+    declared, so `RaceLine.granted` puts one in `Powers.known` and `c.knows`
+    reads the choice back. This trait's pool is "an at-will attack power
+    from a class other than yours": those rows are nobody's racial powers,
+    `RaceLine.powers` for `r6` does not list them, and `Build.choices`
+    carries no entry for one -- so there is no ref to compare `ev.power`
+    against. `chargen` has to deal and record the choice first."""

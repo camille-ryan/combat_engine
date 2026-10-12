@@ -65,6 +65,12 @@ from combat_engine.engine.query import allies, distance_between, enemies, flanke
 
 from .styles import among, hit_with_one_of, used_one_of
 
+# The warlord prints f2325's cover sentence with Strength in it, and the
+# trace is the same one. Shared rather than copied: `query.cover_between`
+# answers *how much* cover and never *whose*, so the walk that asks the
+# second question has to agree with the first call for call.
+from .warlord_b import _covering
+
 #: **A standing clause and a triggered one on the same card.** The
 #: dispatcher only reaches a no-action row when its declared trigger
 #: fires, so a row that also has to be *true* from the start of the
@@ -702,15 +708,35 @@ def f2334(c: Cast) -> None:
 
 
 @power("f2325", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.cover_from()",))
+       reach=PERSONAL, target=SELF)
 def f2325(c: Cast) -> None:
-    """The substitution plays; the cover half does not. Cover is a
-    number the attack context carries and nothing says *which* creature
-    is casting it, which an item block also wants.
+    """Both halves play. The cover one was re-read: the attack context
+    carries how *much* cover and never whose, but cover is stored
+    nowhere -- `query.cover_between` traces it corner to corner at the
+    moment of the attack -- so "which enemy is giving it" is asked by
+    tracing the line again with one candidate as the only blocker.
+    `_covering` is that walk and `Grid.cover` is the call both make, so
+    the two cannot disagree.
+
+    A `c.watch` rather than a declared trigger, because the row also has
+    to be *true* from the start of the fight for the substitution and
+    the dispatcher only reaches a no-action row when its trigger fires.
+    The weapon is re-asked inside the watch instead of snapshotted: the
+    card gates both benefits on what is in hand, and that changes.
 
     `window="ranged"` and not the default: this is the only one of the
     family printed against a *ranged* basic, and the windowless key is
     deliberately not folded into that one."""
+    me = c.me
+
+    def spill(ev: Hit) -> None:
+        if ev.attacker != me or not _holding(c, "bow"):
+            return
+        blockers = _covering(c, ev.target)
+        if blockers:
+            c.flat(c.dex_mod, on=blockers[0])
+
+    c.watch(Hit, spill, until=When.ENCOUNTER, on=me, label=c.ref)
     if _holding(c, "bow"):
         c.as_basic("p529", "p4389", window="ranged")
 

@@ -88,7 +88,22 @@ def _used_wrath(world, me: int, ev) -> bool:  # noqa: ANN001
 #: fight -- "you can use this in place of a melee basic attack" is --
 #: is never armed. Those rows keep the printed Trigger as text and
 #: answer it with `c.watch`, the shape `p7419` already uses.
-#: …nor turn a melee row into a ranged one.
+#:
+#: **…nor turn a melee row into a ranged one, and the reach modifier is
+#: not the way in.** `dsl._stretched` reads a `"reach"` modifier and
+#: `area_of` widens the offer by it, which reads like the answer -- it is
+#: what `c.as_ranged` is built on. Driven on a board it is inert twice
+#: over: `_reach_of`'s weapon branch returns the wielded reach and throws
+#: `area_of`'s stretched size away, which is every row printing "Melee
+#: weapon" and so every power associated with these three feats; and
+#: `_within_reach` never asks `_stretched` at all, so even a fixed-melee
+#: row is *offered* at the stretched distance and then refused by
+#: `actions.perform` before the action is spent. Measured: a `+9` reach on
+#: the melee basic attack leaves it reaching 1 and `use()` answering
+#: False. Both are engine faults rather than this clause's, and the clause
+#: wants more than distance anyway -- the bow's dice, cover, and the
+#: opening a ranged shot leaves all follow the range *kind*, which no
+#: modifier changes.
 AS_RANGED = ("c.recast(reach=)",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -531,8 +546,9 @@ def f2353(c: Cast) -> None:
     applied. `c.ignore_cover` is the verb, and it writes into the
     `ignore_cover` modifier that `query.cover_waived` actually reads.
 
-    The second benefit, casting a melee row at range, is dropped: reach
-    is header data the menu reads before anything runs.
+    The second benefit, casting a melee row at range, stays dropped --
+    see `AS_RANGED`, which records what was measured. The reach modifier
+    looks like the answer and is inert on exactly these rows.
     """
     me = c.me
     picked = among("p1556", "p1075")
@@ -578,8 +594,8 @@ def f2070(c: Cast) -> None:
     stores -- it is traced at the moment of the attack -- so *which*
     creature is casting it is asked the same way, by tracing the line
     once per candidate with that candidate as the only blocker. See
-    `_covering`. Casting a melee row at range stays dropped: reach is
-    header data the menu reads before anything runs.
+    `_covering`. Casting a melee row at range stays dropped -- see
+    `AS_RANGED` for what was driven and why the reach modifier is not it.
     """
     me = c.me
 
@@ -774,18 +790,51 @@ def f2052(c: Cast) -> None:
         c.bonus("damage", c.cha_mod, on=who, until=When.EONT, once=True)
 
 
-@power("f814", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_healing()",))
+@power("f814", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use p1590",
+       on=Trigger(PowerUsed, _my_word, "you use inspiring word"))
 def f814(c: Cast) -> None:
     """Inspiring word's extra dice traded for a saving throw.
 
-    **Re-aimed off `c.opt_in()`**, which was the wrong name for this:
-    `c.may` asks the question and `Healed` is a seam wide enough to
-    change the number. What is missing is narrower -- the dice being
-    forgone are *part* of p1590's own heal, rolled inside its body, and
-    nothing separates them from the surge the same call pays. Writing
-    the saving throw without the cost would hand out the payoff free.
+    **The cost really is separable, which the old marker denied.** p1590
+    pays in two calls -- `c.surge`, then `c.heal(c.roll("1d6"))` -- so the
+    extra dice arrive as a `Healed` of their own, and `Healed` is a
+    `Decision` read back by `resolve.heal`. `SurgeSpent` carries `power`
+    and `source`, so the first `Healed` after it is the surge the card does
+    not touch and the second is the dice the card buys with.
+
+    Armed here rather than standing, because `PowerUsed` fires above
+    p1590's body -- and the creature is taken off `SurgeSpent.actor`, not
+    off `ev.targets`: p1590 chooses who it heals inside its own body, so
+    the declared target is the wrong name for whoever got the hit points.
+
+    At-will, because the cap the card prints is p1590's own two uses.
     """
+    me = c.me
+    paying: dict[str, int] = {}
+
+    def surged(ev: SurgeSpent) -> None:
+        if ev.source == me and ev.power == WORD:
+            paying["who"], paying["seen"] = ev.actor, 0
+
+    def forgo(ev: Healed) -> None:
+        who = paying.get("who")
+        if who is None or ev.source != me or ev.target != who:
+            return
+        paying["seen"] += 1
+        if paying["seen"] < 2:
+            return  # the surge itself, which the feat does not buy with
+        paying.pop("who")
+        if ev.amount <= 0 or not c.may("forgo the extra healing for a save"):
+            return
+        ev.amount = 0
+        c.save(on=who)
+
+    c.watch(SurgeSpent, surged, on=me, until=When.EOT,
+            label=f"{c.ref} word surge")
+    c.watch(Healed, forgo, on=me, until=When.EOT, window=Window.BEFORE,
+            label=f"{c.ref} forgone")
 
 
 # -- the rest, each gap named -----------------------------------------------

@@ -47,6 +47,7 @@ from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.powers.druid.forms import beast_row
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -54,6 +55,7 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     FREE,
+    MINOR,
     MOVE,
     NO_TARGET,
     ONE_ALLY,
@@ -81,6 +83,7 @@ from combat_engine.engine import (
     PowerResolved,
     Powers,
     PowerUsed,
+    SavingThrow,
     SecondWind,
     SurgeSpent,
     Swap,
@@ -96,7 +99,7 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
-from combat_engine.engine.components import Health
+from combat_engine.engine.components import Health, PowerPoints
 from combat_engine.engine.dsl import Power
 from combat_engine.engine.query import has_combat_advantage, team
 
@@ -123,9 +126,6 @@ PROFICIENCY = ("chargen.proficiency()",)
 #: no hit points and no ref, so there is nothing for `c.summon_inline` to
 #: be handed. A ranger's beast is a different creature and now exists.
 COMPANION = ("c.elemental_companion()",)
-#: "Beast attack powers and beast form attack powers" is a druid keyword
-#: and not a companion at all. The engine's keyword set is closed.
-BEAST_KEYWORD = ("Keyword.BEAST",)
 #: The animal companion a different class feature grants, whose printed
 #: line is a *combined* attack -- one the character and the creature make
 #: together. Nothing pairs two attacks that way.
@@ -1339,13 +1339,41 @@ def f3750(c: Cast) -> None:
     c.watch(PowerUsed, used, until=When.ENCOUNTER)
 
 
+_DAZE_OR_STUN = frozenset({Condition.DAZED, Condition.STUNNED})
+
+
+def _my_save_against_daze_or_stun(world: World, me: int, ev: Any) -> bool:
+    """Is this save against an effect carrying one of the two conditions?
+
+    `SavingThrow.against` is `str(eff)` and carries no conditions -- but the
+    effect it names is still standing on the saver, so the narrowing is read
+    off `Effect.conditions` there. `items.arms._my_save_against_hold` settled
+    this shape and `i3556p1` ships on it.
+    """
+    if getattr(ev, "actor", None) != me:
+        return False
+    against = getattr(ev, "against", "")
+    return any(
+        str(eff) == against and _DAZE_OR_STUN & set(eff.conditions)
+        for eff in world.effects.of(me)
+    )
+
+
 @power("f3751", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.effect",))
+       reach=PERSONAL, target=SELF,
+       trigger="you make a saving throw against an effect that dazes or stuns you",
+       on=Trigger(SavingThrow, _my_save_against_daze_or_stun,
+                  "you save against a daze or a stun"))
 def f3751(c: Cast) -> None:
-    """Two dice on a save against daze or stun. `SavingThrow` carries
-    `against` as a string built from the effect and not the effect
-    itself, so which conditions a save is against cannot be asked --
-    and `c.reroll_save` reads the trigger, which a watcher has not got."""
+    """Two dice, and the better kept, which is what `keep="best"` is for.
+
+    The old note was right that the *event* cannot be asked which
+    conditions it is about, and wrong that this made the row unwritable: the
+    effect is still on the saver, which is where the predicate above reads
+    it. And `c.reroll_save` reads `c.trigger`, which a `c.watch` handler
+    does not have -- so this is a **declared** trigger rather than a watch,
+    the way `i3556p1` is. The card prints no limit, so `AT_WILL`."""
+    c.reroll_save(keep="best")
 
 
 @power("f3752", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1620,15 +1648,31 @@ def f3768(c: Cast) -> None:
     )
 
 
-@power("f3769", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.regain_points()",))
+@power("f3769", level=1, cls="", usage=ENCOUNTER, action=MINOR,
+       reach=PERSONAL, target=SELF)
 def f3769(c: Cast) -> None:
-    """Re-aimed. The price is writable now -- `c.expend_row` loses the
-    use of p11739 without casting it -- and what is left is the payout:
-    nothing puts a power point back into the pool, `c.spend_points`
-    only takes them out. Named with the symbol ten other rows use for
-    the same absence, rather than a second spelling of it."""
+    """A use of `p11739` traded for a power point.
+
+    The payout was the half said to be missing, and it is the write
+    `Cast.transfer_points` already makes on a pool (`theirs.points += gone`)
+    -- clamped by the printed maximum, since a regained point is one that
+    was spent. The price is `c.expend_row`, which spends a use and never
+    runs the row.
+
+    **The header is the printed action rather than a trait**: "once per
+    encounter, as a minor action" is `usage=ENCOUNTER` with `action=MINOR`,
+    which gives the limit for free and puts the trade in the action menu
+    where the card puts it. The pool is checked **before** the price is
+    paid, or a full pool would cost a use of the row for nothing.
+
+    The cantrip the feat also grants has no combat meaning of its own --
+    the wild talent cantrips are inert in a fight the way every other
+    cantrip in the tree is."""
+    pool = c.world.get(c.me, PowerPoints)
+    if pool is None or pool.points >= pool.maximum:
+        return
+    if c.expend_row("p11739"):
+        pool.points += 1
 
 
 @power("f3770", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1715,14 +1759,21 @@ def f3773(c: Cast) -> None:
 
 
 @power("f3774", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BEAST_KEYWORD)
+       reach=PERSONAL, target=SELF)
 def f3774(c: Cast) -> None:
-    """"Beast attack powers and beast form attack powers" is a keyword the
-    engine's closed set does not carry, so the bonus cannot be narrowed
-    to them and an ungated one would apply to everything.
+    """+2 to the damage of the shape rows, which is the heroic number.
 
-    Not a companion: the druid's own shape-changing rows are what the
-    word means here, and no creature is involved."""
+    There is no keyword to wait for and there did not need to be:
+    `forms.beast_row` is the gate those rows are already recognised by, and
+    it reads `ctx["power"]` -- the ref of whatever is rolling, which the
+    attack and the damage context both carry -- then asks whether that row's
+    Requirement is being in the form. So the narrowing the old note called
+    impossible is the one the shape rows themselves use.
+
+    "Feat bonus", printed, so `kind="feat"`. Not a companion: the word means
+    the druid's own shape-changing rows and no creature is involved."""
+    c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
+            when=beast_row)
 
 
 @power("f3775", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1756,12 +1807,43 @@ def f3776b(c: Cast) -> None:
 
 @power("f3777", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.lend_defences()", "c.lend_skills()"))
+       dropped=("c.lend_defences()",))
 def f3777(c: Cast) -> None:
-    """A mount using its rider's defences is a substitution, not a bonus:
-    "not including any temporary bonuses" rules out computing the
-    difference and laying it as a modifier, because the difference would
-    then change every time either number did."""
+    """The four skills are lent; the defences are still a substitution.
+
+    **The skills half is a difference, and that is safe here**, which is the
+    distinction the old note missed. `skill:<name>` is a live modifier key
+    that `skills.modifier` reads, so "in place of its own" is the gap between
+    the two numbers laid on the mount: the creature's check then comes to the
+    rider's exactly.
+
+    The parenthetical is the one approximation, and it is a small one. A
+    modifier laid by a power and one printed on a stat block both live in
+    `Mods` and cannot be told apart, so the gap is taken whole -- but the
+    trait arms at the top of the fight, before anything temporary has been
+    laid on either creature, which is when the two readings agree. Taking
+    only the ability-and-level part instead would leave the mount's own
+    bonuses standing *on top of* the rider's number, which is further from
+    the printed line than this is. Arming it twice lays nothing the second
+    time, because by then the gap is zero.
+
+    The defences half stays dropped: a defence is read through
+    `query.defence`, which has no notion of rolling somebody else's, and
+    there the difference really would drift -- a defence is what the fight
+    spends its time changing.
+
+    The mount is read when the trait arms, the way `f3778` below reads the
+    beast: nothing announces mounting, so a character that climbs on later
+    in the fight is not covered."""
+    from combat_engine.engine.skills import modifier
+
+    beast = c.mount()
+    if beast is None:
+        return
+    for skill in ("acrobatics", "athletics", "endurance", "stealth"):
+        lent = modifier(c.world, c.me, skill) - modifier(c.world, beast, skill)
+        if lent:
+            c.bonus(f"skill:{skill}", lent, on=beast, until=When.ENCOUNTER)
 
 
 @power("f3778", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1844,6 +1926,28 @@ def f3783(c: Cast) -> None:
         c.save(on=c.target)
 
 
+def _gains_property(c: Cast, prop: str, *, group: str = "", ref: str = "") -> int:
+    """Lay a printed weapon property on this character's own weapons.
+
+    `c.weapon_dice`'s mechanism rather than a verb of its own: `Gear.weapons`
+    holds per-character `replace(w)` copies, so the write needs no reader
+    beyond the ones `Weapon.properties` already has -- `Cast._high_crit` for
+    a critical and `_weapon_is` for a Requirement.
+
+    A property only ever adds, so unlike a die it is safe to aim at a whole
+    group, and arming the trait twice says the same thing twice.
+    """
+    gear = _gear(c)
+    if gear is None:
+        return 0
+    laid = 0
+    for weapon in gear.weapons:
+        if (group and weapon.group == group) or (ref and weapon.ref == ref):
+            weapon.properties = weapon.properties | {prop}
+            laid += 1
+    return laid
+
+
 # -- the unarmed run --------------------------------------------------------
 
 
@@ -1870,15 +1974,21 @@ def f3784(c: Cast) -> None:
 
 
 @power("f3785", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(property=)",))
+       reach=PERSONAL, target=SELF)
 def f3785(c: Cast) -> None:
-    """A weapon property laid on a weapon after the fact.
+    """High crit laid on this character's own unarmed weapon.
 
-    **One gap now, not two.** It also waited on `Weapon.high_crit`, on the
-    argument that nothing read the property; `Cast._high_crit` reads it now
-    (#240), so the whole of what is missing is the writer.
+    The writer was never missing: `c.weapon_dice` edits the per-character
+    `replace(w)` copies in `Gear.weapons` and `_gains_property` above is the
+    same write on the same object, which `Cast._high_crit` reads (#240).
+
+    **By group, where f3784's die had to be by ref.** Raising the group's die
+    would have lowered the monk strike's d8; a property only adds, so the
+    group is the honest read of "your unarmed attack" for whichever unarmed
+    weapon the character is actually holding. The ref is named too, for the
+    plain fist.
     """
+    _gains_property(c, "high crit", group="unarmed", ref="w:unarmed")
 
 
 @power("f3786", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1996,17 +2106,18 @@ def f3793(c: Cast) -> None:
 
 @power("f3794", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.counts_as(property=)",),
        proficiency=("w3597", "w3602"))
 def f3794(c: Cast) -> None:
     """Neither is a group, but both are rows in the weapon table, so the
     bonus is gated on the ref. Heroic tier, so +2.
 
-    Dropped: "you treat the scythe as having the high crit property".
-    `Weapon.properties` is read off the weapon and nothing writes to the
-    one in hand."""
+    The property clause is written now: `_gains_property` adds it to this
+    character's own copy of the two-handed one of the pair, which is the
+    weapon the sentence names, and `Cast._high_crit` reads it off the weapon
+    in hand."""
     c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _holding_ref(c, "w3597", "w3602"))
+    _gains_property(c, "high crit", ref="w3602")
 
 
 f3795 = _grants("f3795", "f3795b")

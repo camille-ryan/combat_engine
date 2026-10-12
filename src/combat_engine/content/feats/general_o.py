@@ -98,10 +98,13 @@ from combat_engine.engine import (
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.grid import neighbours, spread
 from combat_engine.engine.query import (
+    Light,
     allies,
     distance_between,
     flankers,
     has_combat_advantage,
+    light_level,
+    squares,
     team,
 )
 
@@ -141,6 +144,40 @@ def _used(ref: str):  # noqa: ANN202
         return ev.actor == me and ev.power == ref
 
     return when
+
+
+def _used_racial(race: str):  # noqa: ANN202
+    """"When you use a <race> racial power", without hand-listing the refs.
+
+    Which rows belong to a race is header data: a racial power is declared
+    with the race's ref as its class, exactly as a theme row holds a theme's.
+    So the question is asked of the registry and a fourth racial power is
+    covered the day it lands.
+    """
+
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        row = get(getattr(ev, "power", "") or "")
+        return ev.actor == me and row is not None and row.cls == race
+
+    return when
+
+
+def _in_dim_light(c: Cast):  # noqa: ANN202
+    """Is this creature standing in dim light?
+
+    Asked of the board rather than of the attack context the gate is handed,
+    which carries nothing about light: `Grid.light` is the painted map and
+    `query.light_level` is the reader, worst-wins over a zone that darkens
+    the square.
+    """
+
+    def dim(_ctx: dict[str, Any]) -> bool:
+        return any(
+            light_level(c.world, sq) is Light.DIM
+            for sq in squares(c.world, c.me)
+        )
+
+    return dim
 
 
 def _group(c: Cast, *groups: str) -> bool:
@@ -992,15 +1029,18 @@ _granted("f3067", "f3067b", swap=Swap(9, Usage.DAILY))
        reach=CloseBurst(2), target=EACH_ENEMY,
        keywords=[Keyword.COLD, Keyword.NECROTIC, Keyword.SHADOW,
                  Keyword.WEAPON],
-       attack=Attack(DEX, vs=FORT),
-       dropped=("c.conceal(from_light=)",))
+       attack=Attack(DEX, vs=FORT))
 def f3067b(c: Cast) -> None:
     """The damage is one roll that is cold *and* necrotic, which is what
     `dtypes=` says: a creature resisting only one of them takes all of
     it. The Effect line happens whether or not anything is hit, so it sits
-    outside the hit branch under `c.first`. The last sentence turns dim
-    light into total concealment for the rest of the fight, and lighting
-    is not on the board."""
+    outside the hit branch under `c.first`.
+
+    **Lighting is on the board now**, so the last sentence is written: the
+    engine already concedes concealment for standing in dim light, and
+    "total concealment instead of normal" is a carried concealment of 5
+    gated on the square being dim. Two of the same kind do not stack and
+    the larger wins, which is exactly what "instead" means here."""
     best = max(c.dex_mod, c.cha_mod)
     if c.strike(plus=best - c.attack_mod):
         c.damage(c.w(), best, dtypes=(DamageType.COLD, DamageType.NECROTIC))
@@ -1008,6 +1048,8 @@ def f3067b(c: Cast) -> None:
     if c.first:
         c.invisible(on=c.me, until=When.EONT)
         c.shift(1)
+        c.conceal(total=True, on=c.me, until=When.ENCOUNTER,
+                  when=_in_dim_light(c))
 
 
 # -- single riders ----------------------------------------------------------
@@ -1049,21 +1091,24 @@ def f3073(c: Cast) -> None:
         c.shift(1, who=mate)
 
 
-@power("f3074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3074", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.racial_power_used()",))
+       trigger="you use a racial power",
+       on=Trigger(PowerUsed, _used_racial("r44"), "you use a racial power"))
 def f3074(c: Cast) -> None:
     """Using a racial power makes rough ground free to shift through.
 
-    **Re-pointed: the benefit is writable now and the trigger is not.** The
-    exemption is `when="shift"` until the end of the next turn, exactly as
-    printed -- the half this row was waiting on. What it still has nothing
-    to watch for is "when you use a racial power": `PowerUsed` carries the
-    ref, and nothing says which refs belong to a race, so the three would
-    have to be hand-listed here and go stale the moment a fourth is
-    declared. `rt:r4-t4`, which was held back by the same sentence as the
-    old note, is finished.
+    Both halves. The exemption is `when="shift"` until the end of the next
+    turn, exactly as printed -- narrowed to the one kind of going, so the
+    row is not stronger than its card. And "which refs belong to a race" is
+    header data rather than a list to keep: every racial power is declared
+    with the race as its class, so `_used_racial` asks the registry and a
+    fourth racial power is covered the day it is written.
+
+    `usage=AT_WILL` because the card prints no limit of its own; what limits
+    it is that the racial powers it answers are themselves spent.
     """
+    c.ignores_difficult(when="shift", on=c.me, until=When.EONT)
 
 
 @power("f3091", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1458,10 +1503,47 @@ def f3129(c: Cast) -> None:
 
 
 @power("f3130", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_healing()",))
+       reach=PERSONAL, target=SELF)
 def f3130(c: Cast) -> None:
-    """Handing the hit points to a neighbour costs you yours, and nothing
-    refuses the healing a second wind does."""
+    """The hit points a second wind restores, handed to a neighbour instead.
+
+    Nothing new was needed. `SecondWind` carries `healed` -- the surge value
+    already clamped by what is missing -- for exactly this sentence, and
+    `Healed` is a `Decision` read in the before window, which is how
+    `c.half_healing` changes an amount rather than clawing it back
+    afterwards. So the heal is zeroed on the way in and the same number is
+    dealt to the ally.
+
+    The surge is still spent, which is what the card says: it is the hit
+    points that are forgone, not the second wind."""
+    from combat_engine.engine.events import Healed
+
+    me, pending = c.me, {}
+
+    def traded(ev: SecondWind) -> None:
+        if ev.actor != me or ev.healed <= 0:
+            return
+        beside = c.within(1, side="ally")
+        ally = (
+            c.choose(beside, "which ally regains the hit points instead",
+                     optional=True)
+            if beside
+            else None
+        )
+        if ally is not None:
+            pending["to"], pending["amount"] = ally, ev.healed
+
+    def divert(ev: Healed) -> None:
+        if ev.target != me or "to" not in pending:
+            return
+        ally, amount = pending.pop("to"), pending.pop("amount")
+        ev.amount = 0
+        c.heal(amount, on=ally)
+
+    c.watch(SecondWind, traded, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} trade")
+    c.watch(Healed, divert, until=When.ENCOUNTER, on=me, window=Window.BEFORE,
+            label=c.ref)
 
 
 @power("f3131", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1974,7 +2056,7 @@ def f3162(c: Cast) -> None:
 
 
 @power("f3163", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.charging()",))
+       reach=PERSONAL, target=SELF)
 def f3163(c: Cast) -> None:
     """`rt:r24-t2` is declared and lays +2 `kind="racial"`
     on the same gate. Two of a kind do not stack and the larger wins,
@@ -1983,14 +2065,38 @@ def f3163(c: Cast) -> None:
     prerequisite's psionic class makes near-certain. Below that the
     trait's +2 stands, which is the one place this reads generously.
 
-    Dropped, and the trait drops it too: the narrowing is to opportunity
-    attacks provoked by **your own charge**, and the defence context
-    carries the incoming blow's `opportunity` and nothing about what the
-    defender was doing when it provoked one.
+    **The narrowing is written now, and it was the clause that mattered.**
+    The defence context carries `opportunity` and `attacker` and nothing
+    about what the defender was doing -- but `OpportunityWindow` carries
+    `kind_`, "movement.step's own kind", and names both the creature that
+    may swing and the one that provoked it. So the window says which
+    attackers this creature's *charge* opened, and the gate asks that.
+
+    Gated on the round as well as on the attacker, because the window and
+    the swing are two moments: a creature whose charge-window opened last
+    round does not keep the bonus.
+
+    Before this the bonus applied to **every** opportunity attack, which is
+    wider than the card -- so the dropped clause was not a missing benefit
+    but a missing restriction.
     """
-    c.bonus(AC, max(c.con_mod, c.wis_mod), kind="racial", on=c.me,
-            until=When.ENCOUNTER,
-            when=lambda ctx: bool(ctx.get("opportunity")))
+    me = c.me
+    #: Attacker -> the round this creature's charge opened a window for it.
+    charged: dict[int, int] = {}
+
+    def window(ev: OpportunityWindow) -> None:
+        if ev.provoker == me and ev.kind_ == "charge":
+            charged[ev.actor] = c.world.round
+
+    def from_my_charge(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("opportunity"):
+            return False
+        return charged.get(ctx.get("attacker", -1)) == c.world.round
+
+    c.watch(OpportunityWindow, window, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} charge window")
+    c.bonus(AC, max(c.con_mod, c.wis_mod), kind="racial", on=me,
+            until=When.ENCOUNTER, when=from_my_charge)
 
 
 @power("f3164", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2099,14 +2205,43 @@ def f3169(c: Cast) -> None:
 
 
 @power("f3174", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.regain_points()", "c.forgo_healing()"))
+       reach=PERSONAL, target=SELF)
 def f3174(c: Cast) -> None:
     """Trades the hit points `p2485` would restore for a power point.
 
-    Both halves are missing, so both are named: a pool is spent and
-    transferred and never handed back, and nothing refuses the healing
-    a row is about to do -- the same hold f3130 carries."""
+    Both halves turned out to be sayable. Forgoing the healing is `Healed`
+    answered in the before window, the way `c.half_healing` changes an
+    amount rather than clawing it back -- the same hold `f3130` carries.
+    Handing a point back is the write `Cast.transfer_points` already makes
+    on somebody else's pool (`theirs.points += gone`), clamped by the
+    printed maximum, because a regained point is one that was spent.
+
+    `PowerUsed` is announced *before* the body runs, which is what makes the
+    arming reliable here: the heal has not happened yet when the row is
+    seen, so the window is still open."""
+    from combat_engine.engine.components import PowerPoints
+    from combat_engine.engine.events import Healed
+
+    me, armed = c.me, {}
+
+    def arming(ev: PowerUsed) -> None:
+        if ev.actor == me and ev.power == "p2485":
+            armed["on"] = True
+
+    def forgo(ev: Healed) -> None:
+        if ev.target != me or not armed.pop("on", False) or ev.amount <= 0:
+            return
+        if not c.may("regain a power point instead of the hit points", who=me):
+            return
+        ev.amount = 0
+        pool = c.world.get(me, PowerPoints)
+        if pool is not None and pool.points < pool.maximum:
+            pool.points += 1
+
+    c.watch(PowerUsed, arming, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} arming")
+    c.watch(Healed, forgo, until=When.ENCOUNTER, on=me, window=Window.BEFORE,
+            label=c.ref)
 
 
 @power("f3175", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

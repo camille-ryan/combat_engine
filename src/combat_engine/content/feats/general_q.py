@@ -23,9 +23,12 @@ line; **it carries one now** for all three, and they are finished.
 
 **"You can spend 1 power point to ..."** is writable: `c.points()` asks
 whether there is one and `c.spend_points(1)` takes it. Five of the
-psionic feats here are finished for that reason alone. What is not
-writable is reading a pool *back down to zero* (`c.on_points_spent()`)
-or handing points out (`c.grant_points()`).
+psionic feats here are finished for that reason alone. Handing one
+*back* turns out to be writable too -- `PowerPoints.points` is a plain
+field and `c.transfer_points` already adds to it, so `f3295` and
+`f3389` are written against the component. What is still absent is
+reading a pool back down to zero (`c.on_points_spent()`) and the
+printed "not until an extended rest", which is a rule about rests.
 
 **Theme powers, and what naming the ref bought.** Eighteen rows here ride
 on nine theme powers that no build imported, and each was marked with the
@@ -47,6 +50,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -85,6 +89,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     about_me,
     cursed_by_me,
     get,
@@ -92,8 +97,12 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.components import Health, PowerPoints
+from combat_engine.engine.dsl import REGISTRY
 from combat_engine.engine.events import (
+    ActionPointSpent,
     ActionSpent,
+    AttackDeclared,
     AttackRolled,
     ConditionApplied,
     ConditionEnded,
@@ -128,8 +137,14 @@ from combat_engine.engine.query import (
 #: not help; the hook would.
 PROSE = ("c.on_defiling()",)
 #: A rider on a *set* of powers the card names by category rather than by ref.
-#: One row means a theme's own attacks, the other the ten wild talents; both
-#: want the same thing, which is the registry asked by its `class` value.
+#:
+#: **One row, not two, and the symbol is probably no longer the right one.**
+#: The ten-row half (`f3247`) is written: `_wild_talents` below filters
+#: `dsl.REGISTRY` by `cls`, which is what `items/misc.py` has always done for
+#: an arcane class's attack rows, so nothing was missing there. `f3209` keeps
+#: this marker because it is still refused, but read its docstring before
+#: going looking for the filter: what blocks it is the ref its own spec
+#: prints, not any enumeration.
 #:
 #: **Re-aimed off `etl.build.CLASSES`, which was never able to go green.** That
 #: marker said the powers were missing from `data/game.db` -- and they are not:
@@ -193,6 +208,44 @@ def _wielding(what: str):  # noqa: ANN202
         return bool(holding(world, eid, what))
 
     return gate
+
+
+#: Raised once per fight per feat. A trait is armed at the start of every
+#: fight and the sentence is about the character sheet, so the pool must go
+#: up once however many fights it sees -- `feats/paladin.py` holds the same
+#: latch for the same reason.
+_SURGES_RAISED: dict[tuple[int, str, int], bool] = {}
+#: The same latch for the point `f3389` hands over.
+_POINT_GRANTED: dict[tuple[int, str, int], bool] = {}
+
+
+def _one_more_surge(c: Cast) -> None:
+    """"Your number of healing surges increases by one."
+
+    `Health.max_surges` is the ceiling a rest refills to, no `Cast` method
+    writes it, and `feats/paladin.py` already raises it from content. The
+    surge itself is handed over beside it: raising the ceiling alone leaves
+    the character with no more to spend than it had.
+    """
+    key = (id(c.world), c.ref, c.me)
+    health = c.world.get(c.me, Health)
+    if health is None or _SURGES_RAISED.get(key):
+        return
+    _SURGES_RAISED[key] = True
+    health.max_surges += 1
+    c.regain_surge(1, on=c.me)
+
+
+def _wild_talents() -> list[str]:
+    """The ten rows the compendium files under that category, by ref.
+
+    A `cls` value like any other, so this is the read `items/misc.py` makes
+    for an arcane class's attack rows. Sorted, so two characters offered the
+    choice see the same order.
+    """
+    return sorted(
+        ref for ref, row in REGISTRY.items() if row.cls == "wild talent"
+    )
 
 
 def _swap(ref: str, card: str, trade: Swap) -> None:
@@ -889,12 +942,20 @@ def f3208b(c: Cast) -> None:
 @power("f3209", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, todo=NO_IMPORT)
 def f3209(c: Cast) -> None:
-    """A set of attacks named by the theme that grants them.
+    """A mark hung on a set of attacks the card names rather than lists.
 
-    **Re-aimed off `c.class_feature()`.** The gate is a theme, not a
-    class feature, and the attacks are that theme's powers -- present in
-    the compendium, absent from the build. No single ref, because the
-    printed sentence names the whole set."""
+    **The filter arrived; the set is still not nameable.** `dsl.REGISTRY`
+    can be asked by `cls` -- `_wild_talents` above does it, and `f3247`
+    carried this same marker and is written -- so enumerating a class's
+    rows is no longer what blocks this.
+
+    What blocks it is the row's own spec. It names `cf:druid-f1s0` as the
+    thing whose attacks these are, and that ref is one arm of a fork whose
+    whole content is an ability substitution for AC: it prints no attack,
+    grants none, and `features/primal_divine.py` skips it deliberately as a
+    restatement of `cf:druid-f1`. Nothing ties a set of attack rows to it,
+    so there is no set to resolve and the mark has nothing to hang on.
+    Referred up rather than guessed at."""
 
 
 _F3210 = ("p2105", "p10733", "p10889", "p919")
@@ -1006,14 +1067,25 @@ def f3213c(c: Cast) -> None:
 
 
 @power("f3214", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.race_choice()",))
+       reach=PERSONAL, target=SELF)
 def f3214(c: Cast) -> None:
-    """The defence is chosen in play because it is a fact about a fight;
-    the skill is chosen when the character is made and there is no list
-    of skills to offer here, so that half is dropped."""
+    """Both printed choices, made at arm time.
+
+    **The skill half is written.** It was dropped for want of a list of
+    skills to offer and there is one: `engine.skills.SKILLS` is seventeen
+    entries, and `f3312` in this file already chooses from it. Re-making a
+    build-time choice at the start of every fight is the approximation the
+    defence half has carried since it was written, so the two halves now
+    carry the same one rather than one of them being absent."""
+    from combat_engine.engine.skills import SKILLS
+
     pick = c.choose([FORT, REF, WILL], "which defence")
     if pick is not None:
         c.bonus(pick, 1, on=c.me, until=When.ENCOUNTER, kind="racial")
+    skill = c.choose(sorted(SKILLS), "which skill")
+    if skill is not None:
+        c.bonus(f"skill:{skill}", 2, on=c.me, until=When.ENCOUNTER,
+                kind="racial")
 
 
 @power("f3215", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1271,18 +1343,55 @@ def f3226(c: Cast) -> None:
 
 
 @power("f3227", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.curse_damage()",))
+       reach=PERSONAL, target=SELF)
 def f3227(c: Cast) -> None:
-    """Raises and retypes the curse rider. `c.curse` lays a curse and
-    nothing reaches the dice it pays out."""
+    """Raises the curse rider by a die, and types only the new die.
+
+    **Written off `DamageApplied.detail`.** `features/strikers.py`'s
+    `extra_damage` pays the rider with `detail="cf:warlock-f4"`, so the
+    moment it lands is readable and names the creature it landed on. The
+    rider's own once-a-round latch is upstream of that, so this cannot pay
+    twice in a window the rider paid once.
+
+    `c.change_dice("cf:warlock-f4", "2d6")` was the other candidate -- it
+    is the door four other feats use to raise a striker's dice -- and it is
+    wrong here: one roll takes one type, and the card types the increase
+    only. Two blows, the printed 1d6 untyped and this 1d6 psychic, is what
+    "this additional damage is psychic" says, and it is also the only
+    reading under which a psychic resistance gets to halve the right half."""
+    def psychic(ev: DamageApplied) -> None:
+        if ev.source != c.me or ev.detail != "cf:warlock-f4":
+            return
+        c.damage("1d6", dtype=DamageType.PSYCHIC, on=ev.target, detail=c.ref)
+
+    c.watch(DamageApplied, psychic, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} psychic")
 
 
 @power("f3228", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.max_surges()",))
+       reach=PERSONAL, target=SELF)
 def f3228(c: Cast) -> None:
-    """A surge can be spent and regained; how many a character has is a
-    number on `Health` that no verb writes. The Endurance half is a skill
-    reroll out of combat."""
+    """One more healing surge, and an Endurance check rolled twice.
+
+    **Both halves written.** `Health.max_surges` is a plain field that
+    `feats/paladin.py` already raises from content, which is
+    `_one_more_surge` above. And an Endurance check is not out of combat:
+    `skills.check` announces a `SkillCheck` *before* totalling, reads
+    `natural` back afterwards, and `powers/ranger/level_6.py` answers that
+    very check. So "roll twice" is a second d20 laid in `Window.BEFORE` --
+    the window matters, because the resolve callback runs between the two.
+
+    "Use either result" is taken as the better of the two: a headless run
+    has to answer, and nobody prints this meaning to roll worse."""
+    _one_more_surge(c)
+
+    def twice(ev: SkillCheck) -> None:
+        if ev.actor != c.me or ev.skill != "endurance":
+            return
+        ev.natural = max(ev.natural, c.roll("1d20"))
+
+    c.watch(SkillCheck, twice, on=c.me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} endurance")
 
 
 _F3230 = ("p4541", "p971", "p10592", "p997")
@@ -1341,10 +1450,22 @@ def f3231(c: Cast) -> None:
 def f3232(c: Cast) -> None:
     """Swaps one pact boon's payout for a power point.
 
-    The feature is `cf:warlock-f1s4` and it is declared -- and refused in
-    play, because the boon it hands over is a charge nothing holds. That
-    is `c.fell_might()`, and it is what "instead of regaining" needs
-    something to take away. Handing a point out is the second absence."""
+    **Both facilities exist and the row still cannot be written.** The
+    charge is held after all -- `cf:warlock-f1s4` is `action=NONE` with
+    `usage=ENCOUNTER`, so arming spends its one use and that use *is* the
+    fell might, which its own `Dropped` watch hands back on a cursed kill.
+    And handing a point over is a write to `PowerPoints.points`, which
+    `c.transfer_points` already makes.
+
+    What is missing is the word **instead**: suppressing another row's
+    clause from outside it. `c.pre_empt`/`c.instead_of` are exactly that
+    mechanism, and they need `cf:warlock-f1s4` to wrap its own
+    `c.restore_use` in `c.instead_of` -- a change in `features/warlock.py`,
+    not here. Undoing the restore from this side cannot be made to work:
+    both rows answer the same `Dropped`, `Powers.restore` clears the count
+    rather than decrementing it, and `c.expend_row` refuses once the use is
+    already spent, so whichever handler the arming order happens to run
+    first decides the outcome. Written without it, the row pays twice."""
 
 
 @power("f3233", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1380,13 +1501,44 @@ def f3234(c: Cast) -> None:
 
 
 @power("f3235", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.fell_might()",))
+       reach=PERSONAL, target=SELF)
 def f3235(c: Cast) -> None:
     """A free saving throw when the pact boon comes back.
 
-    `cf:warlock-f1s4` is the feature and it is a row; the boon inside it
-    is not. Nothing holds the charge, so nothing can announce it being
-    restored and there is no moment to hang the save on."""
+    **Written: the charge was held all along.** `cf:warlock-f1s4` is
+    `action=NONE` with `usage=ENCOUNTER`, so arming it spends its one use
+    and the boon's own `Dropped` watch hands that use back when a cursed
+    enemy falls -- which is the moment this row wants.
+
+    It is read rather than hooked, because `c.restore_use` announces only a
+    `Note`. Two guards, and **both** are load-bearing -- driven on a board,
+    because the spent use alone looked like enough and is not:
+
+    * the pact, because `chargen` deals every warlock all seven legs and
+      `turns.arm_traits_of` arms all of them, so `cf:warlock-f1s4`'s one use
+      is spent at the start of every warlock's fight whatever pact it took.
+      Only this one's body gets past its own `c.build` to register the
+      regain, so without the same word here an infernal warlock saved on
+      every cursed kill;
+    * the use being spent, which is what makes this the *regain* and not
+      just a kill, and what stops a second cursed kill paying a second save
+      -- the restore would find nothing to give back either.
+
+    `Window.BEFORE`, so the read happens before the boon's own watch clears
+    the count. On the audit board the character is another pact, so the row
+    reports silent there and was checked by hand with the leg armed."""
+    if not c.build("sorcerer-king"):
+        return
+
+    def regained(ev: Dropped) -> None:
+        if not cursed_by_me(c.world, c.me, ev):
+            return
+        if "cf:warlock-f1s4" not in c.expended(on=c.me):
+            return
+        c.save(on=c.me)
+
+    c.watch(Dropped, regained, on=c.me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} boon save")
 
 
 @power("f3237", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1496,13 +1648,25 @@ def f3246(c: Cast) -> None:
 
 
 @power("f3247", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=NO_IMPORT)
+       reach=PERSONAL, target=SELF)
 def f3247(c: Cast) -> None:
     """Three powers named by their category and not by ref.
 
-    **Re-aimed off `spec.power_ref()`.** The category is a `Class` value
-    in the compendium -- ten rows carry it -- and the build imports
-    neither it nor the themes. The same widening closes both."""
+    **Written.** The category is an ordinary `cls` value and all ten rows
+    that carry it are declared, so the set is `_wild_talents` above -- the
+    same registry read `items/misc.py` makes for an arcane class's attack
+    rows. Nothing had to be imported and nothing had to be enumerated that
+    was not already enumerable.
+
+    Picked one at a time and taken out of the pool, so three choices are
+    three different rows rather than one row three times."""
+    pool = _wild_talents()
+    for _ in range(3):
+        pick = c.choose(pool, "which wild talent")
+        if pick is None:
+            break
+        pool.remove(pick)
+        c.grant_row(pick, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3248", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1563,11 +1727,33 @@ def f3249(c: Cast) -> None:
 
 
 @power("f3274", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.max_surges()", "c.lend_skills()"))
+       reach=PERSONAL, target=SELF)
 def f3274(c: Cast) -> None:
     """One more healing surge, and one skill standing in for another.
-    Neither is a thing a fight does."""
+
+    **Both halves written, and the second is simpler than the arithmetic
+    it was marked for.** `skills.check` totals the modifier *inside* its
+    resolve callback and reads the skill off the event, so rewriting
+    `ev.skill` in the interrupt window **is** making the other check:
+    ability, half level, every standing modifier and the armour penalty all
+    follow the new name. Laying the difference of the two modifiers as a
+    bonus -- which is what `c.lend_skills` would have been -- would have had
+    to subtract one skill's own modifiers and add the other's by hand.
+
+    "While you are not bloodied" is asked at the roll and not at arm time,
+    because it changes mid-fight; the surge half is `_one_more_surge`, as
+    `f3228`."""
+    _one_more_surge(c)
+
+    def instead(ev: SkillCheck) -> None:
+        if ev.actor != c.me or ev.skill != "endurance":
+            return
+        if c.bloodied(c.me) or not c.may("use arcana instead", who=c.me):
+            return
+        ev.skill = "arcana"
+
+    c.watch(SkillCheck, instead, on=c.me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} arcana")
 
 
 @power("f3276", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1601,9 +1787,40 @@ def f3292(c: Cast) -> None:
 
 
 @power("f3295", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.regain_points()",))
+       reach=PERSONAL, target=SELF)
 def f3295(c: Cast) -> None:
-    """Points can be spent and counted; nothing puts one back."""
+    """A point back when an action point buys an extra attack.
+
+    **Written against the component.** `PowerPoints.points` is a plain
+    field and `c.transfer_points` already adds to one with
+    `theirs.points += gone`, so handing a point back needs no new verb. The
+    pool's own maximum is the cap, because a point cannot be regained that
+    was never spent.
+
+    Two watches rather than one, because the card does not pay for the
+    point -- it pays for the *attack* the point buys.
+    `ActionPointSpent` says the point went and the first attack declared in
+    that same round is the extra one. The round is the window: an action
+    point buys an action for the turn it is spent in, so a flag left
+    standing would pay for an ordinary swing a round later."""
+    bought: dict[str, int] = {}
+
+    def spent(ev: ActionPointSpent) -> None:
+        if ev.actor == c.me:
+            bought["round"] = c.world.round
+
+    def swung(ev: AttackDeclared) -> None:
+        if ev.attacker != c.me or bought.pop("round", None) != c.world.round:
+            return
+        pool = c.world.get(c.me, PowerPoints)
+        if pool is None:
+            return
+        pool.points = min(pool.maximum, pool.points + 1)
+
+    c.watch(ActionPointSpent, spent, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} point")
+    c.watch(AttackDeclared, swung, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} swing")
 
 
 @power("f3297", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1788,7 +2005,7 @@ def f3329(c: Cast) -> None:
 
 @power("f3389", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grant_points()", "c.regain_points()"))
+       dropped=("c.regain_points()",))
 def f3389(c: Cast) -> None:
     """The feature is a row, so "you gain it" is `c.grant_row`.
 
@@ -1797,13 +2014,26 @@ def f3389(c: Cast) -> None:
     printed sentence is no longer this row's gap -- and handing over
     `cf:psion-f1` now buys a real feature rather than a refused row.
 
-    What is left is the point itself, and it is two separate holds.
-    Nothing *adds* to a pool: `c.transfer_points` moves points between
-    creatures and `PowerPoints.maximum` is chargen's. And this one is
-    printed as not coming back until an extended rest, where
-    `PowerPoints.refresh` restores the whole pool every encounter.
+    **The point itself is written now.** "Nothing adds to a pool" was
+    wrong: `PowerPoints.points` is a plain field and `c.transfer_points`
+    already writes it, so the grant is that write behind a once-a-fight
+    latch, and the pool is made for a character that had none -- which is
+    the whole point of a feat that hands out the class feature. `maximum`
+    is left alone deliberately: the point sits over the pool's own ceiling,
+    exactly as a transferred one does and for the same reason.
+
+    What is left is the printed restriction. Once spent it does not come
+    back until an extended rest, and `PowerPoints.refresh` restores the
+    whole pool every encounter -- a rule about rests, which is nothing this
+    row can call and nothing one encounter can show.
     """
     c.grant_row("cf:psion-f1", on=c.me, until=When.ENCOUNTER)
+    key = (id(c.world), c.ref, c.me)
+    if _POINT_GRANTED.get(key):
+        return
+    _POINT_GRANTED[key] = True
+    pool = c.world.get(c.me, PowerPoints) or c.world.add(c.me, PowerPoints())
+    pool.points += 1
 
 
 @power("f3390", level=1, cls="", usage=DAILY, action=ActionType.NONE,
@@ -1966,16 +2196,43 @@ def f3403(c: Cast) -> None:
 
 
 @power("f3404", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.deals(ref=)",))
+       reach=PERSONAL, target=SELF)
 def f3404(c: Cast) -> None:
-    """Retypes the damage of the class's level 0 feature row and makes it
-    bite the insubstantial. The second half is writable now --
-    `c.ignore_resistance(insubstantial=True)` -- but it is the *rider* on
-    the first: "when you do" is the retyping, and nothing recolours one
-    named row's damage (`c.deals` recolours everything a creature deals).
-    Laid on its own it would make every flurry bite the insubstantial,
-    which the card does not say, so the whole row still waits."""
+    """Retypes one named row's damage, and lets that row through
+    insubstantial.
+
+    **Written, and not with `c.deals`.** That verb was always the wrong
+    door: it recolours everything a creature deals and its label narrows
+    only by `Keyword.WEAPON` or `Keyword.IMPLEMENT`, so there is no ref in
+    it to aim. `DamageRolled` is the door -- a mutable `dtype` that
+    `resolve.deal_damage` reads back off the event after the emit, with its
+    own comment saying only the power's own part is retyped -- and `detail`
+    on it is the row's ref, so `FLURRIES` is the gate.
+
+    The second clause needed no narrowing verb either: `ignore
+    insubstantial` is an ordinary modifier key read off the attacker, and
+    `when=` is handed the damage context, which carries `power`. The
+    halving happens after the retype, so both clauses speak about the same
+    blow.
+
+    "You can" is asked once, at arm time, rather than per blow. Psychic is
+    worse against some creatures and the whole point against an
+    insubstantial one, and a single answer is what keeps the two clauses
+    agreeing with each other -- asked per blow, the standing modifier would
+    not know which way the last one went."""
+    if not c.may("deal psychic damage with the flurry", who=c.me):
+        return
+
+    def recolour(ev: DamageRolled) -> None:
+        if ev.source == c.me and ev.detail in FLURRIES:
+            ev.dtype = DamageType.PSYCHIC
+
+    c.watch(DamageRolled, recolour, on=c.me, until=When.ENCOUNTER,
+            label=f"{c.ref} psychic")
+    c.ignore_resistance(
+        insubstantial=True, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in FLURRIES,
+    )
 
 
 @power("f3405", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

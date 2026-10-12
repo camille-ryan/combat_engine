@@ -379,17 +379,35 @@ def f217(c: Cast) -> None:
 
 
 @power("f287", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
+       reach=PERSONAL, target=SELF)
 def f287(c: Cast) -> None:
-    """Widens a named racial power's blast. Reach is header data the
-    menu reads before anything runs, and nothing rewrites one."""
+    """Widens a named racial power's blast, 3 to 5.
+
+    Re-read: the header is data, but `dsl.area_of` asks `_stretched`
+    for an extra size *before* it spreads the squares, and hands it
+    `{"power": p.ref}` -- so a `"blast_size"` modifier gated on the ref
+    widens exactly one row and nothing else the character throws. The
+    printed "you can choose to" is not offered: a wider blast only adds
+    candidates and `Target` filters them by side."""
+    c.bonus("blast_size", 2, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "p1448")
 
 
 @power("f601", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
+       reach=PERSONAL, target=SELF)
 def f601(c: Cast) -> None:
-    """Widens two named racial powers, a burst and a range. Same gap as
-    f287, and both powers are refs, so it is not a naming one."""
+    """Widens two named racial powers, a burst and a range.
+
+    Same route as f287. `_stretched` reads `"blast_size"` for a burst
+    and `"range"` for a ranged line, so the two clauses are two gated
+    modifiers; `area_of` stretches `r.size` before `_reach_of` is asked,
+    and `_reach_of` hands a non-weapon range straight back, so the
+    ranged square is counted once."""
+    me = c.me
+    c.bonus("blast_size", 1, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "p2473")
+    c.bonus("range", 5, on=me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "p1831")
 
 
 @power("f387", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

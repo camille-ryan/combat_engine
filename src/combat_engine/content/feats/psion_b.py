@@ -36,6 +36,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    ForcedMove,
     Hit,
     Keyword,
     PowerUsed,
@@ -49,7 +50,11 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Position, PowerPoints
 from combat_engine.engine.grid import distance
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import (
+    distance_between,
+    has_combat_advantage,
+    team,
+)
 from combat_engine.engine.zones import Zone
 
 SEND_THOUGHTS = "p8225"
@@ -400,12 +405,32 @@ def f3398(c: Cast) -> None:
 
 
 @power("f2588", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forces(target=)",))
+       reach=PERSONAL, target=SELF)
 def f2588(c: Cast) -> None:
     """A square further on every shove against a creature granting combat
-    advantage. `c.forces` is the right key and its gate is handed `how`
-    and `power` and nothing else -- the creature being shoved is not in
-    the context, so the condition cannot be asked."""
+    advantage.
+
+    Written **without** `c.forces`, which is the near miss rather than the
+    answer: its gate is handed `how` and `power` and nothing else, so the
+    creature being shoved cannot be asked about and the printed condition
+    is about exactly that creature.
+
+    The event is the way in. `movement.forced` emits `ForcedMove` -- which
+    carries `source` and `target` -- with `settle` as the resolver, and
+    `settle` computes the agreed distance **from `ev.squares`**. Window
+    order is BEFORE listeners, resolver, AFTER listeners, so a
+    `Window.BEFORE` watch that adds a square feeds the same sum the
+    `"forcing"` key would have. Push, pull and slide all come through
+    here, which is all three words the card prints.
+    """
+    me = c.me
+
+    def further(ev: ForcedMove) -> None:
+        if ev.source == me and has_combat_advantage(c.world, me, ev.target):
+            ev.squares += 1
+
+    c.watch(ForcedMove, further, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
 
 
 @power("f2608", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -470,7 +495,16 @@ def f3275(c: Cast) -> None:
     `c.expend_row("p8225")` is the price and `c.use_power("p7546")` is
     the use, so both of those halves have verbs -- what is left is
     using a row at a reach it does not print, which is header data read
-    before the body runs."""
+    before the body runs.
+
+    Checked against `c.bonus` and the marker stands, because the printed
+    change is of **kind** and not of size: `p7546` is a melee row and the
+    card makes it a ranged one. `dsl._stretched` reads `"reach"`,
+    `"range"` and `"blast_size"`, and each only widens the kind the
+    header already declares -- so `c.bonus("reach", 19)` would say
+    "melee 20", which is a different rule, since `reach.kind` is what
+    decides provoking, `c.ranged`, `by_ranged` and the `ranged` context
+    key. `f725` and `f2819` want the same operation."""
 
 
 @power("f3284", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
