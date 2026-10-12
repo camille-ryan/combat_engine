@@ -19,17 +19,36 @@ commits. `CONTRIBUTING.md` describes that side; this page describes yours.
 
 ## The one rule that is not negotiable
 
-**You will never be told what anything is called, and you must never go and
-find out.** Every row you write is identified by an id — `p1004`, `m237a2`.
-The specs you get are mechanics only: the names and the flavour text have
-been stripped out and live in a separate localisation file that the engine
-never reads.
+**You write refs, never names.** Every row you write is identified by an id —
+`p1004`, `m237a2` — and the body of every spec you get is mechanics only,
+with each reference as a ref and the flavour text stripped out.
 
 So: **do not** grep `game.db` for names, **do not** open the localisation
 file, **do not** put a guessed name in a comment or a docstring or a
 variable. If a spec says `m237` you write `m237`. This is the whole legal
 basis of the project — a game system cannot be trademarked but the prose it
 is printed in can.
+
+### The glossary at the end of your spec
+
+Since **2026-10-12** a spec ends with a glossary: every ref the card
+mentions, beside its printed name, with **your row's own ref marked**. This
+passage used to say you would never be told what anything is called; that was
+Camille's instruction until the cost showed up, which is that **a row could
+not tell when a clause meant itself.** "The zone lasts until the end of
+m6233's next turn" reads the same whether `m6233` is the creature you are
+writing or a different one, and authors guessed. Six rows sat blocked asking
+for a facility to address another creature's aura when every one of them
+meant its own.
+
+The glossary is there for that one question — *which of these refs is me* —
+and for nothing else. The rules text above it is still refs, so **copy from
+the body, not from the glossary.**
+
+`leaks.py --cited` fails the build if a file prints the name of a ref it
+cites, and it is in `check.py`, so writing a glossary name into your row
+turns the suite red and names your file. Its first run found 20 real leaks
+that the older tree-wide check had reported clean for its whole life.
 
 **Searching the web for a *mechanic* you do not understand is encouraged.
 Searching for a *name* is forbidden.** Those are different questions and only

@@ -15,16 +15,55 @@
 By default only rows that have **not** been declared yet come out, so the
 output is a work list rather than a catalogue.
 
-What comes out is the mechanical lines and nothing else. No name, no flavour
-text, and no self-reference: a stat block that names itself in its own rules
-says "contracts m145 x5_23" here instead -- both halves as refs, which is the
-point. (This example named the disease in the clear until 2026-10-12. The file
-whose whole job is stripping names carried one in its own docstring, and
-`leaks.py` could not see it: two ordinary words, which is #494's blind spot.
-The places that explain the rule are the places that instance a name to
-explain it -- so quote a ref here, never a word.) The author writes the function
-without ever learning what the row is called, which is the arrangement that
-keeps the engine free of a publisher's prose.
+What comes out is the mechanical lines and nothing else. No flavour text, and
+no self-reference *in the rules*: a stat block that names itself in its own
+rules says "contracts m145 x5_23" here instead -- both halves as refs, which
+is the point. (This example named the disease in the clear until 2026-10-12.
+The file whose whole job is stripping names carried one in its own docstring,
+and `leaks.py` could not see it: two ordinary words, which is #494's blind
+spot. The places that explain the rule are the places that instance a name to
+explain it -- so quote a ref here, never a word.)
+
+## The glossary, and why the rule changed on 2026-10-12
+
+For most of this project an author was shown **no name at all**, and the
+guarantee was by construction: you cannot write what you were never told.
+Camille's call, after a 174-row wave, replaced it:
+
+    "We originally created this method to keep agents from accidentally
+    including power names, and I think it's created problems where an agent
+    doesn't know when something refers to itself. Instead, we should supply
+    the agent the name and its ref, and give it explicit instructions to only
+    use the ref from localization instead of the name."
+
+The cost it is paying for: **a row could not tell when a clause meant
+itself.** Every ref in the rules looks alike, so "the target is also affected
+by m145 x5_23" and "allies within 5 of you gain p289" read the same whether
+the ref is this row or another one -- and a row that cannot tell self from
+other guesses. That cost was real and recurring: `c.aura(shrinks=)` had six
+monster rows waiting on a general facility for addressing somebody else's
+zone, when every one of them meant the aura on that monster, and it took a
+ruling from Camille to unstick them.
+
+So the brief now ends with a **glossary**: every ref the block mentions,
+beside its printed name, with **this row's own ref marked**. The rules text
+above it is unchanged -- still refs -- so the body stays safe to copy from,
+which is the failure mode worth engineering against. The author reads the
+glossary to orient and writes refs.
+
+The guarantee is therefore no longer by construction. It is **instruction
+plus gate**: `leaks.py --cited` fails when a file names a ref it also cites.
+That is a narrower question than the tree-wide name search and needs no
+waiver, so it has no #494 blind spot -- which matters, because the tree-wide
+search is the half that cannot see a two-ordinary-word name.
+
+Two honest notes on the trade. The construction guarantee was **already
+false** -- #528: this file leaks a name in an associated-powers clause, so
+"shown no name, ever" described an intention and not the output. And the new
+exposure is bounded and auditable in a way the old leak was not: the glossary
+says exactly which names were shown, so the gate knows exactly what to look
+for. `--no-names` restores the old output for any consumer that wants a brief
+with no names in it at all.
 
 **Use `--limit`.** The heroic tier is 2,491 item blocks and 2,536 feats, and
 the implement slot alone is 412 items; an unbounded `--items` is a brief
@@ -38,7 +77,75 @@ import json
 import re
 import sys
 
-from combat_engine.db import game
+from combat_engine.db import game, localisation
+
+#: Every ref shape the tree uses, so the glossary can find the ones a block
+#: mentions. Built from what `_render` dispatches on rather than guessed:
+#: prefixed refs first, because `rt:` and `r5` would otherwise both be taken
+#: by the bare-letter branch -- the same ordering bug `_render` has a comment
+#: about, and the reason `comp:` is listed before `c`-anything.
+REF = re.compile(
+    r"\b(?:cf|rt|comp|b|t|q):[A-Za-z0-9][A-Za-z0-9:_.-]*"
+    r"|\b[pmifrax]\d+(?:[apx]\d+)?(?::augment\d+)?\b"
+)
+
+#: The banner above the glossary. It is long on purpose: it is the whole of
+#: the guarantee now that construction is not, and an instruction an author
+#: skims is an instruction that does not bind.
+BANNER = """\
+## glossary -- NAMES. READ THIS.
+
+These are printed names, which may not enter a tracked file: not a docstring,
+not a comment, not a variable, not a string, not a commit message. They are
+here for **one** reason -- so you can tell which ref is the row you are
+writing and which is somebody else -- and `leaks.py --cited` fails the build
+if one of them turns up in a file that cites its ref.
+
+Write the ref. Never the name. Never search the web for one of these; search
+for a *mechanic* you do not understand, which is a different question and is
+encouraged."""
+
+
+def _glossary(block: str, own: str) -> str:
+    """Every ref the block mentions, beside its name, this row's marked.
+
+    Ordered with `own` first and the rest as they appear, because the
+    question an author has is "which of these is me" and an alphabetical
+    list buries the answer among its neighbours.
+
+    A ref with no localisation entry is **listed as such** rather than
+    omitted. On a machine with no `localization/` the whole glossary is
+    every ref saying `no localisation on this machine`, which is the honest
+    output -- silently printing nothing would read as "this row mentions
+    nobody" and that is the misreading the glossary exists to prevent.
+    """
+    names = localisation()
+    seen: list[str] = []
+    for m in REF.finditer(block):
+        ref = m.group(0)
+        if ref not in seen:
+            seen.append(ref)
+    # `own` may be an ability ref whose stat block header carries the
+    # creature, so both are wanted and only one of them is in the text.
+    extra = [own]
+    if re.fullmatch(r"m\d+a\d+", own):
+        extra.append(own.split("a")[0])
+    # Own ref first, then its creature, then the rest in the order the block
+    # mentions them. Appearance order is the useful one: an author reads down
+    # the rules and meets the refs in this sequence.
+    seen = [r for r in extra if r] + [r for r in seen if r not in extra]
+
+    lines = [BANNER, ""]
+    for ref in seen:
+        entry = names.get(ref) or {}
+        name = entry.get("name", "")
+        mark = "  <-- THIS ROW" if ref == own else ""
+        if not name:
+            lines.append(f"    {ref:16} (no name recorded){mark}")
+        else:
+            lines.append(f"    {ref:16} {name}{mark}")
+    return "\n".join(lines)
+
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did
 #: not. `etl/feat.py` argues it; `coverage.py` asks the same question.
@@ -106,6 +213,14 @@ def main() -> int:
         help="the class features of --class, which live on the class page",
     )
     ap.add_argument("--all", action="store_true", help="include rows already declared")
+    ap.add_argument(
+        "--no-names",
+        action="store_true",
+        help="omit the glossary, restoring the output this printed before "
+        "2026-10-12. For any consumer that wants a brief with no printed "
+        "name in it at all; an author wants the glossary, because without "
+        "it a row cannot tell which ref is itself",
+    )
     ap.add_argument("--limit", type=int, default=0, help="stop after this many rows")
     ap.add_argument(
         "--offset",
@@ -174,6 +289,9 @@ def main() -> int:
         if shown <= args.offset:
             continue
         print(block)
+        if not args.no_names:
+            print()
+            print(_glossary(block, ref))
         print()
         if args.limit and shown - args.offset >= args.limit:
             break

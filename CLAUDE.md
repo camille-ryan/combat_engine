@@ -58,10 +58,10 @@ Three orthogonal axes. Pick one from each that applies.
 
 ## The one rule
 
-**Nobody writing a row is shown what it is called.** Specs come out of
-`scripts/spec.py` with names and flavour stripped. Prose lives in
-git-ignored `localization/`. This is the legal basis of the project: game
-systems are not copyrightable and prose is.
+**A name must not enter a tracked file.** Specs come out of
+`scripts/spec.py` with flavour stripped and every reference as a ref. Prose
+lives in git-ignored `localization/`. This is the legal basis of the project:
+game systems are not copyrightable and prose is.
 
 The rule binds **what an author sees and what the repo holds**, not what can
 ever be looked at:
@@ -93,9 +93,41 @@ ever be looked at:
   for it. Tier 1 is the one worth building an instrument for, and `#467` is
   that gap: nothing verifies what the page renders when the localisation is
   absent.
-* **A content agent is shown no name, ever.** It writes rows from the
-  mechanics in its spec, which is what keeps the output clean by
-  construction.
+* **A content agent is shown each name beside its ref, and writes only the
+  ref.** This replaced "shown no name, ever" on **2026-10-12**, on Camille's
+  call:
+
+  > *"We originally created this method to keep agents from accidentally
+  > including power names, and I think it's created problems where an agent
+  > doesn't know when something refers to itself. Instead, we should supply
+  > the agent the name and its ref, and give it explicit instructions to only
+  > use the ref from localization instead of the name."*
+
+  What the old rule cost: **a row could not tell when a clause meant
+  itself.** Every ref in a card looks alike, so an author could not
+  distinguish "the zone lasts until the end of m6233's next turn" — this
+  creature — from a reference to somebody else, and guessed. Six monster rows
+  sat blocked on a general facility for addressing another creature's aura
+  when all six meant their own, and it took a ruling to unstick them.
+
+  So `spec.py` now ends each brief with a **glossary**: every ref the card
+  mentions, beside its printed name, **with this row's own ref marked**. The
+  card text itself is unchanged — still refs — so the body stays safe to copy
+  from, which is the failure mode worth engineering against.
+
+  **The guarantee is no longer by construction. It is instruction plus
+  gate**, and the gate is `leaks.py --cited`: a file may not print the name
+  of a ref it also cites. That is a narrower question than the tree-wide name
+  search, so it needs none of the waivers that give the tree-wide search its
+  #494 blind spot. Its first run found **20 real leaks** that every previous
+  run of `leaks.py` had reported clean — five feature names in one SQL
+  comment, four race names, and one in a `trigger=` string the page renders,
+  which is tier 1.
+
+  Two honest notes. The construction guarantee was **already false** (#528:
+  `spec.py` leaks a name in associated-powers clauses), so it described an
+  intention, not the output. And a one-word ordinary name beside its own ref
+  is still not caught — that case belongs to the tree-wide walk.
 * **The main session may read a name and tell Camille**, in chat. That is
   not redistribution and it is sometimes the only way to settle a question —
   "is the database recording this row properly" was answered by reading
