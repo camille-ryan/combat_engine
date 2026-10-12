@@ -1847,11 +1847,25 @@ def f1340(c: Cast) -> None:
     c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1341", todo=("c.aura(difficult=)",))
+@_trait("f1341", todo=("c.ignores_difficult_in(who=)",))
 def f1341(c: Cast) -> None:
-    """Difficult terrain around you, for one creature only and moving
-    with you. `c.zone` lays terrain for everybody and stays where it is
-    put; `c.aura` follows a creature and carries no terrain."""
+    """"That enemy treats all squares adjacent to you as difficult terrain
+    until the end of your next turn."
+
+    **Re-pointed, not written.** `c.aura(difficult=)` works now -- the field
+    was always there and `Zones.aura` simply did not pass it on -- so the
+    old marker has arrived and would have made this row report ready.
+
+    What this card needs is narrower than the aura: difficult terrain for
+    **one enemy**, the one just hit, and ordinary ground for everybody else.
+    The waiver is per *side* (`c.ignores_difficult_in(zone, side=)`), so
+    laying the aura flat and exempting the caster's team would also make it
+    difficult for every other enemy on the board -- which is wider than the
+    card by the whole opposing side.
+
+    Three theme powers print "for enemies" and are written with the pair;
+    this is the one that names a creature, and it waits on the waiver taking
+    one."""
 
 
 @_trait("f1342")

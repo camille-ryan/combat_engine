@@ -2526,13 +2526,19 @@ def _shocked(world: World, me: int, ev: DamageApplied) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aura(difficult=)",),
 )
 def m6613a0(c: Cast) -> None:
     """The hold on shifting runs on the geometry rather than on the clock, so it
     is laid on entry and taken back on the way out. An aura cannot be difficult
-    terrain: `c.zone` carries that and travels with nobody."""
-    _denies_shift_in(c, c.aura(1, until=When.ENCOUNTER))
+    terrain: `c.zone` carries that and travels with nobody.
+    **The difficult ground lands now.** `Zone.difficult` has always been the
+    field and `Zones.create` has always taken it; `Zones.aura` did not pass
+    it on, so an aura could not be given it. One parameter threaded through,
+    found by `triage.py`'s first calibration run -- a helper in
+    `monsters/level_10/soldiers_sa.py` had been flipping the field by hand
+    and documenting the workaround.
+    """
+    _denies_shift_in(c, c.aura(1, until=When.ENCOUNTER, difficult=True))
 
 
 @power(
@@ -2621,14 +2627,20 @@ def m6613a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aura(difficult=)",),
 )
 def m6627a0(c: Cast) -> None:
     """The extra square is gated on both halves of the printed sentence at once:
     the creature bloodied, and the thing being shoved standing in the ring. An
-    aura cannot be difficult terrain."""
+    aura cannot be difficult terrain.
+    **The difficult ground lands now.** `Zone.difficult` has always been the
+    field and `Zones.create` has always taken it; `Zones.aura` did not pass
+    it on, so an aura could not be given it. One parameter threaded through,
+    found by `triage.py`'s first calibration run -- a helper in
+    `monsters/level_10/soldiers_sa.py` had been flipping the field by hand
+    and documenting the workaround.
+    """
     me = c.me
-    c.aura(1, until=When.ENCOUNTER)
+    c.aura(1, until=When.ENCOUNTER, difficult=True)
 
     def in_the_ring(ctx: dict[str, Any]) -> bool:
         foe = ctx.get("target")

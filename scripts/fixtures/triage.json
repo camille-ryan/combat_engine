@@ -1,0 +1,75 @@
+{
+  "_note": [
+    "Verdicts on blocked symbols, so each is judged once. `triage.py` ranks",
+    "candidates; a person or an agent decides, and the decision lands here.",
+    "",
+    "verdict is one of:",
+    "  mis-marked  the facility exists; the row needs re-pointing or writing",
+    "  probable    a candidate that looks right and was not run down",
+    "  real        the gap is real, whatever the ranking suggested",
+    "",
+    "A symbol absent from this file has not been judged. Recording `real` is",
+    "as valuable as recording `mis-marked`: it stops the next pass paying to",
+    "reach the same conclusion."
+  ],
+  "c.cover_from()": {
+    "verdict": "mis-marked",
+    "rows": 10,
+    "found": "query.cover_between, Grid.cover, feats.warlord_b._covering",
+    "why": "f1296 says 'nothing asks what cover a creature has'. query.cover_between traces it corner to corner at the moment of the attack, and _covering already asks which creature is giving it. What is missing is a Cast door, not a mechanism."
+  },
+  "c.aura(difficult=)": {
+    "verdict": "mis-marked",
+    "rows": 9,
+    "found": "monsters.level_10.soldiers_sa._difficult_aura, Zone.difficult",
+    "why": "The helper's own docstring states the workaround -- 'c.aura has no difficult= of its own ... so the workaround is to create the aura and then flip the field by hand' -- and one row already uses it. Nine rows are marked blocked while a working route sits in the tree."
+  },
+  "c.tome_powers()": {
+    "verdict": "probable",
+    "rows": 10,
+    "found": "items.implement_b._tome_power",
+    "why": "That helper already picks 'one of the dailies a tome would have been stocked with' through c.borrow_row, walking the level ladder the card describes. Not run down: cf:wizard-arcanist-f0s4 wants c.stored_row() as well, so the symbol may be two gaps rather than one."
+  },
+  "c.race_option()": {
+    "verdict": "real",
+    "rows": 24,
+    "found": "chargen.choices.race_options -- and it is the wrong thing",
+    "why": "The top-ranked candidate ranks *races* for a class. f1521 needs which of five sub-options *within* a race is current, and says why c.element cannot stand in: two of the five are not damage types. The largest symbol in the queue and a genuine gap."
+  },
+  "c.on_extra_damage()": {
+    "verdict": "real",
+    "rows": 10,
+    "found": "features.strikers.extra_damage -- adjacent, not the same",
+    "why": "That helper *arms* a once-per-round rider. f1114 needs a rider's payout *announced*, so an area power can copy the amount onto its other targets. The writer exists and the event does not."
+  },
+  "spec.stat_block()": {
+    "verdict": "real",
+    "rows": 13,
+    "found": "query.stat_block -- same name, wrong layer",
+    "why": "query.stat_block is the engine reading the compendium row behind a creature. This symbol is the authoring brief rendering a stat block. A same-name near-miss across two layers, which is the shape the ranking will keep producing."
+  },
+  "chargen.skill_training()": {
+    "verdict": "real",
+    "rows": 14,
+    "found": "nothing",
+    "why": "Nothing in the vocabulary comes close, and that agrees with the rows: skill training is settled when a character is built and chargen has no door for it."
+  },
+  "c.flat(unpreventable=)": {
+    "verdict": "real",
+    "rows": 11,
+    "found": "nothing",
+    "why": "No candidate at all. Damage that cannot be prevented or reduced has no reader anywhere."
+  },
+  "chargen.armor_proficiency()": {
+    "verdict": "real",
+    "rows": 10,
+    "found": "nothing",
+    "why": "No candidate. Armour proficiency is a build-time grant and chargen records none."
+  },
+  "chargen.pact_blade()": {
+    "verdict": "real",
+    "rows": 15,
+    "found": "nothing",
+    "why": "No candidate."
+  }
+}

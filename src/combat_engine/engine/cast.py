@@ -8283,6 +8283,7 @@ class Cast:
         until: When = When.ENCOUNTER,
         on: int | None = None,
         sustain: ActionType | None = None,
+        difficult: bool | str = False,
     ) -> int:
         """An aura around a creature -- or around anything with a position.
 
@@ -8290,9 +8291,20 @@ class Cast:
         which is what made "each creature adjacent to the sphere" unsayable:
         `Zones.refresh` has always been willing to follow any entity with a
         `Position`, and only this signature insisted it be `self.me`.
+
+        **`difficult` is "enemies treat squares in the aura as difficult
+        terrain"**, which nine rows were marked blocked for while the field
+        existed. `Zone.difficult` has always been there and `Zones.create`
+        has always taken it; `Zones.aura` did not pass it on, so the only
+        route was creating the aura and flipping the field by hand -- which
+        `monsters.level_10.soldiers_sa._difficult_aura` does, and documents
+        as a workaround. Found by `triage.py`'s first calibration run.
         """
         owner = self.me if on is None else on
-        return self.world.zones.aura(owner, label or self.ref, radius, until, sustain)
+        return self.world.zones.aura(
+            owner, label or self.ref, radius, until, sustain,
+            difficult=difficult,
+        )
 
     def my_aura(self, label: str = "") -> int:
         """The caster's own live aura, or 0 if it has none.

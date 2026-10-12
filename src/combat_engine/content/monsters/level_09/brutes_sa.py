@@ -353,7 +353,12 @@ _M6614_AURA: dict[int, int] = {}
 
 def _m6614_make_aura(c: Cast, radius: int) -> None:
     me = c.me
-    ring = c.aura(radius, label="m6614a0 aura", until=When.ENCOUNTER, on=me)
+    # **"The aura is difficult terrain"**, with no side named -- so the flag
+    # is laid flat and nothing is waived, unlike the three theme powers that
+    # print "for enemies". `Zones.aura` not passing `difficult` on was the
+    # whole gap; `triage.py` found it.
+    ring = c.aura(radius, label="m6614a0 aura", until=When.ENCOUNTER, on=me,
+                  difficult=True)
     _aura_holds(c, ring, lambda who: c.cannot_shift(on=who, until=When.ENCOUNTER))
 
 
@@ -3049,7 +3054,6 @@ def m6448a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aura(difficult=)",),
 )
 def m6614a0(c: Cast) -> None:
     """The cannot-shift half plays, laid and lifted as the aura's own

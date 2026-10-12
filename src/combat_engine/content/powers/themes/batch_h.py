@@ -1230,18 +1230,26 @@ def p16063(c: Cast) -> None:
     "p16064", level=10, cls=X7_944, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ELEMENTAL],
     requires=_on_the_ground, requires_text="you must be on the ground",
-    dropped=("c.aura(difficult=)",),
+    dropped=("c.ignores_difficult_in(who=)",),
 )
 def p16064(c: Cast) -> None:
     """The sustain payout is written, hung on the aura's own effect --
     `c.aura` hands back an id and `c.on_sustain` wants the effect, which is
     what `_zone_effect` is for.
 
-    The difficult ground is dropped. A zone carries `difficult` and an aura
-    has no way to be given it, and the printed line narrows it further to
-    enemies without earth walk, which a terrain flag cannot say either.
+    **The difficult ground lands now.** `Zones.aura` not passing `difficult`
+    on was the gap -- `Zone.difficult` has always been the field -- and
+    "for enemies" is the aura laid difficult for everybody with the caster's
+    own side waived inside it, bounded by the zone rather than board-wide.
+    Found by `triage.py`'s first calibration run.
+
+    **One clause still dropped, and it is narrower than it was:** "enemies
+    that lack earth walk". The waiver is per *side*, so a particular enemy
+    cannot be exempted from ground everybody else finds difficult. Named as
+    `c.ignores_difficult_in(who=)` rather than as the aura, which now works.
     """
-    aura = c.aura(2, until=When.EONT, sustain=MINOR)
+    aura = c.aura(2, until=When.EONT, sustain=MINOR, difficult=True)
+    c.ignores_difficult_in(aura)
 
     def payout() -> None:
         inside = [

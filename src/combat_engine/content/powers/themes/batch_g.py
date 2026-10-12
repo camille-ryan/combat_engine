@@ -1341,13 +1341,19 @@ def p16113(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL],
-    dropped=("c.aura(difficult=)",),
 )
 def p16114(c: Cast) -> None:
     """The bonus is against ranged attacks only, which the attack context
     carries, and only while inside -- so both go in one gate. An aura
-    cannot be difficult terrain; only a zone can."""
-    c.aura(2, label=c.ref, until=When.EONT, on=c.me)
+    cannot be difficult terrain; only a zone can.
+    **The difficult ground lands now.** `Zone.difficult` has always been the
+    field and `Zones.create` has always taken it; `Zones.aura` did not pass
+    it on, so an aura could not be given it. One parameter threaded through,
+    found by `triage.py`'s first calibration run -- a helper in
+    `monsters/level_10/soldiers_sa.py` had been flipping the field by hand
+    and documenting the workaround.
+    """
+    c.aura(2, label=c.ref, until=When.EONT, on=c.me, difficult=True)
     for who in (c.me, *c.allies()):
         for d in (AC, REF):
             c.bonus(

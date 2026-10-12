@@ -3576,6 +3576,54 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def difficult_aura(out: Result) -> None:
+    """An aura can be difficult terrain, and "for enemies" is the pair.
+
+    **Nine rows were marked blocked for a field that existed.**
+    `Zone.difficult` has always been there and `Zones.create` has always
+    taken it; `Zones.aura` did not pass it on, so the only route was making
+    the aura and flipping the field by hand -- which one monster helper did,
+    documenting the workaround in its own docstring. Found by `triage.py`'s
+    first calibration run, which is the whole reason that instrument exists.
+
+    Two rules, and the second is the one that keeps the three theme powers
+    honest: the printed line is "difficult terrain **for enemies**", and the
+    flag applies to whoever stands there. So the aura is laid difficult for
+    everybody and the caster's own side is waived *inside the zone* --
+    `c.ignores_difficult_in`, which `c.ignores_difficult` would get wrong by
+    exempting the party everywhere.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.zones import Zone
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:rough")
+
+    plain = world.get(c.aura(2, label="plain"), Zone)
+    rough = world.get(c.aura(2, label="rough", difficult=True), Zone)
+    out.that(plain is not None and plain.difficult is False,
+             "an ordinary aura is not difficult ground"
+             f" ({plain.difficult if plain else None})")
+    out.that(rough is not None and rough.difficult is True,
+             "and one asked for it is -- the parameter nine rows waited on"
+             f" ({rough.difficult if rough else None})")
+
+    # **The waiver is bounded by the zone**, which is the half that keeps
+    # the party from ignoring rough ground everywhere on the board.
+    # Read off `Movement.ignores`, which is where the exemption lives --
+    # there is no `query` reader for it, and `_while_inside` lays the effect
+    # on whoever is standing in the zone when it is created.
+    from combat_engine.engine.components import Movement
+
+    ring = c.aura(2, label="ringed", difficult=True, on=me)
+    c.ignores_difficult_in(ring)
+    mine = world.get(me, Movement)
+    out.that(mine is not None and mine.ignores,
+             "standing inside its own difficult aura, the caster is exempt"
+             f" -- the 'for enemies' half ({mine.ignores if mine else None})")
+
+
 def compelled_walk(out: Result) -> None:
     """A compulsion moves a creature; the creature does not choose.
 
@@ -4372,6 +4420,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "difficult_aura": (difficult_aura,
+                       "an aura can be difficult ground, waived for a side"),
     "compelled_walk": (compelled_walk,
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,

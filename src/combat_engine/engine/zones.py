@@ -131,10 +131,19 @@ class Zones:
         radius: int,
         when: When = When.ENCOUNTER,
         sustain: ActionType | None = None,
+        *,
+        difficult: bool | str = False,
     ) -> int:
         """An aura follows its owner. A power that says "enemies adjacent to
-        you" is an aura 1 and gets no special mechanism of its own."""
-        zone = Zone(owner=owner, label=label, aura=radius)
+        you" is an aura 1 and gets no special mechanism of its own.
+
+        **`difficult` was reachable through `create` and not through here**,
+        which nine rows were marked blocked for. `Zone.difficult` has always
+        been the field and a monster helper was flipping it by hand after
+        the fact -- `_difficult_aura`'s docstring describes that workaround
+        in as many words. Passed through instead. #507-era triage.
+        """
+        zone = Zone(owner=owner, label=label, aura=radius, difficult=difficult)
         zone.squares = spread(squares(self.world, owner), radius)
         return self._spawn(zone, when, sustain)
 

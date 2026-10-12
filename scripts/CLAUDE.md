@@ -187,11 +187,42 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `api_smoke.py` | play an encounter over HTTP |
 | `browser.py` | drive the real page in headless Chromium |
 | `spec.py` | the sanitised brief handed to an author |
-| `vocab.py` | the generated `Cast` surface — the authority on what exists |
+| `vocab.py` | the generated `Cast` surface — the authority on what exists; `--find` searches docstrings |
+| `triage.py` | for every blocked symbol, does the thing already exist? Ranks candidates; `fixtures/triage.json` holds the verdicts |
 | `fight.py` | play a whole fight and print the log |
 | `show.py` | one row, printed text beside emitted events |
 | `build.py` | rebuild `data/game.db` |
 | `bonuses.py`, `legs.py`, `mm3.py`, `issues.py`, `progress.py`, `waves.py`, `transcript.py` | narrower checks and ledgers |
+
+## Triage is a ranker, not a gate
+
+`triage.py` is deliberately **not** in `check.py`, and the reason is its own
+output. It matches prose against a terse symbol name, so it produces
+candidates and not verdicts — in the calibration run its top-ranked candidate
+was **wrong seven times in ten**:
+
+* `query.stat_block` for `spec.stat_block()` — same name, different layer;
+* `choices.race_options` for `c.race_option()` — ranks *races*, where the row
+  needs which sub-option *within* a race is current;
+* `features.strikers.extra_damage` for `c.on_extra_damage()` — that helper
+  *arms* a rider, the row needs a payout *announced*.
+
+A number that is wrong 70% of the time cannot be a gate. What it can do is
+put 1,105 symbols in an order worth reading, which nothing did before.
+
+**The measured rate, on the 24 symbols with the most rows waiting** — chosen
+by row count rather than by looking tractable, which the hand-reading was not:
+
+```
+10 judged   2 mis-marked (19 rows)   1 probable (10)   7 real (97)
+```
+
+So **20–30% of symbols**, 15–23% of rows. Lower than the 7-in-14 the
+hand-reading suggested, and that gap is the point: those families were picked
+*because* they looked tractable. 20–30% is the unbiased figure to plan on.
+
+**Record `real` verdicts too.** Half the value of the fixture is stopping the
+next pass paying to reach a conclusion somebody already reached.
 
 ## Freezing the localisation
 

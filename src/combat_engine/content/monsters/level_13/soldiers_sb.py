@@ -3063,7 +3063,6 @@ def m5213a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aura(difficult=)",),
 )
 def m5386a0(c: Cast) -> None:
     """Getting up inside the ring takes a saving throw.
@@ -3077,9 +3076,16 @@ def m5386a0(c: Cast) -> None:
     was made rather than travelling with the creature. That is the half this
     row cannot say; the saving throw above is the half it can, which is why
     the marker is `dropped=` and not `todo=`.
+    
+    **The difficult ground lands now.** `Zone.difficult` has always been the
+    field and `Zones.create` has always taken it; `Zones.aura` did not pass
+    it on, so an aura could not be given it. One parameter threaded through,
+    found by `triage.py`'s first calibration run -- a helper in
+    `monsters/level_10/soldiers_sa.py` had been flipping the field by hand
+    and documenting the workaround.
     """
     me = c.me
-    ring = c.aura(2, until=When.ENCOUNTER, label=c.ref)
+    ring = c.aura(2, until=When.ENCOUNTER, label=c.ref, difficult=True)
 
     def rose(ev: ConditionEnded) -> None:
         if ev.condition is not Condition.PRONE or ev.target == me:

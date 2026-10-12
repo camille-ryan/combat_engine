@@ -2315,16 +2315,23 @@ def m5924a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aura(difficult=)",),
 )
 def m5937a0(c: Cast) -> None:
     """Two sentences about one aura. The grant plays: it is laid on each enemy
     and gated on the distance, because the aura travels with the creature and a
     stored membership list is stale the moment either of them moves. Difficult
     terrain inside an aura is the half with nowhere to live -- `c.zone` takes
-    `difficult=` and an aura does not, and a zone would stay where it was made."""
+    `difficult=` and an aura does not, and a zone would stay where it was made.
+    **The difficult ground lands now.** `Zone.difficult` has always been the
+    field and `Zones.create` has always taken it; `Zones.aura` did not pass
+    it on, so an aura could not be given it. One parameter threaded through,
+    found by `triage.py`'s first calibration run -- a helper in
+    `monsters/level_10/soldiers_sa.py` had been flipping the field by hand
+    and documenting the workaround.
+    """
     me = c.me
-    c.aura(2, label=f"{c.ref} aura", until=When.ENCOUNTER, on=me)
+    c.aura(2, label=f"{c.ref} aura", until=When.ENCOUNTER, on=me,
+           difficult=True)
     for foe in c.enemies():
         c.grants_advantage(
             on=foe,

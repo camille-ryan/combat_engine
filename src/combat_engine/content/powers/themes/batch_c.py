@@ -894,16 +894,35 @@ def p16109(c: Cast) -> None:
 @power("p16110", level=2, cls="x7_951", usage=DAILY, action=MINOR,
        reach=Melee(1), target=ONE_ALLY,
        keywords=[Keyword.ELEMENTAL, Keyword.HEALING],
-       dropped=("c.aura(difficult=)",))
+       )
 def p16110(c: Cast) -> None:
     """The rough ground follows the target, so it is an aura rather than a
     patch of zone -- and `c.aura` takes no terrain. A static `c.zone` would
-    be right only until the target moved."""
+    be right only until the target moved.
+    **The difficult ground lands now**, and "for enemies" is the pair rather
+    than a scoped flag. `Zone.difficult` applies to whoever stands there, so
+    the printed narrowing is the aura laid difficult for everybody and then
+    waived for the caster's own side -- `c.ignores_difficult_in(zone)`, which
+    is bounded by the zone's squares where `c.ignores_difficult` would exempt
+    the party everywhere. The idiom is the one
+    `monsters/level_10/soldiers_sa._difficult_aura` records.
+
+    `Zones.aura` not passing `difficult` on was the whole gap, and
+    `triage.py` found it on its first calibration run.
+    """
     who = c.target
     if c.may("spend a healing surge", who=who):
         c.surge(on=who)
     for d in (AC, FORT, REF, WILL):
         c.bonus(d, 2, kind="power", on=who, until=When.EONT)
+    # **"Squares adjacent to the target are difficult terrain for
+    # enemies"** -- an aura 1 on the *ally*, not on the caster, which
+    # `c.aura(on=)` has always allowed. Difficult for everybody and
+    # then waived for that creature's own side, because the flag
+    # applies to whoever stands there.
+    ring = c.aura(1, label=c.ref, until=When.EONT, on=who,
+                  difficult=True)
+    c.ignores_difficult_in(ring)
 
 
 @power("p16111", level=6, cls="x7_951", usage=ENCOUNTER, action=MINOR,
