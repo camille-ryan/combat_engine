@@ -245,7 +245,12 @@ def sorcerer_f0s0(c: Cast) -> None:
     def chosen(ev: Any) -> None:
         if getattr(ev, "actor", None) != me:
             return
-        enter_phase(c, c.choose(list(_PHASES), "which cosmic phase"))
+        picked = c.choose(list(_PHASES), "which cosmic phase")
+        # `c.choose` answers `None` when there is nobody to ask or the
+        # choice is declined, and the page gives no "no phase" state -- the
+        # sorcerer is always in one of the three. The sun is where the cycle
+        # starts, so that is the answer a silence means.
+        enter_phase(c, picked or _PHASES[0])
 
     c.watch(ShortRested, chosen, until=When.ENCOUNTER, on=me)
 
@@ -256,8 +261,8 @@ def sorcerer_f0s0(c: Cast) -> None:
             return
         for foe in c.enemies():
             if c.adjacent_to(me, foe):
-                c.flat(c.mod(STR), DamageType.FIRE,
-                       dtypes=(DamageType.RADIANT,), on=foe)
+                c.flat(c.mod(STR), dtype=DamageType.FIRE,
+                       dtypes=(DamageType.FIRE, DamageType.RADIANT), on=foe)
 
     c.watch(TurnStart, burn, until=When.ENCOUNTER)
 
@@ -266,7 +271,7 @@ def sorcerer_f0s0(c: Cast) -> None:
         if getattr(ev, "target", None) != me or phase_of(c) != "stars":
             return
         if getattr(ev, "attacker", 0) in c.enemies():
-            c.teleport(c.mod(STR), on=me)
+            c.teleport(c.mod(STR), who=me)
 
     c.watch(Miss, slip, until=When.ENCOUNTER)
 
