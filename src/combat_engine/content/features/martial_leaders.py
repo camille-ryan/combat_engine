@@ -108,19 +108,49 @@ def artificer_empower(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=(_REST,),
 )
 def artificer_empower_reservoir(c: Cast) -> None:
-    """**The spending half landed in #495.** `c.boost_roll` adds to a roll
-    already made, which is exactly what this feature's free action does with
-    its banked +2 -- `c.bonus` was the wrong verb and applied to the next
-    roll rather than the one on the table.
+    """A reservoir banked in a weapon at a rest, worth +2 on one roll.
 
-    What is left is the laying. The reservoir is filled during a short rest
-    and nothing announces one, so there is never a charge to spend and the
-    row still has nothing to do. One symbol now rather than two, which is
-    what lets `todo.py` go red on the right day.
+    **Written.** Both halves exist now: `c.boost_roll` (#495) adds to a roll
+    already made, which is what the printed free action does, and
+    `events.ShortRested` is the moment the reservoir is filled at.
+
+    "The **wielder** of the implement or the weapon" -- not the artificer.
+    The charge is laid on whoever is holding the empowered thing, which for
+    a party is usually somebody else, so the watch is on the holder's own
+    attack roll rather than on this caster's.
+
+    "Or until it is expended" is why the hold ends with its own spending:
+    one roll, not one per attack. `once=True` is the whole of that rule.
+
+    `until=When.ENCOUNTER` where the page says "until the end of your next
+    extended rest". That is this engine's horizon rather than a reading of
+    the card -- `chargen` says persistence does not exist -- and it is the
+    same substitution `c.contract` documents for a disease stage.
     """
+    me = c.me
+
+    def bank(ev: Any) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        # The thing empowered is what this artificer is holding. A party
+        # member's weapon would want `cf:artificer-f0`'s allowance to say
+        # which item was chosen, and that row is still marked.
+        holder = me
+
+        def spend(roll: Any) -> None:
+            if getattr(roll, "actor", None) != holder:
+                return
+            c.boost_roll(2)
+
+        from combat_engine.engine.events import AttackRolled
+
+        c.watch(AttackRolled, spend, until=When.ENCOUNTER, on=holder, once=True)
+
+    from combat_engine.engine.events import ShortRested
+
+    c.watch(ShortRested, bank, until=When.ENCOUNTER, on=me)
 
 
 @power(
