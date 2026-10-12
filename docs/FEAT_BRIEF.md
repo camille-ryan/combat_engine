@@ -43,9 +43,33 @@ or, for an item wave:
 That prints only the rows nobody has written yet. It is the complete
 work list; do not go looking for more.
 
+### The glossary at the end of each spec
+
+Each spec ends with a **glossary**: every ref the card mentions, beside its
+printed name, with **your row's own ref marked `<-- THIS ROW`**.
+
+It is there for one question — *which of these refs is me* — because the card
+body is all refs and they look alike. "The zone lasts until the end of
+m6233's next turn" reads the same whether `m6233` is the row you are writing
+or a different creature, and before the glossary existed authors guessed:
+six monster rows sat blocked asking for a facility to address *another*
+creature's aura when every one of them meant its own.
+
+**Read the glossary. Copy from the body.** The body is refs, so it is safe to
+paste from; the glossary is names, so it is not. If a clause means your own
+row, write your own ref.
+
+`leaks.py --cited` is in `check.py` and fails if a file prints the name of a
+ref it cites. It will name your file. Its first run found 20 real leaks the
+older check had called clean for its whole life, two of them in docstrings
+that *said they were writing around the name* while printing it.
+
 ## Hard rules
-* **You are never given a printed name or flavour text, and you must not
-  go and find one.** Refs only. This is the legal basis of the project.
+* **Write refs, never names.** You are shown each ref's name in the
+  glossary, for the one purpose above, and nothing you write may contain
+  one — not a docstring, not a comment, not a variable, not a string. This
+  is the legal basis of the project. You are never given flavour text and
+  must not go looking for any.
 * **Hand-write every row.** No regex, no loops that mint rows from a
   table — except the small `_feature(ref, what)`-style helper used in
   `warlord.py` and `ranger.py` for a run of rows that are genuinely the
