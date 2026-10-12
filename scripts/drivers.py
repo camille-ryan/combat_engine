@@ -3576,6 +3576,67 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def compelled_walk(out: Result) -> None:
+    """A compulsion moves a creature; the creature does not choose.
+
+    **The distinction is the whole verb.** `c.move(toward=)` *ranks* the
+    destinations and hands them to `World.decide` -- `_nearest_first` says
+    so in as many words, and a real decider still sees every option.
+    `c.walk_toward` picks the nearest square itself and never asks, which
+    is what "must use a move action to move as close to the attacker as
+    possible" and "walks by the most direct route" print. #513.
+
+    So the rule that matters is the **decider never being consulted**: a
+    decider rigged to pick the *worst* square must change nothing. A check
+    that only asserted the creature ended up closer would pass on
+    `c.move(toward=)`, which is the verb this exists to differ from.
+
+    It is still the creature's own move rather than forced movement -- it
+    provokes, and it spends the mover's economy, which `c.push` does not.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import enemies
+
+    world, me, _ = _board()
+    foe = sorted(enemies(world, me))[0]
+    place(world, me, (2, 2))
+    place(world, foe, (12, 2))
+    c = Cast(world=world, me=me, ref="drivers:compelled")
+
+    before = distance(world.get(me, Position).square,
+                      world.get(foe, Position).square)
+    c.walk_toward(foe, on=me)
+    after = distance(world.get(me, Position).square,
+                     world.get(foe, Position).square)
+    out.that(after < before,
+             f"a compelled walk closes on its target ({before} -> {after})")
+
+    # **The decider gets no vote**, which is the rule `c.move(toward=)`
+    # would fail. Rigged to choose the farthest option offered.
+    world2, me2, _ = _board()
+    foe2 = sorted(enemies(world2, me2))[0]
+    place(world2, me2, (2, 2))
+    place(world2, foe2, (12, 2))
+    asked: list[str] = []
+
+    def contrary(eid: int, what: str, options, why: str):  # noqa: ANN001,ANN202
+        asked.append(what)
+        return max(options, key=lambda sq: distance(sq, (12, 2)))
+
+    world2.decide = contrary          # type: ignore[assignment]
+    c2 = Cast(world=world2, me=me2, ref="drivers:compelled-rigged")
+    c2.walk_toward(foe2, on=me2)
+    rigged = distance(world2.get(me2, Position).square, (12, 2))
+    out.that(rigged == after and "move" not in asked,
+             "and a decider rigged to pick the farthest square changes"
+             " nothing, because it is never asked -- the half that tells"
+             f" this apart from c.move(toward=) ({rigged}, asked {asked})")
+
+
 def fell_might(out: Result) -> None:
     """The warlock's pact boon: one charge, an extra die, and a trade.
 
@@ -4311,6 +4372,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "compelled_walk": (compelled_walk,
+                       "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
     "lent_augments": (lent_augments,

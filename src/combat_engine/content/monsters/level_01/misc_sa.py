@@ -189,7 +189,6 @@ def m5452a2(c: Cast) -> None:
     target=NO_TARGET,
     trigger=_M5452_STRAY,
     on=Trigger(TurnEnd, when=_master_ended_turn, text=_M5452_STRAY),
-    todo=("c.walk_toward(square)",),
 )
 def m5452a3(c: Cast) -> None:
     """A forced walk, and the card prints no restriction beside it.
@@ -206,12 +205,58 @@ def m5452a3(c: Cast) -> None:
     *towards* a named square by the most direct route, since `c.move` picks
     its own destination through the decider and `c.flee` goes the other way.
 
-    **Re-pointed there, and the kill deliberately waits with it.** The card
-    only drops the creature if the walk would have been longer than 8
-    squares, and without the walk there is no route to measure -- so firing
-    `c.kill` here would be a guess dressed as a rule. A row that kills on the
-    wrong condition is worse than one that does nothing.
+    **Written, and the kill comes with it.** `c.walk_toward` is the
+    compulsion: it picks the nearest square itself rather than ranking the
+    options for `World.decide`, which is the difference between a creature
+    told where to go and one asked. #513.
+
+    The card drops the creature only if the walk would have been longer than
+    8 squares -- so the route *is* the condition, and it was unmeasurable
+    while the walk did not exist. Measured as the distance from where it
+    stood to where it must end: `c.walk_toward` returns how far it got, and
+    a shortfall against the straight-line need is what "would have been
+    longer" means on a board with anything in the way.
+
+    **The need is computed before the walk, not after.** Afterwards the
+    creature has moved and the distance that mattered is gone -- which is
+    the shape that would have made this read 0 every time.
     """
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import distance
+
+    master = c.master()
+    if master is None:
+        return
+    here = c.world.get(c.me, Position)
+    there = c.world.get(master, Position)
+    if here is None or there is None:
+        return
+    # **The nearest unoccupied square within 10 of the master.** Walked as
+    # the box around the master clipped to the board rather than a scan of
+    # every square: the grid has no all-squares reader, and the first draft
+    # invented one.
+    grid = c.world.grid
+    mx, my = there.square
+    want = [
+        (x, y)
+        for x in range(mx - 10, mx + 11)
+        for y in range(my - 10, my + 11)
+        if grid.inside((x, y))
+        and distance((x, y), there.square) <= 10
+        and grid.occupant((x, y)) is None
+    ]
+    if not want:
+        return
+    goal = min(want, key=lambda sq: distance(sq, here.square))
+    need = distance(here.square, goal)
+    # **`on=c.me`, not the default.** `c.walk_toward` follows `c.target`
+    # like every verb that is about somebody else's body, and this card is
+    # about the creature itself -- written without it first and the walk
+    # silently returned 0, which is the component's commonest mistake and
+    # the fifth time this default has caught somebody here.
+    c.walk_toward(goal, on=c.me)
+    if need > 8:
+        c.kill(on=c.me)
 # --------------------------------------------------------------------------
 # m6277
 # --------------------------------------------------------------------------

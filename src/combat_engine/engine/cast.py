@@ -2881,6 +2881,65 @@ class Cast:
             if lent is not None:
                 self.world.effects.end(lent, "the move ended")
 
+    def walk_toward(
+        self,
+        target: int | Square,
+        squares_: int = 0,
+        *,
+        on: int | None = None,
+    ) -> int:
+        """Compelled: the creature walks the most direct route, no choice.
+
+        **The difference from `c.move(toward=)` is the whole verb.** That one
+        *ranks* the destinations and hands them to `World.decide` -- a real
+        decider still sees every option, which `_nearest_first` says in as
+        many words. A compulsion is the printed line where the mover has no
+        vote: "must use a move action to move as close to the attacker as
+        possible", "walks by the most direct route". So this picks the
+        nearest square itself and never asks. #513.
+
+        It is still the creature's **own** move, not forced movement, which
+        matters twice: it provokes on the way, and it spends the target's
+        move action rather than the caster's. `c.push` and `c.slide` are the
+        other thing and neither spends the mover's economy.
+
+        `target` is a creature to close on or a square to reach. `squares_`
+        defaults to the mover's own speed, which is what "use a move action"
+        means.
+
+        **Follows `c.target`**, like every verb that is about somebody
+        else's body: both printed lines compel a creature other than the
+        one whose card it is. A row compelling *itself* passes `on=c.me`,
+        and `m5452a3` is that row -- written without it, the walk returned
+        0 in silence.
+
+        Returns how far it actually got -- 0 when it is already as close as
+        it can be, which is a true answer and not a failure.
+        """
+        from .movement import walk
+
+        who = self._who(on)
+        if who is None:
+            return 0
+        far = squares_ or self.speed_of(who)
+        if far <= 0:
+            return 0
+        paths = self.world.reachable_paths(who, far)
+        if not paths:
+            return 0
+        if isinstance(target, int):
+            goal = self.world.get(target, Position)
+            if goal is None:
+                return 0
+            spot = goal.square
+        else:
+            spot = target
+        # **Sorted first, then the nearest.** `min` over a set is not
+        # deterministic across runs and a replay fixture compares event for
+        # event, so the tie-break has to be the board's own order.
+        best = min(sorted(paths), key=lambda sq: _distance(sq, spot))
+        return walk(self.world, who, paths[best])
+
     def flee(self, squares_: int, *, on: int | None = None) -> int:
         """The target runs, under its own power, as far from you as it can.
 

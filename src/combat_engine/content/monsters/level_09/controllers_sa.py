@@ -649,6 +649,13 @@ def m1157a1(c: Cast) -> None:
         if c.adjacent(to=victim):
             c.redirect(to=victim)
 
+    def drawn(ev: Any) -> None:
+        if not hold.ended and getattr(ev, "actor", None) == victim:
+            c.walk_toward(me, on=victim)
+
+    c.watch(TurnStart, drawn, until=When.ENCOUNTER, on=victim,
+            label=f"{c.ref} compulsion")
+
     def ends_on_attack(ev: Hit) -> None:
         if hold.ended:
             return
@@ -4286,7 +4293,6 @@ def m6484a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM, Keyword.MELEE],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("c.walk_toward(creature)",),
 )
 def m6484a3(c: Cast) -> None:
     """Cannot-attack is written.
@@ -4296,7 +4302,19 @@ def m6484a3(c: Cast) -> None:
     action to move as close to the angel as possible, on each of its
     turns". A compulsion spending the target's own move action, which is
     `c.walk_toward` with a creature for its destination rather than the
-    square `m5452a3` waits on.
+    square `m5452a3` names.
+
+    **Written.** `c.walk_toward` closes on the creature by the most
+    direct route and never asks -- "as close as possible" is not a
+    choice, which is the whole difference from `c.move(toward=)`, where
+    the destinations are only *ranked* and the mover still decides.
+
+    It is the target's own move, so it provokes on the way out; a push
+    of the same distance would be safe for it and a different card.
+
+    Watched on the target's turn start rather than declared, because the
+    compulsion repeats -- "on each of its turns" for as long as the hold
+    lasts -- and it is gated on the hold so the two end together.
     """
     if not c.strike():
         return
