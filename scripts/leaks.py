@@ -695,7 +695,72 @@ def specs() -> int:
               "See `_cross_reference` in etl/build.py.")
         return 1
     print("no printed names in any spec")
-    return columns(index)
+    bad = _self_named_clauses()
+    return bad or columns(index)
+
+
+#: A labelled clause as the ETL leaves one: `<ref> : <sentence>`.
+_CLAUSE = re.compile(r"^([A-Za-z0-9:_.-]+) : (.*)$")
+
+
+def _self_named_clauses() -> int:
+    """Does a labelled clause print the name of its own label? #528.
+
+    **The walk above cannot answer this and must not be made to.** It runs
+    every spec past `identifies`, which waives a two-word name built of two
+    ordinary words -- and `p1458`'s name is two words that are *both* in the
+    rules vocabulary. So the leak this catches sat in a brief under a
+    reported-clean `--specs` for as long as the feat has been imported.
+
+    Removing that waiver is not the fix and has been measured rather than
+    argued: the same sweep with it off reports **3,885** hits across 3,130
+    specs, nearly all innocent -- a monster ability named for a generic
+    combat phrase, mentioned in prose that means the phrase. Vocabulary
+    cannot separate the two cases at spec scale.
+
+    **Position can, which is why this is a separate walk.** A labelled
+    clause belongs to its label: in `p1458 : ...`, the sentence is about
+    `p1458`, so `p1458`'s own name inside it is self-reference by
+    construction and needs no waiver and no judgement. 733 such clauses
+    exist and the honest count of leaks is 0 or it is a bug.
+
+    The same argument `etl/build._label_refs` makes for the label itself --
+    "in this position it is never a coincidence" -- one clause further
+    along. `etl/build._self_named_clauses` is the pass that fixes it; this
+    is the half that notices when it stops working.
+    """
+    names = localisation()
+    own: dict[str, list[str]] = {}
+    for ref, entry in names.items():
+        name = _fold((entry or {}).get("name", "")).lower().strip()
+        if len(name) >= 4:
+            own.setdefault(ref, []).append(name)
+
+    db = game()
+    bad: list[tuple[str, str, str]] = []
+    clauses = 0
+    for table in ("power", "monster_power", "class_feature", "companion",
+                  "item", "item_block", "feat", "race",
+                  "trap", "racial_trait", "disease", "associate", "terrain"):
+        for ref, spec in db.execute(f"SELECT ref, spec FROM {table}"):
+            for line in (spec or "").splitlines():
+                m = _CLAUSE.match(line)
+                if m is None or m.group(1) not in own:
+                    continue
+                clauses += 1
+                flat = _fold(m.group(2)).lower()
+                if any(n in flat for n in own[m.group(1)]):
+                    bad.append((table, ref, m.group(1)))
+
+    print(f"  {clauses} labelled clause(s) read")
+    for table, ref, label in bad:
+        print(f"  {table}.{ref}: its {label} clause prints {label}'s own name")
+    if bad:
+        print(f"\n{len(bad)} clause(s) name their own label -- "
+              "see `_self_named_clauses` in etl/build.py")
+        return 1
+    print("no labelled clause prints the name of its own label")
+    return 0
 
 
 #: Columns that hold a word from a small fixed vocabulary -- "Attack",

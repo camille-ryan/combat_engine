@@ -2790,6 +2790,9 @@ def _cross_reference_rest(
 
     by_name: dict[str, str] = {}
     by_feature: dict[str, str] = {}
+    #: The inverse of `by_name`, for `_self_named_clauses`. Built here rather
+    #: than per row: it is one pass over the index instead of 25,000.
+    owns: dict[str, list[str]] = {}
     held: dict[str, list[str]] = {}
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip()
@@ -2804,6 +2807,7 @@ def _cross_reference_rest(
         for key in keys:
             if _rank(ref) > _rank(by_name.get(key, "")):
                 by_name[key] = ref
+            owns.setdefault(ref, []).append(key)
         # **A name can be a power for one class and a feature for
         # another.** One printed name is a sorcerer daily *and* the
         # artificer's class feature, and preferring a `p` on a tie sent
@@ -3143,9 +3147,29 @@ def _cross_reference_rest(
             fixed = _elsewhere(fixed, by_other, rules)
             if others:
                 fixed = scrub(fixed, others)
-                if table == "feat":
-                    fixed = _associated_refs(fixed, by_name, imported)
                 fixed = _named_powers(fixed, by_name, ref, by_feature, rules, cls)
+            # **Outside the `others` guard, for the fourth time and the same
+            # reason as the three above.** That guard skips a row whose spec
+            # names nothing `identifies` believes, and a power's name is very
+            # often two ordinary words -- which is precisely what `identifies`
+            # waives. `f1098` is the worked case: it reached this line with an
+            # empty `others`, so the one pass that understands an
+            # Associated-Powers member never ran on it, and the clause kept a
+            # printed name mid-sentence while the heading beside it was a ref.
+            #
+            # The heading was a ref because `_label_refs` runs outside the
+            # guard already, which is what made this look like a parser edge
+            # case: substituted in one position and not the other, on the same
+            # line. #528.
+            #
+            # Kept after the `scrub` rather than before it so the order is
+            # unchanged for every feat that already reached it.
+            if table == "feat":
+                fixed = _associated_refs(fixed, by_name, imported)
+            # **Last, and for every table.** A labelled clause is a ref by
+            # now whichever pass resolved it, and this is the only pass that
+            # looks *inside* one. See `_self_named_clauses`.
+            fixed = _self_named_clauses(fixed, owns)
             if fixed != spec:
                 out.execute(f"UPDATE {table} SET spec=? WHERE ref=?", (fixed, ref))
                 changed += 1
@@ -4050,6 +4074,92 @@ def _associated_refs(spec: str, by_name: dict[str, str], imported: set[str]) -> 
         return "\n".join(lines)
 
     return _ASSOCIATED.sub(swap, spec)
+
+
+def _self_named_clauses(spec: str, owns: dict[str, list[str]]) -> str:
+    """Scrub each labelled clause of the printed name of its own label. #528.
+
+    Applied per line and late, after every pass that can turn a label into a
+    ref, because **which** pass does it varies and the leak does not. `f1098`
+    is the worked case and cost two rebuilds to find: its list is not in the
+    `Associated Powers:` shape at all -- no such heading is printed -- so
+    `_associated_refs` never ran on it and fixing that function changed
+    nothing. Its labels are refs because `_label_refs` resolves a label
+    anywhere it finds one, and `_label_refs` substitutes **the label only**,
+    leaving the rest of the line untouched.
+
+    So the guard this needs is not a pass, it is a *position*: the clause
+    belonging to label `r` is about `r`, and `r`'s own name appearing inside
+    it is self-reference by construction -- the same argument `_label_refs`
+    makes for the label, one clause further along.
+    """
+    out: list[str] = []
+    for line in spec.splitlines():
+        m = _CLAUSE.match(line)
+        if m and m.group(1) in owns:
+            body = _clause_self_ref(m.group(1), m.group(2), owns)
+            line = f"{m.group(1)} : {body}"
+        out.append(line)
+
+    joined = "\n".join(out)
+    return joined + "\n" if spec.endswith("\n") else joined
+
+
+#: A labelled clause as every upstream pass leaves one: `<ref> : <sentence>`.
+_CLAUSE = re.compile(r"^([A-Za-z0-9:_.-]+) : (.*)$")
+
+
+def _clause_self_ref(ref: str, clause: str, owns: dict[str, list[str]]) -> str:
+    """Swap one clause's own row's printed name for its ref. #528.
+
+    **The heading was substituted and the sentence was not.** An
+    Associated-Powers member prints as `<name> : <clause>`, `swap` above
+    turns the heading into a ref, and a clause that goes on to name its own
+    row mid-sentence kept the name in the clear. So `scripts/spec.py f1098`
+    handed an author a brief whose first word was `p1458` and whose next
+    line named `p1458` outright -- and `content/CLAUDE.md` claimed at the
+    time that an author is shown no name "by construction".
+
+    One of `f1098`'s three clauses leaked and two did not, which is what
+    made it look like a parser edge case rather than a missing pass.
+
+    **Why no existing check caught it, and the lesson is reusable.**
+    `leaks.py --specs` waives a two-word name made of two ordinary words in
+    running prose, and this name is two words that are *both* ordinary
+    rules vocabulary. A sweep of every spec with that waiver removed
+    reports 3,885 hits, nearly all of them innocent -- a monster ability
+    named for a generic combat phrase, mentioned in prose that means the
+    phrase. So vocabulary cannot separate these two cases.
+
+    **Position can, and that is the whole of the fix.** Inside a member's
+    clause, the row the clause is *about* is known: it is the member. Its
+    own name appearing there is a self-reference by construction, exactly
+    as a stat block naming itself is, and `sanitise` already scrubs that
+    case -- it simply never ran with the member as the subject. No waiver
+    and no vocabulary test is involved, so there is nothing here to tune.
+
+    Only the member's own names are swapped. A clause naming a *different*
+    row is left alone deliberately: that is `_cross_reference`'s job and
+    doing it here would hide which pass is failing when one of them does.
+    """
+    import re as _re
+
+    out = clause
+    # Longest first, so a name that contains a shorter one is not left
+    # half-substituted by its own prefix.
+    for name in sorted(owns.get(ref, ()), key=len, reverse=True):
+        if len(name) < 4:
+            continue
+        # `by_name`'s keys are `_low`-normalised, so the pattern has to
+        # accept either apostrophe to meet the clause's own spelling --
+        # the same trap `swap` has a comment about one screen up.
+        # Escaped rather than written literally, which `sanitise._fold`
+        # does for the same reason: RUF001 refuses an ambiguous character
+        # in a string, and it is right to -- the two apostrophes are
+        # indistinguishable in a diff.
+        pattern = _re.escape(name).replace("'", "['\u2019]")
+        out = _re.sub(rf"\b{pattern}\b", ref, out, flags=_re.IGNORECASE)
+    return out
 
 
 #: A word used on the pages of at least this many rows is ordinary English.
