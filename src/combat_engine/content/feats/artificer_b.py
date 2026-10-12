@@ -747,7 +747,7 @@ def f3028(c: Cast) -> None:
 
 
 @power("f3035", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("events.ShortRested",))
+       reach=PERSONAL, target=SELF)
 def f3035(c: Cast) -> None:
     """Spending an action point also hands an adjacent ally back a magic
     item's daily power.
@@ -758,9 +758,20 @@ def f3035(c: Cast) -> None:
     ally picks which. One ally and one row, so the loop stops on the
     first hand-back that took.
 
-    Dropped: the second sentence spends a use of a per-day allowance
-    that is granted and spent inside a rest, and nothing announces one
-    -- the same hold `cf:artificer-f0s1` itself carries.
+    **The second sentence lands now.** "This counts as a use of
+    cf:artificer-f0s1 for the purpose of determining the number of times
+    per day an item can be recharged" is two allowances, and the card means
+    the *item's*: that feature limits one item to one recharge a day, and
+    this feat is another way to take it. So the item's own per-day count is
+    spent and the empowerment pool is **not** -- "counts as a use of
+    cf:artificer-f0s1" is about what the item has had done to it, not about
+    the day's budget, and the trigger here is an action point rather than a
+    rest.
+
+    Spent **before** the hand-back, so an item already recharged today is
+    skipped and the loop goes on to the next ally -- `continue`, not
+    `return`. Written the other way first, which would have let one
+    exhausted item stop the feat for the whole party.
     """
     me = c.me
 
@@ -772,7 +783,11 @@ def f3035(c: Cast) -> None:
             if not rows:
                 continue
             pick = c.choose(rows, "item daily power to hand back")
-            if pick is not None and c.restore_use(pick, on=who):
+            if pick is None:
+                continue
+            if not c.spend_per_day(pick, 1):
+                continue
+            if c.restore_use(pick, on=who):
                 return
 
     c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)

@@ -391,20 +391,57 @@ def f1160(c: Cast) -> None:
                     when=lambda ctx, want=phase: phase_of(c) == want)
 
 
-@power("f2026", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
-def f2026(c: Cast) -> None:
-    """Gives `f2023b` a two-type damage line sized by the source's own
-    damage bonus.
 
-    Re-aimed. Two types at once is `c.damage(dtypes=)` now, and handing
-    a damage line to a named row is an ordinary `Hit` trigger against
-    that ref -- `invoker_b.f2032` already rides this very card that way.
-    What is left is the number: the bonus belongs to `cf:sorcerer-f0s0`,
-    which is refused in play because its phase is chosen at a rest
-    nothing announces, so there is no amount to deal. Same symbol
-    `f1160` above waits on.
+def _hit_with_card(ref: str):  # noqa: ANN202
+    """"When you hit with <that card>" -- this creature's hit, with that row.
+
+    The same question `invoker_b._hit_with` asks; written here rather than
+    imported across two feat files, which is the convention in this tree for
+    a two-line predicate.
     """
+    def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+        return ev.attacker == me and ev.power == ref
+
+    return when
+
+
+@power("f2026", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you hit a target with f2023b",
+       on=Trigger(Hit, _hit_with_card("f2023b"), "you hit with that card"))
+def f2026(c: Cast) -> None:
+    """"f2023b deals fire and radiant damage equal to your Cosmic Power
+    damage bonus."
+
+    **Written.** The docstring this replaces said the number was missing
+    because `cf:sorcerer-f0s0` was refused in play -- its phase is chosen at
+    a rest nothing announced. `events.ShortRested` landed and that feature
+    is written, so the amount is there to read.
+
+    Handing a damage line to a named row is an ordinary `Hit` trigger
+    against that ref; `invoker_b.f2032` rides this very card the same way.
+
+    **The number is the source's own ladder, not a second one.** Cosmic
+    Power is "your Strength modifier, + 2 at 11th level and + 4 at 21st",
+    which is exactly `souls.soul_damage` over the ability -- both printed
+    sources use that ladder and differ only in which modifier it sits on,
+    which is why it is written once there. Reading it rather than repeating
+    the three cases is the difference between this staying right when the
+    ladder is re-read and quietly drifting from the two rows that already
+    use it.
+
+    `dtypes=` is the two types at once, which is what the card means by
+    "fire and radiant damage" -- one amount that is both, shrugged off only
+    as far as the target resists both, rather than two lines.
+    """
+    from combat_engine.content.powers.sorcerer.souls import soul_damage
+
+    amount = c.str_mod + soul_damage(c.level)
+    if amount <= 0:
+        return
+    c.flat(amount, dtype=DamageType.FIRE,
+           dtypes=(DamageType.FIRE, DamageType.RADIANT),
+           on=c.trigger.target)
 
 
 @power("f3433", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -1901,13 +1901,33 @@ def f3790(c: Cast) -> None:
 
 
 @power("f3791", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
+       reach=PERSONAL, target=SELF)
 def f3791(c: Cast) -> None:
-    """`cf:artificer-f0` is declared, so the feature this adds a use to
-    has a row. Its own marker is the reason this one cannot move: the
-    per-day allowance is granted and spent inside a rest, `turns
-    .short_rest` emits nothing, and a use added to a pool nothing fills
-    has nowhere to go."""
+    """"You gain one additional use of the cf:artificer-f0 class feature per
+    day."
+
+    **Written.** The docstring this replaces said the pool was one nothing
+    fills -- true when it was written, and the three things it waited on have
+    all landed: `turns.short_rest` announces itself, "per day" means until a
+    long rest (Camille's answer), and `Powers.per_day` holds the count
+    between fights.
+
+    What was still missing is smaller and was the actual obstacle: the
+    allowance was a **module constant** that three rows handed to
+    `c.per_day_left` by name, so a feat printing "one additional use" had
+    nothing to raise. `features.martial_leaders.empowerments` is the reader
+    now and this writes through it.
+
+    `+ 1` off the printed constant rather than a literal 2, so the two move
+    together if the page is ever read again.
+    """
+    from combat_engine.content.features.martial_leaders import (
+        EMPOWERMENTS,
+        EMPOWERMENTS_REF,
+    )
+
+    c.change_amount(EMPOWERMENTS_REF, EMPOWERMENTS + 1, on=c.me,
+                    until=When.ENCOUNTER)
 
 
 @power("f3792", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

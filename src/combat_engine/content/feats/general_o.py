@@ -876,14 +876,48 @@ def f3045(c: Cast) -> None:
 
 
 @power("f3046", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
+       reach=PERSONAL, target=SELF)
 def f3046(c: Cast) -> None:
-    """Rides on an ally's attack that benefited from `cf:artificer-f0s0`.
+    """"When an ally hits with an attack benefiting from the bonus granted
+    by your cf:artificer-f0s0 class feature, the attack deals 1d6 extra
+    poison damage." 2d6 at 11th, 3d6 at 21st.
 
-    That feature is declared and refused in play: the +2 it banks in a
-    weapon is spent after the roll and `c.boost_roll()` is what it
-    waits on. Until the charge exists nothing can have benefited from
-    it."""
+    **Written.** The docstring this replaces named the two things in the
+    way; both landed. `c.boost_roll` adds to a roll already made, which is
+    what the feature's printed free action does, and `events.ShortRested` is
+    the moment it banks the charge at -- so an attack *can* benefit from it
+    now.
+
+    **`events.Boosted` is what "benefiting from" reads.** `c.boost_roll`
+    mutated the result in place and said nothing, which is why this feat had
+    no subject even once the charge existed. `by` is the ref that paid, so a
+    boost somebody else's row bought is ignored; `kind` tells an attack from
+    a boosted save, which the same feature can also pay for.
+
+    **The damage hangs on the `Hit` that follows, not on the `Boosted`.**
+    The boost lands on the roll and the card pays out on a hit, which are
+    two moments -- and a roll that is boosted into a miss must pay nothing.
+    One shot, because it is one attack.
+    """
+    from combat_engine.engine.events import Boosted
+
+    me = c.me
+    dice = "3d6" if c.level >= 21 else "2d6" if c.level >= 11 else "1d6"
+
+    def boosted(ev: Any) -> None:
+        if getattr(ev, "by", "") != "cf:artificer-f0s0":
+            return
+        if getattr(ev, "kind", "") != "attack":
+            return
+
+        def landed(hit: Any) -> None:
+            if getattr(hit, "attacker", None) == me:
+                return
+            c.damage(dice, dtype=DamageType.POISON, on=hit.target)
+
+        c.watch(Hit, landed, until=When.EOT, once=True)
+
+    c.watch(Boosted, boosted, until=When.ENCOUNTER)
 
 
 #: The two `cf:artificer-f2` infusions whose early end f3047 rewrites.

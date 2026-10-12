@@ -3576,6 +3576,78 @@ def manoeuvres(out: Result) -> None:
         break
 
 
+def empowerment_pool(out: Result) -> None:
+    """The artificer's per-day allowance: one pool, two separate limits.
+
+    `cf:artificer-f0` begins the day with one empowerment and the two
+    `-f0s*` options spend from it. `cf:artificer-f0s1` also prints its own
+    limit -- "an item can be recharged only once per day in this way" --
+    and the two are **different sentences about different things**: N
+    empowerments for the artificer, one recharge per item. Folding them
+    would let a single item soak every empowerment once a milestone raised
+    the pool.
+
+    The order matters and is the thing an implementation gets backwards.
+    The item's own limit is asked first, because asking the pool first
+    burns one of the day's allowance on an item that cannot take a second
+    recharge -- a silent loss, since both refusals look the same from
+    outside.
+
+    `f3791` raises the pool by one, which it could not do while the limit
+    was a module constant three rows passed by name. `empowerments()` is
+    the read it writes through.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content.features.martial_leaders import (
+        EMPOWERMENTS,
+        EMPOWERMENTS_REF,
+        empowerments,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:empowerments")
+
+    out.that(empowerments(c) == EMPOWERMENTS,
+             "with no feat the day's allowance is the printed"
+             f" {EMPOWERMENTS} ({empowerments(c)})")
+
+    # **The pool is spent down, and runs out.** `EMPOWERMENTS` is 1, so the
+    # first spend takes and the second must not.
+    took = [c.spend_per_day(EMPOWERMENTS_REF, empowerments(c))
+            for _ in range(2)]
+    out.that(took == [True, False],
+             "the allowance is spent down and refuses when the day is out"
+             f" -- a pool that always says yes is free {took}")
+
+    # f3791's raise, on a fresh day.
+    world2, me2, _ = _board()
+    c2 = Cast(world=world2, me=me2, ref="drivers:empowerments-feat")
+    c2.change_amount(EMPOWERMENTS_REF, EMPOWERMENTS + 1, on=me2,
+                     until=When.ENCOUNTER)
+    out.that(empowerments(c2) == EMPOWERMENTS + 1,
+             "f3791's additional use is read off the same door"
+             f" ({empowerments(c2)})")
+    raised = [c2.spend_per_day(EMPOWERMENTS_REF, empowerments(c2))
+              for _ in range(3)]
+    out.that(raised == [True, True, False],
+             "and buys exactly one more spend, not an unlimited pool"
+             f" {raised}")
+
+    # **The item's own once-a-day is a different key**, so spending the
+    # pool must not have spent it, and vice versa.
+    world3, me3, _ = _board()
+    c3 = Cast(world=world3, me=me3, ref="drivers:empowerments-item")
+    item = [c3.spend_per_day("i601p1", 1) for _ in range(2)]
+    out.that(item == [True, False],
+             f"an item takes one recharge a day on its own key {item}")
+    out.that(c3.spend_per_day(EMPOWERMENTS_REF, empowerments(c3)),
+             "and spending the item's limit leaves the empowerment pool"
+             " untouched -- two sentences, two keys, and folding them is"
+             " how one item eats the whole day")
+
+
 def aid_grants(out: Result) -> None:
     """How much an aid action grants is a knob, and the biggest raise wins.
 
@@ -3938,6 +4010,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "empowerment_pool": (empowerment_pool,
+                         "one per-day pool, two limits, and the order"),
     "aid_grants": (aid_grants,
                    "how much an aid action grants, and the raise that wins"),
     "bull_rush_riders": (bull_rush_riders,

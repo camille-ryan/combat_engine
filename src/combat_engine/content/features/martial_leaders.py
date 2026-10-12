@@ -64,10 +64,13 @@ MARTIAL = [Keyword.MARTIAL]
 #: The four defences, for the one option that lays a modifier on all of them.
 _DEFENCES = (AC, FORT, REF, WILL)
 
-#: The event that would give a row a moment inside a rest. `turns.short_rest`
-#: exists and restores what it should; nothing announces it, so a row whose
-#: printed effect happens *during* a rest has nowhere to hang.
-_REST = "events.ShortRested"
+#: **Gone, and the note it carried was false by the time it was read.**
+#: `events.ShortRested` exists and `turns.short_rest` emits it per creature,
+#: so "a row whose printed effect happens during a rest has nowhere to hang"
+#: stopped being true -- and three rows went on naming it, which is what
+#: made `todo.py` red: a symbol that has arrived is a stale marker, not a
+#: leftover. Each of those rows now names what it actually waits on, and two
+#: of them turned out to wait on nothing and are written.
 
 #: The artificer's daily empowerments, and the ref the count is keyed on.
 #: One at the start of a day; the card adds one per milestone and nothing
@@ -76,6 +79,21 @@ _REST = "events.ShortRested"
 #: `-f0s*` options spend from it.
 EMPOWERMENTS = 1
 EMPOWERMENTS_REF = "cf:artificer-f0"
+
+
+def empowerments(c: Cast) -> int:
+    """How many empowerments this artificer gets today, after any feat.
+
+    **Read, not the constant.** f3791 prints "you gain one additional use of
+    the cf:artificer-f0 class feature per day", and the limit was a module
+    constant three rows passed to `c.per_day_left` by hand -- so the feat had
+    nothing to raise. `c.change_amount` is the write and this is the read,
+    which is the same arrangement the aid grant uses.
+
+    Named without a leading underscore because `f3791` is in another file and
+    reads it. The constant stays as the printed number.
+    """
+    return c.amount_for(EMPOWERMENTS_REF, EMPOWERMENTS)
 
 #: What the reservoir is worth, and the key a feat adds to it on. `f2110`
 #: doubles the bonus and writes the difference there; this row reads it when
@@ -129,8 +147,9 @@ def artificer_empower(c: Cast) -> None:
     # Nothing to do at encounter start: the allowance is a count read at the
     # rest, and `Powers.per_day` already holds whatever the day has spent.
     # Declared so the count has an owner and a ref to be keyed on.
-    c.note(f"{c.ref}: {c.per_day_left(EMPOWERMENTS_REF, EMPOWERMENTS)}"
-           f" of {EMPOWERMENTS} empowerment(s) left today")
+    limit = empowerments(c)
+    c.note(f"{c.ref}: {c.per_day_left(EMPOWERMENTS_REF, limit)}"
+           f" of {limit} empowerment(s) left today")
 
 
 @power(
@@ -172,7 +191,7 @@ def artificer_empower_reservoir(c: Cast) -> None:
         # day's allowance and this is one of the two things it pays for, so
         # banking without spending would make the feature free. The spend
         # answers False when the day is out, and then nothing is banked.
-        if not c.spend_per_day(EMPOWERMENTS_REF, EMPOWERMENTS):
+        if not c.spend_per_day(EMPOWERMENTS_REF, empowerments(c)):
             return
         # The thing empowered is what this artificer is holding. A party
         # member's weapon would want `cf:artificer-f0`'s allowance to say
@@ -207,14 +226,59 @@ def artificer_empower_reservoir(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    todo=(_REST, "c.restore_use(item=)"),
 )
 def artificer_empower_recharge(c: Cast) -> None:
-    """`Gear.worn` records magic items and `Magic.powers` lists their rows,
-    so *which* row to recharge is answerable now -- but `c.restore_use`
-    takes a ref and nothing picks an item's daily out of the slots, and the
-    recharge happens over a rest either way.
+    """"You recharge the daily power of a magic item. An item can be
+    recharged only once per day in this way."
+
+    **Written.** Both halves of the old marker were answered elsewhere in
+    the tree and the docstring had not caught up: `events.ShortRested` is
+    the moment, and picking an item's daily out of the slots is
+    `artificer_b._item_dailies`, which reads `Gear.worn` and `Magic.powers`
+    and has worked since `Gear.worn` landed. `c.restore_use` takes the ref
+    that function returns.
+
+    The sibling of `cf:artificer-f0s0` and the second thing
+    `cf:artificer-f0`'s allowance pays for, so it spends from the same pool
+    and does nothing when the day is out.
+
+    **"Only once per day in this way" is a second allowance, keyed on the
+    item's own row** -- `c.spend_per_day(pick, 1)`, not on this feature,
+    which the empowerment pool already limits. Two different sentences: the
+    artificer gets N empowerments a day, and any one item takes only one
+    recharge. Folding them would let a single item soak every empowerment
+    once a milestone raised the pool.
+
+    The item's own limit is asked **first**, because it is the cheaper
+    refusal: asking the pool first would burn one of the day's allowance on
+    an item that cannot take a second recharge.
+
+    This recharges **this artificer's own** items. "You must spend a short
+    rest with an item in order to empower it" names no other creature, and
+    f3035 is the feat that extends it to an adjacent ally -- handing it out
+    party-wide here would make that feat print nothing.
     """
+    from combat_engine.content.feats.artificer_b import _item_dailies
+    from combat_engine.engine.events import ShortRested
+
+    me = c.me
+
+    def recharge(ev: Any) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        rows = _item_dailies(c, me)
+        if not rows:
+            return
+        pick = c.choose(rows, "item daily power to recharge")
+        if pick is None:
+            return
+        if not c.spend_per_day(pick, 1):
+            return
+        if not c.spend_per_day(EMPOWERMENTS_REF, empowerments(c)):
+            return
+        c.restore_use(pick, on=me)
+
+    c.watch(ShortRested, recharge, until=When.ENCOUNTER, on=me)
 
 
 @power(
@@ -263,7 +327,7 @@ def artificer_transfer(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=(_REST, "chargen.power_choice()"),
+    todo=("chargen.power_choice()",),
 )
 def artificer_infusions(c: Cast) -> None:
     """The budget the class's three infusion cards draw on, and the swap
@@ -382,7 +446,7 @@ def bard_heal_feature(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE_HEAL,
-    todo=(_REST, "turns.short_rest(surges=)"),
+    todo=("turns.short_rest(surges=)",),
 )
 def bard_song_of_rest(c: Cast) -> None:
     """Every word of this is about a short rest: it is set up during one and

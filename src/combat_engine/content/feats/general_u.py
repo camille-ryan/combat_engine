@@ -303,23 +303,30 @@ def f3429(c: Cast) -> None:
 
 
 @power("f3432", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*REACH, "events.ShortRested"))
+       reach=PERSONAL, target=SELF, todo=REACH)
 def f3432(c: Cast) -> None:
     """Two holds, either of which is fatal on its own: no attack is ever
     made *using* `f1028`, and nothing reports which phase is current, so
     all three branches of the payout are unreachable.
 
-    **Re-aimed.** The second hold was `c.cosmic_phase()`, a symbol only
-    this row named. The phase is not a reader that is missing -- it is a
-    state nothing keeps, because `cf:sorcerer-f0s0` cannot maintain it:
-    the phase is picked at the end of a rest that emits no event, and
-    that feature is itself marked `events.ShortRested`.
+    **Re-aimed twice, and the second hold is gone.** It was
+    `c.cosmic_phase()` first -- a symbol only this row named -- then
+    `events.ShortRested`, on the reasoning that the phase is a state
+    nothing keeps because `cf:sorcerer-f0s0` is picked at a rest that
+    emits no event. That event landed and that feature is written:
+    `features.sorcerer.phase_of` answers which phase, and all three
+    branches of the payout have somewhere to read.
 
-    Naming the feature was the obvious move and it is the wrong one: a
-    ref resolves against the registry, and `cf:sorcerer-f0s0` **is**
-    declared -- refused in play, but declared -- so the marker read as
-    arrived the moment anybody ran the tracker. It names what that row
-    is waiting on instead, which is the same thing this one waits on."""
+    So **one hold is left, and it is fatal on its own**: no attack is ever
+    made *using* `f1028`. A power's reach is header data and is never
+    rewritten for one use, which is `c.reach_of(power=)` and is `f1028`'s
+    own marker. Until an attack can be made through that card there is no
+    trigger, whatever the phase says.
+
+    Worth recording why naming the *feature* was wrong both times a wave
+    reached for it: a ref resolves against the registry, and
+    `cf:sorcerer-f0s0` has always been declared -- so the marker read as
+    arrived the moment anybody ran the tracker."""
 
 
 @power("f3434", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
