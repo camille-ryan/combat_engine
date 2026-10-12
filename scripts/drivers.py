@@ -3482,7 +3482,7 @@ def manoeuvres(out: Result) -> None:
     from combat_engine.content import loader  # noqa: F401
     from combat_engine.engine.actions import legal
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.query import enemies
+    from combat_engine.engine.query import allies, enemies
 
     world, me, _ = _board()
     enc = world.encounter
@@ -3499,8 +3499,15 @@ def manoeuvres(out: Result) -> None:
 
     # **Aid is scoped.** The ally's bonus must answer for the chosen enemy
     # and not for anybody else.
-    friends = [a for a in world.having_team(me)] if hasattr(world, "having_team") else []
-    ally = friends[0] if friends else me
+    # **`world.having_team` does not exist.** This read it behind a
+    # `hasattr` and fell through to `ally = me`, so "the aided ally gets its
+    # +2 against the chosen enemy" was measuring the *aider* -- and the
+    # control beneath it compared one creature's bonus against its own. The
+    # guard is what hid it: a missing attribute behind `hasattr` is a
+    # silently weaker test, never a failing one.
+    friends = [a for a in allies(world, me) if a != me]
+    assert friends, "the board has no ally to aid"
+    ally = friends[0]
     c.aid_attack(foe, ally)
     other = next((f for f in sorted(enemies(world, me)) if f != foe), None)
     hit_chosen = c.total("attack", ally, {"actor": ally, "target": foe})
@@ -3567,6 +3574,85 @@ def manoeuvres(out: Result) -> None:
                  " nobody -- the printed Impossible Push clause, and the"
                  " one an unconditional shift gets wrong")
         break
+
+
+def aid_grants(out: Result) -> None:
+    """How much an aid action grants is a knob, and the biggest raise wins.
+
+    Twelve rows modify aiding and **seven of them change the size of the
+    bonus**. The number lived inside `c.aid_attack`, where none of them
+    could reach it -- so the gap was a knob rather than another verb, which
+    is the same shape the bull rush turned out to have.
+
+    Three things are measured, each the way a wrong implementation differs:
+
+    * **the default is still 2** when nothing has changed it, which an
+      over-eager reader breaks by returning its own floor;
+    * **a raise is read**, which a modifier nothing consults breaks -- the
+      commonest bug in this component;
+    * **two raises do not add.** The printed rule is one aid per attack, so
+      +4 and +3 together are +4, not +7. `amount_for` takes a maximum for
+      exactly this, and summing is the natural way to write it wrong.
+
+    The fourth rule is the mirror: **setting it to 0 means zero**, which
+    f2444 needs because its reroll *replaces* the +2. A reader written as
+    `max(default, ...)` would quietly keep the 2 and leave that feat paying
+    out twice.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import MANOEUVRE_AID, Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Aided
+    from combat_engine.engine.query import allies, enemies
+
+    world, me, _ = _board()
+    foe = sorted(enemies(world, me))[0]
+    friends = [a for a in allies(world, me) if a != me]
+    assert friends, "the board has no ally to aid"
+    ally = friends[0]
+    c = Cast(world=world, me=me, ref="drivers:aid")
+
+    out.that(c.amount_for(MANOEUVRE_AID, 2) == 2,
+             "with nothing changing it an aid action grants the printed 2"
+             f" ({c.amount_for(MANOEUVRE_AID, 2)})")
+
+    c.change_amount(MANOEUVRE_AID, 4, on=me, until=When.ENCOUNTER)
+    got = c.amount_for(MANOEUVRE_AID, 2)
+    out.that(got == 4,
+             f"a row raising it to 4 is read -- the half that is a modifier"
+             f" nothing consults when it is missing ({got})")
+
+    c.change_amount(MANOEUVRE_AID, 3, on=me, until=When.ENCOUNTER)
+    both = c.amount_for(MANOEUVRE_AID, 2)
+    out.that(both == 4,
+             "and a second raise of 3 beside it is still 4, not 7 -- an ally"
+             f" benefits from one aid per attack ({both})")
+
+    # **Zero means zero.** f2444 replaces the +2 with a reroll.
+    world2, me2, _ = _board()
+    c2 = Cast(world=world2, me=me2, ref="drivers:aid-zero")
+    c2.change_amount(MANOEUVRE_AID, 0, on=me2, until=When.ENCOUNTER)
+    out.that(c2.amount_for(MANOEUVRE_AID, 2) == 0,
+             "a row setting the grant to 0 gets 0, not the printed 2 kept by"
+             f" a max against the default ({c2.amount_for(MANOEUVRE_AID, 2)})")
+
+    # **What the action actually grants**, which is a different question
+    # from what the reader returns. Added because a plant putting the
+    # literal 2 back inside `c.aid_attack` left every rule above green --
+    # the driver was measuring the knob and not the thing holding it, which
+    # is precisely the unread-modifier bug its own docstring claims to
+    # catch. Four assertions on a reader prove nothing about its callers.
+    heard: list[tuple[int, int, str, int | None]] = []
+    world.bus.on(Aided, lambda ev: heard.append(
+        (ev.actor, ev.ally, ev.kind_, ev.enemy)))
+    c.aid_attack(foe, ally)
+    paid = c.total("attack", ally, {"actor": ally, "target": foe})
+    out.that(paid == 4,
+             "and the aid action pays out the raised 4, not the 2 written in"
+             f" its own body -- the half a reader test cannot see ({paid})")
+    out.that(heard == [(me, ally, "aid_attack", foe)],
+             "aiding announces itself with who aided, who was helped and the"
+             f" enemy it was aimed at -- the door f2444 and f3761 read ({heard})")
 
 
 def bull_rush_riders(out: Result) -> None:
@@ -3852,6 +3938,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
+    "aid_grants": (aid_grants,
+                   "how much an aid action grants, and the raise that wins"),
     "bull_rush_riders": (bull_rush_riders,
                          "a row lengthens the push and the follow apart"),
     "long_rest": (long_rest,

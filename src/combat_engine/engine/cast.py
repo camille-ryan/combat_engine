@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from .components import Gear, Health, Mod, Mods, Position, Stats
 from .durations import Effect, When
-from .events import Boosted, Event, ItemPowerUsed, Note, PowerUsed
+from .events import Aided, Boosted, Event, ItemPowerUsed, Note, PowerUsed
 from .grid import Square, spread
 from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
@@ -90,6 +90,21 @@ _ANY_SIZE = "manoeuvre:any-size"
 #: what `c.extend_move` lengthens and what `c.pre_empt` replaces a clause of.
 #: A manoeuvre is an action kind and not a row, so it has no declared ref and
 #: this is the one it borrows.
+#: The size of the bonus an aid action hands the ally. Read through
+#: `Cast.amount_for`, because seven rows raise it off the printed 2 and the
+#: number was written inside `aid_attack` where none of them could reach.
+MANOEUVRE_AID = "manoeuvre:aid"
+#: The bonus to the *check* an aid another action rolls, as against the bonus
+#: it hands out. Two different numbers on two cards that print both of them
+#: in one sentence -- "a +5 bonus to checks you make to aid another. When you
+#: succeed ... you grant a +3 bonus instead of a +2" -- so one symbol serving
+#: the pair could not go green for either.
+AID_CHECK = "manoeuvre:aid-check"
+#: A bonus to checks made to aid **this** creature, which is the mirror of
+#: `AID_CHECK` and belongs to the one being helped. Read with
+#: `Cast.amount_for(..., who=ally)`, because the aider is the caster and this
+#: number is not its own.
+AID_RECEIVED = "manoeuvre:aid-check-received"
 MANOEUVRE_BULL_RUSH = "manoeuvre:bull_rush"
 #: How far the attacker follows a bull rush, as against how far the target
 #: goes. A separate symbol from `MANOEUVRE_BULL_RUSH` because the printed
@@ -3415,11 +3430,21 @@ class Cast:
         `once=True` is "its next attack roll", and the duration is the
         **aider's** next turn, not the ally's -- the card says so and they
         are different clocks.
+
+        **How much is read, not fixed at 2.** Seven rows raise it and none of
+        them could reach a literal in here; `MANOEUVRE_AID` is the symbol and
+        `c.change_amount` is the write. The read is on the *aider*, which is
+        the creature whose rows say "you grant a +3 bonus" -- so it happens
+        here rather than on the ally receiving it.
         """
-        return self.bonus(
-            "attack", 2, on=ally, until=until, kind="power", once=True,
+        laid = self.bonus(
+            "attack", self.amount_for(MANOEUVRE_AID, 2),
+            on=ally, until=until, kind="power", once=True,
             when=lambda ctx: ctx.get("target") == enemy,
         )
+        self.world.bus.emit(Aided(actor=self.me, ally=ally,
+                                  kind_="aid_attack", enemy=enemy))
+        return laid
 
     def aid_defence(self, enemy: int, ally: int, *, until: When = When.EONT) -> Effect | None:
         """"That ally gains a +2 bonus to all defences against the chosen
@@ -3428,12 +3453,73 @@ class Cast:
         The sibling of `aid_attack` and the same shape, scoped the other way
         round: the gate is on who is *attacking*, not who is being hit.
         `Defense.ANY` is "all defences", which #360 added for exactly this
-        kind of line.
+        kind of line. The granted amount is read the same way, off
+        `MANOEUVRE_AID`: f2056 raises every aid action at once and would
+        otherwise have had to name two.
         """
-        return self.bonus(
-            Defense.ANY, 2, on=ally, until=until, kind="power", once=True,
+        laid = self.bonus(
+            Defense.ANY, self.amount_for(MANOEUVRE_AID, 2),
+            on=ally, until=until, kind="power", once=True,
             when=lambda ctx: ctx.get("attacker") == enemy,
         )
+        self.world.bus.emit(Aided(actor=self.me, ally=ally,
+                                  kind_="aid_defence", enemy=enemy))
+        return laid
+
+    def aid_another(
+        self,
+        ally: int,
+        skill: str = "athletics",
+        *,
+        auto: bool = False,
+        until: When = When.EONT,
+    ) -> bool:
+        """"Make a check against DC 10 + half the ally's level. On a success
+        it gains a +2 bonus to its next check with that skill."
+
+        **The third aid action, and the one that rolls.** `aid_attack` and
+        `aid_defence` grant outright -- those are the combat pair and they
+        attack AC 10 -- while this one is the skill version and is a
+        different printed block. The two get conflated, and conflating them
+        is what would make this one free.
+
+        `auto` is for the rows that print "you **successfully** use the aid
+        another action": the success is the whole of what the power buys, so
+        it is a parameter rather than a lucky roll.
+
+        The DC is off the **ally's** level, not the caster's, which is the
+        printed rule and the one a reader gets backwards: helping somebody
+        far above you is harder, not easier.
+
+        The granted amount comes off `MANOEUVRE_AID` like the other two, so
+        a row raising "the bonus you grant" raises all three without naming
+        them. `AID_CHECK` is the **other** number, added to the roll -- f3131
+        prints both in one sentence and a single symbol could not have gone
+        green for either half.
+        """
+        if not auto:
+            dc = 10 + (self.world.get(ally, Stats) or Stats()).half_level
+            # **Two symbols, summed.** `AID_CHECK` is what the aider brings
+            # and `AID_RECEIVED` is what the creature being helped brings,
+            # and they are different printed bonus types -- a feat's +5 and
+            # an item's +2 do stack. Each takes the largest within itself;
+            # a single max across both would have thrown one away.
+            seen = {"skill": skill, "ally": ally}
+            if not self.check(
+                skill, dc,
+                bonus=self.amount_for(AID_CHECK, 0, seen)
+                + self.amount_for(AID_RECEIVED, 0, seen, who=ally),
+            ):
+                return False
+        self.bonus(
+            skill, self.amount_for(MANOEUVRE_AID, 2),
+            on=ally, until=until, kind="power", once=True,
+        )
+        # **After the grant, not before.** The event says the aid landed,
+        # and a listener answering it may want to read what was laid.
+        self.world.bus.emit(Aided(actor=self.me, ally=ally,
+                                  kind_="aid_another"))
+        return True
 
     def coup_de_grace(self, *, on: int | None = None) -> bool:
         """Finish a helpless creature. An automatic critical, and nothing added.
@@ -6476,6 +6562,94 @@ class Cast:
             return None
         known.dice.setdefault(ref, []).insert(0, entry)
         return effect
+
+    def change_amount(
+        self,
+        ref: str,
+        amount: int,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """Make a named mechanic hand out a different number.
+
+        The third sibling of `change_dice` and `extend_move`, and the same
+        argument a third time: the size of what a mechanic grants is written
+        **inside its own body**, so "you grant a +3 bonus, rather than the
+        normal +2" had nothing to change.
+
+        Aiding another is where it was first needed. `MANOEUVRE_AID` is the
+        symbol, and seven rows raise it -- three monster traits to +3, a feat
+        and an item to +4, another feat and a racial power to +3.
+
+        **A row must read it to be changed**, with `amount_for`. The same
+        arrangement, and the same commonest bug: a `change_amount` on a
+        mechanic whose body still hard-codes its number is a modifier nothing
+        consults.
+
+        **Defaults to the caster**, like `extend_move` and unlike
+        `change_dice`. Every card printing this is about what *you* grant --
+        "you grant a +3 bonus" -- where a die may belong to somebody else's
+        power.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        known = self.world.get(who, Powers)
+        if known is None:
+            return None
+        entry = (amount, when)
+        effect = self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} makes {ref} grant {amount}",
+            on_end=[lambda: _drop_amount(known, ref, entry)],
+        )
+        if effect is None:
+            return None
+        known.amounts.setdefault(ref, []).append(entry)
+        return effect
+
+    def amount_for(
+        self,
+        ref: str,
+        default: int,
+        ctx: dict[str, Any] | None = None,
+        *,
+        who: int | None = None,
+    ) -> int:
+        """How big a number this mechanic hands out, after anything raising it.
+
+        The read half of `change_amount`. `default` is what the rules print,
+        so `aid_attack` asks `c.amount_for(MANOEUVRE_AID, 2)` and keeps
+        working for everybody with nothing changing it.
+
+        **The largest wins**, where `dice_for` takes the first that matches.
+        An ally benefits from one aid per attack, so two rows raising the
+        same grant are not additive and the better applies -- and taking the
+        first would have made the answer depend on the order the effects were
+        laid, which is not a rule anybody printed.
+
+        `who` reads somebody else's store, for the one shape where the
+        number belongs to the creature being *helped* rather than the one
+        helping: "Heal checks made to aid you gain a +2 item bonus" is a
+        fact about you that the aider has to find.
+        """
+        from .components import Powers
+
+        known = self.world.get(self.me if who is None else who, Powers)
+        if known is None:
+            return default
+        seen = ctx or {}
+        # **The default is a fallback, not a floor.** Written as
+        # `max(default, ...)` first, which `drivers.aid_grants` caught: f2444
+        # sets the granted bonus to 0 because its reroll *replaces* the +2,
+        # and a floor quietly kept the 2 -- so that feat would have paid out
+        # twice and nothing would have said so. The entries compete with each
+        # other; the default only answers when there are none.
+        laid = [a for a, gate in known.amounts.get(ref, ())
+                if gate is None or gate(seen)]
+        return max(laid) if laid else default
 
     def pre_empt(
         self,
@@ -10744,6 +10918,19 @@ def _drop_squares(known: Any, ref: str, entry: tuple) -> None:
         if one is entry:
             del held[i]
             break
+
+
+def _drop_amount(known: Any, ref: str, entry: tuple) -> None:
+    """Undo one `c.change_amount`, by identity, for the reason above."""
+    held = known.amounts.get(ref)
+    if not held:
+        return
+    for i, one in enumerate(held):
+        if one is entry:
+            del held[i]
+            break
+    if not held:
+        known.amounts.pop(ref, None)
 
 
 def _drop_dice(known: Any, ref: str, entry: tuple) -> None:

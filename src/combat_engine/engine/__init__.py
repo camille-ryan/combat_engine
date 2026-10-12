@@ -76,6 +76,7 @@ from .events import (
     ActionSpent,
     AdjacencyGained,
     AdjacencyLost,
+    Aided,
     AttackDeclared,
     AttackRolled,
     Bloodied,

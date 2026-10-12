@@ -1046,19 +1046,41 @@ def _manoeuvres(world: World, encounter: Encounter, actor: int) -> list[Action]:
     a dozen things to score that differ only in a pick it can make later.
     """
     out: list[Action] = []
-    if not encounter.can_spend(actor, ActionType.STANDARD):
+    # **A cheaper aid is a granted action, so the standard is not the gate.**
+    # f3535 prints "you can use the aid defense action as a minor action",
+    # which `c.grant_action` records and `_granted` reads back. Returning
+    # early on the standard alone dropped that entry on every turn the
+    # standard was already spent -- which is most of the turns a minor
+    # action is worth having.
+    granted = _granted(world, actor)
+    cheap = {
+        what: cost
+        for (what, cost), _ in granted.items()
+        if what in ("aid_attack", "aid_defence")
+        and cost is not ActionType.STANDARD
+        and encounter.can_spend(actor, cost)
+    }
+    standard = encounter.can_spend(actor, ActionType.STANDARD)
+    if not standard and not cheap:
         return out
     for foe in enemies(world, actor):
         if not alive(world, foe) or distance_between(world, actor, foe) > 1:
             continue
-        out.append(Action(kind="bull_rush", cost=ActionType.STANDARD,
-                          targets=(foe,)))
-        out.append(Action(kind="grab", cost=ActionType.STANDARD,
-                          targets=(foe,)))
-        out.append(Action(kind="aid_attack", cost=ActionType.STANDARD,
-                          targets=(foe,)))
-        out.append(Action(kind="aid_defence", cost=ActionType.STANDARD,
-                          targets=(foe,)))
+        if standard:
+            out.append(Action(kind="bull_rush", cost=ActionType.STANDARD,
+                              targets=(foe,)))
+            out.append(Action(kind="grab", cost=ActionType.STANDARD,
+                              targets=(foe,)))
+        for what in ("aid_attack", "aid_defence"):
+            # The cheaper cost replaces the standard rather than joining it:
+            # two entries differing only in what they spend is a choice no
+            # player would make the expensive way round, and `policy/` would
+            # have to score both.
+            cost = cheap.get(what)
+            if cost is None and standard:
+                cost = ActionType.STANDARD
+            if cost is not None:
+                out.append(Action(kind=what, cost=cost, targets=(foe,)))
     return out
 
 

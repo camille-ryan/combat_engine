@@ -1223,19 +1223,34 @@ def m3770a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aid_another()",),
 )
 def m3770a4(c: Cast) -> None:
     """"+3 instead of +2 while flanking" is one extra point on top of the
     flanking the engine already grants, gated on the board rather than on a
     context key -- no modifier context carries "am I flanking". Aiding another
-    is the named gap: nothing in a fight rolls it."""
+    is the named gap: nothing in a fight rolls it.
+
+    **The aid-another half.** "It grants a +3 bonus instead of +2 while
+    aiding another" is the granted amount rather than a bonus on this
+    creature, so it goes through `c.change_amount` and all three aid actions
+    read it -- `MANOEUVRE_AID` is one symbol for the three and this card
+    names none of them individually.
+
+    Written as the **replacement** 3 where the flanking half above is written
+    as the difference 1, and that asymmetry is the card's, not a slip:
+    flanking's +2 is combat advantage, which something else already laid, so
+    only the extra point is ours to add. The aid bonus is handed out by
+    `aid_attack` itself, so the whole number is ours to set.
+    """
 
     def flanking(ctx: dict[str, Any]) -> bool:
         victim = ctx.get("target")
         return isinstance(victim, int) and flanked_by(c.world, victim, c.me)
 
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, when=flanking)
+    from combat_engine.engine.cast import MANOEUVRE_AID
+
+    c.change_amount(MANOEUVRE_AID, 3, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

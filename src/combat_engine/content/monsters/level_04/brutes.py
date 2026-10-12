@@ -1185,7 +1185,6 @@ def m3021a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aid_another()",),
 )
 def m3021a4(c: Cast) -> None:
     """Flanking is combat advantage and combat advantage is +2 here, so the
@@ -1196,6 +1195,18 @@ def m3021a4(c: Cast) -> None:
     another is an action `actions.legal` does not offer, so there is no roll
     for the point to land on. Marked rather than left in prose, but see the
     report: nothing in the engine has a use for the verb apart from this.
+
+    **The aid-another half.** "It grants a +3 bonus instead of +2 while
+    aiding another" is the granted amount rather than a bonus on this
+    creature, so it goes through `c.change_amount` and all three aid actions
+    read it -- `MANOEUVRE_AID` is one symbol for the three and this card
+    names none of them individually.
+
+    Written as the **replacement** 3 where the flanking half above is written
+    as the difference 1, and that asymmetry is the card's, not a slip:
+    flanking's +2 is combat advantage, which something else already laid, so
+    only the extra point is ours to add. The aid bonus is handed out by
+    `aid_attack` itself, so the whole number is ours to set.
     """
     c.bonus(
         "attack",
@@ -1204,6 +1215,9 @@ def m3021a4(c: Cast) -> None:
         until=When.ENCOUNTER,
         when=lambda ctx: flanked_by(c.world, ctx["target"], c.me),
     )
+    from combat_engine.engine.cast import MANOEUVRE_AID
+
+    c.change_amount(MANOEUVRE_AID, 3, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

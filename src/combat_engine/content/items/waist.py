@@ -315,12 +315,24 @@ def _plus(c: Cast) -> int:
 
 
 @power("i650x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
+       reach=PERSONAL, target=SELF)
 def i650x1(c: Cast) -> None:
-    """The bonus rides on somebody *else's* Heal check and only when that
-    check is aimed at me. `SkillCheck` carries `actor`, `skill` and `dc` and
-    nothing about who is being helped, and aiding another is not an action
-    the engine has -- which is the eight-row gap this joins."""
+    """"Heal checks made to aid you gain a +2 item bonus."
+
+    **The bonus rides on somebody else's check**, and only when that check
+    is aimed at the wearer -- which is why it is `AID_RECEIVED` rather than
+    `AID_CHECK`. The two symbols are the same number read from opposite
+    ends: `AID_CHECK` is what the aider brings, this is what the creature
+    being helped brings, and `c.aid_another` adds them because a feat's
+    untyped +5 and an item's +2 are different printed types.
+
+    Gated on the skill, because the card names one. The `Level 11:` and
+    `Level 21:` lines are out of scope.
+    """
+    from combat_engine.engine.cast import AID_RECEIVED
+
+    c.change_amount(AID_RECEIVED, 2, on=c.me, until=When.ENCOUNTER,
+                    when=lambda ctx: ctx.get("skill") == "heal")
 
 
 @power("i1897x1", level=2, cls=ITEM, action=ActionType.NONE,

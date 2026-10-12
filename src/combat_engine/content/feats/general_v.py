@@ -1320,13 +1320,36 @@ def f3534(c: Cast) -> None:
 
 
 @power("f3535", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.aid_another()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("actions.aid_defence(requires=bloodied)",))
 def f3535(c: Cast) -> None:
-    """Aid defence is an action the engine does not offer, so the cheaper
-    action for it has nothing to make cheaper. The initiative half is
-    `c.initiative`: `c.bonus("initiative", ...)` sits in the table and no
-    roll ever reads it."""
+    """"Once per round, you can use the aid defense action as a minor
+    action, but only if the chosen ally is bloodied. Also, you gain a +2
+    feat bonus to initiative checks."
+
+    **The cheaper action lands.** `c.grant_action` is the general
+    mechanism -- the same one `c.shift_as` uses for "you can shift 2
+    squares as a move action" -- and `actions._manoeuvres` now reads the
+    granted cost back instead of gating every aid on a standard. The
+    cheaper cost *replaces* the standard rather than joining it, so the
+    menu does not carry two entries differing only in what they spend.
+
+    The initiative half is `c.initiative`: `c.bonus("initiative", ...)`
+    sits in the table and no roll ever reads it.
+
+    **Two clauses dropped, and they are the same clause.** "Only if the
+    chosen ally is bloodied" and "once per round" are both conditions on
+    the *option* rather than on the effect, and the menu cannot ask
+    either: aid is offered per adjacent enemy and the ally is chosen when
+    the action resolves, so at the moment the entry is built there is no
+    chosen ally to test. Named as an `actions.` symbol rather than a
+    `c.` one because the fix is in the menu, not in a verb. See #524.
+    """
+    from combat_engine.engine.types import ActionType
+
     c.initiative(2, on=c.me)
+    c.grant_action("aid_defence", ActionType.MINOR, on=c.me,
+                   until=When.ENCOUNTER)
 
 
 @power("f3536", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

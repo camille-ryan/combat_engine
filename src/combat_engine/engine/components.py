@@ -784,6 +784,26 @@ class Powers:
     dice: dict[str, list[tuple[str, Callable[[dict[str, Any]], bool] | None]]] = field(
         default_factory=dict
     )
+    #: How big a number a named mechanic hands out, when something has
+    #: changed it. The third sibling of `dice` and `extra_squares`, and the
+    #: same argument once more: "you grant a +3 bonus, rather than the
+    #: normal +2" is about an amount written inside somebody else's body.
+    #:
+    #: Aiding another is where it was first needed -- three monster traits,
+    #: two feats, an item and a racial power all raise the granted bonus,
+    #: and none of them can reach the 2 inside `Cast.aid_attack`.
+    #:
+    #: **The largest matching entry wins, where `dice` takes the first.**
+    #: The printed rule is that an ally benefits once per attack, so two
+    #: rows both speaking about one grant are not additive and the better
+    #: one applies. First-wins would have made the answer depend on which
+    #: effect was laid last, which is not a rule anybody printed.
+    #:
+    #: `Cast.amount_for` is the read and the row handing the number out
+    #: must use it.
+    amounts: dict[str, list[tuple[int, Callable[[dict[str, Any]], bool] | None]]] = (
+        field(default_factory=dict)
+    )
     #: Extra squares a named row moves you, when something has lengthened it.
     #:
     #: The exact sibling of `dice` above, and the same argument wins it: the

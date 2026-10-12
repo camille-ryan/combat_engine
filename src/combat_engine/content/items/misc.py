@@ -744,10 +744,19 @@ def i1066p1(c: Cast) -> None:
 
 
 @power("i1217x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
+       reach=PERSONAL, target=SELF)
 def i1217x1(c: Cast) -> None:
-    """Aid another is not an action the engine offers, so there is no
-    bonus of its to raise."""
+    """"When you use the aid another action, you grant your ally a +4 bonus
+    rather than +2."
+
+    The granted amount is a knob now -- `MANOEUVRE_AID`, read by all three
+    aid actions through `c.amount_for`. The card names only aid another and
+    the symbol covers the three, which is right: a card raising "the bonus
+    you grant" is raising one number the rules state once.
+    """
+    from combat_engine.engine.cast import MANOEUVRE_AID
+
+    c.change_amount(MANOEUVRE_AID, 4, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1217p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,

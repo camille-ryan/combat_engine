@@ -914,6 +914,30 @@ class EffectApplied(Event):
 
 
 @dataclass
+class Aided(Event):
+    """One creature helped another: aid another, aid attack or aid defence.
+
+    `kind_` is which of the three, as the word `actions.legal` uses --
+    `aid_another`, `aid_attack`, `aid_defence`.
+
+    **Why an event and not a readable effect.** Two feats answer "when you
+    use the aid attack action", and what the three verbs leave behind is an
+    ordinary `c.bonus` whose label names the row that called them. A feat
+    gating on that label would be reading the caller's ref, not the action
+    -- and one of the two feats sets the granted amount to *zero*, so there
+    may be no effect to find at all.
+
+    `enemy` is who the aid was aimed against, and is `None` for the skill
+    form, which names no enemy.
+    """
+
+    actor: int
+    ally: int
+    kind_: str
+    enemy: int | None = None
+
+
+@dataclass
 class ActionSpent(Event):
     """A creature used up an action. `Encounter.spend` is the one door.
 

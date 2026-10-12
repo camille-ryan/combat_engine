@@ -1927,10 +1927,63 @@ def f2446(c: Cast) -> None:
 
 
 @power("f2444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
+       reach=PERSONAL, target=SELF)
 def f2444(c: Cast) -> None:
-    """Rewrites what the aid attack action grants. Aiding is not an
-    action this engine offers, so there is nothing to rewrite."""
+    """"When you use the aid attack action, the target ally can roll twice
+    and use either result on his or her next weapon attack. This effect
+    replaces the normal +2 bonus to the attack roll."
+
+    **"Replaces" is the whole difficulty.** `c.aid_attack` lays the bonus
+    itself, so a feat cannot add a reroll beside it and leave the +2 behind
+    -- the two have to be swapped. `c.change_amount` is how: setting the
+    granted amount to 0 is what "replaces the normal +2" means, and the
+    reroll is laid in its place. The alternative was a `c.pre_empt` on the
+    manoeuvre, which would have needed the aid actions to offer their grant
+    as a named clause; one number through a knob that already exists is less
+    machinery for the same sentence.
+
+    "Roll twice and use either result" is a reroll keeping the better of the
+    two -- the choice is only ever worth making one way -- which is the same
+    reading `i1136x1` records.
+
+    **Watched on the ally rather than laid as a modifier**, because a reroll
+    is not a number: it has to answer the roll as it lands. `once=True` is
+    "his or her next weapon attack", and the keyword gate is the card's word
+    "weapon".
+
+    `Aided` is the door. Written first against `EffectApplied` and gated on
+    the effect's source, which does not work twice over: that event carries
+    `source`/`target` and no owner, and setting the granted amount to zero
+    may leave no effect to find in the first place.
+    """
+    from combat_engine.engine import Aided, AttackRolled
+    from combat_engine.engine.cast import MANOEUVRE_AID
+    from combat_engine.engine.dsl import REGISTRY
+
+    me = c.me
+    c.change_amount(MANOEUVRE_AID, 0, on=me, until=When.ENCOUNTER)
+
+    def granted(ev: Any) -> None:
+        if ev.actor != me or ev.kind_ != "aid_attack":
+            return
+        ally, foe = ev.ally, ev.enemy
+
+        def rolled(roll: Any) -> None:
+            if getattr(roll, "attacker", None) != ally:
+                return
+            if foe is not None and getattr(roll, "target", None) != foe:
+                return
+            # "His or her next **weapon** attack", so the card's own word.
+            # Read through `c.keywords_of`, never `Power.keywords`: a feat
+            # may have granted the keyword and the header would not know.
+            shot = REGISTRY.get(getattr(roll, "power", ""))
+            if shot is None or Keyword.WEAPON not in c.keywords_of(shot):
+                return
+            c.reroll_attack(keep="best")
+
+        c.watch(AttackRolled, rolled, on=ally, until=When.EONT, once=True)
+
+    c.watch(Aided, granted, until=When.ENCOUNTER)
 
 
 @power("f2455", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

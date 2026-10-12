@@ -849,11 +849,39 @@ def f2058(c: Cast) -> None:
 
 
 @power("f2056", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
+       reach=PERSONAL, target=SELF)
 def f2056(c: Cast) -> None:
-    """Raises what the aid another action grants. There is no aid
-    another action: `actions.legal` offers attacks, moves, powers and
-    the standard menu, and helping somebody else is not on it."""
+    """"Whenever you or an ally who can hear you and who has line of sight
+    to you takes the aid another, aid attack, or aid defense action, the
+    bonus granted to the target equals +4 instead of +2."
+
+    **Laid on every ally as well as on the wearer**, because the printed
+    benefit is theirs: it is the ally's own aid action whose number changes.
+    `MANOEUVRE_AID` covers all three actions the card names, so none of them
+    is spelled out.
+
+    "Who can hear you" is every ally -- hearing is not on the board, which
+    `powers/warlord/level_6_b.py` records in the same words. Line of sight
+    is the grid's `line_of_effect`, the same substitution `_ally_in_sight`
+    makes and for the same reason: it is the question about walls.
+
+    **"An ally can benefit from this feat only once per attack" needs no
+    code.** `amount_for` takes the largest matching entry rather than
+    summing them, so a second copy of this changes nothing -- which is the
+    clause, and is why that reader was built to take a maximum.
+    """
+    from combat_engine.engine.cast import MANOEUVRE_AID
+    from combat_engine.engine.components import Position
+
+    me = c.me
+    c.change_amount(MANOEUVRE_AID, 4, on=me, until=When.ENCOUNTER)
+    mine = c.world.get(me, Position)
+    for friend in allies(c.world, me):
+        theirs = c.world.get(friend, Position)
+        if (mine is None or theirs is None
+                or not c.world.grid.line_of_effect(theirs.square, mine.square)):
+            continue
+        c.change_amount(MANOEUVRE_AID, 4, on=friend, until=When.ENCOUNTER)
 
 
 @power("f2053", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

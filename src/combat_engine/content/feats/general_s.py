@@ -1438,7 +1438,7 @@ def f3759(c: Cast) -> None:
 
 @power("f3761", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.aid_another()",))
+)
 def f3761(c: Cast) -> None:
     """"Which enemy p16541 made grant combat advantage" is `c.suffering`:
     `c.grants_advantage` labels the effect it lays `"<ref> advantage"`,
@@ -1449,10 +1449,31 @@ def f3761(c: Cast) -> None:
     Filtered to enemies because p16541's other branch lays a +3 on an
     ally under the same label, and `c.suffering` matches by substring.
 
-    The aid half is dropped: the aid another action is not on the menu,
-    so p16541's second branch is a bonus laid directly and there is no
-    "used it to aid" to answer."""
+    **The aid half lands now.** p16541's second branch takes the real aid
+    attack action rather than laying a bonus by hand, and `Aided` is what
+    says so -- `actor`, `ally` and the `enemy` the aid was aimed at, which
+    is exactly "the chosen enemy" the card names.
+
+    Not gated on p16541 by ref, and that is deliberate: `Aided` carries the
+    action, not the row that took it, and this character has no other way to
+    aid as a minor. Gating on the power would mean reading two events to
+    answer one sentence.
+
+    The advantage is scoped to the one enemy and spent on one attack, which
+    are both the card's words -- "on his or her next attack against the
+    chosen enemy" -- and `until=When.EONT` is the aider's clock, matching
+    what `c.aid_attack` itself lays.
+    """
+    from combat_engine.engine import Aided
+
     me = c.me
+
+    def aided(ev: Any) -> None:
+        if ev.actor != me or ev.kind_ != "aid_attack" or ev.enemy is None:
+            return
+        c.grants_advantage(on=ev.enemy, to=ev.ally, until=When.EONT)
+
+    c.watch(Aided, aided, until=When.ENCOUNTER)
 
     def resolved(ev: Any) -> None:
         if ev.actor != me or ev.power != "p16541":

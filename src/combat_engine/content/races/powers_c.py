@@ -371,14 +371,30 @@ def p14391(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.aid_another()",),
 )
 def p14387(c: Cast) -> None:
-    """The aid another action is not in the menu, so what it would grant --
-    +2 to the ally's next attack -- is laid directly."""
+    """"You successfully use the aid another action on an adjacent ally."
+
+    The whole content of the power is that the action succeeds, so the
+    action is what it takes -- `auto=True` on `c.aid_another`, where the
+    success is bought rather than rolled for.
+
+    **Which aid, and why this one.** The card says "aid another", and the
+    two readings give different benefits: the later split made aid *attack*
+    the one granting +2 to an attack roll, while aid another became the
+    skill-check form. This takes the skill form, because that is the action
+    the card names and the engine now has all three. It is the weaker
+    reading in a fight -- a +2 to a check against +2 to a swing -- and it is
+    the one the words support; the row previously laid an attack bonus with
+    nothing to hang it on, which is the other reading made silently.
+
+    How much is no longer written here: `c.aid_another` reads
+    `MANOEUVRE_AID`, so an item or feat raising what this character grants
+    raises this too.
+    """
     mate = c.choose([a for a in c.allies() if c.adjacent(a)], "who to aid")
     if mate is not None:
-        c.bonus("attack", 2, on=mate, until=When.EONT, once=True)
+        c.aid_another(mate, auto=True)
 
 
 # -- r7 ---------------------------------------------------------------------
@@ -975,20 +991,39 @@ def p27(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.aid_another()",),
 )
 def p16541(c: Cast) -> None:
-    """Two printed choices, offered as one. The second is the aid another
-    action, which the menu has not got, so its +3 is laid directly."""
+    """Two printed choices, offered as one. "You use the aid another or the
+    aid attack action. If you succeed, you grant a +3 bonus, rather than the
+    normal +2."
+
+    **The aid branch takes the real action now**, which is both more faithful
+    and what f3761 needs: that feat answers "when you use this power to take
+    the aid attack action", and a bonus laid by hand is not an action anybody
+    can have taken.
+
+    Aid attack, not aid another, because the +3 is granted on a *success*
+    against an enemy and the card names both -- the attack form is the one
+    that has an enemy to name, and f3761 speaks of "the chosen enemy".
+
+    **The +3 is written as a raise rather than as the number.** `+3 rather
+    than the normal +2` is exactly what `c.change_amount` says, and laying it
+    that way means a wearer who also has f2056's +4 gets the larger -- which
+    `amount_for` does by taking a maximum, and which laying a literal 3 would
+    have thrown away. `until=When.EOT` keeps the raise to this use.
+    """
+    from combat_engine.engine.cast import MANOEUVRE_AID
+
     exposed = [
         foe
         for foe in c.enemies()
         if any(c.adjacent_to(foe, mate) for mate in c.allies())
     ]
     mates = [mate for mate in c.allies() if c.adjacent(mate)]
+    near = [foe for foe in c.enemies() if c.adjacent(foe)]
     options = [
         word
-        for word, pool in (("expose", exposed), ("aid", mates))
+        for word, pool in (("expose", exposed), ("aid", mates and near))
         if pool
     ]
     pick = c.choose(options, "which benefit")
@@ -998,8 +1033,10 @@ def p16541(c: Cast) -> None:
             c.grants_advantage(on=foe, to=c.me, until=When.SONT)
     elif pick == "aid":
         mate = c.choose(mates, "who to aid")
-        if mate is not None:
-            c.bonus("attack", 3, on=mate, until=When.EONT, once=True)
+        foe = c.choose(near, "aid against which enemy")
+        if mate is not None and foe is not None:
+            c.change_amount(MANOEUVRE_AID, 3, on=c.me, until=When.EOT)
+            c.aid_attack(foe, mate)
 
 
 @power(

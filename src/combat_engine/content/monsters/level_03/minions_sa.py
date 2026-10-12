@@ -346,7 +346,6 @@ def m3769a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.aid_another()",),
 )
 def m3769a2(c: Cast) -> None:
     """"+3 instead of +2 while flanking" is written as the *difference*: the
@@ -354,6 +353,18 @@ def m3769a2(c: Cast) -> None:
     stack and the row would be worth nothing.
 
     The aid-another half is dropped -- nothing grants a bonus to one.
+
+    **The aid-another half.** "It grants a +3 bonus instead of +2 while
+    aiding another" is the granted amount rather than a bonus on this
+    creature, so it goes through `c.change_amount` and all three aid actions
+    read it -- `MANOEUVRE_AID` is one symbol for the three and this card
+    names none of them individually.
+
+    Written as the **replacement** 3 where the flanking half above is written
+    as the difference 1, and that asymmetry is the card's, not a slip:
+    flanking's +2 is combat advantage, which something else already laid, so
+    only the extra point is ours to add. The aid bonus is handed out by
+    `aid_attack` itself, so the whole number is ours to set.
     """
     me = c.me
 
@@ -362,6 +373,9 @@ def m3769a2(c: Cast) -> None:
         return isinstance(foe, int) and flanked_by(c.world, foe, me)
 
     c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=while_flanking)
+    from combat_engine.engine.cast import MANOEUVRE_AID
+
+    c.change_amount(MANOEUVRE_AID, 3, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

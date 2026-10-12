@@ -1441,11 +1441,26 @@ def f3130(c: Cast) -> None:
 
 
 @power("f3131", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.aid_another()",))
+       reach=PERSONAL, target=SELF)
 def f3131(c: Cast) -> None:
-    """Aid another is an action nothing in the engine performs, so
-    neither the +5 to the attempt nor the larger grant has anywhere to
-    go."""
+    """"You gain a +5 bonus to checks you make to aid another. When you
+    succeed at aiding another, you grant the target a +3 bonus instead of a
+    +2 bonus."
+
+    **Two numbers in one sentence, and they are two symbols.** `AID_CHECK`
+    is the bonus to the roll the aider makes; `MANOEUVRE_AID` is the bonus
+    the ally then receives. One symbol serving both could not have gone
+    green for either half -- the mistake `c.ability_for` made once, where
+    twelve rows reported ready when a third of it landed.
+
+    The +5 applies only to the check version. `c.aid_attack` and
+    `c.aid_defence` roll nothing, so there is no attempt for it to improve
+    there and the card's "checks you make" is exact.
+    """
+    from combat_engine.engine.cast import AID_CHECK, MANOEUVRE_AID
+
+    c.change_amount(AID_CHECK, 5, on=c.me, until=When.ENCOUNTER)
+    c.change_amount(MANOEUVRE_AID, 3, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3132", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
