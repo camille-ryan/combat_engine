@@ -28,6 +28,8 @@ deliberately, and it is expected to be red.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -52,6 +54,36 @@ def _changed() -> list[str]:
     return sorted(f for f in out if f.endswith(".py") and (ROOT / f).exists())
 
 
+#: Per-file error counts as of the last time this was blessed. **A baseline
+#: that may shrink and must not grow**, which is `fixtures/audited.json`'s
+#: contract and is here for the same reason: the content tree carries years
+#: of standing type debt, so a file with 6 pre-existing errors must not fail
+#: the moment somebody edits an unrelated line in it.
+#:
+#: The first version of this had no baseline and went red on exactly that --
+#: three monster files with 4, 6 and 7 standing errors, none of them near the
+#: change. A check that cannot pass stops being read, which `audit.py`'s own
+#: docstring records the cost of.
+BASELINE = ROOT / "scripts" / "fixtures" / "types.json"
+
+
+def _baseline() -> dict[str, int]:
+    if not BASELINE.exists():
+        return {}
+    return json.loads(BASELINE.read_text())
+
+
+def _per_file(text: str) -> dict[str, int]:
+    """How many errors each file owns, from `ty`'s own output."""
+    out: dict[str, int] = {}
+    for line in text.splitlines():
+        m = re.match(r"\s*-->\s*([^:]+\.py):", line)
+        if m:
+            rel = m.group(1)
+            out[rel] = out.get(rel, 0) + 1
+    return out
+
+
 def _run(paths: list[str]) -> tuple[int, str]:
     done = subprocess.run(["uvx", "ty", "check", *paths], cwd=ROOT,
                           capture_output=True, text=True, check=False)
@@ -62,6 +94,8 @@ def _run(paths: list[str]) -> tuple[int, str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--bless", action="store_true",
+                    help="record the current counts as the baseline")
     ap.add_argument("--all", action="store_true",
                     help="the whole scope, backlog included; expected red")
     ap.add_argument("paths", nargs="*", help="specific files")
@@ -77,12 +111,26 @@ def main() -> int:
             print("no changed Python files")
             return 0
 
-    count, text = _run(targets)
-    if count:
+    _, text = _run(targets)
+    if args.bless:
+        BASELINE.parent.mkdir(parents=True, exist_ok=True)
+        BASELINE.write_text(json.dumps(_per_file(text), indent=2, sort_keys=True) + "\n")
+        print(f"blessed {len(_per_file(text))} file(s) at their current counts")
+        return 0
+
+    base = _baseline()
+    now = _per_file(text)
+    worse = {f: (n, base.get(f, 0)) for f, n in now.items() if n > base.get(f, 0)}
+    if worse:
         print(text.rstrip())
-        print(f"\n{count} type error(s) in {len(targets)} file(s)")
+        print()
+        for f, (n, was) in sorted(worse.items()):
+            print(f"  {f}: {n} error(s), baseline {was}")
+        print(f"\n{sum(n - w for n, w in worse.values())} error(s) above the baseline")
         return 0 if args.all else 1
-    print(f"ok: {len(targets)} file(s) clean")
+    carried = sum(now.values())
+    note = f" ({carried} carried, at or below baseline)" if carried else ""
+    print(f"ok: {len(targets)} file(s) checked{note}")
     return 0
 
 
