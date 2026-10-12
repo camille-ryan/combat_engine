@@ -642,6 +642,13 @@ def extended_rest(world: World) -> None:
         points.free = 0
         points.spent = 0
         points.spent_round = -1
+    # **After everything is restored**, same as `short_rest`: a row answering
+    # the rest asks what it has back. Collected first so a listener that
+    # grants a power cannot mutate what is being walked.
+    from .events import ExtendedRested
+
+    for eid in [eid for eid, _ in world.each(Powers)]:
+        world.bus.emit(ExtendedRested(actor=eid))
 
 
 def _uncommanded(world: World, owner: int) -> None:

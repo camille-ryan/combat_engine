@@ -691,15 +691,23 @@ def p15893(c: Cast) -> None:
 @power(
     "p15894", level=10, cls=X7_917, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    dropped=("events.ExtendedRested",),
+    dropped=("Weapon.brutal",),
 )
 def p15894(c: Cast) -> None:
     """The slow is written and is gated on the aura rather than on a clock,
     so a sustained aura keeps slowing and a lapsed one stops.
 
-    Brutal 2 is dropped -- nothing rerolls a weapon damage die that comes up
-    low -- and so is the extended-rest clause, which needs an event no rest
-    emits.
+    Brutal 2 is the dropped half -- nothing rerolls a weapon damage die that
+    comes up low -- and it is named now with the symbol two other rows
+    already use (`f2099`, and `c.brutal()` on `i1467x1`, which are the same
+    mechanic under two names).
+
+    **`events.ExtendedRested` dropped from the marker, not satisfied by it.**
+    That event landed, and it does not help: the Special line is *"you
+    require only 4 hours to gain the benefits of an extended rest"*, which
+    is a **duration** and not a moment. No clock exists for a rest to take
+    six hours or four, and shortening one changes nothing inside a fight --
+    so the clause has no combat meaning rather than a missing mechanism.
     """
     c.aura(1, until=When.EONT, sustain=MINOR)
 

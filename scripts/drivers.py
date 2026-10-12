@@ -3458,6 +3458,51 @@ def short_rest(out: Result) -> None:
              " show it the spent list")
 
 
+def long_rest(out: Result) -> None:
+    """A long rest announces itself, and a daily does come back.
+
+    "Per day" has no calendar to hang on in this engine, so Camille's answer
+    -- it means until a long rest -- makes `turns.extended_rest` the moment a
+    daily allowance resets at. That function existed and said nothing.
+
+    The control that matters is the **difference from a short rest**: a short
+    rest restores encounter powers and leaves dailies spent, a long rest
+    restores both. An implementation that emitted the new event from the
+    wrong function would pass a test that only checked the event arrived.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import ExtendedRested, ShortRested
+    from combat_engine.engine.turns import extended_rest, short_rest
+
+    world, me, _ = _board()
+    mine = world.get(me, Powers)
+    assert mine is not None
+
+    heard: list[tuple[str, int]] = []
+    world.bus.on(ShortRested, lambda ev: heard.append(("short", ev.actor)))
+    world.bus.on(ExtendedRested, lambda ev: heard.append(("long", ev.actor)))
+
+    # A daily and an encounter power, both spent.
+    mine.note_use("drivers:daily", world.round)
+    mine.note_use("drivers:enc", world.round)
+
+    short_rest(world)
+    out.that(("short", me) in heard, "a short rest announces itself")
+    out.that(not any(k == "long" for k, _ in heard),
+             "and does NOT announce a long one -- the two are different"
+             " moments and emitting from the wrong function would pass a"
+             " check that only asked whether the event arrived")
+
+    extended_rest(world)
+    out.that(("long", me) in heard, "a long rest announces itself too")
+    out.that(len([1 for k, a in heard if k == "long" and a == me]) == 1,
+             "once for this creature, not twice")
+    out.that(not mine.used,
+             "and the long rest cleared what was spent, which is the half"
+             " that makes 'per day' mean something")
+
+
 def disease(out: Result) -> None:
     """"...and the target contracts `x5_23`." 47 rows printed this. #389.
 
@@ -3610,6 +3655,8 @@ DRIVERS = {
     "forms": (forms, "which shape a creature is in, and two at once"),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
+    "long_rest": (long_rest,
+                  "a long rest announces itself, and a daily comes back"),
     "short_rest": (short_rest,
                    "five minutes announces itself, once per creature, after"
                    " the restore"),

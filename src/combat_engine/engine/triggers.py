@@ -449,6 +449,14 @@ def after_short_rest() -> Callable[[World, int, Any], bool]:
     return ok
 
 
+def after_extended_rest() -> Callable[[World, int, Any], bool]:
+    """This creature's own long rest. The sibling of `after_short_rest`."""
+    def ok(world: World, eid: int, ev: Any) -> bool:
+        return getattr(ev, "actor", None) == eid
+
+    return ok
+
+
 def rerolled_by(ref: str, *, roll: str = "") -> Callable[[World, int, Any], bool]:
     """A `Rerolled` bought by this row, optionally of one kind of roll.
 

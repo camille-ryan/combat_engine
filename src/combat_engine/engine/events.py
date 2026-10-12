@@ -797,6 +797,26 @@ class ShortRested(Event):
 
 
 @dataclass
+class ExtendedRested(Event):
+    """A long rest ended, for this creature. The sibling of `ShortRested`.
+
+    **"Per day" means this**, which is Camille's answer and the reason this
+    exists: the engine has no calendar, so a daily allowance needs a moment
+    to reset at, and `turns.extended_rest` is it. It matters for the
+    "encounter day" -- four or five fights on one set of resources -- and for
+    story mode, where a day is the unit the story engine deals in.
+    `story/__init__.py` already reasons about `extended_rest` clearing
+    `Powers.used`; this is the announcement it had no way to hear.
+
+    One per creature and emitted after the restore, for the two reasons
+    `ShortRested` records: every printed clause is about what *you* get back,
+    and a row answering the rest asks what it has available.
+    """
+
+    actor: int = 0
+
+
+@dataclass
 class Rerolled(Event):
     """A d20 was rolled again, and by which row.
 
