@@ -78,6 +78,7 @@ from combat_engine.engine import (
     Pick,
     PowerUsed,
     Ranged,
+    Relation,
     SavingThrow,
     Target,
     Trigger,
@@ -1156,6 +1157,26 @@ def p15930(c: Cast) -> None:
             return
 
 
+def _imposing(c: Cast, cond: Condition) -> Any:
+    """The live hold putting this condition on the caster, or None.
+
+    `c.world.effects.of` is the list of holds standing on a creature and
+    `Effect.conditions` is what each imposes. Domination is held as a
+    relation and only mirrored into the condition count -- the same trap
+    `c.end_effect(carrying=)` has -- so it is asked for by its relation.
+    """
+    for eff in c.world.effects.of(c.me):
+        if eff.ended:
+            continue
+        if cond in eff.conditions:
+            return eff
+        if cond is Condition.DOMINATED and any(
+            kind is Relation.DOMINATED_BY for kind, _by, _who in eff.relations
+        ):
+            return eff
+    return None
+
+
 @power(
     "p15931",
     level=10,
@@ -1167,20 +1188,52 @@ def p15930(c: Cast) -> None:
     keywords=DIVINE,
     trigger="you start your turn dominated, stunned or unconscious",
     on=Trigger(TurnStart, _my_turn, "you start your turn"),
-    dropped=("c.effects_on()",),
 )
 def p15931(c: Cast) -> None:
-    """"For the same duration as the triggering condition" needs the
-    effect imposing it read back off the creature; save-ends is the
-    duration all three of these conditions carry in practice and is what
-    both halves are given."""
+    """"For the same duration as the triggering condition" is the hold
+    imposing it, read off the creature with `c.world.effects.of`:
+    `Effect.conditions` is what each hold imposes, and domination is the
+    exception -- `relations.IMPLIES` maps `DOMINATED_BY` to the condition,
+    so a dominating hold names the relation and lists no condition at all.
+
+    Both halves are then held to the end of the encounter and ended by
+    `c.aftereffect` when that hold goes, so the printed duration is *the
+    same* one rather than a second save-ends clock of its own. Giving them
+    their own was two extra saving throws, and the daze could outlive the
+    stun it replaced or lapse while it still stood.
+
+    The suppression and the hold are separate on purpose:
+    `c.ignore_condition` hushes the condition and leaves the effect
+    standing, so the saving throw the card is waiting on still comes.
+
+    With no hold to find -- a condition from an aura -- save-ends is the
+    duration all three print in practice and is the fallback."""
     if c.dying:
         return
-    for cond in (Condition.DOMINATED, Condition.STUNNED, Condition.UNCONSCIOUS):
-        if c.is_(cond, on=c.me):
-            c.ignore_condition(cond, on=c.me, until=When.SAVE_ENDS)
-            c.dazed(on=c.me, until=When.SAVE_ENDS)
-            return
+    cond = next(
+        (
+            x
+            for x in (Condition.DOMINATED, Condition.STUNNED, Condition.UNCONSCIOUS)
+            if c.is_(x, on=c.me)
+        ),
+        None,
+    )
+    if cond is None:
+        return
+    held = _imposing(c, cond)
+    if held is None:
+        c.ignore_condition(cond, on=c.me, until=When.SAVE_ENDS)
+        c.dazed(on=c.me, until=When.SAVE_ENDS)
+        return
+    hushed = c.ignore_condition(cond, on=c.me, until=When.ENCOUNTER)
+    daze = c.dazed(on=c.me, until=When.ENCOUNTER)
+
+    def lapse() -> None:
+        for eff in (hushed, daze):
+            if eff is not None and not eff.ended:
+                c.end_effect(eff, why=f"{c.ref}: the hold it replaced ended")
+
+    c.aftereffect(held, lapse)
 
 
 @power(

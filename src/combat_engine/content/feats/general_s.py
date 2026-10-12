@@ -301,29 +301,73 @@ def _melee_or_ranged(ctx: dict[str, Any]) -> bool:
 
 
 @power("f3684", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.effects_on()",))
+       reach=PERSONAL, target=SELF)
 def f3684(c: Cast) -> None:
-    """Held on the enemy for its own save-ends duration rather than tied to
-    the effect that earned it, because nothing reads back which holds a
-    creature is carrying. Two saves instead of one: it can end early or
-    late, and `c.effects_on()` is what would couple them.
-    """
+    """"While subject to" is a window, not a duration, so the grant is held
+    to the end of the encounter and taken off when the last of this
+    character's save-ends holds on that enemy goes.
 
+    `c.world.effects.of` is what makes it sayable, twice over.
+    `EffectApplied` carries a label and no effect, so the hold just laid
+    is picked back out of the list standing on the creature -- and when
+    that hold ends, the same list answers whether another one of mine is
+    still on it. One grant per enemy for the same reason: two holds are
+    one window.
+
+    The old row gave the grant its own save-ends duration instead, so an
+    enemy carrying one hold rolled two saving throws and could shake the
+    advantage off while still held.
+    """
+    me = c.me
     # **The grant must not answer itself.** What this watches for is "a
     # save-ends effect from this character on somebody else", and the grant it
-    # lays *is* one -- so it re-answered its own application until the
+    # used to lay *was* one -- so it re-answered its own application until the
     # interpreter ran out of stack. Not a slow row: unbounded, 1000 frames
     # deep, and it took three unrelated rows down with it in the wide audit
     # (p180, p3667, p7099) for no more than applying ongoing damage while
-    # somebody nearby held this feat. The grant's label is the one thing that
-    # tells it apart, and `c.grants_advantage` writes a fixed one.
+    # somebody nearby held this feat. An encounter-long grant is no longer a
+    # hold of the shape this answers; the label guard is kept anyway, since
+    # `c.grants_advantage` writes a fixed one and the test costs nothing.
     mine = f"{c.ref} advantage"
+    grants: dict[int, Any] = {}
+
+    def still_held(foe: int) -> bool:
+        return any(
+            eff.source == me
+            and eff.when is When.SAVE_ENDS
+            and eff.label != mine
+            and not eff.ended
+            for eff in c.world.effects.of(foe)
+        )
+
+    def lapsed(foe: int) -> None:
+        grant = grants.pop(foe, None)
+        if grant is None or grant.ended:
+            return
+        if still_held(foe):
+            grants[foe] = grant
+            return
+        c.end_effect(grant, why=f"{c.ref}: nothing of mine holds it now")
 
     def granted(ev: Any) -> None:
-        if ev.label == mine:
+        if ev.label == mine or ev.source != me or not ev.save_ends or ev.target == me:
             return
-        if ev.source == c.me and ev.save_ends and ev.target != c.me:
-            c.grants_advantage(on=ev.target, to="team", until=When.SAVE_ENDS)
+        foe = ev.target
+        held = next(
+            (eff for eff in sorted(c.world.effects.of(foe), key=lambda e: -e.id)
+             if eff.label == ev.label
+             and eff.source == me
+             and eff.when is When.SAVE_ENDS
+             and not eff.ended),
+            None,
+        )
+        grant = grants.get(foe)
+        if grant is None or grant.ended:
+            grant = c.grants_advantage(on=foe, to="team", until=When.ENCOUNTER)
+            if grant is None:
+                return
+            grants[foe] = grant
+        c.aftereffect(held, lambda: lapsed(foe))
 
     c.watch(EffectApplied, granted, until=When.ENCOUNTER)
 

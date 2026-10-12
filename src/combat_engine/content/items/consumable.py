@@ -93,6 +93,7 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Ranged,
+    Relation,
     SavingThrow,
     SkillCheck,
     SurgeSpent,
@@ -1404,23 +1405,36 @@ def i3299p1(c: Cast) -> None:
 
 
 @power("i3300p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBlast(3), target=EACH_OTHER,
-       dropped=("c.effects_on()",))
+       reach=CloseBlast(3), target=EACH_OTHER)
 def i3300p1(c: Cast) -> None:
-    """Barring concealment is `c.no_cover`. Losing what is already up is
-    `c.end_effect` over the holds that grant it, found by the label
-    `c.invisible` and `c.conceal` stamp -- so an invisibility or a
-    concealment a row laid comes off.
+    """Barring both is `c.no_cover`, which takes the benefit away from
+    whoever is being looked at.
 
-    Dropped, and re-aimed off `c.end_effect`, which exists now: what is
-    still missing is a way to ask what effects a creature is under.
-    Matching on a label fragment reaches the two spellings those verbs
-    happen to use and nothing else, so concealment from terrain or from
-    a monster trait stands."""
+    Losing what is already up reads the holds rather than their labels:
+    `c.world.effects.of` lists what is standing on the target,
+    invisibility is a `HIDDEN_FROM` relation naming it and concealment is
+    a modifier called `"concealment"`, so a hold from any row comes off.
+    The label match this replaces reached only the two spellings
+    `c.invisible` and `c.conceal` happen to stamp, which left a monster's
+    own hiding trait alone.
+
+    A hold that hides *and* does something else goes entirely, which is
+    the coarseness `c.end_effect` has always had; stripping one relation
+    off a live effect is `durations.remove` and is not what the printed
+    line says. Concealment from terrain is untouched either way -- that
+    is the ground, not a hold on the creature."""
+    foe = c.target
+    if foe is None:
+        return
     c.no_cover(until=When.SAVE_ENDS)
-    for word in ("unseen", "concealment"):
-        while c.end_effect(against=word) is not None:
-            pass
+    for held in list(c.world.effects.of(foe)):
+        hidden = any(
+            kind is Relation.HIDDEN_FROM and who == foe
+            for kind, who, _watcher in held.relations
+        )
+        concealed = any(mod.what == "concealment" for _eid, mod in held.mods)
+        if hidden or concealed:
+            c.end_effect(held, why=f"{c.ref} stripped it")
 
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,

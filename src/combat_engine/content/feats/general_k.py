@@ -349,20 +349,37 @@ def f1776(c: Cast) -> None:
 @power("f1847", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use p2483",
-       on=Trigger(PowerResolved, _resolved("p2483"), "you use that power"),
-       dropped=("c.effects_on()",))
+       on=Trigger(PowerResolved, _resolved("p2483"), "you use that power"))
 def f1847(c: Cast) -> None:
     """Declared on `PowerResolved` rather than `PowerUsed`: the racial
     power's own regeneration is laid in its body, and `PowerUsed` is
     announced above it. A second regeneration effect is what "increases
     by 2" comes to.
 
-    Re-aimed off `Effect.duration_of()`. An `Effect` knows its own
-    duration perfectly well and `on_end` is a list a rider could append
-    to -- what is missing is getting hold of p2483's effect at all,
-    because nothing lists the effects standing on a creature. So this one
-    runs to the end of the encounter rather than with the power."""
-    c.regeneration(2, on=c.me, until=When.ENCOUNTER)
+    **Tied to the hold it rides on.** "While you are under the effect of"
+    is a window, not a duration, and `c.world.effects.of` reads the holds
+    standing on the creature -- an effect's label starts with the ref of
+    the row that laid it, the fact f1849 below leans on too -- so p2483's
+    own hold is found and `c.aftereffect` ends this one with it. Both of
+    p2483's holds run to the end of the encounter, so the coupling only
+    shows if something ends the racial power early; what it buys is that
+    the row no longer outlives what it is a rider on.
+
+    `while_bloodied` because the regeneration being increased has it: an
+    ungated +2 would tick while unhurt, which the row it rides on does
+    not."""
+    held = next(
+        (eff for eff in c.world.effects.of(c.me)
+         if not eff.ended and eff.label.split()[:1] == ["p2483"]),
+        None,
+    )
+    extra = c.regeneration(2, on=c.me, until=When.ENCOUNTER, while_bloodied=True)
+
+    def lapse() -> None:
+        if extra is not None and not extra.ended:
+            c.end_effect(extra, why="p2483 ended")
+
+    c.aftereffect(held, lapse)
 
 
 #: The six types f1849 offers. The card lists them, so the row does too.

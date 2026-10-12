@@ -1416,15 +1416,22 @@ def f3239(c: Cast) -> None:
 @power("f3240", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you take damage from an attack",
-       on=Trigger(DamageApplied, targets_me, "you take damage"),
-       dropped=("c.effects_on()",))
+       on=Trigger(DamageApplied, targets_me, "you take damage"))
 def f3240(c: Cast) -> None:
     """The printed gate is "while you are affected by <a named row of
-    yours>", and nothing lists the effects standing on a creature by the
-    row that laid them, so the bonus is paid on any blow.
+    yours>", and that is `c.world.effects.of`: it lists the holds standing
+    on the creature, and an effect's label starts with the ref of the row
+    that laid it. Asked here, in the body, which is the moment the damage
+    lands -- a `requires=` would be asked when the trait is armed, before
+    the racial power has been used at all.
 
     `c.bonus(dice=)` is the extra die: a flat `c.damage` here would be a
     second blow rather than a rider on the next one."""
+    if not any(
+        not eff.ended and eff.label.split()[:1] == ["p6188"]
+        for eff in c.world.effects.of(c.me)
+    ):
+        return
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, once=True,
             when=lambda ctx: _melee(ctx.get("power", "")))
 

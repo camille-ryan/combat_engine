@@ -75,6 +75,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
@@ -307,17 +308,44 @@ def i1436p1(c: Cast) -> None:
 @power("i1313p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a light blade and have combat advantage",
-       on=Trigger(Hit, by_me, "you hit a creature"),
-       dropped=("c.effects_on()",))
+       on=Trigger(Hit, by_me, "you hit a creature"))
 def i1313p1(c: Cast) -> None:
-    """"If the attack already deals ongoing damage of any type" cannot be
-    asked: `c.suffering` only finds holds *this* caster laid, and
-    `c.ongoing` enforces the rule for one type rather than for all."""
+    """"If the attack already deals ongoing damage of any type" is a
+    question about the attack, not about the target, and it is asked
+    **after** the attack finishes: a triggered free action resolves inside
+    the `Hit` emit, which is above the line of the attacking body that
+    lays its own burn, so asking now would always answer "no".
+
+    So the burns on the target are counted with `c.world.effects.of` here
+    and counted again on the attacking row's `PowerResolved`, and this
+    power pays out only if the attack added none. Counted by effect id
+    rather than by damage type, because the card bars any type, and rather
+    than by label, because the burn may be laid by a rider rather than by
+    the row that swung. A burn the target was already carrying does not
+    bar the item -- the printed sentence is about this attack."""
     ev = c.trigger
     foe = _foe(c)
     if foe is None or not c.wielding("light blade") or not c.had_advantage(ev):
         return
-    c.ongoing(5, on=foe)
+    swung = ev.power
+    before = {eff.id for eff in c.world.effects.of(foe) if eff.ongoing is not None}
+    spent: list[bool] = []
+
+    def finished(done: Any) -> None:
+        if spent or done.actor != c.me or done.power != swung:
+            return
+        spent.append(True)
+        burning = {
+            eff.id
+            for eff in c.world.effects.of(foe)
+            if eff.ongoing is not None and not eff.ended
+        }
+        if burning - before:
+            return
+        c.ongoing(5, on=foe)
+
+    c.watch(PowerResolved, finished, until=When.EONT, on=c.me,
+            label=f"{c.ref} after the swing")
 
 
 @power("i1379x1", level=4, cls=ITEM, action=ActionType.NONE,

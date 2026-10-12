@@ -2058,13 +2058,43 @@ def p16698(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=ONE_ALLY,
-    todo=("c.effects_on()",),
 )
 def p16613(c: Cast) -> None:
-    """`c.transfer` moves a live hold intact and is the second half of this
-    row; the first half is picking which hold, and nothing reads the effects
-    standing on a creature. `c.end_effect(save_ends=True)` finds one and
-    destroys it, which is the wrong operation."""
+    """Picking the hold is `c.world.effects.of` plus `c.choose`: the list
+    standing on the ally, narrowed to the ones a save can end --
+    `c.end_effect(save_ends=True)` narrows the same way and then destroys
+    what it finds, which is the wrong operation here. `c.transfer` moves
+    it intact.
+
+    Holds carrying a relation or a subscription are left out of the offer
+    because `c.transfer` refuses one and answers None: whose mark it is
+    now has no answer, and offering one would spend a minor action on
+    nothing.
+
+    The saving-throw bonus runs until the moved hold ends, which is the
+    save the card names, so it is `c.aftereffect` on that hold rather than
+    a duration of its own -- one save ends both."""
+    ally = c.target
+    if ally is None:
+        return
+    pool = [
+        eff
+        for eff in sorted(c.world.effects.of(ally), key=lambda e: e.id)
+        if not eff.ended
+        and eff.when is When.SAVE_ENDS
+        and not eff.relations
+        and not eff.subs
+    ]
+    moved = c.transfer(c.choose(pool, f"{c.ref}: which effect to take"), to=c.me)
+    if moved is None:
+        return
+    held = c.bonus("save", 2, kind="power", on=c.me, until=When.ENCOUNTER)
+
+    def lapse() -> None:
+        if held is not None and not held.ended:
+            c.end_effect(held, why=f"{c.ref}: saved against it")
+
+    c.aftereffect(moved, lapse)
 
 
 @power(

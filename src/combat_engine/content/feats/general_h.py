@@ -99,6 +99,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    MoveEnd,
     PowerUsed,
     Ranged,
     Relation,
@@ -113,6 +114,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.grid import Square
 from combat_engine.engine.query import allies, distance_between
@@ -1532,23 +1534,57 @@ _riders("f1306", {
 }, dropped=("When.SURPRISE",))
 
 
-@_trait("f1307", todo=("c.stored_dose()", "c.effects_on()"))
-def f1307(c: Cast) -> None:
-    """All four refs resolve. Re-aimed off `c.apply_poison`, which coats a
-    weapon now: what these clauses want is the dose itself. Two of them
-    raise the attack roll of a secondary poison attack, which only exists
-    once a dose has been applied and is not labelled when it is; one
-    trades a power's printed move for applying a poison you possess.
+def _poisoned(c: Cast, who: int) -> bool:
+    """Is this creature suffering a poison effect?
 
-    **The fourth is re-aimed off `c.on_shift_away()`**, which names a
-    thing that exists: `MoveStart`, `MoveEnd` and `Moved` all carry
-    `kind_`, and `"shift"` is one of its six words, so "if it shifts
-    before the start of your next turn" is an ordinary `c.watch`. The
-    half that cannot be asked is the other one -- "if the target suffers
-    from a poison effect" -- because `c.suffering` matches an effect's
-    label, which is the ref of the row that laid it, and nothing reads
-    back what effects a creature is under or what type their burn is.
+    `c.world.effects.of` is the holds standing on a creature and an
+    effect's label is the ref of the row that laid it, so `keywords_of`
+    reads that row's keywords back -- which makes this a keyword question
+    rather than a label one, and `c.suffering` could only ask the second.
+    A burn answers by its own damage type instead: a hold ticking poison
+    is a poison effect whatever the row that laid it was keyworded.
     """
+    for eff in c.world.effects.of(who):
+        if eff.ended:
+            continue
+        if Keyword.POISON in keywords_of(eff.label):
+            return True
+        burn = eff.ongoing
+        if burn is not None and DamageType.POISON in (
+            eff.ongoing_types or (burn[1],)
+        ):
+            return True
+    return False
+
+
+@_trait("f1307", dropped=("c.stored_dose()",))
+def f1307(c: Cast) -> None:
+    """Three of the four clauses still want the dose itself: two raise the
+    attack roll of a secondary poison attack, which only exists once a
+    dose has been applied and is not labelled when it is, and one trades a
+    power's printed move for applying a poison you possess.
+
+    **The fourth is written.** "The target suffers from a poison effect"
+    is `_poisoned` above, off the holds on the creature; the shift is
+    `MoveEnd.kind_`, which is the end of the move rather than the
+    declaration of it. Asked at the shift and not at the hit: both halves
+    of the printed sentence are about that moment, so a dose that lands
+    in between still counts.
+    """
+    me = c.me
+
+    def swung(ev: Hit) -> None:
+        if ev.attacker != me or ev.power != "p1063":
+            return
+        foe = ev.target
+
+        def shifted(move: Any) -> None:
+            if move.actor == foe and move.kind_ == "shift" and _poisoned(c, foe):
+                c.grants_advantage(on=foe, to="team", until=When.SONT)
+
+        c.watch(MoveEnd, shifted, until=When.SONT, label=f"{c.ref} watches a shift")
+
+    c.watch(Hit, swung, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
 
 
 @_trait("f1308", dropped=("c.on_riposte()",))
