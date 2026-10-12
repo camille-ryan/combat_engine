@@ -54,8 +54,50 @@ from combat_engine.engine.equipment import equip
 from combat_engine.engine.movement import place
 from combat_engine.engine.types import Usage
 
+
 #: Armour, by the bonus it gives. Light armour also takes a modifier.
-ARMOUR = {"cloth": 0, "leather": 2, "hide": 3, "chain": 6, "scale": 7, "plate": 8}
+#: The basic armours, **read off the `armour` table** rather than remembered.
+#: #452 built that table and nothing outside `etl/` ever queried it, so these
+#: six numbers and the two penalties below were carried as constants here.
+#:
+#: Keyed on `armour.type`, and restricted to **ids 1-8**, which is the care
+#: this needs: the table holds 15 `kind='base'` rows because later books
+#: print variant materials under the same type names, so `chainmail` appears
+#: at +3 and at +6 and `leather` at +2 and +3. Reading by type alone would
+#: pick whichever row came back first and move a character's AC by three.
+#: Ids 1-8 are the PHB set -- cloth, leather, hide, chainmail, scale, plate,
+#: light shield, heavy shield -- and the constants that used to live here
+#: agreed with them exactly, which is what makes this a reader rather than a
+#: correction.
+def _basics() -> tuple[dict[str, int], ...]:
+    from combat_engine.db import game
+
+    ac: dict[str, int] = {}
+    check: dict[str, int] = {}
+    speed: dict[str, int] = {}
+    shield: dict[str, int] = {}
+    for row in game().execute(
+        "SELECT type, ac_bonus, check_penalty, speed_penalty FROM armour"
+        " WHERE kind = 'base' AND id BETWEEN 1 AND 8"
+    ):
+        kind = row["type"]
+        if kind.endswith("shields"):
+            # `light shields` / `heavy shields` on the page; one shield in
+            # hand, so the key is singular and `Gear.shield`'s 1 and 2 index
+            # straight into it.
+            shield[kind.split()[0]] = row["check_penalty"] or 0
+            continue
+        # `chain` is what every reader in the tree calls it, and the page
+        # prints `chainmail`. The content rows asking `gear.armour in
+        # ("scale", "plate")` would all go quiet on a rename.
+        kind = "chain" if kind == "chainmail" else kind
+        ac[kind] = row["ac_bonus"] or 0
+        check[kind] = row["check_penalty"] or 0
+        speed[kind] = row["speed_penalty"] or 0
+    return ac, check, speed, shield
+
+
+ARMOUR, ARMOUR_CHECK, ARMOUR_SPEED, SHIELD_CHECK = _basics()
 
 #: Armour that lets you add a modifier to AC. Heavy armour does not.
 LIGHT = {"cloth", "leather", "hide"}
@@ -2505,7 +2547,11 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
             surges=line.surges + con + (race.surges if race is not None else 0),
         ),
         Movement(
-            speed=speed - 1 if line.armour in ("scale", "plate") else speed,
+            # **Off the table, not a pair of names.** This read
+            # `in ("scale", "plate")` and the page gives chainmail a -1 as
+            # well, so every chainmail-wearing character has been moving one
+            # square too fast. #452.
+            speed=speed + ARMOUR_SPEED.get(line.armour, 0),
             modes=dict(race.modes) if race is not None else {},
         ),
         # Level term via scaling.

@@ -90,6 +90,51 @@ def modifier(world: World, eid: int, skill: str) -> int:
     if mods is not None:
         ctx = {"actor": eid, "skill": skill.lower()}
         out += mods.total(f"skill:{skill.lower()}", ctx) + mods.total("skill", ctx)
+    return out + _armour_penalty(world, eid, skill)
+
+
+#: The four skills an armour check penalty applies to. The printed list, and
+#: it is short because the penalty is about moving in the stuff rather than
+#: about being encumbered generally -- a Diplomacy check is not harder in
+#: plate.
+ENCUMBERED = ("acrobatics", "athletics", "stealth", "thievery")
+
+
+def _armour_penalty(world: World, eid: int, skill: str) -> int:
+    """What the armour and shield cost this check. Zero for most of them.
+
+    **Nothing applied this.** `armour.check_penalty` has been in the database
+    since #452 built the table and no reader outside `etl/` ever asked for
+    it, so hide, chainmail, plate and a heavy shield were all free: a
+    plate-wearing character rolled Stealth at the same number as one in
+    cloth.
+
+    Armour and shield **both** count and they add, which is the printed rule
+    -- plate and a heavy shield is -2 and -2.
+
+    Monsters are skipped. A stat block prints its skills as finished totals
+    with whatever its gear costs already inside them, so subtracting again
+    would charge it twice; `Gear.armour` is `"cloth"` for every creature
+    `loader.spawn` makes anyway, which is the same answer by accident and
+    not one to rely on. #452.
+    """
+    from .components import Defenses, Gear
+
+    if skill.lower() not in ENCUMBERED:
+        return 0
+    # `Defenses.scale` is the discriminator, not `Stats` -- that is where
+    # `loader.spawn` records a creature as a monster.
+    defences = world.get(eid, Defenses)
+    if defences is not None and defences.scale == "monster":
+        return 0
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return 0
+    from combat_engine.chargen import ARMOUR_CHECK, SHIELD_CHECK
+
+    out = ARMOUR_CHECK.get(gear.armour, 0)
+    if gear.shield:
+        out += SHIELD_CHECK.get("heavy" if gear.shield == 2 else "light", 0)
     return out
 
 
