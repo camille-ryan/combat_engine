@@ -358,12 +358,37 @@ def f2804(c: Cast) -> None:
 
 
 @power("f1160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.ShortRested",))
+       reach=PERSONAL, target=SELF)
 def f1160(c: Cast) -> None:
-    """Skill and initiative bonuses that differ by cosmic phase.
-    `cf:sorcerer-f0s0` is declared and refused in play for want of a rest
-    anything announces, so no phase is ever set and there is nothing to
-    branch on. Same symbol that row waits on."""
+    """A pair of skill bonuses per cosmic phase, and initiative in the sun.
+
+    **Written.** `cf:sorcerer-f0s0` holds a phase now that
+    `events.ShortRested` gives it a moment to be chosen at, so there is
+    finally something to branch on.
+
+    Laid once per phase with a `when=` that reads the phase at the moment
+    the check is rolled, rather than re-laid whenever the phase moves. The
+    cycle advances when the sorcerer is bloodied, and a bonus re-laid on
+    that crossing would have to take the old one off first; a predicate just
+    answers whichever phase is current.
+
+    Initiative is the one of the six that is not a skill, and it sits in the
+    sun's pair. `c.bonus("initiative", ...)` is read before the d20 --
+    `lint.py` guards that key against being laid and never consulted -- so it
+    goes in the same loop under its own name.
+    """
+    from combat_engine.content.features.sorcerer import phase_of
+
+    pairs = {
+        "sun": ("initiative", "heal"),
+        "moon": ("bluff", "stealth"),
+        "stars": ("insight", "perception"),
+    }
+    for phase, pair in pairs.items():
+        for what in pair:
+            key = what if what == "initiative" else f"skill:{what}"
+            c.bonus(key, 2, kind="feat", on=c.me, until=When.ENCOUNTER,
+                    when=lambda ctx, want=phase: phase_of(c) == want)
 
 
 @power("f2026", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
