@@ -652,7 +652,7 @@ def m3557a0(c: Cast) -> None:
         kinds_without=frozenset({"undead"}),
     ),
     attack=Attack(vs=WILL, printed=10),
-    dropped=('c.leaves_the_grid()', "Target.living"),
+    dropped=('c.leaves_the_grid()', "chargen.kind_words()"),
 )
 def m3557a1(c: Cast) -> None:
     """"Enters the target's space and is removed from the map, reappearing
@@ -662,7 +662,23 @@ def m3557a1(c: Cast) -> None:
 
     The target line is two fields, not one: the type word is required and
     "living" is the absence of the two that deny it, so a humanoid of either
-    is refused."""
+    is refused.
+
+    **Re-pointed off `Target.living`, which named a field and not the
+    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
+    on, and the reason they cannot serve this row is written at the field
+    itself: `query.kinds_of` is **empty for a player character**, so a
+    positive word aimed at the party yields an empty pool and the row is
+    never offered. Measured again here -- a built fighter, a fighter with
+    `race=r1` and a wizard all answer `[]`, where every monster answers
+    three or four words. `chargen` reads `race.speed` and `race.size` and
+    stores neither the race nor its words.
+
+    So this is `chargen.kind_words()`: a character carrying the type words
+    its race prints. "Living" is derivable once they are there -- it is
+    the absence of `undead` and `construct` -- and is not derivable at all
+    while the party has no words to read.
+    """
     victim = c.target
     if victim is None or not c.strike(on=victim):
         return

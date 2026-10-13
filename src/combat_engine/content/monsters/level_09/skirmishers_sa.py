@@ -3052,14 +3052,30 @@ def m6078a3(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d6", 2, dtype=DamageType.NECROTIC),
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    dropped=("Target.living",),
+    dropped=("chargen.kind_words()",),
 )
 def m6078a4(c: Cast) -> None:
     """"Living creatures" is the **negative** of two type words and not a
     positive `kinds={"living"}`: only 25 blocks in the corpus print that word
     and a character has no type line at all, so the positive form would refuse
     nearly every creature the card catches. `kinds_without` is what the body
-    was already asking, and it is what `_living` means next door. #401."""
+    was already asking, and it is what `_living` means next door. #401.
+
+    **Re-pointed off `Target.living`, which named a field and not the
+    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
+    on, and the reason they cannot serve this row is written at the field
+    itself: `query.kinds_of` is **empty for a player character**, so a
+    positive word aimed at the party yields an empty pool and the row is
+    never offered. Measured again here -- a built fighter, a fighter with
+    `race=r1` and a wizard all answer `[]`, where every monster answers
+    three or four words. `chargen` reads `race.speed` and `race.size` and
+    stores neither the race nor its words.
+
+    So this is `chargen.kind_words()`: a character carrying the type words
+    its race prints. "Living" is derivable once they are there -- it is
+    the absence of `undead` and `construct` -- and is not derivable at all
+    while the party has no words to read.
+    """
     if c.strike():
         c.hit()
         c.weakened(until=When.EONT)

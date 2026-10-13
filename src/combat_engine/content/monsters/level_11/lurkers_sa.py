@@ -1624,7 +1624,7 @@ def m5492a2(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("4d10", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.living",),
+    dropped=("chargen.kind_words()",),
 )
 def m5492a3(c: Cast) -> None:
     """The whole target line is the header's now: `relation=` for the grab and
@@ -1637,6 +1637,22 @@ def m5492a3(c: Cast) -> None:
     `holds.release` -- a grab lives in the relation table and carries no
     `Condition.GRABBED`, so `c.end_effect(carrying=)` finds nothing and
     `c.escape` would announce a struggle that never happened.
+    
+
+    **Re-pointed off `Target.living`, which named a field and not the
+    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
+    on, and the reason they cannot serve this row is written at the field
+    itself: `query.kinds_of` is **empty for a player character**, so a
+    positive word aimed at the party yields an empty pool and the row is
+    never offered. Measured again here -- a built fighter, a fighter with
+    `race=r1` and a wizard all answer `[]`, where every monster answers
+    three or four words. `chargen` reads `race.speed` and `race.size` and
+    stores neither the race nor its words.
+
+    So this is `chargen.kind_words()`: a character carrying the type words
+    its race prints. "Living" is derivable once they are there -- it is
+    the absence of `undead` and `construct` -- and is not derivable at all
+    while the party has no words to read.
     """
     me = c.me
     victim = c.target
@@ -1671,13 +1687,29 @@ def m5492a3(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("2d10", 7, dtype=DamageType.NECROTIC),
-    dropped=("Target.living",),
+    dropped=("chargen.kind_words()",),
 )
 def m5492a4(c: Cast) -> None:
     """"One living creature" is the target line now. "Save ends both" is one
     effect carrying the daze and the slow together: applied separately the
     victim rolls twice and can shake off half of a thing the card prints as
-    one."""
+    one.
+
+    **Re-pointed off `Target.living`, which named a field and not the
+    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
+    on, and the reason they cannot serve this row is written at the field
+    itself: `query.kinds_of` is **empty for a player character**, so a
+    positive word aimed at the party yields an empty pool and the row is
+    never offered. Measured again here -- a built fighter, a fighter with
+    `race=r1` and a wizard all answer `[]`, where every monster answers
+    three or four words. `chargen` reads `race.speed` and `race.size` and
+    stores neither the race nor its words.
+
+    So this is `chargen.kind_words()`: a character carrying the type words
+    its race prints. "Living" is derivable once they are there -- it is
+    the absence of `undead` and `construct` -- and is not derivable at all
+    while the party has no words to read.
+    """
     victim = c.target
     if victim is None or not c.strike(on=victim):
         return

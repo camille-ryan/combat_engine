@@ -1324,12 +1324,28 @@ def m3320a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("6d6", 5, dtype=DamageType.NECROTIC),
-    dropped=("Target.living",),
+    dropped=("chargen.kind_words()",),
 )
 def m3320a2(c: Cast) -> None:
     """Both halves of the target line are the header's now -- `bloodied=` and
     `kinds_without=`, "living" being the absence of the two type words that
-    deny it -- so the redirect that asked them by hand came out."""
+    deny it -- so the redirect that asked them by hand came out.
+
+    **Re-pointed off `Target.living`, which named a field and not the
+    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
+    on, and the reason they cannot serve this row is written at the field
+    itself: `query.kinds_of` is **empty for a player character**, so a
+    positive word aimed at the party yields an empty pool and the row is
+    never offered. Measured again here -- a built fighter, a fighter with
+    `race=r1` and a wizard all answer `[]`, where every monster answers
+    three or four words. `chargen` reads `race.speed` and `race.size` and
+    stores neither the race nor its words.
+
+    So this is `chargen.kind_words()`: a character carrying the type words
+    its race prints. "Living" is derivable once they are there -- it is
+    the absence of `undead` and `construct` -- and is not derivable at all
+    while the party has no words to read.
+    """
     if c.strike():
         c.hit()
 

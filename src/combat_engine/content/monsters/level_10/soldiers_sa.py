@@ -4793,12 +4793,28 @@ def m939a0(c: Cast) -> None:
     #: Flat 4, no dice: the empty string is how `Damage` says that. `"0"`
     #: reaches `rng.roll` and raises -- found by driving this row.
     damage=Damage("", 4),
-    dropped=("Target.living",),
+    dropped=("chargen.kind_words()",),
 )
 def m939a1(c: Cast) -> None:
     """The whole target line is the header's now: `conditions=` for the
     immobilisation and `kinds_without=` for "living", so the redirect that
-    asked both by hand came out."""
+    asked both by hand came out.
+
+    **Re-pointed off `Target.living`, which named a field and not the
+    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
+    on, and the reason they cannot serve this row is written at the field
+    itself: `query.kinds_of` is **empty for a player character**, so a
+    positive word aimed at the party yields an empty pool and the row is
+    never offered. Measured again here -- a built fighter, a fighter with
+    `race=r1` and a wizard all answer `[]`, where every monster answers
+    three or four words. `chargen` reads `race.speed` and `race.size` and
+    stores neither the race nor its words.
+
+    So this is `chargen.kind_words()`: a character carrying the type words
+    its race prints. "Living" is derivable once they are there -- it is
+    the absence of `undead` and `construct` -- and is not derivable at all
+    while the party has no words to read.
+    """
     if c.strike():
         c.hit()
         c.heal(4, on=c.me)
