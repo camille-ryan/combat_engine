@@ -218,10 +218,19 @@ a narrow run — so the rule is *rare, not fast*:
 
   **Read the result without being asked to**: the next `check.py` in any
   session stops printing `wide sweep owed since <sha>` once a nightly has paid
-  it, which needs nobody to remember. Beyond that, `logs/nightly-latest.log`
-  holds the verdict and **`logs/NIGHTLY-FAILED` exists if and only if the last
-  run was red** — a one-line check at the start of a session, and the first
-  thing to look at before trusting a clean narrow run.
+  it, which needs nobody to remember. And **every `check.py` run now prints the
+  nightly's state in words** — `last run <when> clean`, `RED`, or
+  `last attempt <when> SKIPPED`, with the age beside it. Read that line; it is
+  the first thing to look at before trusting a clean narrow run.
+
+  This file used to say `logs/NIGHTLY-FAILED` **exists if and only if the last
+  run was red**, and that was false. A skip leaves the marker alone — rightly,
+  since a skip is no verdict and must not erase a real one — so a red sweep
+  followed by any number of skips leaves a file the invariant says describes the
+  last run. On 2026-10-13 it read `FAILED at 227e2b0` while the last attempt had
+  skipped on a dirty tree, two days and 60 commits later, and following the
+  one-line protocol gave the wrong answer. The marker is evidence about *a*
+  sweep; `check.py` is what reconciles it with the latest attempt. #543.
 
   It refuses a dirty tree, because a sweep over uncommitted edits certifies no
   commit, and it never commits the `audited.json` the sweep rewrites — it

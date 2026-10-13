@@ -202,6 +202,8 @@ def main() -> int:
             print("\n".join(f"          {x}" for x in done.stdout.splitlines()[-25:]))
 
     print()
+    for line in _nightly_state():
+        print(line)
     owed = _sweep_owed()
     if failed:
         print(f"{len(failed)} unhappy: {', '.join(failed)}")
@@ -218,6 +220,82 @@ def main() -> int:
 #: Where `audit.py` records the commit of the last sweep that looked at every
 #: row. Read rather than written here -- this only reports the debt.
 WATERMARK = ROOT / "scripts" / "fixtures" / "audited.json"
+
+
+#: What the nightly leaves behind. `NIGHTLY-FAILED` is written on a red run
+#: and removed on a green one; `nightly-latest.log` is copied on every run
+#: **including a skip**, which is the asymmetry this reads.
+NIGHTLY_RED = ROOT / "logs" / "NIGHTLY-FAILED"
+NIGHTLY_LOG = ROOT / "logs" / "nightly-latest.log"
+
+
+def _nightly_state() -> list[str]:
+    """What the 02:07 net last did, said where the decision to trust it is made.
+
+    **#543: a nightly that never ran is indistinguishable from one that
+    passed.** The documented signal was `logs/NIGHTLY-FAILED` existing, and
+    the protocol in the root `CLAUDE.md` was "a one-line check at the start
+    of a session". Two things make that unsound, and both were live on
+    2026-10-13:
+
+    * **Both of `nightly.sh`'s skip paths `exit 0` without touching the
+      marker.** So a red run on the 12th left the file, the 13th's run
+      skipped on a dirty tree, and the file still read `FAILED at 227e2b0`
+      -- describing a sweep two days and 60 commits old while the stated
+      invariant says it describes the last run. A session following the
+      protocol concludes "the last run was red". The last run did not run.
+    * **A green run removes the marker and leaves nothing**, so "no marker"
+      covers both "swept clean last night" and "has not swept since
+      August".
+
+    So this reports the age and the verdict together, from the log's
+    mtime rather than the marker's existence, and says which it is in
+    words. Not an exit code, for `_sweep_owed`'s reason: the nightly's
+    health is not a verdict on the change in hand, and a red that is not
+    about your work is how red gets ignored.
+
+    The marker is still worth keeping -- it is the only place the failing
+    sha is written down -- but it is evidence about *a* run, not the last
+    one, and this says so when the two disagree.
+
+    **The time comes out of the log's own text, not its mtime**, and that
+    correction came from exercising the four branches here: `nightly.sh`
+    copies this file into place with `cp`, every one of the branch probes
+    did the same to restore it, and each copy reset the mtime to now. A
+    function written to stop a stale signal being read as a fresh one
+    cannot take its own reading from the most easily-touched field on
+    disk. `nightly.sh` writes `%F %T` into the first line of every path it
+    has, so the file says when it ran; mtime is the fallback for a log
+    from some older shape of the script.
+    """
+    try:
+        head = NIGHTLY_LOG.read_text()[:400]
+    except OSError:
+        return ["nightly: no run on record -- `uv run bash scripts/nightly.sh`"]
+
+    stamped = re.search(r"(\d{4}-\d\d-\d\d) (\d\d:\d\d):\d\d", head)
+    if stamped:
+        ran = datetime.strptime(f"{stamped.group(1)} {stamped.group(2)}",
+                                "%Y-%m-%d %H:%M")
+    else:
+        ran = datetime.fromtimestamp(NIGHTLY_LOG.stat().st_mtime)
+
+    hours = (datetime.now() - ran).total_seconds() / 3600
+    when = f"{ran:%F %H:%M}"
+    old = f", {int(hours / 24)}d old" if hours >= 48 else ""
+    if head.lstrip().startswith("SKIPPED"):
+        why = "a check.py was running" if "already running" in head else "a dirty tree"
+        out = [f"nightly: last attempt {when} SKIPPED -- {why}{old}"]
+        if NIGHTLY_RED.exists():
+            # The trap this function exists for: the marker is from an
+            # earlier run and the protocol reads it as the current one.
+            out.append(f"         logs/NIGHTLY-FAILED is from BEFORE that"
+                       f" -- {NIGHTLY_RED.read_text().splitlines()[0]}")
+        return out
+    if NIGHTLY_RED.exists():
+        return [f"nightly: last run {when} RED{old}"
+                f" -- {NIGHTLY_RED.read_text().splitlines()[0]}"]
+    return [f"nightly: last run {when} clean{old}"]
 
 
 def _sweep_owed() -> str:

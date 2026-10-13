@@ -15,10 +15,25 @@
 # Reads nothing, commits nothing, and leaves three things behind:
 #
 #   logs/nightly-<date>T<hhmm>.log   the full run, stamped to the minute
-#   logs/nightly-latest.log   the most recent, whatever its verdict
-#   logs/NIGHTLY-FAILED       exists if and only if the last run was red
+#   logs/nightly-latest.log   the most recent ATTEMPT, including a skip
+#   logs/NIGHTLY-FAILED       written on a red sweep, removed on a green one
 #
-# The fourth and most important signal needs no file: a wide sweep writes
+# **That third line used to say "exists if and only if the last run was red",
+# and it was false.** Both skip paths below `exit 0` without touching the
+# marker -- correctly, since a skip is no verdict and must not erase a real
+# one -- so a red sweep followed by any number of skips leaves a file that the
+# stated invariant says describes the last run. Live on 2026-10-13: the marker
+# read `FAILED at 227e2b0` while the last attempt had skipped on a dirty tree,
+# two days and 60 commits later. A session following the documented one-line
+# check concludes "the last run was red"; the last run did not run.
+#
+# So the marker is evidence about *a* sweep, not the latest attempt, and
+# `check.py` now reconciles the two every run -- `_nightly_state` reads this
+# log's mtime and its first word, and says SKIPPED, RED or clean in words with
+# the age beside it. That is the #543 signal; do not go back to reading the
+# marker's existence.
+#
+# The other signal needs no file at all: a wide sweep writes
 # `scripts/fixtures/audited.json`, so the next `check.py` in any session stops
 # printing "wide sweep owed since <sha>" on its own. Nobody has to remember to
 # look.
