@@ -550,12 +550,17 @@ def m1471a1(c: Cast) -> None:
     keywords=[Keyword.ACID, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("3d6", 6, dtype=[DamageType.ACID, DamageType.NECROTIC], kind=LIMITED),
-    dropped=("Cast.condition(ongoing=)",),
+    dropped=("Cast.condition(ongoing_dtypes=)",),
 )
 def m1471a2(c: Cast) -> None:
     """The hit roll is one blow of two types and the ongoing burn is the
     same pair -- `Damage` and `c.condition`'s own `ongoing=` each take one
-    type, so the necrotic half of both is the part left out."""
+    type, so the necrotic half of both is the part left out.
+
+    **Re-aimed from `Cast.condition(ongoing=)`**, which resolves: the
+    keyword exists, so the old marker read ARRIVED the day it was written.
+    What is absent is a `dtypes` form of it. `c.ongoing` already takes
+    `dtypes=`, but on a second clock -- and "save ends both" is one."""
     if c.strike():
         c.hit()
         c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS, ongoing=(10, DamageType.ACID))
@@ -1082,11 +1087,17 @@ def m2330a0(c: Cast) -> None:
     target=ONE_CREATURE,
     damage=Damage("4d6", 5, kind=LIMITED),
     attack=Attack(vs=AC, printed=12),
-    dropped=("Usage.RECHARGE(when=)",),
 )
 def m2330a1(c: Cast) -> None:
     """Recharges whenever any creature of this kind fells an enemy, on
-    top of the die every round."""
+    top of the die every round.
+
+    **The marker came off; the clause was never missing.** It read
+    `Usage.RECHARGE(when=)`, and `Power.recharge_when` has taken a
+    `Trigger` for some time -- but the helper below is the *more* faithful
+    of the two here, because the card says "a <this kind>" and not "this
+    creature", and a declared `Trigger(Dropped, by_me, ...)` would narrow
+    it to the one that swung."""
     _recharge_when_m2330_kills(c)
     victim = c.target
     if victim is None or not c.strike():
@@ -1466,17 +1477,40 @@ def m3786a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("Power.reach_alt",),
 )
 def m3786a4(c: Cast) -> None:
-    """Growing Large and the +5 damage bonus both play. The reach bump to
-    2 needs the melee row's own header to carry a second number for this
-    state, which `Power.reach_alt` is for and nothing sets here --
-    reverting "as a free action" is the creature's own later choice and
-    has nowhere else to attach."""
+    """Growing Large, the longer reach and the +5 damage bonus all play.
+
+    **The reach half wanted a modifier, not a second header field.** This
+    was marked `Power.reach_alt`, and `Range.alt` is a *branch* -- the half
+    of "Melee or Ranged" a chooser picks -- so it could never have carried a
+    state-gated number. `dsl._stretched` reads a `"reach"` modifier inside
+    `_reach_of`, which is the same arithmetic `c.reach` and the targeting
+    both go through, so one square laid here is one square further this row
+    may be aimed. Gated on the size rather than evaluated once, for
+    `m3786a5`'s reason: the creature reverts as a free action and a gate
+    taken at growth time would be wrong for the rest of the fight.
+
+    The printed push of whoever stood in the three new squares is
+    `c.resize`'s own: its docstring says the push is the consequence of
+    growing rather than a separate line, so it happens there and this
+    body must not do it twice. `m3783a3` is the same card at level 7 and
+    says so.
+
+    Reverting "as a free action" is `c.endable`, as `m3783a3` has it. Both
+    modifiers are gated on the size rather than on the hold, so they lift
+    themselves when the revert comes and nothing has to be unwound."""
     me = c.me
-    c.resize(Size.LARGE, on=me, until=When.ENCOUNTER)
+
+    def grown(_ctx: Any) -> bool:
+        return c.size_of(me) is Size.LARGE
+
+    held = c.resize(Size.LARGE, on=me, until=When.ENCOUNTER)
+    if held is None:
+        return
+    c.bonus("reach", 1, on=me, until=When.ENCOUNTER, when=grown)
     c.bonus("damage", 5, on=me, until=When.ENCOUNTER, when=_melee_only)
+    c.endable(held, cost=ActionType.FREE)
 
 
 @power(
@@ -2247,13 +2281,16 @@ def m5625a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Cast.destroy(creature=)",),
 )
 def m5625a2(c: Cast) -> None:
-    """An already-present minion ally, not one this row creates. The
-    minion's own destruction has no verb -- `c.destroy` only ever removes
-    a piece of equipment and falls back to reading what a creature holds,
-    never the creature itself."""
+    """An already-present minion ally, not one this row creates.
+
+    **Re-aimed off `Cast.destroy(creature=)`, which was looking at the
+    wrong verb.** `c.destroy` does only remove equipment, and the old
+    docstring was right about that -- but `c.kill(on=)` is the one that
+    takes a creature off the board, so the printed "it is destroyed" was
+    sayable all along and the clause is no longer dropped. Killed before
+    the 15 damage lands, which is the printed order."""
     minion = next(
         (a for a in c.allies() if c.is_minion(on=a) and c.is_kind("modron", on=a)), None
     )
@@ -2263,8 +2300,10 @@ def m5625a2(c: Cast) -> None:
     if foe is None:
         return
     c.slide(5, on=minion, anchor=foe)
-    if c.adjacent_to(minion, foe):
-        c.flat(15, on=foe)
+    if not c.adjacent_to(minion, foe):
+        return
+    c.kill(on=minion)
+    c.flat(15, on=foe)
 
 
 @power(
@@ -2645,14 +2684,38 @@ def m5798a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Cast.regeneration(suspended_by=)",),
 )
 def m5798a1(c: Cast) -> None:
-    """Regeneration plays. Suspending it for one turn after taking acid
-    or fire damage has no hook -- `c.regeneration` takes no
-    `suspended_by=`, the damage-type shape of that gap rather than the
-    silvered-weapon one."""
-    c.regeneration(10, on=c.me, until=When.ENCOUNTER)
+    """Regeneration, suspended for the turn after acid or fire damage.
+
+    **`c.regeneration` already took the hook, under another name.** The
+    marker said `suspended_by=`; the parameter is `unless=`, a callable
+    asked each time the heal would pay, which is exactly the right moment
+    -- the window is "his next turn", so a flag set at the moment of the
+    damage would have to be cleared by something, and asking instead
+    needs nothing to clear.
+
+    The flag is **consumed** by the one tick it suppresses rather than
+    cleared on a clock. `unless` is asked from inside the `TurnStart`
+    tick, so a second watch counting turns would race it; consuming says
+    "the next tick, whenever it comes" with nothing to order."""
+    me = c.me
+    burned = {"skip": False}
+
+    def took(ev: DamageApplied) -> None:
+        if ev.target == me and any(
+            t in ev.types() for t in (DamageType.ACID, DamageType.FIRE)
+        ):
+            burned["skip"] = True
+
+    def suspended() -> bool:
+        if not burned["skip"]:
+            return False
+        burned["skip"] = False
+        return True
+
+    c.watch(DamageApplied, took, until=When.ENCOUNTER, on=me, label=f"{c.ref} burned")
+    c.regeneration(10, on=me, until=When.ENCOUNTER, unless=suspended)
 
 
 @power(

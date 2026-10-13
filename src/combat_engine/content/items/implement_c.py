@@ -57,6 +57,8 @@ from combat_engine.content.powers.paladin.marks import SANCTIONS
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    CHA,
+    CON,
     DAILY,
     EACH_ALLY,
     EACH_ENEMY,
@@ -1568,13 +1570,15 @@ def i3472x1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    attack=Attack(INT, vs=FORT),
-    dropped=("Attack.best_of()",),
+    attack=Attack((INT, CON, CHA), vs=FORT),
 )
 def i3472p1(c: Cast) -> None:
-    """"Intelligence, Constitution, or Charisma" is one attack line with
-    three abilities and the header holds one, so the arcane ability is the
-    one written. The enhancement is a column and is added by the engine."""
+    """"Intelligence, Constitution, or Charisma" is the tuple form of
+    `Attack.ability`, which `ability_for` resolves to whichever of the three
+    this holder is best at -- the pick a player would make, and the only one
+    that can be made without asking mid-roll. Writing one of them was worth
+    several points of attack on the wrong character. The enhancement is a
+    column and is added by the engine."""
     if c.strike():
         c.stunned(until=When.SAVE_ENDS)
 
@@ -1588,11 +1592,11 @@ def i3472p1(c: Cast) -> None:
     reach=CloseBlast(3),
     target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
-    attack=Attack(INT, vs=REF),
-    dropped=("Attack.best_of()",),
+    attack=Attack((INT, CON, CHA), vs=REF),
 )
 def i3472p2(c: Cast) -> None:
-    """"Creatures in the blast" is everybody, allies included."""
+    """"Creatures in the blast" is everybody, allies included. The three
+    abilities are the tuple form of `Attack.ability`, as on i3472p1."""
     if c.strike():
         c.flat(5, dtype=DamageType.THUNDER)
         c.push(3)

@@ -46,11 +46,14 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    AttackRolled,
     Cast,
     DamageType,
     Dropped,
     Keyword,
     Ranged,
+    SavingThrow,
+    SkillCheck,
     Trigger,
     When,
     cursed_by_me,
@@ -296,22 +299,43 @@ def warlock_f1s6(c: Cast) -> None:
     on=Trigger(Dropped, cursed_by_me, _A_CURSED_ENEMY_FALLS),
     requires=on_leg("star"),
     requires_text="needs the pact that prints it",
-    dropped=("c.bonus('d20')",),
 )
 def warlock_f1c10(c: Cast) -> None:
-    """A bonus to one roll, kept until it is spent: `once=True` is exactly
-    "if you don't use this bonus by the end of your turn, it is lost", and
-    an untyped one stacks, which is the printed "cumulative".
+    """A bonus to one roll, kept until the end of your turn or until spent.
 
     The printed Prerequisite is the pact, and it is a leg now, so it is
     asked in the header like the other boons'.
 
-    One thing is dropped. The bonus is printed for **any** d20 -- a save,
-    a skill check, an ability check -- and a modifier is laid against one
-    named roll, so the attack roll is the one it is laid against; three
-    drops therefore buy three single attack rolls rather than one at +3.
-    """
-    c.bonus("attack", 1, until=When.EONT, on=c.me, once=True)
+    **All four rolls are written.** The old note said a modifier is laid
+    against one named roll, which left the saving throw, the skill check
+    and the ability check out -- but every one of those has a wide key that
+    is already read: `durations` reads `"save"`, `skills.modifier` reads
+    `"skill"` beside the narrow `skill:<name>`, and `skills.ability_check`
+    reads `"ability_check"`.
+
+    What `once=` cannot do is spend one bonus across four keys -- its
+    branches are attack, damage and defence, and a check is none of them --
+    so the latch is hand-rolled over the three events that announce a d20
+    this creature rolled. Each drop lays its own untyped set, so three
+    drops are the printed +3 on one roll rather than three separate +1s,
+    and the first roll ends every set at once."""
+    me = c.me
+    laid = [
+        c.bonus(what, 1, until=When.EONT, on=me)
+        for what in ("attack", "save", "skill", "ability_check")
+    ]
+
+    def spend(ev: Any) -> None:
+        who = getattr(ev, "attacker", None)
+        if who is None:
+            who = getattr(ev, "actor", None)
+        if who != me:
+            return
+        for eff in laid:
+            c.end_effect(eff, on=me, why="used")
+
+    for event in (AttackRolled, SavingThrow, SkillCheck):
+        c.watch(event, spend, until=When.EONT, on=me)
 
 
 @power(

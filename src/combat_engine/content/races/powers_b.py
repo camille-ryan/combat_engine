@@ -1159,11 +1159,19 @@ def p16549(c: Cast) -> None:
     keywords=[Keyword.PSIONIC],
     trigger="you start your turn dazed, dominated, stunned or unconscious",
     on=Trigger(TurnStart, _start_turn_helpless, "you start your turn helpless"),
-    dropped=("c.ignore_condition(sustain=)",),
 )
 def p16552(c: Cast) -> None:
     """Suppressed, not cured: the condition is still standing at the end of
-    the turn, which is what the printed line says."""
+    the turn, which is what the printed line says.
+
+    The Special is written and `c.ignore_condition` needed no `sustain=` to
+    say it. A printed Sustain line is `c.effect(sustain=)` with
+    `c.on_sustain` hung on it -- the composition `p16034` uses to pay for its
+    hover -- and what the payment buys here is a fresh suppression held to
+    the end of the next turn. `c.feat` is the gate the Special prints and
+    `c.spend_points` is its price, so a creature without the feat, or
+    without a point left, keeps only the one turn the Effect line gives
+    everybody."""
     held = [
         cond
         for cond in (
@@ -1174,8 +1182,18 @@ def p16552(c: Cast) -> None:
         )
         if c.is_(cond, c.me)
     ]
-    if held:
-        c.ignore_condition(*held, on=c.me, until=When.EOT)
+    if not held:
+        return
+    c.ignore_condition(*held, on=c.me, until=When.EOT)
+    if not c.feat("f3769", on=c.me):
+        return
+    keeper = c.effect(c.ref, until=When.SUSTAIN, sustain=MINOR, on=c.me)
+
+    def again() -> None:
+        if c.spend_points(1, who=c.me):
+            c.ignore_condition(*held, on=c.me, until=When.EONT)
+
+    c.on_sustain(keeper, again)
 
 
 # -- r52 --------------------------------------------------------------------

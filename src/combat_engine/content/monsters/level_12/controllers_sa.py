@@ -2025,18 +2025,30 @@ def m1599a1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("Zone.sees_through",),
 )
 def m1599a2(c: Cast) -> None:
     """Darkness that blinds whoever is standing in it.
 
-    `blocks_sight` is the field, and it blocks it for everybody -- there is
-    nothing on a zone that excuses its maker and its own kind, which is the
-    dropped clause. The blinding is a hold carried for as long as a creature
-    is inside, diffed off the zone's own membership rather than hung on a
-    clock: the printed line is about being there, not about arriving.
+    **The exemption is written.** The old marker said nothing on a zone
+    excuses its maker and its own kind; `Zone.exempt` is exactly that field,
+    `c.zone(exempt=)` is the parameter, and `query._blinding_squares` reads
+    it live with the looker already in hand -- eight monster cards print
+    this clause and it is what the field was added for.
+
+    A set of ids is a snapshot, which is sound here only because being off
+    the same stat block is not something that changes during a fight; a
+    same-stock ally summoned after the darkness is laid would not be in it.
+
+    The blinding is a hold carried for as long as a creature is inside,
+    diffed off the zone's own membership rather than hung on a clock: the
+    printed line is about being there, not about arriving.
     """
-    zone = c.zone(c.area(), label=c.ref, until=When.EONT, blocks_sight=True)
+    kin = {c.me} | {
+        who for who in c.allies() if _same_stock(c.world, c.me, who)
+    }
+    zone = c.zone(
+        c.area(), label=c.ref, until=When.EONT, blocks_sight=True, exempt=kin
+    )
     _held_inside(
         c,
         zone,
@@ -4196,8 +4208,13 @@ _M3796_ALLY_ROSE = "an ally within 10 squares regains hit points"
 
 
 def _ally_healed_near(world: World, me: int, ev: Any) -> bool:
+    """An ally within 10 that got back up through `m3796a4` specifically.
+
+    `Healed` does carry the row that paid -- `c.heal` stamps `power=self.ref`
+    -- so the narrowing the old marker here wanted is an ordinary field read.
+    """
     who = getattr(ev, "target", None)
-    if who is None or who == me:
+    if who is None or who == me or ev.power != "m3796a4":
         return False
     return team(world, who) is team(world, me) and distance_between(world, me, who) <= 10
 
@@ -4212,17 +4229,16 @@ def _ally_healed_near(world: World, me: int, ev: Any) -> bool:
     keywords=[Keyword.HEALING, Keyword.IMPLEMENT],
     trigger=_M3796_ALLY_ROSE,
     on=Trigger(Healed, when=_ally_healed_near, text=_M3796_ALLY_ROSE),
-    dropped=("Healed.detail",),
 )
 def m3796a3(c: Cast) -> None:
     """The healing goes to the ally the trigger names, which is
     `c.trigger.target` -- this row has no target line, so `c.target` is None.
 
-    The dropped clause is the narrowing: the card fires only when the ally got
-    back up through m3796a4, and `Healed` carries source, target, amount and
-    hit points and nothing saying what did the healing. So this answers any
-    ally's healing, which is wider than the card, and the gap is named rather
-    than papered over.
+    **The narrowing is written.** The old marker said `Healed` carried
+    nothing saying what did the healing; it carries `power`, the ref of the
+    row that paid, and the field's own note says ten rows wanted it. So the
+    predicate asks for `m3796a4` and this no longer answers any ally's
+    healing at all.
     """
     ev = c.trigger
     ally = getattr(ev, "target", None) if ev is not None else None

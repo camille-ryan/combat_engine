@@ -2326,6 +2326,20 @@ def m6438a4(c: Cast) -> None:
 # ==========================================================================
 
 
+def _aura_radius(world: World, eid: int, label: str) -> int:
+    """A live aura's radius, read from a `(world, eid)` gate.
+
+    `c.my_aura` answers the same question but wants a `Cast`, and a
+    `recharge_while=` is handed the world and the creature alone. The
+    radius is `zone.aura`, which `Zones.refresh` re-cuts from on every
+    tick, so this is the current size rather than the size it was made at.
+    """
+    for _zid, zone in world.zones.all():
+        if zone.aura and zone.owner == eid and label in (zone.label or ""):
+            return zone.aura
+    return 0
+
+
 @power(
     "m6650a0",
     level=8,
@@ -2404,10 +2418,20 @@ def m6650a3(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=lambda world, eid: 0 < _aura_radius(world, eid, "m6650a0") < 5,
 )
 def m6650a4(c: Cast) -> None:
     """The aura grows by 2, to a ceiling of 5.
+
+    **The recharge condition is written.** It is a *state* re-asked at the
+    start of the creature's turn, which is `recharge_while` and not
+    `recharge_when` -- the latter wants an event, and "its aura is smaller
+    than aura 5" is true or false whenever anybody looks. The field landed
+    after this row was marked; `recharge_when`'s own note says 204 rows
+    carried this symbol for want of anywhere to put the sentence.
+
+    `0 <` rather than a bare `< 5`, so a creature whose aura is somehow
+    gone does not spend a minor a round on a row that would resize nothing.
 
     **An earlier version of this row said the radius could not be reached and
     marked it `todo`.** It can: `Zones.refresh` re-cuts `zone.squares` from
@@ -2431,15 +2455,18 @@ def m6650a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=lambda world, eid: _aura_radius(world, eid, "m6650a0") >= 5,
 )
 def m6650a5(c: Cast) -> None:
     """The aura resets to 1 -- see `m6650a4` for why the radius is reachable.
 
     Approximated only in *which* enemy squares count as "entered": every enemy
     adjacent at the end of the move, since there is no step-by-step callback
-    mid-move to catch each square as it is crossed. The printed conditional
-    recharge is the dropped half, as it is on `m6650a4`."""
+    mid-move to catch each square as it is crossed.
+
+    The recharge condition is written, as `m6650a4`'s is: this one is the
+    other side of the same state, so the pair alternates -- the aura grows
+    until it is 5, then this row is what is available and puts it back."""
     me = c.me
     c.resize_aura("m6650a0", to=1)
     c.cure(Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED, on=me)

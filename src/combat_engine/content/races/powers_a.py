@@ -88,7 +88,6 @@ from combat_engine.engine import (
     TurnStart,
     UpTo,
     When,
-    about_me,
     both,
     by_me,
     by_melee,
@@ -1160,6 +1159,12 @@ def p16036(c: Cast) -> None:
             c.dispel(thing)
 
 
+def _my_charge_starts(world: Any, me: int, ev: MoveStart) -> bool:
+    """`MoveStart.kind_` is a declared field and `actions` passes
+    `kind="charge"` for a charge's run, so "you charge" is askable here."""
+    return ev.actor == me and ev.kind_ == "charge"
+
+
 @power(
     "p16379",
     level=6,
@@ -1169,12 +1174,15 @@ def p16036(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you charge an enemy",
-    on=Trigger(MoveStart, about_me, "you start moving"),
-    dropped=("MoveStart.charge",),
+    on=Trigger(MoveStart, _my_charge_starts, "you charge an enemy"),
 )
 def p16379(c: Cast) -> None:
-    """`MoveStart` is the only window early enough to cover the charge's
-    own run, and it does not record that the run is a charge."""
+    """`MoveStart` is the only window early enough to cover the charge's own
+    run, and it does record that the run is a charge -- the old marker
+    (`MoveStart.charge`) named a field that is spelled `kind_` and is set on
+    every emission, which is the trap `AUTHORING.md` describes: reading the
+    dataclass for `charge` finds nothing and the row looks blocked. Without
+    the narrowing this fired on any move the creature started."""
     c.no_provoke(on=c.me, until=When.EOT)
 
 

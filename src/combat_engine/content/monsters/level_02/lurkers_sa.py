@@ -73,6 +73,8 @@ from combat_engine.engine.dsl import get as _row_for
 from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
+    ConditionApplied,
+    ConditionEnded,
     Dropped,
     Hit,
     Miss,
@@ -573,13 +575,49 @@ def m1653a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ILLUSION],
-    todo=("c.invisible(when=)",),
 )
 def m1653a3(c: Cast) -> None:
-    """The whole of this row is a condition on *who* cannot see it, and it has
-    to be asked afresh every time somebody looks: `c.invisible` sets a relation
-    against a named creature and takes no gate, so writing it bare would hide
-    the creature from a daze that has already ended."""
+    """Unseen by whoever is dazed, and seen again the moment the daze lifts.
+
+    **Re-aimed off `c.invisible(when=)`.** The old reading was that this
+    needed a gate re-asked at every look. It does not: `c.invisible(to=)`
+    holds a `HIDDEN_FROM` relation *per watcher*, so the clause is one
+    relation laid when a creature becomes dazed and taken away when it
+    stops being dazed -- two events, both of which exist, and no gate.
+
+    `ConditionApplied` and `ConditionEnded` name their subject `target`,
+    not `actor`, which is why these are watches reading the field rather
+    than anything routed through `about_me`.
+
+    The effect per watcher is kept so the end can find it. Ending the
+    whole label would un-hide the creature from everybody still dazed.
+    """
+    me, ref = c.me, c.ref
+    held: dict[int, Any] = {}
+
+    def hide_from(who: int) -> None:
+        if who in held:
+            return
+        eff = c.invisible(to=who, on=me, until=When.ENCOUNTER)
+        if eff is not None:
+            held[who] = eff
+
+    def dazed(ev: ConditionApplied) -> None:
+        if ev.condition is Condition.DAZED and ev.target != me:
+            hide_from(ev.target)
+
+    def woke(ev: ConditionEnded) -> None:
+        if ev.condition is not Condition.DAZED:
+            return
+        eff = held.pop(ev.target, None)
+        if eff is not None:
+            c.end_effect(eff, on=me)
+
+    for foe in c.enemies():
+        if c.is_(Condition.DAZED, on=foe):
+            hide_from(foe)
+    c.watch(ConditionApplied, dazed, until=When.ENCOUNTER, on=me, label=f"{ref} dazed")
+    c.watch(ConditionEnded, woke, until=When.ENCOUNTER, on=me, label=f"{ref} woke")
 
 
 def _targeted_by_hand(world: World, me: int, ev: Any) -> bool:
@@ -733,7 +771,7 @@ def m3441a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d8", 1),
-    dropped=("c.aura_effect()",),
+    dropped=("c.amount_for('m305')",),
 )
 def m3519a0(c: Cast) -> None:
     """The hold, the two defences it buys and the narrowed claw all play, and
@@ -751,6 +789,14 @@ def m3519a0(c: Cast) -> None:
 
     What still has nowhere to go is "that target takes 6 damage instead of 2
     from the aura" -- it edits a *different* block's aura from here.
+
+    **Re-aimed off `c.aura_effect()`, which named a verb that is not the
+    blocker.** `c.change_amount("m305", 6, on=...)` already exists and is
+    exactly this sentence; it is inert, because `change_amount`'s own
+    docstring says a row must *read* the modifier with `c.amount_for` to be
+    changed by it, and `m305`'s aura hands out its number in the clear.
+    Laying the modifier here would be a finished-looking no-op, so the
+    marker names the reader that has to land in `m305` instead.
     """
     victim = c.target
     held = c.grabbing()
@@ -1693,9 +1739,16 @@ def m5867a1(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("2d6", 8, dtype=DamageType.POISON, kind=LIMITED, half_on_miss=True),
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_when=Trigger(PowerUsed, by_power("m5867a3"),
+                          "it uses m5867a3"),
 )
 def m5867a2(c: Cast) -> None:
+    """**The marker came off and nothing was added for it.** It read
+    `Usage.RECHARGE(when=)`; `_recharge_when_using` below has played that
+    clause since the row was written, so the row was never missing it.
+    `m5867a3` beside it carries the declared `recharge_when=` as well as
+    the helper, and this now matches -- the pair recharge each other and
+    only one of the two said so in its header."""
     _recharge_when_using(c, "m5867a3")
     if c.strike():
         c.hit()

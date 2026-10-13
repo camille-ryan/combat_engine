@@ -11,9 +11,11 @@ ordinary row.
 **Nearly every racial power here is nameable.** `p8278`, `p2482`,
 `p2473`, `p1831`, `p7441`, `m4421a6`, `p1448`, `p377`, `p1452`, `p1449`,
 `p2480`, `p6189` and `p7546` all arrive as refs, so a rider on one is an
-ordinary `PowerUsed` or `Hit` trigger. One row is left naming its power
-in prose and keeps `c.on_racial_power()`, the symbol the rogue's `f767`
-named; `m4421a6` is named by ref but no row declares it.
+ordinary `PowerUsed` or `Hit` trigger. Both rows that were left naming a power
+in prose now have refs for it -- `rt:r6-t3` and `rt:r16-t1` -- so
+`c.on_racial_power()` and `c.race_option()` are off this file; `m4421a6`
+is named by ref but no row declares it, and `rt:r16-t1` is the same
+shape, which is what `f2817` waits on.
 
 What is still refused is narrower than it was: nothing lengthens the
 move a named row makes (`c.extend_move()`) and nothing rewrites the
@@ -63,9 +65,6 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import SkillCheck, ZoneExited
 from combat_engine.engine.zones import Zone
-
-#: A racial power named in prose rather than by ref.
-RACIAL = ("c.on_racial_power()",)
 
 #: The class's own shroud power and its shade form, both named by ref in
 #: these feats' own prerequisites.
@@ -802,29 +801,69 @@ def f2233(c: Cast) -> None:
     c.watch(ZoneExited, left, until=When.ENCOUNTER, on=me)
 
 
-# -- waiting on a racial power that has no ref ------------------------------
+# -- the two that were waiting on a racial power with no ref ----------------
+#
+# Both have one now. `_racial`, `RACIAL` and `RACE_OPTION` are gone with
+# them: the helper existed for exactly these two rows, and a stub factory
+# left behind with no callers is what `lint.py` catches.
 
 
-def _racial(ref: str, what: str, *, wants: tuple[str, ...] = RACIAL) -> None:
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, todo=wants)
-    def feat(c: Cast) -> None: ...
+@power("f1808", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f1808(c: Cast) -> None:
+    """A second shroud on the p9400 victim, once, when the racial trait's
+    borrowed power is used.
 
-    feat.__name__ = ref
-    feat.__doc__ = f"{what} The racial power is named in prose with no ref."
+    **`c.race_option()` was true when this was written and is not the
+    blocker now.** The marker said the racial power arrives in prose with
+    no ref; the brief gives `rt:r6-t3`, so the trigger is an ordinary
+    `PowerUsed` on a ref and the build choice behind that trait never has
+    to be read -- the card turns on *using* the trait's power, whichever
+    one was picked.
+
+    The victim is found by who already carries shrouds from this
+    character rather than by remembering p9400's targets: the card says
+    "the target of your p9400", and that is a standing state `c.shrouds`
+    reads, where a remembered target list goes stale the moment p9400 is
+    used again.
+
+    A trait with a watch rather than a declared trigger, because
+    "once per encounter" is a one-shot and `Trigger()` takes no `once=`.
+    """
+    me = c.me
+
+    def again(ev: Any) -> None:
+        if ev.actor != me or ev.power != "rt:r6-t3":
+            return
+        victim = next((f for f in c.enemies() if c.shrouds(on=f, of=me)), None)
+        if victim is not None:
+            c.shroud(on=victim)
+
+    c.watch(PowerUsed, again, until=When.ENCOUNTER, on=me, once=True,
+            label="f1808 again")
 
 
-#: The `rt:r6-t3` choice: an at-will borrowed from another
-#: class, picked when the character is built and recorded nowhere. The
-#: same symbol `features/racial._option` carries.
-RACE_OPTION = ("c.race_option()",)
+@power("f2817", level=1, cls="", usage=ENCOUNTER, action=ActionType.FREE,
+       reach=PERSONAL, target=SELF, todo=("rt:r16-t1",))
+def f2817(c: Cast) -> None:
+    """Spend the racial power, get the other one back.
 
-_racial("f1808", "A shroud when a racial trait's borrowed power is used.",
-        wants=RACE_OPTION)
-#: Re-aimed: `c.expend_row` is the spending and `c.restore_use` is the
-#: payout, so f2830 next door is this row written out -- the difference
-#: is that the power being spent here arrives as a name and not a ref.
-_racial("f2817", "A named racial power spent to get shade form back.")
+    **Re-aimed off `c.on_racial_power()`, which is no longer true, and
+    then marked for a narrower reason.** The note here said the power
+    being spent arrives as a name rather than a ref; it arrives as
+    `rt:r16-t1`, so nothing is left in prose and `c.expend_row` /
+    `c.restore_use` are both the verbs this needs -- f2830 next door is
+    the same shape written out.
+
+    What stops it is that **no row declares `rt:r16-t1`**. `c.expend_row`
+    on an undeclared ref answers False for ever, and its False is the
+    printed Requirement, so the body below is right and inert: the row
+    would look finished and never pay. The marker is the ref, so this
+    goes green the day race r16's first trait is written, which is the
+    only thing it is waiting for.
+    """
+    if c.expend_row("rt:r16-t1", on=c.me):
+        c.restore_use("p9402", on=c.me)
 
 
 @power("f2813", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

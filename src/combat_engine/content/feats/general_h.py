@@ -1431,12 +1431,15 @@ _riders("f1299", {
    resolved={"p4369": _beast_ongoing_instead})
 
 # p997's clause pays out **on a miss**, which a rider hung on `Hit` never
-# sees; p1061 is the granted attack, which is readable now.
+# sees -- and `_riders` has carried a `missed=` leg since the family was
+# written, so the marker here was naming a verb for a window that already
+# existed. `_extra_if_held` reads `ev.target`, which `Miss` carries beside
+# `Hit`, so the same clause serves both. p1061 is the granted attack.
 _riders("f1300", {
     "p917": _extra_if_held,
     "p704": _extra_if_held,
 }, granted={"p1061": _ally_adds_con},
-   dropped=("c.on_miss(ref)",))
+   missed={"p997": _extra_if_held})
 
 
 @_trait("f1301", dropped=("query.moved_this_turn()",))
@@ -1492,18 +1495,50 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("events.OpportunityWindow.step",))
+@_trait("f1303", dropped=("query.moved_this_turn()",))
 def f1303(c: Cast) -> None:
-    """All four refs resolve and none of the clauses is a rider. p2099
-    goes in the place of the melee basic a charge swings; the other
-    three rewrite the movement their own rows print, or widen which
-    ally p620 may pick, which is that row's targeting rather than
-    anything hung on it.
+    """All four refs resolve. p2099 goes in the place of the melee basic a
+    charge swings; p971 and p620 rewrite the movement and the targeting
+    their own rows print.
+
+    **p1505 is written, and the old marker was looking at the wrong
+    thing.** It named a field on the opportunity window, and no field was
+    needed: the window opens *while the provoker is still in the square it
+    is leaving*, so "when you leave the first square adjacent to the
+    target" is adjacency asked at veto time. `c.no_provoke`'s gate is read
+    inside that veto, which is also the one place a latch is safe to close
+    -- nothing evaluates it speculatively the way a `c.bonus` gate is
+    evaluated.
+
+    What is left of that clause is "if you move **after** using this
+    exploit": nothing records whether the move came before or after the
+    swing, so a character who had already walked in gets the waiver too.
 
     No gate on possessing p2099: `dsl.basic_options` refuses a row the
     character does not have, which is the same question asked later and
     once."""
     c.as_basic("p2099", window="charge")
+    me = c.me
+
+    def hit_and_run(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1505":
+            return
+        foes = tuple(ev.targets)
+        if not foes:
+            return
+        spent: list[int] = []
+
+        def leaving(ctx: dict[str, Any]) -> bool:
+            if spent or not ctx.get("kind"):
+                return False
+            if not any(c.adjacent_to(foe, me) for foe in foes):
+                return False
+            spent.append(1)
+            return True
+
+        c.no_provoke(on=me, until=When.EOT, when=leaving)
+
+    c.watch(PowerUsed, hit_and_run, on=me, until=When.ENCOUNTER)
 
 
 # p4541's clause rides the basic attack that row hands an ally -- which

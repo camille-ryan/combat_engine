@@ -3055,22 +3055,28 @@ def m3754a4(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=13),
-    dropped=("c.no_invisibility()",),
 )
 def m3754a5(c: Cast) -> None:
-    """No damage: the two exposures are the hit line.
+    """No damage: the three exposures are the hit line.
 
     "Grants combat advantage to all attackers" is the victim's whole enemy
     side, which from this creature's side of the board is `team`. `c.no_cover`
-    is cover and concealment; being unable to benefit from **invisibility** is
-    a third thing it does not cover, and nothing says it -- the veil is a hold
-    on the invisible creature and there is no switch that reads "this one does
-    not get to use it".
+    is cover and concealment.
+
+    **The invisibility half is written now.** It is not a switch on the
+    victim -- which is what the old note went looking for -- but a sense on
+    the watcher: `c.truesight(of=)` is "the target cannot become invisible to
+    you", read in `query.unseen_by`, so it is laid once per attacker on this
+    creature's side.
     """
-    if not c.strike():
+    victim = c.target
+    if victim is None or not c.strike():
         return
     c.grants_advantage(until=When.EONT, to="team")
     c.no_cover(until=When.EONT)
+    for watcher in (c.me, *sorted(c.allies())):
+        if watcher != victim:
+            c.truesight(of=victim, on=watcher, until=When.EONT)
 
 
 # ==========================================================================

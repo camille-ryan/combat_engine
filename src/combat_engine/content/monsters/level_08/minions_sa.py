@@ -437,15 +437,28 @@ _M4198_DOWN = "the m4198 drops to 0 hit points"
     trigger=_M4198_DOWN,
     on=Trigger(Dropped, about_me, _M4198_DOWN),
     attack=Attack(vs=REF, printed=12),
-    dropped=("c.disarm(magic=False)",),
+    dropped=("c.recall_weapon()",),
 )
 def m4198a1(c: Cast) -> None:
-    """The statue and its terrain play; the disarm half does not, on a
-    killer wielding an ordinary weapon -- `c.disarm` with no `weapon=`
-    falls back to `held(what="magic")`, which is only ever a weapon with
-    an enhancement bonus. A mundane weapon is never found to disarm."""
+    """The disarm is written. The marker read `c.disarm`'s *default* as its
+    only behaviour: with no `weapon=` it falls back to `held(what="magic")`
+    and so never finds a mundane blade -- but the parameter is there, and the
+    killer's hand is `c.held(on=)`, which answers whatever is in it.
+
+    "That provides cover" was the other half of the terrain line and was
+    quietly absent: a difficult zone is not a sheltering one, and
+    `c.cover_in` is the verb that makes it one. `side="any"`, since the card
+    offers the statue to whoever stands behind it.
+
+    Dropped: "an adjacent creature can yank out the weapon by spending a
+    standard action". The disarmed weapon is on the floor with no record of
+    where, which is the same gap `f612` and `i1252x1` carry -- nothing in
+    `Cast` fetches a weapon back to a hand."""
     me = c.me
-    c.zone(frozenset({c.here}), difficult=True, until=When.ENCOUNTER, label=c.ref)
+    zid = c.zone(
+        frozenset({c.here}), difficult=True, until=When.ENCOUNTER, label=c.ref
+    )
+    c.cover_in(zid, side="any")
     trig = c.trigger
     if trig is None:
         return
@@ -453,7 +466,9 @@ def m4198a1(c: Cast) -> None:
     if killer is None or not _struck_in_melee(c.world, trig, me):
         return
     if c.strike(on=killer):
-        c.disarm(on=killer)
+        arms = c.held(on=killer)
+        if arms:
+            c.disarm(on=killer, weapon=arms[0])
 
 
 # ==========================================================================

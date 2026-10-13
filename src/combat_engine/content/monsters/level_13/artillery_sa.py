@@ -1587,22 +1587,23 @@ def m6016a2(c: Cast) -> None:
     damage=Damage(
         "4d8", 4, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=True
     ),
-    dropped=("Effect.failures",),
 )
 def m6016a3(c: Cast) -> None:
     """Both outcomes leave a burn, and only on a creature that already takes
     extra from necrotic -- which `Defences.vulnerable` holds and nothing
     reads, so it is read here. The burn is printed untyped.
 
-    "Second Failed Saving Throw: the target dies" is the dropped half. A
-    creature is put down by damage, and a blow large enough to be sure of it
-    is a different sentence that resistance and temporary hit points would
-    both read.
+    "Second Failed Saving Throw: the target dies" was marked for a
+    per-effect count of failures. There is no count and none is needed: it
+    is the **chained `escalate`** this file's own note describes and
+    m5558a1 and m5762a3 already use -- `Effect.escalate` is read afresh at
+    every save, so the first failure's callback hands the hold its
+    successor and only the second one kills. This card prints no First
+    Failed Saving Throw, so the first stage does nothing but arm the second.
 
-    **Re-pointed.** `c.kill` exists now; the death is sayable. What is not
-    is *which* failed save it is -- "Second Failed Saving Throw" needs a
-    per-effect count of failures, where `escalate` fires on every one
-    alike and cannot tell the first from the second.
+    The burn goes through `c.condition` with no conditions rather than
+    through `c.ongoing`, for the one reason m5558a1 does: `c.ongoing` takes
+    no `escalate=`, and a save-ends burn is what the stages hang on.
     """
     victim = c.target
     if victim is None:
@@ -1612,8 +1613,21 @@ def m6016a3(c: Cast) -> None:
         c.hit()
     else:
         c.hit(half=True)
-    if _vulnerable_to(c, victim, DamageType.NECROTIC):
-        c.ongoing(20 if landed else 10, on=victim)
+    if not _vulnerable_to(c, victim, DamageType.NECROTIC):
+        return
+
+    def second(eff: Effect) -> None:
+        c.kill(on=victim)
+
+    def first(eff: Effect) -> None:
+        eff.escalate = second
+
+    c.condition(
+        until=When.SAVE_ENDS,
+        on=victim,
+        ongoing=(20 if landed else 10, DamageType.UNTYPED),
+        escalate=first,
+    )
 @power(
     "m6016a4",
     level=13,

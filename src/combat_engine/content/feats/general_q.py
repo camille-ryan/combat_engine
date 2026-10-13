@@ -590,18 +590,25 @@ _F3188 = ("p917", "p992", "p704", "p1063")
 
 
 @power("f3188", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.race()",))
+       reach=PERSONAL, target=SELF)
 def f3188(c: Cast) -> None:
-    """The shift doubles for one race and nothing reads a character's
-    race back, so the printed 1 square is what is laid. The difficult
-    terrain waiver is held to the end of the turn because it is scoped to
-    the shift and nothing scopes an allowance to one move."""
+    """The shift doubles for one race. The difficult terrain waiver is
+    held to the end of the turn because it is scoped to the shift and
+    nothing scopes an allowance to one move.
+
+    **The marker said nothing reads a character's race back. It does now.**
+    `c.race_of` answers by ref -- `c.race_of(on=ally) == "r4"` is its own
+    worked example -- and landed after this row was written, so the
+    `c.race()` it waited on had already arrived under a different name.
+    Asked inside the rider rather than at arming time, which costs
+    nothing and keeps the row honest if a form ever changes the answer.
+    """
     c.bonus("skill:acrobatics", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
     c.bonus("skill:athletics", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
 
     def step(ev: Any) -> None:
         c.ignores_difficult(on=c.me, until=When.EOT)
-        c.shift(1)
+        c.shift(2 if c.race_of(on=c.me) == "r4" else 1)
 
     _on_hit_with(c, _F3188, step)
 

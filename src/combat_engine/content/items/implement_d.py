@@ -1081,21 +1081,38 @@ def i1953p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.resist(into_vulnerability=)",),
 )
 def i1977p1(c: Cast) -> None:
-    """`c.resistances` reads what each enemy shrugs off, a negative
-    `c.resist` takes that resistance away and `c.vulnerable` puts the
-    printed 5 in its place; the hold is the clock, so both go back
-    together. The damage context carries no attacker, so the swap cannot
-    be narrowed to the wielder's own attacks and an ally swinging in the
-    same round gets it too. Paragon numbers are out of scope."""
+    """**"Your attacks" is narrowed now, and both halves changed to do it.**
+
+    The old row stripped each enemy's resistance with a negative
+    `c.resist(on=foe)` and laid an ungated `c.vulnerable`, which is a
+    different sentence: it took the resistance away from everybody, so an
+    ally swinging in the same round got the swap too. The note blamed the
+    damage context for carrying no attacker, which has not been true since
+    #302.
+
+    `c.ignore_resistance` is the printed sentence -- its own docstring names
+    `c.resist(-n, on=foe)` as the other one -- and it is a property of the
+    *attacker*, so it needs no gate at all. The vulnerability has to stay on
+    the target, since that is who carries a save-ends-style hold, so it is
+    scoped on `source`: a gated `c.vulnerable` is kept as a triple and read
+    in `resolve.deal_damage` beside immunity and resistance.
+
+    `c.resistances` is still what says *which* types to lay it on -- the
+    card only pays where there was resistance to reverse. Paragon numbers
+    are out of scope.
+    """
+    me = c.me
+
+    def mine(ctx: dict[str, Any]) -> bool:
+        return ctx.get("source") == me
+
+    c.ignore_resistance(on=me, until=When.EONT)
     for foe in c.enemies():
         for dtype, amount in c.resistances(on=foe).items():
-            if amount <= 0:
-                continue
-            c.resist(-amount, dtype, on=foe, until=When.EONT)
-            c.vulnerable(5, dtype, on=foe, until=When.EONT)
+            if amount > 0:
+                c.vulnerable(5, dtype, on=foe, until=When.EONT, when=mine)
 
 
 @power(

@@ -1710,13 +1710,21 @@ def m657a2(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Usage.RECHARGE(when=)",),
 )
 def m657a3(c: Cast) -> None:
     """No damage at all. The slow and the penalty ride on one effect, so
     "(save ends both)" is one saving throw -- and that same throw is what
     hands the row back, which is why the recharge watch reads the effect by
     name rather than taking whichever save it sees first.
+
+    **The marker is gone because no clause was missing.** It named
+    `Usage.RECHARGE(when=)` while `_hands_the_use_back` below implements
+    exactly the printed "recharge when the target saves against this power",
+    so the row reported a gap it had already filled. The declarative form
+    does exist, as it happens -- `Power.recharge_when` takes a `Trigger` and
+    `recharge_while` a `(world, eid)` test -- but it cannot be used here:
+    the predicate has to match this use's own effect, whose identity is only
+    known once the body has laid it.
     """
     victim = c.target
     if not c.strike() or victim is None:

@@ -275,15 +275,21 @@ def i824x1(c: Cast) -> None:
 
 @power("i3098x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grab_check()", "c.save_vs_forced()"))
+       dropped=("c.save_vs_forced()",))
 def i3098x1(c: Cast) -> None:
-    """The middle clause is the one that plays: `grab_defence` is read off
-    the *grabber* when somebody rolls to get out, which is what "your
-    defences when preventing an escape from your grab" means and is not
-    the same as raising Reflex generally. A grab attack is an ordinary
-    attack the engine does not label, and catching yourself on the way
-    down is a saving throw nothing rolls."""
+    """`grab_defence` is read off the *grabber* when somebody rolls to get
+    out, which is what "your defences when preventing an escape from your
+    grab" means and is not the same as raising Reflex generally.
+
+    The first clause was marked as an attack the engine does not label.
+    It labels it: `c.grab_attempt` passes `as_="grab"` and the attack
+    context carries `as_`, so the bonus lands on the grab swing alone.
+
+    Catching yourself on the way down is still a saving throw nothing
+    rolls."""
     c.bonus("grab_defence", 1, on=c.me, until=When.ENCOUNTER, kind="item")
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: ctx.get("as_") == "grab")
 
 
 # -- level 3 ----------------------------------------------------------------
@@ -1027,14 +1033,19 @@ def i1441x1(c: Cast) -> None:
 
 
 @power("i1486x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.grab_check()",))
+       reach=PERSONAL, target=SELF)
 def i1486x1(c: Cast) -> None:
     """The escape half is `escape` rather than the two skill keys: the
     card narrows it to getting out of a grab, and raising Athletics and
-    Acrobatics outright would raise every climb and tumble too. The
-    Strength check to grab is an ability check nothing rolls."""
+    Acrobatics outright would raise every climb and tumble too.
+
+    The grab half was marked as an ability check nothing rolls. It is an
+    *attack*: `c.grab_attempt` swings Strength against Reflex with
+    `as_="grab"`, and `as_` is a key the attack context carries, so the
+    bonus narrows to that swing and to nothing else."""
     c.bonus("escape", 3, on=c.me, until=When.ENCOUNTER, kind="item")
+    c.bonus("attack", 3, on=c.me, until=When.ENCOUNTER, kind="item",
+            when=lambda ctx: ctx.get("as_") == "grab")
 
 
 @power("i1560p1", level=8, cls=ITEM, usage=DAILY, action=FREE,

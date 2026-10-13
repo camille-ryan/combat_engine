@@ -209,6 +209,42 @@ def _vs_opportunity(ctx: dict[str, Any]) -> bool:
     return bool(ctx.get("opportunity"))
 
 
+def _tagged(ref: str, kw: Keyword) -> bool:
+    """Does the row named by a ref print that keyword?"""
+    row = get(ref) if ref else None
+    return row is not None and kw in row.keywords
+
+
+def _one_shot_advantage(c: Cast, who: int, kw: Keyword, until: When) -> None:
+    """"The target gains combat advantage on his or her next <kw> attack."
+
+    `c.gains_advantage` is the half the two markers here said was absent:
+    it lays the modifier on the **attacker**, so the grant needs no creature
+    to be held against, and its gate is handed `power` -- which is how the
+    keyword narrowing is asked.
+
+    The one-shot is a latch rather than a parameter. `resolve.attack` sums
+    the situational terms *between* the BEFORE and AFTER listeners on
+    `AttackDeclared`, so the default AFTER window `c.on_attack` uses sees a
+    swing that has already had its advantage -- which makes it the right
+    place to spend the grant and the wrong place to lay one.
+    """
+    spent: list[int] = []
+    held = c.gains_advantage(
+        lambda ctx: not spent and _tagged(str(ctx.get("power", "")), kw),
+        until=until,
+        on=who,
+    )
+
+    def spend(ev: AttackDeclared) -> None:
+        if spent or not _tagged(ev.power, kw):
+            return
+        spent.append(1)
+        c.end_effect(held, on=who, why="spent")
+
+    c.on_attack(spend, by=who, until=until)
+
+
 def _baited(c: Cast, foe: int, punish: Callable[[], None]) -> None:
     """"Until the end of your next turn, if the target willingly moves more
     than 2 squares or makes an attack, ..." -- three rows of x7_642 print it
@@ -326,13 +362,18 @@ def p11749(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    todo=("c.advantage_on_roll()",),
+    dropped=("c.gains_advantage(weapon=)",),
 )
 def p11750(c: Cast) -> None:
-    """An invisible weapon has no combat consequence of its own; the whole
-    row is the combat advantage it buys on one future attack, and nothing
-    holds combat advantage for an attack that has not been declared."""
-    ...
+    """An invisible weapon has no combat consequence of its own, so the row
+    is the combat advantage it buys on one future weapon attack -- and
+    `c.gains_advantage` does hold that, which the old marker denied.
+
+    Dropped: the card says a weapon *affected by this power*, and the gate
+    is handed `attacker`, `target` and `power` and no weapon, so the grant
+    is spent on the first weapon attack of any kind. The two readings part
+    company only for a character holding two weapons."""
+    _one_shot_advantage(c, c.me, Keyword.WEAPON, When.ENCOUNTER)
 
 
 @power(
@@ -593,13 +634,16 @@ def p12338(c: Cast) -> None:
     reach=CloseBurst(5),
     target=ONE_ALLY,
     keywords=ARCANE,
-    todo=("c.advantage_on_roll()",),
 )
 def p12339(c: Cast) -> None:
-    """Combat advantage held for one future arcane attack: the grant names
-    no creature to have it against, which is the half `c.grants_advantage`
-    cannot express."""
-    ...
+    """Combat advantage held for one future arcane attack. The old marker
+    read `c.grants_advantage`, which is about a creature *granting* it;
+    `c.gains_advantage` is the mirror and lays it on the attacker, so there
+    is no creature to name. See `_one_shot_advantage`."""
+    who = c.target
+    if who is None:
+        return
+    _one_shot_advantage(c, who, Keyword.ARCANE, When.EONT)
 
 
 @power(

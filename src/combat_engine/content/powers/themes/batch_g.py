@@ -68,7 +68,6 @@ from combat_engine.engine import (
     MeleeOrRanged,
     Miss,
     Moved,
-    MoveEnd,
     MoveStart,
     Pick,
     Powers,
@@ -505,18 +504,24 @@ def p14314(c: Cast) -> None:
         c.shift(2)
 
 
-def _shifted_beside_me(world: World, me: int, ev: MoveEnd) -> bool:
-    """An enemy that shifted and is still within a step and a half.
+def _shifted_beside_me(world: World, me: int, ev: Moved) -> bool:
+    """An enemy that shifted 1 square **out of** a square beside me.
 
-    The printed line is "an enemy **adjacent to you** shifts", which wants
-    the square it left; `Moved` is the only event carrying `from_` and it
-    does not carry `kind_`, so this asks `MoveEnd` where it has landed.
+    `Moved` carries both halves now -- `from_` as a field and `kind_` as a
+    plain attribute set on every emission -- so "an enemy adjacent to you
+    shifts 1 square" is asked where the step started. This used to declare
+    on `MoveEnd`, which knows how the creature moved and not where from, so
+    it measured the distance after the shift and fired on an enemy that had
+    stepped *into* reach.
     """
-    if ev.kind_ != "shift" or ev.actor == me:
+    if getattr(ev, "kind_", "") != "shift" or ev.actor == me:
         return False
     if ev.actor not in query.enemies(world, me):
         return False
-    return query.distance_between(world, me, ev.actor) <= 2
+    mine = query.squares(world, me)
+    if not mine or distance(ev.from_, ev.to) != 1:
+        return False
+    return min(distance(ev.from_, sq) for sq in mine) <= 1
 
 
 @power(
@@ -529,13 +534,17 @@ def _shifted_beside_me(world: World, me: int, ev: MoveEnd) -> bool:
     target=NO_TARGET,
     keywords=MARTIAL_PRIMAL,
     trigger="an enemy adjacent to you shifts 1 square",
-    on=Trigger(MoveEnd, _shifted_beside_me, "an enemy beside you shifts"),
-    dropped=("Moved.kind_",),
+    on=Trigger(Moved, _shifted_beside_me, "an enemy beside you shifts"),
 )
 def p14317(c: Cast) -> None:
     """The destination is named rather than chosen -- "to a square adjacent
-    to that enemy" is an instruction. The trigger is the dropped clause: it
-    fires on where the enemy landed instead of where it started."""
+    to that enemy" is an instruction.
+
+    The trigger is written now. `Moved` grew `kind_` after this row was
+    marked, and it was already the one event carrying `from_`, so the
+    adjacency is measured where the shift started rather than where it
+    ended -- which is the printed sentence and the opposite of what the
+    `MoveEnd` declaration did."""
     foe = c.trigger.actor
     for sq in _beside(c, foe):
         if c.shift(1, to=sq):

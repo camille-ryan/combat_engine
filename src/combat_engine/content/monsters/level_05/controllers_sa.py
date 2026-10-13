@@ -1482,15 +1482,34 @@ def m5134a2(c: Cast) -> None:
     recharge=5,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed creature",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     attack=Attack(vs=AC, printed=10),
-    requires=_any_enemy_suffering(Condition.DAZED),
-    requires_text="targets a dazed creature",
-    dropped=("c.lose_surge()",),
 )
 def m5134a3(c: Cast) -> None:
-    if c.strike():
-        c.weakened(until=When.EONT)
+    """Two fixes, both of which made the row do the wrong thing quietly.
+
+    **"One dazed creature" is the target line, not a Requirement.**
+    `_any_enemy_suffering` asks whether *somebody* is dazed and then the
+    header hands over whoever the chooser picked, so the blow could land on
+    an undazed creature while a dazed one stood next to it.
+    `Target.conditions` is the field written for this sentence and it filters
+    the pool, so the row is offered only where the card allows and refused
+    when nobody qualifies.
+
+    **"Loses a healing surge" is `c.spend_surge`**, whose own docstring is
+    "spend a surge and gain nothing for it" -- the printed line exactly. The
+    `c.lose_surge()` the row waited on was a verb that already existed under
+    the other name. No damage is printed, so the two consequences are the hit.
+    """
+    victim = c.target
+    if victim is None or not c.strike():
+        return
+    c.spend_surge(on=victim)
+    c.weakened(until=When.EONT, on=victim)
 
 
 # ==========================================================================

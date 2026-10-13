@@ -1012,15 +1012,25 @@ def f2983(c: Cast) -> None:
     # covenant manifestation": `_manifests` asks `dsl.keywords_of` now,
     # so the grant is what it sees.
     c.counts_as_keyword("p1448", Keyword.DIVINE)
+
+
 @power("f2177", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reshape_area()",))
+       reach=PERSONAL, target=SELF, dropped=("c.reshape_area()",))
 def f2177(c: Cast) -> None:
-    """Two clauses, neither sayable. `p1448` is a ref but nothing makes one
-    row count as divine, and turning a burst into a close blast 3 changes
-    the header's `reach` for one use -- `c.widen_areas` grows an area and
-    does not reshape one."""
+    """**`todo=` was wrong and was throwing the working half away.** One of
+    the two clauses is sayable: `c.counts_as_keyword` makes one named row
+    count as divine and the body has been laying it. `todo=` refuses the row
+    in play, so the line never ran -- `dropped=` is the marker for a row that
+    plays with one clause missing.
+
+    Still dropped: turning a burst into a close blast 3 changes the header's
+    `reach` for one use, and `c.widen_areas` grows an area rather than
+    reshaping one.
+    """
     # "Considered a divine attack power" -- the mirror of `f2175`.
     c.counts_as_keyword("p1448", Keyword.DIVINE)
+
+
 def _rerolled_a_big_power(world: World, me: int, ev: Any) -> bool:
     """`p1450` rerolled one of my encounter or daily class attack powers.
 

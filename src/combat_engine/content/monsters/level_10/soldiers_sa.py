@@ -22,16 +22,19 @@ Conventions kept from every level below this one:
 * a close burst or blast naming no target set takes **enemies**, and only
   "creatures in the burst/blast" written outright takes everyone.
 
-Four gaps this file is the first to need, confirmed absent before marking:
+Gaps this file is the first to need, confirmed absent before marking:
 
-* **No parameter scopes a save penalty to one named condition's saves.**
-  `c.penalty` takes no `against=`, so "a -2 penalty to saves against the
-  immobilized condition" cannot be laid narrower than every save the
-  creature makes. m2064a0.
-* **`c.regeneration` has no suppression state to restore.** It is a bare
-  heal-on-TurnStart watch with nothing tracking *why* it might currently be
-  off, so "reactivates a different creature's inactive regeneration" has no
-  flag to flip. m2068a3.
+* **A save penalty *can* be scoped to one named condition, and this list said
+  it could not.** `Effects.save` builds a context -- its own comment names
+  "against being immobilized or slowed" as the line it is for -- carrying
+  `conditions`, `ongoing`, `dtype` and the laying row's keywords. So the
+  narrowing is `c.penalty("save", n, when=...)` and m2064a0 is written.
+  m1101a0 carried the same marker and its card has no such clause at all.
+* **`c.regeneration` has a suppression hook**, `unless=`, whose docstring is
+  "its regeneration does not function that turn". What m2068a3 is missing is
+  on the other side: this stat block declares no regeneration anywhere for
+  it to restart -- m2068a4 is the revives-unless trait -- so there is nothing
+  to flip. Needs the block read, not a kwarg.
 * **`Zones.aura` takes no `difficult=`.** `c.zone(difficult=True)` can make
   ground difficult but only `c.aura` follows its owner, so a *moving*
   "enemies treat the aura as difficult terrain" has no single call. Worked
@@ -652,13 +655,15 @@ def m1092a2(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d8", 5),
-    dropped=("c.penalty(against=)",),
 )
 def m1101a0(c: Cast) -> None:
     """ "If the target is a living creature already immobilized, stunned,
-    or unconscious, the bite deals an extra 2d6." The save-penalty half of
-    this creature's own companion row names the same absent symbol; here
-    it is the extra damage that plays."""
+    or unconscious, the bite deals an extra 2d6."
+
+    **The marker came off: this card prints no save penalty.** It was
+    carried over from a sibling, and every clause the card does print --
+    the damage, the save-ends immobilisation and the conditional 2d6
+    against anything living and already held -- is here."""
     victim = c.target
     already_held = (
         victim is not None
@@ -1172,17 +1177,26 @@ def m2052a3(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC, Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("1d12", 4),
-    dropped=("c.penalty(against=)",),
 )
 def m2064a0(c: Cast) -> None:
-    """ "The target takes a -2 penalty to saving throws against the
-    immobilized condition" has no narrower penalty than every save the
-    target makes to aim at; the extra damage half plays."""
+    """ "A -2 penalty to saving throws against the immobilized condition"
+    is written, and the marker was wrong about there being nothing to aim
+    at. `Effects.save` hands the gate a context carrying the `conditions`
+    the effect being saved against imposes -- its own comment names this
+    exact printed shape -- so the penalty narrows to the immobilisation and
+    leaves every other save alone.
+
+    `SONT`, because the card says "until the start of the m2064's next
+    turn" and the attacker is the source."""
     victim = c.target
     if c.strike():
         c.hit()
         if victim is not None and c.is_(Condition.IMMOBILIZED, on=victim):
             c.damage("3d6", 0, dtype=DamageType.PSYCHIC)
+        c.penalty(
+            "save", 2, on=victim, until=When.SONT,
+            when=lambda ctx: Condition.IMMOBILIZED in ctx.get("conditions", ()),
+        )
 
 
 @power(

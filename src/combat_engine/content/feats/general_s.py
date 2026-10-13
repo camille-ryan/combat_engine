@@ -1089,9 +1089,19 @@ def f3738(c: Cast) -> None:
 @power("f3739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=("c.reload()",))
 def f3739(c: Cast) -> None:
-    """Crossbow is a group; a wand is not. Drawing, stowing and loading
-    are gear handling the engine does not spend actions on, so the free
-    actions the card grants have nothing to make cheaper."""
+    """Crossbow is a group; a wand is not.
+
+    **Drawing is charged, so the wand half lands.** The old note said gear
+    handling costs no action and there was nothing to make cheaper;
+    `actions._wielding` has offered a draw at the printed minor since a
+    ranger who sheathed a bow could otherwise never pick it up, and
+    `c.draws_free` is the verb that lowers that price. `only=` narrows the
+    cheap rate to the one weapon the card names, which is why the rest of
+    the character's gear still costs a minor.
+
+    Loading a crossbow is the clause that stays dropped: there is no load
+    at all, so there is no cost to reduce."""
+    c.draws_free(per_turn=1, only="w:wand", on=c.me, until=When.ENCOUNTER)
     # "with a crossbow **or a wand**". The wand half had no way to be said:
     # crossbow is a group and a wand is one implement among eight, so this
     # asks the group for one and the ref for the other.
@@ -1312,10 +1322,19 @@ def f3748(c: Cast) -> None:
 
 
 @power("f3749", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(sneak=)",))
+       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones(when=)",))
 def f3749(c: Cast) -> None:
-    """Rerolling ones in a damage expression is a property of the roll,
-    and `c.reroll_damage` rolls the whole thing twice instead."""
+    """The old marker said rerolling ones was a property of the roll with
+    no verb. `c.reroll_ones` is that verb and `ref=` is the narrowing the
+    card prints: `cf:rogue-scoundrel-f4` rolls its own dice through its own
+    `Cast`, so `reroll_damage_below@<ref>` is the key that matches.
+
+    Dropped: "to a creature adjacent to you". `_reroll_floor` reads the
+    hold with `c.total(key)` and no context, so a `when=` on the modifier
+    is false for ever -- the threshold cannot be narrowed by who was hit.
+    Written unqualified, so a ranged sneak attack rerolls a 1 the card
+    would leave standing."""
+    c.reroll_ones(ref="cf:rogue-scoundrel-f4", on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3750", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

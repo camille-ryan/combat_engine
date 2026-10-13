@@ -388,8 +388,13 @@ def _surge_when_it_lands(c: Cast, ok: Any) -> None:
     c.watch(Hit, landed, until=When.ENCOUNTER)
 
 
-def _skald_aura(ref: str):  # noqa: ANN202
-    """The two printings of the skald's aura are the same card twice."""
+def _skald_aura(ref: str, *, per_day: int = 0):  # noqa: ANN202
+    """The two printings of the skald's aura are the same card twice.
+
+    `per_day` is the day's allowance one of the two printings carries and
+    the other does not, so it is a parameter rather than a line in the
+    shared body.
+    """
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=MINOR,
            reach=PERSONAL, target=SELF,
@@ -402,6 +407,10 @@ def _skald_aura(ref: str):  # noqa: ANN202
 
         def spend(who: int) -> None:
             if not left[0] or not c.in_my_aura(who, label=ref):
+                return
+            # The day's allowance, where one printing has one: charged to
+            # the skald rather than to whoever is being healed.
+            if per_day and not c.spend_per_day(ref, per_day):
                 return
             left[0] -= 1
             c.surge(on=who, bonus=c.roll("1d6"))
@@ -573,8 +582,15 @@ def f3567(c: Cast) -> None:
        reach=PERSONAL, target=SELF, todo=("chargen.race_choice()",))
 def f3568(c: Cast) -> None:
     """A second race's power, chosen at build time, and then a shared
-    once-an-encounter budget with `p8278`. Neither half exists: there is
-    no race on a character and no way to record the choice."""
+    once-an-encounter budget with `p8278`.
+
+    The old reason was false: `c.race_of` reads the `race:<ref>` that
+    `Build.choices` carries, so a character does have a race. What is
+    missing is the *second* one -- the race another racial feature chose,
+    and which of its powers was taken -- and nothing in `Build.choices`
+    records either, so there is no ref for `c.grant_row` to hand over.
+    The shared budget is sayable once that ref exists: `c.expend_row`
+    spends the other end."""
 
 
 # -- the dim light family ---------------------------------------------------
@@ -646,10 +662,11 @@ def f3573(c: Cast) -> None:
     rough going anywhere, which is a far bigger feat than the card.
 
     The light half is readable now -- `c.unlit` answers it -- so what is left
-    is a *gated* ignore. `Movement.ignores` is a set of labels with nowhere to
-    hang a predicate, so `c.ignores_difficult` takes no `when=`. Re-pointed
-    there rather than at the light: 33 rows want that kwarg, which is the
-    largest single one in the tree."""
+    is a *gated* ignore. `c.ignores_difficult` has grown a `when=` since this
+    was written, but it is a **move kind**: `movement.PRICED_KINDS`, so
+    `when="shift"` or `"charge"`, and anything outside the set raises. What
+    this card gates on is a property of the *square* the creature is in, and
+    `Movement.ignores` is a set of labels with nowhere to hang a predicate."""
 
 
 @power("f3574", level=1, cls="", usage=AT_WILL, action=NONE,
@@ -1976,15 +1993,19 @@ def f3663(c: Cast) -> None:
 
 @power("f3664", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=(*TRAINING, "c.uses_per_day()"), proficiency=("w:wand",))
+       dropped=TRAINING, proficiency=("w:wand",))
 def f3664(c: Cast) -> None:
     """Hands over the card printed beside it rather than `f3668b`, which
-    is the same card on the other feat's page. The day's limit on the
-    healing is a clock no fight can see."""
+    is the same card on the other feat's page.
+
+    The day's limit on the healing is written now: `c.spend_per_day`
+    counts against `Powers.per_day`, which both rests outlive, so
+    `f3664b` carries `per_day=1` and `f3668b` -- whose page prints no
+    such limit -- does not."""
     c.grant_row("f3664b", on=c.me, until=When.ENCOUNTER)
 
 
-f3664b = _skald_aura("f3664b")
+f3664b = _skald_aura("f3664b", per_day=1)
 
 
 @power("f3668", level=1, cls="", usage=ENCOUNTER, action=NONE,

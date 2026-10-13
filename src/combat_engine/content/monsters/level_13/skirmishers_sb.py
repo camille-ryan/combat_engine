@@ -2161,21 +2161,27 @@ def m3948a2(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(side=)",),
 )
 def m3948a3(c: Cast) -> None:
     """A cloud that stops sight and blinds whoever is in it.
 
-    `blocks_sight` is terrain and cuts both ways, so the printed "for all
-    creatures except the m3948" is the dropped half -- a zone has no side and
-    the owner sees no better through its own. The blind is laid on whoever is
-    in the cloud now and on whoever walks into it, which is the only reading
-    of "while entirely within" the engine can measure.
+    **The exemption is written.** The old note said a zone has no side and
+    the owner sees no better through its own; `Zone.exempt` is the field for
+    exactly this clause -- its own docstring counts eight monster cards
+    printing it -- and `query._blinding_squares` reads it with the looker
+    already in hand. `c.zone(exempt=)` is the parameter, and one id is the
+    common case.
+
+    The blind is laid on whoever is in the cloud now and on whoever walks
+    into it, which is the only reading of "while entirely within" the
+    engine can measure.
     """
     area = c.area()
     if not area:
         return
-    zone = c.zone(area, blocks_sight=True, until=When.EONT, label=c.ref)
+    zone = c.zone(
+        area, blocks_sight=True, until=When.EONT, label=c.ref, exempt={c.me}
+    )
     me = c.me
 
     def fog(who: int) -> None:

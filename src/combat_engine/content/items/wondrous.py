@@ -65,6 +65,7 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    ConditionEnded,
     DamageApplied,
     DamageRolled,
     DamageType,
@@ -108,6 +109,36 @@ ITEM = "item"
 
 
 # -- shared reading of the board --------------------------------------------
+
+
+def _ends_when_it_wakes(
+    c: Cast, held: Effect, victim: int, *, also: Effect | None = None
+) -> None:
+    """"Until the creature regains consciousness or dies."
+
+    Two shrouds print this and both were marked `When.CONSCIOUS`, which is
+    the wrong kind of answer: `When` is clocks and waking is an event.
+    `ConditionEnded` names the condition that lifted, so the end hangs off
+    that and not off a duration -- and dying is the other half, which is
+    the same event with the hold's own encounter clock behind it.
+
+    `Condition.UNCONSCIOUS` **and** `Condition.DYING`, because a creature
+    below zero carries both and either one lifting is the card's sentence.
+    """
+
+    def woke(ev: ConditionEnded) -> None:
+        if ev.target != victim or ev.condition not in (
+            Condition.UNCONSCIOUS, Condition.DYING
+        ):
+            return
+        c.end_effect(held, on=victim)
+        if also is not None:
+            c.end_effect(also, on=victim)
+
+    c.watch(
+        ConditionEnded, woke, until=When.ENCOUNTER, on=c.me,
+        label=f"{c.ref} wakes",
+    )
 
 
 def _spent_surges(c: Cast) -> int:
@@ -491,12 +522,30 @@ def i2104p1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("When.CONSCIOUS",),
 )
 def i2500p1(c: Cast) -> None:
-    """"Until the creature regains consciousness" has no duration to name,
-    so the resistance runs to the end of the fight instead."""
-    c.resist(20, on=c.target, until=When.ENCOUNTER)
+    """Resist 20 while it lies there, gone the moment it wakes or the
+    shroud is lifted.
+
+    **`When.CONSCIOUS` was the wrong shape of answer.** There is no such
+    duration and there should not be: the `When` enum is clocks -- turn
+    boundaries, saves, the encounter -- and waking up is an *event*.
+    `ConditionEnded` carries the condition that lifted, so the end is a
+    watch rather than a clock, and the hold is kept so the watch can find
+    the one effect this row laid.
+
+    Both printed ends are here: `c.endable` is the standard action that
+    takes the shroud off, and the watch is the creature waking. Either
+    one ends it, which is what "whichever comes first" says.
+    """
+    victim = c.target
+    if victim is None:
+        return
+    held = c.resist(20, on=victim, until=When.ENCOUNTER)
+    if held is None:
+        return
+    _ends_when_it_wakes(c, held, victim)
+    c.endable(held, cost=ActionType.STANDARD)
 
 
 @power("i2508x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -1696,12 +1745,23 @@ def i2117x1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("When.CONSCIOUS",),
 )
 def i2502p1(c: Cast) -> None:
-    """As i2500p1: there is no duration for "until it wakes"."""
-    c.resist(20, on=c.target, until=When.ENCOUNTER)
-    c.bonus("save", 2, on=c.target, until=When.ENCOUNTER, kind="power")
+    """As i2500p1, plus the death-save bonus, and ended the same two ways.
+
+    The bonus is ended beside the resistance rather than left on its own
+    clock: one printed sentence governs both, so a wake-up that lifted
+    only half of it would leave a bonus standing on a creature the card
+    says is no longer under the shroud."""
+    victim = c.target
+    if victim is None:
+        return
+    held = c.resist(20, on=victim, until=When.ENCOUNTER)
+    bonus = c.bonus("save", 2, on=victim, until=When.ENCOUNTER, kind="power")
+    if held is None:
+        return
+    _ends_when_it_wakes(c, held, victim, also=bonus)
+    c.endable(held, cost=ActionType.STANDARD)
 
 
 @power("i2517x1", level=7, cls=ITEM, action=ActionType.NONE,

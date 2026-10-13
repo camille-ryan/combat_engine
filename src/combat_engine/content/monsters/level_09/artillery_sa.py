@@ -29,9 +29,10 @@ Conventions, inherited from the earlier sweeps:
 Several cards in this brief carry a flavour name where another entry's
 own ref happens to sit, read as the spec tool's extraction noise and
 treated as this row's own attack throughout, never as a cross-reference.
-Two creatures name something summoned that this spec gave no ref for;
-finding one would mean reading the printed name the spec already
-stripped, so both are `todo=("Cast.summon(ref=)",)`.
+One creature names something summoned that this spec gave no ref for;
+finding it would mean reading the printed name the spec already
+stripped, so it is `todo=("Cast.summon(ref=)",)`. The other was
+`m6094a5`, and the spec names `m6092` outright -- so that row summons.
 """
 
 from __future__ import annotations
@@ -81,6 +82,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.components import Position
 from combat_engine.engine.events import (
     AttackDeclared,
     AttackRolled,
@@ -967,9 +969,13 @@ def m4213a1(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("3d6", 5, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
 )
 def m4213a2(c: Cast) -> None:
+    """**The marker came off; the clause was never missing.** It read
+    `Usage.RECHARGE(when=)`, and `_recharge_when_ward_damaged` below has
+    played it since the row was written -- `Power.recharge_when` would not
+    even have been the tool, because the condition is that *another* row's
+    conjuration took a hit and no predicate reads that off `PowerUsed`."""
     _recharge_when_ward_damaged(c)
     if c.strike():
         c.hit()
@@ -1689,12 +1695,28 @@ _M6094_DROPS = "it drops below 1 hit point from an attack that does not deal psy
     target=NO_TARGET,
     trigger=_M6094_DROPS,
     on=Trigger(Dropped, about_me, _M6094_DROPS),
-    todo=("Cast.summon(ref=)",),
+    dropped=("Dropped.dtypes",),
 )
 def m6094a5(c: Cast) -> None:
-    """A second creature is meant to appear here. Finding its ref would
-    mean reading the printed name this spec already stripped, so there
-    is no ref to summon with."""
+    """A second creature steps out of the first's space when it falls.
+
+    **The marker said there was no ref to summon with. The spec gives
+    one.** `Cast.summon(ref=)` named the parameter `c.summon` already
+    takes positionally, so it resolved as well -- two reasons the marker
+    could never have gone green. `m6092` is declared and
+    `level_09/soldiers_sa.py` already summons it.
+
+    What is still dropped is the printed "from an attack that does not
+    deal psychic damage". `Dropped` carries the source and the row that
+    did it and not the damage type, so the gate wants the two-watch shape
+    -- remember on `DamageApplied`, act on `Dropped` -- and the window is
+    this row's own trigger, which fires from inside the drop. Written
+    bare rather than approximated: the creature appears whatever felled
+    it, which is the printed effect for every blow but one kind.
+    """
+    me = c.me
+    here = c.world.get(me, Position)
+    c.summon("m6092", at=here.square if here is not None else None)
 
 
 # ==========================================================================

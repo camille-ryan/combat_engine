@@ -1524,8 +1524,11 @@ def i3066p1(c: Cast) -> None:
 def i3146p1(c: Cast) -> None:
     """Shooting round blocking terrain is a waiver of line of effect, which
     `query.line_of_effect` answers and nothing sets aside. The cover and
-    concealment half is a verb, so it is written."""
-    c.ignore_cover(on=c.me, until=When.EONT)
+    concealment half is a verb, so it is written -- `c.ignore_cover` is
+    "cover **and** concealment" by its own docstring, and `once=True` is the
+    printed "the next target you attack", spent on the roll that uses it
+    rather than standing until the end of the next turn."""
+    c.ignore_cover(on=c.me, until=When.EONT, once=True)
 
 
 @power(

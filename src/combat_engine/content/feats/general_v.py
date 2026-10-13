@@ -45,6 +45,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
+    DEX,
     ENCOUNTER,
     FORT,
     FREE,
@@ -119,8 +120,6 @@ PROFICIENCY = ("chargen.proficiency()",)
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Spending a use of another row as the price of this one.
 EXPEND = ("c.expend_row()",)
-#: "Strength or Dexterity" -- one attack line, whichever is better.
-BEST_OF = ("Attack.best_of()",)
 #: Suppressing a clause of the power that triggered this one.
 INSTEAD = ("c.pre_empt(ref, clause)",)
 
@@ -449,15 +448,18 @@ def f3485(c: Cast) -> None:
 @power("f3485b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=Target(side="enemy", count=1, max_size=Size.LARGE),
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
-       attack=Attack(STR, vs=REF),
-       dropped=(*WEAPON_REF, *BEST_OF))
+       attack=Attack((STR, DEX), vs=REF),
+       dropped=WEAPON_REF)
 def f3485b(c: Cast) -> None:
-    """"Strength or Dexterity" is one line with two abilities and the
-    header carries one, so the damage reads `c.attack_mod` -- whatever the
-    declared branch actually swung with -- rather than naming Strength
-    twice. The Requirement names a weapon the engine has no group and no
-    ref for. The secondary attack answers `Escaped`, and the watch ends
-    with the grab it is about rather than running for the encounter."""
+    """"Strength or Dexterity" is the header after all: `Attack.ability`
+    takes a tuple and `ability_for` answers `max(..., key=stats.mod)`,
+    which is what "whichever is better" means on a line the user picks at
+    the moment of use. The damage still reads `c.attack_mod` -- whatever
+    the declared branch actually swung with -- rather than naming one of
+    the two twice. The Requirement names a weapon the engine has no group
+    and no ref for. The secondary attack answers `Escaped`, and the watch
+    ends with the grab it is about rather than running for the
+    encounter."""
     if not c.strike():
         return
     c.damage(c.w(2), c.attack_mod)
@@ -467,7 +469,10 @@ def f3485b(c: Cast) -> None:
     def broke(ev: Escaped) -> None:
         if ev.holder != me or ev.actor != foe or not ev.success:
             return
-        if c.attack(c.str_, FORT, on=foe):
+        # The secondary line prints the same pair of abilities as the
+        # primary, and both are full attack bonuses, so the better of the
+        # two is the printed choice.
+        if c.attack(max(c.str_, c.dex_), FORT, on=foe):
             c.damage(c.w(1), c.attack_mod, on=foe)
 
     c.watch(Escaped, broke, until=When.ENCOUNTER, on=me, once=True)
@@ -520,14 +525,18 @@ def f3487(c: Cast) -> None:
 @power("f3487b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.RELIABLE],
-       attack=Attack(STR, vs=REF),
-       dropped=(*WEAPON_REF, *BEST_OF))
+       attack=Attack((STR, DEX), vs=REF),
+       dropped=WEAPON_REF)
 def f3487b(c: Cast) -> None:
     """"Miss: this power is not expended" is the reliable keyword and is
     declared in the header rather than written in the body. The -2 to
     escape is a penalty on the grabbed creature's own check; the slide
     that follows the grabber is a watch on `Moved`, which is the only
-    event carrying both ends of a step."""
+    event carrying both ends of a step.
+
+    "Strength or Dexterity" is the header, as `f3485b` above: `Attack`
+    takes a tuple of abilities and `ability_for` answers the better
+    modifier, which is what a choice made at the moment of use means."""
     if not c.strike():
         return
     c.damage(c.w(3), c.attack_mod)
@@ -541,7 +550,7 @@ def f3487b(c: Cast) -> None:
     def broke(ev: Escaped) -> None:
         if ev.holder != me or ev.actor != foe or not ev.success:
             return
-        if c.attack(c.str_, FORT, on=foe):
+        if c.attack(max(c.str_, c.dex_), FORT, on=foe):
             c.damage(c.w(2), c.attack_mod, on=foe)
             c.prone(on=foe)
 

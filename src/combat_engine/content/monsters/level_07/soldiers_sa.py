@@ -28,6 +28,8 @@ Conventions, the same ones the rest of the tree settled:
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.content.monsters.forms import _shapechange, _shapes
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
 from combat_engine.content.monsters.level_02.lurkers_sa import (
@@ -1317,20 +1319,33 @@ def m3783a2(c: Cast) -> None:
 
 @power(
     "m3783a3", level=7, usage=ENCOUNTER, action=STANDARD, reach=PERSONAL,
-    target=SELF, keywords=[Keyword.POLYMORPH], dropped=("c.reach(set=)",),
+    target=SELF, keywords=[Keyword.POLYMORPH],
 )
 def m3783a3(c: Cast) -> None:
-    """Growing, the push it causes and the damage bonus all play. Its melee
-    reach becoming 2 while grown does not: `c.reach` has no setter, so a
-    row's printed range cannot change mid-fight."""
+    """Growing, the push it causes, the longer reach and the damage bonus
+    all play.
+
+    **`c.reach(set=)` was looking for a setter and the lever is a
+    modifier.** `c.reach` does only read -- the old docstring was right
+    about that -- but `dsl._stretched` totals a `"reach"` modifier and
+    `_reach_of` applies it, and `_reach_of` is what `c.reach`, the
+    targeting and `c.strike`'s validation all go through. So one square
+    laid here is one square further this creature may swing, by the one
+    piece of arithmetic rather than by three agreeing copies of it.
+
+    Reach 1 becoming 2 is +1, not 2: the modifier is added to what the
+    row prints.
+    """
     me = c.me
     grown = c.resize(Size.LARGE, on=me, until=When.ENCOUNTER)
     if grown is None:
         return
-    c.bonus(
-        "damage", 5, on=me, until=When.ENCOUNTER,
-        when=lambda _ctx: grown in c.world.effects.of(me),
-    )
+
+    def still_grown(_ctx: Any) -> bool:
+        return grown in c.world.effects.of(me)
+
+    c.bonus("reach", 1, on=me, until=When.ENCOUNTER, when=still_grown)
+    c.bonus("damage", 5, on=me, until=When.ENCOUNTER, when=still_grown)
     c.endable(grown, cost=ActionType.FREE)
 
 

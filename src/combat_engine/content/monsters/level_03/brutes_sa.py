@@ -2135,28 +2135,35 @@ def m6560a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6579a0(c: Cast) -> None:
-    """Written out rather than `c.regeneration` because the printed line carries
-    a condition of its own: off the ground, nothing heals, and `c.height` is
-    what answers that. What it cannot answer is the other clause -- a kind of
-    damage that switches regeneration off for the *following* turn. Nothing
-    holds a suspension, so that half is named."""
+    """Three printed clauses, and the two that look alike are different
+    mechanisms:
+
+    * in the air it heals nothing *that* turn -- state, read at the tick, so
+      `unless=`, which also carries the printed "has at least 1 hit point"
+      that `c.regeneration` does not ask for itself;
+    * psychic switches the trait off for the whole of its next turn -- an
+      event with a clock, so `c.suspend_when` with `When.EONT`. `SONT` would
+      resume it just before the start-of-turn tick it is meant to miss.
+
+    The marker here named `c.regeneration(suspended_by=)`; `c.suspend_when`
+    is that facility and its own docstring says it is one verb rather than a
+    kwarg on each trait. m6577a0 is the same pair with the air clause
+    inverted."""
     me = c.me
 
-    def tick(ev: TurnStart) -> None:
-        if ev.actor != me or ev.ghost:
-            return
+    def off() -> bool:
         health = c.world.get(me, Health)
-        if health is None or health.hp < 1:
-            return
-        if c.height(on=me) > 0:
-            return
-        c.heal(5, on=me)
+        return health is None or health.hp < 1 or c.height(on=me) > 0
 
-    c.watch(
-        TurnStart, tick, until=When.ENCOUNTER, on=me, label=f"{c.ref} regeneration"
+    heals = c.regeneration(5, until=When.ENCOUNTER, on=me, unless=off)
+    c.suspend_when(
+        heals,
+        DamageApplied,
+        lambda ev: ev.target == me
+        and DamageType.PSYCHIC in {ev.dtype, *ev.dtypes},
+        for_=When.EONT,
     )
 
 

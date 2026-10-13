@@ -212,26 +212,36 @@ def p12244(c: Cast) -> None:
     keywords=PSIONIC,
     trigger="you are hit by an attack",
     on=Trigger(Hit, hits_me, "you are hit by an attack"),
-    dropped=("c.retarget()",),
 )
 def p12245(c: Cast) -> None:
-    """The swap and the redirection are exact. The +2 against the triggering
-    attack is not: the roll is already settled by the time a `Hit` is
-    announced, so nothing the row lays can change what it is compared to.
+    """The swap, the redirection and the +2 are all three written.
 
-    **Correction: the defence is not header-only and the verb exists.**
-    `resolve.roll` reads `vs = declared.vs`, so an interrupt may move it; what
-    cannot is an *ordinary* listener, which runs after the resolve callback
-    has already read the field. That distinction is the whole of
-    `c.attacks_defence` and is almost certainly how this family concluded the
-    engine could not do it. This row is writable -- it needs its card read,
-    not an engine change. #509.
+    The +2 is laid on the comparison rather than as a modifier. An
+    `IMMEDIATE_INTERRUPT` answers in `Window.BEFORE`, which on a `Hit` is
+    inside `resolve.roll` and *before* its `confirm` callback -- so raising
+    the defence the blow was measured against and recomputing the outcome
+    turns a hit that cleared by one into a `Miss`, announced as one, with
+    every rider on `Hit` skipped. A `c.bonus` cannot do it: the sum was
+    taken when the die landed.
+
+    What this row does **not** do is re-measure against the ally's own
+    defences. `c.redirect` moves the live result deliberately without
+    rolling again, which is the engine's standing simplification and not
+    this clause -- the +2 is the clause, and it is exact.
     """
+    ev = c.trigger
     mate = c.target
     if mate is None:
         return
     c.swap(mate)
     c.redirect(to=mate)
+    result = getattr(ev, "result", None)
+    if result is None:
+        return
+    result.target_defence += 2
+    result.hit = result.natural == 20 or (
+        result.natural != 1 and result.total >= result.target_defence
+    )
 
 
 @power(
@@ -563,17 +573,31 @@ def p16096(c: Cast) -> None:
     reach=CloseBurst(2),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.ZONE],
-    dropped=("c.forces(in_zone=)", "c.ice_walk()"),
 )
 def p16097(c: Cast) -> None:
     """The ice and the icicles are two things: a difficult zone, and three
-    solid squares with a once-a-turn bite around each. The extra square of
-    forced movement inside the zone belongs to whoever is doing the shoving
-    and nothing extends another creature's push; "creatures that have ice
-    walk" names a trait the engine has no word for."""
+    solid squares with a once-a-turn bite around each.
+
+    Both markers were wrong, and the old body was **stronger than the
+    card**. "Ice walk" is not a trait the engine lacks a word for -- it is
+    `c.ignores_difficult("ice")`, which five rows already say, against a
+    zone labelled `difficult="ice"`, which `sorcerer/level_6.py` already lays.
+    So the exemption is automatic for anything that has it, and the caster's
+    own exemption is narrowed to ice: written with no `kind` it waived every
+    kind of rough going on the board for the whole fight.
+
+    The extra square is the *shoved* creature's, not the shover's, so
+    `c.forces` was the wrong side. `movement` settles a shove as
+    `squares + forcing - forced`, so a negative `"forced"` on whoever is
+    standing in the zone is the lengthening, and `c.grants_in` is what hangs
+    it on the geometry and takes it back at the edge. (`movement`'s own note
+    refuses a negative `"forced"` for "*your* pushes move 1 extra" -- that
+    one is about the shover and is what `"forcing"` is for. This clause is
+    about where the victim is standing, which is the key's own side.)"""
     area = c.area()
-    c.zone(area, label=c.ref, until=When.ENCOUNTER, difficult=True)
-    c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    zid = c.zone(area, label=c.ref, until=When.ENCOUNTER, difficult="ice")
+    c.ignores_difficult("ice", on=c.me, until=When.ENCOUNTER)
+    c.grants_in(zid, "forced", -1, side="any", kind="untyped")
     free = [sq for sq in sorted(area) if not c.in_squares([sq])][:3]
     for sq in free:
         c.wall(1, at=sq, solid=True, until=When.ENCOUNTER, label=c.ref)
@@ -1289,12 +1313,30 @@ def _my_melee_roll(world: Any, me: int, ev: Any) -> bool:
     keywords=[Keyword.WEAPON],
     trigger="you make a melee weapon attack roll",
     on=Trigger(AttackRolled, _my_melee_roll, "you make a melee attack roll"),
-    dropped=("c.reroll_attack(both=)",),
 )
 def p16081(c: Cast) -> None:
-    """"Roll twice" is `keep="best"`. "If both rolls hit" is a question about
-    the roll that was thrown away, which the settled event no longer holds."""
-    c.reroll_attack(keep="best")
+    """"Roll twice" is `keep="best"`.
+
+    "If both attack rolls hit" is answerable and the marker said it was not:
+    `AttackResult.rolls` keeps every face thrown, so the discarded one is
+    still there after the reroll, and what the die is added to is
+    `total - natural`. Each face is judged by the printed rule -- a 1 never
+    hits and a 20 always does.
+
+    The extra damage is a one-shot dice bonus rather than a rider on the
+    `Hit`, because the damage sum is taken *after* this window: a modifier
+    laid here is read by the very blow that provoked it. The paragon dice
+    are out of scope."""
+    result = getattr(c.trigger, "result", None)
+    if result is None or not c.reroll_attack(keep="best"):
+        return
+    faces = result.rolls[-2:]
+    rest = result.total - result.natural
+    if len(faces) == 2 and all(
+        face == 20 or (face != 1 and face + rest >= result.target_defence)
+        for face in faces
+    ):
+        c.bonus("damage", 0, dice="1d8", on=c.me, until=When.EOT, once=True)
 
 
 @power(
@@ -1314,6 +1356,18 @@ def p16082(c: Cast) -> None:
     c.surge(on=c.me)
     c.bonus(AC, 2, on=c.me, until=When.EONT, kind="power")
     c.bonus(FORT, 2, on=c.me, until=When.EONT, kind="power")
+
+
+def _melee_weapon(ctx: dict[str, Any]) -> bool:
+    """"Melee weapon attacks", as a modifier gate. The row's own keywords
+    say whether it is a weapon attack; the context says whether it was
+    thrown."""
+    row = REGISTRY.get(str(ctx.get("power") or ""))
+    return (
+        row is not None
+        and Keyword.WEAPON in row.keywords
+        and not ctx.get("ranged")
+    )
 
 
 @power(
@@ -1342,16 +1396,18 @@ def p16083(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.STANCE],
-    dropped=("resolve.attack.weapon",),
 )
 def p16084(c: Cast) -> None:
-    """19-20 is `crit_range` 1; 18-20 would be 2. The gate is the nearest the
-    attack context can get to "melee weapon" -- it carries `ranged` and
-    `opportunity` but says nothing about what is in hand."""
+    """19-20 is `crit_range` 1; 18-20 would be 2.
+
+    "Melee weapon attack" needed nothing from the attack context after all.
+    The context carries `power`, and a weapon attack is one whose *row*
+    declares `Keyword.WEAPON` -- which is how `fighter/level_0._weapon_power`
+    has asked it all along, and which `mba` satisfies. `ranged` supplies the
+    melee half."""
     c.stance(label=c.ref)
     c.bonus(
-        "crit_range", 1, on=c.me, until=When.STANCE,
-        when=lambda ctx: not ctx.get("ranged"),
+        "crit_range", 1, on=c.me, until=When.STANCE, when=_melee_weapon,
     )
     c.bonus(
         "attack", 2, on=c.me, until=When.STANCE, kind="power",
@@ -1371,24 +1427,41 @@ def p16084(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.CHARM],
-    dropped=("AttackDeclared.reach",),
 )
 def p16391(c: Cast) -> None:
-    """The bar covers every attack, not only the melee and ranged ones the
-    card names: `AttackDeclared` carries the power's ref and its defence and
-    nothing about how far away it was thrown from."""
-    held = []
-    for foe in c.enemies():
-        stats = c.world.get(foe, Stats)
-        if stats is not None and stats.level <= c.level:
-            held.append(c.cannot_attack(on=foe, against=c.me, until=When.EONT))
+    """Narrowed to the two kinds of attack the card names, which is the half
+    that was missing.
+
+    The marker asked `AttackDeclared` for a reach it does not carry. It does
+    not need to: the event carries the row's ref, and the row carries its
+    `Range`, whose `kind` is `"melee"`, `"ranged"`, `"close_burst"`,
+    `"close_blast"`, `"area_burst"` or `"wall"`. The old body used
+    `c.cannot_attack`, which refuses everything -- a burst included -- so it
+    was stronger than its card on every area power in the game.
+
+    `c.cannot_attack` is itself nothing but a `Window.BEFORE` watch on
+    `AttackDeclared` that cancels, and that is what is hand-rolled here with
+    the two extra questions it takes no `when=` for. Level is asked at the
+    swing rather than at the minor action, since it is a standing fact about
+    the creature and a summoned reinforcement has to be covered too."""
+    done: list[bool] = []
+    mine = c.me
+
+    def barred(ev: AttackDeclared) -> None:
+        if done or ev.target != mine or ev.attacker == mine:
+            return
+        stats = c.world.get(ev.attacker, Stats)
+        if stats is None or stats.level > c.level:
+            return
+        row = REGISTRY.get(ev.power)
+        if row is not None and row.reach.kind in ("melee", "ranged"):
+            ev.cancel("cannot be targeted by melee or ranged attacks")
 
     def spent(ev: AttackDeclared) -> None:
-        if ev.attacker != c.me:
-            return
-        for effect in held:
-            c.end_effect(effect)
+        if ev.attacker == mine:
+            done.append(True)
 
+    c.watch(AttackDeclared, barred, until=When.EONT, window=Window.BEFORE)
     c.watch(AttackDeclared, spent, until=When.EONT, once=True)
 
 
@@ -1402,17 +1475,34 @@ def p16391(c: Cast) -> None:
     target=SELF,
     keywords=ARCANE,
     trigger="you would make a Diplomacy or an Intimidate check",
-    on=Trigger(SkillCheck, my_check("diplomacy", "intimidate"), "one of those checks"),
-    dropped=("c.swap_check()",),
+    on=Trigger(
+        SkillCheck, my_check("diplomacy", "intimidate"), "one of those checks",
+        window=Window.BEFORE,
+    ),
     narrative=("skill:diplomacy",),
 )
 def p16392(c: Cast) -> None:
-    """The +2 is laid on Arcana, which is where the card moves the roll to;
-    swapping one check for another is `c.pre_empt(ref, clause)`, not in `Cast`,
-    so the original check still happens. Counting as sharing a language with
-    the subject of a Diplomacy check is the other clause, and no board ever
-    asks what language two creatures have in common."""
-    c.bonus("skill:arcana", 2, on=c.me, until=When.EOT, kind="power")
+    """"You instead make an Arcana check" is the roll being moved, and
+    `skills.check` already allows it: it totals the modifiers in its resolve
+    callback and reads `ev.skill` *there*, so rewriting the field before the
+    callback runs makes the Arcana modifier the one applied. The trigger
+    therefore declares `window=Window.BEFORE` -- a free action is otherwise
+    offered in the AFTER window, where the number is already settled and the
+    row would have been inert.
+
+    The +2 stays a laid bonus rather than an addition to `ev.bonus`, because
+    the card prints a *power* bonus and only a modifier carries a kind;
+    `once=True` keeps it from paying out on a second Arcana check this turn.
+
+    `narrative=`: counting as sharing a language with the subject of the
+    check is the other clause, and no board ever asks what language two
+    creatures have in common, so there is no diplomacy circumstance for the
+    waiver to narrow."""
+    ev = c.trigger
+    if ev is None:
+        return
+    c.bonus("skill:arcana", 2, on=c.me, until=When.EOT, kind="power", once=True)
+    ev.skill = "arcana"
 
 
 @power(
@@ -1524,12 +1614,17 @@ def p16442(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=ARCANE,
-    dropped=(*KIT, "Condition.INVISIBLE"),
+    dropped=KIT,
 )
 def p16443(c: Cast) -> None:
     """The trap is a zone five squares across that springs on the first
-    creature the caster cannot see. Stripping the invisibility itself has
-    nothing to take away -- there is no condition for it."""
+    creature the caster cannot see.
+
+    "The creature loses invisibility" is written now. The marker looked for
+    a condition and there is none, because invisibility is a
+    `Relation.HIDDEN_FROM` held by an effect `c.invisible` labels
+    `"<ref> unseen"` -- so `c.end_effect(against=)`, which narrows by label
+    fragment, is what takes it away."""
     spot = _free_beside(c)
     if spot is None:
         return
@@ -1538,6 +1633,7 @@ def p16443(c: Cast) -> None:
     def sprung(ev: ZoneEntered) -> None:
         if ev.zone != field or ev.actor == c.me or c.can_see(to=ev.actor):
             return
+        c.end_effect(on=ev.actor, against="unseen", why=f"{c.ref} revealed it")
         c.penalty("skill:stealth", 10, on=ev.actor, until=When.SAVE_ENDS)
         c.dispel(field)
 
@@ -1847,19 +1943,29 @@ def p14190(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL, Keyword.STANCE],
-    dropped=("query.concealed()",),
 )
 def p14191(c: Cast) -> None:
-    """Cover is a question the attack context can be asked -- it carries the
-    attacker, and the board measures the rest. Concealment is a modifier laid
-    by `c.conceal` and nothing reads it back, so half the printed condition
-    cannot be tested."""
+    """"Any cover or concealment" is both halves now.
+
+    The marker said nothing read a carried concealment back. `query`
+    has two readers for it: `concealment_of` is the modifier `c.conceal`
+    lays -- its own note says "nothing read one until now" -- and
+    `light_concealment` is the badly-lit square, which is a fact about the
+    attacker as well as the target and so cannot be the same call. The
+    printed rule is that they do not add, and this only asks whether any
+    of the three is there at all."""
     c.stance(label=c.ref)
     me = c.me
 
     def sheltered(ctx: dict[str, Any]) -> bool:
         who = ctx.get("attacker")
-        return who is not None and bool(query.cover_between(c.world, who, me))
+        if who is None:
+            return False
+        return bool(
+            query.cover_between(c.world, who, me)
+            or query.concealment_of(c.world, me, ctx)
+            or query.light_concealment(c.world, who, me)
+        )
 
     for defence in ALL_DEFENCES:
         c.bonus(defence, 4, on=me, until=When.STANCE, kind="power", when=sheltered)
@@ -1896,14 +2002,25 @@ def p15881(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=("c.recall(who)",),
 )
 def p15882(c: Cast) -> None:
-    """Sending the companion away is `Condition.REMOVED`. Calling it back
-    into an unoccupied square beside you is the other half of the same
-    sentence and nothing puts a removed creature back on the board."""
+    """One row, two directions: the card's recall is a second move action,
+    which is a second use of this same at-will, so the body toggles.
+
+    The marker said nothing puts a removed creature back. That was read off
+    the phrase rather than off the engine: `Condition.REMOVED` is
+    `Rules(cannot_act, cannot_move)` and takes nothing off the grid, so
+    `c.cure` is the way back and the only thing left to say is where it
+    stands. The teleport is `toward=c.me`, which ranks destinations by how
+    close they are to me and refuses an occupied one -- "an unoccupied
+    square adjacent to you", exactly."""
     pet = c.companion()
-    if pet is not None:
+    if pet is None:
+        return
+    if c.is_(Condition.REMOVED, on=pet):
+        c.cure(Condition.REMOVED, on=pet)
+        c.teleport(max(1, c.distance(pet)), who=pet, toward=c.me)
+    else:
         c.condition(Condition.REMOVED, on=pet, until=When.ENCOUNTER)
 
 
@@ -1916,11 +2033,18 @@ def p15882(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.POLYMORPH],
-    dropped=("c.senses_of(who)",),
 )
 def p15883(c: Cast) -> None:
     """The companion's aura is copied by radius off the live zone rather than
-    guessed. Its senses are a set of traits nothing enumerates."""
+    guessed.
+
+    The senses are copied too, which the marker said nothing could
+    enumerate. `query.sees_in`'s own docstring is the authority on what a
+    sense *is* here -- four `Mods` keys, where the value is the printed
+    range and 0 means absent -- so `c.total` reads each one off the
+    companion and the matching verb lays the same range on the caster.
+    `UNLIMITED_SENSE` copies as itself, which is what "no printed range"
+    already stores."""
     pet = c.companion()
     shape = c.form(
         modes={"walk": c.speed_of(pet)} if pet is not None else None,
@@ -1935,6 +2059,15 @@ def p15883(c: Cast) -> None:
                 radius = zone.aura
         if radius:
             c.aura(radius, label=c.ref, on=c.me, until=When.ENCOUNTER)
+        for sense, grant in (
+            ("darkvision", c.darkvision),
+            ("low_light", c.low_light),
+            ("blindsight", c.blindsight),
+            ("tremorsense", c.tremorsense),
+        ):
+            reach = c.total(sense, on=pet)
+            if reach > 0:
+                grant(reach, on=c.me, until=When.ENCOUNTER)
 
     def other(ev: PowerUsed) -> None:
         if ev.actor == c.me and ev.power != c.ref:
@@ -1956,11 +2089,18 @@ def p15883(c: Cast) -> None:
     target=SELF,
     trigger="you dislike an opposed Perception or Stealth check",
     on=Trigger(SkillCheck, my_check("perception", "stealth"), "one of those checks"),
-    dropped=("SkillCheck.opposed",),
 )
 def p16668(c: Cast) -> None:
-    """"Use either result" is `keep="best"`. Whether the check was *opposed*
-    is not on the event: a `SkillCheck` carries a DC and no second roller."""
+    """"Use either result" is `keep="best"`.
+
+    "Opposed by another creature" is askable and the marker said it was not:
+    `SkillCheck.target` is who the check was made *against* and is None for
+    the checks that are about a fact rather than a creature, which is the
+    distinction the card draws. An unopposed Perception check is left
+    alone, so the encounter use is not spent on one."""
+    ev = c.trigger
+    if ev is None or getattr(ev, "target", None) is None:
+        return
     c.reroll_check(keep="best")
 
 

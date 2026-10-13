@@ -78,6 +78,7 @@ from combat_engine.engine import (
     ActionPointSpent,
     ActionType,
     AttackDeclared,
+    AttackRolled,
     Bloodied,
     Cast,
     Condition,
@@ -101,6 +102,7 @@ from combat_engine.engine import (
     Relation,
     RelationSet,
     SavingThrow,
+    SkillCheck,
     Summoned,
     Trigger,
     TurnEnd,
@@ -692,14 +694,17 @@ def i1930p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="an attack with this orb hits the target's Fortitude",
     on=HIT_BY_ME,
-    dropped=("Hit.vs",),
 )
 def i1943p1(c: Cast) -> None:
-    """`Hit` carries attacker, target, power and critical -- not the defence
-    that was attacked, which only `AttackRolled` knows."""
+    """The defence gate is written. `Hit` does not *declare* `vs`, but
+    `resolve.attack` sets it as a plain attribute alongside `opportunity`
+    and `hand`, so the check is a `getattr` on the event rather than a
+    field read -- the marker here was reading the dataclass and not the
+    emission site."""
     foe = _struck(c)
-    if foe is not None:
-        c.slowed(on=foe, until=When.SAVE_ENDS)
+    if foe is None or getattr(c.trigger, "vs", None) is not FORT:
+        return
+    c.slowed(on=foe, until=When.SAVE_ENDS)
 
 
 @power(
@@ -1273,21 +1278,36 @@ def i2772p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.check_bonus()",),
 )
 def i2773p1(c: Cast) -> None:
-    """The attack-roll half is written; "ability check or skill check" has
-    no modifier key, so the ally always spends it on the swing."""
+    """Written. The old marker said a check has no modifier key, and that
+    was wrong twice over: `skills.modifier` reads `"skill"` beside the
+    narrow `skill:<name>`, and `skills.ability_check` reads
+    `"ability_check"` beside `ability:<name>`.
+
+    What `once=` cannot do is share one spend across three keys -- its
+    branches are attack, damage and defence, and a check is none of them --
+    so the latch is hand-rolled. All three modifiers are laid plain and the
+    first roll that could have used any of them ends all three; `SkillCheck`
+    sums its modifiers in the resolve callback, so an after-window watch
+    reads a roll the bonus has already paid for."""
     mate = next(iter(c.within(10, side="ally")), None)
-    if mate is not None:
-        c.bonus(
-            "attack",
-            c.enhancement,
-            kind="power",
-            on=mate,
-            until=When.ENCOUNTER,
-            once=True,
-        )
+    if mate is None:
+        return
+    laid = [
+        c.bonus(what, c.enhancement, kind="power", on=mate, until=When.ENCOUNTER)
+        for what in ("attack", "skill", "ability_check")
+    ]
+
+    def spend(ev: AttackRolled | SkillCheck) -> None:
+        who = ev.actor if isinstance(ev, SkillCheck) else ev.attacker
+        if who != mate:
+            return
+        for eff in laid:
+            c.end_effect(eff, on=mate, why="used")
+
+    for event in (AttackRolled, SkillCheck):
+        c.watch(event, spend, until=When.ENCOUNTER)
 
 
 @power(

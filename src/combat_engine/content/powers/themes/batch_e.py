@@ -870,14 +870,24 @@ def p14147(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    dropped=("c.resist_forced(zone=)",),
 )
 def p14148(c: Cast) -> None:
-    """`c.grants_in` carries a modifier for as long as you stand in a zone;
-    shortening a shove is `c.resist_forced`, which has no zone form, so the
-    second clause is the dropped one."""
+    """**Re-pointed, and the shove half is written.** `c.resist_forced(zone=)`
+    asked for a kwarg nothing needs: the verb already takes a `when=` gate
+    that is evaluated at the moment of the shove rather than at arming, and
+    the gate closes over the creature it was laid on, so it can ask the zone
+    who is standing in it right now. `i3305p1` gates a penalty on a zone's
+    occupants the same way.
+
+    A creature that joins the fight after this is used is missed, which is
+    the honest limit of laying a modifier per ally rather than in the zone."""
     zone = c.aura(1, until=When.EONT)
     c.grants_in(zone, AC, 2, side="team", kind="power")
+    for who in {c.me, *c.allies()}:
+        c.resist_forced(
+            1, on=who, until=When.EONT,
+            when=lambda ctx, w=who: w in c.world.zones.occupants(zone),
+        )
 
 
 # ===========================================================================

@@ -1987,14 +1987,35 @@ def _in_ooze(world: World, eid: int) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.insubstantial(bypass=)",),
+    dropped=("story.terrain_words",),
 )
 def m6530a0(c: Cast) -> None:
     """`m6530a6`/`m6530a7` end and relay this as the creature changes shape.
-    `Condition.INSUBSTANTIAL` has one built-in exception -- force, and only
-    when the attacker's own row grants it -- and this card wants two,
-    unconditionally, which there is no hook for."""
-    c.insubstantial(on=c.me, until=When.ENCOUNTER)
+
+    **Two clauses written, and the old note was stale on both.**
+    `c.insubstantial(except_=)` takes the types the halving does not cover --
+    it files them in `Defences.half_except` rather than leaning on the
+    condition's one built-in force exception -- and `c.suspend_when` is the
+    "it loses this trait until the start of its next turn" clause, which is
+    a suspension and not an end: ending the hold would spend its duration and
+    the trait would never come back. `insubstantial`'s own docstring names
+    this pair of clauses as the reason `except_` lifts on suspend.
+
+    Dropped: the trait is printed as holding in one named place, and nothing
+    records where a fight is happening, so gating on it would make the trait
+    false in every encounter instead of true in the ones the card means.
+    """
+    me = c.me
+    held = c.insubstantial(
+        on=me, until=When.ENCOUNTER,
+        except_=(DamageType.FORCE, DamageType.PSYCHIC),
+    )
+
+    def mind_struck(ev: DamageApplied) -> bool:
+        return ev.target == me and DamageType.PSYCHIC in set(ev.types())
+
+    c.suspend_when(held, DamageApplied, mind_struck, for_=When.SONT,
+                   label=c.ref)
 
 
 @power(

@@ -3479,11 +3479,14 @@ def m6096a2(c: Cast) -> None:
     recharge=0,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature granting combat advantage to it",
+        grants_ca=True,
+    ),
     keywords=[Keyword.CHARM, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=15),
     damage=Damage("4d6", 4, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("Target.affected_by",),
 )
 def m6096a3(c: Cast) -> None:
     """The caster's absence is tied to the victim's hold, not given a clock
@@ -3492,12 +3495,16 @@ def m6096a3(c: Cast) -> None:
 
     The printed recharge is "when nobody is affected by this power", so it is
     asked at the top of each turn rather than remembered.
+
+    **The target line is the header's now.** `Target.grants_ca` exists and
+    `_stands_right` filters on it through `query.has_combat_advantage` -- the
+    same function the body's redirect was calling -- so it folds in the
+    geometry and the flanking grant the stored relation alone does not, and
+    the restriction is visible to the chooser rather than re-picked after it.
     """
     ref = c.ref
     _recharge_on(c, TurnStart, lambda ev: not ev.ghost and not c.suffering(ref))
-    victim = _restricted_to(
-        c, 1, lambda f: has_combat_advantage(c.world, c.me, f)
-    )
+    victim = c.target
     if victim is None or not c.strike(on=victim):
         return
     c.hit(on=victim)

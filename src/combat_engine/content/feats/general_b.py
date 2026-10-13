@@ -282,13 +282,34 @@ _granted("f620", "f620b")
 
 
 @power("f620b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       dropped=("c.crit_dice_on_hit()",))
+       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY)
 def f620b(c: Cast) -> None:
-    """The critical half: a crit's extra damage is maximised. The other
-    half -- rolling the critical dice as extra damage on an ordinary hit
-    -- has no verb; nothing turns a normal hit into a partial crit."""
-    c.maximise(on=c.me, until=When.EONT, critical=True)
+    """Two branches of one next weapon attack: a crit has its extra damage
+    maximised, an ordinary hit pays the crit dice anyway.
+
+    The old marker said nothing turns a normal hit into a partial crit, and
+    nothing has to. "The extra damage dice you would roll if you scored a
+    critical hit" are the `crit_damage` mods `equipment._crit_rider` lays on
+    the wielder, and `c.total` rolls them -- the same mods
+    `resolve.deal_damage` reads in its own crit branch. A character wielding
+    nothing magic carries none and so pays nothing, which is also the
+    printed line."""
+    me = c.me
+    c.maximise(on=me, until=When.EONT, critical=True)
+    spent: list[int] = []
+
+    def ordinary(ev: Any) -> None:
+        if spent or ev.attacker != me or ev.critical:
+            return
+        row = get(ev.power)
+        if row is None or Keyword.WEAPON not in row.keywords:
+            return
+        spent.append(1)
+        extra = c.total("crit_damage", on=me)
+        if extra:
+            c.flat(extra, on=ev.target)
+
+    c.watch(Hit, ordinary, on=me, until=When.EONT, label=c.ref)
 
 
 _granted("f614", "f614b")

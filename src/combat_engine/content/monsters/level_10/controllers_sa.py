@@ -123,6 +123,7 @@ from combat_engine.engine.events import (
     Moved,
     OpportunityWindow,
     PowerUsed,
+    SavingThrow,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -4000,23 +4001,35 @@ def m6070a6(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.speed_while_squeezing()", "c.no_advantage(squeezing=)"),
+    dropped=("c.waive(when=)",),
 )
 def m6109a0(c: Cast) -> None:
-    """Cancels the attack-roll half of squeezing's penalty while dim or
-    dark. The speed half and the combat-advantage half have nothing to
-    override -- `Condition.SQUEEZING` carries neither a speed modifier
-    nor an advantage grant this can gate off."""
+    """Cancels the attack-roll half of squeezing's penalty while the
+    creature is standing unlit.
+
+    **Re-pointed, twice over.** `c.speed_while_squeezing()` and
+    `c.no_advantage(squeezing=)` both named verbs for knobs that already
+    exist: `c.waive(Condition.SQUEEZING, "attack", "halve_speed",
+    "grants_ca")` is this card's three clauses exactly, and its own
+    docstring carries them as its worked example. So the row was never
+    short two mechanisms -- it is short one **gate**. `c.waive` takes no
+    `when=`, and all three clauses here open "while in dim light or
+    darkness", so laying the waiver would hand the creature its full
+    speed in broad daylight.
+
+    What plays is the attack half, which can be gated because a bonus
+    takes `when=` -- a +5 against squeezing's flat -5. The gate is
+    `c.unlit`, which is the engine's one reader for the nineteen cards
+    printing this clause; `c.terrain` was the wrong question and was
+    being asked here, since it answers what sort of *place* the fight is
+    in rather than how well lit this creature's square is."""
     c.bonus(
         "attack",
         5,
         on=c.me,
         kind="untyped",
         until=When.ENCOUNTER,
-        when=lambda ctx: (
-            c.is_(Condition.SQUEEZING, on=c.me)
-            and (c.terrain("darkness") or c.terrain("dim light"))
-        ),
+        when=lambda ctx: c.is_(Condition.SQUEEZING, on=c.me) and c.unlit(on=c.me),
     )
 
 
@@ -4684,15 +4697,40 @@ def m6485a4(c: Cast) -> None:
     keywords=[Keyword.FIRE, Keyword.NECROTIC, Keyword.MELEE],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d4", 7),
-    dropped=("c.no_save(while=)",),
 )
 def m6692a0(c: Cast) -> None:
-    """The burn is exact. Nothing in the vocabulary stops a specific
-    saving throw from being rolled while a condition holds -- "cannot
-    save against the ongoing damage while adjacent" has nowhere to go."""
-    if c.strike():
-        c.hit()
-        c.ongoing(5, DamageType.FIRE)
+    """**Written: `c.unsave` is the lever, and `c.no_save(while=)` named a
+    verb that never had to exist.** `SavingThrow` is a `Decision`
+    announced *before* it is acted on and `durations._save` reads
+    `rolled.saved` back, so failing the throw from a listener is a
+    printed line with somewhere to go. Failing it is the same outcome as
+    not rolling it here because the burn carries no `escalate` -- the one
+    case where the two differ.
+
+    Matched on `ev.against`, which `durations` sets to `str(eff)` of the
+    hold being rolled against, so the gate is this row's own burn and not
+    every save the victim owes. Adjacency is asked inside the listener,
+    where the card asks it, rather than latched at the hit."""
+    if not c.strike():
+        return
+    c.hit()
+    victim = c.target
+    burn = c.ongoing(5, DamageType.FIRE)
+    if victim is None or burn is None:
+        return
+    me, label = c.me, str(burn)
+
+    def pinned(ev: Any) -> None:
+        if ev.actor != victim or ev.against != label:
+            return
+        if c.adjacent_to(me, victim):
+            c.unsave(ev)
+
+    # `SavingThrow` is emitted with no resolver behind it, so both windows
+    # run before `durations` reads `rolled.saved` and the default is early
+    # enough -- unlike an attack, where the sum is taken in between.
+    c.watch(SavingThrow, pinned, until=When.SAVE_ENDS, on=victim,
+            label=f"{c.ref} no save")
 
 
 @power(

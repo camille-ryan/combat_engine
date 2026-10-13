@@ -744,16 +744,20 @@ def m1623a2(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=17),
-    dropped=("c.no_invisibility()",),
 )
 def m1623a3(c: Cast) -> None:
-    """No damage line: the two holds are the hit.
+    """No damage line: the three holds are the hit.
 
     "Grants combat advantage to all attackers" is wider than any one word
     `to=` takes, so it is laid once per enemy of the target's -- which is the
-    relation the method lays anyway. Concealment is `c.no_cover`; not
-    benefiting from *invisibility* is a third thing, and nothing takes that
-    away from a creature for everybody at once.
+    relation the method lays anyway. Concealment is `c.no_cover`.
+
+    **The invisibility half is written now.** `c.truesight(of=)` is the
+    named-creature shape of the sense -- "the target cannot become invisible
+    to you" in its own docstring -- and `query.unseen_by` reads it, so a
+    watcher holding it stops handing out combat advantage for being unseen.
+    Laid on each attacker rather than on the victim, because that is the side
+    the sense lives on; the printed "all attackers" is this creature's side.
     """
     victim = c.target
     if victim is None or not c.strike():
@@ -762,6 +766,7 @@ def m1623a3(c: Cast) -> None:
     for watcher in (c.me, *sorted(c.allies())):
         if watcher != victim:
             c.grants_advantage(on=victim, to=watcher, until=When.EONT)
+            c.truesight(of=victim, on=watcher, until=When.EONT)
 
 
 @power(

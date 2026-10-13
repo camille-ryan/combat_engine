@@ -1331,8 +1331,7 @@ _granted("f1706", "f1706b")
 
 @power("f1706b", level=1, cls="", usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       trigger="you roll damage for a melee attack",
-       dropped=("c.reroll_damage(melee=)",))
+       trigger="you roll damage for a melee attack")
 def f1706b(c: Cast) -> None:
     """The printed trigger is deliberately **not** declared. A damage
     reroll is read where the dice are rolled, not off `DamageRolled` --
@@ -1340,8 +1339,14 @@ def f1706b(c: Cast) -> None:
     `c.reroll_damage` says outright -- so a row declared on it would
     answer after the only moment it could act. Used as the free action
     it is, ahead of the swing, the effect is in place for the roll.
-    Narrowing it to melee is the half that is dropped."""
-    c.reroll_damage(on=c.me, until=When.EOT)
+
+    **The melee narrowing is written, not dropped.** The old marker said
+    `c.reroll_damage(melee=)`; the verb's `keyword=` is that narrowing
+    under another name -- it hangs the hold on
+    `damage_twice_higher:<word>` and `_rolls_twice` asks the *rolling*
+    row whether it carries the word, and `Keyword.MELEE` is one of
+    them."""
+    c.reroll_damage(on=c.me, until=When.EOT, keyword=Keyword.MELEE)
 
 
 _granted("f2010", "f2010b")

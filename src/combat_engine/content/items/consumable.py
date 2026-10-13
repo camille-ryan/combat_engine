@@ -1677,17 +1677,29 @@ def i3064p1(c: Cast) -> None:
 
 @power("i3278p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("query.is_basic_attack()",))
+       dropped=("resolve.ctx.weapon",))
 def i3278p1(c: Cast) -> None:
     """The draught ends itself on a natural 1 or 2, which is read off
     `AttackRolled.natural` -- both bonuses go together.
 
-    Dropped: nothing asks whether an attack was a basic one, so the
-    damage bonus applies to every attack rather than only to basics."""
+    **Re-pointed, and the damage bonus is narrowed.** `query.is_basic_attack()`
+    named a reader for something the context already says: `power` on the
+    damage side is the ref of the row that rolled the blow, and the engine's
+    own two basics are `basic.MELEE` and `basic.RANGED` -- two string
+    constants. So "of melee basic attacks and of ranged basic attacks" is one
+    membership test, and the bonus used to apply to every attack in the fight.
+
+    Still dropped: "with thrown weapons", which narrows only the ranged half.
+    `Weapon.thrown` is a field of the weapon and the damage context carries
+    no weapon at all, so the ranged basic gets the bonus whatever is in
+    hand."""
+    from combat_engine.engine.basic import MELEE, RANGED
+
     holds = [
         c.bonus("skill:athletics", 2, on=c.me, kind="power",
                 until=When.ENCOUNTER),
-        c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER),
+        c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: ctx.get("power") in (MELEE, RANGED)),
     ]
 
     def fumbled(ev: AttackRolled) -> None:
@@ -1774,12 +1786,37 @@ def i1444p1(c: Cast) -> None:
     """The zone stands. What it pays out is "as if it had taken radiant
     damage", which is the creature's own vulnerability read back at it.
 
-    **Two markers, both stale, for two different reasons (#418).**
-    `c.is_vulnerable()` is gone because `c.vulnerabilities()` landed with #391
-    and answers exactly this -- so the payout is writable now and is content
-    work rather than a gap. `c.expend()` is renamed to `c.consume()`: see the
-    note at the head of this file."""
-    c.zone(c.area(), until=When.ENCOUNTER)
+    **The payout is written now.** The previous note said it was writable
+    once `c.vulnerabilities()` landed and then left the body a bare zone, so
+    the row had a stale marker *and* a missing clause its own docstring had
+    already cleared.
+
+    **Untyped on purpose.** The number *is* the creature's radiant
+    vulnerability, so dealing it as radiant damage would have the resolver
+    add the vulnerability on top and pay double. "Affected as if it had
+    taken radiant damage" is the amount, not the type.
+
+    `c.consume()` stays: turning the stone to dust is the consumption model
+    nothing in this file has."""
+    zone = c.zone(c.area(), until=When.ENCOUNTER)
+
+    def scorch(who: int) -> None:
+        if not c.is_kind("undead", on=who):
+            return
+        worth = c.vulnerabilities(on=who).get(DamageType.RADIANT, 0)
+        if worth > 0:
+            c.flat(worth, on=who)
+
+    def arriving(ev: ZoneEntered) -> None:
+        if ev.zone == zone:
+            scorch(ev.actor)
+
+    def dawning(ev: TurnStart) -> None:
+        if ev.actor in c.world.zones.occupants(zone):
+            scorch(ev.actor)
+
+    c.watch(ZoneEntered, arriving, until=When.ENCOUNTER, on=c.me)
+    c.watch(TurnStart, dawning, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i1703p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,

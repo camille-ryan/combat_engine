@@ -73,6 +73,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Defense,
+    Dropped,
     ForcedMove,
     Health,
     Hit,
@@ -104,6 +105,7 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.query import squares
 
 ITEM = "item"
@@ -343,23 +345,53 @@ def i1897x1(c: Cast) -> None:
     weighed anywhere on a board."""
 
 
+def _raging(c: Cast, who: int) -> bool:
+    """Is a rage standing on this creature?
+
+    An effect's label is the ref of the row that laid it, so
+    `durations.keywords_of` reads that row's keywords back -- and the rage
+    rows do carry `Keyword.RAGE`. The older note here said they had no word
+    for it, which was the reason the gate was left out.
+    """
+    return any(
+        Keyword.RAGE in keywords_of(eff.label)
+        for eff in c.world.effects.of(who)
+        if not eff.ended
+    )
+
+
 @power("i2131x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("events.DroppedToZero",))
+       reach=PERSONAL, target=SELF)
 def i2131x1(c: Cast) -> None:
     """A death save is an ordinary `SavingThrow` with `against="death"`,
     announced before it is read back, so the bonus is written onto it.
-    `once=True` is the printed "first". A rage is held as an effect like any
-    other and `keywords_of` reads the laying row's keywords, so "while
-    raging" wants the keyword the rage rows have no word for; without it the
-    bonus is paid whatever the wearer was doing."""
+
+    **Both halves of the gate are written now.** The old marker named an
+    event that does not exist; the drop is `Dropped`, which does, and
+    "while raging" is `keywords_of` off the holds standing on the wearer --
+    asked at the drop, because that is the moment the card names.
+
+    `once=` on the watch is not the "first death saving throw": it spends a
+    watch only when the handler *did* something the log or the effect list
+    can see, and this handler rewrites a field on the event and emits
+    nothing -- so the hold was never spent and the bonus was paid on every
+    death save. The latch is explicit instead."""
+    me = c.me
+    armed: list[str] = []
+
+    def went_down(ev: Dropped) -> None:
+        if ev.actor == me and not armed and _raging(c, me):
+            armed.append("armed")
 
     def death_save(ev: SavingThrow) -> None:
-        if ev.actor != c.me or ev.against != "death":
+        if ev.actor != me or ev.against != "death" or armed != ["armed"]:
             return
+        armed.append("spent")
         ev.bonus += 4
         ev.saved = ev.natural + ev.bonus >= 10
 
-    c.watch(SavingThrow, death_save, until=When.ENCOUNTER, once=True)
+    c.watch(Dropped, went_down, until=When.ENCOUNTER)
+    c.watch(SavingThrow, death_save, until=When.ENCOUNTER)
 
 
 @power("i654x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -859,7 +891,7 @@ def i1152p1(c: Cast) -> None:
 
 @power("i1455x1", level=9, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grab_check()",))
+       dropped=("c.any_size_manoeuvre(within=)",))
 def i1455x1(c: Cast) -> None:
     """"+2 item bonus on Strength attacks to bull rush or grab a target."
 
@@ -871,8 +903,13 @@ def i1455x1(c: Cast) -> None:
     of: `c.grab` is applied outright, which is still true of the *applying*
     half, and `c.grab_attempt` is the elective one this bonus is about.
 
-    Dropped: the escape side, which is `c.grab_check()` and is this row's
-    other clause rather than this one.
+    **Re-aimed.** The old marker named an escape check, and this card has
+    no escape clause at all. Its second sentence is the size allowance, and
+    `c.any_size_manoeuvre` is nearly it: the verb exists and waives
+    `_manoeuvrable`'s size rule outright, where the card raises the
+    ceiling by two steps. Writing the unbounded waiver would let the
+    wearer grab a Gargantuan creature its card does not reach, so the
+    allowance waits on the verb taking a bound.
     """
     c.bonus("attack", 2, kind="item", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: ctx.get("as_") in ("bull_rush", "grab"))

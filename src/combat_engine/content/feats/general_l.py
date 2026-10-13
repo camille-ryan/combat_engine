@@ -1115,13 +1115,39 @@ def f2847(c: Cast) -> None:
 
 @power("f2848", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.bonus(regeneration)", "Healed.regeneration"))
+       dropped=("c.regeneration(add=)",))
 def f2848(c: Cast) -> None:
-    """Raises the regeneration `p2483` granted, and pays out each time it
-    ticks. `c.regeneration` sets an amount and nothing adds to a
-    standing one; `Healed` does not say which healing was a
-    regeneration, so the second half has no moment either. The `f651`
-    clause only softens a payout that cannot happen."""
+    """The payout half is written, and `Healed.regeneration` was the wrong
+    name for its hold. `c.regeneration` ticks through `c.heal`, which puts
+    the *granting row's* ref on the event, and `p2483` heals in no other
+    way -- so `c.healed_by(ev, ref="p2483")` is exactly "hit points you
+    regained from this regeneration".
+
+    Still dropped: raising the amount. `c.regeneration` sets a number and
+    takes no additive form, so the base 2 is what pays out.
+
+    The `f651` clause is asked once at arming -- nobody takes a feat
+    mid-fight -- and it softens the blow to allies only, which is why the
+    minion filter is on the other leg: the card puts "nonminion" on the
+    general sentence and not on the ally exception."""
+    me = c.me
+    softened = c.feat(PLAGUE_FEAT, on=me)
+    mine = set(allies(c.world, me))
+
+    def regained(ev: Any) -> None:
+        if ev.target != me or ev.amount <= 0:
+            return
+        if not c.healed_by(ev, ref="p2483"):
+            return
+        for who in c.within(1, of=me):
+            if who == me or not c.adjacent(to=who):
+                continue
+            if softened and who in mine:
+                c.flat(1, dtype=DamageType.NECROTIC, on=who)
+            elif not c.is_minion(on=who):
+                c.flat(ev.amount, dtype=DamageType.NECROTIC, on=who)
+
+    c.watch(Healed, regained, on=me, until=When.ENCOUNTER)
 
 
 @power("f2855", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2146,7 +2172,6 @@ def f2720(c: Cast) -> None:
 
 @power("f2606", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("actions.run_grants_ca",),
        trigger="you run",
        on=Trigger(
            MoveEnd,
@@ -2155,11 +2180,17 @@ def f2720(c: Cast) -> None:
        ))
 def f2606(c: Cast) -> None:
     """`MoveEnd` rather than `MoveStart`: the run is over by then, which
-    is when the bonus is printed to begin. Running does not actually
-    grant combat advantage in this engine -- `actions` builds the longer
-    move and lays nothing -- so the second clause is dropped rather than
-    written against a rule that is not there."""
+    is when the bonus is printed to begin.
+
+    **The combat-advantage half is written now, and the old marker was
+    wrong twice over.** A run *does* grant it -- `actions.perform` lays
+    `GRANTS_CA_TO` on every enemy after the walk -- and the suppression is
+    a negative `"run_exposed"`, read *after* the move, which `i3077p1` and
+    the ranger's stance already use. So a penalty laid in this window is
+    standing when the question is asked, and `When.SONT` is how long the
+    grant it cancels would have lasted."""
     c.bonus(REF, 2, on=c.me, until=When.SONT)
+    c.penalty("run_exposed", 1, on=c.me, until=When.SONT)
 
 
 @power("f2620", level=1, cls="", usage=AT_WILL, action=FREE,
@@ -2531,20 +2562,21 @@ def f2717(c: Cast) -> None:
 
 @power("f2718", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.terrain('outdoor')",))
+       dropped=("story.terrain_words",))
 def f2718(c: Cast) -> None:
-    """The Perception bonus is a check. Hiding as the fight opens would
-    be real, but it is gated on being outdoors with cover, and `c.terrain`
-    answers a word no encounter in this tree sets.
+    """The Perception bonus is written -- `skill:perception` is a key the
+    engine really does consult, and `kind="feat"` is the word the card
+    prints.
 
-    **Not `out_of_combat=True`, which this carried alongside a `dropped=`.**
-    That pair claims two things at once -- the row is finished and inert in a
-    fight, *and* a clause is missing -- and the sentence above says which is
-    true: the hide is a real combat clause with nowhere to land. An empty body
-    does nothing, so the marker is `todo=`, and the row is refused in play
-    rather than fired and counted. `dsl.use` refuses the pair outright, which is
-    how the contradiction surfaced.
+    **Re-pointed, and the row plays now.** `c.terrain` exists and was never
+    the hold: `World.terrain` is initialised to an empty set in `ecs` and
+    **nothing anywhere ever adds a word to it** -- `terrain.dress` lays
+    blocking squares, rough going and traps and no words at all -- so every
+    one of the 68 `c.terrain(...)` gates in this tree is False in every
+    fight. That is a story-engine gap, not a `Cast` one, so the opening
+    hide is the dropped clause and the bonus is the half that pays.
     """
+    c.bonus("skill:perception", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f2728", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

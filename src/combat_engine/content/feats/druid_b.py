@@ -153,20 +153,28 @@ def f2207(c: Cast) -> None:
 
 
 @power("f2278", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.run()",))
+       reach=PERSONAL, target=SELF)
 def f2278(c: Cast) -> None:
-    """The charge half works; the run half is dropped, because there is
-    no run action -- `actions.legal` offers a walk, a shift, a charge and
-    the standard menu, which is the gap the avenger's f2165 named."""
+    """**The run half is written and the old note was stale.** There is a
+    run action: `actions._movement` builds one at speed + 2 and
+    `actions.perform` walks it as `kind="run"`. The lever is the `"run"`
+    modifier key, which that menu reads before working out how far -- the
+    ranger's stance and two item blocks already lengthen a run through it.
+
+    So the two halves are two keys. A charge is measured through `"speed"`
+    with `charge` in the context; a run is measured through `"run"`, which
+    is the +2 the action adds, so +4 there is the same total as +4 on a
+    speed the run then adds 2 to."""
     me = c.me
+
+    def shifted(ctx: dict[str, Any]) -> bool:
+        return in_beast_form(c.world, me) and c.bloodied(on=me)
+
     c.bonus(
         "speed", 4, on=me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: (
-            in_beast_form(c.world, me)
-            and c.bloodied(on=me)
-            and bool(ctx.get("charge", False))
-        ),
+        when=lambda ctx: shifted(ctx) and bool(ctx.get("charge", False)),
     )
+    c.bonus("run", 4, on=me, until=When.ENCOUNTER, kind="feat", when=shifted)
 
 
 # -- riders on the beast form at-wills --------------------------------------
@@ -388,12 +396,17 @@ def f1884(c: Cast) -> None:
 
 
 @power("f2282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.crawl()",))
+       reach=PERSONAL, target=SELF, dropped=("c.crawl()",))
 def f2282(c: Cast) -> None:
-    """No opening given by crawling. `c.no_provoke` says the second half
-    and `Condition.PRONE` is real, but crawling is not a move the engine
-    has -- a prone creature walks at half speed and nothing calls it
-    anything."""
+    """The Acrobatics half is written, so the row plays rather than being
+    refused: `skill:acrobatics` is a key the engine consults and "feat" is
+    the word the card prints in front of "bonus".
+
+    Still dropped, and `todo=` was overstating it -- crawling is not a move
+    the engine has. `actions._movement` returns an empty list for a prone
+    creature before it reaches any branch, so there is no crawl to exempt
+    from provoking, and `c.no_provoke` has no moment to narrow to."""
+    c.bonus("skill:acrobatics", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
 @power("f2281", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

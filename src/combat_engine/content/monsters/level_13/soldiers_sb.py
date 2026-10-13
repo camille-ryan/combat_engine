@@ -1159,22 +1159,28 @@ def m2098a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.RANGED],
     attack=Attack(vs=REF, printed=16),
-    dropped=("c.no_invisibility()",),
 )
 def m2098a1(c: Cast) -> None:
     """No damage line: being easy to hit is the whole of it.
 
     "To all attackers" is `to="team"` read from the m2098's side -- every
     enemy of the target is on one side here, and the relation names one
-    beneficiary at a time. Concealment is `c.no_cover`. Invisibility is
-    dropped: nothing takes the *benefit* of being unseen away from a
-    creature that is already invisible, and `c.truesight` grants a sense to
-    one looker rather than stripping one from the target.
+    beneficiary at a time. Concealment is `c.no_cover`.
+
+    **Invisibility is written now, and the old note had it backwards.**
+    `c.truesight` granting a sense to one looker is exactly the shape this
+    needs: `of=` names the creature that cannot hide from that looker, so
+    laying it once per attacker on this creature's side is "cannot benefit
+    from invisibility" against all of them. `query.unseen_by` is the reader.
     """
-    if not c.strike():
+    victim = c.target
+    if victim is None or not c.strike():
         return
     c.grants_advantage(until=When.EONT, to="team")
     c.no_cover(until=When.EONT)
+    for watcher in (c.me, *sorted(c.allies())):
+        if watcher != victim:
+            c.truesight(of=victim, on=watcher, until=When.EONT)
 
 
 _M2098_BLED = "it is first bloodied"

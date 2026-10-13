@@ -26,6 +26,8 @@ against somebody *other* than the caster.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -53,6 +55,7 @@ from combat_engine.engine import (
     When,
     power,
 )
+from combat_engine.engine.components import Movement, Stats
 from combat_engine.engine.events import Hit, MoveStart, ZoneEntered, ZoneExited
 from combat_engine.engine.query import team
 from combat_engine.engine.triggers import by_melee
@@ -137,6 +140,30 @@ def m1463a0(c: Cast) -> None:
         c.hit()
 
 
+def _without_swim(c: Cast, who: int | None) -> bool:
+    """"A creature without a swim speed", read off the component that holds it.
+
+    The marker this replaces asked for a `query` helper. There is no helper,
+    but the fact is not missing: `Movement.modes` is the dict a stat block's
+    "(swim 10)" loads into, so the question is a lookup. A creature with no
+    `Movement` at all has no swim speed either, which is the same answer.
+    """
+    if who is None:
+        return False
+    moves = c.world.get(who, Movement)
+    return moves is None or not moves.modes.get("swim")
+
+
+def _in_water_vs_landbound(c: Cast) -> Callable[[dict], bool]:
+    """"While in water, ... against creatures without a swim speed."
+
+    Two rows on this block print the sentence and one of them aims it at the
+    rider, so the gate is written once. `c.terrain` is the fight's own word
+    and the target comes off the attack context.
+    """
+    return lambda ctx: c.terrain("water") and _without_swim(c, ctx.get("target"))
+
+
 @power(
     "m1463a1",
     level=8,
@@ -144,21 +171,48 @@ def m1463a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.has_swim_speed",),
 )
 def m1463a1(c: Cast) -> None:
-    """"While mounted by a friendly rider of 9th level or higher" is asked
-    at the moment the bonus would pay, not when the trait arms, since a
-    rider can mount after the fight starts. "Without a swim speed" has
-    nothing to ask: no query reads a creature's movement modes for one."""
+    """Both of the rider's benefits, and both gated the way the card gates them.
 
-    def charge_bonus(ctx: dict) -> bool:
-        rider = c.rider()
-        return rider is not None and ctx.get("target") is not None and bool(ctx.get("charge"))
+    "Without a swim speed" was marked unaskable. It is a lookup -- see
+    `_without_swim` -- so the water clause is written rather than left out.
 
+    **The 9th-level half was not being asked at all.** The docstring claimed
+    the Requirement was checked at payout time and the gate only tested that
+    there was a rider, so a 1st-level one collected the extra 1d10. It is
+    read off `Stats` now, inside the gate, because a rider's level cannot
+    change mid-fight but *which* creature is riding can.
+
+    The rider is still read when the trait arms, which is the one shortfall
+    left and is not a marker: nothing announces mounting, so a creature that
+    climbs on in round three is not covered. `f3777` records the same limit
+    for the same reason.
+    """
     rider_now = c.rider()
-    if rider_now is not None:
-        c.bonus("damage", 0, dice="1d10", on=rider_now, until=When.ENCOUNTER, when=charge_bonus)
+    if rider_now is None:
+        return
+
+    def mounted_by_a_veteran(ctx: dict) -> bool:
+        rider = c.rider()
+        if rider is None or rider not in c.allies():
+            return False
+        theirs = c.world.get(rider, Stats)
+        return theirs is not None and theirs.level >= 9
+
+    c.bonus(
+        "damage", 0, dice="1d10", on=rider_now, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            mounted_by_a_veteran(ctx)
+            and ctx.get("target") is not None
+            and bool(ctx.get("charge"))
+        ),
+    )
+    in_water = _in_water_vs_landbound(c)
+    c.bonus(
+        "attack", 2, on=rider_now, until=When.ENCOUNTER,
+        when=lambda ctx: mounted_by_a_veteran(ctx) and in_water(ctx),
+    )
 
 
 @power(
@@ -168,12 +222,13 @@ def m1463a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.has_swim_speed",),
 )
 def m1463a2(c: Cast) -> None:
-    """"While in water" is askable; "against creatures without a swim
-    speed" is not -- nothing reads another creature's movement modes."""
-    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER, when=lambda _ctx: c.terrain("water"))
+    """"While in water" is the fight's own word and "against creatures
+    without a swim speed" is a lookup on `Movement.modes` -- see
+    `_without_swim`, which replaces the marker that called it unaskable."""
+    c.bonus("attack", 2, on=c.me, until=When.ENCOUNTER,
+            when=_in_water_vs_landbound(c))
 
 
 # ==========================================================================

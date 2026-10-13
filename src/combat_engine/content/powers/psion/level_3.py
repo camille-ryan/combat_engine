@@ -152,7 +152,7 @@ def p13317(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=PSIONIC_IMPLEMENT,
     attack=Attack(INT, vs=FORT),
-    dropped=("c.confine(to=)",),
+    dropped=("c.leash(anchors=)",),
 )
 def p13318(c: Cast) -> None:
     """"Moves more than 2 squares" is measured from where it stood when its
@@ -174,9 +174,19 @@ def p13318(c: Cast) -> None:
     burst is centred on the primary target and rolled against Reflex, which
     is a second attack line the body makes for itself.
 
-    Augment 2's mutual leash -- neither end may move to a square that is
-    not adjacent to the other -- is still dropped, the same hold `p13041`
-    names: nothing constrains where a creature may walk."""
+    **Augment 2's leash is half written, and the half that is not is a
+    narrower thing than "nothing constrains where a creature may walk".**
+    That was the old reading and `c.leash` is the refutation: it tethers a
+    creature to a radius around another, and `movement.reachable` reads it,
+    so a square beyond the tether is never offered rather than punished
+    afterwards. Each secondary target is leashed at 1 to the primary, which
+    is the printed sentence exactly.
+
+    The *primary*'s end of it is what stays dropped, and it is one
+    parameter: the card says it may not leave the side of **one or more**
+    secondary targets, so the anchor is a set and `c.leash` takes a single
+    `to=`. Leashing it to whichever secondary happened to be hit first
+    would be a tighter cage than the card prints."""
     spent = augment(c, 1, 2)
     victim = c.target
     if not c.strike():
@@ -215,6 +225,7 @@ def p13318(c: Cast) -> None:
         for other in c.within(1, of=victim, side="enemy"):
             if other != victim and c.attack(bonus, REF, on=other).hit:
                 c.flat(5 + c.int_mod, on=other)
+                c.leash(1, to=victim, on=other, until=When.EONT)
     began: dict[str, object] = {}
 
     def began_turn(ev: TurnStart) -> None:

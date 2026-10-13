@@ -56,6 +56,7 @@ from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    CHA,
     DAILY,
     ENCOUNTER,
     FORT,
@@ -1991,23 +1992,29 @@ def i1999x1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     trigger="you hit an enemy with an attack using this orb",
     on=Trigger(Hit, by_me, "you hit with this orb"),
-    dropped=("Hit.targets",),
 )
 def i1999p1(c: Cast) -> None:
     """The damage dealt is not known when `Hit` fires, so the relay waits
-    for the `DamageApplied` that follows. "Not included as a target of
-    your attack" is dropped down to "not the one you hit": `Hit` names one
-    creature and nothing on it lists the rest of the set."""
+    for the `DamageApplied` that follows.
+
+    **Written: the whole target set is `Hit.among`, not `Hit.targets`.**
+    `resolve.attack` sets `landed.among = among or (target,)` after
+    building the event, so it is a plain attribute rather than a declared
+    field -- which is why reading the dataclass says it does not exist.
+    That is the one list "not included as a target of your attack" needs,
+    so the relay now excludes every creature the use touched rather than
+    only the one it was announced against."""
     foe = _struck(c)
     if foe is None:
         return
+    struck = frozenset(getattr(c.trigger, "among", ()) or (foe,))
     done: list[int] = []
 
     def relay(ev: DamageApplied) -> None:
         if done or ev.source != c.me or ev.target != foe:
             return
         done.append(1)
-        near = [x for x in c.within(1, of=foe) if x != foe]
+        near = [x for x in c.within(1, of=foe) if x not in struck]
         pick = c.choose(near, "takes the same damage") if near else None
         if pick is not None:
             c.flat(ev.amount, dtype=DamageType.PSYCHIC, on=pick)
@@ -2547,14 +2554,16 @@ def i2635x1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBlast(5),
     target=ONE_CREATURE,
-    attack=Attack(INT, vs=FORT),
-    dropped=("Attack.by_choice",),
+    attack=Attack((INT, CHA), vs=FORT),
 )
 def i2637p1(c: Cast) -> None:
-    """"Intelligence or Charisma" is one attack line with two abilities and
-    `Attack` holds one; Intelligence is written and the choice dropped.
-    Re-aimed onto the symbol `p1448` already carries for the same hole --
-    that racial attack prints three abilities -- so the two group."""
+    """**Written: `Attack` holds two abilities after all.** Its `ability`
+    takes a `tuple[Ability, ...]` and `Attack.ability_for` answers
+    `max(..., key=stats.mod)`, so "Intelligence or Charisma" is the header
+    and not a dropped clause. Best-of is the right resolution here because
+    the choice is the user's at the moment of use -- unlike `p1448`, whose
+    three abilities are bound once at character creation, which is why
+    that row keeps its marker and this one does not."""
     if c.strike():
         c.push(c.enhancement)
         c.prone()

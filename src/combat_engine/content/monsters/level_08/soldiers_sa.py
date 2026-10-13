@@ -2815,12 +2815,15 @@ def _adjacent_enemy_fell(world: World, me: int, ev: Any) -> bool:
         conditions=frozenset({Condition.PRONE}),
     ),
     attack=Attack(vs=AC, printed=13), damage=Damage("3d6", 9, kind=LIMITED),
-    dropped=("c.cannot_stand()",),
 )
 def m5701a2(c: Cast) -> None:
-    """"Cannot stand until the end of its next turn" has no verb -- there
-    is no `c.cannot_stand`, only `c.cannot_shift`. The recharge is a
-    condition, not a die, so it stays 0 in the header."""
+    """"Cannot stand until the end of its next turn" is written. It wanted
+    no verb: `Condition.PINNED` is the engine's word for it, which is what
+    `c.prone(held=)` lays on top of a fall -- "for `held` it may not do the
+    one thing that ends it". This card's target is already prone, so only
+    the second half is laid and no `c.prone` is needed.
+
+    The recharge is a condition, not a die, so it stays 0 in the header."""
     if c.first and not _armed(c, "m5701a2 recharge"):
         import combat_engine.engine.events as _events
 
@@ -2830,6 +2833,7 @@ def m5701a2(c: Cast) -> None:
         )
     if c.strike():
         c.hit()
+        c.condition(Condition.PINNED, until=When.EONT)
 
 
 @power(

@@ -297,6 +297,21 @@ def _save_ends_on_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "target", None) == me and getattr(ev, "save_ends", False)
 
 
+def _ongoing_on_me(world: World, me: int, ev: Any) -> bool:
+    """A hold that lands on me and carries ongoing damage.
+
+    `c.ongoing` applies its effect with `label=f"ongoing {amount}"` and
+    nothing else in the tree labels an effect that way, so `EffectApplied`
+    does say what it carries after all -- through the label rather than a
+    field of its own.
+    """
+    return (
+        getattr(ev, "target", None) == me
+        and getattr(ev, "save_ends", False)
+        and str(getattr(ev, "label", "")).startswith("ongoing")
+    )
+
+
 def _my_save_ends_effect(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "source", None) == me and getattr(ev, "save_ends", False)
 
@@ -1437,14 +1452,18 @@ def i2033x1(c: Cast) -> None:
 @power("i2171p1", level=8, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you are hit by an attack that deals ongoing damage",
-       on=Trigger(EffectApplied, _save_ends_on_me,
-                  "a save-ends effect lands on you"),
-       dropped=("EffectApplied.ongoing",))
+       on=Trigger(EffectApplied, _ongoing_on_me,
+                  "a hold carrying ongoing damage lands on you"))
 def i2171p1(c: Cast) -> None:
     """`c.save(against="ongoing")` picks the burn out of whatever else is
-    holding the wearer, which is the half the event cannot narrow --
-    `EffectApplied` says a save-ends hold landed and not what it carries,
-    so the trigger fires wider than the card prints.
+    holding the wearer.
+
+    **The trigger is narrowed and the marker is gone.** `EffectApplied.ongoing`
+    was the wrong name for the gap: `c.ongoing` labels its effect
+    `"ongoing <n>"` and the event carries `label`, so the one thing the row
+    needed was already on the event under another name. The row used to fire
+    on *any* save-ends hold, spend a daily and refund it -- wider than print
+    and visible only as noise in the log.
 
     "On a failure, you don't expend the use of this power" is
     `c.restore_use`: `dsl.use` counts the use above the body, so the use

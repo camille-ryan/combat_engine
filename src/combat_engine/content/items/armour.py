@@ -71,6 +71,7 @@ from combat_engine.engine import (
     Attack,
     AttackDeclared,
     AttackRolled,
+    Augment,
     Cast,
     CloseBurst,
     Condition,
@@ -2010,10 +2011,13 @@ def i2046x1(c: Cast) -> None:
        reach=CloseBurst(1), target=EACH_ENEMY, keywords=[Keyword.PSYCHIC],
        trigger="an enemy attack hits your Will",
        on=Trigger(AttackRolled, _hit_my_will, "an attack hits your Will"),
-       dropped=("c.augment_area()",))
+       augments=(Augment(1, reach=CloseBurst(2)),))
 def i2046p1(c: Cast) -> None:
-    """Augment 1 widens the burst, and targets are chosen before the body
-    runs -- `c.widen_areas` would arrive a step too late."""
+    """**Re-pointed, and written in the header.** `c.augment_area()` named a
+    body verb for something that is declared data: `Augment` carries
+    `reach`, and `dsl.reach_of(branch, augment)` is what the aiming asks,
+    so the wider burst is in place *before* targets are chosen rather than
+    a step too late. `battlemind/level_7.py` already widens one this way."""
     c.flat(3 + c.enhancement, dtype=DamageType.PSYCHIC)
     c.penalty("attack", 2, until=When.EONT, when=_against(c.me))
 
@@ -2525,17 +2529,25 @@ def i1227p1(c: Cast) -> None:
 
 
 @power("i1522x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Healed.surge",))
+       reach=PERSONAL, target=SELF)
 def i1522x1(c: Cast) -> None:
-    """"A power that lets a creature spend a surge" narrows this to one
-    kind of healing, and the event does not say which kind it was."""
+    """**Re-pointed off `Healed.surge`, and the row is exact now rather than
+    wide.** The narrowing the old marker asked for is already announced
+    under another name: `SurgeSpent` carries `source` -- whose power made
+    the surge happen -- beside `actor`, whose surge it was. Watching
+    `Healed` instead, which is what this did, paid the bonus out on every
+    heal the wearer handed an ally, surge or no.
 
-    def mended(ev: Healed) -> None:
-        if ev.source != c.me or ev.target == c.me:
+    The wearer is still left out, as before: a second wind spends a surge
+    with `source` and `actor` both the wearer and is not a healing power,
+    and the two cannot be told apart from here."""
+
+    def spent(ev: Any) -> None:
+        if ev.source != c.me or ev.actor == c.me:
             return
-        c.heal(c.enhancement, on=ev.target)
+        c.heal(c.enhancement, on=ev.actor)
 
-    c.watch(Healed, mended, until=When.ENCOUNTER, on=c.me)
+    c.watch(SurgeSpent, spent, until=When.ENCOUNTER, on=c.me)
 
 
 @power("i2013p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
@@ -2693,14 +2705,22 @@ def i2814x1(c: Cast) -> None:
     asks for it, so there is one place to add to and it is everywhere."""
 
 
+def _starts_a_charge(world: World, me: int, ev: Any) -> bool:
+    return getattr(ev, "actor", None) == me and getattr(ev, "kind_", "") == "charge"
+
+
 @power("i3119p1", level=5, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
        trigger="you start a charge",
-       on=Trigger(AttackDeclared, both(by_me, by_charge), "you charge"),
-       dropped=("MoveStart.charge",))
+       on=Trigger(MoveStart, _starts_a_charge, "you start a charge"))
 def i3119p1(c: Cast) -> None:
-    """The charge is only knowable once the swing is declared, so the
-    invisibility arrives at the end of the run rather than the start."""
+    """**Re-pointed, and the row fires at the printed moment now.**
+    `MoveStart.charge` named a field that does not exist, and the one that
+    does says it: `movement.walk` is passed `kind="charge"` by
+    `actions.perform` (#301) and stamps `ev.kind_` on every emission. So the
+    charge *is* knowable before the run, and this no longer waits for the
+    swing to be declared -- which was strictly weaker than print, since the
+    whole value of the clause is crossing the ground unseen."""
     c.invisible(on=c.me, until=When.EOT)
 
 
@@ -2768,12 +2788,25 @@ def i3425x1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="you take damage that has a type",
        on=Trigger(DamageApplied, targets_me, "you take damage"),
-       dropped=("c.extra_damage()", "c.on_expire()"))
+       dropped=("c.on_expire()",))
 def i3425p1(c: Cast) -> None:
-    """The extra die lands, untyped: `c.bonus` has no damage type. The
-    clause that turns the die back on you if you do not swing wants
-    something to run when a one-shot expires unspent."""
-    c.bonus("damage", 0, dice="1d6", on=c.me, until=When.EONT, once=True)
+    """**Re-pointed: `c.bonus` does carry a damage type.** `dtype=` is on the
+    signature and is read for `"damage"` and `"crit_damage"`, so the extra
+    die is of the triggering type rather than untyped -- which is the whole
+    of what the card prints. `DamageApplied.dtype` is where that type comes
+    from.
+
+    The guard is the card's own Requirement: "damage that has a type", so an
+    untyped blow gives nothing to copy and the row pays nothing. It is asked
+    in the body because `targets_me` is shared with four other rows here.
+
+    Still dropped: the clause that turns the die back on you if you do not
+    swing, which wants something to run when a one-shot expires unspent."""
+    hurt = getattr(c.trigger, "dtype", None)
+    if hurt is None or hurt is DamageType.UNTYPED:
+        return
+    c.bonus("damage", 0, dice="1d6", dtype=hurt, on=c.me,
+            until=When.EONT, once=True)
 
 
 @power("i461x1", level=5, cls=ITEM, action=ActionType.NONE,

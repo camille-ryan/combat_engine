@@ -234,7 +234,6 @@ def p13040(c: Cast) -> None:
         Augment(1, reach=Melee(5)),
         Augment(2, reach=Melee(5)),
     ),
-    dropped=("c.confine(to=)",),
 )
 def p13041(c: Cast) -> None:
     """Both augments print Melee 5, which is the header's reach and is
@@ -242,16 +241,24 @@ def p13041(c: Cast) -> None:
     the reach declared, the longer pull and the prone that come with them
     are writable below.
 
-    "The target can move only to squares adjacent to you" is the `dropped`
-    clause and is printed on all three forms: nothing on `Cast` constrains
-    where a creature may walk."""
+    **Written: `c.confine(to=)` was the wrong name for `c.leash`.** "The
+    target can move only to squares adjacent to you" is a tether with a
+    radius of 1 anchored on the caster, and `c.leash` is read in
+    `movement.reachable`, so a square off the tether is never offered
+    rather than punished after the step. The anchor is a creature, which
+    is what makes it follow the caster the way the printed line does.
+    `until=When.EONT` is the card's own clock, in place of the verb's
+    save-ends default -- this one times out, it is not saved out of."""
     spent = augment(c, 1, 2)
     if not c.strike():
         return
+    victim = c.target
     c.damage(c.w() if spent == 2 else 0, c.con_mod)
     c.pull(4 if spent else 1)
     if spent == 2:
         c.prone()
+    if victim is not None:
+        c.leash(1, to=c.me, on=victim, until=When.EONT)
 
 
 @power(

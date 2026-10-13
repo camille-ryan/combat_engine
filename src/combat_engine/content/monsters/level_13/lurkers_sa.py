@@ -304,9 +304,13 @@ def _burrow_speed(c: Cast) -> int:
 def _two_forms(c: Cast, ooze: str, still: str) -> None:
     """The pair of polymorph forms two of these stat blocks print verbatim.
 
-    One form is about squeezing and the engine holds `Condition.SQUEEZING`
-    without holding any of the three costs this form waives, so nothing of it
-    can be laid. The other is four clauses and three of them are ordinary.
+    **Both forms lay now.** The ooze form's three clauses were marked as costs
+    the engine does not charge, and it charges all three:
+    `conditions.RULES[Condition.SQUEEZING]` is `Rules(grants_ca=True,
+    attack=-5, halve_speed=True)` and `c.waive` is the verb that switches a
+    named one off without lifting the condition -- its own docstring offers
+    this exact sentence as the example. The other form is four clauses and
+    three of them are ordinary.
 
     "Remains in the chosen form until it uses this power again" is why any
     standing hold of this row's is ended first: a second use must not leave
@@ -318,13 +322,20 @@ def _two_forms(c: Cast, ooze: str, still: str) -> None:
             c.world.effects.end(old, "it took another shape")
     taken = c.choose([ooze, still], f"{c.ref}: which shape")
     shape = c.world.effects.apply(me, me, When.ENCOUNTER, label=c.ref)
-    if taken != still:
-        return
-    for hold in (
-        c.resist(15, until=When.ENCOUNTER, on=me),
-        c.immobilized(until=When.ENCOUNTER, on=me),
-        c.cannot_attack(on=me, until=When.ENCOUNTER),
-    ):
+    if taken == still:
+        holds = (
+            c.resist(15, until=When.ENCOUNTER, on=me),
+            c.immobilized(until=When.ENCOUNTER, on=me),
+            c.cannot_attack(on=me, until=When.ENCOUNTER),
+        )
+    else:
+        holds = (
+            c.waive(
+                Condition.SQUEEZING, "halve_speed", "attack", "grants_ca",
+                on=me, until=When.ENCOUNTER,
+            ),
+        )
+    for hold in holds:
         if hold is not None:
             shape.on_end.append(lambda h=hold: c.world.effects.end(h, "it moved again"))
 
@@ -2895,27 +2906,20 @@ def m6183a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=(
-        "c.ignore_squeeze_penalty()",
-        "c.speed_while_squeezing()",
-        "c.no_advantage(squeezing=)",
-    ),
     narrative=("skill:perception",),
 )
 def m6183a4(c: Cast) -> None:
-    """One of the two forms plays whole and the other has nothing in it the
-    engine can hold.
+    """Both forms lay whole -- see `_two_forms`.
 
     The still form is resistance, a hold and a ban, all three of them
     ordinary. Its last sentence is a Perception DC to tell a creature from a
-    rock, and nothing on a board rolls one -- there is no symbol waiting to
-    be built there, which is why that clause is narrative and the squeezing
-    ones are not.
+    rock, and nothing on a board rolls one, which is why that clause is
+    narrative and nothing else here is.
 
-    The ooze form waives the three costs of squeezing and the engine charges
-    none of them: `Condition.SQUEEZING` is held, and the half speed, the -5
-    and the combat advantage it is meant to carry are not. Two rows already
-    wait on the same pair of symbols.
+    The ooze form was marked on the belief that the engine charges none of
+    squeezing's three costs. It charges all three, and `c.waive` turns them
+    off one word at a time without lifting the condition -- which is what
+    "without changing its size" needs.
     """
     _two_forms(c, "m6183a4s0", "m6183a4s1")
 
@@ -2962,21 +2966,16 @@ def m6184a1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=(
-        "c.ignore_squeeze_penalty()",
-        "c.speed_while_squeezing()",
-        "c.no_advantage(squeezing=)",
-    ),
     narrative=("skill:perception",),
 )
 def m6184a2(c: Cast) -> None:
     """The same pair of forms m6183a4 prints, word for word, so it is the
-    same helper -- and the same two kinds of absence.
+    same helper.
 
     The still form's last sentence is a perception check to tell a creature
     from a rock, and nothing on a board rolls one, so that clause narrows a
-    skill rather than waiting on a verb. The three squeezing clauses are the
-    other kind and are dropped.
+    skill rather than waiting on a verb. The three squeezing clauses are
+    `c.waive`, which was there all along.
     """
     _two_forms(c, "m6184a2s0", "m6184a2s1")
 
