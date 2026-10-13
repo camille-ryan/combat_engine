@@ -5246,6 +5246,85 @@ def once_spent(out: Result) -> None:
              f" fix must not restore (other {rejected.amount}, mine"
              f" {wanted.amount})")
 
+def creature_kinds(out: Result) -> None:
+    """Every player character is a natural humanoid, and an origin replaces it.
+
+    Camille's ruling, #542. Nothing on any race's page says the universal
+    half, which is exactly why nothing had it: the compendium omits it
+    because it is the default, and the 19 races that print a type sentence
+    carry an **additional** type rather than their only one.
+
+    Measured before the fix: every character answered `[]` while every
+    monster answered three or four words. So `humanoid` -- the second
+    most-asked type word in the tree, 22 sites -- was False for the whole
+    party, and five *written* rows read false against any party:
+    `m2015a3` raised no slain character, and a level-4 skirmisher's target
+    line `kinds=frozenset({"humanoid"})` was offered against an empty pool.
+    None of it showed up anywhere, because every creature on the audit
+    board is a monster and a monster has the word.
+
+    Four things, and the fourth is the one guarding the design:
+
+    * **a built character is a natural humanoid**, which is the default;
+    * **an origin displaces `natural`** -- a fey character is not also
+      natural, and `c.set_origin(instead_of=)` lays the `unorigin:` that
+      takes it off;
+    * **a keyword does not displace** -- `reptile`, `undead` and
+      `shapechanger` sit beside `natural` quite correctly, which is why
+      only 15 of the 19 rows name a displacement;
+    * **an entity with no `Build` gets nothing.** The default is keyed on
+      the component `chargen.spawn` adds, not on the absence of a stat
+      block, because the audit dummy also has no stat block and its
+      `types=` knob depends on having *no* words unless given some. Keyed
+      the lazy way, every row gating on `humanoid` would start passing on
+      the audit board -- the change would hide faults instead of finding
+      them, and nothing would have said so.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.durations import When
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities) if not query.stat_block(world, e))
+
+    base = query.kinds_of(world, pc)
+    out.that("humanoid" in base and "natural" in base,
+             "a built character is a natural humanoid, which no race's page"
+             f" prints and nothing had before #542 ({sorted(base)})")
+
+    # An origin is exclusive.
+    Cast(world=world, me=pc, ref="drivers:kinds").set_origin(
+        "fey", until=When.ENCOUNTER, instead_of="natural")
+    fey = query.kinds_of(world, pc)
+    out.that("fey" in fey and "natural" not in fey and "humanoid" in fey,
+             "and an origin REPLACES natural rather than stacking -- a fey"
+             f" character is fey and humanoid, not also natural ({sorted(fey)})")
+
+    # A keyword is additive. Fresh board, or the fey hold above is still up.
+    other = story.field_encounter(seed=8, level=3)
+    w2 = other.world
+    pc2 = next(e for e in sorted(w2.entities) if not query.stat_block(w2, e))
+    Cast(world=w2, me=pc2, ref="drivers:kinds").set_origin(
+        "reptile", until=When.ENCOUNTER)
+    kw = query.kinds_of(w2, pc2)
+    out.that("reptile" in kw and "natural" in kw,
+             "while a keyword is additive and keeps natural, which is why 4"
+             f" of the 19 rows name no displacement ({sorted(kw)})")
+
+    # The guard: no `Build`, no words. This is what keeps the audit dummy
+    # wordless and the board honest.
+    bare = w2.spawn(Position(square=(1, 1)), Health(max_hp=10))
+    none = query.kinds_of(w2, bare)
+    out.that(not none,
+             "and an entity with no Build gets NO words -- the audit dummy"
+             " must stay wordless or every humanoid gate would start"
+             f" passing on the board ({sorted(none)})")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5254,6 +5333,8 @@ DRIVERS = {
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
+    "creature_kinds": (creature_kinds,
+                       "every character is a natural humanoid; an origin replaces it"),
     "once_spent": (once_spent,
                    "a once= hold is spent by rewriting its own event"),
     "two_types": (two_types, "one roll that is two types, and resistance reads both"),

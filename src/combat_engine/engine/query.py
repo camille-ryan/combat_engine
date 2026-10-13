@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from .components import (
     Barrier,
+    Build,
     Companion,
     Conditions,
     # Two spellings, two different components, and this is the one holding
@@ -500,6 +501,37 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
         for column in ("kind", "origin"):
             if row.get(column):
                 words.add(row[column])
+    elif world.get(eid, Build) is not None:
+        # **Every player character is a natural humanoid**, and nothing on
+        # any race's page says so -- which is exactly why nothing had it.
+        # Camille's ruling, #542: the races that print a type sentence are
+        # not the only ones with a type, they are the ones carrying an
+        # *additional* one. The compendium omits the universal half because
+        # it is the default, so there was never anything to parse and #537's
+        # ETL half is withdrawn.
+        #
+        # Measured before: every character answered `[]` while every monster
+        # answered three or four words, so `humanoid` -- the second
+        # most-asked type word in the tree, 22 sites -- was False for the
+        # whole party. A monster that raises slain humanoids raised nobody,
+        # and a target line restricted to humanoids was offered against an
+        # empty pool.
+        #
+        # **Keyed on `Build`, not on the absence of a stat block.** `Build`
+        # is added in exactly one place, `chargen.spawn`, and
+        # `actions.py:967` and `:1428` already use `world.get(actor, Build)
+        # is not None` to mean "is a player character". Keying on the
+        # missing stat block instead would also catch the audit dummy, whose
+        # `types=` knob depends on having *no* words unless given some --
+        # so rows gating on `humanoid` would start passing on the board and
+        # the change would hide faults rather than find them.
+        #
+        # The 19 races whose page names a different origin lay it with
+        # `c.set_origin(..., instead_of="natural")`, and the `unorigin:`
+        # subtraction below takes `natural` off. An origin is exclusive; a
+        # keyword like `undead` or `reptile` is additive and needs no
+        # exception here.
+        words |= {"natural", "humanoid"}
     # The type line parenthesises its subtypes -- "(undead)" -- and a power
     # asking whether something is undead should not have to know.
     return frozenset(

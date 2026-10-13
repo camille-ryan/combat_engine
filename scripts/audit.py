@@ -578,11 +578,15 @@ KNOWN_SILENT = {
     "m2011a3": "needs an adjacent corpse to inhabit, and nothing here is dead "
                "beside it. Driven with one: it fires, and so do the rows the "
                "possession then grants",
-    # The board carries no creature with this type word at all, which is #387
-    # rather than anything about the row: 17 cards target one.
-    "m5235a1": "its printed target is a living humanoid and no creature on this "
-               "board carries that type word (#387). Driven with the word "
-               "granted: dominates, removes itself from play, lends its at-will",
+    # `m5235a1`'s entry was here and is **deleted**, not amended: #542 gave
+    # every character `humanoid`, so the board now carries the type word its
+    # target line asks for and the row fires. The entry argued "no creature
+    # on this board carries that type word (#387)" and had driven the row by
+    # hand with the word granted to prove it worked -- so it diagnosed this
+    # exact fix and was waiting for it. `audit.py` reported it as an
+    # outlived excuse the moment the default landed, which is the list
+    # working as intended: an excuse that can be deleted is the test of a
+    # real fix, where one that must be reworded is the test of a patch.
     # Not a target state: the caster's own.
     "m6192a5": "it stands up, and the board never knocks the caster down. "
                "Driven with prone set: emits ConditionEnded(prone)",

@@ -167,7 +167,8 @@ def _my_class(c: Cast) -> str:
 
 
 def _origin(
-    race: str, *words: str, dropped: tuple[str, ...] = (), why: str = ""
+    race: str, *words: str, dropped: tuple[str, ...] = (),
+    why: str = "", instead_of: str = "",
 ) -> None:
     """"You are considered a <kind> creature for the purpose of effects
     that relate to creature origin." The same factory covers the two
@@ -179,10 +180,23 @@ def _origin(
     word onto the creature instead and `kinds_of` unions the two. Every
     reader in the tree asks `c.kinds_of` or `c.is_kind`, so one place to
     write it is one place to read it.
+
+    **`instead_of="natural"` on the rows whose word is an origin**, since
+    #542 gave every character `natural` and `humanoid` by default. An
+    origin is exclusive -- a fey character is not also natural -- and
+    `c.set_origin` lays the `unorigin:` effect that takes the displaced
+    word off. A *keyword* is additive and passes nothing here: `undead`,
+    `reptile` and `shapechanger` sit beside `natural` quite correctly,
+    which is why only 15 of these 19 rows name a displacement.
+
+    Camille's ruling is the reason this parameter is needed at all: the
+    races that print a type sentence carry an **additional** type, not
+    their only one, so the universal half is a default rather than
+    anything on a page.
     """
 
     def body(c: Cast) -> None:
-        c.set_origin(*words, until=_HOLDS)
+        c.set_origin(*words, until=_HOLDS, instead_of=instead_of)
 
     body.__name__ = f"rt_{race}_origin"
     body.__doc__ = why or _origin.__doc__
@@ -315,7 +329,7 @@ _inert("rt:r3-t1", "Proficiency, which is a build-time sentence.",
 _inert("rt:r3-t5",
        "Four hours of trance for six of sleep. A rest rule; no fight "
        "reaches it.")
-_origin("r3", "fey")
+_origin("r3", "fey", instead_of="natural")
 
 
 @power("rt:r3-t2", level=0, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -333,7 +347,7 @@ def rt_r3_t2(c: Cast) -> None:
 
 _inert("rt:r4-t1", "Proficiency, which is a build-time sentence.",
        proficiency=("w3631", "w3630"))
-_origin("r4", "fey")
+_origin("r4", "fey", instead_of="natural")
 
 
 @power("rt:r4-t3", level=0, cls="", usage=AT_WILL,
@@ -531,7 +545,7 @@ def rt_r14_t2(c: Cast) -> None:
 # -- r16 ---------------------------------------------------------------
 
 _inert("rt:r16-t2", "A rest rule; no fight reaches it.")
-_origin("r16", "fey")
+_origin("r16", "fey", instead_of="natural")
 
 
 # -- r17 ---------------------------------------------------------------
@@ -607,7 +621,7 @@ def rt_r19_t2(c: Cast) -> None:
 _inert("rt:r20-t2",
        "A wizard cantrip once an encounter, and every cantrip in the "
        "tree is itself out of combat.")
-_origin("r20", "fey")
+_origin("r20", "fey", instead_of="natural")
 
 
 @power("rt:r20-t4", level=0, cls="", usage=AT_WILL,
@@ -776,7 +790,7 @@ def rt_r25_t0(c: Cast) -> None:
 
 # -- r26 ---------------------------------------------------------------
 
-_origin("r26", "shadow")
+_origin("r26", "shadow", instead_of="natural")
 
 
 @power("rt:r26-t2", level=0, cls="", usage=AT_WILL,
@@ -837,7 +851,7 @@ def rt_r28_t3(c: Cast) -> None:
 
 # -- r33 ---------------------------------------------------------------
 
-_origin("r33", "elemental")
+_origin("r33", "elemental", instead_of="natural")
 
 
 def _magma(c: Cast) -> None:
@@ -935,7 +949,7 @@ def rt_r33_t0(c: Cast) -> None:
 
 # -- r35 ---------------------------------------------------------------
 
-_origin("r35", "immortal")
+_origin("r35", "immortal", instead_of="natural")
 
 
 @power("rt:r35-t0", level=0, cls="", usage=AT_WILL,
@@ -1100,7 +1114,7 @@ def rt_r43_t0(c: Cast) -> None:
 
 # -- r44 ---------------------------------------------------------------
 
-_origin("r44", "fey")
+_origin("r44", "fey", instead_of="natural")
 _inert("rt:r44-t2",
        "An aspect of nature chosen at every extended rest, and each of "
        "the three is a power and nothing else -- 'you can use p744N "
@@ -1206,7 +1220,7 @@ def rt_r47_t3(c: Cast) -> None:
 _inert("rt:r49-t2",
        "No eating, drinking, breathing or sleeping; none is modelled.")
 _inert("rt:r49-t4", "Speech within 5 squares.")
-_origin("r49", "immortal")
+_origin("r49", "immortal", instead_of="natural")
 
 
 @power("rt:r49-t0", level=0, cls="", usage=AT_WILL,
@@ -1270,7 +1284,7 @@ _inert("rt:r52-t1",
        "when the character is built.")
 _inert("rt:r52-t3",
        "Training in Stealth, and there is no training model.")
-_origin("r52", "shadow")
+_origin("r52", "shadow", instead_of="natural")
 
 
 # -- r53 ---------------------------------------------------------------
@@ -1305,7 +1319,7 @@ def rt_r53_t4(c: Cast) -> None:
 _inert("rt:r60-t4",
        "Endurance against starvation and thirst, and meditation instead "
        "of sleep.")
-_origin("r60", "fey")
+_origin("r60", "fey", instead_of="natural")
 
 
 @power("rt:r60-t2", level=0, cls="", usage=AT_WILL,
@@ -1334,7 +1348,7 @@ _inert("rt:r61-t3",
        "Reach is not derived from size here -- every creature reaches 1 "
        "unless a weapon says otherwise -- so this is already true. The "
        "Strength-check penalty is a check no row makes.")
-_origin("r61", "fey")
+_origin("r61", "fey", instead_of="natural")
 
 
 # -- r62 ---------------------------------------------------------------
@@ -1343,7 +1357,7 @@ _inert("rt:r62-t4",
        "Extra hit points per surge spent during a short rest; a rest is "
        "not played out.")
 _inert("rt:r62-t5", "Bluff as a class skill; there is no skill list.")
-_origin("r62", "fey")
+_origin("r62", "fey", instead_of="natural")
 
 
 @power("rt:r62-t1", level=0, cls="", usage=AT_WILL,
@@ -1370,7 +1384,7 @@ _origin("r65", "fey", "beast", "humanoid", "shapechanger",
         why="Three printed sentences and one row: the page gives a type, "
             "an origin and a subtype, and `rt:r65-t3` is the only "
             "trait ref the race has for any of them, so all four words go "
-            "on together.")
+            "on together.", instead_of="natural")
 
 
 @power("rt:r65-t2", level=0, cls="", usage=AT_WILL,
@@ -1395,7 +1409,7 @@ def rt_r65_t2(c: Cast) -> None:
 
 _inert("rt:r66-t3",
        "Dungeoneering as a class skill; there is no skill list.")
-_origin("r66", "fey")
+_origin("r66", "fey", instead_of="natural")
 
 
 @power("rt:r66-t0", level=0, cls="", usage=AT_WILL,
