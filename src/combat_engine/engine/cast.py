@@ -125,7 +125,22 @@ MANOEUVRE_BULL_RUSH_FOLLOW = "manoeuvre:bull_rush-follow"
 #: silently mis-spent every key nobody had thought of -- five times. A key
 #: added here needs one sentence saying where it is read; a key that has no
 #: such moment belongs in the refusal below, not here.
-_SPENT_ON_ATTACK = frozenset({"attack", "range", "reach"})
+#:
+#: `ignore_cover` and `no_cover` are read by `query.cover_waived`, which
+#: `resolve.attack` calls at line 167 while gathering the situational
+#: modifiers -- so before the roll, like the two above.
+#:
+#: **Those two were missed on the first pass and four rows raised for it.**
+#: They are never written as `c.bonus("ignore_cover", once=True)`; they
+#: arrive through `c.ignore_cover(once=...)`, which forwards to `bonus`.
+#: `audit.py --calls 'c.bonus('` cannot see that -- it finds rows naming
+#: the verb, not rows reaching it through a helper -- and the commit that
+#: introduced this refusal said so in as many words before shipping the
+#: thing it warned about. The pre-push wide sweep is what caught it, which
+#: is the whole argument for paying for one.
+_SPENT_ON_ATTACK = frozenset({
+    "attack", "range", "reach", "ignore_cover", "no_cover",
+})
 
 
 @dataclass
@@ -3647,8 +3662,18 @@ class Cast:
                 + self.amount_for(AID_RECEIVED, 0, seen, who=ally),
             ):
                 return False
+        # **`skill:<name>`, not the bare name**, which is the key
+        # `skills.modifier` reads: it totals `f"skill:{skill.lower()}"` and
+        # `"skill"` and nothing else. Laid bare, this +2 was a modifier no
+        # reader consulted -- `engine/CLAUDE.md` calls that the commonest
+        # bug in this component, and it meant **the aid another action has
+        # never granted anything** in any fight.
+        #
+        # Found by `c.bonus(once=)`'s new refusal (#544) raising on the key
+        # during a pre-push wide sweep, which is a second argument for that
+        # refusal: the dead key had been silent for as long as it existed.
         self.bonus(
-            skill, self.amount_for(MANOEUVRE_AID, 2),
+            f"skill:{skill.lower()}", self.amount_for(MANOEUVRE_AID, 2),
             on=ally, until=until, kind="power", once=True,
         )
         # **After the grant, not before.** The event says the aid landed,

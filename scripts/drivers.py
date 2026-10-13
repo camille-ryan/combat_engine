@@ -5805,6 +5805,81 @@ def lengthened_shift(out: Result) -> None:
              f" three above all survive ({asks})")
 
 
+def aid_another_grants(out: Result) -> None:
+    """The aid another action's +2, which had never applied to anything.
+
+    `c.aid_another` laid its grant as `c.bonus(skill, 2, ...)` -- the bare
+    skill name. `skills.modifier` totals `f"skill:{skill.lower()}"` and
+    `"skill"` and nothing else, so the key had no reader: a modifier
+    nothing consults, which `engine/CLAUDE.md` calls the commonest bug in
+    this component and `lint.py`'s `UNREAD_MODIFIER_KEYS` exists to guard.
+
+    **So aiding an ally granted nothing, in every fight, since the action
+    was written.** It is in `actions.legal`, so any character could take it
+    and did.
+
+    Found by `c.bonus(once=)`'s new refusal (#544) raising on the key
+    during a **pre-push wide sweep** -- which is two arguments at once: for
+    paying for that sweep, and for the refusal, because the dead key had
+    been silent for as long as it existed and no narrow run had ever
+    reached it. `audit.py --calls 'c.bonus('` could not: the call is inside
+    a helper, not in any row.
+
+    Three things, and the third is what makes the first meaningful:
+
+    * the grant lands on the key the reader actually totals;
+    * the bare key totals nothing, which is the state this fixes and the
+      control that would have caught it;
+    * and a check with a **different** skill gets no part of it, because
+      the card grants "a +2 bonus to its next check with that skill".
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    party = [e for e in sorted(world.entities)
+             if not query.stat_block(world, e)]
+    helper, mate = party[0], party[1]
+
+    mods = world.get(mate, Mods)
+    assert mods is not None
+
+    def total(key: str) -> int:
+        return mods.total(key, {"target": mate})
+
+    # **Deltas, not absolutes.** `chargen` deals this party its feats, and
+    # one of them may already carry a bonus to the skill being measured --
+    # which is how the third assertion below first failed inside the full
+    # suite while passing alone. `points_regained` records the same lesson:
+    # "an assertion that only holds while its neighbours do is not an
+    # independent measurement".
+    was_aided = total("skill:athletics")
+    was_bare = total("athletics")
+    was_other = total("skill:stealth")
+
+    landed = Cast(world=world, me=helper, ref="drivers:aid").aid_another(
+        mate, "athletics", auto=True)
+
+    out.that(landed and total("skill:athletics") - was_aided == 2,
+             "aiding an ally grants +2 on the key `skills.modifier` totals"
+             f" -- `skill:<name>` (+{total('skill:athletics') - was_aided})")
+
+    out.that(total("athletics") - was_bare == 0,
+             "while the bare skill name totals nothing, which is where the"
+             " grant used to be laid: a modifier with no reader, silent for"
+             f" as long as the action has existed (+{total('athletics') - was_bare})")
+
+    out.that(total("skill:stealth") - was_other == 0,
+             "and a check with a different skill gets none of it, which is"
+             " the card -- '+2 to its next check with that skill' -- and the"
+             f" control that separates it from a blanket"
+             f" (+{total('skill:stealth') - was_other})")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5821,6 +5896,8 @@ DRIVERS = {
                        "every character is a natural humanoid; an origin replaces it"),
     "lengthened_shift": (lengthened_shift,
                          "a feat lengthens another row's shift, read in the moved row"),
+    "aid_another_grants": (aid_another_grants,
+                           "the aid another action's +2 reaches a reader"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,
