@@ -130,9 +130,57 @@ BY_NAME = {c.name: c for c in CATEGORIES}
 #: the source's own "is this a preview row" flag and means nothing here.
 HIDDEN = {"ID", "Txt", "PlainTxt", "Teaser"}
 
-#: The markers a content row can carry. `content/CLAUDE.md` owns the meanings;
-#: this only reports which are present.
-MARKERS = ("todo", "dropped", "defect", "narrative", "obsolete")
+#: Every marker a content row can carry, worst-news-last.
+#:
+#: **Hand-written, because nothing in the tree exports the set.** `dsl.py`
+#: documents each field on its own and enumerates them collectively in exactly
+#: one place -- the "cannot be combined with another marker" guard inside
+#: `power()` -- and that is a boolean expression, not a list anything can read.
+#:
+#: So this is the second list `content/CLAUDE.md` warns about, and it went
+#: stale within a day of being written: it shipped with five names while the
+#: DSL had seven, and `implemented_in=` arrived as the eighth. A row carrying
+#: `declined=` or `out_of_combat=` showed on the page as a row carrying
+#: nothing. `unclassified()` is what stops that happening twice.
+MARKERS = (
+    "todo",
+    "dropped",
+    "narrative",
+    "implemented_in",
+    "out_of_combat",
+    "obsolete",
+    "declined",
+    "defect",
+)
+
+#: The other 31 parameters `dsl.power()` takes, which are rules rather than
+#: markers. Listed so that a **new** one has to be classified instead of being
+#: silently absent -- see `unclassified()`.
+NOT_MARKERS = frozenset(
+    {
+        "action", "attack", "attack_alt", "augments", "basic", "charges", "cls",
+        "damage", "damage_alt", "group", "keywords", "level", "no_provoke", "on",
+        "once_per_round", "proficiency", "reach", "recharge", "recharge_when",
+        "recharge_while", "ref", "requires", "requires_alt", "requires_text",
+        "summon", "swap", "target", "thrown_by_hand", "trigger", "usage", "uses",
+    }
+)
+
+
+def unclassified() -> tuple[str, ...]:
+    """`power()` parameters this file has never been told about.
+
+    A gate, not decoration. The marker list above is a hand-maintained copy of
+    a set that lives nowhere else, and the only way such a copy stays true is
+    if drifting from it is loud. A new parameter shows up here, gets printed at
+    startup and banners the page, until somebody decides which list it is on.
+    """
+    import inspect
+
+    from combat_engine.engine import dsl
+
+    known = set(MARKERS) | NOT_MARKERS
+    return tuple(sorted(set(inspect.signature(dsl.power).parameters) - known))
 
 _TAGS = re.compile(r"<[^>]+>")
 
@@ -257,7 +305,10 @@ def markers() -> dict[str, dict[int, dict[str, tuple[str, ...]]]]:
             value = getattr(row, marker, None)
             if not value:
                 continue
-            carried[marker] = (value,) if isinstance(value, str) else tuple(value)
+            if value is True:
+                carried[marker] = ()  # a flag has no value; the page shows no `=`
+            else:
+                carried[marker] = (value,) if isinstance(value, str) else tuple(value)
         if not carried:
             continue
         for name, pattern in patterns:
@@ -603,6 +654,7 @@ def entry(cat: str, ident: int) -> dict[str, Any]:
 def catalogue() -> dict[str, Any]:
     return {
         "built": built() is not None,
+        "unclassified": list(unclassified()),
         "categories": [
             {
                 "name": c.name,
@@ -733,6 +785,14 @@ def main() -> int:
     print(f"compendium search on {url}")
     if built() is None:
         print(f"  {GAME} is missing, so the repo column will be empty.")
+    drifted = unclassified()
+    if drifted:
+        print(
+            f"  dsl.power() has {len(drifted)} parameter(s) this script has never been "
+            f"told about: {', '.join(drifted)}.\n"
+            "  If any is a marker, add it to MARKERS; otherwise to NOT_MARKERS. "
+            "Until then the repo column cannot report it."
+        )
     print("  ctrl-c to stop")
     if args.open:
         webbrowser.open(url)

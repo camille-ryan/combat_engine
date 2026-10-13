@@ -261,12 +261,13 @@ function markSort() {
 // whole list on hover.
 function markerChips(markers) {
   return Object.entries(markers || {}).map(([name, values]) => {
-    const all = values.join(", ");
+    // A flag marker has no value, so it gets no `=` either. Writing one and
+    // leaving it empty is the thing being fixed here, not a shape to keep.
+    if (!values.length) return `<span class="marker"><b>${esc(name)}</b></span>`;
     const more = values.length > 1 ? ` +${values.length - 1}` : "";
-    const shown = values.length ? `${esc(values[0])}${more}` : "";
     return (
-      `<span class="marker" title="${esc(`${name}= ${all}`)}">` +
-      `<b>${esc(name)}=</b> ${shown}</span>`
+      `<span class="marker" title="${esc(`${name}= ${values.join(", ")}`)}">` +
+      `<b>${esc(name)}=</b> ${esc(values[0])}${more}</span>`
     );
   });
 }
@@ -573,6 +574,14 @@ async function boot() {
   const catalogue = await getJSON("/api/categories");
   state.cats = catalogue.categories;
   el("nobuild").hidden = catalogue.built;
+  // The marker list in compendium.py is a hand-kept copy of a set the DSL
+  // does not export. If the DSL grows a parameter this page has never heard
+  // of, say so here rather than quietly reporting a row as unmarked.
+  const drifted = catalogue.unclassified || [];
+  el("drift").hidden = drifted.length === 0;
+  el("drift").textContent =
+    `dsl.power() has ${drifted.length} unclassified parameter(s): ${drifted.join(", ")}` +
+    " — a marker among them would not show in the repo column.";
   renderCats();
   wire();
   await route();
