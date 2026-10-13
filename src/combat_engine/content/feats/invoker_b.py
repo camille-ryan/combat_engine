@@ -531,12 +531,21 @@ def f1506(c: Cast) -> None:
 
 
 @power("f1521", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
+       reach=PERSONAL, target=SELF, todo=("c.manifestation()",))
 def f1521(c: Cast) -> None:
     """Five elemental variants of a bonus to the ally `cf:invoker-f1c0`
     protected. Re-aimed: the ally is on the card's trigger and that is
-    carried now. Which of the five legs is current is not -- two of them
-    are not damage types at all, so `c.element` cannot stand in, and
+    carried now.
+
+    **And re-aimed again, off `c.race_option()`.** That symbol was doing
+    duty for six unrelated needs across 23 rows, and this is not one of
+    them: a *manifestation* is a state the character is currently in and
+    changes during a fight, where a race option is a build-time choice
+    with one answer for the character's whole life. A symbol covering both
+    could not go green correctly for either.
+
+    Which of the five legs is current is still what is missing -- two of
+    them are not damage types at all, so `c.element` cannot stand in, and
     `rt:r33-t0` carries the same marker."""
 
 

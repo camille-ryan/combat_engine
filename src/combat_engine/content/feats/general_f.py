@@ -440,7 +440,7 @@ def f387(c: Cast) -> None:
 
 
 @power("f602", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.race_option()",))
+       reach=PERSONAL, target=SELF, todo=("c.manifestation()",))
 def f602(c: Cast) -> None:
     """**Re-aimed: half of what held this has arrived.** A use now
     carries who granted it and through which row, so "the melee basic

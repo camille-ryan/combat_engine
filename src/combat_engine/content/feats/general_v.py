@@ -117,7 +117,14 @@ RACIAL_POWER = ("c.on_racial_power()",)
 #: so a marker naming it can never go from absent to present and the row
 #: would have waited for ever. The gap is a *reader* for which
 #: manifestation is current, so the symbol names the reader.
-ASPECT = ("c.manifesting()",)
+#:
+#: **And it is the same reader `f1521` and `f602` want**, which is why they
+#: share this symbol rather than a near-twin of it. All three ask "which of
+#: this racial trait's several modes is the character in now" -- an aspect
+#: of nature here, an elemental manifestation there. Two spellings for one
+#: gap is the exact fault that made `c.race_option()` cover six needs, and
+#: it would have been introduced by the commit that split it.
+ASPECT = ("c.manifestation()",)
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
 #: A power traded for another at build time.
