@@ -16,11 +16,13 @@ from combat_engine.engine import (
     CHA,
     CON,
     DAILY,
+    DEX,
     EACH_ALLY,
     EACH_OTHER,
     ENCOUNTER,
     FORT,
     FREE,
+    INT,
     INTERRUPT,
     MINOR,
     MOVE,
@@ -34,6 +36,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    WIS,
     ActionType,
     AreaBurst,
     Attack,
@@ -157,8 +160,8 @@ def _close_or_area(world: World, me: int, ev: Any) -> bool:
     action=MINOR,
     reach=CloseBlast(3),
     target=EACH_OTHER,
-    attack=Attack(CON, vs=REF, plus=2),
-    dropped=("c.race_option()",),
+    attack=Attack((STR, CON, DEX), vs=REF, plus=2),
+    dropped=("c.race_option(damage_type=)",),
 )
 def p1448(c: Cast) -> None:
     """The card binds the attack ability and the damage type at character
@@ -473,8 +476,7 @@ def p7546(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    attack=Attack(CHA, vs=REF, plus=4),
-    dropped=("c.race_option()",),
+    attack=Attack((INT, WIS, CHA), vs=REF, plus=4),
 )
 def p1831(c: Cast) -> None:
     """"All attacks against the target" is written as the caster's side,
@@ -1481,8 +1483,8 @@ def p16475(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
-    attack=Attack(CON, vs=REF, plus=2),
-    dropped=("c.on_death(ref)", "c.race_option()"),
+    attack=Attack((STR, CON, DEX), vs=REF, plus=2),
+    dropped=("c.on_death(ref)",),
 )
 def p16654(c: Cast) -> None:
     """Bloodied value is half the maximum. The Effect line lands once and
