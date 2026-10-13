@@ -2079,7 +2079,10 @@ def p16696(c: Cast) -> None:
 def p16697(c: Cast) -> None:
     """The card prints no DC; the opposed number is the target's passive
     Insight, which is what `c.passive` is for rather than inventing one."""
-    if c.check("bluff", c.passive("insight", of=c.target)):
+    # `against=` names who is being deceived, which three feats read back
+    # off the `SkillCheck` -- "the enemy you bluffed" had no referent
+    # before. Opposed by that creature's passive Insight, as printed.
+    if c.check("bluff", c.passive("insight", of=c.target), against=c.target):
         c.grants_advantage(on=c.target, to="me", until=When.EOT)
         c.no_provoke(from_=c.target, on=c.me, until=When.EONT)
 

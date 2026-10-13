@@ -85,6 +85,7 @@ from combat_engine.engine import (
     SavingThrow,
     SecondWind,
     Size,
+    SkillCheck,
     SurgeSpent,
     Swap,
     Target,
@@ -1201,11 +1202,13 @@ _granted("f2130", "f2130b", swap=Swap(2, utility=True))
        reach=PERSONAL, target=SELF,
        trigger="you hit with an attack",
        on=Trigger(Hit, _i_hit, "you hit an enemy with an attack"),
-       dropped=("SkillCheck.target",))
+       dropped=("c.intimidate()",))
 def f2130b(c: Cast) -> None:
-    """Half the printed trigger is declared. `SkillCheck` says who rolled
-    and against what skill but never who it was aimed at, so "the
-    creature you intimidated" has no referent; the attack half does.
+    """Half the printed trigger is declared; the attack half does fire.
+
+    `SkillCheck.target` landed and is not what this waits on: nothing
+    *makes* an Intimidate check, so "the creature you intimidated" has no
+    event behind it at all.
 
     The aftereffect is the same penalty again, for a turn, once the save
     lands -- `When.EOTNT`, because the card clocks it on the *target's* next
@@ -2071,11 +2074,27 @@ def f2896(c: Cast) -> None:
 
 
 @power("f2889", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SkillCheck.target",))
+       reach=PERSONAL, target=SELF)
 def f2889(c: Cast) -> None:
     """Widens who benefits from a Bluff that wins combat advantage.
-    `SkillCheck` never says who a check was aimed at, so "the enemy" has
-    no referent."""
+
+    `SkillCheck.target` names the creature the check was aimed at now, so
+    "the enemy" has a referent -- and the rows that make such a check pass
+    `against=`, which is the half that had to land with it. A field nobody
+    populates reads as None for ever.
+
+    The allies are read when the check lands rather than when the trait is
+    armed: who is within 5 of that enemy is a fact about the moment.
+    """
+    def bluffed(ev: Any) -> None:
+        foe = getattr(ev, "target", None)
+        if ev.skill != "bluff" or not ev.success or foe is None:
+            return
+        for mate in c.within(5, side="ally", of=foe):
+            if mate != c.me:
+                c.grants_advantage(on=foe, to=mate, until=When.EOT)
+
+    c.watch(SkillCheck, bluffed, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f2893", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

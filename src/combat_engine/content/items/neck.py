@@ -444,10 +444,25 @@ _CHARM_OR_FEAR = either(by_keyword(Keyword.CHARM), by_keyword(Keyword.FEAR))
 
 
 @power("i1734x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SkillCheck.target",))
+       reach=PERSONAL, target=SELF)
 def i1734x1(c: Cast) -> None:
-    """A Heal check names no patient. Laid as a plain +5 to every ally's
-    Heal check it would be five points too large for every other use."""
+    """A +5 to an ally's Heal check, but only on **this** wearer.
+
+    Two things had to land. `SkillCheck.target` names the patient, and
+    `skills.modifier` puts it in the context the gate reads -- without
+    that key the `when=` would be silently false, which is the failure
+    this component is named for. Laid as a plain +5 it would have been
+    five points too large for every other Heal check an ally makes.
+
+    One modifier per ally, read when the trait arms: the card is about
+    who is standing with the wearer, and a gate cannot lay itself on a
+    creature that arrives later.
+    """
+    me = c.me
+    for mate in c.allies():
+        if mate != me:
+            c.bonus("skill:heal", 5, on=mate, until=When.ENCOUNTER,
+                    kind="item", when=lambda ctx: ctx.get("target") == me)
 
 
 @power("i2740p1", level=2, cls=ITEM, usage=ENCOUNTER, action=FREE,
@@ -1673,10 +1688,15 @@ def i3463x1(c: Cast) -> None:
 
 
 @power("i3560x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("SkillCheck.target",))
+       reach=PERSONAL, target=SELF, dropped=("Target.ident",))
 def i3560x1(c: Cast) -> None:
-    """A skill check names no subject, so "except against gargoyles" cannot
-    be taken back out of the bonus. Being sensed by one is narrative."""
+    """"Except against gargoyles" is a **species** exclusion.
+
+    `SkillCheck.target` landed and gives the creature; what it cannot give
+    is the creature's species. `query.kinds_of` returns an origin and a
+    type and never a species, which is the same gap nine `Target.ident`
+    rows carry. Being sensed by one is narrative.
+    """
     c.bonus("skill:intimidate", c.enhancement, on=c.me,
             until=When.ENCOUNTER, kind="item")
 

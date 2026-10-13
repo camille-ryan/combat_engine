@@ -43,6 +43,7 @@ from combat_engine.engine import (
     SELF,
     WILL,
     ActionType,
+    Bloodied,
     Cast,
     DamageApplied,
     DamageType,
@@ -51,9 +52,11 @@ from combat_engine.engine import (
     Keyword,
     PowerUsed,
     SavingThrow,
+    TempHP,
     Trigger,
     TurnEnd,
     When,
+    Window,
     power,
 )
 from combat_engine.engine.query import allies, distance_between
@@ -302,14 +305,43 @@ def f1534(c: Cast) -> None:
 
 
 @power("f2912", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
+       reach=PERSONAL, target=SELF)
 def f2912(c: Cast) -> None:
     """Raises every heal by however many temporary hit points a named
-    racial trait paid. The trait is a ref and `Bloodied` names its own
-    actor, so both ends of the trigger are there -- what is missing is
-    the number: `TempHP` carries a source and an amount and no power,
-    so temporary hit points from that trait cannot be told from any
-    other pool."""
+    racial trait paid.
+
+    All three parts are there now. `Bloodied` names its own actor;
+    `TempHP.power` says which row paid, and `rt:r36-t1` **is** a declared
+    row, so the amount can be caught as it is granted; and `Healed.power`
+    is how the raise is narrowed to this cleric's own healing.
+
+    The pool is remembered rather than read back off `Health.temp`,
+    because temporary hit points do not stack -- a later, larger pool
+    replaces this one and the card asks about the number *this trait*
+    paid.
+    """
+    paid = [0]
+
+    def noted(ev: TempHP) -> None:
+        if ev.target == c.me and ev.power == "rt:r36-t1":
+            paid[0] = ev.amount
+
+    def more(ev: Healed) -> None:
+        if ev.source == c.me and paid[0] and _healed_by(
+            ev, keyword=Keyword.HEALING
+        ):
+            ev.amount += paid[0]
+
+    def bloodied(ev: Any) -> None:
+        if ev.actor != c.me:
+            return
+        c.watch(Healed, more, until=When.EONT, window=Window.BEFORE,
+                on=c.me, label=f"{c.ref} heals")
+
+    c.watch(TempHP, noted, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} pool")
+    c.watch(Bloodied, bloodied, until=When.ENCOUNTER, on=c.me,
+            label=c.ref)
 
 
 @power("f1553", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

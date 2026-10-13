@@ -1198,7 +1198,7 @@ def deal_damage(
     )
     if not was_bloodied and health.bloodied and health.hp > 0:
         world.bus.emit(Bloodied(actor=target, source=source))
-    _check_down(world, target, health, source, crit)
+    _check_down(world, target, health, source, crit, detail)
     return landed
 
 
@@ -1274,20 +1274,42 @@ def spend_surge(
     return not spent.cancelled
 
 
-def temp_hp(world: World, source: int, target: int, amount: int) -> None:
+def temp_hp(
+    world: World, source: int, target: int, amount: int, power: str = ""
+) -> None:
     """Temporary hit points do not stack -- the larger pool wins."""
     health = world.get(target, Health)
-    if health is None or amount <= health.temp:
+    if health is None:
+        return
+    # **A term to add to, which nothing had.** "+2 to the number of
+    # temporary hit points you gain" is printed on several feats and
+    # `temp_hp` consulted `Mods` for nothing at all, so those rows had no
+    # number to raise -- the gap their markers named after the power.
+    #
+    # Read off the **receiver**, because the printed line is about the
+    # creature gaining them ("you gain") rather than whoever granted them.
+    from .components import Mods
+
+    mods = world.get(target, Mods)
+    if mods is not None and mods.items:
+        amount += mods.total("temp_hp", {"target": target, "power": power})
+    # The non-stacking rule is applied *after* the term, so a raised pool
+    # can beat a standing one -- checking first would have thrown the
+    # bonus away whenever the unraised number happened to tie.
+    if amount <= health.temp:
         return
     health.temp = amount
-    world.bus.emit(TempHP(source=source, target=target, amount=amount))
+    world.bus.emit(
+        TempHP(source=source, target=target, amount=amount, power=power)
+    )
 
 
 # -- going down -------------------------------------------------------------
 
 
 def _check_down(world: World, eid: int, health: Health,
-                source: int | None = None, crit: bool = False) -> None:
+                source: int | None = None, crit: bool = False,
+                power: str = "") -> None:
     from .query import is_
 
     if health.hp > 0:
@@ -1299,6 +1321,11 @@ def _check_down(world: World, eid: int, health: Health,
     # **or fewer**", and those rows were missing almost every death.
     world.bus.emit(Dropped(
         actor=eid, dead=health.hp <= health.dying_at, source=source,
+        # The row that did it. Both callers already know it -- the damage
+        # path carries `detail` and `Cast.kill` has `self.ref` -- so this
+        # costs a parameter rather than a new fact, the same argument
+        # `critical` below makes.
+        power=power,
         # Whether the blow that did it was a critical. `crit` is already
         # in scope at the one site that calls this, so "but not by a
         # critical hit" costs a parameter rather than a new fact. #428.

@@ -77,8 +77,17 @@ class CheckResult:
         return self.total
 
 
-def modifier(world: World, eid: int, skill: str) -> int:
-    """The fixed part of a creature's check: ability, half level, modifiers."""
+def modifier(
+    world: World, eid: int, skill: str, target: int | None = None
+) -> int:
+    """The fixed part of a creature's check: ability, half level, modifiers.
+
+    `target` is who the check is *about*, and it goes into the context so
+    a modifier can be gated on it: "allies gain a +5 bonus to Heal checks
+    to administer first aid **to you**" is a bonus on the ally's roll that
+    only applies when the patient is the wearer. Without the key such a
+    gate is silently false, which is this component's named failure mode.
+    """
     stats = world.get(eid, Stats)
     ability = SKILLS.get(skill.lower())
     out = 0
@@ -88,7 +97,7 @@ def modifier(world: World, eid: int, skill: str) -> int:
             out += stats.mod(ability)
     mods = world.get(eid, Mods)
     if mods is not None:
-        ctx = {"actor": eid, "skill": skill.lower()}
+        ctx = {"actor": eid, "skill": skill.lower(), "target": target}
         out += mods.total(f"skill:{skill.lower()}", ctx) + mods.total("skill", ctx)
     return out + _armour_penalty(world, eid, skill)
 
@@ -207,7 +216,10 @@ def passive(world: World, eid: int, skill: str) -> int:
     return 10 + modifier(world, eid, skill)
 
 
-def check(world: World, eid: int, skill: str, dc: int = 0, *, bonus: int = 0) -> CheckResult:
+def check(
+    world: World, eid: int, skill: str, dc: int = 0, *, bonus: int = 0,
+    target: int | None = None,
+) -> CheckResult:
     """Roll one skill check and announce it.
 
     The die is rolled first and the modifiers are totalled **inside the
@@ -226,10 +238,11 @@ def check(world: World, eid: int, skill: str, dc: int = 0, *, bonus: int = 0) ->
         bonus=bonus,
         total=natural + bonus,
         success=False,
+        target=target,
     )
 
     def finish(ev: SkillCheck) -> None:
-        ev.bonus += modifier(world, eid, ev.skill)
+        ev.bonus += modifier(world, eid, ev.skill, ev.target)
         ev.total = ev.natural + ev.bonus
         ev.success = ev.dc <= 0 or ev.total >= ev.dc
 

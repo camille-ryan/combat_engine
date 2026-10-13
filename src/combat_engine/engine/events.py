@@ -643,6 +643,11 @@ class TempHP(Event):
     source: int
     target: int
     amount: int
+    #: The row that granted them, as a ref. Seven rows narrow on it --
+    #: "the temporary hit points you gained from your rt:r36-t1 racial
+    #: trait" -- and this event said only who gave how many to whom.
+    #: `""` when nothing named it. Same contract as `Healed.power`.
+    power: str = ""
 
 
 @dataclass
@@ -690,6 +695,12 @@ class Dropped(Event):
     carries a source but announces before the creature is down, and a third
     left its row out. `by_me` works on this now.
 
+    `power` is the row that did it, and seven rows need it: the printed
+    line is almost never bare -- "with a melee basic attack", "with a
+    ranged attack", "with a melee attack". `""` when nothing named the
+    blow, which is ongoing damage and a failed death save, so a gate on a
+    particular power must test for it rather than treat empty as any.
+
     `critical` is whether the blow that did it was a critical hit, for the
     two rows printing "reduced to 0 hit points, **but not by a critical
     hit**" -- a clause that could not be asked at all. #428.
@@ -730,6 +741,8 @@ class Dropped(Event):
     dead: bool = False
     source: int | None = None
     critical: bool = False
+    #: The row that struck the killing blow. See the note above.
+    power: str = ""
 
 
 @dataclass
@@ -1007,6 +1020,12 @@ class SkillCheck(Decision):
 
     `dc` of 0 is a check with no number to beat -- "you make a Heal check
     and the target regains half the result" -- and always succeeds.
+
+    `target` is **who the check was made against**, for the seven rows
+    whose printed line is about a creature rather than a number: "if you
+    successfully intimidate an enemy", "a Bluff check in combat to gain
+    combat advantage". A check against nobody leaves it `None`, which is
+    most of them -- a History check is about a fact.
     """
 
     actor: int
@@ -1016,6 +1035,12 @@ class SkillCheck(Decision):
     bonus: int
     total: int
     success: bool
+    #: **Last, because it has a default.** A dataclass cannot put a
+    #: defaulted field before the required ones, and placing it at the top
+    #: beside the docstring that describes it made `types.py` report all
+    #: seven of the others as "cannot be defined after fields with default
+    #: values" -- one mistake reported as seven faults.
+    target: int | None = None
 
 
 @dataclass

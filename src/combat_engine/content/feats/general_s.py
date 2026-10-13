@@ -1903,13 +1903,23 @@ def f3780(c: Cast) -> None:
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
+       reach=PERSONAL, target=SELF, todo=("cf:bard-f1s2",))
 def f3781(c: Cast) -> None:
-    """`cf:bard-f1s2` is a ref the prerequisite prints, and no row carries
-    it: `cf:bard-f1` writes that virtue inline on its `second-con` leg.
-    What it does is lay temporary hit points, and `TempHP` carries a
-    source, a target and an amount and no power -- so "when you use your
-    `cf:bard-f1s2`" cannot be told from any other pool the bard lays."""
+    """`cf:bard-f1s2` is a ref the prerequisite prints and no row carries:
+    `cf:bard-f1` writes that virtue inline on its `second-con` leg.
+
+    **Re-pointed off `TempHP.power`, which landed and is not the
+    blocker.** The event names the row that paid now -- and the row it
+    would name is `cf:bard-f1s2`'s *holder*, not `cf:bard-f1s2`, because
+    `cf:bard-f1` writes that virtue inline on its leg and nothing
+    declares the sub-option as a row of its own. So there is no ref to
+    gate on, and gating on the leg would catch every virtue it writes.
+    The missing ref is the gap.
+
+    The trigger here is *using* the virtue rather than the pool it lays,
+    so even `TempHP.power` was the wrong half -- a `PowerUsed` on the
+    sub-option is what this wants, and that needs the row to exist.
+    """
 
 
 @power("f3782", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

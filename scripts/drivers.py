@@ -3817,6 +3817,101 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def event_provenance(out: Result) -> None:
+    """Three more events that did not say which row caused them.
+
+    `Healed.power` was the first of four of the same shape, and these are
+    the other three. 21 rows between them, each printing a narrowing the
+    event could not answer:
+
+    * **`TempHP.power`** -- "the temporary hit points you gained from your
+      rt:r36-t1 racial trait";
+    * **`Dropped.power`** -- "whenever you reduce an enemy to 0 hit points
+      **with a melee basic attack**", "with a ranged attack";
+    * **`SkillCheck.target`** -- "if you successfully intimidate **an
+      enemy**", which is a creature rather than a number.
+
+    Each is driven with the same pair that `healed_power` uses: the field
+    arrives, and **it is empty when nothing named the cause**. The second
+    half is the one that matters -- ongoing damage and a failed death save
+    drop a creature with no power behind them, and a History check is
+    about a fact and not a creature, so a gate treating empty as a
+    wildcard fires on all of those.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import Dropped, SkillCheck, TempHP
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import temp_hp as _temp_hp
+
+    # ---- TempHP.power
+    world, me, _ = _board(seed=1)
+    seen: list[str] = []
+    c = Cast(world=world, me=me, ref="drivers:ward")
+    c.watch(TempHP, lambda ev: seen.append(ev.power),
+            until=When.ENCOUNTER, on=me, label="drivers:tw")
+    c.temp_hp(5, on=me)
+    _temp_hp(world, me, me, 9)          # nothing named this one
+    out.that(seen == ["drivers:ward", ""],
+             "temporary hit points name the row that granted them, and are"
+             f" blank when nothing did {seen}")
+
+    # **And there is a term to raise them by**, which several of the same
+    # rows needed after the power: `resolve.temp_hp` consulted `Mods` for
+    # nothing, so "+2 to the number of temporary hit points you gain" had
+    # no number to add to. Read off the *receiver*, since the printed line
+    # is about the creature gaining them.
+    world, me, _ = _board(seed=1)
+    c = Cast(world=world, me=me, ref="drivers:ward2")
+    c.bonus("temp_hp", 3, on=me, until=When.ENCOUNTER, kind="feat")
+    c.temp_hp(5, on=me)
+    got = world.get(me, Health).temp
+    out.that(got == 8,
+             f"a +3 to temporary hit points makes a printed 5 arrive as {got}")
+
+    # ---- Dropped.power
+    world, me, _ = _board(seed=1)
+    fell: list[str] = []
+    c = Cast(world=world, me=me, ref="drivers:slay")
+    c.watch(Dropped, lambda ev: fell.append(ev.power),
+            until=When.ENCOUNTER, on=me, label="drivers:dw")
+    foe = sorted(enemies(world, me))[0]
+    c.kill(on=foe)
+    out.that(fell == ["drivers:slay"],
+             "a kill names the row that struck the blow, which seven rows"
+             f" need to say 'with a melee basic attack' {fell}")
+
+    world, me, _ = _board(seed=1)
+    fell = []
+    c = Cast(world=world, me=me, ref="drivers:slay2")
+    c.watch(Dropped, lambda ev: fell.append(ev.power),
+            until=When.ENCOUNTER, on=me, label="drivers:dw2")
+    other = sorted(enemies(world, me))[0]
+    hp = world.get(other, Health)
+    hp.hp = 1
+    from combat_engine.engine.resolve import _check_down
+    hp.hp = 0
+    _check_down(world, other, hp)       # ongoing damage, no power
+    out.that(fell == [""],
+             "and a creature that drops with nothing behind it -- ongoing"
+             f" damage, a failed save -- names no row {fell}")
+
+    # ---- SkillCheck.target
+    world, me, _ = _board(seed=1)
+    asked: list[object] = []
+    c = Cast(world=world, me=me, ref="drivers:lean")
+    c.watch(SkillCheck, lambda ev: asked.append(ev.target),
+            until=When.ENCOUNTER, on=me, label="drivers:sw")
+    foe = sorted(enemies(world, me))[0]
+    c.check("intimidate", 10, against=foe)
+    c.check("history", 10)
+    out.that(asked == [foe, None],
+             "a check names the creature it was made against, and leaves it"
+             f" None for a check about a fact {asked}")
+
+
 def healed_power(out: Result) -> None:
     """Which row did the healing, which `Healed` did not say.
 
@@ -5083,6 +5178,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "event_provenance": (event_provenance,
+                         "three more events that did not say what caused them"),
     "healed_power": (healed_power,
                      "which row did the healing, which Healed did not say"),
     "reach_stretch": (reach_stretch,

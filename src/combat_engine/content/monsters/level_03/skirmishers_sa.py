@@ -1077,10 +1077,10 @@ def m1136a2(c: Cast) -> None:
     charges=True,
     trigger="it drops an enemy",
     on=Trigger(Dropped, by_me, "it drops an enemy"),
-    dropped=("Dropped.power",),
+
 )
 def m1136a3(c: Cast) -> None:
-    """The charge is written; "with a ranged attack" is the dropped half.
+    """The charge is written, and "with a ranged attack" is written too.
 
     `Dropped` carries who struck the blow but not what struck it, so the
     narrowing cannot be asked. `charges=True` is what makes the engine
@@ -1088,6 +1088,11 @@ def m1136a3(c: Cast) -> None:
     whenever the target is further off than a sword, which is every
     situation a charge is for.
     """
+    # "With a ranged attack" -- `Dropped.power` names the row that struck
+    # and `c.struck_by(kind=)` reads its range line. Before it the charge
+    # answered any killing blow, ongoing damage included.
+    if not c.struck_by(c.trigger, kind="ranged"):
+        return
     foe = _nearest(c)
     if foe is not None:
         c.charge_at(foe)

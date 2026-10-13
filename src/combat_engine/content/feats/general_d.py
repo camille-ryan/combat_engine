@@ -251,7 +251,7 @@ def f945(c: Cast) -> None:
 
 @power("f946", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.skill_circumstance()", "SkillCheck.target"))
+       todo=("c.skill_circumstance()",))
 def f946(c: Cast) -> None:
     """A slide on a successful Bluff check made in combat to gain combat
     advantage, while bloodied.

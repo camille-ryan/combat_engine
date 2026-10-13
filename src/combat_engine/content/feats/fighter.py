@@ -326,7 +326,7 @@ def f758(c: Cast) -> None:
 
 @power("f774", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Keyword.INVIGORATING", "TempHP.power"))
+       todo=("Keyword.INVIGORATING",))
 def f774(c: Cast) -> None:
     """Same keyword, raising the temporary hit points it pays.
 
@@ -339,7 +339,7 @@ def f774(c: Cast) -> None:
 
 @power("f792", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Keyword.INVIGORATING", "TempHP.power"))
+       todo=("Keyword.INVIGORATING",))
 def f792(c: Cast) -> None:
     """Same two gaps as f774, a smaller number."""
 

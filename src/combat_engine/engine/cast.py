@@ -2346,9 +2346,14 @@ class Cast:
         return heal(self.world, self.me, who, worth, self.ref)
 
     def temp_hp(self, amount: int, *, on: int | None = None) -> None:
+        """Grant temporary hit points. The row's ref rides on `TempHP`.
+
+        Seven rows narrow on which row granted them -- see `TempHP.power`
+        and `Healed.power`, which carries the same contract.
+        """
         who = self._who(on)
         if who is not None:
-            temp_hp(self.world, self.me, who, amount)
+            temp_hp(self.world, self.me, who, amount, self.ref)
 
     def ongoing(
         self,
@@ -8213,7 +8218,8 @@ class Cast:
         if health is None or health.hp <= 0:
             return False
         health.hp = 0
-        _check_down(self.world, who, health, source=self.me, crit=critical)
+        _check_down(self.world, who, health, source=self.me, crit=critical,
+                    power=self.ref)
         return True
 
     def aftereffect(
@@ -9828,7 +9834,7 @@ class Cast:
 
     # -- skill checks, and the three resources a character spends ------------
 
-    def check(self, skill: str, dc: int = 0, *, who: int | None = None, bonus: int = 0):  # noqa: ANN201
+    def check(self, skill: str, dc: int = 0, *, who: int | None = None, bonus: int = 0, against: int | None = None):  # noqa: ANN201, E501
         """Roll a skill check. Truthy when it beat the DC.
 
         `who` is who rolls, and it defaults to the **caster**: it is your
@@ -9846,7 +9852,43 @@ class Cast:
         from .skills import check as _check
 
         roller = self.me if who is None else who
-        return _check(self.world, roller, skill, dc, bonus=bonus)
+        # `against` is who the check is *about*, which seven rows need and
+        # the event could not say: "if you successfully intimidate an
+        # enemy" is a creature, not a number. `None` for a check about a
+        # fact, which is most of them.
+        return _check(self.world, roller, skill, dc, bonus=bonus,
+                      target=against)
+
+    def struck_by(self, ev: Any, *, kind: str = "", ref: str = "",
+                  basic: bool = False) -> bool:
+        """What kind of blow caused this event? Reads its `power`.
+
+        Four `Dropped` rows and counting print "with a melee attack",
+        "with a ranged attack", "with a melee basic attack" -- the event
+        says *who* struck and, since `Dropped.power`, *what* struck, and
+        this is the reading. `kind` is a `Range.kind`; `basic` asks
+        whether the row is this creature's own basic attack.
+
+        **Empty `power` never matches**, which is ongoing damage and a
+        failed death save -- the deaths no blow caused.
+        """
+        from .components import Powers
+        from .dsl import get as _get
+
+        named = getattr(ev, "power", "") or ""
+        declared = _get(named)
+        if declared is None:
+            return False
+        if ref and declared.ref != ref:
+            return False
+        if kind and declared.reach.kind != kind:
+            return False
+        if basic:
+            known = self.world.get(self.me, Powers)
+            mine = getattr(known, "basic", "mba") if known else "mba"
+            if named not in (mine, "mba"):
+                return False
+        return True
 
     def healed_by(self, ev: Any, *, ref: str = "", cls: str = "",
                   keyword: Keyword | None = None,

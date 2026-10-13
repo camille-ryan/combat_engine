@@ -1029,7 +1029,7 @@ _M4197_FELLED = "it drops to 0 hit points"
     attack=Attack(vs=REF, printed=7),
     trigger=_M4197_FELLED,
     on=Trigger(Dropped, lambda w, me, ev: getattr(ev, "actor", None) == me, _M4197_FELLED),
-    dropped=("Dropped.power",),
+    dropped=("Dropped.weapon",),
 )
 def m4197a2(c: Cast) -> None:
     """It turns to stone where it fell, and the stone lasts the fight.

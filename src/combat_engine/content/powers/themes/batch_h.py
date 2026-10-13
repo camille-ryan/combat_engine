@@ -831,14 +831,18 @@ def p14188(c: Cast) -> None:
         ),
         "you succeed on a monster knowledge check",
     ),
-    todo=("SkillCheck.target",),
+    todo=("c.knowledge_check()",),
 )
 def p14137(c: Cast) -> None:
-    """Every clause is about "the monster" and "the target", and a
-    `SkillCheck` says who rolled, which skill and what it beat -- never what
-    it was rolled about. Without that there is no creature to raise defences
-    against, no creature to add Intelligence against, and no creature to
-    halve damage to, so all three halves wait on the same field."""
+    """Every clause is about "the monster", so all three halves wait on
+    one thing -- and it is no longer the field.
+
+    `SkillCheck.target` landed and the rows that make an opposed check
+    pass `against=`. Nothing makes a **monster knowledge check**: there is
+    no action and no row that rolls Arcana or Nature *about a creature*,
+    so the declared trigger has no event to fire on and a target field
+    would have nothing to carry. That is the gap this names.
+    """
 
 
 @power(

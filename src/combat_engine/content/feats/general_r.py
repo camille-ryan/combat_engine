@@ -623,12 +623,15 @@ def f3571(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you reduce a nonminion enemy to 0 hit points",
        on=Trigger(Dropped, _i_dropped_a_nonminion, "you drop an enemy"),
-       dropped=("Dropped.power",))
+)
 def f3572(c: Cast) -> None:
-    """`Dropped` carries `actor`, `dead` and `source` and no power, so
-    "with a melee basic attack" has nothing to read -- the row answers
-    any killing blow. The nonminion clause is declared."""
+    """"With a melee basic attack" is askable now: `Dropped.power` names
+    the row that struck and `c.struck_by(basic=True)` is the reading.
+    Before it the row answered any killing blow, including ongoing
+    damage. The nonminion clause is declared."""
     ev = c.trigger
+    if not c.struck_by(ev, basic=True):
+        return
     others = [e for e in c.within(2, side="enemy") if e != ev.actor]
     if others:
         c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=others[0])
@@ -979,11 +982,17 @@ f3612 = _power_strike_rider(
        reach=PERSONAL, target=NO_TARGET,
        trigger="you drop an enemy with a heavy blade",
        on=Trigger(Dropped, _i_dropped_a_foe, "you drop an enemy"),
-       dropped=("Dropped.power",))
+       dropped=("Dropped.weapon",))
 def f3606(c: Cast) -> None:
     """Heavy blade is a real group, so this one is written. What is
-    dropped is which blow did it: `Dropped` names no power, so the group
-    is read off what is in hand instead of off the attack.
+    dropped is which *weapon* did it.
+
+    **Re-pointed off `Dropped.power`, which landed and is the wrong
+    half.** The event names the row that struck now, and this card asks
+    what *weapon* struck -- a group, which lives on the `Weapon` and not
+    on the row. Reading the weapon in hand is the approximation already
+    here and is not the same question: a character may hold two.
+
 
     `c.expend_row` is the printed price and the printed "instead of
     gaining the power's normal benefit" both: the use goes and `p12668`

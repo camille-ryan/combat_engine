@@ -380,7 +380,7 @@ def i3523x1(c: Cast) -> None:
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
+       reach=PERSONAL, target=SELF, todo=("cf:barbarian-f1s0",))
 def i640x1(c: Cast) -> None:
     """`cf:barbarian-f1s0` is a ref the card prints and no row carries:
     `cf:barbarian-f1` writes that option inline, on its `rageblood` leg,

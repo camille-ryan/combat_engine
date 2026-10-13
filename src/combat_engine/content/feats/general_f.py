@@ -481,12 +481,18 @@ def f469(c: Cast) -> None:
 
 
 @power("f470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
+       reach=PERSONAL, target=SELF, todo=("cf:bard-f1s2",))
 def f470(c: Cast) -> None:
-    """Rides on the virtue that grants temporary hit points. `TempHP`
-    carries a source, a target and an amount and no power, so "with your
-    `cf:bard-f1s2`" cannot be told from any other pool the bard lays --
-    and the bard lays several."""
+    """Rides on the virtue that grants temporary hit points.
+
+    **Re-pointed off `TempHP.power`, which landed and is not the
+    blocker.** The event names the row that paid now -- and the row it
+    would name is `cf:bard-f1s2`'s *holder*, not `cf:bard-f1s2`, because
+    `cf:bard-f1` writes that virtue inline on its leg and nothing
+    declares the sub-option as a row of its own. So there is no ref to
+    gate on, and gating on the leg would catch every virtue it writes.
+    The missing ref is the gap.
+    """
 
 
 @power("f472", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

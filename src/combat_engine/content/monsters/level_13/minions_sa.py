@@ -1070,7 +1070,7 @@ _M6518_DROPPED = "it drops to 0 hit points"
     damage=Damage(bonus=10, dtype=DamageType.NECROTIC, kind=MINION),
     trigger=_M6518_DROPPED,
     on=Trigger(Dropped, about_me, _M6518_DROPPED),
-    dropped=('Dropped.power', "chargen.kind_words()"),
+    dropped=("Dropped.weapon", "chargen.kind_words()"),
 )
 def m6518a1(c: Cast) -> None:
     """A death throe, handed over in the keyword column as a standard
@@ -1082,8 +1082,9 @@ def m6518a1(c: Cast) -> None:
 
     "Living" is `kinds_without=` -- the absence of the two type words that
     deny it -- so it is the target line now. What is still out of reach is
-    "as a result of a weapon attack": that asks what the killing blow was
-    made with, and `Dropped` carries who struck it and nothing about the blow.
+    "as a result of a weapon attack": `Dropped.power` names the row that
+    struck, which is not the same question -- a weapon is a `Weapon` and
+    the group lives there, not on the row. `Dropped.weapon` is the gap.
     
 
     **Re-pointed off `Target.living`, which named a field and not the

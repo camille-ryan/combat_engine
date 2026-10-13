@@ -1232,7 +1232,7 @@ def p14032(c: Cast) -> None:
     keywords=[Keyword.SHADOW],
     trigger="you kill a nonminion enemy with a melee attack",
     on=Trigger(Dropped, by_me, "you drop an enemy"),
-    dropped=("Dropped.power",),
+
 )
 def p14021(c: Cast) -> None:
     """Eating and breathing are not on a board. The nonminion half of the
@@ -1244,6 +1244,9 @@ def p14021(c: Cast) -> None:
     `c.is_minion` reads."""
     ev = c.trigger
     if ev is None or c.is_minion(on=ev.actor):
+        return
+    # The melee half, which `Dropped.power` makes askable.
+    if not c.struck_by(ev, kind="melee"):
         return
     c.bonus(
         "save",

@@ -30,5 +30,7 @@ def p10622(c: Cast) -> None:
     the payout -- so `c.check` is read for `.total` rather than for whether
     it succeeded. `c.save` follows the target, which is whose poison it is.
     """
-    c.heal(c.check("heal").total // 2)
+    # `against=` is the patient, which `i1734x1` reads back to know whose
+    # Heal check its bonus belongs to.
+    c.heal(c.check("heal", against=c.target).total // 2)
     c.save(against="poison")

@@ -527,15 +527,16 @@ def f1697(c: Cast) -> None:
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("SkillCheck.target",), proficiency=("w3611",))
+       dropped=("c.intimidate()",), proficiency=("w3611",))
 def f1704(c: Cast) -> None:
     """Re-aimed from `todo` to `dropped`. The grant is header data and the
     damage half is writable -- the weapon table keys on the ref -- so
     refusing the whole row in play threw a working sentence away.
 
-    What is still missing is the advantage half: `SkillCheck` says who
-    rolled and against what skill without saying who it was aimed at, so
-    "that enemy" has no referent. Untyped is wrong here for once -- the
+    What is still missing is the advantage half, and the marker now names
+    it: `SkillCheck.target` landed and nothing *makes* an Intimidate
+    check, so there is no event to carry a target. Untyped is wrong here
+    for once -- the
     card prints the word "feat"."""
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=lambda ctx: _wielding_ref(c, "w3611"))
@@ -692,11 +693,23 @@ def f1854(c: Cast) -> None:
 
 
 @power("f1855", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("TempHP.power",))
+       reach=PERSONAL, target=SELF)
 def f1855(c: Cast) -> None:
     """Adds to the temporary hit points one named racial trait hands out.
-    `TempHP` carries source, target and amount and never says which row
-    paid, so a watcher cannot tell that batch from any other."""
+
+    Two things landed and this needed both. `resolve.temp_hp` reads a
+    `temp_hp` term off the **receiver** now, so there is a number to add
+    to; and `TempHP.power` names the row that paid, which the modifier's
+    own gate reads out of the context -- so this raises that trait's
+    batch and no other.
+
+    A modifier rather than a watcher, because the non-stacking rule is
+    applied after the term: a watcher raising `ev.amount` would already
+    have lost to a standing pool by the time it ran.
+    """
+    c.bonus("temp_hp", c.con_mod, on=c.me, until=When.ENCOUNTER,
+            kind="racial",
+            when=lambda ctx: ctx.get("power") == "rt:r36-t1")
 
 
 @power("f1863", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

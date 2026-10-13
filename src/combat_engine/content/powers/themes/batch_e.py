@@ -339,12 +339,26 @@ def p11871(c: Cast) -> None:
         Trigger(Bloodied, by_me, "you bloody an enemy"),
         Trigger(Dropped, by_me, "you reduce an enemy to 0 hit points"),
     ),
-    dropped=("Dropped.power",),
+    dropped=("Bloodied.power",),
 )
 def p12234(c: Cast) -> None:
-    """`Dropped` names who felled the creature and not what with, so the
-    "with a melee attack" half of the trigger cannot be asked; `by_melee`
-    on it reads a power field the event has not got and is false forever."""
+    """Two triggers, and the melee narrowing is askable on one of them.
+
+    `Dropped.power` names the blow now, so the kill arm is gated. The
+    *bloodying* arm is not: `Bloodied` carries an actor and a source and
+    nothing about what struck, so "with a melee attack" has nothing to
+    read there -- which is the marker, and it is the narrower half of what
+    this row used to claim.
+
+    Gated rather than left wide, because answering a ranged kill was the
+    fault: `by_melee` on a `Dropped` reads a field the event did not have
+    and was false for ever, so the clause never narrowed anything.
+    """
+    from combat_engine.engine.events import Dropped as _Dropped
+
+    ev = c.trigger
+    if isinstance(ev, _Dropped) and not c.struck_by(ev, kind="melee"):
+        return
     for foe in c.within(10, side="enemy"):
         if c.can_see(foe):
             c.grants_advantage(on=foe)
@@ -599,7 +613,9 @@ def p13435(c: Cast) -> None:
 def p13436(c: Cast) -> None:
     """The immobilise asks the attack that was actually rolled, not the
     board: a one-shot grant is spent by the time `c.strike` returns."""
-    if c.check("bluff").total > c.passive("insight", of=c.target):
+    if c.check("bluff", against=c.target).total > c.passive(
+        "insight", of=c.target
+    ):
         c.grants_advantage(once=True)
     result = c.strike()
     if result:
