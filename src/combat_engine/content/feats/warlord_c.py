@@ -87,7 +87,7 @@ R33 = (
 #: is never armed. Those rows keep the printed Trigger as text and
 #: answer it with `c.watch`, the shape `p7419` already uses.
 #: …nor turn a melee row into a ranged one.
-AS_RANGED = ("c.recast(reach=)",)
+AS_RANGED = ("c.recast(as_ranged=)",)
 #: The basic attacks. A grant hands over whichever of these the
 #: creature's own is, so "you grant an ally a basic attack" is the ref
 #: being one of them.

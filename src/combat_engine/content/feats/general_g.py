@@ -1420,7 +1420,7 @@ def f921(c: Cast) -> None:
     # are header data shared by everyone who holds it.
     c.counts_as_keyword("p1767", Keyword.RELIABLE)
 @power("f725", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
+       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
 def f725(c: Cast) -> None:
     """Turns a named power's close blast into an area burst. Reach is
     header data the action menu reads before anything runs, and
@@ -1433,7 +1433,17 @@ def f725(c: Cast) -> None:
     already declares, and this card changes the *kind*: `reach.kind`
     decides provoking, `c.ranged`, `by_ranged` and the `ranged` context
     key, so a bigger blast would say the wrong rule as well as the wrong
-    shape."""
+    shape.
+
+    **Re-pointed off `c.recast(reach=)`, which was one symbol over two
+    mechanisms.** This row rewrites a *named row's area* -- its size or
+    its shape. `c.widen_areas` lays a `blast_size` modifier and
+    `dsl._stretched` reads it, so growing every burst this caster throws
+    is already sayable; what is not is naming **one** row, which is what
+    all of these cards do. The other five rows on the old symbol wanted
+    melee-as-ranged, which is a different rewrite -- see
+    `c.recast(as_ranged=)`.
+    """
 
 
 def _melee_or_close_at_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001

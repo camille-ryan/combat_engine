@@ -563,11 +563,21 @@ def f2944(c: Cast) -> None:
 
 
 @power("f2945", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
+       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
 def f2945(c: Cast) -> None:
     """Turns a close burst 1 into an area burst 1 within 5. Reach is
     header data the action menu reads before anything runs, and nothing
-    rewrites one."""
+    rewrites one.
+
+    **Re-pointed off `c.recast(reach=)`, which was one symbol over two
+    mechanisms.** This row rewrites a *named row's area* -- its size or
+    its shape. `c.widen_areas` lays a `blast_size` modifier and
+    `dsl._stretched` reads it, so growing every burst this caster throws
+    is already sayable; what is not is naming **one** row, which is what
+    all of these cards do. The other five rows on the old symbol wanted
+    melee-as-ranged, which is a different rewrite -- see
+    `c.recast(as_ranged=)`.
+    """
 
 
 @power("f2946", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

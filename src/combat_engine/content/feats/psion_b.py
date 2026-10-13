@@ -488,7 +488,7 @@ def f3172(c: Cast) -> None:
 
 @power("f3275", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.recast(reach=)",))
+       todo=("c.recast(as_ranged=)",))
 def f3275(c: Cast) -> None:
     """Spends one racial power to use another at a range it does not
     print. Re-aimed, and onto the symbol ten other rows already use:
@@ -504,7 +504,15 @@ def f3275(c: Cast) -> None:
     header already declares -- so `c.bonus("reach", 19)` would say
     "melee 20", which is a different rule, since `reach.kind` is what
     decides provoking, `c.ranged`, `by_ranged` and the `ranged` context
-    key. `f725` and `f2819` want the same operation."""
+    key. `f725` and `f2819` want the same operation.
+
+    **Re-pointed off `c.recast(reach=)`, which was one symbol over two
+    mechanisms.** This row rewrites a named row's range *kind*, melee to
+    ranged. `c.as_ranged` exists and `p2633` uses it, but it is a
+    per-caster effect on the next melee swing; what is missing is
+    scoping it to the row the card names. The other five rows on the old
+    symbol wanted a row's *area* rewritten -- see `c.recast(area=)`.
+    """
 
 
 @power("f3284", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

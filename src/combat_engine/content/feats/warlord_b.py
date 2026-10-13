@@ -104,7 +104,7 @@ def _used_wrath(world, me: int, ev) -> bool:  # noqa: ANN001
 #: wants more than distance anyway -- the bow's dice, cover, and the
 #: opening a ranged shot leaves all follow the range *kind*, which no
 #: modifier changes.
-AS_RANGED = ("c.recast(reach=)",)
+AS_RANGED = ("c.recast(as_ranged=)",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 

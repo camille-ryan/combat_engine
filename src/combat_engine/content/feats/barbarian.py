@@ -158,7 +158,7 @@ def f1009(c: Cast) -> None:
 
 
 @power("f1010", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(reach=)",))
+       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
 def f1010(c: Cast) -> None:
     """Grows a named power's burst and pays a damage bonus, both while
     raging.
@@ -187,4 +187,14 @@ def f1010(c: Cast) -> None:
     "5 + your Charisma modifier" -- reach is header data the menu reads
     before anything runs, which is `c.recast(reach=)`, the symbol `f287`
     and `f601` already carry.
+    
+
+    **Re-pointed off `c.recast(reach=)`, which was one symbol over two
+    mechanisms.** This row rewrites a *named row's area* -- its size or
+    its shape. `c.widen_areas` lays a `blast_size` modifier and
+    `dsl._stretched` reads it, so growing every burst this caster throws
+    is already sayable; what is not is naming **one** row, which is what
+    all of these cards do. The other five rows on the old symbol wanted
+    melee-as-ranged, which is a different rewrite -- see
+    `c.recast(as_ranged=)`.
     """
