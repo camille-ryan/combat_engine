@@ -105,11 +105,19 @@ from combat_engine.engine.query import concealment_of, creatures, is_, team, uns
 FEATURE = ("c.class_feature()",)
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
-#: "The aspect of nature you are manifesting" -- `rt:r44-t2` is a
-#: declared row and it is refused in play: which of the three a character
-#: has chosen is a build decision with nowhere to write it down, which is
-#: the marker that row carries itself.
-ASPECT = ("c.race_option()",)
+#: **Which manifestation `rt:r44-t2` is currently showing**, and the
+#: moment it is chosen. That trait is declared and refused in play, and
+#: the choice is **not** a build decision -- the card says "whenever you
+#: choose", which is a per-encounter moment with no event behind it. So
+#: this is not `c.race_option()`, which it carried: that symbol was doing
+#: duty for six different needs and one row's state is not one of them.
+#:
+#: And **not the trait's own ref either**, which was the first re-point and
+#: was wrong in the way `todo.py` exists to catch: `rt:r44-t2` is declared,
+#: so a marker naming it can never go from absent to present and the row
+#: would have waited for ever. The gap is a *reader* for which
+#: manifestation is current, so the symbol names the reader.
+ASPECT = ("c.manifesting()",)
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
 #: A power traded for another at build time.
@@ -1260,7 +1268,7 @@ def f3530(c: Cast) -> None:
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=ASPECT,
+       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3531(c: Cast) -> None:
@@ -1270,8 +1278,10 @@ def f3531(c: Cast) -> None:
     still true -- by `Moved` the shove has happened. `once=True` is the
     printed "the first time".
 
-    Dropped: "if you are in the aspect of the elements", a class feature
-    named in prose with no ref. The 11th and 21st steps are out of scope.
+    Dropped: the clause gating this on being in one of the class's own
+    manifestations -- a class feature the benefit names in prose, with no
+    `cf:` ref to read, which is what `FEATURE` says and `c.class_feature()`
+    collects. The 11th and 21st steps are out of scope.
     """
     me = c.me
 
@@ -1289,7 +1299,7 @@ def f3531(c: Cast) -> None:
 
 
 @power("f3532", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=ASPECT,
+       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3532(c: Cast) -> None:
@@ -1312,7 +1322,7 @@ def f3532(c: Cast) -> None:
 
 @power("f3533", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=ASPECT,
+       dropped=FEATURE,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3533(c: Cast) -> None:
@@ -1337,7 +1347,7 @@ def f3533(c: Cast) -> None:
 
 
 @power("f3534", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=ASPECT,
+       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3534(c: Cast) -> None:
