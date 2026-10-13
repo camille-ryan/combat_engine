@@ -6090,6 +6090,126 @@ def feat_clause_exclusivity(out: Result) -> None:
     known.known[:] = held_originally
 
 
+#: Every row migrated under #550, with the feats whose clauses are exclusive
+#: of each other written into it. One entry per row; `at_most_one_applies`
+#: is what makes adding a row cost a line rather than a function.
+#:
+#: **Exclusive means the printed category, read from the names.** Feats of
+#: other categories that name the same row stack and are deliberately absent
+#: here -- see each row's docstring for which and why.
+MIGRATED = {
+    "p704": ("f972", "f1300"),
+    "p997": ("f994", "f1300"),
+    "p2099": ("f992", "f1298"),
+}
+
+
+def at_most_one_applies(out: Result) -> None:
+    """For every row migrated under #550, at most one exclusive clause pays.
+
+    `feat_clause_exclusivity` proves the property in detail for `p704`,
+    including that each clause works on its own and that the stacking
+    feats still stack. This is the same property asked of **every**
+    migrated row, cheaply, so that migrating the next one costs a line in
+    `MIGRATED` rather than a function here.
+
+    The board is made as generous as it can be -- every condition read
+    answers True, the attack crits, the weapon is whatever was asked for
+    -- precisely so that **both** branches of each chain would fire if
+    the chain were two independent `if`s. That is the only state in which
+    the property is testable: a chain whose branches never both apply is
+    trivially exclusive and proves nothing.
+
+    What it cannot see: whether the right feats are in the chain. That is
+    a reading of printed names and lives in each row's docstring. This
+    asks only that the chain is a chain.
+    """
+    from collections import Counter
+
+    from combat_engine import story
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.resolve import AttackResult
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities)
+              if not query.stat_block(world, e))
+    mon = next(e for e in sorted(world.entities)
+               if query.stat_block(world, e))
+    known = world.get(pc, Powers)
+    assert known is not None
+    was = list(known.known)
+
+    def fire(ref: str, feats: tuple[str, ...], *, hit: bool) -> list[str]:
+        """One use of `ref` holding `feats`, reporting which clauses paid."""
+        known.known[:] = [*was, *feats]
+        paid: list[str] = []
+
+        def spend(which: str):  # noqa: ANN202
+            def spied(*_a: object, **_kw: object) -> object:
+                paid.append(which)
+                return 0
+
+            return spied
+
+        spy = Cast(world=world, me=pc, ref=ref, target=mon,
+                   result=AttackResult(hit=hit, critical=hit, target=mon))
+        # Every laying verb a migrated chain reaches for. A chain using one
+        # that is absent here records nothing, which is what the second
+        # assertion below is the control against.
+        for verb in ("penalty", "flat", "temp_hp", "bonus", "push",
+                     "shift", "slide", "pull", "grants_advantage",
+                     "vulnerable", "mark", "immobilized", "prone"):
+            setattr(spy, verb, spend(verb))
+        setattr(spy, "strike", lambda *_a, **_kw: hit)        # noqa: B010
+        setattr(spy, "damage", lambda *_a, **_kw: 0)          # noqa: B010
+        # Generous: every question a clause's gate can ask says yes.
+        setattr(spy, "is_", lambda *_a, **_kw: True)          # noqa: B010
+        setattr(spy, "is_kind", lambda *_a, **_kw: True)      # noqa: B010
+        setattr(spy, "wielding", lambda *_a, **_kw: True)     # noqa: B010
+        REGISTRY[ref].body(spy)
+        return paid
+
+    def added(ref: str, feats: tuple[str, ...], *, hit: bool) -> list[str]:
+        """What holding `feats` adds over the row's own output.
+
+        **Measured as a difference, because the spy cannot tell a feat's
+        clause from the row's own.** `p997` pays flat damage on its own
+        miss and `f994` adds flat damage on top, so a bare count read two
+        payments and called the chain broken -- it was not; one of the two
+        was the printed row. `feat_clause_exclusivity` already uses this
+        control for `p704` and it has to be generic here.
+        """
+        bare = Counter(fire(ref, (), hit=hit))
+        held = Counter(fire(ref, feats, hit=hit))
+        return sorted((held - bare).elements())
+
+    for ref, feats in MIGRATED.items():
+        # **Both outcomes, because a chain may live in either branch.**
+        # `p704`'s pays on the hit and `p997`'s on the miss, and the first
+        # version of this rule forced a hit and so never reached `p997`'s
+        # `else` at all -- which the reachability assertion caught,
+        # reporting zero clauses paid on a row whose chain is two lines
+        # long. One use of a power is one run, so "at most one" is asked
+        # per run; reachability is asked across the pair.
+        landed = added(ref, feats, hit=True)
+        missed = added(ref, feats, hit=False)
+        for outcome, paid in (("hit", landed), ("miss", missed)):
+            out.that(len(paid) <= 1,
+                     f"{ref} on a {outcome}: holding {len(feats)} exclusive"
+                     f" feats with every condition met, at most one clause"
+                     f" pays ({len(paid)}: {paid})")
+        out.that(len(landed) + len(missed) >= 1,
+                 f"{ref}: and the chain is REACHED -- the control that stops"
+                 f" this passing on a row whose branch never runs"
+                 f" (hit {landed}, miss {missed})")
+
+    known.known[:] = was
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -6114,6 +6234,9 @@ DRIVERS = {
     "feat_clause_exclusivity": (feat_clause_exclusivity,
                                 "two feats of one category cannot both ride"
                                 " one use of a power; two of another can"),
+    "at_most_one_applies": (at_most_one_applies,
+                            "every row migrated under #550 pays exactly one"
+                            " of its exclusive feats' clauses"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,

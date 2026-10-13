@@ -37,6 +37,10 @@ from .grips import heavy_rider, two_handed, two_melee
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
 
+#: The four creature types `f1298`'s clause on `p2099` names together.
+#: Copied with the clause, for the reason `p997`'s `_HELD_FAST` gives.
+_NAMED_KINDS = ("demon", "drow", "orc", "spider")
+
 
 @power(
     "p2099",
@@ -50,8 +54,26 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
     attack=Attack(STR, vs=AC),
 )
 def p2099(c: Cast) -> None:
-    if c.strike():
-        c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
+    """Two feats of the exclusive category hang a clause on this row's hit.
+
+    #550's convention, and `p704` carries the long form of why `f992` and
+    `f1298` are one `if`/`elif` chain rather than two tests.
+
+    `f973` and `f3245` also name this row and are not of that category, so
+    they stay riders in their own files and stack with whichever of these
+    pays. `f973`'s clause is a bonus to *this* row's attack roll, which a
+    body cannot lay for itself -- by the time it runs the roll is made --
+    so it has to stay on the `used=` window regardless.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
+
+    if c.feat("f992"):
+        c.bonus(FORT, 1, on=c.me, until=When.SONT, kind="feat")
+    elif (c.feat("f1298") and c.int_mod > 0
+            and any(c.is_kind(word, on=c.target) for word in _NAMED_KINDS)):
+        c.temp_hp(c.int_mod, on=c.me)
 
 
 @power(

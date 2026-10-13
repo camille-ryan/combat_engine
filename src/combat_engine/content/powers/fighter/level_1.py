@@ -12,6 +12,7 @@ from combat_engine.engine import (
     STR,
     Attack,
     Cast,
+    Condition,
     Keyword,
     Melee,
     power,
@@ -20,6 +21,23 @@ from combat_engine.engine.grid import distance
 from combat_engine.engine.query import squares as squares_of
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
+
+#: The four holds `f1300`'s clause on `p997` names together.
+#:
+#: **Copied rather than shared, and that is the convention's stated cost.**
+#: `f1300` names four rows and its clause goes into each of their bodies
+#: (#550), so this tuple follows it. A shared home was considered and
+#: rejected twice over: `content/powers/` importing from `content/feats/`
+#: would reverse the import direction the tree already has in eight places,
+#: and a general `c.held_fast()` would be one symbol serving several needs --
+#: three other files in the tree name *different* held sets for different
+#: printed lines, which is why there is no general one.
+_HELD_FAST = (
+    Condition.IMMOBILIZED,
+    Condition.RESTRAINED,
+    Condition.STUNNED,
+    Condition.UNCONSCIOUS,
+)
 
 
 @power(
@@ -34,11 +52,36 @@ MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
     attack=Attack(STR, vs=AC),
 )
 def p997(c: Cast) -> None:
+    """Two feats pay their clause on this row's **miss**, and only one may.
+
+    #550's convention. Both `f994` and `f1300` are of the printed category
+    a character may apply only one of to a single use of a power, so they
+    are one `if`/`elif` chain and **not** two tests -- see `p704` for the
+    long form of why the engine cannot check that itself.
+
+    Both hang on the miss and not the hit, which is unusual and is why
+    they sit in the `else`: one pays "damage equal to your Strength
+    modifier **+2**" where the printed row already pays the modifier, and
+    the other pays against a held target whether the blow landed or not.
+
+    `f3230` also names this row and is **not** of that category, so it
+    stays a rider in its own file and stacks with whichever of these pays.
+    Its clause is once per encounter, which a body has no latch for.
+    """
     if c.strike():
         c.damage(c.w(1), c.str_mod)
-    else:
-        # A miss still does something, and a two-handed weapon does more.
-        c.flat(c.str_mod if c.wielding("two-handed") else c.str_mod // 2)
+        return
+    # A miss still does something, and a two-handed weapon does more.
+    c.flat(c.str_mod if c.wielding("two-handed") else c.str_mod // 2)
+    # **Two, not Strength modifier + 2.** The line above already pays the
+    # modifier on a two-handed miss, so the full printed figure would pay
+    # it twice. #299's trap, and the reason this row was read before the
+    # clause was written.
+    if c.feat("f994") and c.wielding("two-handed"):
+        c.flat(2, on=c.target)
+    elif (c.feat("f1300") and c.con_mod > 0
+            and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
+        c.flat(c.con_mod, on=c.target)
 
 
 @power(

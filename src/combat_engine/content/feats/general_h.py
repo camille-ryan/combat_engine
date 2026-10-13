@@ -1162,9 +1162,9 @@ def _is_named_kind(c: Cast, who: int) -> bool:
     return any(c.is_kind(word, on=who) for word in _NAMED_KINDS)
 
 
-def _temp_hp_off_kind(c: Cast, ev: Any) -> None:
-    if c.int_mod > 0 and _is_named_kind(c, ev.target):
-        c.temp_hp(c.int_mod, on=c.me)
+# `_temp_hp_off_kind` was here, called only by f1298's entry on p2099,
+# which is written into p2099's body now (#550). `_is_named_kind` stays:
+# `_extra_off_kind` below is f1298's clause on p87, which has not migrated.
 
 
 def _extra_off_kind(c: Cast, ev: Any) -> None:
@@ -1412,8 +1412,8 @@ def _cow_on_granted_hit(c: Cast, ev: Any) -> None:
 # p1061 adds to the attack roll of the basic attack that row hands an
 # ally, which is now an ordinary read; p653's clause rides the riposte,
 # which shares its row's `Hit`.
+# **p2099's entry has moved into p2099's body** (#550).
 _riders("f1298", {
-    "p2099": _temp_hp_off_kind,
     "p87": _extra_off_kind,
 }, granted={"p1061": _ally_adds_half_int},
    dropped=("c.on_riposte()",))
@@ -1436,12 +1436,12 @@ _riders("f1299", {
 # existed. `_extra_if_held` reads `ev.target`, which `Miss` carries beside
 # `Hit`, so the same clause serves both. p1061 is the granted attack.
 #
-# **p704's entry has moved into p704's body** (#550). The other three stay
-# riders until their own rows are migrated.
+# **p704's and p997's entries have moved into those rows' bodies** (#550),
+# and the `missed=` note above went with p997's. p917 and p1061 stay riders
+# until their own rows are migrated.
 _riders("f1300", {
     "p917": _extra_if_held,
-}, granted={"p1061": _ally_adds_con},
-   missed={"p997": _extra_if_held})
+}, granted={"p1061": _ally_adds_con})
 
 
 @_trait("f1301", dropped=("query.moved_this_turn()",))
