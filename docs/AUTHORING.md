@@ -664,9 +664,55 @@ declare a weapon, a weapon group or a suit of armour.
   `unparsed: 2` counts how many of those the gate has. **None of it is
   yours to write and none of it is a reason to skip the feat** — the
   Benefit is still worth writing whatever the gate says.
+* **A feat that names one power writes its clause INTO that power.** This
+  is the convention as of #550 and it replaced a rider mechanism, so the
+  tree still holds examples of the old shape; follow this one.
+
+      def p87(c: Cast) -> None:
+          ...
+          if c.feat("f974"):
+              c.bonus(..., label="f974")
+
+  `label=` is not optional. `audit._claimed` credits an effect to a row by
+  **label prefix**, so without it the power is credited and the feat reports
+  SILENT. With it the feat is credited exactly as if it had laid the effect
+  itself.
+
+  Three reasons it goes this way round rather than the feat reaching in:
+
+  1. **Nothing has to be pre-wired.** The old shape only reached a power
+     that had been written to *ask* — and almost none were: 36 registrations
+     against 12 read sites, and 2 `squares_for`/`dice_for`/`amount_for` read
+     sites in 23,009 rows. Two bugs came straight out of that gap in one
+     day: `p1489` hard-coded `c.shift(1)` and blocked three feats on a verb
+     that existed, and `c.aid_another` laid its +2 on a key nothing read, so
+     the aid another action had never granted anything in any fight.
+  2. **It makes the style-feat rule unbreakable.** You cannot apply more
+     than one style feat to a single use of a power, and 24 of the 29 ridden
+     powers are named by more than one feat — seven name `p87`. Written as
+     `if c.feat(A): ... elif c.feat(B): ...` the engine *cannot* apply two.
+     As independent riders it always could, and nothing gated it.
+  3. One mechanism instead of two, and the `if` in the body was already the
+     dominant one at 193 sites.
+
+  **The exception is a feat naming a CLASS of powers** — "any implement
+  attack", "your weapon attacks". There is no finite list of bodies to edit,
+  so those still register with `c.pre_empt` / `c.instead_of`. 15 of the 36
+  registrations are this kind; the other 21 name a ref and belong in the
+  power.
+
+  Locality does invert: the feat's printed sentence lives in the power's
+  file, and a power with seven feats carries seven branches. The feat row
+  stays declared as a pointer. That cost is deliberate — the coupling
+  already existed and was being paid as a missing read site, which is to say
+  silently.
+
 * A common shape is a rider on another row: "when you use *X*…". Declare
   it as `on=Trigger(PowerUsed, …)` against the ref the spec gives you,
   and read the note above about `PowerUsed` firing *before* the body.
+  **This is for a feat that answers a moment** -- a trigger -- rather than
+  one that adds a clause to a named power's own resolution; for that, see
+  the bullet above.
 * A feat whose whole benefit is a skill bonus or a ritual is
   `out_of_combat=True` with an empty body, like a cantrip that lights a
   torch. That is a finished row, not a skipped one.

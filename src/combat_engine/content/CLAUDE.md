@@ -147,6 +147,28 @@ before "bonus" and nothing else. A prerequisite is a **column** enforced by
 (`f959` / `f960b`) — the `b` suffix is the convention for a second card with
 no ref of its own.
 
+**A feat that names one power writes its clause into that power**, gated on
+`c.feat("<the feat>")` and laying its effect with `label="<the feat>"` so
+`audit._claimed` still credits the feat and not the power. The feat row stays
+declared as a pointer. #550, and the tree still holds the old rider shape in
+places.
+
+Three reasons, and the second is a rule the engine could otherwise break:
+
+* **Nothing has to be pre-wired.** The rider shape only reached a power
+  written to *ask*, and almost none were — 36 registrations against 12 read
+  sites. `p1489` hard-coded `c.shift(1)` instead of `c.squares_for` and
+  blocked three feats on a verb that already existed.
+* **You cannot apply two style feats to one use of a power**, and 24 of the
+  29 ridden powers are named by more than one feat (seven name `p87`).
+  `if c.feat(A): … elif c.feat(B): …` makes that impossible; two riders make
+  it inevitable, and nothing gated it.
+* One mechanism rather than two, and the `if` was already the common one.
+
+**The exception is a feat naming a class of powers** — "any implement
+attack". There is no finite list of bodies to edit, so those keep
+`c.pre_empt` / `c.instead_of`: 15 of 36 registrations are that kind.
+
 **`races/`** — `cls` holds a **race ref** (`r33`), not a class, for the same
 reason a theme row holds `x7_642`: a printed name in that column is a leak.
 A racial trait says its race in its own ref (`rt:r33-...`).
