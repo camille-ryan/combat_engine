@@ -1473,7 +1473,12 @@ def area_of(
     for eye in origins(world, actor, r):
         mine |= squares(world, eye)
     stretch = _stretched(world, actor, r.kind, {"power": p.ref, "kind": r.kind})
-    if stretch:
+    # **Not applied to a melee or ranged range here**, because those go
+    # through `_reach_of` below and it derives its own answer from the
+    # weapon -- so a size raised here was read, overwritten and lost. See
+    # `_reach_of`. The spread kinds have no such second opinion and take it
+    # directly.
+    if stretch and r.kind not in ("melee", "ranged"):
         r = replace(r, size=r.size + stretch)
     if r.kind == "close_burst":
         out = spread(mine, r.size)
@@ -1487,13 +1492,16 @@ def area_of(
         # up and what `c.wall` picks its run of squares out of.
         out = spread(mine, r.within)
     elif r.kind in ("melee", "ranged"):
-        out = spread(mine, _reach_of(world, actor, r, p.ref))
+        out = spread(mine, _reach_of(world, actor, r, p.ref, stretch=stretch))
     else:
         out = frozenset(mine)
     return frozenset(sq for sq in out if world.grid.inside(sq))
 
 
-def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
+def _reach_of(
+    world: World, actor: int, r: Range, ref: str = "", *,
+    stretch: int | None = None,
+) -> int:
     """How far this range actually carries.
 
     For a weapon range that is the **long** range, because a shot past
@@ -1501,9 +1509,28 @@ def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
     `resolve._long_range` charges. Capping the offer at the normal range
     made that penalty unreachable: the target was refused before it could
     be charged, so the whole of `_long_range` was dead code.
+
+    **`stretch` is "the target's reach increases by 1", and it used to be
+    thrown away here.** `area_of` computed it, added it to `r.size`, and
+    then called this -- which answers a by-weapon range off the weapon and
+    never looks at `r.size`. So the modifier was read, applied and
+    discarded on the **common** path: 1,023 melee rows print "melee
+    weapon" against 325 with a fixed number, and `mba` is on it too, so the
+    melee basic attack ignored a reach bonus. #533.
+
+    `None` means ask `_stretched` here. That is the default on purpose:
+    `_within_reach`, `Cast.reach_of` and the three policy readers all call
+    this without a stretch, and none of them applied one anywhere else --
+    so the modifier reached the *area* a power offered and not the question
+    "may I reach that creature". Computing it here is what makes those
+    four agree with each other.
     """
     from .components import Gear
 
+    if stretch is None:
+        stretch = _stretched(
+            world, actor, r.kind, {"power": ref, "kind": r.kind}
+        )
     gear = world.get(actor, Gear)
     if r.kind == "melee":
         # **A reach weapon reaches, which nothing here used to say.**
@@ -1527,7 +1554,7 @@ def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
         # and could not **choose** a basic attack at two -- `_threat` reads the
         # weapon and `candidates` read the printed 1. #294.
         if ref not in BY_WEAPON and not r.by_weapon:
-            return r.size
+            return r.size + stretch
         # **The weapon's reach plus what the card grants**, and neither `max` with
         # the printed size nor the weapon alone. Both of those were tried and both
         # were wrong, because the figure they needed had been thrown away upstream:
@@ -1537,9 +1564,9 @@ def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
         # unarmed, which is what a fist reaches.
         held = getattr(gear, "main", None) if gear else None
         worn = getattr(held, "reach", None) if held else None
-        return (worn or 1) + GIVES.get(ref, 0)
+        return (worn or 1) + GIVES.get(ref, 0) + stretch
     if not r.by_weapon:
-        return r.size
+        return r.size + stretch
     # **The weapon's range, not the card's.** A row printing `Ranged weapon`
     # does not print a number, so the number the ETL wrote down is a stand-in
     # and must lose to the thing in hand. It used to be `max(weapon, printed)`,
@@ -1561,7 +1588,7 @@ def _reach_of(world: World, actor: int, r: Range, ref: str = "") -> int:
     if flies is None:
         hurled = getattr(gear, "thrown", None) if gear else None
         flies = getattr(hurled, "thrown", None) if hurled else None
-    return flies[1] if flies else r.size
+    return (flies[1] if flies else r.size) + stretch
 
 
 def _stretched(

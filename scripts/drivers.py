@@ -3812,6 +3812,95 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def reach_stretch(out: Result) -> None:
+    """"The target's reach increases by 1", on the rows that print a weapon.
+
+    The modifier was written, stored and **read**, and then discarded by
+    the one function that decides what a melee or ranged power can touch.
+    `area_of` computed the stretch, added it to `r.size` and called
+    `_reach_of`, which answers a by-weapon range off the weapon in hand and
+    never looked at `r.size`. #533.
+
+    That is the common path, not an edge: 1,023 melee rows print "melee
+    weapon" against 325 with a fixed number, and `mba` is on it -- so the
+    melee basic attack ignored a reach bonus entirely.
+
+    Four controls:
+
+    * **a by-weapon melee row stretches**, which is the fix;
+    * **it does not stretch without a modifier**, the negative control --
+      otherwise this passes on a build that simply reaches one further;
+    * **a fixed-range melee row stretches too but does not inherit the
+      weapon's reach.** `_reach_of` guards that case deliberately, because
+      "Melee touch" must not grow in a glaive's hand, and a careless fix
+      here would have flattened the guard;
+    * **`_within_reach` agrees with the area.** This is the half the issue
+      called the second bug: that function calls `_reach_of` without a
+      stretch and applied one nowhere else, so the modifier reached the
+      squares a power *offered* and not the question "may I reach that
+      creature".
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import BY_WEAPON, REGISTRY, _reach_of
+
+    by_weapon = "mba"
+    fixed = next(
+        (r for r, p in REGISTRY.items()
+         if p.reach.kind == "melee"
+         and not getattr(p.reach, "by_weapon", False)
+         and r not in BY_WEAPON),
+        "",
+    )
+
+    def reach_of(ref: str, *, plus: int) -> int:
+        world, me, _ = _board(seed=1)
+        c = Cast(world=world, me=me, ref="drivers:reach")
+        if plus:
+            c.bonus("reach", plus, on=me, until=When.ENCOUNTER, kind="power")
+        declared = REGISTRY.get(ref)
+        assert declared is not None, ref
+        return _reach_of(world, me, declared.reach_of(0), ref)
+
+    plain = reach_of(by_weapon, plus=0)
+    stretched = reach_of(by_weapon, plus=1)
+    out.that(stretched == plain + 1,
+             "a +1 to reach reaches one further on a by-weapon melee row --"
+             f" `{by_weapon}` goes {plain} -> {stretched}, and this is the"
+             " row the melee basic attack is")
+
+    out.that(plain == reach_of(by_weapon, plus=0),
+             "and reaches no further with no modifier laid, which is the"
+             f" negative control ({plain})")
+
+    if fixed:
+        a, b = reach_of(fixed, plus=0), reach_of(fixed, plus=1)
+        out.that(b == a + 1 and a == REGISTRY[fixed].reach_of(0).size,
+                 "a fixed-range melee row stretches as well and still does"
+                 f" not inherit the weapon's reach -- {fixed} is {a} printed"
+                 f" and {b} stretched, which is the guard `_reach_of` keeps")
+
+    # **The reach question, not the area question.** `_within_reach` is a
+    # different call site and had no stretch of its own.
+    from combat_engine.engine.dsl import _within_reach
+    world, me, _ = _board(seed=1)
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import enemies, squares
+    foe = sorted(enemies(world, me))[0]
+    here = sorted(squares(world, me))[0]
+    world.get(foe, Position).square = (here[0] + 2, here[1])
+    declared = REGISTRY[by_weapon]
+    c = Cast(world=world, me=me, ref="drivers:reach")
+    before = _within_reach(world, me, declared, foe)
+    c.bonus("reach", 2, on=me, until=When.ENCOUNTER, kind="power")
+    after = _within_reach(world, me, declared, foe)
+    out.that(not before and after,
+             "and a creature two squares off is out of reach until a +2 to"
+             f" reach says otherwise ({before} then {after}) -- the half"
+             " that asks 'may I reach it' rather than 'what do I cover'")
+
+
 def shield_bonuses(out: Result) -> None:
     """A shield's contribution to AC, as a number a row can read.
 
@@ -4915,6 +5004,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "reach_stretch": (reach_stretch,
+                      "a reach modifier the by-weapon rows were dropping"),
     "shield_bonuses": (shield_bonuses,
                        "a shield's AC contribution, as a readable number"),
     "ability_checks": (ability_checks,
