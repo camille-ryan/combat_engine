@@ -3161,16 +3161,26 @@ def m4244a1(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.CLOSE],
     requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
     requires_text="usable only while bloodied",
-    todo=("compendium.attack_defence", "c.aura(shrinks=)"),
+    defect="the printed attack line has neither of its two defences",
 )
 def m4244a2(c: Cast) -> None:
     """Both defence names are gone -- "+12 vs or (whichever is lower)" --
     and unlike `m3094a1`'s version of this same defect, neither survives to
-    anchor the header. Picking one would be an invented number the policy
-    reads as printed, so nothing here is rolled. The second gap is its own:
-    the aura this card shrinks by one square per use, and recharge-locks
-    once it is gone, is not one of this file's rows, and `c.aura` has no
-    shrinking radius regardless."""
+    anchor the header. There `m3094a1` kept the defence its line leads with
+    and rolls; here nothing is rolled at all, which is the test #360 set for
+    `defect=` against `dropped=` and the same shape as m850a2, m2346a1 and
+    m2515a1.
+
+    This was the one row of 24 carrying `compendium.attack_defence` as a
+    `todo=` rather than a source defect, so it reported as waiting on work
+    somebody could do.
+
+    **A second gap sits behind the defect and has no marker of its own**,
+    because `defect=` takes one reason and a marker names one gap: the aura
+    this card shrinks by one square per use, and recharge-locks once it is
+    gone, is not one of this file's rows, and `c.aura` has no shrinking
+    radius regardless. It becomes live only if the defence is ever
+    recovered, at which point this row needs both."""
 
 
 @power(
