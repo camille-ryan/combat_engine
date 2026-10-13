@@ -64,6 +64,7 @@ from combat_engine.engine import (
     DamageType,
     EffectApplied,
     Forced,
+    Healed,
     Hit,
     Keyword,
     Melee,
@@ -757,18 +758,27 @@ def i1505p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("Healed.power",),
 )
 def i1561x1(c: Cast) -> None:
     """Adds to the amount one **named** healing row restores.
 
-    Re-aimed. The old marker said healing has no seam at all, which is no
-    longer true: `resolve.heal` announces `Healed` *before* the hit points
-    go on and reads `amount` back off the event, so a listener may raise
-    it. What is missing is narrowing it to the row the card names --
-    `Healed` carries `source`, `target`, `amount` and `hp` and nothing
-    saying which power healed. Ungated this would fatten every heal the
-    wielder ever gave, which is far more than the card grants."""
+    Both halves now. `resolve.heal` announces `Healed` *before* the hit
+    points go on and reads `amount` back off the event, so a listener may
+    raise it; and `Healed.power` says which row healed, so the rise is
+    narrowed to the one the card names. Ungated it would have fattened
+    every heal the wielder ever gave.
+
+    `window=Window.BEFORE`, like every other rider that changes a heal's
+    amount: the resolve callback reads the number after the window.
+    """
+    plus = max(1, c.enhancement)
+
+    def more(ev: Healed) -> None:
+        if ev.source == c.me and c.healed_by(ev, ref="p1455"):
+            ev.amount += plus
+
+    c.watch(Healed, more, until=When.ENCOUNTER, window=Window.BEFORE,
+            on=c.me, label=c.ref)
 
 
 @power(

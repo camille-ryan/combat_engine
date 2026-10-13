@@ -86,6 +86,7 @@ from combat_engine.engine import (
     Event,
     Forced,
     ForcedMove,
+    Healed,
     Hit,
     InitiativeRolled,
     Keyword,
@@ -102,6 +103,7 @@ from combat_engine.engine import (
     TurnEnd,
     TurnStart,
     When,
+    Window,
     World,
     ZoneEntered,
     about_me,
@@ -573,11 +575,30 @@ def i3298x1(c: Cast) -> None:
 
 @power("i1420p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       dropped=("Healed.power",))
+)
 def i1420p1(c: Cast) -> None:
-    """"When one of your primal healing powers heals an ally" needs the
-    power off the `Healed`, which does not carry one."""
+    """Both halves. `_soulfang` is the price every soulfang prints -- half
+    a surge's worth at the start of each turn -- and the payout is the
+    rider, which needed to know *which* row healed. `Healed.power` says
+    so now.
+
+    An **ally**, not the wielder: the card pays the creature the power
+    healed, and a wielder healing itself is not that. +2 is the heroic
+    number; the Level 8 and later lines are out of scope as every item's
+    are.
+
+    The soulfang's own damage is `unpreventable=True` inside `_soulfang`
+    -- "damage caused by this soulfang cannot be reduced by any means".
+    """
     _soulfang(c)
+
+    def mended(ev: Healed) -> None:
+        if (ev.source == c.me and ev.target != c.me
+                and c.healed_by(ev, keyword=Keyword.PRIMAL)):
+            ev.amount += 2
+
+    c.watch(Healed, mended, until=When.ENCOUNTER, window=Window.BEFORE,
+            on=c.me, label=c.ref)
 
 
 @power("i2561p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,

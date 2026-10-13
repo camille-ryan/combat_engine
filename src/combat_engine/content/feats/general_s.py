@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Dropped,
     EffectApplied,
     Gear,
+    Healed,
     Hit,
     Keyword,
     MoveEnd,
@@ -2184,19 +2185,30 @@ def f3795b(c: Cast) -> None:
 
 
 @power("f3796", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Healed.power",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use p6189",
+       on=Trigger(PowerUsed,
+                  lambda w, me, ev: ev.actor == me and ev.power == "p6189",
+                  "you use that racial power"))
 def f3796(c: Cast) -> None:
-    """Both names are refs now -- `p6189` and `f3668b`, and `f3668b` is a
-    real row -- so what is left is telling the two apart at the moment
-    of the heal.
+    """A window after the racial power: every heal from `f3668b` until the
+    end of the next turn pays more.
 
-    `Healed` carries `source`, `target`, `amount` and `hp` and does not
-    say which row paid out, and `f3668b` heals through a `c.give`
-    one-shot that announces nothing of its own. Written without that,
-    the top-up would ride on *every* heal this caster sourced for the
-    round, which is more than the card prints -- so the whole row waits
-    rather than half of it playing too wide.
+    **The last piece was telling that heal from any other.** `Healed` now
+    carries the row that paid out, and `f3668b` heals through `c.surge`,
+    which passes its own ref -- so `c.healed_by(ev, ref="f3668b")` is the
+    narrowing the card prints. Written without it the top-up would have
+    ridden on every heal this caster sourced for the round, which is more
+    than the card grants.
     """
+    extra = c.cha_mod
+
+    def more(ev: Healed) -> None:
+        if ev.source == c.me and c.healed_by(ev, ref="f3668b"):
+            ev.amount += c.roll("1d8") + extra
+
+    c.watch(Healed, more, until=When.EONT, window=Window.BEFORE,
+            on=c.me, label=c.ref)
 
 
 @power("f3797", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

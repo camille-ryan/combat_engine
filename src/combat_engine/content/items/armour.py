@@ -2506,14 +2506,18 @@ def i1211p1(c: Cast) -> None:
 
 @power("i1227p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
-       dropped=("Healed.power",))
+)
 def i1227p1(c: Cast) -> None:
     """"By one of your encounter or daily powers" is dropped: `Healed`
     names the source and the number and not the row that did it, so the
     top-up pays out on any healing of mine."""
 
     def mended(ev: Healed) -> None:
-        if ev.source != c.me:
+        # "Healed by one of your encounter powers or daily powers", which
+        # `Healed.power` makes askable.
+        if ev.source != c.me or not c.healed_by(
+            ev, usage=(ENCOUNTER, DAILY)
+        ):
             return
         c.heal(c.roll("1d10") + c.cha_mod, on=ev.target)
 

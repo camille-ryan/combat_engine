@@ -570,7 +570,6 @@ def i3200x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("Healed.power",),
 )
 def i3344x1(c: Cast) -> None:
     """"At 0 hit points or fewer" is read back from the event: `hp` is
@@ -581,6 +580,9 @@ def i3344x1(c: Cast) -> None:
     busy: list[int] = []
 
     def topped_up(ev: Healed) -> None:
+        # The "primal healing power" half, which `Healed.power` answers.
+        if not c.healed_by(ev, keyword=Keyword.PRIMAL):
+            return
         if busy or ev.source != c.me or ev.amount <= 0:
             return
         if ev.hp - ev.amount > 0:

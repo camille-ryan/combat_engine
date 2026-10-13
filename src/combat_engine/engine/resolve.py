@@ -1202,7 +1202,9 @@ def deal_damage(
     return landed
 
 
-def heal(world: World, source: int, target: int, amount: int) -> int:
+def heal(
+    world: World, source: int, target: int, amount: int, power: str = ""
+) -> int:
     health = world.get(target, Health)
     if health is None or amount <= 0:
         return 0
@@ -1214,7 +1216,9 @@ def heal(world: World, source: int, target: int, amount: int) -> int:
     # first and announce after, which left a row like that clawing the
     # surplus back off `Health` -- the total came out right and the number
     # in the log did not.
-    offered = Healed(source=source, target=target, amount=amount, hp=health.hp)
+    offered = Healed(
+        source=source, target=target, amount=amount, hp=health.hp, power=power
+    )
     if world.bus.emit(offered).cancelled:
         return 0
     before = health.hp

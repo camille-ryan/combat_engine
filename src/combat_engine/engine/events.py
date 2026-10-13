@@ -517,6 +517,17 @@ class Healed(Decision):
     target: int
     amount: int
     hp: int
+    #: The row that did the healing, as a ref. Ten rows wanted it and none
+    #: could ask: a rider on "the hit points regained by your cleric
+    #: healing powers", "each character healed by one of your encounter or
+    #: daily powers", or one named row, has to tell *which* heal it is
+    #: looking at, and this event said only who healed whom.
+    #:
+    #: `""` when nothing named it -- a surge spent on its own, a rest. A
+    #: gate on this must therefore test the ref it wants rather than
+    #: treating empty as a wildcard, or a short rest reads as every power
+    #: at once.
+    power: str = ""
 
 
 @dataclass

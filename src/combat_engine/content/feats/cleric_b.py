@@ -63,7 +63,28 @@ FORTUNE = "p1589"
 
 #: `Healed` names a source and no power, so "your cleric healing
 #: powers" cannot be told from any other heal you cause.
-HEAL_SOURCE = ("Healed.power",)
+def _healed_by(ev: Any, *, cls: str = "", keyword: Any = None,
+               usage: Any = None) -> bool:
+    """Did this heal come from a row of mine matching the card's wording?
+
+    `Healed.power` carries the ref now, so "with any of your cleric
+    healing powers" is a lookup rather than a guess. Three rows in this
+    file and four elsewhere print some narrowing of the same shape.
+
+    **An unnamed heal never matches.** `ev.power` is `""` for a surge
+    nothing asked for and for a rest, and treating empty as a wildcard
+    would make every one of these riders pay out on a short rest.
+    """
+    from combat_engine.engine.dsl import get as _get
+
+    declared = _get(getattr(ev, "power", "") or "")
+    if declared is None:
+        return False
+    if cls and declared.cls != cls:
+        return False
+    if keyword is not None and keyword not in declared.keywords:
+        return False
+    return not (usage is not None and declared.usage is not usage)
 
 _DEFENCES = (AC, FORT, REF, WILL)
 
@@ -200,7 +221,7 @@ def f2866(c: Cast) -> None:
 
 
 @power("f1547", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=HEAL_SOURCE)
+       reach=PERSONAL, target=SELF)
 def f1547(c: Cast) -> None:
     """Two standing clauses, so a trait with two watchers rather than a
     declared trigger -- a row with `on=` lays nothing until it fires.
@@ -218,7 +239,10 @@ def f1547(c: Cast) -> None:
     extra = "1d6" if c.level < 11 else "2d6"
 
     def more(ev: Any) -> None:
-        if ev.source == c.me:
+        # "p1455 or a divine power that allows a target to spend a healing
+        # surge" -- the divine keyword is the narrowing the card prints and
+        # `p1455` carries it too, so one test serves both halves.
+        if ev.source == c.me and _healed_by(ev, keyword=Keyword.DIVINE):
             ev.amount += c.roll(extra) + c.cha_mod
 
     def stun(ev: Any) -> None:
@@ -230,7 +254,7 @@ def f1547(c: Cast) -> None:
 
 
 @power("f1531", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=HEAL_SOURCE)
+       reach=PERSONAL, target=SELF)
 def f1531(c: Cast) -> None:
     """Adds a held implement's enhancement bonus to what a surge
     restores.
@@ -251,14 +275,16 @@ def f1531(c: Cast) -> None:
     plus = armed[0].enhancement if armed else c.enhancement
 
     def more(ev: Any) -> None:
-        if ev.source == c.me:
+        if ev.source == c.me and _healed_by(
+            ev, cls="cleric", keyword=Keyword.HEALING
+        ):
             ev.amount += plus
 
     c.watch(Healed, more, until=When.ENCOUNTER)
 
 
-@power("f1534", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=HEAL_SOURCE,
+@power("f1534", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you use p2485",
        on=Trigger(PowerUsed, _i_used("p2485"), "you use that racial power"))
 def f1534(c: Cast) -> None:
@@ -267,7 +293,9 @@ def f1534(c: Cast) -> None:
     duration and not the one-shot the other healing word riders use."""
 
     def more(ev: Any) -> None:
-        if ev.source == c.me:
+        if ev.source == c.me and _healed_by(
+            ev, cls="cleric", keyword=Keyword.HEALING
+        ):
             ev.amount += c.str_mod
 
     c.watch(Healed, more, until=When.EONT)

@@ -739,15 +739,18 @@ def i2134p1(c: Cast) -> None:
 
 
 @power("i2168x1", level=6, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Healed.power",))
+       reach=PERSONAL, target=SELF, dropped=())
 def i2168x1(c: Cast) -> None:
     """`Healed` says who healed whom and not which row did it, so "a power
     that allows a surge" and "an encounter or daily power" go unasked and
     every heal of mine on a construct pays out."""
 
     def healed(ev: Healed) -> None:
-        if ev.source == c.me and ev.target != c.me and c.is_kind(
-                "construct", on=ev.target):
+        # "An encounter or daily power", which `Healed.power` makes
+        # askable -- before this it paid out on every heal of mine.
+        if (ev.source == c.me and ev.target != c.me
+                and c.healed_by(ev, usage=(ENCOUNTER, DAILY))
+                and c.is_kind("construct", on=ev.target)):
             c.heal(c.roll("2d6"), on=ev.target)
 
     def temped(ev: TempHP) -> None:

@@ -490,6 +490,11 @@ def suspension(out: Result) -> None:
 
     out.that(not takes_half(world, caster), "nobody starts insubstantial")
     thin = c.insubstantial(on=caster, until=When.ENCOUNTER)
+    # Narrowed because the verb is `Effect | None` and everything below
+    # reads fields off it. Pre-existing, and surfaced only when this file
+    # entered `types.py`'s changed set -- the same way writing a clause
+    # makes a silent row visible.
+    assert thin is not None, "insubstantial laid nothing"
     out.that(takes_half(world, caster), "and the trait goes on")
 
     world.effects.suspend(thin)
@@ -3812,6 +3817,80 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def healed_power(out: Result) -> None:
+    """Which row did the healing, which `Healed` did not say.
+
+    Ten rows print a rider on *some* heals and not others -- "the hit
+    points regained by your cleric healing powers", "each character healed
+    by one of your encounter or daily powers", "the amount healed by
+    p1455" -- and the event carried who healed whom and the number, with
+    no way to tell one heal from another.
+
+    Three controls, and the second is the one a careless gate gets wrong:
+
+    * **a heal from a row announces that row's ref**;
+    * **a heal nothing named announces `""`**, and a gate on a particular
+      ref must not fire on it. Empty is not a wildcard: treating it as one
+      would make a short rest read as every power at once;
+    * **the rider can still change the amount**, because `resolve.heal`
+      announces before the hit points go on and that seam is what every
+      one of the ten rows needs. A field nobody can act on at the right
+      moment would be no use.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.events import Healed
+    from combat_engine.engine.resolve import heal as _heal
+
+    world, me, _ = _board(seed=1)
+    hurt = world.get(me, Health)
+    hurt.hp = max(1, hurt.max_hp - 20)
+
+    seen: list[tuple[str, int]] = []
+    c = Cast(world=world, me=me, ref="drivers:cure")
+    c.watch(Healed, lambda ev: seen.append((ev.power, ev.amount)),
+            until=When.ENCOUNTER, on=me, label="drivers:watch")
+
+    c.heal(5, on=me)
+    out.that(seen and seen[-1][0] == "drivers:cure",
+             "a heal announces the row that did it, which ten rows needed"
+             f" and the event never said {seen[-1:]}")
+
+    # **Nothing named it.** `resolve.heal` straight, as a rest or a bare
+    # surge reaches it.
+    _heal(world, me, me, 3)
+    out.that(seen[-1][0] == "",
+             "a heal nothing named announces an empty ref, so a gate on one"
+             f" particular row does not fire on it {seen[-1:]}")
+
+    gated = [p for p, _ in seen if p == "drivers:cure"]
+    out.that(len(gated) == 1,
+             "which is the gate working: one of the two heals matches the"
+             f" ref and the other does not ({len(gated)} of {len(seen)})")
+
+    # **The seam still works.** A rider adds before the hit points go on.
+    world, me, _ = _board(seed=1)
+    hurt = world.get(me, Health)
+    hurt.hp = max(1, hurt.max_hp - 20)
+    before = hurt.hp
+    c = Cast(world=world, me=me, ref="drivers:cure")
+
+    def more(ev: Healed) -> None:
+        if ev.power == "drivers:cure":
+            ev.amount += 4
+
+    from combat_engine.engine.types import Window
+    c.watch(Healed, more, until=When.ENCOUNTER, window=Window.BEFORE,
+            on=me, label="drivers:more")
+    c.heal(5, on=me)
+    got = world.get(me, Health).hp - before
+    out.that(got == 9,
+             "and a rider keyed on that ref still adds before the hit"
+             f" points go on -- 5 printed became {got}")
+
+
 def reach_stretch(out: Result) -> None:
     """"The target's reach increases by 1", on the rows that print a weapon.
 
@@ -5004,6 +5083,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "healed_power": (healed_power,
+                     "which row did the healing, which Healed did not say"),
     "reach_stretch": (reach_stretch,
                       "a reach modifier the by-weapon rows were dropping"),
     "shield_bonuses": (shield_bonuses,

@@ -54,6 +54,7 @@ from .types import (
     Relation,
     Size,
     Team,
+    Usage,
     Window,
 )
 
@@ -2311,8 +2312,17 @@ class Cast:
         )
 
     def heal(self, amount: int, *, on: int | None = None) -> int:
+        """Put hit points back. The row's own ref rides along on `Healed`.
+
+        `power=self.ref` is what lets a rider tell *which* heal it is
+        looking at -- "the hit points regained by your cleric healing
+        powers", "each character healed by one of your encounter powers".
+        Ten rows wanted that and the event said only who healed whom.
+        """
         who = self._who(on)
-        return 0 if who is None else heal(self.world, self.me, who, amount)
+        if who is None:
+            return 0
+        return heal(self.world, self.me, who, amount, self.ref)
 
     def surge(self, *, on: int | None = None, bonus: int = 0) -> int:
         """Spend a healing surge: a quarter of maximum hit points."""
@@ -2333,7 +2343,7 @@ class Cast:
             self.world, who, source=self.me, power=self.ref, healed=worth
         ):
             return 0
-        return heal(self.world, self.me, who, worth)
+        return heal(self.world, self.me, who, worth, self.ref)
 
     def temp_hp(self, amount: int, *, on: int | None = None) -> None:
         who = self._who(on)
@@ -9837,6 +9847,40 @@ class Cast:
 
         roller = self.me if who is None else who
         return _check(self.world, roller, skill, dc, bonus=bonus)
+
+    def healed_by(self, ev: Any, *, ref: str = "", cls: str = "",
+                  keyword: Keyword | None = None,
+                  usage: Usage | tuple[Usage, ...] | None = None) -> bool:
+        """Did this `Healed` come from a row matching the card's wording?
+
+        `Healed.power` carries the ref, and ten rows narrow on it in four
+        different ways -- "with any of your **cleric healing** powers", "by
+        one of your **encounter or daily** powers", "your **primal
+        healing** powers", "the amount healed by **p1455**". One reader
+        rather than ten lookups, because the awkward part is the same every
+        time and getting it wrong is silent.
+
+        **An unnamed heal never matches.** `ev.power` is `""` for a surge
+        nothing asked for and for a rest, so treating empty as a wildcard
+        would pay every one of these riders out on a short rest. That is
+        the control `drivers.healed_power` keeps.
+        """
+        from .dsl import get as _get
+
+        declared = _get(getattr(ev, "power", "") or "")
+        if declared is None:
+            return False
+        if ref and declared.ref != ref:
+            return False
+        if cls and declared.cls != cls:
+            return False
+        if keyword is not None and keyword not in declared.keywords:
+            return False
+        if usage is not None:
+            wanted = usage if isinstance(usage, tuple) else (usage,)
+            if declared.usage not in wanted:
+                return False
+        return True
 
     def ability_check(self, ability: Ability, dc: int = 0, *, who: int | None = None, bonus: int = 0):  # noqa: ANN201, E501
         """Roll a raw ability check. Truthy when it beat the DC.

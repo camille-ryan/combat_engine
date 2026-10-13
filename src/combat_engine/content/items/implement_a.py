@@ -1315,7 +1315,6 @@ def i2778p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack made with this holy symbol",
     on=HIT_BY_ME,
-    dropped=("Healed.power",),
 )
 def i2780p1(c: Cast) -> None:
     """"By your encounter and daily powers" cannot be told from any other
@@ -1323,7 +1322,11 @@ def i2780p1(c: Cast) -> None:
     numbers are out of scope."""
 
     def extra(ev: Healed) -> None:
-        if ev.source == c.me:
+        # "By your encounter and daily powers" -- askable now that
+        # `Healed` carries the row that did the healing.
+        if ev.source == c.me and c.healed_by(
+            ev, usage=(ENCOUNTER, DAILY)
+        ):
             c.heal(c.roll("1d6"), on=ev.target)
 
     c.watch(Healed, extra, until=When.EOT)
