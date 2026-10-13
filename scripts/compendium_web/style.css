@@ -1,0 +1,736 @@
+/* The chrome copies the layout of the viewer this replaces -- measured off its
+   stylesheet, written fresh here. That viewer is AGPL and none of its code is
+   in this file; what is copied is where things sit, so the habit transfers.
+
+   Light, not the dark `web/style.css` palette. This is not the combat grid. */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: #fde8bd;
+  font: 14px/1.4 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body {
+  color: black;
+  min-height: 100%;
+  width: 100%;
+}
+
+html,
+body,
+div,
+th,
+td {
+  margin: 0;
+  padding: 0;
+}
+
+a {
+  color: #600;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #d00;
+  text-decoration: underline;
+}
+
+button,
+.button {
+  background-color: #b7e9f7;
+  border: 1px outset #888;
+  border-radius: 1ex;
+  color: black;
+  cursor: pointer;
+  display: inline-block;
+  font: inherit;
+  padding: 0.5ex 1ex;
+}
+
+button:hover,
+button:focus {
+  border-color: red;
+  color: firebrick;
+  opacity: 0.85;
+}
+
+/* A target toggle. Pressed is the lit one; `aria-pressed` carries the state so
+   the control is the state, with nothing to keep in step. */
+button.pressable {
+  color: #666;
+  opacity: 0.7;
+}
+
+button.pressable[aria-pressed="true"] {
+  color: #008;
+  opacity: 1;
+}
+
+th {
+  text-align: left;
+}
+
+mark {
+  background-color: yellow;
+  padding: 0;
+}
+
+/* The highlight toggle: one class on the body, every `<mark>` goes quiet. */
+body.no_highlight mark {
+  background-color: transparent;
+  color: inherit;
+}
+
+/* ------- the fixed bar */
+
+header[role="banner"] {
+  background-color: black;
+  height: 40px;
+  position: fixed;
+  text-align: center;
+  top: 0;
+  width: 100%;
+  z-index: 8;
+}
+
+header[role="banner"] h1 {
+  color: white;
+  display: inline-block;
+  font-size: 150%;
+  line-height: 40px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+header[role="banner"] button {
+  border-radius: 2ex;
+  float: left;
+  font-weight: bold;
+  margin: 5px;
+}
+
+header[role="banner"] h1 ~ button {
+  float: right;
+}
+
+body > section {
+  background-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 200px 200px rgba(255, 224, 128, 0.5);
+  margin-top: 40px;
+  min-height: calc(100vh - 40px);
+  width: 100%;
+}
+
+body > section > * {
+  margin: 10px;
+}
+
+body > section > header {
+  margin: 0 0 10px;
+  padding: 0.5em 1ex;
+}
+
+section[hidden] {
+  display: none;
+}
+
+/* ------- page flippers: fixed to both edges, out of the way until wanted */
+
+.btn_prev,
+.btn_next {
+  border-radius: 1cm;
+  bottom: 0;
+  font-size: 1cm;
+  height: 2cm;
+  left: 1ex;
+  margin: auto;
+  opacity: 0.12;
+  position: fixed;
+  right: 1ex;
+  top: 0;
+  width: 2cm;
+  z-index: 6;
+}
+
+/* Faint at rest. They sit over the rightmost column -- which is how the viewer
+   this copies behaves -- and that column is the repo one, the reason to look. */
+.btn_prev:hover,
+.btn_next:hover {
+  opacity: 0.9;
+}
+
+.btn_prev {
+  margin-left: 0;
+}
+
+.btn_next {
+  margin-right: 0;
+}
+
+.btn_prev[disabled],
+.btn_next[disabled] {
+  opacity: 0.08;
+  cursor: default;
+}
+
+@media (max-width: 12cm) {
+  .btn_prev,
+  .btn_next {
+    border-radius: 0.5cm;
+    font-size: 0.5cm;
+    height: 1cm;
+    width: 1cm;
+  }
+}
+
+/* ------- the search panel */
+
+#term {
+  margin-top: 50px;
+}
+
+#q {
+  font: inherit;
+  padding: 0.4ex 1ex;
+  width: 100%;
+}
+
+#targets {
+  border-spacing: 0;
+  width: calc(100% - 20px);
+}
+
+/* Flex, not three inline-blocks at 33.33%: the whitespace between inline
+   elements counts, so the third button wrapped to its own line. */
+#targets td:first-child {
+  display: flex;
+}
+
+#targets button {
+  border-radius: 0;
+  flex: 1;
+  font-weight: bold;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#targets td + td {
+  width: 30px;
+}
+
+#targets td + td button {
+  width: 100%;
+}
+
+@media (min-width: 767px) {
+  #term {
+    float: left;
+    margin-right: -330px;
+    margin-top: 10px;
+    padding-right: 330px;
+    width: calc(100% - 10px);
+  }
+
+  #q {
+    font-size: 120%;
+  }
+
+  #targets {
+    float: right;
+    margin-left: 0;
+    width: 310px;
+  }
+}
+
+#error {
+  clear: both;
+  color: #b00;
+  font-weight: bold;
+  margin: 10px;
+}
+
+#error[hidden] {
+  display: none;
+}
+
+/* ------- category tabs */
+
+#cats {
+  clear: left;
+}
+
+#cats button {
+  border: 1px outset #888;
+  display: block;
+  float: left;
+  font-size: 115%;
+  height: 34px;
+  line-height: 24px;
+  max-width: 360px;
+  overflow: hidden;
+  padding: 2px 5px;
+  text-align: left;
+  width: 100%;
+}
+
+#cats button[aria-selected="true"] {
+  background-color: #ffe080;
+  font-weight: bold;
+}
+
+#cats button var {
+  float: right;
+  font-size: 10pt;
+  font-style: normal;
+  font-weight: normal;
+  padding-left: 1ex;
+}
+
+@media (min-width: 1024px) {
+  #cats button {
+    max-width: 220px;
+  }
+}
+
+@media (max-width: 1023px) {
+  #cats button {
+    font-size: 100%;
+    width: 25%;
+  }
+}
+
+@media (min-width: 1270px) {
+  #cats button {
+    max-width: 250px;
+  }
+}
+
+/* ------- the caption line */
+
+#caption {
+  clear: both;
+  padding: 5px 0;
+}
+
+#caption > * {
+  margin-right: 1.5em;
+}
+
+#caption label {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#showing {
+  font-weight: bold;
+}
+
+.warn {
+  color: #a50;
+  font-weight: bold;
+}
+
+/* ------- results */
+
+#rows {
+  clear: left;
+  overflow-x: auto;
+}
+
+#results {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#results th {
+  border-bottom: 1px solid #888;
+  padding: 0 5px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+/* Label above its filter box, not beside it. Side by side, a long column name
+   and its input shared one line and the name was clipped mid-word. */
+#results th button.sort {
+  background: none;
+  border: 0;
+  display: block;
+  font: inherit;
+  font-weight: bold;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+#results th input {
+  color: red;
+  font: inherit;
+  font-weight: bold;
+  min-width: 4em;
+  width: 100%;
+}
+
+#results th input::placeholder {
+  color: black;
+  font-weight: bold;
+  opacity: 0.4;
+}
+
+#results td {
+  padding: 0 5px;
+  vertical-align: top;
+}
+
+#results tbody tr[data-id]:hover {
+  background: #b7e9f7;
+  color: red;
+  cursor: pointer;
+}
+
+#results tbody tr.hit {
+  border-top: 1px solid #ddd;
+}
+
+/* The snippet row sits under its own result and belongs to it, so it must not
+   look like a row of its own -- no hover, no pointer. */
+#results tbody tr.snip td {
+  color: #333;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 90%;
+  padding: 0 5px 4px 1.5em;
+}
+
+#results tbody tr.snip p {
+  margin: 0;
+}
+
+.ref {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.unbuilt {
+  color: #888;
+}
+
+.marker {
+  background: #fe8;
+  border-radius: 0.5ex;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 90%;
+  padding: 0 0.4ex;
+  white-space: nowrap;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+#empty {
+  color: #666;
+  font-size: 120%;
+  padding: 2em 0;
+}
+
+/* ------- the card, and the about page */
+
+#card,
+.prose {
+  background: white;
+  border: 1px solid #c8b38a;
+  margin: 10px auto;
+  max-width: 48em;
+  padding: 1.5em;
+}
+
+.prose code {
+  background: #f4f4f4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0 0.3ex;
+}
+
+#view header,
+#about header {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+#view_repo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-left: 1em;
+}
+
+/* ------- the card itself
+
+   Rules for the 57 classes the source markup actually uses, counted over all
+   26,601 rows rather than sampled -- an 80-row-per-table sample found 27 and
+   missed the whole `mi*` family, which is most of what an item card is.
+
+   Written fresh. The source references a stylesheet we do not have, so these
+   are an honest reading of the structure, not a reproduction of it. */
+
+#card {
+  line-height: 1.35;
+}
+
+#card h1,
+#card h2,
+#card h3 {
+  font-size: 115%;
+  margin: 0.8em 0 0.2em;
+}
+
+#card p,
+#card ul {
+  margin: 0.35em 0;
+}
+
+#card b {
+  font-weight: bold;
+}
+
+/* Titles. One per card kind; they all read as the card's name. */
+#card h1.monster,
+#card h1.player,
+#card h1.trap,
+#card h1.dm,
+#card h1.familiar,
+#card h1.poison,
+#card h1.mihead,
+#card h1.miset,
+#card h1.magicitem,
+#card h1.thHead,
+#card h2.monster,
+#card h2.mihead,
+#card h2.magicitem,
+#card h2.thHead,
+#card h2.ah1,
+#card h2.ah2,
+#card h2.ah3,
+#card h2.artifactHeading1,
+#card h2.artifactHeading2 {
+  border-bottom: 2px solid #7b2d26;
+  color: #7b2d26;
+  font-size: 150%;
+  font-variant: small-caps;
+  margin-top: 1.2em;
+  padding-bottom: 2px;
+}
+
+#card h1:first-child,
+#card h2:first-child {
+  margin-top: 0;
+}
+
+/* Power titles carry their usage, and the usage is the colour -- the one piece
+   of the original presentation that is load-bearing rather than decorative. */
+#card h1.atwillpower,
+#card h1.encounterpower,
+#card h1.dailypower {
+  border-bottom: 0;
+  color: white;
+  font-size: 125%;
+  font-variant: small-caps;
+  padding: 2px 6px;
+}
+
+#card h1.atwillpower {
+  background: #4a7023;
+}
+
+#card h1.encounterpower {
+  background: #7b2d26;
+}
+
+#card h1.dailypower {
+  background: #1a1a1a;
+}
+
+/* The header spans sit inside the title, separated by `<br>`, so each needs to
+   be its own line. */
+#card span.type,
+#card span.level,
+#card span.thSubHead {
+  color: #333;
+  display: block;
+  font-size: 68%;
+  font-variant: normal;
+  font-weight: normal;
+  /* Contains the XP, which is floated right *inside* this line. Without it the
+     float escapes and lands on top of the flavour text below. */
+  overflow: hidden;
+}
+
+#card span.type {
+  font-style: italic;
+}
+
+#card span.xp,
+#card span.thXP,
+#card span.thLevel,
+#card span.thInit,
+#card span.milevel,
+#card span.miright {
+  color: #444;
+  float: right;
+  font-size: 95%;
+  font-variant: normal;
+  font-weight: normal;
+}
+
+#card span.power {
+  font-weight: bold;
+}
+
+/* `flavor` is two different things in the source and must not be styled as
+   one. On a power it wraps `<i>` and is the prose; on a monster it wraps `<b>`
+   and *is* the stat block. Italicising the class would italicise every
+   creature's defences. So: the `<i>` is what gets the treatment. */
+#card p.flavor i,
+#card p.flavortext,
+#card p.miflavor {
+  color: #333;
+  font-style: italic;
+}
+
+#card p.flavor,
+#card p.powerstat,
+#card p.mistat,
+#card p.mistatAI,
+#card p.mitext,
+#card p.thStat,
+#card p.thBody,
+#card p.tbod,
+#card p.th2 {
+  margin: 0.25em 0;
+}
+
+#card p.flavorIndent,
+#card p.indent,
+#card p.indent1,
+#card ul.indent,
+#card ul.mistat,
+#card ul.mitext,
+#card p.mistat.indent {
+  margin-left: 1.5em;
+}
+
+#card p.indent2 {
+  margin-left: 3em;
+}
+
+#card span.clearIndent {
+  clear: both;
+  display: block;
+  margin-left: 1.5em;
+}
+
+/* The source alternates `alt` down a stat block's abilities. That shading is
+   how a card's powers read as separate blocks at a glance. */
+#card p.alt {
+  background: #f1ece0;
+}
+
+#card p.flavor,
+#card p.alt {
+  padding: 0.15em 0.4em;
+}
+
+/* Trap blocks are spans in the source, laid out by a stylesheet we do not
+   have, so without `display: block` the whole block runs together as one
+   paragraph. */
+#card span.traplead,
+#card span.trapblocktitle,
+#card span.trapblockbody,
+#card span.ritualstats {
+  display: block;
+}
+
+#card span.trapblocktitle {
+  color: #7b2d26;
+  font-variant: small-caps;
+  font-weight: bold;
+  margin-top: 0.6em;
+}
+
+#card span.trapblockbody {
+  margin-left: 1.5em;
+}
+
+#card span.ritualstats,
+#card span.traplead {
+  margin: 0.4em 0;
+}
+
+#card table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+#card table.bodytable,
+#card table.magicitem {
+  width: 100%;
+}
+
+#card table.bodytable th,
+#card table.magicitem th,
+#card th.miset {
+  border-bottom: 1px solid #c8b38a;
+  font-variant: small-caps;
+}
+
+#card table th,
+#card table td {
+  padding: 1px 0.6em 1px 0;
+}
+
+/* `ignore` is the source's own name for a table used purely for layout. */
+#card table.ignore,
+#card table.ignore th,
+#card table.ignore td {
+  border: 0;
+}
+
+#card td.mic1,
+#card td.mic3 {
+  font-weight: bold;
+}
+
+#card td.mic2,
+#card td.mic4 {
+  color: #444;
+}
+
+#card td.rightalign,
+#card .num {
+  text-align: right;
+}
+
+#card p.publishedIn {
+  border-top: 1px solid #ddd;
+  color: #666;
+  font-size: 90%;
+  margin-top: 1.2em;
+  padding-top: 0.4em;
+}
+
+/* A glyph standing in for one of the nine images the source references. The
+   `title` holds the filename it replaced. */
+#card .sym {
+  color: #7b2d26;
+  /* Not smaller than the body. Six of the seventeen are die faces, and a die
+     face is the only thing on the card saying when the power comes back. */
+  font-size: 115%;
+  line-height: 1;
+  padding-right: 0.3ex;
+}
+
+/* A link that pointed at a site that no longer answers. The words are kept and
+   the hop is dropped -- nothing on this page reaches off the machine. */
+#card .deadlink {
+  border-bottom: 1px dotted #aaa;
+}

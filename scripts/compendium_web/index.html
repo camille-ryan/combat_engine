@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>compendium — regex search</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header role="banner">
+      <button id="btn_about" type="button">?</button>
+      <h1 id="banner">compendium</h1>
+      <button class="top" type="button" onclick="window.scroll(0, 0)">↑</button>
+    </header>
+
+    <!-- The list. One section per screen, shown by swapping [hidden], which is
+         how the viewer this copies does it: no router, no framework, back and
+         forward come from the query string. -->
+    <section id="list">
+      <button class="btn_prev" id="list_prev" type="button" title="previous page">‹</button>
+      <button class="btn_next" id="list_next" type="button" title="next page">›</button>
+
+      <div id="term" role="search">
+        <input
+          type="search"
+          id="q"
+          accesskey="s"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="a regular expression — ongoing \d+ (fire|cold)"
+        />
+        <table id="targets" summary="what the pattern is matched against">
+          <tbody>
+            <tr>
+              <td>
+                <button class="button pressable" type="button" data-target="name" aria-pressed="true">
+                  Name
+                </button>
+                <button class="button pressable" type="button" data-target="text" aria-pressed="true">
+                  Text
+                </button>
+                <button class="button pressable" type="button" data-target="html" aria-pressed="false">
+                  HTML
+                </button>
+              </td>
+              <td>
+                <button class="button" type="button" id="btn_clear" title="clear the pattern and every column filter">
+                  ✕
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p id="error" hidden></p>
+      <div id="cats" role="tablist"></div>
+
+      <div id="caption">
+        <span id="showing">…</span>
+        <span id="pages"></span>
+        <label><input type="checkbox" id="fold" checked /> ignore case</label>
+        <label><input type="checkbox" id="highlight" checked /> highlight</label>
+        <span id="nobuild" class="warn" hidden>
+          data/game.db is missing — the repo column is empty. Run: uv run scripts/build.py
+        </span>
+      </div>
+
+      <div id="rows">
+        <table id="results">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+        <p id="empty" hidden>Nothing matched that pattern.</p>
+      </div>
+    </section>
+
+    <!-- One card. -->
+    <section id="view" hidden>
+      <button class="btn_prev" id="view_prev" type="button" title="previous row">‹</button>
+      <button class="btn_next" id="view_next" type="button" title="next row">›</button>
+      <header>
+        <button id="btn_back" type="button" accesskey="1">← list</button>
+        <span id="view_repo"></span>
+      </header>
+      <article id="card"></article>
+    </section>
+
+    <!-- What the thing is, and the one rule it lives under. -->
+    <section id="about" hidden>
+      <header><button id="btn_about_back" type="button">← list</button></header>
+      <div class="prose">
+        <h2>Regex search over the compendium source</h2>
+        <p>
+          The pattern is a <b>Python regular expression</b>, not a word search.
+          <code>\d+</code>, <code>(a|b)</code>, <code>\b</code>, lookahead and
+          backreferences all work. It is matched with <code>re.search</code>, so
+          it does not have to match the whole field — anchor it with
+          <code>^</code> and <code>$</code> if you want that.
+        </p>
+        <p>
+          Three targets, OR-ed together. <b>Name</b> is the name column.
+          <b>Text</b> is the card as printed text. <b>HTML</b> is the raw source
+          markup, for when the question is about the markup —
+          <code>symbol/\d+a\.gif</code>, or a tag that should not be there.
+        </p>
+        <p>
+          Each column header carries its own filter box. Those are regexes too,
+          and they are AND-ed on top of the main pattern. An empty main pattern
+          lists the whole category, so the column filters work on their own.
+        </p>
+        <p>
+          A pattern that does not compile shows the error in red. It never
+          returns zero rows — a broken pattern must not be able to look like a
+          true negative.
+        </p>
+        <h3>The repo column</h3>
+        <p>
+          What this repository made of each row: the ref if the ETL built it,
+          plus any marker the hand-written content rows under it carry.
+          <span class="unbuilt">(not built)</span> means the ETL did not build
+          it. <b>Blank</b> means there is no table for that category at all — it
+          was never meant to be built, which is a different thing and reads
+          differently on purpose.
+        </p>
+        <h3>Where the content comes from</h3>
+        <p>
+          Everything on this page is read live out of your own copy of the
+          source database and the built database. Neither is in the repository,
+          nothing is cached to disk, and the server is bound to loopback. The
+          files that make up this tool hold no content of their own.
+        </p>
+      </div>
+    </section>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
