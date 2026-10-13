@@ -579,7 +579,7 @@ def p16097(c: Cast) -> None:
     solid squares with a once-a-turn bite around each.
 
     Both markers were wrong, and the old body was **stronger than the
-    card**. "Ice walk" is not a trait the engine lacks a word for -- it is
+    card**. `f2700` is not a trait the engine lacks a word for -- it is
     `c.ignores_difficult("ice")`, which five rows already say, against a
     zone labelled `difficult="ice"`, which `sorcerer/level_6.py` already lays.
     So the exemption is automatic for anything that has it, and the caster's
