@@ -491,12 +491,21 @@ def m115823a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m115825a0(c: Cast) -> None:
-    """Regeneration lands; the silver that switches it off does not --
-    nothing marks a weapon as silvered for `c.regeneration` to read."""
-    c.regeneration(5)
+    """**Written: the silver that switches it off is a weapon property.**
+
+    Found by Camille asking whether the suspension wanted a less specific
+    mechanism than silver, which it did -- and the three rows in this file
+    turned out to be silvered rows filed under
+    `c.regeneration(suspended_by=)` rather than `compendium.silvered`, so
+    they were not in the family's count at all. A fourth spelling for one
+    idea.
+
+    `unless_struck_by=` reads the property off the `Hit`;
+    `unless_damaged_by=` is its sibling for the rows suspended by a damage
+    *type*, and both feed the one consumed flag in `c.regeneration`."""
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(
@@ -2478,10 +2487,12 @@ def m5501a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m5591a0(c: Cast) -> None:
-    c.regeneration(5)
+    """Written, the same card and the same two verbs as `m115825a0` --
+    "takes damage from a silvered weapon" is a weapon property read off
+    the `Hit`."""
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(
@@ -3740,10 +3751,12 @@ def m6489a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.regeneration(suspended_by=)",),
 )
 def m6550a0(c: Cast) -> None:
-    c.regeneration(5)
+    """Written, the same card and the same two verbs as `m115825a0` --
+    "takes damage from a silvered weapon" is a weapon property read off
+    the `Hit`."""
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(

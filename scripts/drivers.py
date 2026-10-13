@@ -5393,8 +5393,8 @@ def living_targets(out: Result) -> None:
              " 'construct'} would have wrongly refused")
 
 
-def silvered_regeneration(out: Result) -> None:
-    """A weapon's material, and the regeneration fifteen cards hang on it.
+def regeneration_suspended(out: Result) -> None:
+    """What switches a regeneration off for a turn, in both of its kinds.
 
     Twenty-four rows carried `compendium.silvered` -- a marker blaming the
     source -- and **all twenty-four specs print the clause in full**. The
@@ -5420,7 +5420,17 @@ def silvered_regeneration(out: Result) -> None:
       `m5798a1` settled the consumed shape for the acid version;
     * **a plain weapon suspends nothing**, the negative control. Without
       it this passes on an implementation that suspends regeneration
-      after any hit at all.
+      after any hit at all;
+    * **a damage type does it too, and the wrong type does not.** Camille
+      asked whether the mechanism should be less specific than silver, and
+      it should: these cards come in two kinds and the mechanism under
+      them is one. A material is read off the `Hit`, because only that
+      carries `attacker`; a damage type is a field on `DamageApplied`. Two
+      feeds, one consumed flag. **Four spellings had grown for the single
+      idea** -- `suspended_by=`, `suppressed_by=`, `when=`, and three rows
+      that hand-rolled the watch -- and asking the question found three
+      *silvered* rows hiding under `suspended_by=`, outside the family's
+      own count.
 
     The trap worth recording: `weapon_of` finds the swing through
     `ev.attacker`, and `DamageApplied` carries `source` instead. A watch on
@@ -5434,7 +5444,8 @@ def silvered_regeneration(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Gear, Health
     from combat_engine.engine.durations import When
-    from combat_engine.engine.events import Hit, TurnStart
+    from combat_engine.engine.events import DamageApplied, Hit, TurnStart
+    from combat_engine.engine.types import DamageType
 
     def fight(silver: bool) -> tuple[int, int, int]:
         fielded = story.field_encounter(seed=7, level=3)
@@ -5488,6 +5499,58 @@ def silvered_regeneration(out: Result) -> None:
              " passes on an implementation that stops regeneration after any"
              f" hit at all (healed {plain[0]}, {plain[1]}, {plain[2]})")
 
+    # -- the other kind: a damage type, read off DamageApplied -----------
+    def burn(dtype: DamageType,
+             dtypes: tuple[DamageType, ...] = ()) -> tuple[int, int, int]:
+        fielded = story.field_encounter(seed=7, level=3)
+        world = fielded.world
+        mon = next(e for e in sorted(world.entities)
+                   if query.stat_block(world, e))
+        hurt = world.get(mon, Health)
+        assert hurt is not None
+        hurt.hp = max(1, hurt.max_hp - 40)
+        Cast(world=world, me=mon, ref="drivers:regen").regeneration(
+            5, on=mon, until=When.ENCOUNTER,
+            unless_damaged_by=(DamageType.ACID, DamageType.FIRE))
+        rnd = [1]
+
+        def turn() -> int:
+            rnd[0] += 1
+            was = hurt.hp
+            world.bus.emit(TurnStart(actor=mon, round=rnd[0], ghost=False))
+            return hurt.hp - was
+
+        clean = turn()
+        world.bus.emit(DamageApplied(
+            source=mon, target=mon, amount=1, dtype=dtype, dtypes=dtypes,
+            detail="drivers", absorbed=0, hp=hurt.hp))
+        after = turn()
+        return clean, after, turn()
+
+    acid = burn(DamageType.ACID)
+    out.that(acid == (5, 0, 5),
+             "a named damage type suspends it the same way and for the same"
+             " one turn, through the same consumed flag -- the generalisation"
+             f" Camille asked for (healed {acid[0]}, {acid[1]}, {acid[2]})")
+
+    cold = burn(DamageType.COLD)
+    out.that(cold == (5, 5, 5),
+             "and an unnamed type does nothing, which is the control that"
+             " separates 'suspended by acid or fire' from 'suspended by"
+             f" being hurt' (healed {cold[0]}, {cold[1]}, {cold[2]})")
+
+    # **A blow that is two types at once, with the named one second.**
+    # #420's lesson, and the assertion this rule was missing: with a
+    # single-type blow, `ev.dtype in wanted` and `wanted &
+    # set(ev.types())` agree, so a plant swapping one for the other
+    # stayed green. It only separates them here.
+    pair = burn(DamageType.COLD, (DamageType.COLD, DamageType.FIRE))
+    out.that(pair == (5, 0, 5),
+             "and a blow that is TWO types suspends it when the named one is"
+             " not the first -- reading `ev.dtype` instead of `ev.types()`"
+             f" passes every other case here (healed {pair[0]}, {pair[1]},"
+             f" {pair[2]})")
+
 
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
@@ -5497,8 +5560,8 @@ DRIVERS = {
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
-    "silvered_regeneration": (silvered_regeneration,
-                              "a weapon's material, and the regeneration it suspends"),
+    "regeneration_suspended": (regeneration_suspended,
+                               "what switches a regeneration off: a material, or a damage type"),
     "living_targets": (living_targets,
                        "one living creature: not undead, and not construct unless living"),
     "creature_kinds": (creature_kinds,

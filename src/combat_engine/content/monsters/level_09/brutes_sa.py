@@ -2698,24 +2698,20 @@ def m5798a1(c: Cast) -> None:
     The flag is **consumed** by the one tick it suppresses rather than
     cleared on a clock. `unless` is asked from inside the `TurnStart`
     tick, so a second watch counting turns would race it; consuming says
-    "the next tick, whenever it comes" with nothing to order."""
-    me = c.me
-    burned = {"skip": False}
+    "the next tick, whenever it comes" with nothing to order.
 
-    def took(ev: DamageApplied) -> None:
-        if ev.target == me and any(
-            t in ev.types() for t in (DamageType.ACID, DamageType.FIRE)
-        ):
-            burned["skip"] = True
-
-    def suspended() -> bool:
-        if not burned["skip"]:
-            return False
-        burned["skip"] = False
-        return True
-
-    c.watch(DamageApplied, took, until=When.ENCOUNTER, on=me, label=f"{c.ref} burned")
-    c.regeneration(10, on=me, until=When.ENCOUNTER, unless=suspended)
+    **That shape is the verb's now**, and this row is one line because of
+    it. `unless_damaged_by=` carries the same consumed flag that
+    `unless_struck_by=` feeds, which is the point: four spellings had
+    grown for one idea -- a damage type here, a weapon's material on the
+    silvered rows, `suspended_by=`, `suppressed_by=`, `when=` -- and the
+    mechanism under all of them is this one. `ev.types()` rather than
+    `ev.dtype`, or "acid **or** fire" reads only the first type of a blow
+    that is both (#420)."""
+    c.regeneration(
+        10, on=c.me, until=When.ENCOUNTER,
+        unless_damaged_by=(DamageType.ACID, DamageType.FIRE),
+    )
 
 
 @power(

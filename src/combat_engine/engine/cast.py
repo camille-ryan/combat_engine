@@ -8027,6 +8027,7 @@ class Cast:
         while_bloodied: bool = False,
         unless: Callable[[], bool] | None = None,
         unless_struck_by: str = "",
+        unless_damaged_by: tuple[DamageType, ...] = (),
     ) -> Effect:
         """Heal this much at the start of each of that creature's turns.
 
@@ -8074,6 +8075,17 @@ class Cast:
         # and `DamageApplied` carries `source` instead, so a damage watch
         # would answer False for ever and every one of the fifteen rows
         # would audit clean while doing nothing.
+        # **Two feeds, one flag**, because the mechanism is identical and
+        # the *read* is not: a damage type is a field on `DamageApplied`,
+        # and a weapon property can only be found through the `Hit` that
+        # carries `attacker`. Four spellings had grown for one idea --
+        # `suspended_by=`, `suppressed_by=`, `when=` and three rows that
+        # hand-rolled it -- and a row cannot tell which of them will land.
+        #
+        # Deliberately **not** one parameter taking either kind. They read
+        # off different events at different moments, and a single argument
+        # whose type decides which would be the one-symbol-several-gaps
+        # trap pointed at a signature.
         struck = {"skip": False}
         if unless_struck_by:
             from .events import Hit
@@ -8087,6 +8099,22 @@ class Cast:
             self.watch(
                 Hit, took, until=until, on=who,
                 label=f"{self.ref} struck by {unless_struck_by}",
+            )
+        if unless_damaged_by:
+            from .events import DamageApplied
+
+            wanted = frozenset(unless_damaged_by)
+
+            def burned(ev: Any) -> None:
+                # `ev.types()` and not `ev.dtype`, or a blow that is two
+                # types at once is read as only the first -- #420's lesson,
+                # and "acid or fire" is exactly the shape that trips on it.
+                if ev.target == who and wanted & set(ev.types()):
+                    struck["skip"] = True
+
+            self.watch(
+                DamageApplied, burned, until=until, on=who,
+                label=f"{self.ref} damaged by type",
             )
 
         def suppressed() -> bool:
@@ -8102,7 +8130,7 @@ class Cast:
                 return
             if unless is not None and unless():
                 return
-            if unless_struck_by and suppressed():
+            if (unless_struck_by or unless_damaged_by) and suppressed():
                 return
             self.heal(amount, on=who)
 
