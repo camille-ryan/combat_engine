@@ -982,11 +982,23 @@ class Power:
     #: clause written into that power, gated on `c.feat("<this ref>")` and
     #: laid with `label="<this ref>"` so the credit stays here.
     #:
-    #: So the body is empty **and the row is finished**, which no other
-    #: marker could say. `todo=`/`dropped=` claim work is owed and name a
-    #: symbol that will never arrive; `obsolete=`, `declined=` and
-    #: `defect=` all refuse the row; `narrative=` and `out_of_combat=`
-    #: claim it has no combat meaning, when it has one laid elsewhere.
+    #: So the body is empty **and the clause is written**, which no other
+    #: marker could say. `todo=` claims nothing works; `obsolete=`,
+    #: `declined=` and `defect=` all refuse the row; `narrative=` and
+    #: `out_of_combat=` claim it has no combat meaning, when it has one laid
+    #: elsewhere.
+    #:
+    #: **`dropped=` is the one it combines with**, and it has to. A row has
+    #: several clauses: this field says where the written ones live, and
+    #: `dropped=` says a *different* clause is still owed. 13 of the 30
+    #: rider-bearing feats are in exactly that state. Refusing the
+    #: combination -- which the first version did -- made #550 one 58-row
+    #: change that could not be staged, because a power's exclusivity
+    #: `elif` needs every feat naming it to be inline, while a feat's
+    #: marker needs every power *it* names to be finished. Neither side can
+    #: go first. The mistake was reasoning from the markers' *names*
+    #: instead of from the fact that a row has more than one clause --
+    #: `c.race_option()` made the same one across six gaps.
     #:
     #: **It must not refuse the row**, which is the whole subtlety. The
     #: other five markers exclude a row from every chargen draw -- and a
@@ -1409,12 +1421,32 @@ def power(
         # *and out of every chargen draw* -- which would stop the feat being
         # dealt and so stop `c.feat()` in the implementing row ever answering
         # True -- and `narrative=`/`out_of_combat=` claim no combat meaning.
-        if todo or dropped or narrative or obsolete or declined or defect \
+        # **`dropped=` is allowed beside it, and nothing else is.** The two
+        # describe *different clauses* of the same row: "these clauses live
+        # in those powers, and this symbol is still owed". 13 of the 30
+        # rider-bearing feats are in exactly that state, and refusing the
+        # combination -- which this did for an afternoon -- made #550's
+        # migration one 58-row change that could not be staged, because a
+        # power's exclusivity needs every feat naming it to be inline and a
+        # feat's marker needs every power it names to be done.
+        #
+        # The first version reasoned from the markers' *names* rather than
+        # from the fact that a row has several clauses, which is the same
+        # mistake `c.race_option()` made at six times the scale.
+        #
+        # The other five stay refused and for unchanged reasons: `todo=`
+        # says nothing here works, which contradicts a clause living
+        # elsewhere; `narrative=` and `out_of_combat=` claim no combat
+        # meaning; and `obsolete=`, `declined=` and `defect=` all refuse the
+        # row, which would stop the feat being dealt and so stop the
+        # `c.feat()` gate in the implementing power ever answering True.
+        if todo or narrative or obsolete or declined or defect \
                 or out_of_combat:
             raise ValueError(
-                f"{ref}: implemented_in cannot be combined with another marker "
-                f"-- it means this row is finished and its clause lives in "
-                f"{implemented_in!r}"
+                f"{ref}: implemented_in may be combined with dropped= and "
+                f"nothing else -- it says this row's written clauses live in "
+                f"{tuple(implemented_in)!r}, and the other markers each say "
+                f"something incompatible with that"
             )
         for host in implemented_in:
             if not _REF.fullmatch(host.strip()):

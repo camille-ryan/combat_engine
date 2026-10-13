@@ -3686,6 +3686,21 @@ def main() -> int:
             # firing the implementing row with the feat held is what proves
             # it, and that is a `drivers.py` rule rather than this sweep.
             # `lint.py` is what checks the pointer still resolves. #553.
+            #
+            # **This branch sits before `dropped=`, and that ordering is
+            # load-bearing.** A row may carry both: some clauses written
+            # into other rows, one symbol still owed. A plain `dropped=`
+            # row *is* fired, deliberately, because the part that works has
+            # to be checked -- but a row that also points elsewhere has no
+            # part left here to fire, so firing it would lay nothing and
+            # report SILENT.
+            #
+            # The cost of the ordering, said out loud because the numbers
+            # will not add up otherwise: such a row shows as ELSEWHERE and
+            # **not** as DROP, so this sweep's dropped count runs below
+            # `blocked.py`'s. `blocked.py` reads `Power.unfinished`, which
+            # still carries the symbol, and it is the queue -- so the owed
+            # work is counted in the one place that counts work.
             implemented.append((ref, tuple(p.implemented_in), "ELSEWHERE"))
             continue
         if p.todo:
