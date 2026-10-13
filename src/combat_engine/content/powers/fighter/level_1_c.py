@@ -54,16 +54,18 @@ _NAMED_KINDS = ("demon", "drow", "orc", "spider")
     attack=Attack(STR, vs=AC),
 )
 def p2099(c: Cast) -> None:
-    """Two feats of the exclusive category hang a clause on this row's hit.
+    """Two feats hang a clause on this row's hit, and they stack.
 
-    #550's convention, and `p704` carries the long form of why `f992` and
-    `f1298` are one `if`/`elif` chain rather than two tests.
+    #550's convention, and `p704` carries the grouping rule. `f992` is
+    `[Arena Fighting]`; `f1298` carries no bracket. **Two plain `if`s, not
+    a chain** -- the first version chained them on a family split I had
+    inferred from the books rather than read from the compendium.
 
-    `f973` and `f3245` also name this row and are not of that category, so
-    they stay riders in their own files and stack with whichever of these
-    pays. `f973`'s clause is a bonus to *this* row's attack roll, which a
-    body cannot lay for itself -- by the time it runs the roll is made --
-    so it has to stay on the `used=` window regardless.
+    `f973` and `f3245` are Arena Fighting and belong in a chain with
+    `f992`; neither is written yet. `f973`'s clause is a bonus to *this*
+    row's attack roll, and it has to be laid before `c.strike()` rather
+    than after -- a `used=` rider reaches it and a hit clause does not.
+    `f1317` and `f2363` are Lesser Style and want a second chain.
     """
     if not c.strike():
         return
@@ -71,7 +73,9 @@ def p2099(c: Cast) -> None:
 
     if c.feat("f992"):
         c.bonus(FORT, 1, on=c.me, until=When.SONT, kind="feat")
-    elif (c.feat("f1298") and c.int_mod > 0
+    # f1298 carries no bracket and stacks with the arena feat above. This
+    # was an `elif` and was wrong.
+    if (c.feat("f1298") and c.int_mod > 0
             and any(c.is_kind(word, on=c.target) for word in _NAMED_KINDS)):
         c.temp_hp(c.int_mod, on=c.me)
 

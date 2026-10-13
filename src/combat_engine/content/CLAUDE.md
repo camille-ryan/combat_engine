@@ -167,16 +167,23 @@ Three reasons, and the second is a rule the engine could otherwise break:
   written to *ask*, and almost none were — 36 registrations against 12 read
   sites. `p1489` hard-coded `c.shift(1)` instead of `c.squares_for` and
   blocked three feats on a verb that already existed.
-* **You cannot apply two style feats to one use of a power.** Measured
-  across all three registration mechanisms: 69 feats on 53 rows, 27 of them
-  style feats, and **20 rows named by 2+ style feats** (seven name `p87`).
+* **One feat per bracketed category applies to one use of a power.**
   `if c.feat(A): … elif c.feat(B): …` makes two impossible; two riders make
   it inevitable, and nothing gated it.
 
-  **13 of the 20 also carry non-style feats, which stack.** So a body is a
-  chain over the style feats *plus* independent `if`s for the rest. A flat
-  chain over every feat naming the row would deny a clause the character is
-  entitled to — the mistake `p4368` nearly caused.
+  **The category is in brackets after the printed name** —
+  `[Arena Fighting]`, `[Lesser Style]`, `[Greater Style]`, or nothing.
+  Camille's rule: one Arena Fighting, one Lesser Style, any number of
+  unbracketed. So a body carries **one chain per category**, independent of
+  each other, and an unbracketed feat is a plain `if` in neither. Off the
+  compendium's `Associated Powers` lines: Arena Fighting 26 rows / 110
+  edges, Lesser Style 17 / 51, Greater Style 57 / 140.
+
+  **Never group by the last word of the printed name.** Arena Fighting and
+  unbracketed feats are both printed "… Style", and that reading got four
+  of the first five migrated rows wrong. **And the category is not in
+  `game.db`** — the ETL strips the bracket, so the grouping has to arrive
+  with your brief.
 * One mechanism rather than two, and the `if` was already the common one.
 
 **The exception is a feat naming a class of powers** — "any implement

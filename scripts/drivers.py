@@ -5990,36 +5990,47 @@ def penalties_by_source(out: Result) -> None:
 
 
 def feat_clause_exclusivity(out: Result) -> None:
-    """The feat clauses written into `p704`, and the one that excludes another.
+    """The feat clauses written into `p704`: which exclude each other, which do not.
 
     #550's convention: a feat naming one power has its clause written into
     that power's body, gated on `c.feat()`, instead of registering a rider
-    from its own body. `p704` is the first row migrated and it was chosen
-    because four feats name it and they are **two kinds**:
+    from its own body. `p704` is the first row migrated and is the worked
+    example because four feats name it and they are **two kinds**.
 
-    * `f972` and `f1300` are of the printed category a character may apply
-      only one of to a single use of a power, so they are one `if`/`elif`
-      chain;
-    * `f3188` and `f3234` are not, so they stack -- with each other and
-      with whichever of the first two paid.
+    **The grouping is the compendium's bracket, and the first version of
+    this rule had it wrong.** A feat's category is printed in brackets
+    after its name -- `[Arena Fighting]`, `[Lesser Style]`,
+    `[Greater Style]`, or nothing at all -- and Camille's rule is one
+    Arena Fighting feat, one Lesser Style feat, and **any number** of
+    unbracketed ones per use of a power.
+
+    So on `p704`:
+
+    * `f972`, `f3188` and `f3234` are **all** Arena Fighting: one chain,
+      at most one pays;
+    * `f1300` carries no bracket: a plain `if`, and it **stacks** with
+      whichever arena feat paid.
+
+    The first version asserted `f972` and `f1300` were exclusive and that
+    `f3188`/`f3234` stacked -- wrong in both directions at once, because I
+    inferred the families from the books they came from rather than
+    reading the bracket. The bracket is in the compendium's `PlainTxt`
+    and the ETL strips it, which is why `game.db` looks like it has no
+    category at all.
 
     **The exclusivity is the assertion that matters**, because it is the
-    one a later reader can undo by "tidying" the `elif` into a second
-    `if`. Nothing else in the tree would notice: both clauses are correct
-    in isolation and the engine cannot tell the two categories apart (a
-    feat's category is part of its printed name, and names are not in
-    tracked files). So the rule plants the state where both apply at once
-    -- a critical hit on a held target, holding both feats -- and asserts
-    that **exactly one** pays.
+    one a later reader can undo by "tidying" an `elif` into a second
+    `if`. Nothing else would notice: every clause is correct in isolation.
+    So the rule poses the state where all three arena clauses apply at
+    once and asserts that **exactly one** pays -- and, as the control
+    against writing the exclusivity too wide, that the unbracketed clause
+    pays *as well*.
 
     Driven through the row rather than through the clauses: the clauses
-    are three ordinary verbs that were never broken, and the whole of the
+    are ordinary verbs that were never broken, and the whole of the
     migration is that `p704`'s body now calls them. A rule asking
     `c.penalty` directly would survive the body being reverted to a
     rider, which is the mistake two rules in this file were written with.
-
-    Seven states, and the first is the control that says the body does
-    nothing on its own.
     """
     from combat_engine import story
     from combat_engine.engine import query
@@ -6075,53 +6086,86 @@ def feat_clause_exclusivity(out: Result) -> None:
              f" control, since every assertion below is a set it adds to"
              f" ({sorted(run())})")
 
+    # Each arena clause on its own, so the chain below cannot pass by
+    # having branches that never fire. `p992` taught that lesson.
     out.that(run("f972", crit=True) == {"f972"},
-             "f972 pays on a critical hit")
+             "f972 (Arena Fighting) pays on a critical hit")
     out.that(run("f972") == set(),
              "and NOT on an ordinary one, which is the printed condition"
              f" ({sorted(run('f972'))})")
+    out.that(run("f3188") == {"f3188"},
+             "f3188 (Arena Fighting) pays on any hit")
+    out.that(run("f3234") == {"f3234"},
+             "f3234 (Arena Fighting) pays on any hit")
 
+    arena = run("f972", "f3188", "f3234", crit=True)
+    out.that(len(arena) == 1,
+             "**holding all three Arena Fighting feats on a critical hit,"
+             " exactly ONE pays.** The assertion that fails the moment an"
+             " `elif` in p704's body becomes a second `if`, and the only"
+             f" one that does ({sorted(arena)})")
+
+    out.that(run("f972", "f3188") == {"f3188"},
+             "and on an ordinary hit f3188 pays rather than nothing -- each"
+             " branch carries its own applicability, so the chain does not"
+             " spend the use on a feat that cannot do anything"
+             f" ({sorted(run('f972', 'f3188'))})")
+
+    # The control against writing the exclusivity too wide, which is the
+    # mistake the first version of this rule made.
     out.that(run("f1300", held=True) == {"f1300"},
-             "f1300 pays against a held target")
+             "f1300 carries NO bracket and pays against a held target")
     out.that(run("f1300") == set(),
              "and not against a free one"
              f" ({sorted(run('f1300'))})")
 
-    both = run("f972", "f1300", crit=True, held=True)
-    out.that(len(both) == 1,
-             "**holding both, with both conditions met, exactly ONE pays.**"
-             " This is the assertion that fails the moment the `elif` in"
-             " p704's body becomes a second `if` -- and the only one that"
-             f" does; the four above all survive it ({sorted(both)})")
-
-    out.that(run("f972", "f1300", held=True) == {"f1300"},
-             "holding both on a non-critical hit, f1300 pays -- each branch"
-             " carries its own applicability, so the chain does not spend"
-             " the use on a feat that would do nothing"
-             f" ({sorted(run('f972', 'f1300', held=True))})")
-
-    stacked = run("f972", "f3188", "f3234", crit=True)
-    out.that(stacked == {"f972", "f3188", "f3234"},
-             "and f3188 and f3234 are not of that category, so they stack"
-             " with f972 and with each other -- the control that stops the"
-             f" exclusivity above being written too wide ({sorted(stacked)})")
+    mixed = run("f972", "f1300", crit=True, held=True)
+    out.that(mixed == {"f972", "f1300"},
+             "**and an unbracketed feat stacks with an arena feat: BOTH"
+             " pay.** This is the assertion the first version of this rule"
+             " had backwards -- it asserted exactly one, on a family split"
+             f" inferred from the books instead of read from the compendium"
+             f" ({sorted(mixed)})")
 
     known.known[:] = held_originally
 
 
-#: Every row migrated under #550, with the feats whose clauses are exclusive
-#: of each other written into it. One entry per row; `at_most_one_applies`
-#: is what makes adding a row cost a line rather than a function.
+#: Every row migrated under #550, keyed by row and then by the feat
+#: **category the compendium prints in brackets** after a feat's name.
+#: `at_most_one_applies` is what makes migrating a row cost a line here
+#: rather than a function.
 #:
-#: **Exclusive means the printed category, read from the names.** Feats of
-#: other categories that name the same row stack and are deliberately absent
-#: here -- see each row's docstring for which and why.
+#: Camille's rule: **one `[Arena Fighting]` feat, one `[Lesser Style]`
+#: feat, and any number of unbracketed ones** per use of a power. So each
+#: category is its own chain and the two chains are independent; an
+#: unbracketed feat is never in either and never appears here.
+#:
+#: **This used to be one flat tuple per row and that encoded a mistake.**
+#: I had grouped the feats by the last word of their printed name -- so a
+#: `[Arena Fighting]` feat and an unbracketed one, both printed "... Style",
+#: looked like one family -- and the grouping came out wrong on four of the
+#: five rows migrated. The bracket lives in the compendium's `PlainTxt`;
+#: the ETL strips it, which is why `game.db` looks like it carries no
+#: category at all. Read it from `compendium.sqlite`, not from the books a
+#: feat appeared in and not from its name.
+#:
+#: A chain of fewer than two is nothing to assert and is left out.
 MIGRATED = {
-    "p704": ("f972", "f1300"),
-    "p997": ("f994", "f1300"),
-    "p2099": ("f992", "f1298"),
-    "p992": ("f1299", "f1304", "f1305"),
-    "p1758": ("f978", "f985"),
+    "p704": {"Arena Fighting": ("f972", "f3188", "f3234")},
+    "p1758": {"Arena Fighting": ("f978", "f985")},
+}
+
+#: Rows migrated under #550 that have **no** chain yet to assert on, with
+#: why. Carried so the set of migrated rows is one list rather than two,
+#: and so a row cannot quietly drop out of the instrument's view.
+NO_CHAIN_YET = {
+    "p997": "one Arena Fighting clause written (f994); the other four and"
+            " the three Lesser Style ones are not",
+    "p2099": "one Arena Fighting clause written (f992); f973 and f3245 are"
+             " not, nor either Lesser Style one",
+    "p992": "its three written clauses are all unbracketed, so they stack"
+            " and there is nothing to chain; its four Arena Fighting and"
+            " two Lesser Style feats are unwritten",
 }
 
 #: Feats of the exclusive category that name a migrated row and are **still
@@ -6239,51 +6283,53 @@ def at_most_one_applies(out: Result) -> None:
         held = Counter(fire(ref, feats, hit=hit))
         return sorted((held - bare).elements())
 
-    for ref, feats in MIGRATED.items():
-        # **Both outcomes, because a chain may live in either branch.**
-        # `p704`'s pays on the hit and `p997`'s on the miss, and the first
-        # version of this rule forced a hit and so never reached `p997`'s
-        # `else` at all -- which the reachability assertion caught,
-        # reporting zero clauses paid on a row whose chain is two lines
-        # long. One use of a power is one run, so "at most one" is asked
-        # per run; reachability is asked across the pair.
-        landed = added(ref, feats, hit=True)
-        missed = added(ref, feats, hit=False)
-        for outcome, paid in (("hit", landed), ("miss", missed)):
-            out.that(len(paid) <= 1,
-                     f"{ref} on a {outcome}: holding {len(feats)} exclusive"
-                     f" feats with every condition met, at most one clause"
-                     f" pays ({len(paid)}: {paid})")
+    for ref, chains in MIGRATED.items():
+        for family, feats in chains.items():
+            # **Both outcomes, because a chain may live in either branch.**
+            # `p704`'s pays on the hit and `p997`'s on the miss, and the
+            # first version of this rule forced a hit and so never reached
+            # `p997`'s `else` at all -- which the reachability assertion
+            # caught, reporting zero clauses paid on a row whose chain is
+            # two lines long. One use of a power is one run, so "at most
+            # one" is asked per run; reachability across the pair.
+            landed = added(ref, feats, hit=True)
+            missed = added(ref, feats, hit=False)
+            for outcome, paid in (("hit", landed), ("miss", missed)):
+                out.that(len(paid) <= 1,
+                         f"{ref} on a {outcome}: holding all {len(feats)}"
+                         f" [{family}] feats with every condition met, at"
+                         f" most one clause pays ({len(paid)}: {paid})")
 
-        # **How many of this row's branches can pay on THIS board at all.**
-        # Without this the rule passes vacuously, and it did: `p992`'s
-        # chain was planted into three independent `if`s and **nothing
-        # reddened**, because only one of its three branches can fire here
-        # -- one needs the target to be the last enemy standing near it and
-        # one needs a zone `p2473` lays, and the spy fakes neither. The
-        # docstring claimed the board was "as generous as it can be" and
-        # that was false: the gates read the board, not just the feats.
-        #
-        # So the limit is measured and reported rather than papered over
-        # with more patching, which would be endless. A row with fewer than
-        # two live branches has its exclusivity **unproven here**, and the
-        # row's own rule -- `feat_clause_exclusivity` for `p704` -- is what
-        # poses the state this board cannot.
-        alone = [f for f in feats
-                 if added(ref, (f,), hit=True) or added(ref, (f,), hit=False)]
-        out.that(len(alone) >= 1,
-                 f"{ref}: the chain is REACHED -- at least one branch pays"
-                 f" when its feat is held alone ({alone} of {list(feats)})")
-        if len(alone) < 2:
-            out.skip(f"{ref}: exclusivity NOT PROVEN -- only {len(alone)} of"
-                     f" {len(feats)} branches can fire here ({alone}), so"
-                     f" 'at most one' above is vacuous. The rest read the"
-                     f" world rather than the Cast; a dedicated rule has to"
-                     f" build the state.")
-        elif len(alone) < len(feats):
-            out.skip(f"{ref}: {len(alone)} of {len(feats)} branches posed"
-                     f" ({alone}) -- the exclusivity between those IS proven,"
-                     f" the rest read the world and are not.")
+            # **How many of this chain's branches can pay on THIS board.**
+            # Without this the rule passes vacuously, and it did: a
+            # three-way chain was planted into three independent `if`s and
+            # **nothing reddened**, because only one branch could fire here
+            # -- one needed the target to be the last enemy near it and one
+            # a zone another row lays, and the spy fakes neither. The
+            # docstring claimed the board was "as generous as it can be"
+            # and that was false: the gates read the board, not just which
+            # feats are held.
+            #
+            # So the limit is measured and reported rather than papered
+            # over with more patching, which would be endless.
+            alone = [f for f in feats
+                     if added(ref, (f,), hit=True)
+                     or added(ref, (f,), hit=False)]
+            out.that(len(alone) >= 1,
+                     f"{ref} [{family}]: the chain is REACHED -- at least"
+                     f" one branch pays when its feat is held alone"
+                     f" ({alone} of {list(feats)})")
+            if len(alone) < 2:
+                out.skip(f"{ref} [{family}]: exclusivity NOT PROVEN -- only"
+                         f" {len(alone)} of {len(feats)} branches can fire"
+                         f" here ({alone}), so 'at most one' above is"
+                         f" vacuous. The rest read the world rather than the"
+                         f" Cast; a dedicated rule has to build the state.")
+            elif len(alone) < len(feats):
+                out.skip(f"{ref} [{family}]: {len(alone)} of {len(feats)}"
+                         f" branches posed ({alone}) -- the exclusivity"
+                         f" between those IS proven, the rest read the world"
+                         f" and are not.")
 
         # **A chain that looks complete and is not.** Reported every run,
         # because the only other place this is written down is the row's
@@ -6291,10 +6337,18 @@ def at_most_one_applies(out: Result) -> None:
         riders = STILL_RIDERS.get(ref, ())
         if riders:
             out.skip(f"{ref}: INCOMPLETE chain -- {' '.join(riders)} of the"
-                     f" same exclusive category still ride this row from"
+                     f" same bracketed category still ride this row from"
                      f" their own file and stack with whatever the chain"
                      f" pays, which the printed rule forbids. See the row's"
                      f" docstring for why they could not move. #556")
+
+    # **Migrated rows with nothing to assert on are still listed.** A row
+    # that quietly drops out of this instrument's view is how a chain goes
+    # unwatched, and three of the five migrated so far are in this state:
+    # their written clauses are unbracketed, or only one of a category is
+    # written, so there is no chain yet.
+    for ref, why in NO_CHAIN_YET.items():
+        out.skip(f"{ref}: migrated, no chain to assert -- {why}")
 
     known.known[:] = was
 

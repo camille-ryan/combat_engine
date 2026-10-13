@@ -79,21 +79,31 @@ def _others_in_cloud(c: Cast, hit: int) -> list[int]:
     attack=Attack(STR, vs=AC),
 )
 def p997(c: Cast) -> None:
-    """Two feats pay their clause on this row's **miss**, and only one may.
+    """Two feats pay their clause on this row's **miss**, and they stack.
 
-    #550's convention. Both `f994` and `f1300` are of the printed category
-    a character may apply only one of to a single use of a power, so they
-    are one `if`/`elif` chain and **not** two tests -- see `p704` for the
-    long form of why the engine cannot check that itself.
+    #550's convention. See `p704` for the grouping rule; in short, the
+    compendium brackets a feat's category after its name and Camille's
+    rule is one `[Arena Fighting]`, one `[Lesser Style]`, any number of
+    unbracketed.
+
+    `f994` is Arena Fighting. `f1300` carries no bracket. **They are two
+    plain `if`s, not a chain** -- the first version of this chained them,
+    on a family split I had inferred from the books instead of reading the
+    bracket.
 
     Both hang on the miss and not the hit, which is unusual and is why
-    they sit in the `else`: one pays "damage equal to your Strength
-    modifier **+2**" where the printed row already pays the modifier, and
-    the other pays against a held target whether the blow landed or not.
+    they sit after the early return: one pays "damage equal to your
+    Strength modifier **+2**" where the printed row already pays the
+    modifier, and the other pays against a held target whether the blow
+    landed or not. Six of this row's eight printed feat clauses are
+    miss-clauses, which is unusual enough to be worth saying.
 
-    `f3230` also names this row and is **not** of that category, so it
-    stays a rider in its own file and stacks with whichever of these pays.
-    Its clause is once per encounter, which a body has no latch for.
+    **Five more Arena Fighting feats and three Lesser Style feats name
+    this row and are not written yet**, so `f994` sits alone in a chain
+    that will grow and the Lesser Style chain does not exist. `f3230` is
+    Arena Fighting and is one of the five; its clause is once per
+    encounter, which a body has no latch for, so it cannot come here at
+    all.
     """
     if c.strike():
         c.damage(c.w(1), c.str_mod)
@@ -106,7 +116,9 @@ def p997(c: Cast) -> None:
     # clause was written.
     if c.feat("f994") and c.wielding("two-handed"):
         c.flat(2, on=c.target)
-    elif (c.feat("f1300") and c.con_mod > 0
+    # f1300 carries no bracket, so it stacks with the arena feat above
+    # rather than being chained to it. This was an `elif` and was wrong.
+    if (c.feat("f1300") and c.con_mod > 0
             and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
         c.flat(c.con_mod, on=c.target)
 
@@ -123,17 +135,21 @@ def p997(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p992(c: Cast) -> None:
-    """Three feats of the exclusive category hang a clause on this hit.
+    """Three feats hang a clause on this hit and **none of them conflict**.
 
-    #550's convention, and `p704` carries the long form of why `f1299`,
-    `f1304` and `f1305` are one chain rather than three tests. The first
-    row migrated with three in it, and worth a note for the next: the
-    chain is in printed order and **every branch carries its own
-    applicability**, so a character holding all three gets whichever can
-    actually do something rather than always the first.
+    #550's convention. `f1299`, `f1304` and `f1305` carry no category
+    bracket in the compendium, so nothing limits how many of them apply
+    to one use: three plain `if`s.
 
-    `f3188` and two others also name this row and are not of that
-    category, so they stay riders and stack with whichever of these pays.
+    **This row was the clearest casualty of my own mistake.** It shipped
+    as a three-way `if`/`elif` chain, on the reasoning that all three
+    printed names end in the same word -- and the word is not the
+    category. The bracket is. A character holding all three was being
+    given one clause of the three it is entitled to.
+
+    `f3188`, `f977`, `f987` and `f993` are Arena Fighting and `f2356` and
+    `f2714` are Lesser Style; none are written yet, so this row still
+    needs one chain of each beside the three below.
     """
     if not c.strike():
         return
@@ -146,12 +162,16 @@ def p992(c: Cast) -> None:
     foe = c.target
     if foe is None:
         return
+    # **All three carry no bracket, so all three stack.** This was written
+    # as one chain and that was wrong: the compendium tags a feat's category
+    # in brackets after its name, and these have none, so nothing limits
+    # how many of them apply to one use.
     if (c.feat("f1299") and c.wis_mod > 0
             and not any(o != foe for o in c.within(1, of=foe, side="enemy"))):
         c.ongoing(c.wis_mod, on=foe)
-    elif c.feat("f1304"):
+    if c.feat("f1304"):
         c.mark(on=foe)
-    elif c.feat("f1305") and c.str_mod > 0:
+    if c.feat("f1305") and c.str_mod > 0:
         for other in _others_in_cloud(c, foe):
             c.flat(c.str_mod, on=other)
 

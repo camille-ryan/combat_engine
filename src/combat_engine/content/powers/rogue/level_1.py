@@ -81,46 +81,55 @@ _HELD_FAST = (
     requires_text="needs a light blade",
 )
 def p704(c: Cast) -> None:
-    """Four feats print a clause on this row, and they are two kinds.
+    """Four feats print a clause on this row: three of one kind, one of none.
 
     #550's convention: a feat naming one power has its clause written
     here, gated on `c.feat()`, rather than registering a rider from its
     own body. The feat rows stay declared.
 
-    **`f972` and `f1300` are exclusive to each other.** Both are of the
-    printed category a character may apply only one of to a single use of
-    a power -- Camille's ruling -- so they are one `if`/`elif` chain and
-    not two tests. The engine cannot check this for itself: a feat's
-    category is part of its printed name, and names are not in tracked
-    files, so the chain is written by hand from the two names in a
-    brief's glossary. **Do not split it back into two `if`s.**
+    **The grouping comes from the compendium's bracket, and the first
+    version of this docstring got it wrong.** A feat's category is printed
+    in brackets after its name -- `[Arena Fighting]`, `[Lesser Style]`,
+    `[Greater Style]`, or nothing -- and Camille's rule is **one Arena
+    Fighting feat, one Lesser Style feat, and any number of unbracketed
+    ones** per use of a power.
 
-    Each branch carries its own applicability, which is the ordering that
-    matters: `f972` pays on a critical hit only and `f1300` only against
-    a held target, so a character holding both gets whichever can
-    actually do something. When *both* apply the first wins, which is
-    arbitrary -- the card gives the choice to the player. #554.
+    So `f972`, `f3188` and `f3234` are **all** Arena Fighting and are one
+    chain. The first version paired `f972` with `f1300` and left the other
+    two as plain `if`s, which was wrong in both directions at once: it
+    denied a clause the character is entitled to and allowed two it is
+    not. I had inferred the families from the books rather than reading
+    the bracket.
 
-    **`f3188` and `f3234` are not of that category and stack**, with each
-    other and with whichever of the two above paid out. Their own
-    standing bonuses stay in their own bodies; only the clause that rides
-    this row's hit is here.
+    `f1300` carries no bracket, so it stacks with whichever arena feat
+    paid -- a plain `if`, outside the chain.
+
+    Each branch of the chain carries its own applicability: `f972` pays on
+    a critical hit only, so a character holding it and `f3188` gets the
+    shift on an ordinary hit rather than nothing. When more than one
+    applies the first wins, which is arbitrary -- the printed rule is that
+    the player declares which one **before the attack**. #554.
     """
     if not c.strike():
         return
     c.damage(c.w(1), c.dex_mod)
 
+    # One Arena Fighting feat. f3188 and f3234 are of that category too --
+    # they were plain `if`s in the first version of this and should not have
+    # been -- so all three are one chain, in printed order.
     if c.feat("f972") and c.crit:
         c.penalty(AC, 2, on=c.target, until=When.EONT)
-    elif (c.feat("f1300") and c.con_mod > 0
-            and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
-        c.flat(c.con_mod, on=c.target)
-
-    if c.feat("f3188"):
+    elif c.feat("f3188"):
         c.ignores_difficult(on=c.me, until=When.EOT)
         c.shift(2 if c.race_of(on=c.me) == "r4" else 1)
-    if c.feat("f3234"):
+    elif c.feat("f3234"):
         c.push(1, on=c.target)
+
+    # f1300 carries no bracket, so any number of its kind apply: a plain
+    # `if`, outside the chain, stacking with whichever arena feat paid.
+    if (c.feat("f1300") and c.con_mod > 0
+            and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
+        c.flat(c.con_mod, on=c.target)
 
 
 @power(

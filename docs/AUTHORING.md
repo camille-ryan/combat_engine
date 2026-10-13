@@ -706,24 +706,37 @@ declare a weapon, a weapon group or a suit of armour.
      day: `p1489` hard-coded `c.shift(1)` and blocked three feats on a verb
      that existed, and `c.aid_another` laid its +2 on a key nothing read, so
      the aid another action had never granted anything in any fight.
-  2. **It makes the style-feat rule unbreakable.** You cannot apply more than
-     one style feat to a single use of a power. Measured across all three
-     registration mechanisms: **69 feats hang a clause on 53 rows**, 27 of
-     those feats are style feats, and **20 rows are named by two or more of
-     them** — seven name `p87`. Written as `if c.feat(A): … elif c.feat(B): …`
-     the engine *cannot* apply two. As independent riders it always could,
-     and nothing gated it.
+  2. **It makes the one-per-category rule unbreakable.** Written as
+     `if c.feat(A): … elif c.feat(B): …` the engine *cannot* apply two. As
+     independent riders it always could, and nothing gated it.
 
-     **But 13 of those 20 rows also carry feats that are not style feats,
-     and those stack.** So the body is a chain over the style feats *plus*
-     independent `if`s for the rest — never one flat chain over every feat
-     naming the row, which would deny a clause the character is entitled to.
-     `p704` is the worked example: 2 exclusive, 2 stacking.
+     **The category is printed in brackets after a feat's name** —
+     `[Arena Fighting]`, `[Lesser Style]`, `[Greater Style]`, or nothing —
+     and Camille's rule is **one Arena Fighting feat, one Lesser Style
+     feat, and any number of unbracketed ones** per use of a power. So a
+     body holds *one chain per bracketed category*, and the chains are
+     independent of each other; an unbracketed feat is a plain `if` in
+     neither.
 
-     You cannot derive the classification from anything in the repo: a
-     feat's category is part of its printed **name**. Read the names in your
-     brief's glossary, and put the reason in the docstring as refs, so the
-     next reader does not tidy the `elif` back into an `if`. #550.
+     Measured off the compendium's own `Associated Powers` lines:
+
+     ```
+     Arena Fighting   26 rows named by 2+, 110 edges
+     Lesser Style     17 rows named by 2+,  51 edges
+     Greater Style    57 rows named by 2+, 140 edges   (encounter powers)
+     no bracket        2 rows               — these stack, no chain
+     ```
+
+     **Do not group the feats by the last word of their printed names.**
+     Both `[Arena Fighting]` and unbracketed feats are printed "… Style",
+     so that reading is wrong, and it came out wrong on four of the first
+     five rows migrated — denying clauses a character is entitled to on
+     three of them and allowing two it is not on the fourth.
+
+     **And do not read the category out of `game.db`: it is not there.**
+     The bracket lives in `compendium.sqlite`'s `Feat.PlainTxt` and the
+     ETL strips it. An authoring agent cannot read the compendium, so the
+     grouping has to come down from the main session with the brief. #550.
   3. One mechanism instead of two, and the `if` in the body was already the
      dominant one at 193 sites.
 
