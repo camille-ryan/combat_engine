@@ -1172,13 +1172,8 @@ def _extra_off_kind(c: Cast, ev: Any) -> None:
         c.flat(c.int_mod, on=ev.target)
 
 
-def _ongoing_if_alone(c: Cast, ev: Any) -> None:
-    foe = ev.target
-    if c.wis_mod <= 0:
-        return
-    if any(other != foe for other in c.within(1, of=foe, side="enemy")):
-        return
-    c.ongoing(c.wis_mod, on=foe)
+# `_ongoing_if_alone` was here, called only by f1299's entry on p992,
+# which is written into p992's body now (#550). `lint.py` named it.
 
 
 def _beast_shifts_if_open(c: Cast, ev: Any) -> None:
@@ -1280,8 +1275,8 @@ def _extra_if_held(c: Cast, ev: Any) -> None:
         c.flat(c.con_mod, on=ev.target)
 
 
-def _mark_the_hit(c: Cast, ev: Any) -> None:
-    c.mark(on=ev.target)
+# `_mark_the_hit` was here -- f1304's whole `clauses` leg, on p992 -- and
+# is written into p992's body now (#550).
 
 
 def _advantage_in_surprise(c: Cast, ev: Any) -> None:
@@ -1311,10 +1306,9 @@ def _others_in_cloud(c: Cast, ev: Any) -> list[int]:
     return [] if ev.target not in inside else [f for f in inside if f != ev.target]
 
 
-def _splash_in_cloud(c: Cast, ev: Any) -> None:
-    if c.str_mod > 0:
-        for foe in _others_in_cloud(c, ev):
-            c.flat(c.str_mod, on=foe)
+# `_splash_in_cloud` was here, f1305's clause on p992, written into p992's
+# body now (#550) along with a copy of `_others_in_cloud`. That reader
+# stays: `_rattle_in_cloud` below is the same feat's clause on p2248.
 
 
 def _rattle_in_cloud(c: Cast, ev: Any) -> None:
@@ -1424,8 +1418,9 @@ _riders("f1298", {
 # lists four powers and each has its own entry above -- `p992` and `p653`
 # on `Hit`, `p315` on the granted swing's `PowerResolved`, and the ranger
 # variant on this row's own. Nothing was waiting for a verb.
+#
+# **p992's entry has moved into p992's body** (#550).
 _riders("f1299", {
-    "p992": _ongoing_if_alone,
     "p653": _ongoing_on_riposte,
 }, landed={"p315": _ongoing_on_granted_hit},
    resolved={"p4369": _beast_ongoing_instead})
@@ -1546,9 +1541,10 @@ def f1303(c: Cast) -> None:
 # p4541's clause rides the basic attack that row hands an ally -- which
 # `granted_via` names now -- p653's the riposte, and p87's both of its
 # two attacks landing.
-_riders("f1304", {
-    "p992": _mark_the_hit,
-}, landed={"p4541": _cow_on_granted_hit},
+#
+# **p992's entry has moved into p992's body** (#550), which leaves this
+# row's only `clauses` leg empty.
+_riders("f1304", {}, landed={"p4541": _cow_on_granted_hit},
    dropped=("c.on_riposte()", "c.hit_twice()"))
 
 # All four clauses are about the zone `p2473` lays. The two splash ones
@@ -1556,8 +1552,10 @@ _riders("f1304", {
 # travel with its owner -- `c.move_zone` puts one on a named square and
 # nothing ties it to a creature -- and p620's wants one named ally left
 # out of a zone that is otherwise blinding everybody in it.
+#
+# **p992's entry has moved into p992's body** (#550), and `_others_in_cloud`
+# went with it as a copy -- p2248's clause below still reads this one.
 _riders("f1305", {
-    "p992": _splash_in_cloud,
     "p2248": _rattle_in_cloud,
 }, dropped=("c.move_zone(with_me=)", "c.zone_exempt()"))
 

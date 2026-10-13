@@ -62,6 +62,7 @@ class Result:
     def __init__(self, name: str) -> None:
         self.name = name
         self.failed: list[str] = []
+        self.skipped: list[str] = []
         self.passed = 0
 
     def that(self, ok: bool, what: str, detail: str = "") -> None:
@@ -71,6 +72,24 @@ class Result:
         else:
             self.failed.append(what)
             print(f"    FAIL  {what}" + (f"\n            {detail}" if detail else ""))
+
+    def skip(self, why: str) -> None:
+        """A question this board cannot pose. **Not a pass.**
+
+        `scripts/CLAUDE.md`: an instrument must not skip itself quietly,
+        and the total has to reconcile -- `browser.py` had eight sites
+        writing `that(True, "... (skipped)")`, which increments `passed`
+        while the parenthetical admits it, and the only thing that found
+        them was the arithmetic not adding up.
+
+        So this is counted apart and printed in the summary. The first
+        caller is `at_most_one_applies`: `p992`'s chain has three branches
+        and only one can fire on the audit board, so "at most one pays" is
+        true there and proves nothing -- planting the regression left it
+        green.
+        """
+        self.skipped.append(why)
+        print(f"    skip  {why}")
 
 
 def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
@@ -6101,6 +6120,7 @@ MIGRATED = {
     "p704": ("f972", "f1300"),
     "p997": ("f994", "f1300"),
     "p2099": ("f992", "f1298"),
+    "p992": ("f1299", "f1304", "f1305"),
 }
 
 
@@ -6170,6 +6190,18 @@ def at_most_one_applies(out: Result) -> None:
         setattr(spy, "is_", lambda *_a, **_kw: True)          # noqa: B010
         setattr(spy, "is_kind", lambda *_a, **_kw: True)      # noqa: B010
         setattr(spy, "wielding", lambda *_a, **_kw: True)     # noqa: B010
+        # **And the board reads, as far as they can be faked.** A clause
+        # gate is not only about the feats: `p992`'s first branch asks
+        # whether the creature hit is the only enemy near it, and on a
+        # drawn encounter it usually is not -- so that branch could not
+        # fire and the chain's exclusivity was unprovable. An empty
+        # neighbourhood is the generous answer, and it is safe because
+        # every figure here is a difference against the same board.
+        #
+        # What cannot be faked this way is a clause reading the *world* --
+        # `p992`'s third branch wants a zone a particular row laid. Those
+        # are counted and reported as skipped rather than patched around.
+        setattr(spy, "within", lambda *_a, **_kw: [])         # noqa: B010
         REGISTRY[ref].body(spy)
         return paid
 
@@ -6202,10 +6234,36 @@ def at_most_one_applies(out: Result) -> None:
                      f"{ref} on a {outcome}: holding {len(feats)} exclusive"
                      f" feats with every condition met, at most one clause"
                      f" pays ({len(paid)}: {paid})")
-        out.that(len(landed) + len(missed) >= 1,
-                 f"{ref}: and the chain is REACHED -- the control that stops"
-                 f" this passing on a row whose branch never runs"
-                 f" (hit {landed}, miss {missed})")
+
+        # **How many of this row's branches can pay on THIS board at all.**
+        # Without this the rule passes vacuously, and it did: `p992`'s
+        # chain was planted into three independent `if`s and **nothing
+        # reddened**, because only one of its three branches can fire here
+        # -- one needs the target to be the last enemy standing near it and
+        # one needs a zone `p2473` lays, and the spy fakes neither. The
+        # docstring claimed the board was "as generous as it can be" and
+        # that was false: the gates read the board, not just the feats.
+        #
+        # So the limit is measured and reported rather than papered over
+        # with more patching, which would be endless. A row with fewer than
+        # two live branches has its exclusivity **unproven here**, and the
+        # row's own rule -- `feat_clause_exclusivity` for `p704` -- is what
+        # poses the state this board cannot.
+        alone = [f for f in feats
+                 if added(ref, (f,), hit=True) or added(ref, (f,), hit=False)]
+        out.that(len(alone) >= 1,
+                 f"{ref}: the chain is REACHED -- at least one branch pays"
+                 f" when its feat is held alone ({alone} of {list(feats)})")
+        if len(alone) < 2:
+            out.skip(f"{ref}: exclusivity NOT PROVEN -- only {len(alone)} of"
+                     f" {len(feats)} branches can fire here ({alone}), so"
+                     f" 'at most one' above is vacuous. The rest read the"
+                     f" world rather than the Cast; a dedicated rule has to"
+                     f" build the state.")
+        elif len(alone) < len(feats):
+            out.skip(f"{ref}: {len(alone)} of {len(feats)} branches posed"
+                     f" ({alone}) -- the exclusivity between those IS proven,"
+                     f" the rest read the world and are not.")
 
     known.known[:] = was
 
@@ -6369,8 +6427,19 @@ def main() -> int:
 
     bad = [r for r in results if r.failed]
     total = sum(r.passed for r in results)
+    skipped = sum(len(r.skipped) for r in results)
+    # **The skipped count is printed even when it is zero.** A line that
+    # only appears when something was skipped is a line nobody learns to
+    # look for, and `browser.py`'s eight silent skips were found by
+    # arithmetic rather than by a failure. See `Result.skip`.
     print(f"\n{total} printed rules hold, {sum(len(r.failed) for r in bad)} do not"
-          + (f" ({', '.join(r.name for r in bad)})" if bad else ""))
+          + (f" ({', '.join(r.name for r in bad)})" if bad else "")
+          + f", {skipped} could not be posed on the board used")
+    if skipped:
+        print("  what was skipped, and by which driver:")
+        for r in results:
+            for why in r.skipped:
+                print(f"    {r.name}: {why}")
     return 1 if bad else 0
 
 

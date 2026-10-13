@@ -17,7 +17,7 @@ from combat_engine.engine import (
     Melee,
     power,
 )
-from combat_engine.engine.grid import distance
+from combat_engine.engine.grid import Square, distance
 from combat_engine.engine.query import squares as squares_of
 
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -38,6 +38,31 @@ _HELD_FAST = (
     Condition.STUNNED,
     Condition.UNCONSCIOUS,
 )
+
+#: The zone `f1305`'s clause on `p992` reads -- the caster's own `p2473`.
+_CLOUD = "p2473"
+
+
+def _others_in_cloud(c: Cast, hit: int) -> list[int]:
+    """"All other enemies within the area" of the caster's own `p2473`.
+
+    Empty unless the creature just hit is standing in it, which is the
+    clause's first half. `Cast.zone` labels a zone with the ref that laid
+    it when the row passes no `label=`, so that ref is the whole match.
+
+    Copied from `feats/general_h.py`, where `f1305`'s clause on `p87` still
+    uses it. **The heaviest duplication this migration has cost so far**,
+    and the first one big enough to argue about: fifteen lines of reader,
+    not three lines of clause. It takes the creature hit rather than the
+    `Hit` event, because a body has `c.target` and no event.
+    """
+    area: frozenset[Square] = frozenset()
+    for _zid, zone in c.world.zones.all():
+        if zone.owner == c.me and zone.label == _CLOUD:
+            area = zone.squares
+            break
+    inside = c.in_squares(area, side="enemy") if area else []
+    return [] if hit not in inside else [f for f in inside if f != hit]
 
 
 @power(
@@ -96,12 +121,37 @@ def p997(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p992(c: Cast) -> None:
-    if c.strike():
-        c.damage(c.w(1), c.str_mod)
-        # And a second enemy beside you takes the modifier on its own.
-        others = [e for e in c.within(1, side="enemy") if e != c.target]
-        if others:
-            c.flat(c.str_mod, on=c.choose(others, "who else does it catch"))
+    """Three feats of the exclusive category hang a clause on this hit.
+
+    #550's convention, and `p704` carries the long form of why `f1299`,
+    `f1304` and `f1305` are one chain rather than three tests. The first
+    row migrated with three in it, and worth a note for the next: the
+    chain is in printed order and **every branch carries its own
+    applicability**, so a character holding all three gets whichever can
+    actually do something rather than always the first.
+
+    `f3188` and two others also name this row and are not of that
+    category, so they stay riders and stack with whichever of these pays.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(1), c.str_mod)
+    # And a second enemy beside you takes the modifier on its own.
+    others = [e for e in c.within(1, side="enemy") if e != c.target]
+    if others:
+        c.flat(c.str_mod, on=c.choose(others, "who else does it catch"))
+
+    foe = c.target
+    if foe is None:
+        return
+    if (c.feat("f1299") and c.wis_mod > 0
+            and not any(o != foe for o in c.within(1, of=foe, side="enemy"))):
+        c.ongoing(c.wis_mod, on=foe)
+    elif c.feat("f1304"):
+        c.mark(on=foe)
+    elif c.feat("f1305") and c.str_mod > 0:
+        for other in _others_in_cloud(c, foe):
+            c.flat(c.str_mod, on=other)
 
 
 @power(
