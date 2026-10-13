@@ -115,6 +115,19 @@ MANOEUVRE_BULL_RUSH = "manoeuvre:bull_rush"
 MANOEUVRE_BULL_RUSH_FOLLOW = "manoeuvre:bull_rush-follow"
 
 
+#: **Keys whose one-shot is correctly spent by the attack roll**, because
+#: each is *consulted before* it: `attack` at the roll itself, and `range`
+#: and `reach` when `dsl._reach_of` decides what may be reached, which is
+#: aiming and happens first. So the roll is the moment after which the hold
+#: has been used, which is exactly what `once=` means.
+#:
+#: Written down rather than left as an `else`, because the `else` is what
+#: silently mis-spent every key nobody had thought of -- five times. A key
+#: added here needs one sentence saying where it is read; a key that has no
+#: such moment belongs in the refusal below, not here.
+_SPENT_ON_ATTACK = frozenset({"attack", "range", "reach"})
+
+
 @dataclass
 class Cast:
     """One use of one power, aimed at one target."""
@@ -7814,6 +7827,74 @@ class Cast:
                 effect.subs.append(
                     self.world.bus.on(SavingThrow, spend_save, owner=who)
                 )
+            elif key == "skill" or key.startswith(("skill:", "ability")):
+                # **A one-shot check bonus was spent by the next attack
+                # roll too**, the same way the save was, and for the same
+                # reason: the branch below took everything the three
+                # tests above did not name. `skills.modifier` reads
+                # `skill:<name>` and `skill`; `skills.ability_check`
+                # reads `ability_check`. Seven sites in the tree carry
+                # one, and two more hand-rolled the latch rather than
+                # trust `once=`.
+                #
+                # Fifth time a branch of this method has spent a modifier
+                # somewhere other than where it is read -- which is why
+                # the `else` below no longer guesses.
+                from .events import SkillCheck
+
+                def spend_check(ev: SkillCheck) -> None:
+                    if ev.actor == who:
+                        self.world.effects.end(effect, "used")
+
+                effect.subs.append(
+                    self.world.bus.on(SkillCheck, spend_check, owner=who)
+                )
+            elif key == "forced":
+                # **The shove is where a shove reduction is read**, inside
+                # `ForcedMove`'s resolve callback, and two rows say so in
+                # their own docstrings -- "spends the reduction on this
+                # shove rather than on every one until the end of the
+                # turn". Neither got it: `forced` fell through to the
+                # attack-roll branch, so the reduction was spent by the
+                # owner's next swing and stood for the second shove of the
+                # window. Sixth instance of the same fault, and the last
+                # one found by reading rather than by a row breaking.
+                from .events import ForcedMove
+
+                def spend_shove(ev: ForcedMove) -> None:
+                    if ev.target == who:
+                        self.world.effects.end(effect, "used")
+
+                effect.subs.append(
+                    self.world.bus.on(ForcedMove, spend_shove, owner=who)
+                )
+            elif key not in _SPENT_ON_ATTACK:
+                # **Refused rather than guessed.** Every fix to this method
+                # has been "add a branch for the key I just found", and the
+                # `else` kept silently mis-spending the next one: a
+                # `"forced"` or `"range"` or `"resist <type>"` one-shot was
+                # ended by the owner's next *swing*, which is not where any
+                # of them is read. `f3530` found the fifth instance and
+                # could not write its row because of it.
+                #
+                # So an unrecognised key raises, naming itself, exactly as
+                # a misused `dtype` does twenty lines above. A loud refusal
+                # at authoring time is strictly better than a bonus spent
+                # by the wrong roll, and it is what turned that misuse from
+                # a bug into a typo. #544.
+                raise ValueError(
+                    f"c.bonus({key!r}, once=True) has no spend moment. "
+                    "`once=` knows when these are read: "
+                    f"{', '.join(sorted(_SPENT_ON_ATTACK))} (all consulted "
+                    "before the roll, so the roll spends them), 'damage', "
+                    "'save', a Defense, 'crit_range', and the check family "
+                    "('skill', 'skill:<name>', 'ability_check'). For "
+                    f"{key!r} there is no event to end the hold on, so it "
+                    "would be spent by the next attack roll instead -- "
+                    "which is the bug this refusal replaces. Lay it "
+                    "without `once=` and end it yourself, or add the "
+                    "branch here if the key has a moment."
+                )
             else:
 
                 def spend(ev: AttackRolled) -> None:
@@ -7836,6 +7917,7 @@ class Cast:
 
                 effect.subs.append(self.world.bus.on(AttackRolled, spend, owner=who))
         return effect
+
 
     def penalty(self, what: str | Defense, value: int, **kw: Any) -> Effect | None:
         """A negative modifier. **It takes no `kind`, and that is the rule.**

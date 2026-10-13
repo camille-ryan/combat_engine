@@ -5552,6 +5552,150 @@ def regeneration_suspended(out: Result) -> None:
              f" {pair[2]})")
 
 
+def once_spend_moments(out: Result) -> None:
+    """A one-shot bonus is spent where it is READ, not by the next swing.
+
+    `c.bonus(..., once=True)` dispatches on the key to decide which event
+    ends the hold, and the fix for every gap in it has been "add a branch
+    for the key I just found". The `else` kept silently mis-spending the
+    next one, and the code's own comments count the instances: the damage
+    branch was the second, `crit_range` the third, `save` the fourth
+    ("fourth time a branch of this method has spent a modifier somewhere
+    other than where it is read"), and `f3530`'s docstring found the fifth
+    while unable to write its row.
+
+    **None of the four previous fixes shipped the assertion that would
+    have caught the next one**, which is why there was a next one each
+    time: each proved its own key worked and none proved that the *wrong*
+    roll leaves the hold alone. That is what this rule is.
+
+    So, per moment, both halves:
+
+    * a check bonus is spent by the **check** and **not** by an attack
+      roll -- the bug, seven sites in the tree, and two more that
+      hand-rolled the latch rather than trust `once=`;
+    * a shove reduction is spent by the **shove**. Two rows say "spends
+      the reduction on this shove rather than on every one until the end
+      of the turn" and neither got it;
+    * an attack bonus is still spent by the attack roll, which is what the
+      `else` was right about all along and must not regress.
+
+    And the refusal, which is the part that stops a sixth instance: a key
+    with no spend moment **raises** instead of being quietly handed to the
+    attack roll. `range` and `reach` are *not* in that set and must not
+    be -- both are read by `dsl._reach_of` when it decides what may be
+    reached, which happens before the roll, so the roll is genuinely the
+    moment after which they have been used.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.types import Defense
+
+    def board() -> tuple[World, int, int]:
+        fielded = story.field_encounter(seed=7, level=3)
+        world = fielded.world
+        pc = next(e for e in sorted(world.entities)
+                  if not query.stat_block(world, e))
+        mon = next(e for e in sorted(world.entities)
+                   if query.stat_block(world, e))
+        return world, pc, mon
+
+    def total(world: World, who: int, key: str) -> int:
+        mods = world.get(who, Mods)
+        return mods.total(key, {"target": who, "attacker": who}) if mods else 0
+
+    def swing(world: World, who: int, at: int) -> None:
+        """An attack roll, announced directly.
+
+        `c.strike` needs a declared attack line and this rule is about the
+        spend rather than about any row, so the event is emitted the way
+        the other rules here emit a `Hit` or a `TurnStart`.
+        """
+        roll = AttackRolled(
+            attacker=who, target=at, power="drivers:once", vs=Defense.AC,
+            natural=11, bonus=5, total=16, defence=10, advantage=False,
+        )
+        # `ctx` is a plain attribute `resolve.attack` stamps on, not a
+        # field -- and the spend branch reads it to ask whether a gated
+        # one-shot applies, so an event without one takes the fallback.
+        roll.ctx = {"attacker": who, "target": at,
+                    "power": "drivers:once", "advantage": False}
+        world.bus.emit(roll)
+
+    # -- a check bonus, and the attack roll that must NOT spend it -------
+    world, pc, mon = board()
+    c = Cast(world=world, me=pc, ref="drivers:once")
+    c.bonus("skill:bluff", 2, on=pc, until=When.ENCOUNTER, once=True)
+    before = total(world, pc, "skill:bluff")
+    swing(world, pc, mon)
+    survived = total(world, pc, "skill:bluff")
+    out.that(before == 2 and survived == 2,
+             "a one-shot CHECK bonus survives an attack roll, which is the"
+             " bug: every key the four named branches missed was handed to"
+             f" the swing instead ({before} -> {survived})")
+
+    c.check("bluff", 10)
+    spent = total(world, pc, "skill:bluff")
+    out.that(spent == 0,
+             f"and is spent by the check itself, where it is read ({spent})")
+
+    # -- a shove reduction, spent by the shove ---------------------------
+    world, pc, mon = board()
+    Cast(world=world, me=pc, ref="drivers:once").bonus(
+        "forced", 2, on=mon, until=When.ENCOUNTER, once=True)
+    armed = total(world, mon, "forced")
+    Cast(world=world, me=pc, ref="drivers:once").push(3, on=mon)
+    gone = total(world, mon, "forced")
+    out.that(armed == 2 and gone == 0,
+             "a shove reduction is spent by the SHOVE -- `movement` reads it"
+             " inside ForcedMove's resolve callback, which runs before the"
+             f" after window the spend listens on ({armed} -> {gone})")
+
+    # -- the attack branch must not regress ------------------------------
+    world, pc, mon = board()
+    Cast(world=world, me=pc, ref="drivers:once").bonus(
+        "attack", 2, on=pc, until=When.ENCOUNTER, once=True)
+    up = total(world, pc, "attack")
+    swing(world, pc, mon)
+    down = total(world, pc, "attack")
+    out.that(up == 2 and down == 0,
+             "while an ATTACK bonus is still spent by the attack roll, which"
+             f" the else branch was right about all along ({up} -> {down})")
+
+    # -- the refusal, which is what stops a sixth instance ---------------
+    world, pc, mon = board()
+    c = Cast(world=world, me=pc, ref="drivers:once")
+    refused = []
+    for key in ("surge_value", "temp_hp", "made_up"):
+        try:
+            c.bonus(key, 1, on=pc, until=When.ENCOUNTER, once=True)
+        except ValueError:
+            refused.append(key)
+    out.that(len(refused) == 3,
+             "a key with no spend moment RAISES rather than being handed to"
+             f" the attack roll ({len(refused)} of 3 refused)")
+
+    kept = []
+    for key in ("attack", "range", "reach", "damage", "save",
+                "skill", "skill:bluff", "ability_check", "forced"):
+        try:
+            Cast(world=world, me=pc, ref=f"drivers:{key}").bonus(
+                key, 1, on=pc, until=When.ENCOUNTER, once=True)
+            kept.append(key)
+        except ValueError:
+            pass
+    out.that(len(kept) == 9,
+             "and every key that DOES have one is still accepted -- `range`"
+             " and `reach` included, read by _reach_of before the roll, so"
+             f" the roll really is their moment ({len(kept)} of 9)")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5566,6 +5710,8 @@ DRIVERS = {
                        "one living creature: not undead, and not construct unless living"),
     "creature_kinds": (creature_kinds,
                        "every character is a natural humanoid; an origin replaces it"),
+    "once_spend_moments": (once_spend_moments,
+                           "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,
                    "a once= hold is spent by rewriting its own event"),
     "two_types": (two_types, "one roll that is two types, and resistance reads both"),
