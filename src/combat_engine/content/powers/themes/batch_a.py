@@ -766,14 +766,19 @@ def p14206(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[*PRIMAL, Keyword.HEALING],
-    dropped=("compendium.silvered",),
 )
 def p14207(c: Cast) -> None:
-    """The silvered-weapon suspension is the dropped clause: nothing marks a
-    weapon as silver. `c.endable` is the "as a minor action you can end this"
-    half, with the surge as its payout."""
+    """**Written: silver is a weapon property, not a missing page.** The
+    marker said `compendium.silvered`, and the compendium prints this card's
+    clause in full -- the gap was that nothing marked a weapon as silvered.
+    `c.gains_property` is the write and `regeneration(unless_struck_by=)`
+    is the read, so the suspension is the header's now.
+
+    `c.endable` is the "as a minor action you can end this" half, with the
+    surge as its payout."""
     healing = c.regeneration(
-        1 + c.con_mod, until=When.ENCOUNTER, on=c.me, while_bloodied=True
+        1 + c.con_mod, until=When.ENCOUNTER, on=c.me, while_bloodied=True,
+        unless_struck_by="silvered",
     )
     c.endable(healing, MINOR, then=lambda: c.surge(on=c.me))
 

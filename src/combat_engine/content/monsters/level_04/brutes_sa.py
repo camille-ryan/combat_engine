@@ -1766,13 +1766,12 @@ _M5952_SHAPES = ("rat", "human", "hybrid")
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5952a0(c: Cast) -> None:
     """Regeneration lands; the silver that switches it off does not. Nothing
     marks a weapon as silvered, so the suspension clause has no property to
     read."""
-    c.regeneration(5)
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(

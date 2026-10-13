@@ -2791,12 +2791,11 @@ def m5837a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5891a0(c: Cast) -> None:
     """Regeneration plays; nothing marks a weapon as silvered, so the
     suspension clause has no property to read."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.regeneration(5, until=When.ENCOUNTER, on=c.me, unless_struck_by="silvered")
 
 
 @power(

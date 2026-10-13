@@ -1189,9 +1189,17 @@ def i446p1(c: Cast) -> None:
 
 
 @power("i469p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
+       reach=PERSONAL, target=SELF, todo=("chargen.ammunition()",))
 def i469p1(c: Cast) -> None:
-    """Silver is a material a base weapon does not record and nothing
+    """**Re-pointed.** The weapon half is writable with
+    `c.gains_property`. The card's choice is not: "your weapon **or one
+    group of ammunition** (30 arrows, 10 crossbow bolts, 20 sling
+    bullets, or 5 shuriken)" needs ammunition to be a countable thing a
+    character owns in groups, and nothing holds one -- arrows are not
+    `Gear.weapons` entries. Writing the weapon branch alone would be a
+    row that silently picked for the player.
+
+    Silver is a material a base weapon does not record and nothing
     reads, so "attacks as a silvered weapon" has nothing to set.
 
     Re-aimed from `Weapon.silvered`, which was this row alone: eight rows

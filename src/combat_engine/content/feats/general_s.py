@@ -1958,28 +1958,6 @@ def f3783(c: Cast) -> None:
         c.save(on=c.target)
 
 
-def _gains_property(c: Cast, prop: str, *, group: str = "", ref: str = "") -> int:
-    """Lay a printed weapon property on this character's own weapons.
-
-    `c.weapon_dice`'s mechanism rather than a verb of its own: `Gear.weapons`
-    holds per-character `replace(w)` copies, so the write needs no reader
-    beyond the ones `Weapon.properties` already has -- `Cast._high_crit` for
-    a critical and `_weapon_is` for a Requirement.
-
-    A property only ever adds, so unlike a die it is safe to aim at a whole
-    group, and arming the trait twice says the same thing twice.
-    """
-    gear = _gear(c)
-    if gear is None:
-        return 0
-    laid = 0
-    for weapon in gear.weapons:
-        if (group and weapon.group == group) or (ref and weapon.ref == ref):
-            weapon.properties = weapon.properties | {prop}
-            laid += 1
-    return laid
-
-
 # -- the unarmed run --------------------------------------------------------
 
 
@@ -2011,7 +1989,7 @@ def f3785(c: Cast) -> None:
     """High crit laid on this character's own unarmed weapon.
 
     The writer was never missing: `c.weapon_dice` edits the per-character
-    `replace(w)` copies in `Gear.weapons` and `_gains_property` above is the
+    `replace(w)` copies in `Gear.weapons` and `c.gains_property` is the
     same write on the same object, which `Cast._high_crit` reads (#240).
 
     **By group, where f3784's die had to be by ref.** Raising the group's die
@@ -2020,7 +1998,7 @@ def f3785(c: Cast) -> None:
     weapon the character is actually holding. The ref is named too, for the
     plain fist.
     """
-    _gains_property(c, "high crit", group="unarmed", ref="w:unarmed")
+    c.gains_property("high crit", group="unarmed", ref="w:unarmed")
 
 
 @power("f3786", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2143,13 +2121,13 @@ def f3794(c: Cast) -> None:
     """Neither is a group, but both are rows in the weapon table, so the
     bonus is gated on the ref. Heroic tier, so +2.
 
-    The property clause is written now: `_gains_property` adds it to this
+    The property clause is written now: `c.gains_property` adds it to this
     character's own copy of the two-handed one of the pair, which is the
     weapon the sentence names, and `Cast._high_crit` reads it off the weapon
     in hand."""
     c.bonus("damage", 2, kind="feat", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _holding_ref(c, "w3597", "w3602"))
-    _gains_property(c, "high crit", ref="w3602")
+    c.gains_property("high crit", ref="w3602")
 
 
 f3795 = _grants("f3795", "f3795b")

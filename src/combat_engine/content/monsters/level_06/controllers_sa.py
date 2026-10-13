@@ -3874,22 +3874,25 @@ def _m6470_shape(world: World, eid: int) -> str | None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered", "c.regeneration(suspended_by=)"),
 )
 def m6470a0(c: Cast) -> None:
-    """The regeneration plays. Suspending it for a turn needs two things that
-    are both missing, so both are named.
+    """**Written, and the split this row insisted on is why it could be.**
 
-    **It is not the same gap as `m5087a1`'s, and sharing one symbol would make
-    neither able to go green.** Of the 16 rows carrying
-    `c.regeneration(suspended_by=)`, 15 suspend on a **damage type** -- acid or
-    fire, force or psychic, psychic -- which `DamageType` already holds and only
-    the parameter is wanting. This one suspends on damage from a **silvered
-    weapon**, which is a weapon material nothing in the engine models at all;
-    `c.silvered()` is where 17 rows already wait for it. Giving the parameter to
-    `suspended_by=` would report this row ready while it still had nowhere to ask
-    the question."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    Its marker named two gaps and refused to share one symbol with
+    `m5087a1`: of the 16 rows wanting a suspension, 15 suspend on a
+    **damage type**, which `DamageType` already held so only the parameter
+    was wanting; this one suspends on damage from a **silvered weapon**,
+    which was a material nothing modelled. Sharing a symbol would have
+    reported this row ready the moment the parameter landed, with still
+    nowhere to ask the question.
+
+    Both arrived together: silver is a weapon property now and
+    `unless_struck_by=` is the parameter asking about it. The other 15 are
+    a different want and still are -- a damage-type suspension is not this
+    verb's business and `m5087a1`'s symbol stands."""
+    c.regeneration(
+        5, until=When.ENCOUNTER, on=c.me, unless_struck_by="silvered",
+    )
 
 
 @power(

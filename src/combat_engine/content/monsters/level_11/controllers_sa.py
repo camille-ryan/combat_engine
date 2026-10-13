@@ -82,7 +82,7 @@ from combat_engine.content.monsters.level_07.brutes import (
 )
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_08.skirmishers import _adjacent_foe
-from combat_engine.content.monsters.level_09.brutes import _regenerates, _volley
+from combat_engine.content.monsters.level_09.brutes import _volley
 from combat_engine.content.monsters.level_09.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_11.controllers import (
     EVERY_DEFENCE,
@@ -3667,17 +3667,34 @@ _M6418_DOUSED = "m6418a0 suppressed"
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m6418a0(c: Cast) -> None:
-    """Regeneration, written out: the engine holds no such thing, and "has at
-    least 1 hit point" is `hp > 0` rather than `alive`.
+    """**Written: the door had nothing to knock on it and now does.** A
+    weapon's metal is a weapon property, laid by `c.gains_property`, and
+    `unless_struck_by=` is the knock.
 
-    The suppression has a door and nothing to knock on it: a weapon's metal
-    is not a property any item carries, so no blow can be recognised as the
-    silvered one the card names.
+    **Two suspensions, and `c.regeneration` takes both**, which is why this
+    row leaves `_regenerates` behind: `unless_struck_by=` for the silver,
+    and `unless=` for the dousing hold the sibling rows lay. The helper
+    only ever had room for one.
+
+    "Has at least 1 hit point" is `hp > 0` and not `alive` -- the printed
+    sentence says it does not knit itself back together once it is down --
+    and that is the helper's own nuance, carried into the gate rather than
+    lost with it.
     """
-    _regenerates(c, 10, _M6418_DOUSED)
+    me = c.me
+
+    def down_or_doused() -> bool:
+        health = c.world.get(me, Health)
+        if health is None or health.hp <= 0:
+            return True
+        return any(eff.label == _M6418_DOUSED for eff in c.world.effects.of(me))
+
+    c.regeneration(
+        10, on=me, until=When.ENCOUNTER,
+        unless=down_or_doused, unless_struck_by="silvered",
+    )
 
 
 @power(

@@ -666,10 +666,20 @@ def i1296p1(c: Cast) -> None:
 
 
 @power("i1764x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
+       reach=PERSONAL, target=SELF)
 def i1764x1(c: Cast) -> None:
-    """What a weapon is made of is not a property a creature can be given,
-    and nothing on the board resists or fears silver."""
+    """**Written.** "Treat weapons you wield as silvered" is the printed
+    blanket, so `every=True` rather than one ref -- and what a weapon is
+    made of turns out to be exactly a weapon property, written onto the
+    per-character `Gear.weapons` copy.
+
+    The ammunition and thrown weapons the card parenthesises are the same
+    `Gear.weapons` entries, so they are covered by the same write rather
+    than needing a second one.
+
+    Fifteen monster traits read it through
+    `regeneration(unless_struck_by=)`."""
+    c.gains_property("silvered", every=True, on=c.me)
 
 
 @power("i1764p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
@@ -828,9 +838,16 @@ def i2475p1(c: Cast) -> None:
 
 
 @power("i2478p1", level=4, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
+       reach=PERSONAL, target=SELF, todo=("c.gains_property(in_zone=)",))
 def i2478p1(c: Cast) -> None:
-    """Light is not modelled and neither is what a weapon is made of, so
+    """**Re-pointed.** "You and your allies **within the light**" is a
+    grant with moving membership: a property is written once onto a
+    carried copy, and an ally who steps out of the radius must stop
+    having it. `c.gains_property` has no undo and should not grow one --
+    the zone is the right owner of a membership that changes, the way
+    `c.resist_in` owns a resistance that holds only inside one.
+
+    Light is not modelled and neither is what a weapon is made of, so
     both halves of this are absent rather than one."""
 
 

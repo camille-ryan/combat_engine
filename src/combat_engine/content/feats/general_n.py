@@ -2098,9 +2098,18 @@ def f2889(c: Cast) -> None:
 
 
 @power("f2893", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
+       reach=PERSONAL, target=SELF, todo=("c.gains_property(against=)",))
 def f2893(c: Cast) -> None:
-    """Counts attacks as silvered against one creature. Silver is a
+    """**Re-pointed, not blocked on the compendium, which prints this in
+    full.** Silver is a weapon property now and `c.gains_property` lays
+    it -- but this card scopes it to **one enemy**: "while an enemy grants
+    combat advantage to you, your attacks *against that enemy* count as
+    silvered". A property lives on the weapon and the weapon does not know
+    who it is pointed at, so a per-target property is a different thing
+    from the blanket `f1075` and `i1764x1` print. Both halves of the gate
+    are dynamic too -- the grant comes and goes mid-fight.
+
+    Counts attacks as silvered against one creature. Silver is a
     material nothing on a weapon or a blow carries."""
 
 

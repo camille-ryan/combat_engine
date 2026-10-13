@@ -2736,11 +2736,16 @@ def i2901p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("compendium.silvered",),
 )
 def i2941x1(c: Cast) -> None:
-    """What a weapon is made of is not a thing the engine holds, and the
-    whole content of this property is the material."""
+    """**Written.** The whole content of this property is the material,
+    and a material is a weapon property: `c.gains_property` writes it onto
+    the per-character `Gear.weapons` copy, where `_high_crit`,
+    `_weapon_is` and `regeneration(unless_struck_by=)` all read it. The
+    marker blamed the compendium, which prints the sentence in full."""
+    own = c.my_weapon()
+    if own is not None:
+        c.gains_property("silvered", ref=own.ref, on=c.me)
 
 
 @power(

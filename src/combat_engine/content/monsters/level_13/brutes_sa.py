@@ -2078,14 +2078,13 @@ def m6146a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m6146a1(c: Cast) -> None:
     """Regeneration lands, including the printed "and has at least 1 hit
     point", which is what regeneration already is. The silver that switches it
     off for a turn does not: nothing marks a weapon as silver, so there is
     nothing for a suspension to read."""
-    c.regeneration(10, on=c.me, until=When.ENCOUNTER)
+    c.regeneration(10, on=c.me, until=When.ENCOUNTER, unless_struck_by="silvered")
 
 
 @power(

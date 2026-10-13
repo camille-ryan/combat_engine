@@ -199,6 +199,30 @@ KNOWN_SILENT = {
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",
     "i3207p1": "hands a shield's bonuses over; the board holds no shield",
+    # **Two entries that came back with corrected reasons, and the
+    # correction is the point.** Both were added as "not an event", which
+    # was true of the mechanism and wrong about why each row is quiet.
+    # `WeaponChanged` made the write visible; what is left is a board gap
+    # in one case and a second unannounced writer in the other. A reason
+    # that reads as the wrong kind of limit is the fault
+    # `scripts/CLAUDE.md` records about `m6655a0`, pointed the other way.
+    #
+    # `f3785` lays its property on an **unarmed** weapon, and no character
+    # the board deals carries one -- measured: the four parties hold axe,
+    # sling, implement, mace, hammer, light blade, crossbow, heavy blade
+    # and orb, and nothing with `group == "unarmed"` or `ref ==
+    # "w:unarmed"`. So it lays nothing, announces nothing, and is right.
+    # `f3786` beside it fires, because it names a printed weapon that is
+    # dealt. A dummy posing an unarmed combatant retires this one (#437),
+    # exactly as a shield-bearer retires `f1873`.
+    "f3785": "lays a property on an unarmed weapon; no dealt character carries one",
+    # `i1101x1` goes through `items.weapon._longer_range`, which writes
+    # `range_short` and `range_long` straight onto the carried copy and
+    # still announces nothing -- the one writer `WeaponChanged` has not
+    # been threaded into. The honest fix is the same as the one that
+    # worked here: give that helper the event, or promote it the way
+    # `_gains_property` was promoted. It is not a board gap.
+    "i1101x1": "lengthens a weapon's range through a writer that still announces nothing",
     # **Nineteen rows, and the same shape as `f1873` and the four above for
     # the third time -- so the shape is worth naming rather than re-deriving.**
     #
@@ -236,8 +260,6 @@ KNOWN_SILENT = {
     "f3769": "trades a use for a power point; the board's pool starts at its maximum",
     # Gear writes, which edit the per-character `replace(w)` copy rather
     # than announcing anything.
-    "f3785": "writes a weapon property onto its own unarmed copy; not an event",
-    "i1101x1": "lengthens a weapon's range; a range write is not an event",
     # Boards that cannot pose the condition the card names. Each row's own
     # docstring says so, and `i1470p1`'s says the oil does nothing to an
     # enemy without the sense -- the card being odd, not the row wrong.
@@ -820,7 +842,7 @@ DID_SOMETHING = {
     "ForcedMove", "RelationSet", "RelationCleared", "ZoneCreated",
     "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
-    "SurgeSpent", "ActionGranted", "ZoneResized",
+    "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
 }  # fmt: skip
 # `RelationCleared` for the same reason `ConditionEnded` is here and
 # `RelationSet` already was: **taking a relation off is as much a thing as

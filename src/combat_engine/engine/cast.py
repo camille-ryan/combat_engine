@@ -8026,6 +8026,7 @@ class Cast:
         on: int | None = None,
         while_bloodied: bool = False,
         unless: Callable[[], bool] | None = None,
+        unless_struck_by: str = "",
     ) -> Effect:
         """Heal this much at the start of each of that creature's turns.
 
@@ -8053,12 +8054,55 @@ class Cast:
         if who is None:
             return None  # type: ignore[return-value]
 
+        # **"Its regeneration does not function on its next turn after
+        # damage from a <property> weapon."** Fifteen stat blocks print
+        # that sentence about silver and every one of them had to say it
+        # by hand -- the same `Hit` watch, the same consumed flag, the
+        # same `unless` closure, fifteen times in twelve files. Folded in
+        # here for the reason `regeneration` itself was: fifteen copies of
+        # a two-part mechanism is fifteen chances to get the flag wrong,
+        # and the flag is the part that is easy to get wrong.
+        #
+        # **Consumed by the tick it suppresses, not cleared on a clock.**
+        # `m5798a1` settled that shape for the acid-and-fire version: the
+        # read happens inside the `TurnStart` tick, so a second watch
+        # counting turns would race it, and consuming says "the next tick,
+        # whenever it comes" with nothing to order.
+        #
+        # **`Hit` and not `DamageApplied`**, which is the whole trap of
+        # this family: `weapon_of` finds the swing through `ev.attacker`
+        # and `DamageApplied` carries `source` instead, so a damage watch
+        # would answer False for ever and every one of the fifteen rows
+        # would audit clean while doing nothing.
+        struck = {"skip": False}
+        if unless_struck_by:
+            from .events import Hit
+
+            def took(ev: Any) -> None:
+                if ev.target == who and self.struck_by_property(
+                    unless_struck_by, ev
+                ):
+                    struck["skip"] = True
+
+            self.watch(
+                Hit, took, until=until, on=who,
+                label=f"{self.ref} struck by {unless_struck_by}",
+            )
+
+        def suppressed() -> bool:
+            if not struck["skip"]:
+                return False
+            struck["skip"] = False
+            return True
+
         def tick(ev: Any) -> None:
             if ev.actor != who or ev.ghost:
                 return
             if while_bloodied and not self.bloodied(on=who):
                 return
             if unless is not None and unless():
+                return
+            if unless_struck_by and suppressed():
                 return
             self.heal(amount, on=who)
 
@@ -10347,12 +10391,111 @@ class Cast:
         gear = self.world.get(who, Gear)
         if gear is None:
             return 0
+        from .events import WeaponChanged
+
         changed = 0
         for weapon in gear.weapons:
             if (group and weapon.group == group) or (ref and weapon.ref == ref):
+                if weapon.damage != dice:
+                    self.world.bus.emit(WeaponChanged(
+                        actor=who, weapon=weapon.ref,
+                        field="damage", what=dice,
+                    ))
                 weapon.damage = dice
                 changed += 1
         return changed
+
+    def gains_property(
+        self,
+        prop: str,
+        *,
+        group: str = "",
+        ref: str = "",
+        every: bool = False,
+        on: int | None = None,
+    ) -> int:
+        """Lay a printed weapon property on that creature's weapons. Returns how many.
+
+        `weapon_dice`'s mechanism, and the same argument for doing it this
+        way: `Gear.weapons` holds per-character `replace(w)` copies, so the
+        write needs no reader beyond the ones `Weapon.properties` already
+        has -- `_high_crit` for a critical and `_weapon_is` for a printed
+        Requirement. Nothing new reads it and nothing shared is mutated.
+
+        **Not `counts_as`, which waives a Requirement.** That verb says "a
+        warhammer satisfies a card asking for a light blade" and changes no
+        weapon; this one changes the weapon. One symbol serving both would
+        go green for either need and be right for only one.
+
+        `group` matches a whole group, `ref` names one weapon, and `every`
+        is the printed "weapons you wield" -- a blanket that `weapon_dice`
+        deliberately does not offer, because a *die* set across a group
+        would lower some of them while a property only ever adds. Arming
+        the trait twice says the same thing twice.
+
+        Promoted from `feats.general_s._gains_property`, which had served
+        the unarmed run alone for as long as only feats wanted it. Twenty
+        rows across the weapon, implement and feat trees print the same
+        sentence about silver, and a content-local helper cannot be
+        imported by all three trees without a seam nobody wants.
+        """
+        who = self._who(on)
+        if who is None:
+            return 0
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return 0
+        from .events import WeaponChanged
+
+        laid = 0
+        for weapon in gear.weapons:
+            if (
+                every
+                or (group and weapon.group == group)
+                or (ref and weapon.ref == ref)
+            ):
+                had = weapon.properties
+                weapon.properties = weapon.properties | {prop}
+                laid += 1
+                # Announced because the write needs no reader and therefore
+                # had no witness -- `ZoneResized`'s argument exactly. Only
+                # when it changed something, so arming a trait twice says
+                # the same thing once.
+                if weapon.properties != had:
+                    self.world.bus.emit(WeaponChanged(
+                        actor=who, weapon=weapon.ref,
+                        field="properties", what=prop,
+                    ))
+        return laid
+
+    def struck_by_property(self, prop: str, ev: Any = None) -> bool:
+        """Did the attack behind this event use a weapon with that property?
+
+        The reading half of `gains_property`, and the shape fourteen
+        monster traits print: "when it takes damage from a <property>
+        weapon, its regeneration does not function on its next turn".
+
+        `weapon_of` rather than `struck_with`, for the reason that method's
+        own docstring gives: `struck_with` prefers whatever magic thing the
+        attacker holds, which is right for a ki focus and wrong here -- a
+        treated weapon is one weapon, and the other must not carry it.
+
+        False when no weapon can be identified, which is the honest answer
+        for an unarmed or implement attack and the one the printed sentence
+        wants: a creature not struck *by a weapon* was not struck by one
+        with the property.
+
+        **Hand it an attack event, not a `DamageApplied`.** `weapon_of`
+        finds the swing through `ev.attacker`, and `DamageApplied` carries
+        `source` instead -- so a watch on damage would hand this an event
+        with no attacker, get None, and answer False for ever. That is the
+        trap this whole family is about and it is one word apart from
+        working: watch `Hit`, which carries `attacker`, `target` and the
+        power. The printed sentence costs nothing by it, because damage
+        *from a weapon* arrives through a hit.
+        """
+        weapon = self.weapon_of(ev)
+        return weapon is not None and prop in weapon.properties
 
     def weapon_of(self, ev: Any = None) -> Weapon | None:
         """Which weapon the attack behind this event was swung with.

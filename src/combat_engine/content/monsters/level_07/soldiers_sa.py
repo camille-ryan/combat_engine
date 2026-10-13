@@ -1874,12 +1874,11 @@ def _m5598_steady(world: World, eid: int) -> bool:
 
 @power(
     "m5598a0", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
-    target=NO_TARGET, dropped=("compendium.silvered",),
-)
+    target=NO_TARGET,)
 def m5598a0(c: Cast) -> None:
     """The silvered-weapon suspension has no verb; the regeneration itself
     plays."""
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.regeneration(5, until=When.ENCOUNTER, on=c.me, unless_struck_by="silvered")
 
 
 @power(

@@ -2356,10 +2356,9 @@ _M5957_SHAPES = ("wolf", "human", "hybrid")
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5957a0(c: Cast) -> None:
-    c.regeneration(5, until=When.ENCOUNTER, on=c.me)
+    c.regeneration(5, until=When.ENCOUNTER, on=c.me, unless_struck_by="silvered")
 
 
 @power(

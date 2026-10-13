@@ -1102,6 +1102,36 @@ class ZoneResized(Event):
 
 
 @dataclass
+class WeaponChanged(Event):
+    """A carried weapon's own fields changed in place.
+
+    `Gear.weapons` holds per-character `replace(w)` copies, so raising a
+    weapon's die or laying a property on it is a plain field write that
+    needed no reader -- `_high_crit`, `_weapon_is` and `query.holding` all
+    see it with no change to any of them. That is the whole argument for
+    `weapon_dice` and `gains_property` working the way they do, and it has
+    one cost: **nothing announced it**, so a row whose entire content is
+    such a write looked inert.
+
+    Exactly `ZoneResized`'s shape and fixed the same way. Three rows sat in
+    `audit.KNOWN_SILENT` for it -- a high-crit property on an unarmed copy,
+    a lengthened weapon range, and a silvered blanket -- each correct and
+    invisible rather than idle. The alternative was teaching the harness to
+    diff component state, which `audit.py` argues against in its own words:
+    *"the real fix is an event, not an excuse"*.
+
+    `field` is which one moved -- `"properties"`, `"damage"`, `"range"` --
+    and `what` is the value laid, so a listener can tell a silvered blade
+    from a high-crit one without re-reading the weapon.
+    """
+
+    actor: int
+    weapon: str
+    field: str
+    what: str = ""
+
+
+@dataclass
 class ZoneEntered(Event):
     zone: int
     actor: int

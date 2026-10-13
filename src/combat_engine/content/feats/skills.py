@@ -247,14 +247,21 @@ def f1864(c: Cast) -> None:
 
 
 @power("f1075", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("compendium.silvered",))
+       reach=PERSONAL, target=SELF, narrative=("skill:endurance",))
 def f1075(c: Cast) -> None:
-    """Rolling an Endurance check twice is narrative. Treating a weapon
-    as silvered is not -- silver is what some creatures' resistances are
-    written against -- and `Weapon` has no such property. Nine rows want
-    the symbol, one of them an item block in the weapon slot.
+    """**Written: the silver half plays and the other half is narrative.**
 
-    **`todo`, not `dropped`**, for f194's reason: neither half of the
-    card leaves anything behind, so a row that played would be a row
-    that did nothing.
+    "You treat any weapon you wield as though it were a silvered weapon"
+    is `every=True` -- the printed blanket, which is why `gains_property`
+    offers one where `weapon_dice` deliberately does not: a property only
+    adds, so a blanket is safe where a shared *die* would lower some of
+    the group.
+
+    Fifteen monster traits read it through
+    `regeneration(unless_struck_by=)`, which is what silver is for.
+
+    Rolling an Endurance check twice to check disease progression has no
+    combat meaning, so the marker is `narrative=` now rather than `todo=`:
+    the row plays, and what is left over is not a gap.
     """
+    c.gains_property("silvered", every=True, on=c.me)

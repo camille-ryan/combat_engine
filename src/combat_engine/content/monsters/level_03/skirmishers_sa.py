@@ -1197,14 +1197,13 @@ def m115787a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m115824a0(c: Cast) -> None:
     """Regeneration lands; the silver that switches it off does not.
 
     Nothing marks a weapon as silvered, so the suspension clause has no
     property to read. The healing half is the whole of what plays."""
-    c.regeneration(5)
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(
@@ -1996,12 +1995,11 @@ def m4184a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m4616a0(c: Cast) -> None:
     """Regeneration plays; nothing marks a weapon as silvered, so the clause
     that switches it off has no property to read."""
-    c.regeneration(10)
+    c.regeneration(10, unless_struck_by="silvered")
 
 
 @power(

@@ -5393,6 +5393,102 @@ def living_targets(out: Result) -> None:
              " 'construct'} would have wrongly refused")
 
 
+def silvered_regeneration(out: Result) -> None:
+    """A weapon's material, and the regeneration fifteen cards hang on it.
+
+    Twenty-four rows carried `compendium.silvered` -- a marker blaming the
+    source -- and **all twenty-four specs print the clause in full**. The
+    compendium was missing nothing; the engine held no notion of what a
+    weapon is made of. `i469p1`'s own docstring recorded that it had been
+    re-pointed *from* `Weapon.silvered`, which was right, *to* the
+    compendium symbol, which was not: the exact ledger fault #360 names,
+    pointed the other way.
+
+    Silver is a weapon property. `c.gains_property` writes it onto the
+    per-character `Gear.weapons` copy -- the mechanism `weapon_dice`
+    already used, which needs no reader because `_high_crit`, `_weapon_is`
+    and `query.holding` all see it.
+
+    Three things, and the second is the one no amount of reading would
+    have settled:
+
+    * **the property lands**, which is the setter half nine item and feat
+      rows print;
+    * **the suspension costs exactly one turn** -- heal, then nothing,
+      then heal again. A flag cleared on a clock rather than consumed by
+      the tick it suppresses would race the tick, which is why
+      `m5798a1` settled the consumed shape for the acid version;
+    * **a plain weapon suspends nothing**, the negative control. Without
+      it this passes on an implementation that suspends regeneration
+      after any hit at all.
+
+    The trap worth recording: `weapon_of` finds the swing through
+    `ev.attacker`, and `DamageApplied` carries `source` instead. A watch on
+    damage -- the obvious reading of "when it takes damage from a silvered
+    weapon" -- would have answered False for ever, and all fifteen rows
+    would have audited clean while doing nothing.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import Hit, TurnStart
+
+    def fight(silver: bool) -> tuple[int, int, int]:
+        fielded = story.field_encounter(seed=7, level=3)
+        world = fielded.world
+        pc = next(e for e in sorted(world.entities)
+                  if not query.stat_block(world, e))
+        mon = next(e for e in sorted(world.entities)
+                   if query.stat_block(world, e))
+        hurt = world.get(mon, Health)
+        assert hurt is not None
+        hurt.hp = max(1, hurt.max_hp - 40)
+        if silver:
+            Cast(world=world, me=pc, ref="drivers:silver").gains_property(
+                "silvered", every=True, on=pc)
+        Cast(world=world, me=mon, ref="drivers:silver").regeneration(
+            5, on=mon, until=When.ENCOUNTER, unless_struck_by="silvered")
+        rnd = [1]
+
+        def turn() -> int:
+            rnd[0] += 1
+            was = hurt.hp
+            world.bus.emit(TurnStart(actor=mon, round=rnd[0], ghost=False))
+            return hurt.hp - was
+
+        clean = turn()
+        world.bus.emit(Hit(attacker=pc, target=mon, power="rba", critical=False))
+        after = turn()
+        again = turn()
+        return clean, after, again
+
+    board = story.field_encounter(seed=7, level=3)
+    who = next(e for e in sorted(board.world.entities)
+               if not query.stat_block(board.world, e))
+    laid = Cast(world=board.world, me=who, ref="drivers:silver").gains_property(
+        "silvered", every=True, on=who)
+    held = board.world.get(who, Gear)
+    assert held is not None
+    out.that(laid > 0 and all("silvered" in w.properties for w in held.weapons),
+             f"a weapon can be silvered at all, which is what 24 rows wanted"
+             f" and no page was missing ({laid} weapon(s))")
+
+    clean, after, again = fight(silver=True)
+    out.that((clean, after, again) == (5, 0, 5),
+             "and a silvered hit suspends the regeneration for EXACTLY one"
+             " turn -- consumed by the tick it suppresses, not cleared on a"
+             f" clock that would race it (healed {clean}, {after}, {again})")
+
+    plain = fight(silver=False)
+    out.that(plain == (5, 5, 5),
+             "while a plain weapon suspends nothing, without which this"
+             " passes on an implementation that stops regeneration after any"
+             f" hit at all (healed {plain[0]}, {plain[1]}, {plain[2]})")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5401,6 +5497,8 @@ DRIVERS = {
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
+    "silvered_regeneration": (silvered_regeneration,
+                              "a weapon's material, and the regeneration it suspends"),
     "living_targets": (living_targets,
                        "one living creature: not undead, and not construct unless living"),
     "creature_kinds": (creature_kinds,

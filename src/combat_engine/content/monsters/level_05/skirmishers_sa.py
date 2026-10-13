@@ -1911,10 +1911,9 @@ _M5597_SHAPES = ("wolf", "human", "hybrid")
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5597a0(c: Cast) -> None:
-    c.regeneration(5)
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(
@@ -2027,10 +2026,9 @@ _M5599_SHAPES = ("rat", "human", "hybrid")
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5599a0(c: Cast) -> None:
-    c.regeneration(5)
+    c.regeneration(5, unless_struck_by="silvered")
 
 
 @power(

@@ -1383,12 +1383,21 @@ def i1761p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("compendium.silvered",),
 )
 def i1880x1(c: Cast) -> None:
-    """Silver is a material a base weapon cannot record, so nothing reads
-    it -- re-aimed onto the name the other six rows wanting it use. The
-    defence bonus gates on the attack context's `attacker`."""
+    """**Written: silver is a weapon property.** The marker said
+    `compendium.silvered`, and the page prints "this weapon is silvered"
+    in full -- what was missing was anywhere to put it.
+    `c.gains_property` writes onto the per-character `Gear.weapons` copy,
+    which `_high_crit` and `_weapon_is` already read, and fifteen monster
+    traits read through `regeneration(unless_struck_by=)`.
+
+    `c.my_weapon()` is the read for "this weapon" that the other item
+    property rows in this tree use. The defence bonus gates on the attack
+    context's `attacker`."""
+    own = c.my_weapon()
+    if own is not None:
+        c.gains_property("silvered", ref=own.ref, on=c.me)
     for d in _DEFENCES:
         c.bonus(
             d, 1, kind="item", on=c.me, until=When.ENCOUNTER,
@@ -2742,7 +2751,6 @@ def i3412p3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("compendium.silvered",),
 )
 def i3510x1(c: Cast) -> None:
     """"Full damage to insubstantial creatures" is already a verb:
@@ -2752,10 +2760,16 @@ def i3510x1(c: Cast) -> None:
     `None`, or the blanket "ignore every resistance" rides along with it
     and the weapon walks through things the card never mentions.
 
-    Silver is still a material a base weapon cannot record."""
+    **And the silver is written now.** It is a weapon property, laid onto
+    the per-character `Gear.weapons` copy, where fifteen monster traits
+    read it through `regeneration(unless_struck_by=)`. The marker named
+    the compendium, which prints the sentence in full."""
     c.ignore_resistance(
         0, on=c.me, until=When.ENCOUNTER, insubstantial=True
     )
+    own = c.my_weapon()
+    if own is not None:
+        c.gains_property("silvered", ref=own.ref, on=c.me)
 
 
 @power(

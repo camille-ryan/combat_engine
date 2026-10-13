@@ -2191,20 +2191,18 @@ def m5596a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5596a1(c: Cast) -> None:
-    """5 a turn plays. Suspending it specifically after a silvered
-    weapon's damage has no reader -- a weapon's material is not a fact
-    the damage context carries, so there is nothing to ask what it was
-    forged from."""
-    me = c.me
+    """**Written, and the hand-rolled tick came out with it.** The reason
+    given was right at the time -- a weapon's material was not a fact
+    anything carried. It is a weapon property now, laid by
+    `c.gains_property` and asked through `regeneration(unless_struck_by=)`,
+    so the whole row is the one verb.
 
-    def tick(ev: TurnStart) -> None:
-        if not ev.ghost and ev.actor == me:
-            c.heal(5, on=me)
-
-    c.watch(TurnStart, tick, until=When.ENCOUNTER, on=me, label=f"{c.ref} regen")
+    `Hit` and not the damage context, which is where the old note looked:
+    `DamageApplied` carries `source` rather than `attacker`, so a damage
+    watch could never find the swing. The hit carries both."""
+    c.regeneration(5, until=When.ENCOUNTER, on=c.me, unless_struck_by="silvered")
 
 
 @power(

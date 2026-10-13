@@ -2440,14 +2440,13 @@ def m5888a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("compendium.silvered",),
 )
 def m5956a0(c: Cast) -> None:
     """The regeneration plays. Switching it off for a turn after a silvered
     weapon lands does not: nothing marks a weapon as made of silver, which
     is a different gap from the damage-*type* suspension `suspended_by=`
     already names."""
-    c.regeneration(5, on=c.me, until=When.ENCOUNTER)
+    c.regeneration(5, on=c.me, until=When.ENCOUNTER, unless_struck_by="silvered")
 
 
 @power(

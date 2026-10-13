@@ -772,10 +772,18 @@ def i1843p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("compendium.silvered",),
+    todo=("c.gains_property(implement=)",),
 )
 def i1884x1(c: Cast) -> None:
-    """No creature in the tree resists anything by material, so there is
+    """**Re-pointed.** The silver itself is writable -- `c.gains_property`
+    does it, and an implement really is a `Gear.weapons` entry with group
+    "implement", so there is somewhere to put it. What this card scopes it
+    to is not: "for the purpose of implement **and** weapon attack powers
+    made using it" is a property that answers for two different attack
+    paths off one object, and the implement path does not read
+    `Weapon.properties` at all. The blanket rows need none of that.
+
+    No creature in the tree resists anything by material, so there is
     nothing for a silvered implement to beat."""
 
 
