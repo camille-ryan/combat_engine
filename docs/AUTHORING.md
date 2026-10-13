@@ -671,12 +671,31 @@ declare a weapon, a weapon group or a suit of armour.
       def p87(c: Cast) -> None:
           ...
           if c.feat("f974"):
-              c.bonus(..., label="f974")
+              c.bonus(...)
 
-  `label=` is not optional. `audit._claimed` credits an effect to a row by
-  **label prefix**, so without it the power is credited and the feat reports
-  SILENT. With it the feat is credited exactly as if it had laid the effect
-  itself.
+  **This block used to say `label="f974"` was not optional, and that example
+  raised a `TypeError`.** `c.bonus`, `c.penalty`, `c.flat` and `c.damage`
+  took no `label=` at all — only 15 `Cast` verbs do, and they are the
+  watchers, zones, auras and stances. So the one instruction this convention
+  gave about writing the clause named an argument that did not exist, on the
+  day 20 rows were about to follow it.
+
+  The credit argument was also wrong, and in a more interesting way. It is
+  true that `audit._claimed` reads the **effect** label by prefix — but the
+  feat row is **not fired** under this convention, because it carries
+  `implemented_in=` and `audit.py` has its own bucket for that. There is
+  nothing to credit. A modifier is labelled with the laying row's ref
+  automatically, which is what you want: the clause is part of what that
+  power did.
+
+  **Where a label genuinely matters is two PENALTIES in one body.**
+  `Mods.total` buckets penalties by label and takes the worse — 4e's "two
+  from the same source do not add" — so a power's own penalty and a feat's
+  penalty on the same key collapse to one. `c.bonus(label=)` exists for
+  exactly that and for nothing else; it prefixes the row's ref, so credit is
+  unaffected. `m238a3` was the live instance, silently -2 instead of -4 for
+  its whole life, and `drivers.py penalties_by_source` is the gate. Bonuses
+  need none of this — they bucket by `kind`.
 
   Three reasons it goes this way round rather than the feat reaching in:
 
@@ -687,19 +706,30 @@ declare a weapon, a weapon group or a suit of armour.
      day: `p1489` hard-coded `c.shift(1)` and blocked three feats on a verb
      that existed, and `c.aid_another` laid its +2 on a key nothing read, so
      the aid another action had never granted anything in any fight.
-  2. **It makes the style-feat rule unbreakable.** You cannot apply more
-     than one style feat to a single use of a power, and 24 of the 29 ridden
-     powers are named by more than one feat — seven name `p87`. Written as
-     `if c.feat(A): ... elif c.feat(B): ...` the engine *cannot* apply two.
-     As independent riders it always could, and nothing gated it.
+  2. **It makes the style-feat rule unbreakable.** You cannot apply more than
+     one style feat to a single use of a power. Measured across all three
+     registration mechanisms: **69 feats hang a clause on 53 rows**, 27 of
+     those feats are style feats, and **20 rows are named by two or more of
+     them** — seven name `p87`. Written as `if c.feat(A): … elif c.feat(B): …`
+     the engine *cannot* apply two. As independent riders it always could,
+     and nothing gated it.
+
+     **But 13 of those 20 rows also carry feats that are not style feats,
+     and those stack.** So the body is a chain over the style feats *plus*
+     independent `if`s for the rest — never one flat chain over every feat
+     naming the row, which would deny a clause the character is entitled to.
+     `p704` is the worked example: 2 exclusive, 2 stacking.
+
+     You cannot derive the classification from anything in the repo: a
+     feat's category is part of its printed **name**. Read the names in your
+     brief's glossary, and put the reason in the docstring as refs, so the
+     next reader does not tidy the `elif` back into an `if`. #550.
   3. One mechanism instead of two, and the `if` in the body was already the
      dominant one at 193 sites.
 
   **The exception is a feat naming a CLASS of powers** — "any implement
   attack", "your weapon attacks". There is no finite list of bodies to edit,
-  so those still register with `c.pre_empt` / `c.instead_of`. 15 of the 36
-  registrations are this kind; the other 21 name a ref and belong in the
-  power.
+  so those still register with `c.pre_empt` / `c.instead_of`.
 
   Locality does invert: the feat's printed sentence lives in the power's
   file, and a power with seven feats carries seven branches. The feat row

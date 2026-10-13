@@ -5880,6 +5880,96 @@ def aid_another_grants(out: Result) -> None:
              f" (+{total('skill:stealth') - was_other})")
 
 
+def penalties_by_source(out: Result) -> None:
+    """Two penalties from two printed sources add; the same one twice does not.
+
+    `Mods.total` buckets penalties by `Mod.label`, which `c.bonus` set to
+    the laying row's ref and nothing could override. That is right for the
+    rule it was built for -- "two penalties from the same source do not
+    add, the worse applies", so one power landing on a creature twice is
+    -2 and not -4 (#471's fix).
+
+    **It is wrong for one body paying two different sentences**, and
+    `m238a3` was the live instance: a zone laying -2 to attack for
+    standing in it and a second -2 for attacking somebody concealed by it.
+    Both hold at once whenever an enemy inside the fog swings at an ally
+    inside it, the card gives -4 there, and the row returned -2 for as
+    long as it existed. Found while correcting `docs/AUTHORING.md`, which
+    told authors to pass a `label=` that `c.bonus` did not take.
+
+    It will recur: #550's migration writes a feat's clause into the power
+    it names, so a body laying a penalty of its own beside a feat's is the
+    normal shape on several of the 20 rows in that set.
+
+    Four assertions, and the second is the rule this must not break:
+
+    * two penalties with different labels **add**;
+    * two with the same label **do not** -- the worse applies, which is
+      the whole of #471 and the thing a `label=` could regress;
+    * the ref stays the label's prefix, so `audit._claimed` still credits
+      the row that laid it;
+    * and a **bonus** is unaffected, because bonuses bucket by `kind` --
+      the control that stops `label=` being reached for as a stacking
+      knob in general.
+    """
+    from combat_engine import story
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.types import Defense
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities)
+              if not query.stat_block(world, e))
+    mon = next(e for e in sorted(world.entities)
+               if query.stat_block(world, e))
+    ctx = {"target": mon, "attacker": pc}
+
+    def ac() -> int:
+        mods = world.get(mon, Mods)
+        return mods.total(Defense.AC, ctx) if mods else 0
+
+    def labels() -> list[str]:
+        mods = world.get(mon, Mods)
+        return [m.label for m in mods.items
+                if m.what == Defense.AC] if mods else []
+
+    base = ac()
+    c = Cast(world=world, me=pc, ref="drivers:m238a3")
+    c.penalty(Defense.AC, 2, on=mon, label="inside")
+    one = ac() - base
+    c.penalty(Defense.AC, 3, on=mon, label="concealed")
+    out.that(ac() - base == -5,
+             "two penalties from two printed sources ADD -- the state"
+             " `m238a3` was in, where this came to -3 because both carried"
+             f" the row's bare ref ({ac() - base}, after {one})")
+
+    out.that(all(lab.startswith("drivers:m238a3") for lab in labels()),
+             "and the row's ref is still the label's prefix, so"
+             " `audit._claimed` credits the row that laid them"
+             f" ({labels()})")
+
+    was = ac()
+    same = Cast(world=world, me=pc, ref="drivers:twice")
+    same.penalty(Defense.AC, 2, on=mon)
+    first = ac() - was
+    same.penalty(Defense.AC, 2, on=mon)
+    out.that(ac() - was == -2,
+             "the SAME source landing twice still does not add -- the worse"
+             " applies, which is #471's rule and the one a label could"
+             f" regress ({ac() - was}, after {first})")
+
+    before = ac()
+    b = Cast(world=world, me=pc, ref="drivers:bonuses")
+    b.bonus(Defense.AC, 2, on=mon, label="one")
+    b.bonus(Defense.AC, 3, on=mon, label="two")
+    out.that(ac() - before == 5,
+             "and two untyped BONUSES add whatever their labels, because"
+             " bonuses bucket by kind -- the control that stops `label=`"
+             f" being read as a general stacking knob ({ac() - before})")
+
+
 def feat_clause_exclusivity(out: Result) -> None:
     """The feat clauses written into `p704`, and the one that excludes another.
 
@@ -6018,6 +6108,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "penalties_by_source": (penalties_by_source,
+                            "two penalties from two sources add; one source"
+                            " landing twice does not"),
     "feat_clause_exclusivity": (feat_clause_exclusivity,
                                 "two feats of one category cannot both ride"
                                 " one use of a power; two of another can"),

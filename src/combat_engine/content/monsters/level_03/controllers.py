@@ -372,6 +372,11 @@ def m238a3(c: Cast) -> None:
     -2 to attack rolls against the concealed creature is the whole of what
     concealment means and the engine keeps no state for it.
 
+    **The two carry different `label=`s and that is load-bearing.** They
+    are two printed sentences, both of which hold for an enemy standing in
+    the fog attacking an ally standing in it -- the card gives -4 there.
+    See the `for` loop below.
+
     "Moving the zone up to 5 squares" when sustained has no expression --
     see the report.
     """
@@ -385,9 +390,17 @@ def m238a3(c: Cast) -> None:
         victim = ctx.get("target")
         return victim in ours and victim in c.world.zones.occupants(zone)
 
+    # **Two labels, because these are two printed sentences and not one
+    # penalty landing twice.** `Mods.total` buckets penalties by label and
+    # takes the worse, which is 4e's "two from the same source do not
+    # add" -- so unlabelled, both of these carried `m238a3` and an enemy
+    # inside the fog attacking an ally inside it took -2 where the card
+    # gives -4. Silent for as long as the row existed.
     for foe in c.enemies():
-        c.penalty("attack", 2, on=foe, until=When.ENCOUNTER, when=in_the_fog)
-        c.penalty("attack", 2, on=foe, until=When.ENCOUNTER, when=shrouded)
+        c.penalty("attack", 2, on=foe, until=When.ENCOUNTER,
+                  when=in_the_fog, label="inside")
+        c.penalty("attack", 2, on=foe, until=When.ENCOUNTER,
+                  when=shrouded, label="concealed")
 
 
 _ALLY_SLIPPED = "an ally uses m238a5"

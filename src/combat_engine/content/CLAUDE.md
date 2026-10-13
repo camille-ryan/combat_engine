@@ -148,10 +148,18 @@ before "bonus" and nothing else. A prerequisite is a **column** enforced by
 no ref of its own.
 
 **A feat that names one power writes its clause into that power**, gated on
-`c.feat("<the feat>")` and laying its effect with `label="<the feat>"` so
-`audit._claimed` still credits the feat and not the power. The feat row stays
-declared as a pointer. #550, and the tree still holds the old rider shape in
-places.
+`c.feat("<the feat>")`. The feat row stays declared as a pointer. #550, and
+the tree still holds the old rider shape in places. `p704` is the worked
+example.
+
+**No `label=`, and this line used to say the opposite.** It said laying the
+effect with `label="<the feat>"` was not optional, for credit — and
+`c.bonus`, `c.penalty`, `c.flat` and `c.damage` take no `label=` at all, so
+the instruction raised a `TypeError`. Credit is not the question either: the
+feat row is not fired, because it carries `implemented_in=` and `audit.py`
+buckets that separately. A modifier is labelled with the laying row's ref
+for free. See `docs/AUTHORING.md` for the one case where a label does
+matter — two *penalties* in one body, which collapse without one.
 
 Three reasons, and the second is a rule the engine could otherwise break:
 
@@ -159,15 +167,21 @@ Three reasons, and the second is a rule the engine could otherwise break:
   written to *ask*, and almost none were — 36 registrations against 12 read
   sites. `p1489` hard-coded `c.shift(1)` instead of `c.squares_for` and
   blocked three feats on a verb that already existed.
-* **You cannot apply two style feats to one use of a power**, and 24 of the
-  29 ridden powers are named by more than one feat (seven name `p87`).
-  `if c.feat(A): … elif c.feat(B): …` makes that impossible; two riders make
+* **You cannot apply two style feats to one use of a power.** Measured
+  across all three registration mechanisms: 69 feats on 53 rows, 27 of them
+  style feats, and **20 rows named by 2+ style feats** (seven name `p87`).
+  `if c.feat(A): … elif c.feat(B): …` makes two impossible; two riders make
   it inevitable, and nothing gated it.
+
+  **13 of the 20 also carry non-style feats, which stack.** So a body is a
+  chain over the style feats *plus* independent `if`s for the rest. A flat
+  chain over every feat naming the row would deny a clause the character is
+  entitled to — the mistake `p4368` nearly caused.
 * One mechanism rather than two, and the `if` was already the common one.
 
 **The exception is a feat naming a class of powers** — "any implement
 attack". There is no finite list of bodies to edit, so those keep
-`c.pre_empt` / `c.instead_of`: 15 of 36 registrations are that kind.
+`c.pre_empt` / `c.instead_of`.
 
 **`races/`** — `cls` holds a **race ref** (`r33`), not a class, for the same
 reason a theme row holds `x7_642`: a printed name in that column is a leak.

@@ -7682,8 +7682,30 @@ class Cast:
         stacks: bool = True,
         dice: str = "",
         dtype: DamageType | Sequence[DamageType] | None = None,
+        label: str = "",
     ) -> Effect | None:
         """A numeric modifier with a duration.
+
+        **`label` is for a body laying two PENALTIES from two different
+        printed sources, and nothing else.** It defaults to this row's
+        ref, which is what `Mods.total` buckets penalties by -- two
+        penalties sharing a label do not add, the worse applies, which is
+        4e's "two penalties from the same source" rule. Right for one row
+        landing twice; wrong when one body pays two separate sentences.
+
+        `m238a3` was the live instance: a zone laying a penalty for
+        standing in it *and* a second for attacking somebody concealed by
+        it. Both conditions hold at once whenever an enemy inside the fog
+        attacks an ally inside it, the card means -4 there, and this
+        returned -2 for as long as the row existed.
+
+        **It does nothing for a bonus** and must not be reached for as if
+        it did: bonuses bucket by `kind`, so two untyped ones already add
+        and two of a type already collapse, both regardless of label. And
+        it is **not** the credit mechanism `docs/AUTHORING.md` once said
+        it was -- `audit._claimed` reads the *effect* label, which this
+        does not touch, and under #550's convention the feat row is not
+        fired at all so there is nothing to credit.
 
         **`kind` is the 4e bonus type and it decides whether this stacks.**
         Two bonuses of the same type do not add -- the larger applies --
@@ -7774,7 +7796,8 @@ class Cast:
             kind = self.ref
         rng = self.world.rng
         mod = Mod(
-            what=key, value=value, kind=kind, when=when, label=self.ref,
+            what=key, value=value, kind=kind, when=when,
+            label=f"{self.ref}:{label}" if label else self.ref,
             roll=(lambda: rng.roll(dice).total) if dice else None,
             dtype=types,
         )

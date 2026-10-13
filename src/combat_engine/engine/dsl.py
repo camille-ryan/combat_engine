@@ -979,8 +979,23 @@ class Power:
     defect: str = ""
     #: **This row's clause is written into another row's body**, naming that
     #: row. The convention is #550: a feat that names one power has its
-    #: clause written into that power, gated on `c.feat("<this ref>")` and
-    #: laid with `label="<this ref>"` so the credit stays here.
+    #: clause written into that power, gated on `c.feat("<this ref>")`.
+    #:
+    #: **Only when this row's body is empty**, which is narrower than this
+    #: field first claimed and was found on the first migration. `f3188`
+    #: and `f3234` each write a clause into a power *and* print a standing
+    #: skill bonus of their own; marking either would stop `audit.py`
+    #: firing a row with live clauses in it, which is the one thing the
+    #: field must not do. A row that is half-migrated carries no marker at
+    #: all -- it still has a body and still fires.
+    #:
+    #: It also used to say the clause should be laid with
+    #: `label="<this ref>"` to keep the credit here. Both halves were
+    #: wrong: `c.bonus` and `c.penalty` took no `label=`, and there is no
+    #: credit to keep, because a row carrying this field is **not fired**
+    #: by the sweep at all. `c.bonus(label=)` exists now and is for two
+    #: penalties in one body, which is a stacking question and not this
+    #: one.
     #:
     #: So the body is empty **and the clause is written**, which no other
     #: marker could say. `todo=` claims nothing works; `obsolete=`,
