@@ -6121,6 +6121,26 @@ MIGRATED = {
     "p997": ("f994", "f1300"),
     "p2099": ("f992", "f1298"),
     "p992": ("f1299", "f1304", "f1305"),
+    "p1758": ("f978", "f985"),
+}
+
+#: Feats of the exclusive category that name a migrated row and are **still
+#: riders**, so that row's chain does not cover them and they stack when the
+#: printed rule says they must not.
+#:
+#: **This exists so the gap is in the instrument and not only in a
+#: docstring.** `p1758` is the first row where the convention could not
+#: deliver its own main argument: `f981`'s clause asks whether the target
+#: has hurt the character since the end of their last turn, which is a
+#: *memory* that has to be armed before the blow it remembers. `_riders`
+#: arms it through `setup=` at the start of the fight; a body runs far too
+#: late and would build an empty set, which is exactly how the first
+#: attempt at that memory failed silently.
+#:
+#: A chain that looks complete and is not is the worst of the three states,
+#: so every entry here is reported as a skip. #556.
+STILL_RIDERS = {
+    "p1758": ("f981",),
 }
 
 
@@ -6264,6 +6284,17 @@ def at_most_one_applies(out: Result) -> None:
             out.skip(f"{ref}: {len(alone)} of {len(feats)} branches posed"
                      f" ({alone}) -- the exclusivity between those IS proven,"
                      f" the rest read the world and are not.")
+
+        # **A chain that looks complete and is not.** Reported every run,
+        # because the only other place this is written down is the row's
+        # docstring, and a docstring is not an instrument.
+        riders = STILL_RIDERS.get(ref, ())
+        if riders:
+            out.skip(f"{ref}: INCOMPLETE chain -- {' '.join(riders)} of the"
+                     f" same exclusive category still ride this row from"
+                     f" their own file and stack with whatever the chain"
+                     f" pays, which the printed rule forbids. See the row's"
+                     f" docstring for why they could not move. #556")
 
     known.known[:] = was
 

@@ -13,8 +13,10 @@ from combat_engine.engine import (
     Attack,
     Cast,
     Condition,
+    Gear,
     Keyword,
     Melee,
+    When,
     power,
 )
 from combat_engine.engine.grid import Square, distance
@@ -191,9 +193,48 @@ def p1000(c: Cast) -> None:
     attack=Attack(STR, vs=AC, plus=2),
 )
 def p1758(c: Cast) -> None:
-    """No ability modifier on the damage: the +2 to hit is what it buys."""
-    if c.strike():
-        c.damage(c.w(2 if c.level >= 21 else 1))
+    """No ability modifier on the damage: the +2 to hit is what it buys.
+
+    **Three feats of the exclusive category name this row and only two of
+    them could come here**, which is the first time #550's convention has
+    failed to deliver its main promise. `f978` and `f985` are the chain;
+    `f981` is still a rider in `feats/exploits.py` and **stacks with
+    whichever of these pays**, which the printed rule does not allow.
+
+    Why it could not move: `f981`'s clause asks whether the target has
+    damaged the character *since the end of their last turn*. That is a
+    memory, not a question about the board, and it has to be armed before
+    the blow it remembers -- `_riders` arms it through `setup=` when the
+    trait arms at the start of the fight. A body runs far too late: the
+    damage happened already, so a set built here is empty by construction
+    and the clause would silently pay nothing. `_hurt_me_since`'s own
+    docstring records that as how the first attempt at it failed.
+
+    So this row's exclusivity is **partial and the instrument says so** --
+    `drivers.py at_most_one_applies` carries `f981` as a known rider and
+    skips rather than claiming the chain is complete. #556 is the fix:
+    promote that memory into the engine, where nothing has to arm it.
+
+    `f1102` and six others also name this row in other categories and
+    stack legitimately.
+    """
+    if not c.strike():
+        return
+    c.damage(c.w(2 if c.level >= 21 else 1))
+
+    # **`c.my_weapon()` is the wrong verb here and was my first try**: it
+    # means "the weapon *this row's item* sits on", which a class power
+    # has none of, so it answered None and `f978`'s branch could never
+    # pay. `drivers.py at_most_one_applies` found it by reporting only one
+    # of the two branches live. This row is melee-only, so the weapon in
+    # the main hand is the one swung -- which is what `c.weapon_of` picked
+    # off the event before the clause moved here.
+    gear = c.world.get(c.me, Gear)
+    weapon = gear.main if gear is not None else None
+    if c.feat("f978") and c.wielding("superior") and weapon is not None:
+        c.flat(weapon.proficiency, on=c.target)
+    elif c.feat("f985") and c.wielding("shield"):
+        c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
 
 
 def _has_shield(world: object, eid: int) -> bool:
