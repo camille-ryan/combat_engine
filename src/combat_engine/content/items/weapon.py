@@ -1641,7 +1641,7 @@ def i581x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with this weapon",
     on=Trigger(Hit, by_me, "you hit with this weapon"),
-    dropped=("c.flat(unpreventable=)",),
+
 )
 def i696p1(c: Cast) -> None:
     """The wielder pays the whole allowance rather than choosing a smaller
@@ -1654,7 +1654,11 @@ def i696p1(c: Cast) -> None:
     cost = c.enhancement
     held = c.held(on=c.me)
     two_handed = bool(held) and held[0].two_handed
-    c.flat(cost, on=c.me)
+    # **Only the wielder's half.** "This damage cannot be reduced or
+    # prevented in any way" is printed about the price, not about what the
+    # target takes -- and the target takes double what the wielder paid, so
+    # resisting the cost would double the profit.
+    c.flat(cost, on=c.me, unpreventable=True)
     c.flat(cost * (3 if two_handed else 2), on=foe)
 
 

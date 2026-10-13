@@ -2271,18 +2271,41 @@ class Cast:
 
     def flat(self, amount: int, *, dtype: DamageType = DamageType.UNTYPED,
              dtypes: Sequence[DamageType] = (),
+             unpreventable: bool = False,
              on: int | None = None) -> int:
         """Damage that is not rolled. `dtypes` is one blow of several types.
 
         "The attacker takes 10 lightning and thunder damage" is ten points
         that are both, not ten of each -- see `c.damage`.
+
+        **`unpreventable=True` is "this damage cannot be reduced or
+        prevented in any way"**, which ten cards print.
+
+        **Most** are a price the character elects to pay -- hit points for
+        an ally's healing, for pulling an attack onto itself, for raising a
+        weapon's damage -- and resistance would let the payer dodge the
+        bill while keeping what it bought. `i696p1` is the clearest: the
+        target takes double what the wielder paid, so resisting your own
+        cost would double the profit.
+
+        **Two are not, and the first reading of this family missed them.**
+        `i2056p1` deals five necrotic to an *enemy* that ends its turn
+        adjacent, and the clause is there to go through that enemy's
+        necrotic resistance; `i3376p1` charges an *ally* who volunteers.
+        So the flag means what it says about the damage and carries no
+        assumption about who takes it.
+
+        Skips insubstantial halving, immunity and resistance. Does **not**
+        touch temporary hit points, which are spent after all of that and
+        are how hit points work rather than a reduction of the blow. See
+        `resolve.deal_damage` for why vulnerability goes with the rest.
         """
         who = self._who(on)
         if who is None:
             return 0
         return deal_damage(
             self.world, self.me, who, amount, dtype, self.ref,
-            dtypes=dtypes,
+            dtypes=dtypes, unpreventable=unpreventable,
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
         )

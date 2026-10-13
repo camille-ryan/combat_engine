@@ -1698,7 +1698,7 @@ def _melee_weapon(world: World, eid: int) -> bool:
     reach=Melee(1),
     target=ONE_ALLY,
     keywords=[*MARTIAL, *PRIMAL],
-    dropped=("c.flat(unpreventable=)",),
+
 )
 def p16029(c: Cast) -> None:
     """`DamageRolled` is a decision announced before the blow lands, which is
@@ -1721,7 +1721,10 @@ def p16029(c: Cast) -> None:
             return
         taken = c.halve(ev)
         if taken:
-            c.flat(taken, dtype=ev.dtype, on=c.me)
+            # "Nothing can reduce the damage you take" -- the sharer's
+            # own resistance used to eat part of the half it took on,
+            # which is the clause this row was dropping.
+            c.flat(taken, dtype=ev.dtype, on=c.me, unpreventable=True)
 
     c.watch(DamageRolled, share, until=When.EONT, window=Window.BEFORE)
 

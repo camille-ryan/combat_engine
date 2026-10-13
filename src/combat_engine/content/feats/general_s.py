@@ -542,13 +542,15 @@ def f3693b(c: Cast) -> None:
 
 @power("f3695", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.retarget()", "c.flat(unpreventable=)"))
+       dropped=("c.retarget()",))
 def f3695(c: Cast) -> None:
     """Heroic tier, so +2. The interrupt half moves an attack that has
     been *declared* onto a different creature, which is a retarget rather
     than the `c.redirect` an interrupt row does with its own trigger --
-    and the 5 damage that buys it "cannot be reduced in any way", which
-    `c.flat` has no way to promise."""
+    and the 5 damage that buys it is `c.flat(..., unpreventable=True)`,
+    which exists now -- so the only gap left is the retarget. The cost is
+    not written on its own: it buys the retarget and would be a character
+    paying hit points for nothing."""
     c.bonus(WILL, 2, kind="feat", on=c.me, until=When.ENCOUNTER)
 
 

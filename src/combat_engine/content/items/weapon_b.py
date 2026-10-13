@@ -3510,14 +3510,17 @@ def i625x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.considered_bloodied()", "c.flat(unpreventable=)"),
+    dropped=("c.considered_bloodied()",),
 )
 def i625p1(c: Cast) -> None:
     """The self-harm lands; resistance still eats it, which the card says
     it should not. Being bloodied without having lost the hit points has no
     spelling, so a wielder who does not cross the line gets the cut and
     none of the benefit."""
-    c.flat(c.level // 2, on=c.me)
+    # "ignoring any resistances" is the printed clause, and the point of
+    # it: the cost is elected and resisting it would be keeping what it
+    # bought for free.
+    c.flat(c.level // 2, on=c.me, unpreventable=True)
 
 
 @power(

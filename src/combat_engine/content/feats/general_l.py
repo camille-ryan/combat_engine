@@ -1945,7 +1945,6 @@ def f2852(c: Cast) -> None:
 
 @power("f2853", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("c.flat(unpreventable=)",),
        trigger="you target an ally with a healing power",
        on=Trigger(
            PowerUsed,
@@ -1958,12 +1957,14 @@ def f2852(c: Cast) -> None:
 def f2853(c: Cast) -> None:
     """`PowerUsed` is announced above the body, and targets are chosen
     before it runs -- so `ev.targets` is the one thing on that event
-    worth reading. "Cannot be decreased in any way" is dropped: `c.flat`
-    goes through resistance like everything else."""
+    worth reading. "Cannot be decreased in any way" is
+    `unpreventable=True`: the necrotic is a price elected to heal an ally,
+    and resisting it would buy the healing for nothing."""
     friends = [t for t in c.trigger.targets if t != c.me]
     if not friends or not c.may("take the necrotic damage", who=c.me):
         return
-    c.flat(3 + c.level // 2, dtype=DamageType.NECROTIC, on=c.me)
+    c.flat(3 + c.level // 2, dtype=DamageType.NECROTIC, on=c.me,
+           unpreventable=True)
     c.heal(c.level, on=friends[0])
     if c.feat(PLAGUE_FEAT):
         c.bonus("save", 2, on=friends[0], until=When.EONT, kind="power")

@@ -686,8 +686,7 @@ def p14219(c: Cast) -> None:
 
 @power("p14220", level=10, cls="x7_875", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.ARCANE, Keyword.POLYMORPH],
-       dropped=("c.flat(unpreventable=)",))
+       keywords=[Keyword.ARCANE, Keyword.POLYMORPH])
 def p14220(c: Cast) -> None:
     """Everything hangs on one sustained hold so the whole form ends
     together -- **including the surge refusal**, which is what "while this
@@ -697,8 +696,10 @@ def p14220(c: Cast) -> None:
     deliberately not `c.no_healing`: the card bars *your own surges* and says
     nothing about a cleric healing you.
 
-    One clause is still short: the self-damage is printed as unpreventable,
-    which `c.flat` cannot say."""
+    The self-damage is printed as unpreventable, and the row says so --
+    which matters on this card more than most, since the form *grants fire
+    resistance* and the damage it charges for would otherwise be reduced by
+    the very resistance it just handed out."""
     held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MINOR)
     c.bonus(AC, 2, kind="power", on=c.me, until=When.SUSTAIN)
     c.mode("fly", c.speed_of(c.me), until=When.SUSTAIN, on=c.me)

@@ -1472,7 +1472,7 @@ def p16475(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[Keyword.THUNDER],
     attack=Attack(CON, vs=REF, plus=2),
-    dropped=("c.flat(unpreventable=)", "c.on_death(ref)", "c.race_option()"),
+    dropped=("c.on_death(ref)", "c.race_option()"),
 )
 def p16654(c: Cast) -> None:
     """Bloodied value is half the maximum. The Effect line lands once and
@@ -1493,7 +1493,10 @@ def p16654(c: Cast) -> None:
     else:
         c.flat(val // 2, dtype=DamageType.THUNDER)
     if c.last:
-        c.flat(val, on=c.me)
+        # "This damage cannot be reduced by any means" is about the
+        # caster's own half. The two above are what the burst deals and
+        # are ordinary.
+        c.flat(val, on=c.me, unpreventable=True)
         c.prone(on=c.me)
 
 

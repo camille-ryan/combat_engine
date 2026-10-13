@@ -3812,6 +3812,76 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def unpreventable(out: Result) -> None:
+    """"This damage cannot be reduced or prevented in any way."
+
+    Ten cards print it. Most are a **price the character elects to pay** --
+    hit points for an ally's healing, for pulling an attack onto itself,
+    for raising a weapon's damage -- and the clause exists so the payer
+    cannot dodge the bill and keep what it bought. `i696p1` is the
+    clearest, since the target takes double what the wielder took, so
+    resisting your own cost would double the profit.
+
+    **Two are not a self-cost, and writing the rows found it:** `i2056p1`
+    deals five necrotic to an *enemy* ending its turn adjacent, precisely
+    to go through that enemy's necrotic resistance, and `i3376p1` charges
+    an *ally* who volunteers. The flag is about the damage, not about who
+    takes it -- which is why the controls below test an ordinary foe and
+    not a self-inflicted cost.
+
+    Three things measured:
+
+    * **resistance does not touch it**, which is the clause;
+    * **resistance still works on an ordinary blow of the same type and
+      size**, which is the negative control. Without it this passes on an
+      implementation that broke resistance altogether -- and resistance
+      being read for one type and silently skipped for another is a fault
+      this file has already recorded once;
+    * **immunity does not stop it either.** "Prevented" is the stronger
+      half of the printed pair and immunity is what prevents; a check on
+      resistance alone would miss it.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    def hurt(*, resist: int = 0, immune: bool = False, free: bool) -> int:
+        world, me, _ = _board(seed=1)
+        foe = sorted(enemies(world, me))[0]
+        shield = world.get(foe, Defences) or world.add(foe, Defences())
+        shield.resist = dict(getattr(shield, "resist", {}) or {})
+        shield.immune = set(getattr(shield, "immune", set()) or set())
+        if resist:
+            shield.resist[DamageType.FIRE] = resist
+        if immune:
+            shield.immune.add(DamageType.FIRE)
+        hp = world.get(foe, Health)
+        before = hp.hp
+        Cast(world=world, me=me, ref="drivers:cost").flat(
+            10, dtype=DamageType.FIRE, unpreventable=free, on=foe)
+        return before - world.get(foe, Health).hp
+
+    plain = hurt(resist=4, free=False)
+    out.that(plain == 6,
+             "resistance takes its 4 off an ordinary blow of 10 -- the"
+             f" negative control, without which this rule would pass on a"
+             f" build that had simply stopped reading resistance ({plain})")
+
+    free = hurt(resist=4, free=True)
+    out.that(free == 10,
+             "and an unpreventable 10 lands whole through resist 4, which is"
+             f" the printed clause ({free})")
+
+    walled = hurt(immune=True, free=False)
+    blown = hurt(immune=True, free=True)
+    out.that(walled == 0 and blown == 10,
+             "while immunity stops an ordinary blow dead and does not stop"
+             f" an unpreventable one -- 'prevented' is the stronger half of"
+             f" the pair ({walled} then {blown})")
+
+
 def zone_exempt(out: Result) -> None:
     """A cloud that blinds everybody except the creature that made it.
 
@@ -4691,6 +4761,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "unpreventable": (unpreventable,
+                      "damage that resistance and immunity do not touch"),
     "zone_exempt": (zone_exempt,
                     "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,

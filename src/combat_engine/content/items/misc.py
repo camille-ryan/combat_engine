@@ -1030,16 +1030,19 @@ def i2026p2(c: Cast) -> None:
 
 
 @power("i2056p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.NECROTIC],
-       dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.NECROTIC])
 def i2056p1(c: Cast) -> None:
-    """"Cannot be prevented in any way" has no flag, so resistance still
-    eats it. The aura is what makes the adjacency visible to the UI."""
+    """"Cannot be prevented in any way" is `unpreventable=True`, and this
+    row is the one that shows the clause is not only about a cost a
+    character elects: the five lands on an *enemy* and goes through its
+    necrotic resistance, which is most of what such a resistance is for.
+    The aura is what makes the adjacency visible to the UI."""
     c.aura(1, until=When.ENCOUNTER, on=c.me)
 
     def ended(ev: TurnEnd) -> None:
         if ev.actor in c.enemies() and c.adjacent(ev.actor):
-            c.flat(5, dtype=DamageType.NECROTIC, on=ev.actor)
+            c.flat(5, dtype=DamageType.NECROTIC, on=ev.actor,
+                   unpreventable=True)
 
     c.watch(TurnEnd, ended, until=When.ENCOUNTER)
 
@@ -2349,18 +2352,19 @@ def i1809x1(c: Cast) -> None:
        on=Trigger(DamageRolled, lambda w, me, ev: (
            getattr(ev, "target", None) is not None
            and getattr(ev, "target", None) != me),
-           "an attack would damage your mount"),
-       dropped=("c.flat(unpreventable=)",))
+           "an attack would damage your mount"))
 def i1809p1(c: Cast) -> None:
-    """"Nothing can reduce or prevent" the rider's share, and a flat hit
-    has no flag for that, so the rider's resistances still apply."""
+    """"Nothing can reduce or prevent" the rider's share is
+    `unpreventable=True`. The rider elects to take the remainder off its
+    mount, so its own resistances must not eat the part it volunteered
+    for."""
     beast = c.mount()
     ev = c.trigger
     if beast is None or getattr(ev, "target", None) != beast:
         return
     was = max(0, getattr(ev, "amount", 0))
     c.halve(ev)
-    c.flat(was // 2, on=c.me)
+    c.flat(was // 2, on=c.me, unpreventable=True)
 
 
 @power("i2421x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -2440,11 +2444,12 @@ def i3371p1(c: Cast) -> None:
 
 
 @power("i3376p1", level=6, cls=ITEM, usage=ENCOUNTER, action=MOVE,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING],
-       dropped=("c.flat(unpreventable=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.HEALING])
 def i3376p1(c: Cast) -> None:
-    """The ally's five damage is optional and is offered to the ally, not
-    taken from them; "cannot be prevented in any way" has no flag."""
+    """The ally's five damage is optional and is offered to the ally rather
+    than taken from them, and "cannot be prevented in any way" is
+    `unpreventable=True` -- so an ally with resistance cannot volunteer a
+    cheaper five and still buy the larger heal."""
     c.shift(2)
 
     def landed(ev: Hit) -> None:
@@ -2452,7 +2457,7 @@ def i3376p1(c: Cast) -> None:
             return
         friends = [a for a in c.within(5, side="ally")]
         if friends and c.may("take 5 damage", who=friends[0]):
-            c.flat(5, on=friends[0])
+            c.flat(5, on=friends[0], unpreventable=True)
             c.heal(10, on=c.me)
         else:
             c.heal(5, on=c.me)

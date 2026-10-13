@@ -1899,9 +1899,18 @@ def m4741a2(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.flat(unpreventable=)",),
+    dropped=("c.lose_hp()",),
 )
 def m4741a3(c: Cast) -> None:
+    """**Re-pointed off `c.flat(unpreventable=)`, which landed and is
+    not what this card says.** The printed line is "loses 10 hit
+    points", and losing hit points is not damage: it fires nothing
+    that watches for damage, and no resistance was ever going to
+    apply. `c.flat` is the wrong verb rather than a verb missing a
+    flag -- the number it produces is already right here, because the
+    loss is untyped and this creature resists only one type, so the
+    row plays correctly and reports the distinction it is papering
+    over."""
     spot = next(iter(c.world.reachable_squares(c.me, 1)), None)
     spawn = c.summon("m4743", at=spot)
     if spawn is not None and spawn >= 0:

@@ -827,6 +827,7 @@ def deal_damage(
     miss: bool = False,
     crit: bool = False,
     dtypes: Sequence[DamageType] = (),
+    unpreventable: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1022,8 +1023,10 @@ def deal_damage(
     # redirect above, so a blow moved onto another creature is asked about
     # the types it actually carries.
     blow_types = frozenset(kind for kinds, _ in parts for kind in kinds)
-    if takes_half(world, target, blow_types) and not _mods(
-        world, source, "ignore insubstantial", dmg_ctx
+    if (
+        takes_half(world, target, blow_types)
+        and not unpreventable
+        and not _mods(world, source, "ignore insubstantial", dmg_ctx)
     ):
         # Insubstantial halves everything, and does it before resistance so a
         # creature with both does not get the better of the two twice.
@@ -1041,7 +1044,27 @@ def deal_damage(
     # reading it and getting False in every fight without temp hp.
     resisted = 0
     defences = world.get(target, Defences)
-    if defences is not None:
+    # **`unpreventable` skips this whole block, vulnerability included.**
+    # Ten cards print "this damage cannot be reduced or prevented in any
+    # way" about damage a character takes *on purpose* -- paying hit points
+    # to redirect an attack, to heal an ally, to raise a weapon's damage --
+    # and the clause exists so the price cannot be dodged. Resistance and
+    # immunity are exactly the dodge it forbids.
+    #
+    # Vulnerability goes with them, which is the one judgement here. A
+    # vulnerability would *raise* the price rather than lower it, so
+    # "cannot be reduced" does not bar it on the printed wording -- but
+    # every one of the ten is a cost the row's own owner elects to pay, and
+    # charging a character extra for electing to pay is not something any
+    # of the cards says. Skipping the block whole is also the only reading
+    # that cannot be got wrong by halves. Say so if a card ever wants the
+    # other one.
+    #
+    # Temporary hit points are **not** touched, and that is deliberate:
+    # they are spent below this block, and losing temp hp first is how hit
+    # points work rather than a reduction of the blow. `absorbed` stays
+    # honest.
+    if defences is not None and not unpreventable:
         # Untyped damage is included. `c.resist(5)` with no type writes an
         # entry for every member *including* untyped, and this used to skip
         # the whole block for untyped -- so "resist 5 to all damage" was
