@@ -232,11 +232,18 @@ CREATE INDEX item_block_owner ON item_block(item_ref);
 -- see `feat.py`, and note that `unparsed` counts the atoms that could not
 -- be structured rather than keeping their text, because the text is a
 -- deity's name as often as not.
+-- `category` is the word the page prints in **brackets** after the feat's
+-- name -- `[Arena Fighting]`, `[Lesser Style]`, `[Domain]` -- and empty for
+-- the 2,701 that carry none. It is the only field that says whether two
+-- feats may apply to the same power, which is what #550's migration is
+-- about; it was dropped for the whole life of this table because `spec`
+-- starts at "Benefit :". See `feat._category`. #557.
 CREATE TABLE feat (
   ref TEXT PRIMARY KEY, id INTEGER, tier TEXT, min_level INTEGER,
-  prereq TEXT, unparsed INTEGER, books TEXT, spec TEXT
+  prereq TEXT, unparsed INTEGER, books TEXT, category TEXT, spec TEXT
 );
 CREATE INDEX feat_tier ON feat(tier, min_level);
+CREATE INDEX feat_category ON feat(category);
 
 -- Races, which nothing in the engine has ever had. 690 of 1,675 heroic
 -- feats gate on one, and the racial powers are already in `power` -- the

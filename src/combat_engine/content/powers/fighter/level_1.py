@@ -242,17 +242,24 @@ def p1758(c: Cast) -> None:
         return
     c.damage(c.w(2 if c.level >= 21 else 1))
 
-    # **`c.my_weapon()` is the wrong verb here and was my first try**: it
+    # **The gear read sits INSIDE the branch, and that is not tidiness.**
+    # `chargen._does_more_than_damage` asks whether a body does anything
+    # beyond rolling damage, by reading the source and skipping clauses
+    # gated on `c.feat`. A `c.world` read above the gate is *not* skipped,
+    # so this row -- whose card is a plain "+2 to hit, no ability modifier
+    # on the damage" -- scored as a rider row and the draw moved. A line
+    # that only one feat's clause needs belongs in that clause.
+    #
+    # `c.my_weapon()` is the wrong verb here and was my first try: it
     # means "the weapon *this row's item* sits on", which a class power
-    # has none of, so it answered None and `f978`'s branch could never
-    # pay. `drivers.py at_most_one_applies` found it by reporting only one
-    # of the two branches live. This row is melee-only, so the weapon in
-    # the main hand is the one swung -- which is what `c.weapon_of` picked
-    # off the event before the clause moved here.
-    gear = c.world.get(c.me, Gear)
-    weapon = gear.main if gear is not None else None
-    if c.feat("f978") and c.wielding("superior") and weapon is not None:
-        c.flat(weapon.proficiency, on=c.target)
+    # has none of, so it answered None and this branch could never pay.
+    # The row is melee-only, so the main hand is the weapon swung, which
+    # is what `c.weapon_of` picked off the event before the clause moved.
+    if c.feat("f978") and c.wielding("superior"):
+        gear = c.world.get(c.me, Gear)
+        weapon = gear.main if gear is not None else None
+        if weapon is not None:
+            c.flat(weapon.proficiency, on=c.target)
     elif c.feat("f985") and c.wielding("shield"):
         c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
 

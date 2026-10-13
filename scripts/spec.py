@@ -697,6 +697,23 @@ def _feat(db, ref: str) -> str | None:  # noqa: ANN001
     enforce and nothing the author has to restate. A clause shown as `q17`
     is one the parser could not read -- the author learns that a condition
     exists and never learns what it says, which is the whole arrangement.
+
+    **The category is shown, and it is a rule rather than a name.** The
+    page prints it in brackets after the feat's name --
+    `[Arena Fighting]`, `[Lesser Style]`, `[Domain]` -- and it decides
+    whether two feats may apply to the same power: one Arena Fighting, one
+    Lesser Style, any number of unbracketed. Under #550 an author writes
+    those clauses into the power as one `if`/`elif` chain **per
+    category**, so without this line the grouping cannot be derived from
+    anything in the brief at all.
+
+    It was not derivable from `game.db` either until #557: `spec` starts
+    the stored text at "Benefit :", so the title line was dropped and the
+    column did not exist. The main session inferred the grouping from the
+    books a feat came from and the last word of its printed name instead,
+    and both are wrong -- feats printed "... Style" are `[Arena Fighting]`
+    in one book and unbracketed in another. Four of the first five rows
+    migrated came out wrong with it.
     """
     row = db.execute("SELECT * FROM feat WHERE ref = ?", (ref,)).fetchone()
     if row is None:
@@ -712,6 +729,8 @@ def _feat(db, ref: str) -> str | None:  # noqa: ANN001
     head = [f"### {row['ref']}", row["tier"].lower() or "untiered"]
     if card:
         head.append(f"card of f{row['id']}")
+    if row["category"]:
+        head.append(f"category: [{row['category']}]")
     tree = json.loads(gate["prereq"]) if gate["prereq"] else None
     if tree:
         head.append(f"requires: {_requires(tree, top=True)}")

@@ -59,6 +59,70 @@ from .sanitise import (
 _CARD = re.compile(r'<h1[^>]*class="[a-z-]*power"', re.I)
 _HEAD = re.compile(r"<h1\b")
 
+#: The page's own title, which is where the **category** is printed.
+_TITLE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
+#: `Name [Category]` -- the bracket at the very end of the title.
+_BRACKET = re.compile(r"^(?P<name>.*?)\s*\[(?P<category>[^\[\]]+)\]$")
+
+
+def _category(document: str, name: str) -> str:
+    """The feat's category, as the page prints it in brackets after the name.
+
+    The page's title line reads `<f3230's name> [Arena Fighting]`. 260 of
+    2,961 feats carry a bracket, in 70-odd kinds, and it is **the field
+    that decides whether two feats may apply to the same power**.
+    `[Arena Fighting]`: one at a time. `[Lesser Style]` and
+    `[Greater Style]`: one of each, same style. `[Domain]`: one per power.
+    Nothing else in the row says any of that.
+
+    (That first line named `f3230` in the clear in the first version of
+    this docstring, and `leaks.py` caught it -- in the module whose whole
+    job is keeping names out of the tree, in a paragraph explaining the
+    field. `scripts/CLAUDE.md` warns about exactly this position: the
+    places that explain the rule are the places that instance a name to
+    explain it.)
+
+    **This was dropped for the whole life of the table and the cost was
+    real.** `_benefit` starts the stored text at "Benefit :", so the title
+    line never reached `spec` and the category existed nowhere in
+    `game.db`. #550's migration writes a feat's clause into the power it
+    names, as one `if`/`elif` chain per category, so the grouping *is* the
+    deliverable -- and with no column to read it was inferred from the
+    books a feat came from and the last word of its printed name. Both are
+    wrong: feats printed "... Style" are `[Arena Fighting]` in one book and
+    **unbracketed** in another, and the `[Lesser Style]` ones are printed
+    "... Student" and do not say "style" at all. Four of the first five
+    rows migrated came out wrong. #557.
+
+    **Matched against the name rather than against "whatever is in the
+    last brackets", and the honest note is that this costs nothing
+    today.** Measured over all 2,961 feats: no name contains a bracket,
+    and no title's bracket is preceded by anything other than exactly the
+    name -- so the anchor currently rejects nothing a looser pattern would
+    accept. It is kept because a feat page's first heading is not
+    guaranteed to be the feat's own: `_CARD` exists precisely because 220
+    pages carry a granted power's card in a second `h1`, and a page whose
+    order ever changed would otherwise file the *power's* bracket here.
+    Verified rather than assumed -- the first version of this note claimed
+    three feats needed the guard, and the real figure is zero.
+
+    Returned raw. One feat is tagged `Familiar, Vistani Bloodline` -- two
+    categories in one bracket -- and splitting here would commit every
+    reader to one way of reading that; `prereq`'s `unparsed` column makes
+    the same choice for the same reason.
+    """
+    found = _TITLE.search(document)
+    if not found:
+        return ""
+    title = text(found.group(1))
+    bracket = _BRACKET.match(title)
+    if not bracket:
+        return ""
+    # The title has to be *this feat's*, or a page whose first `<h1>` is a
+    # granted power's card would hand back the power's own bracket.
+    return (bracket.group("category").strip()
+            if bracket.group("name").strip() == (name or "").strip() else "")
+
 #: The three lines that are not the Benefit. The tier is its own column,
 #: the prerequisite is the tree, and the footer is about the page.
 _FURNITURE = re.compile(
@@ -293,11 +357,12 @@ def feats(
                 granted[card_name] = card_ref
             report.feat_cards += 1
         out.execute(
-            "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 ref, row["ID"], tier, _min_level(tree),
                 json.dumps(tree) if tree else None, opaque,
                 books,
+                _category(row["Txt"] or "", row["Name"] or ""),
                 _trimmed(source, row,
                          _benefit(head, ref, row["Name"] or "", granted)),
             ),
@@ -356,9 +421,13 @@ def _card(
     parent = (row["Name"] or "").strip()
     if parent:
         spec = scrub(spec, {parent: f"f{row['ID']}"})
+    # **A card carries no category and must not inherit the feat's.** The
+    # bracket is on the feat, and the restriction it encodes is about which
+    # *feats* combine -- a power card handed over by one has nothing to do
+    # with it. Empty string, explicitly.
     out.execute(
-        "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?)",
-        (ref, row["ID"], tier, 1, None, 0, books, spec),
+        "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?)",
+        (ref, row["ID"], tier, 1, None, 0, books, "", spec),
     )
     # A card is read in the power dialect, so its printed rules are
     # `power_rules` -- the same lines `power_spec` scrubs two lines up. #349.
