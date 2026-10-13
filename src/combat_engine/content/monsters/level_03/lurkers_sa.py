@@ -180,7 +180,10 @@ def _lingering_field(c: Cast, amount: int, *, until: When) -> int:
     of them.
     """
     area = frozenset(c.area())
-    zone = c.hazard(area, amount, until=until, blocks_sight=True)
+    # `exempt={c.me}` is the printed "except this one". Without it the cloud
+    # blinded its own maker as well, which inverts the ability.
+    zone = c.hazard(area, amount, until=until, blocks_sight=True,
+                    exempt={c.me})
     ring = spread(area, 1) - area
     me, ref = c.me, c.ref
 
@@ -412,7 +415,6 @@ def m1418a3(c: Cast) -> None:
     keywords=[Keyword.ZONE],
     attack=Attack(vs=FORT, printed=6),
     damage=Damage("2d8", 2, kind=LIMITED),
-    dropped=("c.zone(exempt=)",),
 )
 def m1418a4(c: Cast) -> None:
     """What is dropped is the exemption: the cloud blocks line of sight for
@@ -1000,13 +1002,13 @@ def m4736a0(c: Cast) -> None:
     reach=AreaBurst(2, 10),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m4736a1(c: Cast) -> None:
     """The darkness is laid and blocks sight, which is most of the card. What
     is dropped is "for all enemies": the creature is blind in this and the
     whole point is that it is not."""
-    c.zone(c.area(), label=c.ref, until=When.EONT, blocks_sight=True)
+    c.zone(c.area(), label=c.ref, until=When.EONT, blocks_sight=True,
+           exempt={c.me})
 
 
 @power(

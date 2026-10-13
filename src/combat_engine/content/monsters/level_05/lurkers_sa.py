@@ -1629,17 +1629,17 @@ def m5311a1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m5311a2(c: Cast) -> None:
-    """The sight-blocking half of the zone catches this creature too --
-    `c.zone(blocks_sight=True)` is terrain and blinds both sides -- so the
-    exemption it prints for itself is the gap. The blind itself is exempted,
-    laid per occupant rather than by the zone."""
+    """Both halves of the exemption are written. The blind was always laid
+    per occupant and skipped this creature; the sight-blocking did not, so
+    the zone left its own maker unable to see out. `exempt={me}` is that
+    half, read by `query._blinding_squares`."""
     c.teleport(5)
     area = spread({c.here}, 1)
-    zone = c.zone(area, blocks_sight=True, until=When.SONT, label=c.ref)
     me = c.me
+    zone = c.zone(area, blocks_sight=True, until=When.SONT, label=c.ref,
+                  exempt={me})
 
     def blind(who: int) -> Effect | None:
         return None if who == me else c.blinded(on=who, until=When.ENCOUNTER)

@@ -61,6 +61,25 @@ class Zone:
     #: Read by `query.light_level`, which the attack path consults through
     #: `query.light_concealment`.
     obscured: str = ""
+    #: Creatures this zone's sight-blocking does not apply to.
+    #:
+    #: Eight monster cards print a cloud or a darkness that blinds everybody
+    #: **except the creature that made it**, and `blocks_sight` is terrain:
+    #: binary and symmetric, with nothing to carve out of it. So those rows
+    #: laid the zone and dropped the exemption, which inverts the card -- the
+    #: whole point of the ability is that its owner can see and nobody else
+    #: can.
+    #:
+    #: A set of ids and **not a predicate**, which is the narrower choice on
+    #: purpose. Three more rows want an exemption by *sense* ("whatever can
+    #: see in darkness") or by *movement mode*, and one wants `difficult`
+    #: waived for a side; a set cannot say any of those, and pretending it
+    #: can by snapshotting who qualifies when the zone is laid would be
+    #: wrong the moment anything changed. Those rows keep their markers and
+    #: name the narrower gaps. #528-adjacent reasoning: one marker, one gap.
+    #:
+    #: Read by `query._blinding_squares`, which already knows the looker.
+    exempt: frozenset[int] = frozenset()
     #: The effect whose duration this zone lives on.
     effect: Effect | None = field(default=None, repr=False)
 
@@ -100,6 +119,7 @@ class Zones:
         difficult: bool | str = False,
         blocks_sight: bool = False,
         obscured: str = "",
+        exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
     ) -> int:
         if obscured:
@@ -121,6 +141,7 @@ class Zones:
             difficult=difficult,
             blocks_sight=blocks_sight,
             obscured=obscured,
+            exempt=frozenset(exempt or ()),
         )
         return self._spawn(zone, when, sustain)
 

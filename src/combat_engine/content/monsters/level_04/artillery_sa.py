@@ -3277,13 +3277,21 @@ def m6581a2(c: Cast) -> None:
     keywords=[Keyword.COLD, Keyword.ZONE],
     attack=Attack(vs=REF, printed=7),
     damage=Damage("1d8", 4, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
-    dropped=("c.zone(exempt=)",),
+    dropped=("c.zone(difficult_exempt=)",),
 )
 def m6581a3(c: Cast) -> None:
     """The zone is laid once for the whole use, which is what `c.first` is for.
     The exemption -- creatures with one particular movement mode cross it
     freely -- is the dropped half: `c.zone` takes `difficult` for everybody or
-    for nobody."""
+    for nobody.
+
+    **Re-pointed off `c.zone(exempt=)`, which landed and is the other half.**
+    That exempts a creature from a zone's **sight-blocking**, read by
+    `query._blinding_squares` which knows who is looking. This card waives
+    the **difficult** half, and `Zones.difficult_squares` answers per
+    *square* with no notion of who is moving -- so an exemption there is a
+    different reader and a different gap.
+    """
     if c.first:
         c.zone(c.area(), difficult=True, until=When.EONT, label=c.ref)
     if c.strike():

@@ -8327,6 +8327,7 @@ class Cast:
         difficult: bool | str = False,
         blocks_sight: bool = False,
         obscured: str = "",
+        exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
     ) -> int:
         """`obscured=Light.DIM` is "lightly obscured", `Light.DARK` is
@@ -8336,11 +8337,22 @@ class Cast:
         `c.zone`'s long-standing caution against reaching for it here was
         correct and now has somewhere else to point. 12 rows asked for this
         kwarg and 14 more asked for `c.conceal_in()`; they are one gap. #424.
+
+        **`exempt` is who the sight-blocking does not apply to**, and the
+        common case is one id: `exempt={c.me}` for the eight cards printing
+        a cloud that blinds everybody except the creature that made it.
+        Without it those rows laid the zone and dropped the exemption, which
+        inverts the ability -- the point of the card is that its owner sees
+        and nobody else does.
+
+        A set of ids, not a predicate. An exemption by *sense* or by
+        *movement mode* is a different gap and those rows still carry a
+        marker; see `Zone.exempt`.
         """
         return self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
             difficult=difficult, blocks_sight=blocks_sight,
-            obscured=obscured, sustain=sustain,
+            obscured=obscured, exempt=exempt, sustain=sustain,
         )
 
     def aura(
@@ -8473,6 +8485,7 @@ class Cast:
         until: When = When.SUSTAIN,
         difficult: bool = False,
         blocks_sight: bool = False,
+        exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = ActionType.MINOR,
     ) -> int:
         """A zone that hurts whoever is standing in it.
@@ -8486,7 +8499,7 @@ class Cast:
 
         zone = self.zone(
             area, label=label, until=until, difficult=difficult,
-            blocks_sight=blocks_sight,
+            blocks_sight=blocks_sight, exempt=exempt,
             sustain=sustain if until is When.SUSTAIN else None,
         )
         self.burns(zone, amount, dtype)

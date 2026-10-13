@@ -253,14 +253,18 @@ def _blinding_cloud(c: Cast, radius: int) -> None:
     """A cloud that blocks sight and blinds whoever is standing in it.
 
     The blind is held per occupant and lifted on the way out, because "while
-    entirely in the cloud" is geometry rather than a duration. The exemption
-    the card prints -- everyone *except* this creature is blinded and blinded
-    by it -- is the half that cannot be said: `c.zone(blocks_sight=True)` is
-    terrain and blinds both sides.
+    entirely in the cloud" is geometry rather than a duration.
+
+    **Both halves of the exemption are written now.** The blind below always
+    skipped the owner; the sight-blocking did not, so the cloud left its own
+    maker unable to see out -- which is the opposite of what the card is
+    for. `exempt={me}` is the second half, read by
+    `query._blinding_squares`, which asks whether the looker is exempt.
     """
     area = spread({c.here}, radius)
-    zone = c.zone(area, blocks_sight=True, until=When.EONT, label=c.ref)
     me = c.me
+    zone = c.zone(area, blocks_sight=True, until=When.EONT, label=c.ref,
+                  exempt={me})
 
     def blind(who: int) -> Effect | None:
         return None if who == me else c.blinded(on=who, until=When.ENCOUNTER)
@@ -2763,7 +2767,6 @@ def m6396a2(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m6396a3(c: Cast) -> None:
     """A cloud that blinds whoever is inside it.
@@ -3294,7 +3297,6 @@ def m6672a3(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m6672a4(c: Cast) -> None:
     """The exemption is the dropped half: everyone **except** this creature is

@@ -1163,7 +1163,7 @@ def m2515a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.ZONE],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("1d6", 6, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.zone(exempt=)", "c.douse_lights()"),
+    dropped=("c.zone(exempt_if=)", "c.douse_lights()"),
 )
 def m2515a2(c: Cast) -> None:
     """The blast, and a patch of dark that bites at the start of a turn.
@@ -1177,6 +1177,17 @@ def m2515a2(c: Cast) -> None:
     card exempts whatever can see in darkness -- `c.zone(exempt=)` is the
     symbol twelve rows carry for that. And "cannot be illuminated" has
     nothing to refuse, because light is not a thing the board holds.
+    
+
+    **Re-pointed off `c.zone(exempt=)`, which landed as a set of ids.** That
+    serves the ten cards exempting *one named creature* -- their own maker.
+    This card exempts whoever has a particular sense or ability, which a set
+    cannot say: snapshotting who qualifies when the zone is laid would be
+    wrong the moment anything changed, and the zone is asked per look. A
+    predicate parameter -- `exempt_if=` -- is a different gap and this
+    names it. Not `exempt=<a predicate>`: `todo.py` matches a symbol
+    against the code and reads that as the parameter it already has,
+    so the row reported ready the moment the set form landed.
     """
     if c.strike():
         c.hit()

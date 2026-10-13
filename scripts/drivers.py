@@ -3812,6 +3812,117 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def zone_exempt(out: Result) -> None:
+    """A cloud that blinds everybody except the creature that made it.
+
+    Eight monster cards print exactly that, and all eight laid the zone and
+    dropped the exemption -- which **inverts the ability**: the point of the
+    card is that its owner sees through its own darkness and nobody else
+    does. `blocks_sight` is terrain, binary and symmetric, with nothing to
+    carve out of it.
+
+    **Two things about the board had to be fixed before this measured
+    anything**, and both made it look like the code was wrong:
+
+    * every creature `_board` deals stands *adjacent* to the caster, so
+      there is no square between anybody and a fog laid between them covers
+      nothing. The first version read `Cover.NONE` everywhere.
+    * with the foe moved away, the other creatures are still standing on the
+      line, and a creature gives `Cover.PARTIAL` -- a different mechanism
+      with the same units. Every case then read 2 whether the exemption
+      worked or not. So the line is cleared, and the zone is the only thing
+      between.
+
+    A third trap was in the assertion rather than the board: `cover_between`
+    returns an `IntEnum`, and `is Cover.SUPERIOR` is False for the equal
+    integer. That is a **false pass** -- the exempt case "passed" while the
+    exemption was doing nothing. Compared with `==`.
+
+    Three controls:
+
+    * **the exempt creature sees through it** -- the clause eight rows had
+      dropped;
+    * **everybody else is still blinded**, the negative control. `query.py`'s
+      own comment records that `blocks_sight` was once stored and read by
+      nothing, so a zone that blocks nothing is a real failure mode here;
+    * **the exemption is about the looker, not the target.** Exempting only
+      the target must leave the attacker blinded: the card says the exempt
+      creature can see out, not that others can see it.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import cover_between, enemies, squares
+    from combat_engine.engine.types import Cover
+
+    def board_with(exempt_who: str):  # noqa: ANN202
+        """Two creatures six squares apart with only a fog between them.
+
+        `exempt_who` is "owner", "target" or "nobody".
+        """
+        world, me, _ = _board(seed=1)
+        foe = sorted(enemies(world, me))[0]
+        here = sorted(squares(world, me))[0]
+        far = (here[0] + 6, here[1])
+        world.get(foe, Position).square = far
+        # Clear the line. A creature standing between gives PARTIAL cover of
+        # its own, which reads in the same units as the zone's and hid the
+        # result entirely in the first version of this rule.
+        for other in sorted(enemies(world, me)):
+            if other != foe:
+                spot = world.get(other, Position)
+                if spot is not None:
+                    spot.square = (here[0], here[1] + 9)
+        # **And clear the target's carried cover.** `cover_between` ends with
+        # `max(traced, _carried_cover(target))`, and the dealt creature holds
+        # a `cover` modifier -- so every case read PARTIAL whatever the zone
+        # did. Three board artifacts in one rule, each of which looked like
+        # the implementation failing.
+        from combat_engine.engine.components import Mods
+        held = world.get(foe, Mods)
+        if held is not None:
+            held.items = type(held.items)()
+        # **Three rows thick, because `Grid.cover` traces corner to corner.**
+        # A single row of fog across the line still leaves the corner traces
+        # above and below it clear, which is PARTIAL and not SUPERIOR -- so a
+        # one-row zone could not be told apart from the board's own terrain.
+        area = frozenset(
+            (x, here[1] + dy)
+            for x in range(here[0] + 1, here[0] + 6)
+            for dy in (-1, 0, 1)
+        )
+        who = {me} if exempt_who == "owner" else (
+            {foe} if exempt_who == "target" else set())
+        Cast(world=world, me=me, ref="drivers:fog").zone(
+            area, label="drivers:fog", blocks_sight=True, exempt=who)
+        return world, me, foe
+
+    # **The baseline is PARTIAL, not NONE, and that is the board rather than
+    # the zone.** `Grid.cover` consults its own terrain, and this line
+    # already has some of it -- measured by tracing with no blockers at all.
+    # So the thing to assert is that the fog takes a non-exempt looker to
+    # SUPERIOR and leaves an exempt one where the terrain put them.
+    world, me, foe = board_with("nobody")
+    blind = cover_between(world, me, foe)
+    out.that(blind == Cover.SUPERIOR,
+             "a sight-blocking zone between two creatures blinds the looker"
+             f" -- the negative control, and it reads {blind!r}")
+
+    world, me, foe = board_with("owner")
+    seen = cover_between(world, me, foe)
+    out.that(seen < Cover.SUPERIOR,
+             "and the creature the card exempts sees through its own cloud"
+             f" ({seen!r} -- the terrain's own cover, not the fog's), which"
+             " is the clause eight rows had dropped")
+
+    world, me, foe = board_with("target")
+    still = cover_between(world, me, foe)
+    out.that(still == Cover.SUPERIOR,
+             "while exempting only the target leaves the looker blinded --"
+             " the exemption is about who is looking, not who is looked at"
+             f" ({still!r})")
+
+
 def points_regained(out: Result) -> None:
     """A power point put *back*, which nothing on the surface could say.
 
@@ -4580,6 +4691,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "zone_exempt": (zone_exempt,
+                    "a cloud that blinds all but the creature that made it"),
     "points_regained": (points_regained,
                         "a power point put back, and the cap that refuses one"),
     "boon_traded": (boon_traded,

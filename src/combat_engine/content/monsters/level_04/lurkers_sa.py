@@ -1120,14 +1120,13 @@ def m5805a2(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m5805a3(c: Cast) -> None:
     """The cloud is laid and blinds whoever is standing in it, held per
     occupant and lifted on the way out -- "while entirely within" is geometry
-    rather than a duration. What is dropped is the exemption: the zone blocks
-    sight for every creature **except** this one, and `c.zone(blocks_sight=)`
-    is terrain with nothing to carve out."""
+    rather than a duration. The exemption is `_blinding_cloud`'s now: it
+    passes `exempt={me}`, so the zone blocks sight for every creature except
+    this one, which is what the card prints."""
     _recharge_when_using(c, "m5805a2")
     _blinding_cloud(c, 1)
 
@@ -1487,7 +1486,6 @@ def m6395a3(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m6395a4(c: Cast) -> None:
     """As its sibling elsewhere: the cloud and the blind play, and the

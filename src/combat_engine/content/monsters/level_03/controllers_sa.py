@@ -1185,14 +1185,25 @@ def m1652a2(c: Cast) -> None:
     reach=AreaBurst(3, 10),
     target=NO_TARGET,
     keywords=[Keyword.COLD, Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
+    dropped=("c.zone(exempt_if=)",),
 )
 def m1652a3(c: Cast) -> None:
     """Two clauses are absent and they are different absences. Nothing hangs
     concealment on a zone; and a zone that exempts *some* of the creatures in
     it has no form -- `c.ignores_difficult_in` waives the terrain for a whole
     side, which is not what "creatures with that ability can ignore this"
-    says."""
+    says.
+
+    **Re-pointed off `c.zone(exempt=)`, which landed as a set of ids.** That
+    serves the ten cards exempting *one named creature* -- their own maker.
+    This card exempts whoever has a particular sense or ability, which a set
+    cannot say: snapshotting who qualifies when the zone is laid would be
+    wrong the moment anything changed, and the zone is asked per look. A
+    predicate parameter -- `exempt_if=` -- is a different gap and this
+    names it. Not `exempt=<a predicate>`: `todo.py` matches a symbol
+    against the code and reads that as the parameter it already has,
+    so the row reported ready the moment the set form landed.
+    """
     zone = _sustained_zone(c, c.area(), 5)
     # "to the m1652 and its allies" is the printed narrowing.
     c.conceal_in(zone, side="team")

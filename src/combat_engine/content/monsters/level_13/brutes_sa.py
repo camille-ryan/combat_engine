@@ -2756,7 +2756,6 @@ def m984a4(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m984a5(c: Cast) -> None:
     """The dark is a zone that blocks sight, and the printed exemption for the
@@ -2769,7 +2768,8 @@ def m984a5(c: Cast) -> None:
     that half, which the engine *can* say.
     """
     me, ref = c.me, c.ref
-    dark = c.zone(c.area(), label=ref, until=When.EONT, blocks_sight=True)
+    dark = c.zone(c.area(), label=ref, until=When.EONT, blocks_sight=True,
+                  exempt={c.me})
     held: dict[int, Effect] = {}
 
     def take(who: int) -> None:

@@ -1283,7 +1283,12 @@ def _blinding_squares(world: World, attacker: int, target: int) -> set[Square]:
     here = squares(world, attacker) | squares(world, target)
     out: set[Square] = set()
     for _eid, zone in zones.all():
-        if zone.blocks_sight:
+        # **`exempt` is about the looker, not the target.** "Blocks line of
+        # sight for every creature except this one" means the exempt
+        # creature sees through its own cloud; it does not mean everybody
+        # else can see *it*. So the attacker is the one asked, and a zone
+        # exempting only the target still blinds the attacker. #Zone.exempt.
+        if zone.blocks_sight and attacker not in zone.exempt:
             out |= set(zone.squares) - here
     return out
 

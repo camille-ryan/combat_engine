@@ -282,17 +282,24 @@ def _is_gear_power(p: Any) -> bool:
 def _dark_cloud(c: Cast, *, until: When) -> int:
     """A cloud nobody sees through and nobody inside sees out of.
 
-    `blocks_sight` is what `cover_between` reads and it applies to everybody;
-    the caster's own exemption has no primitive, which is the
-    `c.zone(exempt=)` gap. The blinding is held per occupant and diffed by
-    the two events that say who is standing in it, because a zone's fields
-    make squares rough or dark and carry no conditions.
+    **The caster's own exemption is written now**, as `exempt={me}`:
+    `blocks_sight` is terrain and applies to everybody, and
+    `query._blinding_squares` now asks whether the *looker* is exempt. That
+    was the whole of the `c.zone(exempt=)` gap for this helper -- the
+    blinding below already skipped the owner, so the cloud blinded everyone
+    but its maker while still hiding its maker's own targets from it, which
+    inverts the card.
+
+    The blinding is held per occupant and diffed by the two events that say
+    who is standing in it, because a zone's fields make squares rough or
+    dark and carry no conditions.
     """
     from combat_engine.engine.events import ZoneEntered, ZoneExited
 
     me = c.me
     area = c.area() or {c.here}
-    dark = c.zone(area, label=c.ref, until=until, blocks_sight=True)
+    dark = c.zone(area, label=c.ref, until=until, blocks_sight=True,
+                  exempt={me})
     held: dict[int, Effect] = {}
 
     def swallow(who: int) -> None:
@@ -3031,7 +3038,6 @@ def m3754a3(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m3754a4(c: Cast) -> None:
     """Darkness nobody sees through and nobody inside sees out of. The
@@ -5240,7 +5246,6 @@ def m6276a3(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.ZONE],
-    dropped=("c.zone(exempt=)",),
 )
 def m6276a4(c: Cast) -> None:
     """Her own exemption from the cloud is the dropped clause: `blocks_sight`

@@ -2771,7 +2771,7 @@ def m4665a2(c: Cast) -> None:
     keywords=[Keyword.ACID, Keyword.ZONE],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("1d8", 5, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("c.zone(exempt=)",),
+    dropped=("c.zone(difficult_exempt=)",),
 )
 def m4665a3(c: Cast) -> None:
     """The zone is laid on the first pass, because its Effect line is printed
@@ -2779,6 +2779,14 @@ def m4665a3(c: Cast) -> None:
 
     Rough ground in a zone is rough for everybody; "difficult terrain for its
     enemies" needs the zone to know whose side to let past, and nothing does.
+    
+
+    **Re-pointed off `c.zone(exempt=)`, which landed and is the other half.**
+    That exempts a creature from a zone's **sight-blocking**, read by
+    `query._blinding_squares` which knows who is looking. This card waives
+    the **difficult** half, and `Zones.difficult_squares` answers per
+    *square* with no notion of who is moving -- so an exemption there is a
+    different reader and a different gap.
     """
     if c.first:
         c.zone(c.area(), label=c.ref, until=When.EONT, difficult=c.ref)
