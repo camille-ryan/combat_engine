@@ -528,10 +528,15 @@ def i903x1(c: Cast) -> None:
 
 
 @power("i1385x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_check()",))
+       reach=PERSONAL, target=SELF)
 def i1385x1(c: Cast) -> None:
-    """A raw ability check is not a skill check and nothing rolls one."""
+    """Both halves. `ability:str` is the key `skills.ability_check` reads,
+    so "+1 to Strength ability checks" is an ordinary bonus now.
+
+    "(but not Strength attacks)" needs no code and is why the key is its
+    own: an attack roll never consults it."""
     _skills(c, 1, "athletics")
+    c.bonus("ability:str", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i1385p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -542,9 +547,11 @@ def i1385p1(c: Cast) -> None:
 
 
 @power("i1427x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_check()",))
+       reach=PERSONAL, target=SELF)
 def i1427x1(c: Cast) -> None:
+    """The two skills and the bare Dexterity check, which is its own key."""
     _skills(c, 1, "acrobatics", "stealth")
+    c.bonus("ability:dex", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i1432p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -574,9 +581,11 @@ def i1743x1(c: Cast) -> None:
 
 
 @power("i1895x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_check()",))
+       reach=PERSONAL, target=SELF)
 def i1895x1(c: Cast) -> None:
+    """As `i1385x1`, which prints the same two lines."""
     _skills(c, 1, "athletics")
+    c.bonus("ability:str", 1, on=c.me, until=When.ENCOUNTER, kind="item")
 
 
 @power("i1895p1", level=5, cls=ITEM, usage=DAILY, action=FREE,
@@ -1016,7 +1025,7 @@ def i1441x1(c: Cast) -> None:
 
 @power("i1486x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grab_check()", "c.ability_check()"))
+       dropped=("c.grab_check()",))
 def i1486x1(c: Cast) -> None:
     """The escape half is `escape` rather than the two skill keys: the
     card narrows it to getting out of a grab, and raising Athletics and

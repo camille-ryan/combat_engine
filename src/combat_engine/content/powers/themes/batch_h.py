@@ -1036,12 +1036,19 @@ def p14322(c: Cast) -> None:
         Trigger(SkillCheck, my_check(), "you make a skill check"),
         Trigger(SavingThrow, about_me, "you make a saving throw"),
     ),
-    dropped=("c.ability_check()",),
 )
 def p14323(c: Cast) -> None:
     """"A d20 roll" is three events, so it is three declared triggers rather
     than one that reads a field none of them share. The fourth kind -- a bare
-    ability check -- is not rolled on a board and is dropped."""
+    ability check -- is not rolled on a board and is dropped.
+
+    **The ability-check arm is covered now, not dropped.** `skills
+    .ability_check` announces the same `SkillCheck` event under an
+    `ability:<name>` key, and this row's trigger is unnamed -- so it
+    hears an ability check without a second entry. Driven in
+    `drivers.ability_checks`: `my_check()` matches it and
+    `my_check("athletics")` does not.
+    """
     ev = c.trigger
     c.spend_surge(on=c.me)
     if isinstance(ev, AttackRolled):
@@ -1207,20 +1214,21 @@ def p16061(c: Cast) -> None:
     "p16062", level=2, cls=X7_944, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ELEMENTAL],
     requires=_on_the_ground, requires_text="you must be on the ground",
-    dropped=("c.ability_check()",),
 )
 def p16062(c: Cast) -> None:
     """"Or until you are no longer on the ground" is asked of the board by
     the gate itself, so the bonus lapses the moment the character leaves it
     and comes back when he lands -- a duration could not say that.
 
-    Strength checks are dropped: `skill:<name>` reaches the seventeen
-    skills and nothing rolls a bare ability check.
+    The Strength checks ride the same gate, on `ability:str` -- the key
+    `skills.ability_check` reads. `skill:<name>` reaches the seventeen
+    skills and could not say this one.
     """
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER, kind="power",
         when=lambda ctx: not ctx.get("ranged") and not c.moving_as("fly"),
     )
+    c.bonus("ability:str", 2, on=c.me, until=When.ENCOUNTER, kind="power")
 
 
 @power(
@@ -1677,13 +1685,20 @@ def p16599(c: Cast) -> None:
         Trigger(AttackRolled, by_me, "you make an attack roll"),
         Trigger(SkillCheck, my_check(), "you make a skill check"),
     ),
-    dropped=("c.ability_check()",),
 )
 def p16691(c: Cast) -> None:
     """"Roll two d20s and use either" is one reroll keeping the better, which
     is the same distribution. The doubles clause is read off
     `AttackResult.rolls`, which keeps every face the attack has shown -- for
-    a check `c.reroll_check` hands back the second face directly."""
+    a check `c.reroll_check` hands back the second face directly.
+
+    **The ability-check arm is covered now, not dropped.** `skills
+    .ability_check` announces the same `SkillCheck` event under an
+    `ability:<name>` key, and this row's trigger is unnamed -- so it
+    hears an ability check without a second entry. Driven in
+    `drivers.ability_checks`: `my_check()` matches it and
+    `my_check("athletics")` does not.
+    """
     _two_dice(c, 1)
 
 
@@ -1717,11 +1732,18 @@ def p16692(c: Cast) -> None:
         Trigger(AttackRolled, by_me, "you make an attack roll"),
         Trigger(SkillCheck, my_check(), "you make a skill check"),
     ),
-    dropped=("c.ability_check()",),
 )
 def p16693(c: Cast) -> None:
     """Three dice is two rerolls keeping the best, and the doubles clause
-    widens to "any two the same", which is what the set test says."""
+    widens to "any two the same", which is what the set test says.
+
+    **The ability-check arm is covered now, not dropped.** `skills
+    .ability_check` announces the same `SkillCheck` event under an
+    `ability:<name>` key, and this row's trigger is unnamed -- so it
+    hears an ability check without a second entry. Driven in
+    `drivers.ability_checks`: `my_check()` matches it and
+    `my_check("athletics")` does not.
+    """
     _two_dice(c, 2)
 
 

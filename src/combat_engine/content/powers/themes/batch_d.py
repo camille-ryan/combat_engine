@@ -1952,7 +1952,6 @@ def p16620(c: Cast) -> None:
         Trigger(SavingThrow, about_me, "you make a saving throw"),
         Trigger(SkillCheck, about_me, "you make a skill check"),
     ),
-    dropped=("c.ability_check()",),
 )
 def p16621(c: Cast) -> None:
     """Add 1d10 to the roll, then subtract 1d4 from it.
@@ -1966,6 +1965,14 @@ def p16621(c: Cast) -> None:
 
     "Any d20" is four kinds of roll and the engine has three. The ability
     check is `c.ability_check()`, with eleven other rows. #495.
+    
+
+    **The ability-check arm is covered now, not dropped.** `skills
+    .ability_check` announces the same `SkillCheck` event under an
+    `ability:<name>` key, and this row's trigger is unnamed -- so it
+    hears an ability check without a second entry. Driven in
+    `drivers.ability_checks`: `my_check()` matches it and
+    `my_check("athletics")` does not.
     """
     c.boost_roll(c.roll("1d10") - c.roll("1d4"))
 

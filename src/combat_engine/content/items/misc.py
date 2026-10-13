@@ -897,7 +897,7 @@ def i1697p1(c: Cast) -> None:
 
 
 @power("i1700x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_check()",))
+       reach=PERSONAL, target=SELF, dropped=("c.ability_check(purpose=)",))
 def i1700x1(c: Cast) -> None:
     """The Athletics half is unconditional and written; "Strength checks
     made to break objects" is a bare ability check against an object, and

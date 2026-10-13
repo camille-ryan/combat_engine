@@ -944,12 +944,13 @@ def p14202(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=PRIMAL,
-    dropped=("c.ability_check()",),
 )
 def p14203(c: Cast) -> None:
-    """Athletics is a skill the engine rolls -- an escape, a bull rush. A
-    bare Strength ability check is not a skill and has no key."""
+    """Athletics is a skill the engine rolls -- an escape, a bull rush --
+    and the bare Strength check has a key of its own now, so both printed
+    halves are laid."""
     c.bonus("skill:athletics", 4, on=c.me, until=When.ENCOUNTER, kind="power")
+    c.bonus("ability:str", 4, on=c.me, until=When.ENCOUNTER, kind="power")
 
 
 @power(

@@ -9838,6 +9838,27 @@ class Cast:
         roller = self.me if who is None else who
         return _check(self.world, roller, skill, dc, bonus=bonus)
 
+    def ability_check(self, ability: Ability, dc: int = 0, *, who: int | None = None, bonus: int = 0):  # noqa: ANN201, E501
+        """Roll a raw ability check. Truthy when it beat the DC.
+
+        `c.ability_check(Ability.STR, 20)` for "make a DC 20 Strength
+        check". **Not `c.check`**, which rolls a *skill*: fourteen rows
+        carried a marker saying so, and the cards keep the two apart -- one
+        prints "ability check or skill check" as two separate things.
+
+        `who` defaults to the caster, as `c.check`'s does, and for the same
+        reason: it is your check and nothing is being done *to* anybody.
+
+        The result carries `.total` for the rows that halve the number
+        instead of comparing it. See `skills.ability_check` for why this
+        announces a `SkillCheck` under an `ability:<name>` key rather than
+        inventing a skill.
+        """
+        from .skills import ability_check as _ability_check
+
+        roller = self.me if who is None else who
+        return _ability_check(self.world, roller, ability, dc, bonus=bonus)
+
     def passive(self, skill: str, *, of: int | None = None) -> int:
         """10 plus a creature's check modifier -- what it notices unbidden.
 

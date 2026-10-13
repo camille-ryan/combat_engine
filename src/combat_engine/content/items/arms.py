@@ -1141,7 +1141,7 @@ def i783p1(c: Cast) -> None:
 
 
 @power("i791p1", level=6, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.ability_check()",))
+       reach=PERSONAL, target=SELF, dropped=("c.roll_with(ability=)",))
 def i791p1(c: Cast) -> None:
     """"Use your Intelligence, Wisdom, or Charisma modifier in place of
     your Strength modifier" is the difference between the two added to the

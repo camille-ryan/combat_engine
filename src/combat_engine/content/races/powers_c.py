@@ -841,7 +841,6 @@ def p14074(c: Cast) -> None:
         Trigger(SavingThrow, about_me, "you make a saving throw"),
         Trigger(SkillCheck, about_me, "you make a skill check"),
     ),
-    dropped=("c.ability_check()",),
 )
 def p6186(c: Cast) -> None:
     """"Add 1d6 to the triggering roll", whatever the roll was.
@@ -860,6 +859,14 @@ def p6186(c: Cast) -> None:
     nothing consults -- this component's commonest bug, and `lint.py` has a
     guard named after it. The skill is handed over in the context so the
     feat can narrow to the check it names.
+    
+
+    **The ability-check arm is covered now, not dropped.** `skills
+    .ability_check` announces the same `SkillCheck` event under an
+    `ability:<name>` key, and this row's trigger is unnamed -- so it
+    hears an ability check without a second entry. Driven in
+    `drivers.ability_checks`: `my_check()` matches it and
+    `my_check("athletics")` does not.
     """
     ev = c.trigger
     skill = str(getattr(ev, "skill", "") or "").lower()

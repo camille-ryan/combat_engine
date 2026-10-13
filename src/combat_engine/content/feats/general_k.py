@@ -497,7 +497,7 @@ def _any_reroll_of_mine(world: World, me: int, ev: Any) -> bool:
        reach=PERSONAL, target=SELF,
        trigger="you reroll an attack roll, a skill check or an ability check",
        on=Trigger(Rerolled, _any_reroll_of_mine, "you roll a d20 again"),
-       dropped=("c.ability_check()", "c.grants_advantage(everyone=)"))
+       dropped=("c.grants_advantage(everyone=)",))
 def f1697(c: Cast) -> None:
     """+2 on the reroll, and combat advantage to all attackers if it came
     out worse.

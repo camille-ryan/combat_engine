@@ -3812,6 +3812,94 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def ability_checks(out: Result) -> None:
+    """A raw ability check, which is not a skill check.
+
+    Fourteen rows carried a marker saying so -- `i1385x1`'s note was "a raw
+    ability check is not a skill check and nothing rolls one" -- and the
+    cards keep the two apart: one prints "ability check or skill check" as
+    two separate things.
+
+    Four things, and the last two are the ones that would be easy to get
+    wrong:
+
+    * **it rolls and totals** ability modifier plus half level;
+    * **a DC decides success**, and a `dc` of 0 always succeeds, as
+      `c.check` does;
+    * **a skill rider does not fire on it.** `my_check("athletics")` must
+      not match a Strength check -- which is exactly what folding this into
+      `check()` under an invented skill name would have done;
+    * **an ability-check bonus does apply**, so the modifier keys have a
+      reader. A modifier nothing consults is this component's commonest
+      bug and `lint.py` keeps a list of the spellings it has caught.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Stats
+    from combat_engine.engine.types import Ability
+
+    def roller():  # noqa: ANN202
+        world, me, _ = _board(seed=1)
+        stats = world.get(me, Stats) or world.add(me, Stats())
+        stats.scores[Ability.STR] = 20          # +5
+        return world, me, Cast(world=world, me=me, ref="drivers:check")
+
+    world, me, c = roller()
+    got = c.ability_check(Ability.STR)
+    half = (world.get(me, Stats)).half_level
+    out.that(got.total == got.natural + 5 + half,
+             "a Strength check is the die plus the ability modifier plus"
+             f" half level ({got.natural} + 5 + {half} = {got.total})")
+
+    world, me, c = roller()
+    easy = c.ability_check(Ability.STR, 0)
+    out.that(bool(easy),
+             "a check with no DC always succeeds, as `c.check` does"
+             f" ({easy.total} against 0)")
+
+    # **A skill rider must not hear it.** The negative control.
+    world, me, c = roller()
+    heard: list[str] = []
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.triggers import my_check
+    c.watch(SkillCheck,
+            lambda ev: heard.append(ev.skill)
+            if my_check("athletics")(world, me, ev) else None,
+            until=When.ENCOUNTER, on=me, label="drivers:athletics")
+    c.ability_check(Ability.STR)
+    out.that(not heard,
+             "and a rider watching for an Athletics check does not fire on"
+             f" a Strength check -- the two are different rolls {heard}")
+
+    # **An unnamed check rider must hear it**, which is the positive half of
+    # the control above and is what five rows' markers came off on. Those
+    # rows print "an attack roll, a skill check, or an ability check" and
+    # already declared `Trigger(SkillCheck, my_check(), ...)`; naming no
+    # skill means any check, so the ability arm needed no second entry and
+    # no code. If this goes red those five rows are silently short a clause.
+    world, me, c = roller()
+    any_check: list[str] = []
+    c.watch(SkillCheck,
+            lambda ev: any_check.append(ev.skill)
+            if my_check()(world, me, ev) else None,
+            until=When.ENCOUNTER, on=me, label="drivers:anycheck")
+    c.ability_check(Ability.STR)
+    out.that(any_check == ["ability:str"],
+             "while a rider watching for *any* check does hear it, which is"
+             " how five rows printing 'a skill check or an ability check'"
+             f" need no second trigger {any_check}")
+
+    # And the modifier keys have a reader.
+    world, me, c = roller()
+    c.bonus("ability_check", 3, on=me, until=When.ENCOUNTER, kind="power")
+    boosted = c.ability_check(Ability.STR)
+    base = (world.get(me, Stats)).half_level + 5
+    out.that(boosted.total == boosted.natural + base + 3,
+             "while a bonus to ability checks is read, so the key is not a"
+             f" modifier nothing consults ({boosted.total})")
+
+
 def unpreventable(out: Result) -> None:
     """"This damage cannot be reduced or prevented in any way."
 
@@ -4761,6 +4849,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "ability_checks": (ability_checks,
+                       "a raw ability check, which is not a skill check"),
     "unpreventable": (unpreventable,
                       "damage that resistance and immunity do not touch"),
     "zone_exempt": (zone_exempt,

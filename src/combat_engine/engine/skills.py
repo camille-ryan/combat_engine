@@ -93,6 +93,70 @@ def modifier(world: World, eid: int, skill: str) -> int:
     return out + _armour_penalty(world, eid, skill)
 
 
+def ability_check(
+    world: World, eid: int, ability: Ability, dc: int = 0, *, bonus: int = 0
+) -> CheckResult:
+    """A raw ability check: d20 + ability modifier + half level.
+
+    **Not a skill check**, and fourteen rows said so before this existed --
+    `i1385x1`'s note was "a raw ability check is not a skill check and
+    nothing rolls one". The cards keep the two apart deliberately, and one
+    of them prints "ability check or skill check" as two things, so folding
+    this into `check()` with an invented skill name would have made every
+    rider that watches for a *skill* fire on it.
+
+    So it announces the same `SkillCheck` event -- a row answering "you
+    would make a check" has to be able to hear this one -- but under the key
+    `ability:<name>`, which no skill key can collide with. `my_check
+    ("stealth")` does not match it; a rider wanting any check can look at
+    the prefix.
+
+    The ability modifier is added in the resolve callback rather than before
+    the emit, for the reason `check()` gives: the interrupt window runs
+    first, so "when you would make the check" can still lay a bonus, and
+    `skills.modifier` cannot be reused because its `SKILLS` lookup has no
+    entry for a bare ability and would silently contribute half level only.
+    """
+    fixed = 0
+    stats = world.get(eid, Stats)
+    if stats is not None:
+        fixed = stats.half_level + stats.mod(ability)
+    key = f"ability:{ability.value}"
+    natural = world.rng.d20().total
+    announced = SkillCheck(
+        actor=eid,
+        skill=key,
+        dc=dc,
+        natural=natural,
+        bonus=bonus,
+        total=natural + bonus,
+        success=False,
+    )
+
+    def finish(ev: SkillCheck) -> None:
+        extra = 0
+        mods = world.get(eid, Mods)
+        if mods is not None:
+            ctx = {"actor": eid, "skill": ev.skill, "ability": ability.value}
+            # Both keys are read here, which is what keeps them off
+            # `lint.py`'s unread-modifier list: the narrow one for "+2 to
+            # Strength checks" and the wide one for "+1 to ability checks".
+            extra = mods.total(ev.skill, ctx) + mods.total("ability_check", ctx)
+        ev.bonus += fixed + extra
+        ev.total = ev.natural + ev.bonus
+        ev.success = ev.dc <= 0 or ev.total >= ev.dc
+
+    rolled = world.bus.emit(announced, finish)
+    return CheckResult(
+        skill=rolled.skill,
+        natural=rolled.natural,
+        bonus=rolled.bonus,
+        total=rolled.total,
+        dc=rolled.dc,
+        success=rolled.success and not rolled.cancelled,
+    )
+
+
 #: The four skills an armour check penalty applies to. The printed list, and
 #: it is short because the penalty is about moving in the stuff rather than
 #: about being encumbered generally -- a Diplomacy check is not harder in
