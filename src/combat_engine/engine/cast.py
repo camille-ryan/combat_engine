@@ -8147,6 +8147,13 @@ class Cast:
                 return
             before = len(self.world.bus.log)
             held = len(self.world.effects.live)
+            # **Rewriting a field on the triggering event counts as doing
+            # something**, and nothing else here can see it: the handler
+            # emits no event and lays no effect, so both counts below are
+            # unmoved. Snapshot only for a `once=` hold -- it is the only
+            # caller that asks the question, and an ordinary watch should not
+            # pay a dict copy per firing. See the `did` comment.
+            was = dict(ev.__dict__) if once else None
             running.append(1)
             try:
                 fn(ev)
@@ -8157,12 +8164,32 @@ class Cast:
             # Ending unconditionally burned the effect on the first event of
             # the right *class*, so "the first time you hit a bloodied enemy"
             # was spent by the first attack that missed a healthy one.
-            # Whether the body did anything is read off the log.
-            # Anything the handler *did*, not only what it announced.
-            # `c.summon` puts a creature on the board and in the order and
-            # emits nothing at all, so a once-only row whose whole effect is
-            # a summon never spent its hold and fired every round.
-            did = len(self.world.bus.log) > before or len(self.world.effects.live) != held
+            #
+            # So the question is "did the handler do anything", and the way
+            # it is asked has been wrong twice, both times by **enumerating
+            # the ways of doing something** instead:
+            #
+            # * `c.summon` puts a creature on the board and in the order and
+            #   emits nothing at all, so a once-only row whose whole effect
+            #   is a summon never spent its hold and fired every round. The
+            #   effect count was added for it.
+            # * A handler whose whole effect is rewriting a field on its own
+            #   event -- `ev.amount -= cut`, `ev.saved = True` -- moves
+            #   neither count, so `once=` never spent and the hold fired on
+            #   every matching event for its whole duration. Three rows in
+            #   the tree, and the sharpest of them chose a `once=` watch
+            #   *expressly* to avoid shaving every blow its ally took, which
+            #   is what this bug made it do. #540.
+            #
+            # A field holding a mutable member that the handler changes in
+            # place still reads as untouched -- `dict()` is one level deep.
+            # No row does that today; a future one would need a third term
+            # here, and the better answer then is for the handler to say so.
+            did = (
+                len(self.world.bus.log) > before
+                or len(self.world.effects.live) != held
+                or (was is not None and dict(ev.__dict__) != was)
+            )
             if once and holder and did:
                 self.world.effects.end(holder[0], "used")
 

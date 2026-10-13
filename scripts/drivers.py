@@ -5156,6 +5156,96 @@ def summoned(out: Result) -> None:
              "and it is in the initiative order rather than standing there")
 
 
+def once_spent(out: Result) -> None:
+    """A `once=` hold is spent by a handler that only rewrites its event.
+
+    Nothing printed says this either -- it is the same kind of engine
+    property `reentry` measures, and it had been wrong twice in the same
+    place for the same reason. `c.watch`'s spend test asks *"did the handler
+    do anything"* by *enumerating ways of doing something*: it grew the bus
+    log, or it changed the effect list. Both enumerations missed a case.
+
+    * `c.summon` emits nothing at all, so a once-only summon never spent and
+      fired every round. The effect-count term was added for it.
+    * A handler whose whole effect is rewriting a field on the event it was
+      handed -- `ev.amount -= cut` -- moves neither count, so `once=` never
+      spent and the hold fired on **every** matching event for its whole
+      duration. Three rows, #540.
+
+    The sharpest of the three is the reason this is driven rather than
+    trusted: its docstring says it was written as a `DamageRolled` watch
+    *expressly* to avoid `c.resist`, "which would shave every other blow the
+    ally took as well" -- and the bug made it shave every blow. A row can
+    state its own intent correctly and be defeated by the engine under it.
+
+    **`audit.py` cannot see any of this.** All three rows fire and do
+    something; they do it too many times. Firing twice and measuring the
+    second firing is the only thing that distinguishes them, which is why
+    the second assertion here is the load-bearing one.
+
+    The third assertion is the guard that must survive the fix: a handler
+    that *reads and rejects* still must not spend, or "the first time you hit
+    a bloodied enemy" goes back to being burned by a miss on a healthy one --
+    the original fault the enumeration was introduced to cure.
+    """
+    from collections.abc import Callable
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import DamageRolled, Window
+    from combat_engine.engine.types import DamageType
+
+    def blow(world: World, who: int, amount: int = 10) -> DamageRolled:
+        return world.bus.emit(DamageRolled(
+            source=who, target=who, amount=amount,
+            dtype=DamageType.FIRE, detail="drivers:once",
+        ))
+
+    # Built per board rather than closed over `me`: the second half rebinds
+    # it, and a late-bound closure would still have worked here while
+    # breaking silently the moment the two halves were reordered.
+    def shaver(whose: int) -> Callable[[DamageRolled], None]:
+        def shave(ev: DamageRolled) -> None:
+            if ev.target == whose:
+                ev.amount -= 3
+        return shave
+
+    # -- the bug: a mutate-only handler, fired twice ----------------------
+    world, me, _ = _board(seed=1)
+    c = Cast(world=world, me=me, ref="drivers:once")
+    c.watch(DamageRolled, shaver(me), until=When.ENCOUNTER, on=me,
+            once=True, window=Window.BEFORE, label="drivers:once")
+
+    first = blow(world, me)
+    out.that(first.amount == 7,
+             "a once= handler that only rewrites its event does fire"
+             f" (10 -> {first.amount})")
+
+    second = blow(world, me)
+    out.that(second.amount == 10,
+             "and is SPENT by having done so -- the second blow is untouched,"
+             " which is the whole of #540: three rows shaved every blow for"
+             f" their duration instead of one (10 -> {second.amount})")
+
+    # -- the guard: rejecting must not spend ------------------------------
+    # Fired at somebody else first, so the handler's `if` says no. If the
+    # fix spent the hold on a rejected event it would be the original fault
+    # restored, and the assertion above would still pass -- which is why
+    # this one is here and not folded into it.
+    world, me, foe = _board(seed=1)
+    c = Cast(world=world, me=me, ref="drivers:once")
+    c.watch(DamageRolled, shaver(me), until=When.ENCOUNTER, on=me,
+            once=True, window=Window.BEFORE, label="drivers:once")
+
+    rejected = blow(world, foe)
+    wanted = blow(world, me)
+    out.that(rejected.amount == 10 and wanted.amount == 7,
+             "while a handler that reads and REJECTS does not spend the hold"
+             " -- the fault the spend test was introduced to cure, which the"
+             f" fix must not restore (other {rejected.amount}, mine"
+             f" {wanted.amount})")
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5164,6 +5254,8 @@ DRIVERS = {
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
+    "once_spent": (once_spent,
+                   "a once= hold is spent by rewriting its own event"),
     "two_types": (two_types, "one roll that is two types, and resistance reads both"),
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
@@ -5258,6 +5350,7 @@ DRIVERS = {
                           "vulnerable to some of what reaches you"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
 }
+
 
 
 def main() -> int:
