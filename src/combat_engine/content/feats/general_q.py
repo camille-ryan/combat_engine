@@ -586,7 +586,9 @@ def f3187(c: Cast) -> None:
     _on_hit_with(c, ("p12338",), landed)
 
 
-_F3188 = ("p917", "p992", "p704", "p1063")
+#: p704 is gone from this list because its clause is written into p704's
+#: own body (#550). The watcher still covers the other three.
+_F3188 = ("p917", "p992", "p1063")
 
 
 @power("f3188", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1503,7 +1505,9 @@ def f3233(c: Cast) -> None:
     c.watch(MoveEnd, stepped, on=c.me, until=When.ENCOUNTER, label=f"{c.ref} step")
 
 
-_F3234 = ("p917", "p10890", "p704", "p10472")
+#: p704 is gone from this list because its clause is written into p704's
+#: own body (#550). The watcher still covers the other three.
+_F3234 = ("p917", "p10890", "p10472")
 
 
 @power("f3234", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -1435,9 +1435,11 @@ _riders("f1299", {
 # written, so the marker here was naming a verb for a window that already
 # existed. `_extra_if_held` reads `ev.target`, which `Miss` carries beside
 # `Hit`, so the same clause serves both. p1061 is the granted attack.
+#
+# **p704's entry has moved into p704's body** (#550). The other three stay
+# riders until their own rows are migrated.
 _riders("f1300", {
     "p917": _extra_if_held,
-    "p704": _extra_if_held,
 }, granted={"p1061": _ally_adds_con},
    missed={"p997": _extra_if_held})
 

@@ -5880,6 +5880,126 @@ def aid_another_grants(out: Result) -> None:
              f" (+{total('skill:stealth') - was_other})")
 
 
+def feat_clause_exclusivity(out: Result) -> None:
+    """The feat clauses written into `p704`, and the one that excludes another.
+
+    #550's convention: a feat naming one power has its clause written into
+    that power's body, gated on `c.feat()`, instead of registering a rider
+    from its own body. `p704` is the first row migrated and it was chosen
+    because four feats name it and they are **two kinds**:
+
+    * `f972` and `f1300` are of the printed category a character may apply
+      only one of to a single use of a power, so they are one `if`/`elif`
+      chain;
+    * `f3188` and `f3234` are not, so they stack -- with each other and
+      with whichever of the first two paid.
+
+    **The exclusivity is the assertion that matters**, because it is the
+    one a later reader can undo by "tidying" the `elif` into a second
+    `if`. Nothing else in the tree would notice: both clauses are correct
+    in isolation and the engine cannot tell the two categories apart (a
+    feat's category is part of its printed name, and names are not in
+    tracked files). So the rule plants the state where both apply at once
+    -- a critical hit on a held target, holding both feats -- and asserts
+    that **exactly one** pays.
+
+    Driven through the row rather than through the clauses: the clauses
+    are three ordinary verbs that were never broken, and the whole of the
+    migration is that `p704`'s body now calls them. A rule asking
+    `c.penalty` directly would survive the body being reverted to a
+    rider, which is the mistake two rules in this file were written with.
+
+    Seven states, and the first is the control that says the body does
+    nothing on its own.
+    """
+    from combat_engine import story
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.resolve import AttackResult
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities)
+              if not query.stat_block(world, e))
+    mon = next(e for e in sorted(world.entities)
+               if query.stat_block(world, e))
+
+    known = world.get(pc, Powers)
+    assert known is not None
+    held_originally = list(known.known)
+
+    def run(*feats: str, crit: bool = False, held: bool = False) -> set[str]:
+        """Fire `p704`'s body and report which clauses asked for anything."""
+        known.known[:] = [*held_originally, *feats]
+        asked: set[str] = set()
+        spy = Cast(world=world, me=pc, ref="p704", target=mon,
+                   result=AttackResult(hit=True, critical=crit, target=mon))
+
+        # `setattr` on the instance, not a subclass: a subclass narrowing
+        # these signatures is an invalid override and `types.py` says so.
+        # Same reason `lengthened_shift` does it.
+        def record(what: str, ret: object = None):  # noqa: ANN202
+            def spied(*_a: object, **_kw: object) -> object:
+                asked.add(what)
+                return ret
+
+            return spied
+
+        setattr(spy, "strike", record("strike", True))        # noqa: B010
+        setattr(spy, "damage", record("damage", 0))           # noqa: B010
+        setattr(spy, "penalty", record("f972", None))         # noqa: B010
+        setattr(spy, "flat", record("f1300", 0))              # noqa: B010
+        setattr(spy, "ignores_difficult", record("f3188"))    # noqa: B010
+        setattr(spy, "shift", record("f3188", True))          # noqa: B010
+        setattr(spy, "push", record("f3234", 0))              # noqa: B010
+        # The held test is a read, not a write, so it is answered rather
+        # than recorded -- planting four conditions on the board would
+        # make this rule depend on what else clears them.
+        setattr(spy, "is_", lambda *_a, **_kw: held)          # noqa: B010
+        REGISTRY["p704"].body(spy)
+        return asked - {"strike", "damage"}
+
+    out.that(run() == set(),
+             "with no feat held the body lays no feat clause at all -- the"
+             f" control, since every assertion below is a set it adds to"
+             f" ({sorted(run())})")
+
+    out.that(run("f972", crit=True) == {"f972"},
+             "f972 pays on a critical hit")
+    out.that(run("f972") == set(),
+             "and NOT on an ordinary one, which is the printed condition"
+             f" ({sorted(run('f972'))})")
+
+    out.that(run("f1300", held=True) == {"f1300"},
+             "f1300 pays against a held target")
+    out.that(run("f1300") == set(),
+             "and not against a free one"
+             f" ({sorted(run('f1300'))})")
+
+    both = run("f972", "f1300", crit=True, held=True)
+    out.that(len(both) == 1,
+             "**holding both, with both conditions met, exactly ONE pays.**"
+             " This is the assertion that fails the moment the `elif` in"
+             " p704's body becomes a second `if` -- and the only one that"
+             f" does; the four above all survive it ({sorted(both)})")
+
+    out.that(run("f972", "f1300", held=True) == {"f1300"},
+             "holding both on a non-critical hit, f1300 pays -- each branch"
+             " carries its own applicability, so the chain does not spend"
+             " the use on a feat that would do nothing"
+             f" ({sorted(run('f972', 'f1300', held=True))})")
+
+    stacked = run("f972", "f3188", "f3234", crit=True)
+    out.that(stacked == {"f972", "f3188", "f3234"},
+             "and f3188 and f3234 are not of that category, so they stack"
+             " with f972 and with each other -- the control that stops the"
+             f" exclusivity above being written too wide ({sorted(stacked)})")
+
+    known.known[:] = held_originally
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5898,6 +6018,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "feat_clause_exclusivity": (feat_clause_exclusivity,
+                                "two feats of one category cannot both ride"
+                                " one use of a power; two of another can"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,
