@@ -1192,7 +1192,22 @@ class Gear:
     """
 
     weapons: list[Weapon] = field(default_factory=list)
-    shield: bool = False
+    #: Which shield is held: 0 none, 1 light, 2 heavy -- and the number is
+    #: the printed AC and Reflex bonus, which `query.shield_bonus` reads off
+    #: the `armour` table rather than from this literal.
+    #:
+    #: **Annotated `bool` until now, and chargen flattened it on the way in**
+    #: (`shield=bool(carried_shield)`), so the kind was known on the class
+    #: line -- documented there as "0 none, 1 light shield, 2 heavy shield" --
+    #: and thrown away at this boundary. Nine rows wanted the number: "your
+    #: shield bonus also applies to Fortitude", "raises the light shield's
+    #: bonus by one", "trade the shield's bonus to AC and Reflex for damage".
+    #: None of them could ask.
+    #:
+    #: Every existing reader tests truthiness (`bool(gear.shield)`, `if
+    #: gear.shield or ...`), which is why widening it moves nothing: checked
+    #: across all 55 sites, none compares against True or False.
+    shield: int = 0
     armour: str = "cloth"
     #: What is on the belt rather than in the hands, by weapon ref.
     stowed: set[str] = field(default_factory=set)

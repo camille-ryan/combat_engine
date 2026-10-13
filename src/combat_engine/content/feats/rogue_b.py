@@ -59,6 +59,7 @@ from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
     PERSONAL,
+    REF,
     SELF,
     ActionType,
     Cast,
@@ -948,22 +949,35 @@ def f826(c: Cast) -> None:
 
 
 @power("f2073", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.shield_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f2073(c: Cast) -> None:
-    """Raises the light shield's bonus by one. `Gear.shield` is a bool
-    and the light-or-heavy number was folded into the defence totals at
-    spawn, so there is neither a number to raise nor a way to tell which
-    shield is being carried. The fighter's f1741 named it first."""
+    """A light shield's bonus to defences rises to +2, which is +1 more.
+
+    Both halves are answerable now: `Gear.shield` says *which* shield and
+    `c.shield_bonus()` what it is worth. Gated on the light one, because a
+    heavy shield already grants 2 and the card raises only the light.
+
+    `kind="shield"` so it reads as the same bonus getting larger rather
+    than a second one stacking on top.
+    """
+    if c.shield_bonus() != 1:
+        return
+    c.bonus(AC, 1, on=c.me, until=When.ENCOUNTER, kind="shield")
+    c.bonus(REF, 1, on=c.me, until=When.ENCOUNTER, kind="shield")
 
 
 @power("f2074", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("query.shield_bonus()", "c.on_power_bonus()"))
+       todo=("c.on_power_bonus()",))
 def f2074(c: Cast) -> None:
     """Adds one to a power bonus to defences while a light shield is
-    carried. Two gaps: which shield it is, and that a bonus being laid
-    announces nothing a row can answer -- `Mods` records the number and
-    its kind, not the act of granting it."""
+    carried.
+
+    **Down to one gap.** Which shield it is can be asked now --
+    `c.shield_bonus() == 1` is the light one. What is still missing is the
+    other half: a bonus being laid announces nothing a row can answer.
+    `Mods` records the number and its kind, not the act of granting it, so
+    there is no moment at which to add the +1."""
 
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

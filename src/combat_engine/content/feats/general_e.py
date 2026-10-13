@@ -128,8 +128,26 @@ _riders("f993", {"p4541": _temp_hp("con_mod"), "p2248": _intimidating},
 _riders("f991", {}, missed={"p917": _second_shot},
         used={"p970": _no_long_range})
 
+def _shield_to_attack(c: Cast, ev: Any) -> None:
+    """"Add your shield bonus as a feat bonus to your attack roll."
+
+    Laid in the `used=` window rather than on a hit, because it changes the
+    roll: `PowerUsed` is announced above the body, so a bonus put down here
+    is in time to be read, and one put down on `Hit` would be too late to
+    have decided anything.
+
+    "You can" is `c.may`, and nothing is added without a shield -- the
+    card's own Requirement.
+    """
+    del ev
+    held = c.shield_bonus()
+    if not held or not c.may("add your shield bonus to the attack"):
+        return
+    c.bonus("attack", held, on=c.me, until=When.EONT, kind="feat", once=True)
+
+
 _riders("f995", {"p1000": _shield_the_neighbour},
-        dropped=("query.shield_bonus()",))
+        used={"p4542": _shield_to_attack})
 
 
 @power("f1002", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

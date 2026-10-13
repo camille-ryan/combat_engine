@@ -3812,6 +3812,72 @@ def fell_might(out: Result) -> None:
              f" (kept {plain}, traded {traded})")
 
 
+def shield_bonuses(out: Result) -> None:
+    """A shield's contribution to AC, as a number a row can read.
+
+    Nine rows wanted it and none could ask. The shield's bonus is folded
+    into the AC the sheet is built with, and `Gear.shield` was a bare
+    `bool` -- so "your shield bonus also applies to Fortitude", "raises the
+    light shield's bonus by one" and "trade the shield's bonus to AC and
+    Reflex for damage" had nothing to read.
+
+    **The kind was known the whole time and thrown away at one boundary.**
+    The class line records 0, 1 or 2 and says so in its own comment;
+    `chargen` wrote `shield=bool(carried_shield)` into `Gear`. So the fix
+    was a widened field and a dropped `bool()`, not a new mechanism -- and
+    the control that matters is the second one below, because a reader that
+    works on a hand-set component and never sees a real character is the
+    shape this file has been caught by before.
+
+    Three things:
+
+    * **the number comes from the database**, light 1 and heavy 2, not from
+      a literal in the engine;
+    * **a built character carries its kind through**, which is the half
+      that was lost;
+    * **no shield is 0**, so a row trading the bonus away trades nothing.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.query import shield_bonus
+
+    world, me, _ = _board(seed=1)
+    gear = world.get(me, Gear) or world.add(me, Gear())
+    seen = {}
+    for kind in (0, 1, 2):
+        gear.shield = kind
+        seen[kind] = shield_bonus(world, me)
+    out.that(seen == {0: 0, 1: 1, 2: 2},
+             "a light shield reads 1 and a heavy one 2, off the armour"
+             f" table rather than a literal {seen}")
+
+    # **A real character off the chargen path, not a hand-set component.**
+    # `chargen.spawn` is where the kind was being flattened, so a reader
+    # proven only against a component this rule set itself would have
+    # passed straight over the actual fault.
+    from combat_engine.chargen import Character, spawn
+    kinds: dict[str, int] = {}
+    for cls in ("fighter", "paladin", "warden"):
+        who = Character(cls=cls, level=1)
+        eid = spawn(world, who, (1, 1))
+        held = world.get(eid, Gear)
+        kinds[cls] = int(getattr(held, "shield", 0) or 0)
+    # **Assert a *heavy* shield, not merely a shield.** Written as
+    # `any(v > 0)` first and the plant test went green: `bool(2)` is True
+    # and `int(True)` is 1, so the old flattening turns every heavy shield
+    # into a light one and still passes a "carries something" check. The
+    # distinguishable value is the whole point of widening the field.
+    out.that(2 in kinds.values(),
+             "and a character built through `chargen.spawn` carries a"
+             " *heavy* shield as 2 -- flattening it to a bool reads 1 here"
+             f" and would silently downgrade every one {kinds}")
+
+    gear.shield = 0
+    out.that(shield_bonus(world, me) == 0,
+             "while a creature with no shield reads 0, so a row trading the"
+             " bonus away trades nothing")
+
+
 def ability_checks(out: Result) -> None:
     """A raw ability check, which is not a skill check.
 
@@ -4849,6 +4915,8 @@ DRIVERS = {
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,
                    "the pact boon's one charge, its die, and the trade"),
+    "shield_bonuses": (shield_bonuses,
+                       "a shield's AC contribution, as a readable number"),
     "ability_checks": (ability_checks,
                        "a raw ability check, which is not a skill check"),
     "unpreventable": (unpreventable,

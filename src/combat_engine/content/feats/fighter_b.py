@@ -1145,12 +1145,18 @@ def f1739(c: Cast) -> None:
 
 
 @power("f1741", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.shield_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f1741(c: Cast) -> None:
-    """"Your shield bonus also applies to Fortitude." `Gear.shield` is a
-    bool and the light-or-heavy number was folded into the defence
-    totals at spawn, so the amount to apply is not recoverable -- which
-    is a different gap from not knowing whether a shield is held."""
+    """"Your shield bonus also applies to Fortitude", and the amount is
+    readable now: `Gear.shield` carries which shield is held and
+    `query.shield_bonus` reads the printed figure off the armour table.
+
+    `kind="shield"` so it does not stack with the shield bonus the
+    character already has to AC and Reflex -- it is the same bonus
+    reaching a third defence, which is what "also" means."""
+    held = c.shield_bonus()
+    if held:
+        c.bonus(FORT, held, on=c.me, until=When.ENCOUNTER, kind="shield")
 
 
 @power("f1743", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

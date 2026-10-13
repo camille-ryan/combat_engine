@@ -29,6 +29,7 @@ from combat_engine.engine import (
     MINOR,
     NO_TARGET,
     PERSONAL,
+    REF,
     SELF,
     WILL,
     Ability,
@@ -274,19 +275,25 @@ def f947(c: Cast) -> None:
 
 
 @power("f949", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.shield_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f949(c: Cast) -> None:
     """Trades the shield's bonus to AC and Reflex for damage.
 
-    Turning it off is not the gap: a `c.penalty(AC, n)` and a
-    `c.penalty(REF, n)` held until the start of the next turn say
-    "forgo" exactly, and the `+1` to damage is one more line. What is
-    missing is `n`. `Gear.shield` is a bare bool, folded into the two
-    defences at spawn and never recorded as its own number, so nothing
-    can say how much to take back off -- which is `query.shield_bonus()`
-    and six rows elsewhere. It was marked `c.forgo_shield()`, a verb for
-    this one row and nothing else.
+    The old note had the whole shape right and was waiting on one number:
+    a `c.penalty(AC, n)` and a `c.penalty(REF, n)` held until the start of
+    the next turn say "forgo" exactly, and the `+1` is one more line.
+    `n` is `c.shield_bonus()` now.
+
+    **No shield means no trade**, which is why the penalties are gated:
+    the printed Requirement is a shield being wielded, and paying nothing
+    for the damage would make this a flat +1 for anybody.
     """
+    held = c.shield_bonus()
+    if not held:
+        return
+    c.penalty(AC, held, on=c.me, until=When.SONT)
+    c.penalty(REF, held, on=c.me, until=When.SONT)
+    c.bonus("damage", 1, on=c.me, until=When.SONT, kind="feat")
 
 
 @power("f950", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

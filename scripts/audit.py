@@ -178,6 +178,27 @@ KNOWN_SILENT = {
     # direction. The dummy posing a character in light armour would retire
     # both entries (#437).
     "f1873": "holds only out of heavy armour; the board deals heavy armour",
+    # **Four shield rows, and the same shape as `f1873` above.** Each lays
+    # its bonus only when a shield is held -- "your shield bonus also
+    # applies to Fortitude", "to Will", "forgo the shield bonus for +1
+    # damage", "the target gains the shield's bonuses and you lose them" --
+    # and the board's fighter chassis carries none, so the rows correctly
+    # lay nothing.
+    #
+    # All four were `todo=("query.shield_bonus()",)` with empty bodies
+    # until the number became readable, so they were *refused* rather than
+    # silent and the baseline never had to mention them. Writing the clause
+    # is what made them visible, which is the right direction -- the same
+    # note `f1873` carries.
+    #
+    # `drivers.shield_bonuses` is the cover: it sets the kind directly and
+    # also proves a `chargen.spawn` character keeps it, which is the half
+    # that was being flattened. A dummy posing a shield-bearer would retire
+    # all four entries (#437), as it would `f1873`.
+    "f1741": "applies a shield bonus; the board's fighter holds no shield",
+    "f2860": "applies a shield bonus; the board's fighter holds no shield",
+    "f949": "trades a shield bonus away; the board's fighter holds none",
+    "i3207p1": "hands a shield's bonuses over; the board holds no shield",
     # Gives back the use of one named sibling row, and the harness fires
     # each row once on a fresh board -- so that sibling has never been
     # spent and there is nothing to give back. Driven by hand: with

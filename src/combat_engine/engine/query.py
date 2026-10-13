@@ -1293,6 +1293,53 @@ def _blinding_squares(world: World, attacker: int, target: int) -> set[Square]:
     return out
 
 
+#: The AC and Reflex bonus each shield grants, by `Gear.shield` index, read
+#: from the `armour` table on first ask. Not a literal `{1: 1, 2: 2}`: the
+#: numbers are printed and this component does not derive a printed number,
+#: which is the rule `etl/CLAUDE.md` states and `trap.perception_dc` is the
+#: worked example of. That they happen to equal the index is a coincidence
+#: worth not relying on.
+_SHIELD_AC: dict[int, int] | None = None
+
+
+def shield_bonus(world: World, eid: int) -> int:
+    """What this creature's shield adds to AC and Reflex. 0 for none.
+
+    Nine rows wanted this number and none could ask for it: a shield's
+    contribution is folded into the AC the sheet was built with, and
+    `Gear.shield` was a bare `bool` -- so "your shield bonus also applies
+    to Fortitude", "raises the light shield's bonus by one" and "trade the
+    shield's bonus to AC and Reflex for damage" had nothing to read. The
+    kind was known on the class line all along and chargen flattened it on
+    the way into `Gear`; see `Gear.shield`.
+
+    `world` is taken and unused by design, so a caller does not have to
+    know that: it keeps the signature the other `query` readers have and
+    leaves room for a shield granted by something other than gear.
+    """
+    global _SHIELD_AC
+    from .components import Gear
+
+    gear = world.get(eid, Gear)
+    held = int(getattr(gear, "shield", 0) or 0) if gear is not None else 0
+    if held <= 0:
+        return 0
+    if _SHIELD_AC is None:
+        from combat_engine.db import game
+
+        rows = game().execute(
+            "SELECT type, ac_bonus FROM armour WHERE type LIKE '%shield%'"
+        ).fetchall()
+        found: dict[int, int] = {}
+        for row in rows:
+            # `light shields` is index 1 and `heavy shields` index 2, which
+            # is the order the class line records and `chargen` prints.
+            where = 1 if str(row["type"]).startswith("light") else 2
+            found.setdefault(where, int(row["ac_bonus"] or 0))
+        _SHIELD_AC = found
+    return _SHIELD_AC.get(held, 0)
+
+
 def sealed(world: World, eid: int) -> bool:
     """Is this creature inside something, out of reach in both directions?
 

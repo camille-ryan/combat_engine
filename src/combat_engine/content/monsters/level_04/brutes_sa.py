@@ -1409,7 +1409,7 @@ def m4622a1(c: Cast) -> None:
     once_per_round=True,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("c.hit_this_turn()", "query.shield_bonus()"),
+    dropped=("c.hit_this_turn()", "loader.monster_shield()"),
 )
 def m4622a2(c: Cast) -> None:
     """The shove and the step into the vacated square are exact. "One creature

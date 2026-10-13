@@ -1070,12 +1070,13 @@ def f2802(c: Cast) -> None:
 
 
 @power("f2860", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.shield_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f2860(c: Cast) -> None:
-    """"Your shield bonus also applies to Will." The same gap `f1741`
-    names for Fortitude: `Gear.shield` is a bool and the light-or-heavy
-    number was folded into the defence totals at spawn, so the amount to
-    apply again is not recoverable."""
+    """"Your shield bonus also applies to Will." `f1741` is the same line
+    for Fortitude and the reasoning for `kind="shield"` is there."""
+    held = c.shield_bonus()
+    if held:
+        c.bonus(WILL, held, on=c.me, until=When.ENCOUNTER, kind="shield")
 
 
 @power("f2861", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

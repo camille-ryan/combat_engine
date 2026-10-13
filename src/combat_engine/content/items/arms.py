@@ -808,10 +808,17 @@ def i1893p1(c: Cast) -> None:
 
 
 @power("i2475x1", level=4, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.shield_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i2475x1(c: Cast) -> None:
-    """A shield's contribution to AC is folded into the base item and
-    nothing reports it as a number of its own."""
+    """An item bonus equal to the shield's own, against opportunity
+    attacks only -- so it is gated on the attack rather than laid flat.
+
+    `query.shield_bonus` is the number, which nothing could report until
+    `Gear.shield` carried which shield was held."""
+    held = c.shield_bonus()
+    if held:
+        c.bonus(AC, held, on=c.me, until=When.ENCOUNTER, kind="item",
+                when=lambda ctx: bool(ctx.get("opportunity")))
 
 
 @power("i2475p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
@@ -848,11 +855,22 @@ def i2479p1(c: Cast) -> None:
 
 
 @power("i3207p1", level=4, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=ONE_ALLY,
-       todo=("query.shield_bonus()",))
+       reach=CloseBurst(5), target=ONE_ALLY)
 def i3207p1(c: Cast) -> None:
-    """Handing the shield's bonuses over needs the number they are worth,
-    and nothing reports it."""
+    """The ally gains the shield's bonuses and the wielder loses them, for
+    the same stretch -- so it is one number read once and applied twice,
+    with the signs opposite.
+
+    `c.shield_bonus()` is that number. Nothing to hand over when no shield
+    is held, which is the item's own Requirement.
+    """
+    mate = c.target
+    held = c.shield_bonus()
+    if mate is None or not held:
+        return
+    for defence in (AC, REF):
+        c.bonus(defence, held, on=mate, until=When.EONT, kind="shield")
+        c.penalty(defence, held, on=c.me, until=When.EONT)
 
 
 @power("i3207p2", level=4, cls=ITEM, usage=DAILY, action=MINOR,

@@ -9859,6 +9859,16 @@ class Cast:
         roller = self.me if who is None else who
         return _ability_check(self.world, roller, ability, dc, bonus=bonus)
 
+    def shield_bonus(self, *, of: int | None = None) -> int:
+        """What this creature's shield adds to AC and Reflex. 0 for none.
+
+        Defaults to the **caster**: every one of the nine printed lines is
+        about its own holder's shield. See `query.shield_bonus`.
+        """
+        from .query import shield_bonus as _shield_bonus
+
+        return _shield_bonus(self.world, self.me if of is None else of)
+
     def passive(self, skill: str, *, of: int | None = None) -> int:
         """10 plus a creature's check modifier -- what it notices unbidden.
 

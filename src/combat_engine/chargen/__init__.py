@@ -2578,7 +2578,10 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         BuildState(choices=set(who.choices)),
         Gear(
             weapons=carried,
-            shield=bool(carried_shield),
+            # **The kind, not merely whether.** `_shield_for` already
+            # returns 0, 1 or 2 and this used to `bool()` it, which is where
+            # nine rows' "your shield bonus" went missing. See `Gear.shield`.
+            shield=carried_shield,
             armour=line.armour,
             # **What this character is trained with**, which nothing recorded
             # before: the chassis's printed lines, plus what its feats and its
