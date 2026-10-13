@@ -5624,8 +5624,13 @@ def once_spend_moments(out: Result) -> None:
         # `ctx` is a plain attribute `resolve.attack` stamps on, not a
         # field -- and the spend branch reads it to ask whether a gated
         # one-shot applies, so an event without one takes the fallback.
-        roll.ctx = {"attacker": who, "target": at,
-                    "power": "drivers:once", "advantage": False}
+        # `setattr` rather than an attribute write: `ctx` is stamped on by
+        # `resolve.attack` and is not a declared field, so a direct write
+        # is an unresolved attribute to the checker.
+        setattr(roll, "ctx", {  # noqa: B010
+            "attacker": who, "target": at,
+            "power": "drivers:once", "advantage": False,
+        })
         world.bus.emit(roll)
 
     # -- a check bonus, and the attack roll that must NOT spend it -------
@@ -5696,6 +5701,110 @@ def once_spend_moments(out: Result) -> None:
              f" the roll really is their moment ({len(kept)} of 9)")
 
 
+def lengthened_shift(out: Result) -> None:
+    """A feat that lengthens another row's shift, and where the read lives.
+
+    Three feats print "when you use <row>, you can shift N extra squares"
+    and all three were marked blocked on `c.extend_move(any_of=)`. All
+    three docstrings blamed the same thing: *"`PowerUsed` is announced
+    before the body runs, so by the time a watcher sees it the shift has
+    not happened and there is nothing yet to lengthen."*
+
+    **True, and irrelevant** -- nothing watches an event here.
+    `c.extend_move` lays a standing modifier against a ref and the
+    **moved row** reads it. So the gap was never in the feats: `p1489` and
+    `p2479` hard-coded `c.shift(1)` where they should have asked
+    `c.squares_for(c.ref, 1)`. Two one-line content fixes, and the three
+    feats become one line each.
+
+    Found by an agent that could not write the three and went looking for
+    why, which is the shape worth repeating: when several rows blame the
+    same mechanism, read the mechanism.
+
+    Four things, and the last two are the gate:
+
+    * the moved row's own printed distance, with nothing laid;
+    * **the entries add**, which `squares_for` documents and which matters
+      because two feats can lengthen the same row;
+    * a gated entry stays shut while its condition is false;
+    * and opens when it becomes true -- read at the moment the distance is
+      asked for, not at the moment the modifier was laid, so a character
+      who becomes bloodied mid-fight gains it.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    pc = next(e for e in sorted(world.entities)
+              if not query.stat_block(world, e))
+    vital = world.get(pc, Health)
+    assert vital is not None
+
+    def asked(bloodied: bool = False) -> int:
+        vital.hp = (vital.max_hp // 3) if bloodied else vital.max_hp
+        return Cast(world=world, me=pc, ref="p1489").squares_for("p1489", 1)
+
+    out.that(asked() == 1,
+             f"the moved row's own printed distance, unlengthened ({asked()})")
+
+    Cast(world=world, me=pc, ref="drivers:f3748").extend_move(
+        "p1489", 1, on=pc)
+    out.that(asked() == 2,
+             f"one feat lengthens it by the square it prints ({asked()})")
+
+    gated = Cast(world=world, me=pc, ref="drivers:f3746")
+    gated.extend_move("p1489", 2, on=pc,
+                      when=lambda _ctx: gated.bloodied(on=pc))
+    out.that(asked() == 2,
+             "a second feat gated on being bloodied adds NOTHING while it is"
+             f" not -- the control that separates the gate from the sum"
+             f" ({asked()})")
+
+    out.that(asked(bloodied=True) == 4,
+             "and adds its two the moment it is, because the gate is asked"
+             " when the distance is read rather than when the modifier was"
+             f" laid ({asked(bloodied=True)})")
+
+    # **And the half the three assertions above do not cover.** They ask
+    # `squares_for` directly, so removing the read from the moved row --
+    # which is the actual fix, two one-line content changes -- leaves them
+    # all green. Caught by planting exactly that and watching nothing
+    # redden.
+    #
+    # Asserted on what the row **asks for**, not on where it ends up:
+    # `c.shift(n)` is "shift *up to* n" and a chooser picks the square, so
+    # a row asking for 3 can legitimately move 1. Measuring the landing
+    # square would have made this rule depend on board geometry and on the
+    # mover's preferences, neither of which is what the three feats
+    # changed.
+    asks: list[int] = []
+    Cast(world=world, me=pc, ref="drivers:plain").extend_move(
+        "p1489", 5, on=pc)
+    spy = Cast(world=world, me=pc, ref="p1489")
+    # Patched on the instance rather than by subclassing: a subclass
+    # narrowing `shift` is an invalid override and `types.py` says so.
+    def record(squares_: int = 1, **kw: object) -> bool:
+        asks.append(squares_)
+        return True
+
+    # `setattr` for the same reason as `ctx` above: replacing a bound
+    # method on one instance is a narrower type than the method it
+    # replaces, which is a real objection in general and not here.
+    setattr(spy, "shift", record)  # noqa: B010
+    REGISTRY["p1489"].body(spy)
+    out.that(asks == [9],
+             "and the moved row ASKS for its lengthened distance -- 1 printed,"
+             " plus the 1 and 5 laid flat and the 2 whose gate the assertion"
+             " above left open. This is the only assertion here that fails"
+             " when `p1489` goes back to a hard-coded `c.shift(1)`, which the"
+             f" three above all survive ({asks})")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5710,6 +5819,8 @@ DRIVERS = {
                        "one living creature: not undead, and not construct unless living"),
     "creature_kinds": (creature_kinds,
                        "every character is a natural humanoid; an origin replaces it"),
+    "lengthened_shift": (lengthened_shift,
+                         "a feat lengthens another row's shift, read in the moved row"),
     "once_spend_moments": (once_spend_moments,
                            "a one-shot bonus is spent where it is read"),
     "once_spent": (once_spent,

@@ -672,9 +672,16 @@ def p16636(c: Cast) -> None:
     target=EACH_ALLY,
 )
 def p2479(c: Cast) -> None:
-    c.shift(1, who=c.target)
+    """`c.squares_for` rather than a bare 1, for `p1489`'s reason: a feat
+    lengthening this shift lays its entry against this ref, and the read
+    belongs in the row being lengthened.
+
+    Both shifts, because the card moves the ally and the caster by the
+    same printed distance and a feat that lengthens it lengthens both."""
+    extra = c.squares_for(c.ref, 1)
+    c.shift(extra, who=c.target)
     if c.first and c.me not in c.targets:
-        c.shift(1, who=c.me)
+        c.shift(extra, who=c.me)
 
 
 @power(

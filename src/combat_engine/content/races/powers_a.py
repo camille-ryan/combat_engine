@@ -385,7 +385,13 @@ def p1449(c: Cast) -> None:
     on=Trigger(Miss, both(targets_me, by_melee), "an enemy misses you with a melee attack"),
 )
 def p1489(c: Cast) -> None:
-    c.shift(1)
+    """`c.squares_for` rather than a bare 1, so a feat lengthening this
+    shift reaches it. Three feats print "you shift 1 extra square when you
+    use <this row>" and `c.extend_move(ref, n)` is how they say it -- but
+    the read has to be *here*, in the row being lengthened, or the entry
+    is laid and nothing consults it. Found by an agent that could not
+    write those three and looked at why."""
+    c.shift(c.squares_for(c.ref, 1))
 
 
 @power(

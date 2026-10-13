@@ -1279,11 +1279,22 @@ def f3745(c: Cast) -> None:
 
 
 @power("f3746", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTEND)
+       reach=PERSONAL, target=SELF)
 def f3746(c: Cast) -> None:
-    """Two extra squares on the shift p1489 prints. `PowerUsed` is
-    announced before the body runs, so by the time a watcher sees it the
-    shift has not happened and there is nothing yet to lengthen."""
+    """**Written, and the old note had the wrong diagnosis.** It blamed
+    `PowerUsed` firing before the body, which is true and irrelevant:
+    nothing watches an event here. `c.extend_move` lays a standing
+    modifier against the ref, and the *moved row* reads it -- so the only
+    thing missing was the read, and `p1489` hard-coded `c.shift(1)`
+    instead of `c.squares_for(c.ref, 1)`. Fixed there; this row is one
+    line.
+
+    "While bloodied" is asked at read time rather than at lay time, so a
+    character who becomes bloodied mid-fight gains it and one who heals
+    out of it loses it. The gate ignores the ctx and reads the board,
+    because `p1489` consults `squares_for` with no ctx to carry one."""
+    me = c.me
+    c.extend_move("p1489", 2, on=me, when=lambda _ctx: c.bloodied(on=me))
 
 
 @power("f3747", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -1306,13 +1317,17 @@ def f3747(c: Cast) -> None:
 
 
 @power("f3748", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=EXTEND)
+       reach=PERSONAL, target=SELF)
 def f3748(c: Cast) -> None:
-    """The concealment half lands: `c.conceal` with `total` left off is
-    the printed partial kind. The extra square on p1489's shift is
-    dropped -- `PowerUsed` is announced before the body runs, so there is
-    nothing yet to lengthen, and by `PowerResolved` the shift is spent."""
+    """**Both halves now.** The concealment lands as it did: `c.conceal`
+    with `total` left off is the printed partial kind.
+
+    The extra square was dropped on a wrong diagnosis -- the timing of
+    `PowerUsed` does not matter, because `c.extend_move` is a standing
+    modifier the moved row reads, not a watcher. **One** square, which is
+    what this card prints where `f3746` prints two."""
     me = c.me
+    c.extend_move("p1489", 1, on=me)
 
     def used(ev: Any) -> None:
         if ev.actor == me and ev.power == "p1489":
@@ -1441,10 +1456,21 @@ def f3753(c: Cast) -> None:
 
 
 @power("f3754", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTEND)
+       reach=PERSONAL, target=SELF,
+       dropped=("c.extend_move(one_target=)",))
 def f3754(c: Cast) -> None:
-    """Two extra squares on a shift p2479 hands out, and the same timing
-    problem: the shift is gone by the time anything is announced."""
+    """**The distance is written; the narrowing is not, and it is a
+    different gap.** The old note blamed timing, which was wrong for
+    `f3746`'s reason -- `c.extend_move` lays a standing modifier and the
+    moved row reads it.
+
+    What this card prints and the others do not is "**one target** of the
+    power can shift up to 2 extra squares". `p2479` shifts every ally, and
+    a modifier laid against its ref is read once per target -- so this
+    lengthens the shift for all of them. Over-delivering rather than
+    inert, and named as its own symbol instead of sharing `EXTEND` with
+    the two rows above, which are now finished."""
+    c.extend_move("p2479", 2, on=c.me)
 
 
 @power("f3755", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
