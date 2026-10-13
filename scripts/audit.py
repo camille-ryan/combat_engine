@@ -199,6 +199,67 @@ KNOWN_SILENT = {
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",
     "i3207p1": "hands a shield's bonuses over; the board holds no shield",
+    # **Nineteen rows, and the same shape as `f1873` and the four above for
+    # the third time -- so the shape is worth naming rather than re-deriving.**
+    #
+    # Every one of these was a marked row with an empty body at the last
+    # full sweep, so it was *refused in play* and the baseline said nothing
+    # about it. The wave of verb families and the eight-agent fan-out wrote
+    # the clauses; writing them is what made these visible. Checked one by
+    # one against the old sweep in a worktree at `227e2b0`: 14 were `TODO`
+    # there and 5 fired, and none of the 19 was silent. So this is not a
+    # regression, it is the cost of finishing rows, pointed the right way.
+    #
+    # **What they have in common is the finding worth keeping.** The harness
+    # judges a row by five observables -- damage, a condition, movement, an
+    # effect, healing. These rows pay in currencies that are none of those:
+    # a surge pool, a power point, a weapon property, a weapon's range, an
+    # initiative slot, a granted row, a `Note`. So the audit's definition of
+    # "does something" has a blind spot that **widens every time a verb
+    # family lands that writes to a pool or to gear instead of announcing an
+    # event**, and three waves in a row have paid into it. That is an
+    # argument for teaching the harness those currencies, not for a longer
+    # list; filed so the list does not become the answer.
+    #
+    # Build-gated class-feature legs: `chargen` deals one build and each leg
+    # checks its own, so four of the five always decline, and the one that
+    # matches hands over a row -- which the log does not see either.
+    "cf:monk-f0s0": "declines unless the monk took its own tradition; one build is dealt",
+    "cf:monk-f0s1": "declines unless the monk took its own tradition; one build is dealt",
+    "cf:monk-f0s2": "declines unless the monk took its own tradition; one build is dealt",
+    "cf:monk-f0s3": "declines unless the monk took its own tradition; one build is dealt",
+    "cf:monk-f0s4": "declines unless the monk took its own tradition; one build is dealt",
+    # Pools. Both guards are deliberate and documented in the rows: a full
+    # pool must not be raised, and `f3769`'s check comes first precisely so
+    # a full pool does not cost a use of the row for nothing.
+    "f131": "raises the surge pool; a surge ceiling is not an observable and the board starts full",
+    "f3769": "trades a use for a power point; the board's pool starts at its maximum",
+    # Gear writes, which edit the per-character `replace(w)` copy rather
+    # than announcing anything.
+    "f3785": "writes a weapon property onto its own unarmed copy; not an event",
+    "i1101x1": "lengthens a weapon's range; a range write is not an event",
+    # Boards that cannot pose the condition the card names. Each row's own
+    # docstring says so, and `i1470p1`'s says the oil does nothing to an
+    # enemy without the sense -- the card being odd, not the row wrong.
+    "f3235": "needs a cursed enemy to fall with the pact leg's use already spent",
+    "i1470p1": "hides from blindsight; the board fields no enemy that has it",
+    "i744p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    "m1526a2": "resets an adjacent sprung trap; the board fields none",
+    "m6115a0": "lends its square to siblings of its own stock; the board fields it alone",
+    # Sustains. Both narrow to holds whose printed cost is a minor, and the
+    # harness fires each row on a fresh board, so nothing is being sustained.
+    "i1964p1": "sustains one of its own minor-cost holds; a fresh board sustains nothing",
+    "p14124": "sustains one of its own minor-cost holds; a fresh board sustains nothing",
+    # `c.restore_use` announces only a `Note`, which `f3235` documents.
+    "i2318p1": "gives back a sibling's use, which announces only a Note",
+    # The initiative order is not one of the five observables.
+    "m4448a4": "adds initiative slots; the order is not an observable",
+    # Deliberately empty, and its docstring predicts this exact line:
+    # "it will audit quiet, because there is nothing for a log to see".
+    # Nothing in the engine refuses a charge by movement mode, so the
+    # printed permission is already the rule. `m4005a4` and `m5625a0` are
+    # the precedent it names.
+    "m5303a0": "a printed permission the engine already allows; finished with an empty body",
     # Gives back the use of one named sibling row, and the harness fires
     # each row once on a fresh board -- so that sibling has never been
     # spent and there is nothing to give back. Driven by hand: with
