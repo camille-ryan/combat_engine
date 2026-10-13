@@ -565,6 +565,26 @@ class Cast:
         """Is this creature of that type? `c.is_kind("undead")`."""
         return word.lower() in self.kinds_of(on)
 
+    def living(self, on: int | None = None) -> bool:
+        """Is this a living creature? `query.living`, defaulting to the target.
+
+        Ten rows print it as a restriction and every one of them means "not
+        undead" -- so this is not a new type word, it is the read the tree
+        was already spelling by hand.
+
+        **Defaults to the target**, like almost everything here, because
+        every printed use is about who the power lands on: "one living
+        creature", "a bloodied, living enemy". Pass `on=c.me` for the rare
+        row asking about its own caster.
+
+        The two races printing "both living and undead" are why this is a
+        function rather than `not c.is_kind("undead")` -- see
+        `query.living`.
+        """
+        from .query import living
+
+        return living(self.world, self._who(on))
+
     def is_minion(self, on: int | None = None) -> bool:
         """Is this creature a minion? What "a nonminion enemy" asks.
 

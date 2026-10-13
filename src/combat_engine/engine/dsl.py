@@ -393,18 +393,27 @@ class Target:
     #: this set accepts either word, which would take an undead humanoid and a
     #: living beast -- both of which such a card refuses. Those rows stay marked.
     #:
-    #: **And a positive word matches no player character.** `kinds_of` is empty
-    #: for one: a character has no stat block, and its race is not on the board
-    #: at all -- `chargen` reads `race.speed` and `race.size` and stores neither
-    #: the race nor its words. So `kinds={"humanoid"}` aimed at a party yields an
-    #: empty pool and the row is never offered. Measured on a live board: every
-    #: character answers `[]` where every monster answers four or more words.
-    #: Safe aimed at monsters, which is what the ally rows do; for a row a
-    #: monster aims at the party, only `kinds_without` behaves.
+    #: **A positive word reaches a player character now**, which it did not
+    #: until #542. `kinds_of` was empty for one -- a character has no stat
+    #: block and its race was not on the board at all -- so `kinds={
+    #: "humanoid"}` aimed at a party yielded an empty pool and the row was
+    #: never offered. Every character carries `natural` and `humanoid` by
+    #: default, so the asymmetry this note used to warn about is gone and a
+    #: positive word is as safe aimed at the party as at a monster.
     kinds: frozenset[str] = frozenset()
     #: The negative: "nonplant creatures in the burst", "not elemental". Five of
     #: the thirty rows print it, so it is not an afterthought.
     kinds_without: frozenset[str] = frozenset()
+    #: **"One living creature", which is not a set operation at all.** Seven
+    #: rows print it and every one of them spelled it `kinds_without={
+    #: "undead"}` with the remainder carried as a marker, because #411 found
+    #: the exact test and no any-of negative can say it: *not undead, and
+    #: not construct unless it carries living*. Twenty-five stat blocks
+    #: carry both `living` and `construct` and their cards call them living,
+    #: while a construct with neither word is not -- so the loose negative
+    #: admits a non-living construct and the tight one refuses the
+    #: twenty-five. `query.living` is the one `if` that says it.
+    living: bool = False
     #: "One creature taking ongoing damage", with no type named. One row.
     ongoing: bool = False
     #: "One creature taking ongoing **poison** damage". Seven of the eight rows
@@ -1878,6 +1887,7 @@ def candidates(
         or aim.can_act is not None
         or aim.kinds
         or aim.kinds_without
+        or aim.living
         or aim.ongoing
         or aim.ongoing_types
         or aim.bloodied is not None
@@ -2221,6 +2231,11 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         if aim.kinds and not (words & aim.kinds):
             return False
         if words & aim.kinds_without:
+            return False
+    if aim.living:
+        from .query import living
+
+        if not living(world, target):
             return False
     if aim.ongoing or aim.ongoing_types:
         from .query import taking_ongoing

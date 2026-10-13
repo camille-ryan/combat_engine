@@ -212,9 +212,13 @@ def _origin(
 #: so a creature holding both words reads as neither -- and neither page
 #: can be written any other way until one reader settles it.
 _BOTH = (
-    "Both words are written. The living half is dropped: no row asks "
-    "for it directly, they all spell it as not being undead, so a "
-    "creature that is both reads as neither."
+    "Both words are written, and both are read now. `query.living` is "
+    "spelled so that the word wins where it is present -- its absence "
+    "only argues when `undead` is there -- which is exactly this page's "
+    "case and the reason that function exists rather than the plain "
+    "`not c.is_kind(\"undead\")` every row used to write by hand. The "
+    "living half was dropped while nothing read it; #542 gave the party "
+    "type words and ten rows then needed the reader."
 )
 
 
@@ -1165,7 +1169,7 @@ def rt_r46_t1(c: Cast) -> None:
 _inert("rt:r47-t1",
        "Counting as a second race for prerequisites. `Character.race` "
        "holds one ref and `chargen.meets` reads that one.")
-_origin("r47", "undead", "living", dropped=("query.living()",), why=_BOTH)
+_origin("r47", "undead", "living", why=_BOTH)
 
 
 @power("rt:r47-t3", level=0, cls="", usage=AT_WILL,
@@ -1293,7 +1297,7 @@ _inert("rt:r53-t1", "A Bluff bonus for passing as something.")
 _inert("rt:r53-t5",
        "Trading a class utility for a racial one, made when the "
        "character is built.")
-_origin("r53", "undead", "living", dropped=("query.living()",), why=_BOTH)
+_origin("r53", "undead", "living", why=_BOTH)
 
 
 @power("rt:r53-t0", level=0, cls="", usage=AT_WILL,

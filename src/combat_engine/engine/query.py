@@ -541,6 +541,53 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     )
 
 
+def living(world: World, eid: int) -> bool:
+    """Is this a living creature? Ten rows print the word as a restriction.
+
+    **"Living" is not a type word that anything writes down.** Every card
+    meaning it is drawing the line against the undead, and every row in the
+    tree spells it by hand as `not c.is_kind("undead")` -- so this is that
+    read, named once, rather than a new word for anybody to lay.
+
+    The clause it answers is a *target* restriction nine times out of ten --
+    "one living creature", "a bloodied, living enemy", "living creatures in
+    the burst" -- which is why it belongs here next to `kinds_of` and not on
+    `Cast`: `dsl.candidates` has to ask it to narrow the pool, and a row that
+    asks in its body has already been offered against creatures it will then
+    decline.
+
+    **The both-words case is the whole reason this needs a function.** Two
+    races print "you are both living and undead", so they carry *both*
+    words, and the plain reading -- undead means not living -- makes them
+    neither. `racial._BOTH` records that and both rows dropped their living
+    half for it. So `living` is spelled the other way round: the word wins
+    where it is present, and its absence only matters when `undead` is
+    there to argue with.
+
+    **Constructs are the half a negative set cannot say**, and #411 wrote
+    the exact test down before anything could implement it: *"not undead,
+    and not construct unless it carries living"*. Twenty-five stat blocks
+    carry **both** `living` and `construct` and the cards call them living,
+    while a construct with neither word is not -- so `kinds_without={
+    "undead"}` admits a non-living construct and `kinds_without={"undead",
+    "construct"}` refuses the twenty-five. Seven rows have carried that
+    exception as a marker. It is one `if` here, and it was never a field on
+    `Target` nor anything `chargen` could store.
+
+    So the word wins where present, and absence is only read against the
+    two words that argue with it.
+
+    Before #542 a player character carried no type words at all, so this
+    would have answered True for the party by accident rather than on
+    purpose -- which is a different thing and would have broken the moment
+    anything undead joined it.
+    """
+    words = kinds_of(world, eid)
+    if "living" in words:
+        return True
+    return "undead" not in words and "construct" not in words
+
+
 def taking_ongoing(
     world: World, eid: int, types: frozenset[DamageType] = frozenset()
 ) -> bool:

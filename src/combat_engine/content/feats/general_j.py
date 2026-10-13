@@ -1415,20 +1415,23 @@ def f1641(c: Cast) -> None:
 
 
 @power("f1642", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.living()",))
+       reach=PERSONAL, target=SELF)
 def f1642(c: Cast) -> None:
     """**Re-aimed, and written.** The marker said `c.counts_as(kind=)`
     and that verb arrived: `c.set_origin` writes a type word onto a
     creature and `instead_of` takes one off, which is the only thing
-    that can. `rt:r47-t2` writes both `undead` and `living` onto
+    that can. `rt:r47-origin` writes both `undead` and `living` onto
     this race; this feat takes the second back.
 
     The eating, drinking and breathing half is not a fight.
 
-    Dropped, and it is the clause `rt:r47-t2` drops for the same
-    reason: no row in the tree asks whether a creature is living. They
-    all spell it as the absence of `undead`, so taking the word off
-    changes no answer until one reader settles it."""
+    **Finished: one reader settled it.** The clause was dropped because
+    no row asked whether a creature was living -- they all spelled it as
+    the absence of `undead`, so taking the word off changed no answer.
+    `query.living` is that reader, and it is written so the word wins
+    where present, which is the only spelling that keeps this race both
+    things at once. Taking `living` off now does what the card says: the
+    character stops answering the ten rows that restrict to it."""
     c.set_origin(instead_of="living", until=When.ENCOUNTER)
 
 

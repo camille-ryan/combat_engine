@@ -5325,6 +5325,74 @@ def creature_kinds(out: Result) -> None:
              f" passing on the board ({sorted(none)})")
 
 
+def living_targets(out: Result) -> None:
+    """"One living creature" is not a set operation, and #411 said so first.
+
+    Seven rows print the restriction. Every one of them spelled it
+    `kinds_without={"undead"}` and carried the remainder as a marker,
+    because the exact test cannot be written as an any-of negative:
+
+        not undead, and not construct unless it carries living
+
+    Twenty-five stat blocks carry **both** `living` and `construct` and
+    their cards call them living, while a construct carrying neither word
+    is not living at all. So the loose negative admits a non-living
+    construct and the tight one refuses the twenty-five. `query.living` is
+    the one `if` that says it, and `Target(living=True)` is the header
+    saying it -- which matters because a target restriction has to narrow
+    the **pool**, or the row is offered against creatures it then declines.
+
+    The marker history is the reusable part: `Target.living` was right,
+    went to `chargen.kind_words()` when a character turned out to carry no
+    type words at all, and comes back now that #542 supplies them. Both
+    re-points were correct when made. The symbol that finally closed it is
+    the one it started on.
+
+    Four cases, and the third is the one no previous spelling could pass.
+    """
+    from combat_engine import story
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine import query
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import Target, _stands_right
+    from combat_engine.engine.durations import When
+
+    fielded = story.field_encounter(seed=7, level=3)
+    world = fielded.world
+    party = [e for e in sorted(world.entities) if not query.stat_block(world, e)]
+    caster = next(e for e in sorted(world.entities) if query.stat_block(world, e))
+    aim = Target("enemy", 1, label="one living creature", living=True)
+
+    def admits(eid: int) -> bool:
+        return _stands_right(world, caster, aim, eid, "drivers:living")
+
+    out.that(all(admits(p) for p in party),
+             "an ordinary character is a living creature, which it could not"
+             " be before #542 gave it any type words at all")
+
+    def word(eid: int, *words: str) -> None:
+        for w in words:
+            Cast(world=world, me=eid, ref="drivers:living").set_origin(
+                w, until=When.ENCOUNTER)
+
+    word(party[0], "undead")
+    out.that(not admits(party[0]),
+             "an undead creature is refused, which is the half a plain"
+             " kinds_without={'undead'} already got right")
+
+    word(party[1], "construct")
+    out.that(not admits(party[1]),
+             "a construct carrying no living word is ALSO refused -- the half"
+             " no any-of negative could say, and the reason seven rows"
+             " carried a marker (#411)")
+
+    word(party[2], "construct", "living")
+    out.that(admits(party[2]),
+             "while a construct that DOES carry living is admitted, which is"
+             " the 25 stat blocks a tight kinds_without={'undead',"
+             " 'construct'} would have wrongly refused")
+
+
 DRIVERS = {
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
@@ -5333,6 +5401,8 @@ DRIVERS = {
     "suspension": (suspension, "a trait switched off by a hit, and back on after"),
     "sure_footed": (sure_footed, "difficult terrain ignored when shifting, and only then"),
     "reentry": (reentry, "a watcher is not re-entered by an event it caused"),
+    "living_targets": (living_targets,
+                       "one living creature: not undead, and not construct unless living"),
     "creature_kinds": (creature_kinds,
                        "every character is a natural humanoid; an origin replaces it"),
     "once_spent": (once_spent,

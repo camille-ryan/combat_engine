@@ -4794,40 +4794,36 @@ def m939a0(c: Cast) -> None:
         "enemy", 1,
         label="immobilized living creature only",
         conditions=frozenset({Condition.IMMOBILIZED}),
-        # "Living" is not a negative set. Excluding `construct` as well
-        # refuses the 25 blocks that carry *both* `living` and `construct`,
-        # which the card calls living; excluding only `undead` admits a
-        # non-living construct. The exact test is "not undead, and not
-        # construct unless it carries living", which no any-of negative can
-        # say. This is the faithful half -- what the body asked before the
-        # conversion -- and the exception is marked. #411.
-        kinds_without=frozenset({"undead"}),
+        # `living=` is the exact test #411 wrote down and nothing could
+        # say: not undead, and not construct unless it carries living.
+        # `kinds_without={"undead"}` stood here as the faithful half,
+        # with the construct exception carried as a marker.
+        living=True,
     ),
     attack=Attack(vs=FORT, printed=15),
     #: Flat 4, no dice: the empty string is how `Damage` says that. `"0"`
     #: reaches `rng.roll` and raises -- found by driving this row.
     damage=Damage("", 4),
-    dropped=("chargen.kind_words()",),
 )
 def m939a1(c: Cast) -> None:
     """The whole target line is the header's now: `conditions=` for the
     immobilisation and `kinds_without=` for "living", so the redirect that
     asked both by hand came out.
 
-    **Re-pointed off `Target.living`, which named a field and not the
-    blocker.** `Target.kinds` and `kinds_without` exist and are filtered
-    on, and the reason they cannot serve this row is written at the field
-    itself: `query.kinds_of` is **empty for a player character**, so a
-    positive word aimed at the party yields an empty pool and the row is
-    never offered. Measured again here -- a built fighter, a fighter with
-    `race=r1` and a wizard all answer `[]`, where every monster answers
-    three or four words. `chargen` reads `race.speed` and `race.size` and
-    stores neither the race nor its words.
+    **`Target.living` was the right symbol after all**, and the two
+    re-points away from it were each correct at the time. It first went to
+    `chargen.kind_words()` because `query.kinds_of` was empty for a player
+    character, so a positive word aimed at the party yielded an empty pool
+    -- true then, fixed by #542, which gives every character `natural` and
+    `humanoid`. What remained was #411's exception, and that was never a
+    field on `Target` nor anything `chargen` could store: it is one `if` in
+    `query.living`.
 
-    So this is `chargen.kind_words()`: a character carrying the type words
-    its race prints. "Living" is derivable once they are there -- it is
-    the absence of `undead` and `construct` -- and is not derivable at all
-    while the party has no words to read.
+    Both halves landed. #542 gives every character `natural` and
+    `humanoid`, so there are words to read; `query.living` is the test
+    itself, and it is the word-wins-where-present spelling rather than a
+    plain absence, because two races print "both living and undead" and
+    twenty-five stat blocks print both living and construct.
     """
     if c.strike():
         c.hit()
