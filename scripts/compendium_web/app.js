@@ -9,6 +9,58 @@
 
 const el = (id) => document.getElementById(id);
 
+// A mark per category, drawn rather than set in a font -- the in-card symbols
+// were characters first and the die faces came out as empty boxes at the size
+// they render. The viewer this copies uses a licensed pixel-art icon set; these
+// are plain geometry, and they only have to make a tab findable at a glance.
+const CAT_ICON = {
+  Monster: '<path d="M2 13 5 4l3 9 3-9 3 9Z"/>',
+  Power: '<path d="M9.5 1 3 9h4l-.5 6L13 7H8.5Z"/>',
+  Item: '<path d="M8 1.8 14.2 5v6L8 14.2 1.8 11V5Z"/>',
+  Feat: '<path d="M8 1.3 9.95 6.2 15.2 6.5 11.1 9.8 12.5 14.9 8 12.1 3.5 14.9 4.9 9.8.8 6.5 6.05 6.2Z"/>',
+  Race: '<circle cx="8" cy="4.2" r="2.7"/><path d="M2.8 14.5c0-3.3 2.3-5.3 5.2-5.3s5.2 2 5.2 5.3Z"/>',
+  Class: '<path d="M8 1.4 14 3.8v4.6c0 3.3-2.7 5.5-6 6.2-3.3-.7-6-2.9-6-6.2V3.8Z"/>',
+  Trap: '<path d="M1.5 2h13l-2.2 4-2.2-2.6L8 6 6 3.4 3.7 6Zm0 12h13l-2.2-4-2.2 2.6L8 10 6 12.6 3.7 10Z"/>',
+  Terrain: '<path d="M1 14 5.5 5.5 8.6 10.5 11 7 15 14Z"/>',
+  Disease:
+    '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+    '<circle cx="6" cy="6.4" r="1.2"/><circle cx="10" cy="7.4" r="1"/><circle cx="7.6" cy="10.4" r="1.1"/>',
+  Associate:
+    '<circle cx="5.6" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+    '<circle cx="10.4" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>',
+  Companion:
+    '<ellipse cx="8" cy="10.6" rx="4" ry="3.2"/><circle cx="3.6" cy="6.2" r="1.7"/>' +
+    '<circle cx="6.6" cy="4" r="1.8"/><circle cx="9.9" cy="4" r="1.8"/><circle cx="12.6" cy="6.2" r="1.7"/>',
+  Background:
+    '<path d="M3 2.6h10v10.8H3Z" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+    '<path d="M5.2 5.6h5.6M5.2 8h5.6M5.2 10.4h3.4" fill="none" stroke="currentColor" stroke-width="1.3"/>',
+  Deity:
+    '<circle cx="8" cy="8" r="3.2"/><path d="M8 .8v2.4M8 12.8v2.4M.8 8h2.4M12.8 8h2.4' +
+    'M2.9 2.9 4.6 4.6M11.4 11.4l1.7 1.7M13.1 2.9 11.4 4.6M4.6 11.4 2.9 13.1" ' +
+    'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  EpicDestiny: '<path d="M1.8 13 2.8 4l3.4 3L8 2.6 9.8 7l3.4-3 1 9Z"/>',
+  Glossary:
+    '<path d="M2.5 2.6h4.6c1 0 1.6.5 1.6 1.3v9.5c0-.7-.6-1.1-1.6-1.1H2.5Z"/>' +
+    '<path d="M13.5 2.6H8.9c-1 0-1.6.5-1.6 1.3v9.5c0-.7.6-1.1 1.6-1.1h4.6Z" ' +
+    'fill="none" stroke="currentColor" stroke-width="1.4"/>',
+  ParagonPath: '<path d="M8 1.5 13.5 7h-3.3v7.5H5.8V7H2.5Z"/>',
+  Poison: '<path d="M8 1.5c3 3.6 4.6 6 4.6 8A4.6 4.6 0 0 1 3.4 9.5c0-2 1.6-4.4 4.6-8Z"/>',
+  Ritual:
+    '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+    '<path d="M8 3.2 11.8 12 3.2 6.6h9.6L4.2 12Z" fill="none" stroke="currentColor" stroke-width="1.3"/>',
+  Skill:
+    '<path d="M2.5 8.6 6.3 12.4 13.6 4" fill="none" stroke="currentColor" ' +
+    'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  Theme:
+    '<path d="M2 2h6.4l5.6 5.6-6.4 6.4L2 8.4Z" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+    '<circle cx="5.4" cy="5.4" r="1.3"/>',
+};
+
+function catIcon(name) {
+  const body = CAT_ICON[name] || '<circle cx="8" cy="8" r="4"/>';
+  return `<svg class="cat-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${body}</svg>`;
+}
+
 const state = {
   cats: [],
   cat: "",
@@ -19,6 +71,7 @@ const state = {
   sort: "Name",
   dir: "asc",
   page: 1,
+  snippets: false,
   // The last result set, so the card's prev/next walk the search you ran
   // rather than the whole category.
   last: null,
@@ -60,6 +113,7 @@ function readURL() {
   state.sort = q.get("sort") || "Name";
   state.dir = q.get("dir") === "desc" ? "desc" : "asc";
   state.page = Math.max(1, parseInt(q.get("page") || "1", 10) || 1);
+  state.snippets = q.get("snip") === "1";
   state.filters = {};
   for (const [key, value] of q) {
     if (key.startsWith("col.") && value) state.filters[key.slice(4)] = value;
@@ -76,6 +130,7 @@ function listQuery() {
   if (state.sort !== "Name") q.set("sort", state.sort);
   if (state.dir !== "asc") q.set("dir", state.dir);
   if (state.page !== 1) q.set("page", String(state.page));
+  if (state.snippets) q.set("snip", "1");
   for (const [name, expr] of Object.entries(state.filters)) {
     if (expr) q.set(`col.${name}`, expr);
   }
@@ -114,7 +169,9 @@ function renderCats() {
     button.dataset.cat = cat.name;
     button.setAttribute("role", "tab");
     button.setAttribute("aria-selected", String(cat.name === state.cat));
-    button.innerHTML = `${esc(cat.name)}<var>${cat.count.toLocaleString()}</var>`;
+    button.innerHTML =
+      `${catIcon(cat.name)}<b>${esc(cat.name)}</b>` +
+      `<var data-cat="${esc(cat.name)}">${cat.count.toLocaleString()}</var>`;
     button.addEventListener("click", () => {
       if (state.cat === cat.name) return;
       state.cat = cat.name;
@@ -198,11 +255,26 @@ function markSort() {
   }
 }
 
+// A marker with no value is the marker minus the only thing anyone wants from
+// it. `dropped=` alone says a row is unfinished; `dropped= c.shift(path=)` says
+// what it is unfinished *on*. The first value shows, the rest are a +N with the
+// whole list on hover.
+function markerChips(markers) {
+  return Object.entries(markers || {}).map(([name, values]) => {
+    const all = values.join(", ");
+    const more = values.length > 1 ? ` +${values.length - 1}` : "";
+    const shown = values.length ? `${esc(values[0])}${more}` : "";
+    return (
+      `<span class="marker" title="${esc(`${name}= ${all}`)}">` +
+      `<b>${esc(name)}=</b> ${shown}</span>`
+    );
+  });
+}
+
 function repoCell(repo) {
   if (!repo || repo.state === "absent") return "";
   if (repo.state === "unbuilt") return '<span class="unbuilt">(not built)</span>';
-  const markers = (repo.markers || []).map((m) => `<span class="marker">${esc(m)}=</span>`);
-  return [`<span class="ref">${esc(repo.ref)}</span>`, ...markers].join(" ");
+  return [`<span class="ref">${esc(repo.ref)}</span>`, ...markerChips(repo.markers)].join(" ");
 }
 
 function renderBody(data) {
@@ -225,7 +297,10 @@ function renderBody(data) {
     tr.addEventListener("click", () => open(data.category, row.id));
     body.appendChild(tr);
 
-    if (row.snippets.length) {
+    // Off by default: a line of card prose under every row is clutter in a
+    // list you are scanning. The checkbox brings it back when the question is
+    // "what in the text matched".
+    if (state.snippets && row.snippets.length) {
       const snip = document.createElement("tr");
       snip.className = "snip";
       // The snippets arrive escaped, with the match already wrapped in a
@@ -249,6 +324,50 @@ function renderCaption(data) {
   el("list_next").disabled = data.page >= data.pages;
 }
 
+// Every tab's count, for the pattern now in the box. Without it a tab reads
+// 9,409 whatever you typed and the only way to find out whether the pattern
+// has anything in that category is to click it.
+let countsToken = 0;
+let countsKey = "";
+
+function catCounts() {
+  const q = new URLSearchParams();
+  if (state.q) q.set("q", state.q);
+  q.set("in", [...state.targets].join(","));
+  if (!state.fold) q.set("fold", "0");
+  return q;
+}
+
+function setCount(node, n) {
+  node.textContent = n === undefined || n === null ? "–" : n.toLocaleString();
+  node.classList.toggle("none", n === 0);
+  node.classList.remove("pending");
+}
+
+async function updateCounts(matchedHere) {
+  const vars = [...el("cats").querySelectorAll("var")];
+  const here = vars.find((v) => v.dataset.cat === state.cat);
+  // The open tab always takes the search's own number, so it cannot disagree
+  // with the caption under it when a column filter is narrowing the rows.
+  if (here) setCount(here, matchedHere);
+
+  const key = catCounts().toString();
+  if (key === countsKey) return; // same pattern, different tab: nothing moved
+  const mine = ++countsToken;
+  for (const v of vars) if (v !== here) v.classList.add("pending");
+  try {
+    const data = await getJSON(`/api/counts?${key}`);
+    if (mine !== countsToken) return; // a later search overtook this one
+    countsKey = key;
+    for (const v of vars) {
+      if (v.dataset.cat === state.cat) setCount(v, matchedHere);
+      else setCount(v, data.counts[v.dataset.cat]);
+    }
+  } catch {
+    for (const v of vars) v.classList.remove("pending");
+  }
+}
+
 async function search() {
   markCats();
   try {
@@ -260,6 +379,7 @@ async function search() {
     markSort();
     renderBody(data);
     renderCaption(data);
+    updateCounts(data.matched);
   } catch (wrong) {
     // A pattern that does not compile must read as a typo. The rows stay as
     // they were -- blanking them would be the one lie this tool exists to
@@ -336,6 +456,7 @@ async function route() {
   // Put the controls back in step with the URL that was just read.
   el("q").value = state.q;
   el("fold").checked = state.fold;
+  el("snippets").checked = state.snippets;
   for (const button of el("targets").querySelectorAll("button.pressable")) {
     button.setAttribute("aria-pressed", String(state.targets.has(button.dataset.target)));
   }
@@ -399,6 +520,12 @@ function wire() {
 
   el("highlight").addEventListener("change", () => {
     document.body.classList.toggle("no_highlight", !el("highlight").checked);
+  });
+
+  el("snippets").addEventListener("change", () => {
+    state.snippets = el("snippets").checked;
+    go(listQuery(), false);
+    if (state.last) renderBody(state.last); // already fetched; no round trip
   });
 
   el("list_prev").addEventListener("click", () => flip(-1));

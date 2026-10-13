@@ -228,8 +228,14 @@ def refs(cat: str) -> dict[int, str]:
 
 
 @functools.lru_cache(maxsize=1)
-def markers() -> dict[str, dict[int, tuple[str, ...]]]:
-    """`{category: {source ID: markers present}}`, derived from the content rows.
+def markers() -> dict[str, dict[int, dict[str, tuple[str, ...]]]]:
+    """`{category: {source ID: {marker: what it says}}}`, from the content rows.
+
+    **The values come too, not just the names.** A bare `dropped=` on the page
+    is the marker without the one thing a reader wants from it -- which symbol
+    the row is waiting on. `todo`, `dropped` and `narrative` carry a tuple of
+    symbol names; `defect` and `obsolete` carry a sentence. Both are normalised
+    to a tuple here so the page has one shape to render.
 
     **The import has to be `content.loader`.** `from combat_engine.engine.dsl
     import REGISTRY` on its own yields *three* rows -- importing the content
@@ -244,18 +250,28 @@ def markers() -> dict[str, dict[int, tuple[str, ...]]]:
     from combat_engine.engine.dsl import REGISTRY
 
     patterns = [(c.name, re.compile(c.marked)) for c in CATEGORIES if c.marked]
-    found: dict[str, dict[int, set[str]]] = {name: {} for name, _ in patterns}
+    found: dict[str, dict[int, dict[str, set[str]]]] = {name: {} for name, _ in patterns}
     for ref, row in REGISTRY.items():
-        present = tuple(m for m in MARKERS if getattr(row, m, None))
-        if not present:
+        carried: dict[str, tuple[str, ...]] = {}
+        for marker in MARKERS:
+            value = getattr(row, marker, None)
+            if not value:
+                continue
+            carried[marker] = (value,) if isinstance(value, str) else tuple(value)
+        if not carried:
             continue
         for name, pattern in patterns:
             hit = pattern.match(ref)
             if hit:
-                found[name].setdefault(int(hit.group(1)), set()).update(present)
+                at = found[name].setdefault(int(hit.group(1)), {})
+                for marker, values in carried.items():
+                    at.setdefault(marker, set()).update(values)
                 break
     return {
-        name: {ident: tuple(m for m in MARKERS if m in got) for ident, got in table.items()}
+        name: {
+            ident: {m: tuple(sorted(got[m])) for m in MARKERS if m in got}
+            for ident, got in table.items()
+        }
         for name, table in found.items()
     }
 
@@ -267,7 +283,7 @@ def repo(cat: str, ident: int) -> dict[str, Any]:
     ref = refs(cat).get(ident)
     if not ref:
         return {"state": "unbuilt"}
-    return {"state": "built", "ref": ref, "markers": markers().get(cat, {}).get(ident, ())}
+    return {"state": "built", "ref": ref, "markers": markers().get(cat, {}).get(ident, {})}
 
 
 def plain(row: sqlite3.Row) -> str:
@@ -389,6 +405,41 @@ def search(
     }
 
 
+def counts(pattern: str, *, targets: set[str], fold: bool) -> dict[str, int]:
+    """How many rows in **every** category match, so the tabs can say so.
+
+    Without this a tab reads 9,409 whatever you typed, and the only way to find
+    out whether the pattern has anything in it is to click. Measured at 0.23s
+    for the whole corpus -- all 26,601 rows, all 20 categories -- so it is a
+    second request fired beside the search rather than anything cached.
+
+    Column filters are deliberately **not** applied: they are per-column, and
+    the columns differ by category, so there is nothing to apply across tabs.
+    The page overwrites the open tab's number with that search's own `matched`,
+    which keeps the one tab you can check from disagreeing with its caption.
+    """
+    main = _compile(pattern, fold)
+    if main is None:
+        return {c.name: total(c.name) for c in CATEGORIES}
+
+    needs_text = "text" in targets or "html" in targets
+    out: dict[str, int] = {}
+    for cat in CATEGORIES:
+        select = "SELECT Name" + (", Txt, PlainTxt" if needs_text else "") + f' FROM "{cat.name}"'
+        found = 0
+        for row in source().execute(select):
+            # Short-circuits left to right, which is also what keeps `plain(row)`
+            # off a row whose text columns were never selected.
+            if (
+                ("name" in targets and main.search(row["Name"] or ""))
+                or ("text" in targets and main.search(plain(row)))
+                or ("html" in targets and main.search(row["Txt"] or ""))
+            ):
+                found += 1
+        out[cat.name] = found
+    return out
+
+
 def _sortable(value: Any) -> tuple[int, float, str]:
     """Sort numbers as numbers, blanks last, everything else as folded text.
 
@@ -405,38 +456,99 @@ def _sortable(value: Any) -> tuple[int, float, str]:
 
 # ------- one card
 
-#: Every image the source references, as a glyph -- **all seventeen**, counted
-#: over all 26,601 rows. A 40-row-per-category sample found nine and missed the
-#: `\da.gif` recharge faces entirely, which is most of what a monster's usage
-#: line is about.
-#:
-#: The numbered ones are die faces: `etl/monster.py:577-581` reads
-#: `/symbol/(\d)` as "recharge when the die shows that", so a die face is what
-#: they are and a die face is what they get.
-#:
-#: The `title` keeps the filename. A glyph that reads wrong can then be traced
-#: to what it stood for, rather than quietly meaning something else -- which
-#: matters because these are the only reading of attack type and recharge a card
-#: has, and guessing one wrong would be a silently false card.
-GLYPHS = {
-    "images/bullet.gif": "✦",
-    "images/symbol/x.gif": "✖",
-    "images/symbol/1a.gif": "⚀",
-    "images/symbol/2a.gif": "⚁",
-    "images/symbol/3a.gif": "⚂",
-    "images/symbol/4a.gif": "⚃",
-    "images/symbol/5a.gif": "⚄",
-    "images/symbol/6a.gif": "⚅",
-    "images/symbol/S2.gif": "⚔",
-    "images/symbol/S3.gif": "➹",
-    "images/symbol/Z1.gif": "◣",
-    "images/symbol/Z1a.gif": "◣",
-    "images/symbol/Z2a.gif": "◎",
-    "images/symbol/Z3a.gif": "◈",
-    "images/symbol/Z4.gif": "◆",
-    "images/symbol/Z4a.gif": "◆",
-    "images/symbol/aura.png": "◉",
+#: Pip positions on a die face, on the 16x16 grid the icons are drawn in.
+_PIPS: dict[int, tuple[tuple[float, float], ...]] = {
+    1: ((8, 8),),
+    2: ((5, 5), (11, 11)),
+    3: ((5, 5), (8, 8), (11, 11)),
+    4: ((5, 5), (11, 5), (5, 11), (11, 11)),
+    5: ((5, 5), (11, 5), (8, 8), (5, 11), (11, 11)),
+    6: ((5, 4.5), (11, 4.5), (5, 8), (11, 8), (5, 11.5), (11, 11.5)),
 }
+
+
+def _die(face: int) -> str:
+    pips = "".join(f'<circle cx="{x}" cy="{y}" r="1.35"/>' for x, y in _PIPS[face])
+    return (
+        '<rect x="1.4" y="1.4" width="13.2" height="13.2" rx="3" fill="none"'
+        ' stroke="currentColor" stroke-width="1.5"/>' + pips
+    )
+
+
+#: Every image the source references, as **drawn** artwork -- all seventeen,
+#: counted over all 26,601 rows rather than sampled.
+#:
+#: **Inline SVG, not a character.** These were Unicode glyphs first, and at the
+#: size a card renders them that did not work: the six die faces came out about
+#: 12px wide and read as empty boxes, because the system sans has no dice and
+#: the fallback draws them tiny. A width probe said "present in some font",
+#: which is true and not the question. Drawing them removes the font from the
+#: decision entirely, and lets them be sized to be read.
+#:
+#: The numbered ones **are** dice: `etl/monster.py:577-581` reads
+#: `/symbol/(\d)` as "recharge when the die shows that", so they get real pips.
+#: That one is a fact.
+#:
+#: The rest are a **reading**, and the `<title>` keeps the filename so it stays
+#: a checkable one. The shapes follow the areas they mark -- a square for melee,
+#: an arrow for ranged, a quadrant for a blast, rings for a burst -- but nothing
+#: downstream depends on that being right, and if one is wrong the filename in
+#: the tooltip is what says so.
+GLYPHS = {
+    # A list bullet, and the separator that runs ahead of a keyword.
+    "images/bullet.gif": '<path d="M8 1.6 9.9 6.1 14.4 8 9.9 9.9 8 14.4 6.1 9.9 1.6 8 6.1 6.1Z"/>',
+    "images/symbol/x.gif": (
+        '<path d="M4 4 12 12M12 4 4 12" fill="none" stroke="currentColor"'
+        ' stroke-width="2.6" stroke-linecap="round"/>'
+    ),
+    "images/symbol/1a.gif": _die(1),
+    "images/symbol/2a.gif": _die(2),
+    "images/symbol/3a.gif": _die(3),
+    "images/symbol/4a.gif": _die(4),
+    "images/symbol/5a.gif": _die(5),
+    "images/symbol/6a.gif": _die(6),
+    # Melee: the one square you can reach.
+    "images/symbol/S2.gif": '<rect x="3.5" y="3.5" width="9" height="9" rx="1"/>',
+    # Ranged: an arrow.
+    "images/symbol/S3.gif": (
+        '<path d="M2.5 13.5 13 3M7.5 2.8h5.9v5.9" fill="none" stroke="currentColor"'
+        ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    ),
+    # Blast: a quadrant off one corner.
+    "images/symbol/Z1.gif": '<path d="M2 14V5l9 9Z"/>',
+    "images/symbol/Z1a.gif": '<path d="M2 14V5l9 9Z"/>',
+    # Close burst: a ring around where you stand.
+    "images/symbol/Z2a.gif": (
+        '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+        '<circle cx="8" cy="8" r="2.1"/>'
+    ),
+    # Area burst: rings somewhere else.
+    "images/symbol/Z3a.gif": (
+        '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+        '<circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+    ),
+    # Wall.
+    "images/symbol/Z4.gif": '<path d="M1.5 4h13v3.2h-13Zm0 4.8h13V12h-13Z"/>',
+    "images/symbol/Z4a.gif": '<path d="M1.5 4h13v3.2h-13Zm0 4.8h13V12h-13Z"/>',
+    # Aura: a ring that is not a hard edge.
+    "images/symbol/aura.png": (
+        '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"'
+        ' stroke-dasharray="2.2 1.8"/><circle cx="8" cy="8" r="2.1"/>'
+    ),
+}
+
+#: Anything not in `GLYPHS`. It has never been drawn -- the cleanup check goes
+#: red if a card produces one -- and it exists so a new image cannot vanish.
+UNKNOWN = '<circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+
+
+def icon(src: str) -> str:
+    body = GLYPHS.get(src, UNKNOWN)
+    known = "" if src in GLYPHS else " unknown"
+    return (
+        f'<svg class="sym{known}" viewBox="0 0 16 16" fill="currentColor" role="img">'
+        f"<title>{html.escape(src)}</title>{body}</svg>"
+    )
 
 _SCRIPT = re.compile(r"<script\b.*?</script>", re.S | re.I)
 _DROP = re.compile(r"<(?:link|meta)\b[^>]*>", re.I)
@@ -458,12 +570,7 @@ def clean(fragment: str) -> str:
     out = _SCRIPT.sub("", fragment)
     out = _DROP.sub("", out)
 
-    def image(hit: re.Match[str]) -> str:
-        src = hit.group(1)
-        glyph = GLYPHS.get(src, "▫")
-        return f'<span class="sym" title="{html.escape(src)}">{glyph}</span>'
-
-    out = _IMG.sub(image, out)
+    out = _IMG.sub(lambda hit: icon(hit.group(1)), out)
 
     def link(hit: re.Match[str]) -> str:
         attrs, label = hit.group(1), hit.group(2)
@@ -556,6 +663,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, catalogue())
             elif route == "/api/search":
                 self._json(200, self._search(query))
+            elif route == "/api/counts":
+                self._json(200, self._counts(query))
             elif route == "/api/entry":
                 self._json(200, self._entry(query))
             else:
@@ -586,6 +695,14 @@ class Handler(BaseHTTPRequestHandler):
             descending=query.get("dir", "asc") == "desc",
             page=int(query.get("page", "1") or 1),
         )
+
+    def _counts(self, query: dict[str, str]) -> dict[str, Any]:
+        targets = {t for t in query.get("in", "name,text").split(",") if t}
+        return {
+            "counts": counts(
+                query.get("q", ""), targets=targets, fold=query.get("fold", "1") != "0"
+            )
+        }
 
     def _entry(self, query: dict[str, str]) -> dict[str, Any]:
         cat = query.get("cat", "")

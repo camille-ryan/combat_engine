@@ -266,8 +266,9 @@ section[hidden] {
 }
 
 #cats button {
+  align-items: center;
   border: 1px outset #888;
-  display: block;
+  display: flex;
   float: left;
   font-size: 115%;
   height: 34px;
@@ -284,12 +285,40 @@ section[hidden] {
   font-weight: bold;
 }
 
+#cats button b {
+  font-weight: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-icon {
+  color: #7b2d26;
+  flex: 0 0 auto;
+  height: 1.15em;
+  margin-right: 0.6ex;
+  width: 1.15em;
+}
+
 #cats button var {
-  float: right;
   font-size: 10pt;
   font-style: normal;
   font-weight: normal;
+  margin-left: auto;
   padding-left: 1ex;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The count for a tab whose number has not come back yet. Never show a stale
+   number as though it were the new one. */
+#cats button var.pending {
+  opacity: 0.25;
+}
+
+/* Nothing in this category matches. Worth seeing without clicking -- it is the
+   whole reason the counts move with the search. */
+#cats button var.none {
+  opacity: 0.35;
 }
 
 @media (min-width: 1024px) {
@@ -421,10 +450,20 @@ section[hidden] {
 .marker {
   background: #fe8;
   border-radius: 0.5ex;
+  cursor: help;
+  display: inline-block;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 90%;
+  max-width: 22em;
+  overflow: hidden;
   padding: 0 0.4ex;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
   white-space: nowrap;
+}
+
+.marker b {
+  font-weight: bold;
 }
 
 .num {
@@ -718,15 +757,23 @@ section[hidden] {
   padding-top: 0.4em;
 }
 
-/* A glyph standing in for one of the nine images the source references. The
-   `title` holds the filename it replaced. */
+/* One of the seventeen source images, drawn rather than set in a font. Sized
+   generously on purpose: six of them are recharge die faces, and as characters
+   they came out 12px wide and read as empty boxes. The `<title>` inside the
+   svg holds the filename it replaced. */
 #card .sym {
   color: #7b2d26;
-  /* Not smaller than the body. Six of the seventeen are die faces, and a die
-     face is the only thing on the card saying when the power comes back. */
-  font-size: 115%;
-  line-height: 1;
-  padding-right: 0.3ex;
+  display: inline-block;
+  height: 1.05em;
+  margin-right: 0.3ex;
+  vertical-align: -0.17em;
+  width: 1.05em;
+}
+
+/* An image not in the map. The cleanup check goes red if one appears, so this
+   should never be seen -- it is red so that it is not missed if it is. */
+#card .sym.unknown {
+  color: #c00;
 }
 
 /* A link that pointed at a site that no longer answers. The words are kept and
