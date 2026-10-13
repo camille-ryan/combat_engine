@@ -218,6 +218,14 @@ def main() -> int:
         )
         faults += 1
 
+    for ref, where, why in _dangling_implementations():
+        print(
+            f"{ref}: implemented_in={where!r} but {why}"
+            f" -- the row is reported finished and never fired, so this"
+            f" pointer is the only thing holding it up. #553."
+        )
+        faults += 1
+
     for ref, pred, event, has in _dead_triggers():
         print(
             f"{ref}: `{pred}` reads a field {event} does not have"
@@ -1153,6 +1161,55 @@ PREDICATE_FIELDS = {
     "targets_me": ("target",),
     "hits_me": ("attacker", "target"),
 }
+
+
+def _dangling_implementations() -> list[tuple[str, str, str]]:
+    """A row saying `implemented_in="X"` where X does not carry its clause.
+
+    #550's convention is that a feat naming one power has its clause written
+    into that power, gated on `c.feat("<the feat>")`. `implemented_in=` is
+    how the feat says so, and `audit.py` trusts it: the row is reported
+    finished and **never fired**.
+
+    So the pointer is load-bearing, and the obvious way for it to rot is
+    silent -- somebody rewrites the power and drops the `c.feat` branch, and
+    the feat goes on claiming to be implemented by a row that no longer
+    mentions it. Nothing would fail: the feat is not fired, the power still
+    works, and `blocked.py` counts neither as owed.
+
+    That is the exact shape of #492 (two hand-kept lists, nothing
+    reconciles them) and #551 (a fixture with no freshness check), so this
+    marker shipped with the check rather than acquiring one later.
+
+    **Its own path set, deliberately.** `_asked_for()` returns content only
+    and is scoped that way for a good reason (#388), but a sibling check
+    inheriting it is #546 -- the unknown-context-key walk never runs over
+    `engine/` and there is a live fault there it cannot see. The pair here
+    is always content-to-content, so content is the right scope; it is
+    written explicitly so that nobody has to wonder which it got.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+
+    sources: dict[Path, str] = {}
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        sources[path] = path.read_text()
+
+    out = []
+    for ref, row in sorted(REGISTRY.items()):
+        hosts = getattr(row, "implemented_in", ()) or ()
+        asked = f'c.feat("{ref}")'
+        for where in hosts:
+            if where not in REGISTRY:
+                out.append((ref, where, "names a row that is not declared"))
+                continue
+            # Every named row's own source must ask for this feat. Checked
+            # per host rather than "any of them", or a feat naming four
+            # powers would pass on one and leave three clauses missing.
+            if not any(f'"{where}"' in t and asked in t for t in sources.values()):
+                out.append((ref, where,
+                            f"that row's source does not contain {asked}"))
+    return out
 
 
 def _dead_triggers() -> list[tuple[str, str, str, str]]:

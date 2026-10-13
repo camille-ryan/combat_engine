@@ -977,6 +977,35 @@ class Power:
     #: the corpus rate of 0.86% in Dragon and Dungeon magazine imports, so the
     #: defect is concentrated in the periodicals rather than scattered. #360.
     defect: str = ""
+    #: **This row's clause is written into another row's body**, naming that
+    #: row. The convention is #550: a feat that names one power has its
+    #: clause written into that power, gated on `c.feat("<this ref>")` and
+    #: laid with `label="<this ref>"` so the credit stays here.
+    #:
+    #: So the body is empty **and the row is finished**, which no other
+    #: marker could say. `todo=`/`dropped=` claim work is owed and name a
+    #: symbol that will never arrive; `obsolete=`, `declined=` and
+    #: `defect=` all refuse the row; `narrative=` and `out_of_combat=`
+    #: claim it has no combat meaning, when it has one laid elsewhere.
+    #:
+    #: **It must not refuse the row**, which is the whole subtlety. The
+    #: other five markers exclude a row from every chargen draw -- and a
+    #: feat that is never dealt is a feat `c.feat()` answers False for, so
+    #: the clause in the power would never fire and the migration would
+    #: silently undo itself. `usable` therefore says nothing about this
+    #: field.
+    #:
+    #: Reconciled by `lint.py`: **every** named row's source must actually
+    #: mention `c.feat("<this ref>")`. A pointer at a power that no longer
+    #: carries the clause is the obvious failure and would be silent, which
+    #: is the fault #492 and #551 are both open about. #553.
+    #:
+    #: **A tuple, because one feat normally names several powers.** The
+    #: first draft of this field took a single ref and was wrong for 28 of
+    #: the 32 rider-bearing feats -- they ride two, three or four powers
+    #: each, and the card is "you gain a benefit with any of the following
+    #: exploits you possess". Caught on first use rather than by review.
+    implemented_in: tuple[str, ...] = ()
     #: Base items this row lets a character carry, by weapon ref --
     #: `("w3607",)`. **Build-time data, never run.** "You gain
     #: proficiency with all hammers" cannot be a body: a `Cast` opens on a
@@ -1283,6 +1312,12 @@ _SYMBOL = re.compile(
 #: What a `narrative=` element may look like -- `skill:thievery`. See
 #: `Power.narrative` for why this is a closed vocabulary and not a symbol.
 _NARRATIVE = re.compile(r"skill:([a-z]+)")
+#: A row's own ref, for `implemented_in=`. The shapes the tree actually
+#: uses: a power, monster ability, item block, feat, class-feature leg or
+#: racial trait. Checked rather than taken on trust so that a pointer at a
+#: symbol or a sentence is refused where it is written, not discovered by
+#: `lint.py` later. #553.
+_REF = re.compile(r"(?:[pmif]\d+[a-z]?\d*[a-z]?\d*|cf:[\w-]+|rt:[\w:-]+)")
 
 #: How much docstring counts as a reason. `out_of_combat` asks for one by
 #: convention and gets one; `narrative=` is the easier field to reach for,
@@ -1328,6 +1363,7 @@ def power(
     obsolete: str = "",
     declined: str = "",
     defect: str = "",
+    implemented_in: Iterable[str] = (),
     proficiency: Iterable[str] = (),
     swap: Swap | None = None,
     augments: Iterable[Augment] = (),
@@ -1365,6 +1401,29 @@ def power(
             f"{ref}: defect cannot be combined with todo, dropped, obsolete, declined "
             f"or out_of_combat -- it means no symbol can finish this row"
         )
+    implemented_in = tuple(implemented_in)
+    if implemented_in:
+        # **Finished, with the clause in another row.** Every other marker
+        # says something incompatible: the two symbol lists promise a symbol
+        # that will never arrive, the three refusals take the row out of play
+        # *and out of every chargen draw* -- which would stop the feat being
+        # dealt and so stop `c.feat()` in the implementing row ever answering
+        # True -- and `narrative=`/`out_of_combat=` claim no combat meaning.
+        if todo or dropped or narrative or obsolete or declined or defect \
+                or out_of_combat:
+            raise ValueError(
+                f"{ref}: implemented_in cannot be combined with another marker "
+                f"-- it means this row is finished and its clause lives in "
+                f"{implemented_in!r}"
+            )
+        for host in implemented_in:
+            if not _REF.fullmatch(host.strip()):
+                raise ValueError(
+                    f"{ref}: implemented_in={host!r} is not a ref. Name the rows "
+                    f"whose bodies carry this one's clauses, so the pair reads "
+                    f"both ways and `lint.py` can check each clause is really "
+                    f"there."
+                )
 
     narrative = tuple(narrative)
     skills = []
@@ -1442,6 +1501,7 @@ def power(
             obsolete=obsolete,
             declined=declined,
             defect=defect,
+            implemented_in=implemented_in,
             proficiency=tuple(proficiency),
             swap=swap,
             augments=tuple(augments),

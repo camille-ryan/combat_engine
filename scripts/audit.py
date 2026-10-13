@@ -3622,6 +3622,12 @@ def main() -> int:
     inert: list[str] = []
     partial: list[tuple[str, tuple[str, ...], str]] = []
     retired: list[tuple[str, tuple[str, ...], str]] = []
+    #: Rows finished with their clause in another row's body (#553). Its own
+    #: bucket for the same reason `retired` is one: counted with the `todo`
+    #: rows it would read as waiting for something, and counted among the
+    #: firing rows it would claim to have done something here, which it did
+    #: not -- it was not fired.
+    implemented: list[tuple[str, tuple[str, ...], str]] = []
     #: Rows the selection actually reached, for the `# scope:` line below.
     reached = 0
     for ref in wanted:
@@ -3662,6 +3668,25 @@ def main() -> int:
             # moment some unrelated verb landed; counted done it would read as
             # playing. Its own bucket, like `obsolete=` above. #360.
             partial.append((ref, (p.defect,), "DEFECT"))
+            continue
+        if p.implemented_in:
+            # **Finished, with its clause in another row's body.** Firing it
+            # here lays nothing and would report SILENT -- and it is not
+            # silent, it is written somewhere else: the convention is that a
+            # feat naming one power has its clause in that power, gated on
+            # `c.feat()` (#550).
+            #
+            # Its own bucket rather than `KNOWN_SILENT`, which was the only
+            # alternative and the wrong one twice over: 54 hand-written
+            # excuses is the growth #545 argues against, and none of them
+            # would be a *board* limitation, so the list would stop reading
+            # as "what the board cannot pose".
+            #
+            # Not fired at all. The clause is exercised where it lives --
+            # firing the implementing row with the feat held is what proves
+            # it, and that is a `drivers.py` rule rather than this sweep.
+            # `lint.py` is what checks the pointer still resolves. #553.
+            implemented.append((ref, tuple(p.implemented_in), "ELSEWHERE"))
             continue
         if p.todo:
             # Declared unfinished. `usable` refuses it, so firing it here
@@ -3886,6 +3911,13 @@ def main() -> int:
         print(f"  {len(retired)} retired by a rules change, not fired: "
               + ", ".join(ref for ref, _, _ in retired[:6])
               + (" ..." if len(retired) > 6 else ""))
+    if implemented:
+        # Named with their implementing row, because the pair is the point:
+        # a reader of this line should be able to go and look at the clause.
+        print(f"  {len(implemented)} written into another row, not fired: "
+              + ", ".join(f"{ref}->{','.join(where)}"
+                          for ref, where, _ in implemented[:6])
+              + (" ..." if len(implemented) > 6 else ""))
     if broken or silent:
         if graded:
             print(f"  {len(broken)} raise, {len(fresh)} newly silent, "
