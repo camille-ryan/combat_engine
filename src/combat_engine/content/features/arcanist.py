@@ -843,3 +843,112 @@ def mage_apprentice_s0(c: Cast) -> None:
     for kind in ("push", "pull", "slide"):
         c.extend_every(kind, 2, on=c.me, until=When.ENCOUNTER,
                        when=arcane_enchantment)
+
+
+# --------------------------------------------------------------------------
+# The mage's top school tier, `cf:wizard-mage-f6sN`
+#
+# Three of the six. The other three want readers that do not exist: "forces
+# a creature to make an attack" as a moment (`f6s0`), concealment asked of a
+# third party as a *state* rather than as the penalty it confers (`f6s4`),
+# and turning an attack's area into a zone after the fact (`f6s5`).
+# --------------------------------------------------------------------------
+
+
+@power(
+    "cf:wizard-mage-f6s1",
+    level=10,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_master_s1(c: Cast) -> None:
+    """Resistance to whatever this power deals, ignored; immunity, not.
+
+    **`dtype=None` is the card rather than a shortcut.** The printed line is
+    "a target's resistance to any of *those* types of damage" -- the types
+    the power in hand deals -- and a power deals only its own types, so
+    "ignore all resistance on this power's damage" is the same set by
+    construction. Naming a type here would have been narrower than the card
+    on every power that deals two.
+
+    "You do not ignore any immunities" is `immunity=False`, which is the
+    default and is stated here because it is the half a reader would check.
+    """
+    def arcane_evocation(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power", "")))
+        if rolled is None:
+            return False
+        held = rolled.keywords or ()
+        return Keyword.ARCANE in held and Keyword.EVOCATION in held
+
+    c.ignore_resistance(
+        on=c.me, until=When.ENCOUNTER, immunity=False, when=arcane_evocation
+    )
+
+
+@power(
+    "cf:wizard-mage-f6s2",
+    level=10,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_master_s2(c: Cast) -> None:
+    """"Hit **or miss**", which is why this is two watchers and not a
+    trigger.
+
+    A row holds one declared `on=`, and this card fires on either outcome of
+    the same attack -- so the trait lays a watcher on each, the way
+    `cf:shaman-f0s1` lays one on `Healed`. Writing it as a `Hit` trigger
+    would have been the quiet half-row: every miss doing nothing, and the
+    audit no wiser because the hits work.
+
+    `to="team"` rather than a word for "anybody". The card says "the next
+    attack made against it" and `c.grants_advantage` recognises `me`, `ally`,
+    `team` or one creature -- an unknown word is an error there, by design.
+    `team` is the caster and the caster's allies, which is every attacker
+    this engine can pose against an enemy.
+    """
+    def opened(ev: Hit | Miss) -> None:
+        if ev.attacker != c.me:
+            return
+        rolled = get(str(getattr(ev, "power", "")))
+        held = rolled.keywords if rolled is not None else ()
+        if Keyword.ILLUSION not in (held or ()):
+            return
+        c.grants_advantage(on=ev.target, to="team", until=When.EONT, once=True)
+
+    for moment in (Hit, Miss):
+        c.watch(moment, opened, until=When.ENCOUNTER, on=c.me, label=c.ref)
+
+
+@power(
+    "cf:wizard-mage-f6s3",
+    level=10,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_master_s3(c: Cast) -> None:
+    """One damage type, named, on one school's attack powers."""
+    def arcane_necromancy(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power", "")))
+        if rolled is None:
+            return False
+        held = rolled.keywords or ()
+        return Keyword.ARCANE in held and Keyword.NECROMANCY in held
+
+    c.ignore_resistance(
+        dtype=DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER,
+        when=arcane_necromancy,
+    )

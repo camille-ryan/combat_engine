@@ -7868,6 +7868,49 @@ def mage_school_riders(out: Result) -> None:
                  "and none on a power that is neither -- the negative control",
                  f"it gave {mods.total('damage', {'power': NEITHER})}")
 
+    # ---- the master tier: a miss counts, and resistance is walked -------
+    ref = "cf:wizard-mage-f6s2"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        from combat_engine.engine.events import Miss
+        world, caster, _ = _board(ref)
+        victim = sorted(enemies(world, caster))[0]
+
+        def granted(w=world, who=victim, r: str = ref) -> int:  # noqa: ANN001
+            return sum(1 for e in w.effects.of(who) if e.label.startswith(r))
+
+        # A **miss** is the half a Hit trigger would have dropped, so it is
+        # the one asserted first.
+        world.bus.emit(Miss(attacker=caster, target=victim, power=NEITHER))
+        out.that(granted() == 0,
+                 f"{ref} ignores a miss with a power of neither school"
+                 f" -- the negative control",
+                 f"it laid {granted()}")
+        world.bus.emit(Miss(attacker=caster, target=victim, power=ILLUSION))
+        out.that(granted() == 1,
+                 "and a MISS with an illusion power opens the target up",
+                 f"it laid {granted()}")
+
+    ref = "cf:wizard-mage-f6s3"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        from combat_engine.engine.resolve import _ignored_resist
+        from combat_engine.engine.types import DamageType
+        world, caster, _ = _board(ref)
+        necrotic = (DamageType.NECROTIC,)
+        walked = _ignored_resist(world, caster, necrotic,
+                                 {"power": NECROMANCY})
+        other = _ignored_resist(world, caster, necrotic, {"power": NEITHER})
+        out.that(walked > 0,
+                 f"{ref} walks through necrotic resistance on its own school",
+                 f"it walked {walked}")
+        out.that(other == 0,
+                 "and through none on a power of neither school"
+                 " -- the negative control",
+                 f"it walked {other}")
+
     # ---- the necromancy tier: 2 temporary hit points --------------------
     ref = "cf:wizard-mage-f0s3"
     if ref not in REGISTRY:
