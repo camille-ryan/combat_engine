@@ -26,7 +26,11 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import AttackDeclared, ConditionEnded
 
-IMPLEMENT = [Keyword.IMPLEMENT]
+# Psionic is printed on every one of these cards and the constant
+# omitted it, so 28 rows declared half their keyword line -- the
+# `MARTIAL_WEAPON` idiom the fighter files use, missing its source.
+# #486.
+PSIONIC_IMPLEMENT = [Keyword.PSIONIC, Keyword.IMPLEMENT]
 
 
 def _hand_free(world: World, eid: int) -> bool:
@@ -47,7 +51,7 @@ def _hand_free(world: World, eid: int) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )
 def p11224(c: Cast) -> None:
@@ -64,7 +68,7 @@ def p11224(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )
 def p11226(c: Cast) -> None:
@@ -81,7 +85,7 @@ def p11226(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*IMPLEMENT, Keyword.LIGHTNING, Keyword.TELEPORTATION],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.LIGHTNING, Keyword.TELEPORTATION],
     attack=Attack(DEX, vs=REF),
 )
 def p13163(c: Cast) -> None:
@@ -105,7 +109,7 @@ def p13163(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )
 def p13165(c: Cast) -> None:
@@ -134,7 +138,7 @@ def p13165(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=FORT),
 )
 def p13167(c: Cast) -> None:
@@ -160,7 +164,7 @@ def p13167(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )
 def p13169(c: Cast) -> None:
@@ -179,7 +183,7 @@ def p13169(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )
 def p13225(c: Cast) -> None:
@@ -196,7 +200,7 @@ def p13225(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=FORT),
 )
 def p15987(c: Cast) -> None:
@@ -218,7 +222,7 @@ def p15987(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*IMPLEMENT, Keyword.THUNDER],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.THUNDER],
     attack=Attack(DEX, vs=REF),
 )
 def p16163(c: Cast) -> None:
@@ -238,7 +242,7 @@ def p16163(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=[*IMPLEMENT, Keyword.FIRE],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE],
     attack=Attack(DEX, vs=REF),
 )
 def p16166(c: Cast) -> None:
@@ -260,7 +264,7 @@ def p16166(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
     requires=_hand_free,
     requires_text="needs at least one hand free",
@@ -280,7 +284,7 @@ def p16168(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=REF),
 )
 def p7465(c: Cast) -> None:
@@ -297,7 +301,7 @@ def p7465(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=IMPLEMENT,
+    keywords=PSIONIC_IMPLEMENT,
     attack=Attack(DEX, vs=FORT),
 )
 def p7466(c: Cast) -> None:
