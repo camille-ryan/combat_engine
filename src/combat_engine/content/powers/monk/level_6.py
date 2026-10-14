@@ -87,7 +87,7 @@ def p11223(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.TELEPORTATION],
+    keywords=[Keyword.TELEPORTATION, Keyword.PSIONIC],
     trigger="an adjacent enemy misses you with an attack",
     on=Trigger(
         Miss, both(targets_me, enemy_within(1)), "an adjacent enemy misses you"
@@ -111,7 +111,7 @@ def p13159(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p13160(c: Cast) -> None:
     """"Insubstantial while moving" is only true during the move, so it is
@@ -147,6 +147,7 @@ def p13160(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     requires=_bloodied,
     requires_text="must be bloodied",
 )
@@ -177,6 +178,7 @@ def p13162(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="an enemy hits you with an attack",
     on=Trigger(Hit, hits_me, "an enemy hits you with an attack"),
 )
@@ -192,7 +194,7 @@ def p16160(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.PSIONIC],
 )
 def p16161(c: Cast) -> None:
     c.surge(on=c.me)
@@ -207,7 +209,7 @@ def p16161(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p16162(c: Cast) -> None:
     """The "forced" modifier is read off the creature being shoved, not the
@@ -233,7 +235,7 @@ def p16162(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p7463(c: Cast) -> None:
     posture = c.stance()

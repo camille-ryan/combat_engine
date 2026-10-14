@@ -212,7 +212,7 @@ def p13136b(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.IMPLEMENT, Keyword.STANCE],
+    keywords=[Keyword.IMPLEMENT, Keyword.STANCE, Keyword.PSIONIC],
     attack=Attack(DEX, vs=FORT),
     requires=active("p13141"),
     requires_text="the p13141 power must be active",
@@ -264,7 +264,7 @@ def p13221b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.FIRE],
+    keywords=[Keyword.FIRE, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16133b(c: Cast) -> None:
     """The riposte is provoked by this movement, so it lives exactly as long
@@ -337,7 +337,7 @@ def p16139b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.FIRE],
+    keywords=[Keyword.FIRE, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16141b(c: Cast) -> None:
     c.shift(2)
@@ -450,6 +450,7 @@ def p7535b(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     requires=active("p16147"),
     requires_text="the p16147 power must be active",
     trigger="an enemy enters a square adjacent to you",
@@ -524,7 +525,7 @@ def p11218b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.PSYCHIC],
+    keywords=[Keyword.PSYCHIC, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13146b(c: Cast) -> None:
     near = c.within(1, side="other")
@@ -542,7 +543,7 @@ def p13146b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.THUNDER],
+    keywords=[Keyword.THUNDER, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13148b(c: Cast) -> None:
     c.move(c.speed_of() + 2)
@@ -637,7 +638,7 @@ def p16150b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.FIRE],
+    keywords=[Keyword.FIRE, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16152b(c: Cast) -> None:
     """Partial concealment is written as the +2 it is worth to the monk's
@@ -658,7 +659,7 @@ def p16152b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.COLD],
+    keywords=[Keyword.COLD, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16154b(c: Cast) -> None:
     c.immobilized(on=c.me, until=When.SONT)
@@ -695,7 +696,7 @@ def p7459b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.THUNDER],
+    keywords=[Keyword.THUNDER, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7460b(c: Cast) -> None:
     near = c.within(1, side="enemy")

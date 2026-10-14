@@ -293,7 +293,7 @@ def p16158(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE, Keyword.ZONE],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE, Keyword.ZONE, Keyword.ELEMENTAL],
     attack=Attack(DEX, vs=REF),
 )
 def p16159(c: Cast) -> None:

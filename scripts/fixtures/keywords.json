@@ -1,4 +1,73 @@
 {
+ "extras": {
+  "i2108p1": [
+   "weapon"
+  ],
+  "i2723p2": [
+   "weapon"
+  ],
+  "i2967p1": [
+   "martial"
+  ],
+  "i2968p1": [
+   "martial"
+  ],
+  "i3058p1": [
+   "weapon"
+  ],
+  "i447p1": [
+   "weapon"
+  ],
+  "p10700": [
+   "zone"
+  ],
+  "p10936": [
+   "healing"
+  ],
+  "p11609": [
+   "healing"
+  ],
+  "p12650": [
+   "healing"
+  ],
+  "p13642": [
+   "radiant"
+  ],
+  "p13650": [
+   "teleportation"
+  ],
+  "p13744": [
+   "summoning"
+  ],
+  "p13818": [
+   "divine"
+  ],
+  "p13982": [
+   "zone"
+  ],
+  "p14502": [
+   "zone"
+  ],
+  "p16286": [
+   "implement"
+  ],
+  "p3405": [
+   "psychic"
+  ],
+  "p4020": [
+   "conjuration"
+  ],
+  "p4201": [
+   "zone"
+  ],
+  "p5848": [
+   "cold",
+   "radiant"
+  ],
+  "p9870": [
+   "healing"
+  ]
+ },
  "omits": {
   "i1005p1": [
    "augmentable"
@@ -265,15 +334,9 @@
   "p11171": [
    "augmentable"
   ],
-  "p11208": [
-   "full discipline"
-  ],
   "p11208b": [
    "full discipline",
    "psionic"
-  ],
-  "p11210": [
-   "full discipline"
   ],
   "p11210b": [
    "full discipline",
@@ -282,39 +345,15 @@
   "p11214": [
    "psionic"
   ],
-  "p11216": [
-   "full discipline"
-  ],
   "p11216b": [
    "full discipline",
    "psionic"
-  ],
-  "p11218": [
-   "full discipline"
   ],
   "p11218b": [
    "full discipline",
    "psionic"
   ],
   "p11223": [
-   "psionic"
-  ],
-  "p11224": [
-   "full discipline"
-  ],
-  "p11224b": [
-   "full discipline"
-  ],
-  "p11226": [
-   "full discipline"
-  ],
-  "p11226b": [
-   "full discipline"
-  ],
-  "p11231": [
-   "psionic"
-  ],
-  "p11232": [
    "psionic"
   ],
   "p11269": [
@@ -641,166 +680,62 @@
   "p13054": [
    "augmentable"
   ],
-  "p13124": [
-   "full discipline"
-  ],
   "p13124b": [
    "full discipline",
    "psionic"
-  ],
-  "p13126": [
-   "full discipline"
   ],
   "p13126b": [
    "full discipline",
    "psionic"
   ],
-  "p13128": [
-   "full discipline"
-  ],
   "p13128b": [
    "full discipline",
    "psionic"
-  ],
-  "p13130": [
-   "full discipline"
   ],
   "p13130b": [
    "full discipline",
    "psionic"
   ],
-  "p13132": [
-   "full discipline"
-  ],
   "p13132b": [
    "full discipline",
    "psionic"
-  ],
-  "p13134": [
-   "full discipline"
   ],
   "p13134b": [
    "full discipline",
    "psionic"
   ],
-  "p13136": [
-   "full discipline"
-  ],
   "p13136b": [
    "full discipline",
-   "psionic"
-  ],
-  "p13141b": [
-   "psionic"
-  ],
-  "p13144": [
    "psionic"
   ],
   "p13145": [
    "psionic"
   ],
-  "p13146": [
-   "full discipline"
-  ],
-  "p13146b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13148": [
-   "full discipline"
-  ],
-  "p13148b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13150": [
-   "full discipline"
-  ],
   "p13150b": [
    "full discipline",
    "psionic"
-  ],
-  "p13152": [
-   "full discipline"
   ],
   "p13152b": [
    "full discipline",
    "psionic"
   ],
-  "p13159": [
-   "psionic"
-  ],
-  "p13160": [
-   "psionic"
-  ],
-  "p13161": [
-   "psionic"
-  ],
   "p13162": [
-   "psionic"
-  ],
-  "p13163": [
-   "full discipline"
-  ],
-  "p13163b": [
-   "full discipline"
-  ],
-  "p13165": [
-   "full discipline"
-  ],
-  "p13165b": [
-   "full discipline"
-  ],
-  "p13167": [
-   "full discipline"
-  ],
-  "p13167b": [
-   "full discipline"
-  ],
-  "p13169": [
-   "full discipline"
-  ],
-  "p13169b": [
-   "full discipline"
-  ],
-  "p13176": [
    "psionic"
   ],
   "p13177": [
    "psionic"
   ],
-  "p13178": [
-   "psionic"
-  ],
-  "p13179": [
-   "psionic"
-  ],
-  "p13219": [
-   "full discipline"
-  ],
   "p13219b": [
    "full discipline",
    "psionic"
-  ],
-  "p13221": [
-   "full discipline"
   ],
   "p13221b": [
    "full discipline",
    "psionic"
   ],
-  "p13223": [
-   "full discipline"
-  ],
   "p13223b": [
    "full discipline",
    "psionic"
-  ],
-  "p13225": [
-   "full discipline"
-  ],
-  "p13225b": [
-   "full discipline"
   ],
   "p13302": [
    "augmentable"
@@ -1211,21 +1146,9 @@
   "p15905": [
    "zone"
   ],
-  "p15983": [
-   "psionic"
-  ],
-  "p15984": [
-   "full discipline"
-  ],
   "p15984b": [
    "full discipline",
    "psionic"
-  ],
-  "p15987": [
-   "full discipline"
-  ],
-  "p15987b": [
-   "full discipline"
   ],
   "p15989": [
    "psionic"
@@ -1296,147 +1219,23 @@
   "p16123": [
    "elemental"
   ],
-  "p16133": [
-   "elemental",
-   "full discipline"
-  ],
-  "p16133b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16135": [
-   "elemental",
-   "full discipline"
-  ],
   "p16135b": [
    "elemental",
    "full discipline",
    "psionic"
-  ],
-  "p16137": [
-   "elemental",
-   "full discipline"
   ],
   "p16137b": [
    "elemental",
    "full discipline",
    "psionic"
   ],
-  "p16139": [
-   "elemental",
-   "full discipline"
-  ],
   "p16139b": [
    "elemental",
    "full discipline",
    "psionic"
   ],
-  "p16141": [
-   "elemental",
-   "full discipline"
-  ],
-  "p16141b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16143": [
-   "elemental"
-  ],
-  "p16144": [
-   "elemental"
-  ],
-  "p16145": [
-   "elemental"
-  ],
-  "p16146": [
-   "psionic"
-  ],
-  "p16147": [
-   "psionic"
-  ],
-  "p16147b": [
-   "psionic"
-  ],
-  "p16149": [
-   "psionic"
-  ],
-  "p16150": [
-   "full discipline"
-  ],
   "p16150b": [
    "full discipline",
-   "psionic"
-  ],
-  "p16152": [
-   "elemental",
-   "full discipline"
-  ],
-  "p16152b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16154": [
-   "elemental",
-   "full discipline"
-  ],
-  "p16154b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16159": [
-   "elemental"
-  ],
-  "p16160": [
-   "psionic"
-  ],
-  "p16161": [
-   "psionic"
-  ],
-  "p16162": [
-   "psionic"
-  ],
-  "p16163": [
-   "elemental",
-   "full discipline"
-  ],
-  "p16163b": [
-   "full discipline"
-  ],
-  "p16166": [
-   "elemental",
-   "full discipline"
-  ],
-  "p16166b": [
-   "full discipline"
-  ],
-  "p16168": [
-   "full discipline"
-  ],
-  "p16168b": [
-   "full discipline"
-  ],
-  "p16170": [
-   "elemental"
-  ],
-  "p16171": [
-   "psionic"
-  ],
-  "p16173": [
-   "elemental"
-  ],
-  "p16174": [
-   "elemental",
-   "psionic"
-  ],
-  "p16175": [
-   "elemental",
-   "psionic"
-  ],
-  "p16176": [
    "psionic"
   ],
   "p16236": [
@@ -1861,80 +1660,34 @@
   "p7414": [
    "summoning"
   ],
-  "p7449": [
-   "full discipline"
-  ],
   "p7449b": [
    "full discipline",
    "psionic"
-  ],
-  "p7450": [
-   "full discipline"
   ],
   "p7450b": [
    "full discipline",
    "psionic"
   ],
-  "p7452": [
-   "full discipline"
-  ],
   "p7452b": [
    "full discipline",
    "psionic"
-  ],
-  "p7453": [
-   "full discipline"
   ],
   "p7453b": [
    "full discipline",
    "psionic"
   ],
-  "p7454": [
-   "full discipline"
-  ],
   "p7454b": [
    "full discipline",
-   "psionic"
-  ],
-  "p7457": [
    "psionic"
   ],
   "p7458": [
    "psionic"
   ],
-  "p7459": [
-   "full discipline"
-  ],
   "p7459b": [
    "full discipline",
    "psionic"
   ],
-  "p7460": [
-   "full discipline"
-  ],
-  "p7460b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7463": [
-   "psionic"
-  ],
   "p7464": [
-   "psionic"
-  ],
-  "p7465": [
-   "full discipline"
-  ],
-  "p7465b": [
-   "full discipline"
-  ],
-  "p7466": [
-   "full discipline"
-  ],
-  "p7466b": [
-   "full discipline"
-  ],
-  "p7469": [
    "psionic"
   ],
   "p7470": [
@@ -1945,9 +1698,6 @@
   ],
   "p7510": [
    "evocation"
-  ],
-  "p7535": [
-   "full discipline"
   ],
   "p7535b": [
    "full discipline",

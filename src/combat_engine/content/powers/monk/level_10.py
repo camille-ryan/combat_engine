@@ -58,7 +58,7 @@ def _ends_with(c: Cast, posture: Effect, held: Effect | None) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.PSIONIC],
 )
 def p11231(c: Cast) -> None:
     c.surge(on=c.me, bonus=c.roll("2d6"))
@@ -72,6 +72,7 @@ def p11231(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="you are prone at the start of your turn",
     on=Trigger(TurnStart, about_me, "your turn starts"),
 )
@@ -92,6 +93,7 @@ def p11232(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="an attack that deals a specific damage type hits you",
     on=Trigger(DamageRolled, targets_me, "you are about to take typed damage"),
 )
@@ -125,7 +127,7 @@ def p13177(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.PSIONIC],
     trigger="you hit an enemy with a melee attack",
     on=Trigger(Hit, both(by_me, by_melee), "you hit an enemy with a melee attack"),
 )
@@ -141,7 +143,7 @@ def p13178(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p13179(c: Cast) -> None:
     posture = c.stance()
@@ -161,6 +163,7 @@ def p13179(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.ELEMENTAL, Keyword.PSIONIC],
     trigger="you take acid, cold, fire, lightning, or thunder damage",
     on=Trigger(DamageRolled, targets_me, "you are about to take elemental damage"),
 )
@@ -185,7 +188,7 @@ def p16174(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.ELEMENTAL, Keyword.PSIONIC],
 )
 def p16175(c: Cast) -> None:
     posture = c.stance()
@@ -204,6 +207,7 @@ def p16175(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="you hit an enemy with a melee attack",
     on=Trigger(Hit, both(by_me, by_melee), "you hit an enemy with a melee attack"),
 )
@@ -230,6 +234,7 @@ def p16176(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="you take damage",
     on=Trigger(DamageRolled, targets_me, "you are about to take damage"),
 )

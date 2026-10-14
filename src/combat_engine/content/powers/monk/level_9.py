@@ -250,7 +250,7 @@ def p15989(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_OTHER,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.LIGHTNING, Keyword.THUNDER],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.LIGHTNING, Keyword.THUNDER, Keyword.ELEMENTAL],
     attack=Attack(DEX, vs=REF),
 )
 def p16170(c: Cast) -> None:
@@ -281,7 +281,7 @@ def p16170(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.POLYMORPH],
+    keywords=[Keyword.POLYMORPH, Keyword.PSIONIC],
 )
 def p16171(c: Cast) -> None:
     """The extra saving throw is written as one save at the top of the turn;
@@ -312,7 +312,7 @@ def p16171(c: Cast) -> None:
     action=REACTION,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.ELEMENTAL],
     attack=Attack(DEX, vs=FORT),
     trigger="an adjacent enemy hits you with an attack",
     on=Trigger(Hit, both(hits_me, by_melee), "an adjacent enemy hits you"),

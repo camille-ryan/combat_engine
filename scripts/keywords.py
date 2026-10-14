@@ -45,13 +45,21 @@ is a **per-ref baseline that may shrink and never grow**, the shape
 That is stricter than a count, which cannot see ten rows healing while ten
 others break.
 
-## What it deliberately does not check
+## Both directions, each scoped to the question it can answer
 
-**Keywords the header declares and the database does not** -- 4,494 refs,
-and almost all of it is representation rather than fault. `melee`, `ranged`,
-`close` and `area` are 1,176 of them and the ETL keeps those in `reach`;
-damage types are most of the rest and live in `damage=`. A gate on that
-direction would be 4,494 red on day one and wrong about nearly all of it.
+A header declaring a keyword the card does **not** print is the inverse fault
+and matters for the same reason -- it prices the row wrong, the other way.
+Asked naively it is useless: **4,494 refs**, almost all representation rather
+than fault, because `melee`, `ranged`, `close` and `area` are 1,176 of them
+and the ETL keeps those in `reach`, while damage types are most of the rest
+and live in `damage=`.
+
+Scoped to the words the ETL **records as keywords** -- `power._KEYWORDS`, the
+only vocabulary where the database's silence means "the card did not print
+it" -- the same question gives **16**, and all 16 are real. So that is the
+scope, and it is why this direction is worth gating at all.
+
+## What it deliberately does not check
 
 **A keyword with no `Keyword` member**, since a header has no way to say it.
 `invigorating` is the live example: the ETL records it and the enum has no
@@ -78,14 +86,17 @@ BASELINE = Path(__file__).resolve().parent / "fixtures" / "keywords.json"
 TABLES = ("power", "item_block")
 
 
-def _measure() -> dict[str, list[str]]:
-    """Every content row that omits a keyword its card printed."""
+def _measure() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """What each header omits, and what it declares the card does not print."""
     import combat_engine.content  # noqa: F401  -- populates REGISTRY
     from combat_engine.db import game
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.types import Keyword
+    from combat_engine.etl.power import _KEYWORDS
 
     sayable = {k.value for k in Keyword}
+    # The only vocabulary where the database's silence means "not printed".
+    recorded = set(_KEYWORDS)
     printed: dict[str, set[str]] = {}
     db = game()
     for table in TABLES:
@@ -94,7 +105,8 @@ def _measure() -> dict[str, list[str]]:
             if held:
                 printed[ref] = held
 
-    out: dict[str, list[str]] = {}
+    omits: dict[str, list[str]] = {}
+    extras: dict[str, list[str]] = {}
     for ref, power in REGISTRY.items():
         card = printed.get(ref)
         if card is None:
@@ -102,14 +114,18 @@ def _measure() -> dict[str, list[str]]:
         declared = {str(k) for k in (power.keywords or ())}
         missing = (card & sayable) - declared
         if missing:
-            out[ref] = sorted(missing)
-    return out
+            omits[ref] = sorted(missing)
+        over = (declared & recorded) - card
+        if over:
+            extras[ref] = sorted(over)
+    return omits, extras
 
 
-def _load() -> dict[str, list[str]]:
+def _load() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     if not BASELINE.exists():
-        return {}
-    return dict(json.loads(BASELINE.read_text()).get("omits", {}))
+        return {}, {}
+    held = json.loads(BASELINE.read_text())
+    return dict(held.get("omits", {})), dict(held.get("extras", {}))
 
 
 def main() -> int:
@@ -119,56 +135,66 @@ def main() -> int:
     ap.add_argument("--quiet", action="store_true", help="one line of summary")
     args = ap.parse_args()
 
-    now = _measure()
+    omits, extras = _measure()
     if args.record:
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
         BASELINE.write_text(json.dumps(
-            {"omits": dict(sorted(now.items()))}, indent=1, sort_keys=True) + "\n")
-        per = Counter(w for words in now.values() for w in words)
-        print(f"recorded {len(now)} refs omitting a printed keyword")
-        for word, count in per.most_common():
-            print(f"  {count:5}  {word}")
+            {"omits": dict(sorted(omits.items())),
+             "extras": dict(sorted(extras.items()))},
+            indent=1, sort_keys=True) + "\n")
+        for label, held in (("omitting a printed keyword", omits),
+                            ("declaring one the card does not print", extras)):
+            per = Counter(w for words in held.values() for w in words)
+            print(f"recorded {len(held)} refs {label}")
+            for word, count in per.most_common():
+                print(f"  {count:5}  {word}")
         return 0
 
-    was = _load()
-    new = sorted(set(now) - set(was))
-    gone = sorted(set(was) - set(now))
-    grew = sorted(r for r in set(was) & set(now) if set(now[r]) > set(was[r]))
-    healed = sorted(r for r in set(was) & set(now) if set(now[r]) < set(was[r]))
-    changed = sorted(
-        r for r in set(was) & set(now)
-        if set(now[r]) != set(was[r]) and r not in grew and r not in healed
-    )
+    was_omits, was_extras = _load()
+    faults, repairs = 0, 0
+    quiet_lines = []
+    for verb, now, was in (("omits", omits, was_omits),
+                           ("declares", extras, was_extras)):
+        new = sorted(set(now) - set(was))
+        gone = sorted(set(was) - set(now))
+        grew = sorted(r for r in set(was) & set(now) if set(now[r]) > set(was[r]))
+        healed = sorted(r for r in set(was) & set(now) if set(now[r]) < set(was[r]))
+        changed = sorted(
+            r for r in set(was) & set(now)
+            if set(now[r]) != set(was[r]) and r not in grew and r not in healed
+        )
+        for ref in new:
+            print(f"NEW      {ref}: header {verb} {', '.join(now[ref])}")
+        for ref in grew:
+            print(f"WORSE    {ref}: now {verb} {', '.join(now[ref])}, "
+                  f"was {', '.join(was[ref])}")
+        for ref in changed:
+            print(f"CHANGED  {ref}: now {verb} {', '.join(now[ref])}, "
+                  f"was {', '.join(was[ref])}")
+        for ref in healed:
+            print(f"BETTER   {ref}: now {verb} {', '.join(now[ref])}, "
+                  f"was {', '.join(was[ref])} -- tighten the baseline")
+        for ref in gone:
+            print(f"FIXED    {ref}: no longer {verb} {', '.join(was[ref])} -- "
+                  f"tighten the baseline")
+        faults += len(new) + len(grew) + len(changed)
+        repairs += len(gone) + len(healed)
+        quiet_lines.append(len(now))
 
-    if args.quiet and not (new or gone or grew or healed or changed):
-        print(f"{len(now)} refs omit a printed keyword, all of them recorded")
-        return 0
-
-    for ref in new:
-        print(f"NEW      {ref}: header omits {', '.join(now[ref])}")
-    for ref in grew:
-        print(f"WORSE    {ref}: now omits {', '.join(now[ref])}, "
-              f"was {', '.join(was[ref])}")
-    for ref in changed:
-        print(f"CHANGED  {ref}: now omits {', '.join(now[ref])}, "
-              f"was {', '.join(was[ref])}")
-    for ref in healed:
-        print(f"BETTER   {ref}: now omits {', '.join(now[ref])}, "
-              f"was {', '.join(was[ref])} -- tighten the baseline")
-    for ref in gone:
-        print(f"FIXED    {ref}: declared {', '.join(was[ref])} -- "
-              f"tighten the baseline")
-
-    if new or grew or changed:
-        print(f"\n{len(new)} new, {len(grew)} worse, {len(changed)} changed. "
-              f"A printed keyword a header drops is a row the AI prices wrong "
-              f"and a feat naming that keyword cannot find. #486.")
+    summary = (f"{quiet_lines[0]} refs omit a printed keyword and "
+               f"{quiet_lines[1]} declare one the card does not print, "
+               f"all of them recorded")
+    if faults:
+        print(f"\n{faults} header(s) newly disagree with the card they came "
+              f"off. A keyword a header drops is a row the AI prices wrong and "
+              f"a feat naming that keyword cannot find; one it invents is the "
+              f"same fault pointed the other way. #486.")
         return 1
-    if healed or gone:
-        print(f"\n{len(gone) + len(healed)} refs improved. Re-record with "
-              f"`--record` so the baseline tracks the repair.")
+    if repairs:
+        print(f"\n{repairs} refs improved. Re-record with `--record` so the "
+              f"baseline tracks the repair.")
         return 1
-    print(f"{len(now)} refs omit a printed keyword, all of them recorded")
+    print(summary)
     return 0
 
 

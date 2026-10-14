@@ -51,7 +51,7 @@ def _hand_free(world: World, eid: int) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p11224(c: Cast) -> None:
@@ -68,7 +68,7 @@ def p11224(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p11226(c: Cast) -> None:
@@ -85,7 +85,8 @@ def p11226(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.LIGHTNING, Keyword.TELEPORTATION],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.LIGHTNING, Keyword.TELEPORTATION,
+              Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13163(c: Cast) -> None:
@@ -109,7 +110,7 @@ def p13163(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13165(c: Cast) -> None:
@@ -138,7 +139,7 @@ def p13165(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p13167(c: Cast) -> None:
@@ -164,7 +165,7 @@ def p13167(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13169(c: Cast) -> None:
@@ -183,7 +184,7 @@ def p13169(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13225(c: Cast) -> None:
@@ -200,7 +201,7 @@ def p13225(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p15987(c: Cast) -> None:
@@ -222,7 +223,7 @@ def p15987(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.THUNDER],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.THUNDER, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p16163(c: Cast) -> None:
@@ -242,7 +243,7 @@ def p16163(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p16166(c: Cast) -> None:
@@ -264,7 +265,7 @@ def p16166(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
     requires=_hand_free,
     requires_text="needs at least one hand free",
@@ -284,7 +285,7 @@ def p16168(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p7465(c: Cast) -> None:
@@ -301,7 +302,7 @@ def p7465(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p7466(c: Cast) -> None:

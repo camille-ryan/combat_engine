@@ -87,7 +87,7 @@ def _square_of(c: Cast, who: int) -> Square | None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p11208(c: Cast) -> None:
@@ -114,7 +114,7 @@ def p11208(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.THUNDER],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.THUNDER, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p11210(c: Cast) -> None:
@@ -212,7 +212,7 @@ def p11213(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13124(c: Cast) -> None:
@@ -239,7 +239,7 @@ def p13124(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(2),
     target=EACH_ENEMY,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13126(c: Cast) -> None:
@@ -255,7 +255,7 @@ def p13126(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p13128(c: Cast) -> None:
@@ -275,7 +275,7 @@ def p13128(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p13130(c: Cast) -> None:
@@ -299,7 +299,7 @@ def p13130(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13132(c: Cast) -> None:
@@ -330,7 +330,7 @@ def p13132(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
 )
 def p13134(c: Cast) -> None:
@@ -363,7 +363,7 @@ def p13134(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13136(c: Cast) -> None:
@@ -491,7 +491,7 @@ def p13141(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13219(c: Cast) -> None:
@@ -511,7 +511,7 @@ def p13219(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p13221(c: Cast) -> None:
@@ -538,7 +538,7 @@ def p13221(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE],
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.FIRE, Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=REF),
 )
 def p16141(c: Cast) -> None:

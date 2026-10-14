@@ -81,7 +81,7 @@ def p11214(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p13144(c: Cast) -> None:
     """The damage context carries no weapon, so "unarmed" cannot be gated
@@ -117,6 +117,7 @@ def p13145(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="you are hit by a ranged weapon attack",
     on=Trigger(Hit, both(targets_me, by_ranged), "you are hit by a ranged attack"),
 )
@@ -144,6 +145,7 @@ def p15983(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="you hit an enemy with a melee attack",
     on=Trigger(Hit, both(by_me, by_melee), "you hit an enemy with a melee attack"),
 )
@@ -171,7 +173,7 @@ def p16146(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=STANCE_KW,
+    keywords=[*STANCE_KW, Keyword.PSIONIC],
 )
 def p16147(c: Cast) -> None:
     """The stance's second stat block is a row of its own, gated on this
@@ -187,6 +189,7 @@ def p16147(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="an enemy attacks you",
     on=Trigger(AttackDeclared, targets_me, "an enemy attacks you"),
 )
@@ -205,6 +208,7 @@ def p16149(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
     trigger="you are pulled, pushed, or slid",
     on=Trigger(ForcedMove, targets_me, "you are pulled, pushed, or slid"),
 )

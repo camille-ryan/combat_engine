@@ -160,7 +160,7 @@ def p16156b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p11224b(c: Cast) -> None:
     """Two one-square shifts rather than one of two, because the printed
@@ -194,7 +194,7 @@ def p11224b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p11226b(c: Cast) -> None:
     """A running start is the whole of the difference between dividing the
@@ -214,7 +214,7 @@ def p11226b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[*PSIONIC, Keyword.LIGHTNING, Keyword.TELEPORTATION],
+    keywords=[*PSIONIC, Keyword.LIGHTNING, Keyword.TELEPORTATION, Keyword.FULL_DISCIPLINE],
 )
 def p13163b(c: Cast) -> None:
     c.teleport(c.speed_of())
@@ -228,7 +228,7 @@ def p13163b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p13165b(c: Cast) -> None:
     """"During this movement" -- the rough going is ignored for the length of
@@ -249,7 +249,7 @@ def p13165b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p13167b(c: Cast) -> None:
     c.shift(1)
@@ -264,7 +264,7 @@ def p13167b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p13169b(c: Cast) -> None:
     mates = [a for a in c.within(1, side="ally") if a != c.me]
@@ -283,7 +283,7 @@ def p13169b(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p13225b(c: Cast) -> None:
     walk = "move 3 squares"
@@ -301,7 +301,7 @@ def p13225b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p15987b(c: Cast) -> None:
     """A grab and a mark are held as relations, not as conditions, so
@@ -333,7 +333,7 @@ def p15987b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[*PSIONIC, Keyword.ELEMENTAL, Keyword.THUNDER],
+    keywords=[*PSIONIC, Keyword.ELEMENTAL, Keyword.THUNDER, Keyword.FULL_DISCIPLINE],
 )
 def p16163b(c: Cast) -> None:
     """The monk has no fly speed of its own, so the flight is lent for the
@@ -350,7 +350,7 @@ def p16163b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[*PSIONIC, Keyword.ELEMENTAL, Keyword.FIRE],
+    keywords=[*PSIONIC, Keyword.ELEMENTAL, Keyword.FIRE, Keyword.FULL_DISCIPLINE],
 )
 def p16166b(c: Cast) -> None:
     c.shift(max(1, c.speed_of() // 2))
@@ -365,7 +365,7 @@ def p16166b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p16168b(c: Cast) -> None:
     """"The creature moves with you" is a square-by-square drag: whatever is
@@ -393,7 +393,7 @@ def p16168b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p7465b(c: Cast) -> None:
     c.shift(2)
@@ -407,7 +407,7 @@ def p7465b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.FULL_DISCIPLINE],
 )
 def p7466b(c: Cast) -> None:
     """Every prone enemy, not only the adjacent ones: the opening the printed
