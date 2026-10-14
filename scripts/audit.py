@@ -302,7 +302,13 @@ KNOWN_SILENT = {
     # Driven by hand too: with a `CHANNEL_DIVINITY` row spent, `Powers.used`
     # goes 1 -> 0; with nothing spent it touches nothing.
     "i2772p1": "the same sentence again, off a holy symbol",
-    "i3036p1": "its bonus is f650b's, and the board's wielder has no f650b",
+    # `i3036p1` was excused here -- "its bonus is f650b's, and the board's
+    # wielder has no f650b" -- and the excuse has **outlived its subject**:
+    # the row fires and lays an effect on this board now. Checked rather
+    # than assumed, because `ConditionApplied, EffectApplied` on an item
+    # power is also the signature of #579's false credit: hollowed, it is
+    # credited with **nothing**, so the credit is the row's own. The list
+    # may shrink and must never grow, so it goes.
     # Targets an undead creature and the board's dummies are not one.
     # Driven by hand against a real undead stat block: a healing surge
     # goes and the target takes that much radiant damage.
@@ -2499,6 +2505,29 @@ def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN00
 
     That costs nothing: no extra board, no engine change, and the field was
     there the whole time.
+
+    **Depth alone does not bound a trait, and the docstring above said
+    "bounded at both ends" while it was bounded at one.** The depth test is
+    right for a *triggered* row, which the provocation resumes beneath once
+    the trigger window unwinds. A trait is not nested in anything: every
+    creature's traits arm from the same loop in `Encounter.start()`, so they
+    all sit at the **same** depth, `depth < mine` never trips, and the slice
+    ran to the end of the log -- crediting this trait with every creature
+    that armed after it.
+
+    That is #216's second half and #204's first arriving a third time, by
+    the one route a depth bound cannot see: siblings, not children. It was
+    worth 86 rows. A wide sweep reported silent 193 -> 107 with **all 86 of
+    the difference credited with `RelationSet` and nothing else** -- six of
+    which the board emits while dressing itself, and more than six once one
+    more row becomes offerable and chargen deals a marking character on some
+    seed. `f139`, whose whole body is `c.bonus("range", 5)`, was credited
+    with setting a relation.
+
+    So the end is **also** the next row starting at this depth or above. A
+    `use()` nested inside this row's own body emits *deeper* and is still
+    this row's doing, so `PowerUsed` at a greater depth does not stop it --
+    only a sibling or a shallower one does.
     """
     log = world.bus.log[cursor:]
     for i, e in enumerate(log):
@@ -2506,7 +2535,10 @@ def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN00
             mine = getattr(e, "depth", 0)
             out: set[str] = set()
             for x in log[i + 1:]:
-                if getattr(x, "depth", 0) < mine:
+                at = getattr(x, "depth", 0)
+                if at < mine:
+                    break
+                if x.kind == "PowerUsed" and at <= mine:
                     break
                 out.add(x.kind)
             return out
