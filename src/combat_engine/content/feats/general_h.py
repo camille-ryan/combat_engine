@@ -9,8 +9,12 @@ at-will riders. Five things decided most of the rows.
 `c.grant_row`.** It was not, because the refs -- `cf:swordmage-f0`,
 `cf:wizard-arcanist-f0`, `cf:bard-f0`, `cf:warlock-f3` -- were not
 declared anywhere in the tree and `grant_row` had nothing to hand over.
-All four are declared now. Only f1219, which prints its two features by
-name and gives no ref for either, still has nothing to point at.
+All four are declared now, and so is f1219 -- it prints its two features
+by **name** rather than by ref, which read like "no ref exists" and was
+not: `cf:bard-f5` and `cf:bard-f4` were both declared, and the brief's
+phrasing is #340's residual. Resolved by keying the localisation index on
+`(class, name)`, since 29 of the 290 feature names are shared by two or
+more features and only the class tells them apart.
 
 **The exotic-weapon chains follow `assassin/level_0.py`, not
 `exotic.py`.** Spiked chain, blowgun and garrote are not in the weapon
@@ -229,12 +233,27 @@ def f1218(c: Cast) -> None:
     c.grant_row("cf:bard-f0", on=c.me, until=When.ENCOUNTER)
 
 
-@_trait("f1219", todo=NAMED_FEATURE)
+@_trait("f1219")
 def f1219(c: Cast) -> None:
-    """Two more features of the same class, **both named in prose**. The
-    grant itself is writable now -- f1218 above is the same sentence
-    with a ref -- so what is left is only that the brief prints these
-    two by name and no id in the tree answers to either."""
+    """Two more features of the same class, one `c.grant_row` each, exactly
+    as `f1218` above does it for the third.
+
+    **"No id in the tree answers to either" was wrong, and that was the
+    whole of the marker.** Both are declared -- `cf:bard-f5` and
+    `cf:bard-f4` -- and the brief printing them by name rather than by ref
+    is #340's residual, not a missing row. Resolved by asking the
+    localisation index for `(class, name)`: the class is the one the
+    sentence itself names, which matters because **29 of the 290 feature
+    names are shared by two or more features** and only the class tells
+    them apart.
+
+    `cf:bard-f5` carries its own `todo=`, so it is refused in play until
+    that clears while the ref still lands in `Powers.known` -- which is
+    what "you gain the class feature" reads, and the arrangement `f1220`
+    below spells out.
+    """
+    c.grant_row("cf:bard-f5", on=c.me, until=When.ENCOUNTER)
+    c.grant_row("cf:bard-f4", on=c.me, until=When.ENCOUNTER)
 
 
 @_trait("f1220", proficiency=("w3610",))
