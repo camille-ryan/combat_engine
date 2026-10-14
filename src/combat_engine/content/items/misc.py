@@ -2718,7 +2718,7 @@ def i2419p1(c: Cast) -> None:
 
 
 @power("i2967p1", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.MARTIAL],
+       reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.BEAST],
        charges=True)
 def i2967p1(c: Cast) -> None:
     """`charges=True` or the engine measures the reach before the run and
@@ -3169,7 +3169,7 @@ def i2968x1(c: Cast) -> None:
 
 
 @power("i2968p1", level=9, cls=ITEM, usage=DAILY, action=REACTION,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.MARTIAL],
+       reach=PERSONAL, target=SELF, keywords=[Keyword.BEAST],
        trigger="an adjacent enemy targets you with a melee attack",
        on=Trigger(AttackDeclared, both(targets_me, by_melee),
                   "an adjacent enemy targets you with a melee attack"))

@@ -120,6 +120,18 @@ class Keyword(StrEnum):
     #: second; the tree saw none of them. #478.
     BEAST_FORM = "beast form"
     GUARDIAN_FORM = "guardian form"
+    #: A beast **companion**, which is not the shape above. The two were one
+    #: confusion once already -- #478's `_KEYWORDS` held `"beast"` and
+    #: `"form"` separately, so a card printing "Beast Form" yielded both and
+    #: neither was a keyword. They are different things: `BEAST_FORM` is a
+    #: druid wearing an animal's shape, this is a ranger's animal standing
+    #: beside it.
+    #:
+    #: Two rows print it, both item blocks, and until now neither could say
+    #: so: the item parser records the word, the enum had no member, and the
+    #: pair declared `MARTIAL` instead -- a power source their cards do not
+    #: print and an item power does not inherit from its holder. #590.
+    BEAST = "beast"
     #: A barbarian's rage, printed in the keyword line beside Primal and
     #: Weapon on 37 cards.
     #:
