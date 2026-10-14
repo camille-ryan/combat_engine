@@ -232,12 +232,17 @@ def p12896(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
+    keywords=[Keyword.ARCANE],
 )
 def p13650(c: Cast) -> None:
     """The secondary is `p13650b`, so all this leaves is the hold its
     Requirement reads. `Encounter.can_spend` is what keeps it to once a
     round, which is what an immediate action costs however at-will it is.
+
+    **`Keyword.TELEPORTATION` came off.** This card prints `Arcane`
+    alone and this body teleports nobody -- it lays a hold. The
+    teleport is `p13650b`, whose own card prints
+    `Arcane, Teleportation`. #590.
     """
     c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
 

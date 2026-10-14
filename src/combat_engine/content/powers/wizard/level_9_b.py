@@ -483,7 +483,7 @@ def p16285(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(20),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.CONJURATION],
+    keywords=[Keyword.ARCANE, Keyword.CONJURATION],
     attack=Attack(INT, vs=REF),
 )
 def p16286(c: Cast) -> None:

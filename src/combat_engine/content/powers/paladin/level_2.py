@@ -160,7 +160,7 @@ def p13557(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.DIVINE, Keyword.SHADOW],
+    keywords=[Keyword.SHADOW],
 )
 def p13818(c: Cast) -> None:
     c.temp_hp(5, on=c.me)
