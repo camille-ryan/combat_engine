@@ -4520,7 +4520,7 @@ def i1468x1(c: Cast) -> None:
     polearm does not fail it -- and nothing here stops a grabber attacking
     what it holds."""
     c.bonus(
-        "attack", c.enhancement, on=c.me, until=When.ENCOUNTER, kind="item",
+        "attack", c.enhancement, on=c.me, until=When.ENCOUNTER, kind="enhancement",
         when=_grabbing,
     )
 

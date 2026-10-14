@@ -33,6 +33,7 @@ import re
 import sys
 import textwrap
 from collections import Counter
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -95,6 +96,19 @@ BORROWED = {
     # file grew its false positives, and the parse is not wrong about the
     # phrasing it was built for. #523.
     ("i2842x1", "enhancement"),
+    # **A second card of that third shape**, so it is no longer unique --
+    # "adding the weapon's enhancement bonus to your grab attack", applied
+    # to a roll that gets no weapon terms otherwise. Was written
+    # `kind="item"`, which is a type the card never prints *and* would let
+    # it stack with the weapon's own enhancement on the same roll.
+    ("i1468x1", "enhancement"),
+    # **A fourth of the extends-another-row shape**, the first three being
+    # the racials above. "You gain **additional** temporary hit points
+    # from your rt:r36-t1 racial trait equal to your Constitution
+    # modifier" is one pool, not two: written untyped it would stack with
+    # the trait's own and pay twice, so the trait's kind is what makes the
+    # arithmetic come out as printed.
+    ("f1855", "racial"),
 }
 
 #: Rows where a `c.bonus` call is **not** the card's printed bonus, so
@@ -143,7 +157,22 @@ BORROWED = {
 #: stops being checked too. Filed rather than changed here, because narrowing a
 #: natural-language reader is how this file grew its false positives in the first
 #: place and it wants its own measurement.
-ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4"}
+#:
+#: `i3382p1` is the **sixth**, and a variant worth distinguishing: its untyped
+#: call is not a rider on damage but a *substitution*. The card prints "+4
+#: power bonus to AC and Reflex" -- written, typed, correct -- and separately
+#: "you can use the attack result as your defense", which the row implements as
+#: the difference between the roll and the live defence. That delta is not a
+#: printed bonus at all, and typing it `power` would be actively wrong: two
+#: bonuses of one type do not stack, so it would collide with the +4 and the
+#: larger would win.
+#:
+#: So six instances, two shapes, one conclusion -- the per-sentence read this
+#: comment has wanted since the fifth is still the right fix, and the delta
+#: case says something the first five did not: the question is not only "which
+#: sentence names the type" but "is this call a printed bonus at all".
+ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4",
+             "i3382p1"}
 
 #: A type word is printed as "a **power** bonus" or "+2 **item** bonus".
 #: The same word after "the" or "equal to the" is an *amount* being
@@ -199,11 +228,20 @@ def main() -> int:
     wrong, missing, nocard = [], [], []
     for ref, src, path in _rows():
         card = cards.get(ref)
-        for text, key in _calls(src):
+        for text, key, gating in _calls(src):
             if key in INTERNAL:
                 continue
             said = KIND.search(text)
             code = said.group(1) if said else ""
+            # **#550: the clause belongs to the feat's card, not this
+            # row's.** Checked against that card rather than waived, so a
+            # migrated clause whose `kind=` is wrong is still caught -- and
+            # per *clause*, since a feat names a different bonus in each
+            # power it lists.
+            if code and gating:
+                theirs = _feat_clauses().get((gating, ref))
+                if theirs and code in theirs:
+                    continue
             if card is None:
                 nocard.append((ref, code or "(default)", path))
                 continue
@@ -307,19 +345,52 @@ def _granted(text: str, word: str) -> bool:
     return False
 
 
-def _calls(src: str) -> list[tuple[str, str]]:
-    """Every `c.bonus(...)` in a row, with the `what` it modifies.
+#: A feat ref written as a string anywhere in an `if` test.
+_FEAT_IN_GATE = re.compile(r"\bf\d+\b")
+
+
+def _calls(src: str) -> list[tuple[str, str, str]]:
+    """Every `c.bonus(...)` in a row: its text, the `what`, and the feat
+    whose clause it belongs to if it sits inside one.
 
     Found through `ast` rather than by matching brackets, because a gate
     written as a lambda nests arbitrarily deep and a regex that stopped at
     one level skipped such a call without saying so.
+
+    **The third value exists because #550 broke this check's premise.**
+    That migration writes a feat's clause into the power the feat names,
+    so a power's body lays bonuses the *power's* card never prints -- and
+    comparing them against the power's card reported the migration working
+    as two faults. The clause is always gated on the declared feat,
+    `if arena == "f992":` or `if c.feat("f1298"):`, so the ref that says
+    which card to read is right there in the test.
     """
     import ast
 
+    body = textwrap.dedent(src)
     try:
-        tree = ast.parse(textwrap.dedent(src))
+        tree = ast.parse(body)
     except SyntaxError:
         return []
+
+    # Which feat gates each statement, by walking `if` tests downward.
+    gate: dict[int, str] = {}
+
+    def mark(stmts: list, ref: str) -> None:
+        for st in stmts:
+            for node in ast.walk(st):
+                gate.setdefault(id(node), ref)
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test = ast.get_source_segment(body, node.test) or ""
+        found = _FEAT_IN_GATE.findall(test)
+        if len(found) == 1:
+            # One feat named, so the branch is unambiguously its clause.
+            # Two or more is a compound condition this must not guess at.
+            mark(node.body, found[0])
+
     out = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -327,14 +398,44 @@ def _calls(src: str) -> list[tuple[str, str]]:
         fn = node.func
         if not (isinstance(fn, ast.Attribute) and fn.attr == "bonus"):
             continue
-        text = ast.get_source_segment(textwrap.dedent(src), node) or ""
+        text = ast.get_source_segment(body, node) or ""
         first = node.args[0] if node.args else None
         key = first.value if isinstance(first, ast.Constant) else ""
         if isinstance(first, ast.Attribute):     # `AC`, `Defense.AC`
             key = first.attr.lower()
         elif isinstance(first, ast.Name):
             key = first.id.lower()
-        out.append((text, str(key).lower()))
+        out.append((text, str(key).lower(), gate.get(id(node), "")))
+    return out
+
+
+@cache
+def _feat_clauses() -> dict[tuple[str, str], set[str]]:
+    """Types each feat's card names, per power it names, keyed `(feat, power)`.
+
+    A feat's spec lists its associated powers one per line, prefixed by the
+    power's ref -- `p1758 : If you are wielding a shield ... you gain a +1
+    feat bonus to AC ...`. That line is the card for a migrated clause, and
+    it is the one to compare a `kind=` against once #550 has moved it into
+    the power's body.
+
+    Read per clause rather than per feat on purpose: a feat with four
+    associated powers names a different bonus in each, so the union of its
+    types would waive a wrong one.
+    """
+    sys.argv = sys.argv[:1]
+    from combat_engine.db import game
+
+    out: dict[tuple[str, str], set[str]] = {}
+    for ref, spec in game().execute("select ref, spec from feat"):
+        for line in (spec or "").split("\n"):
+            head = re.match(r"\s*(p\d+[a-z0-9:]*)\s*:\s*(.*)", line, re.I)
+            if not head:
+                continue
+            text = head.group(2).lower()
+            types = {t for t in TYPES if _names_type(text, t)}
+            types |= {t for t in MECHANICS if _granted(text, t)}
+            out[(ref, head.group(1).lower())] = types
     return out
 
 

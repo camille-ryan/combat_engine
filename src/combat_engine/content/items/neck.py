@@ -476,8 +476,15 @@ def i1734x1(c: Cast) -> None:
     me = c.me
     for mate in c.allies():
         if mate != me:
+            # **Untyped, and it said `kind="item"`.** The card prints
+            # "allies gain a +5 bonus to Heal checks" with no type word
+            # before "bonus", and `content/CLAUDE.md` is explicit that
+            # `kind=` is the word the card prints and nothing else. Not
+            # cosmetic: two item bonuses do not stack and two untyped ones
+            # do, so a second source of first-aid help was being thrown
+            # away. #567.
             c.bonus("skill:heal", 5, on=mate, until=When.ENCOUNTER,
-                    kind="item", when=lambda ctx: ctx.get("target") == me)
+                    when=lambda ctx: ctx.get("target") == me)
 
 
 @power("i2740p1", level=2, cls=ITEM, usage=ENCOUNTER, action=FREE,

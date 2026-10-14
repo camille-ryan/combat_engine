@@ -293,7 +293,12 @@ def f949(c: Cast) -> None:
         return
     c.penalty(AC, held, on=c.me, until=When.SONT)
     c.penalty(REF, held, on=c.me, until=When.SONT)
-    c.bonus("damage", 1, on=c.me, until=When.SONT, kind="feat")
+    # **Untyped, and it said `kind="feat"`.** The only type word on this
+    # card is in the clause being *forgone* -- "you can forgo the shield
+    # bonus to AC and Reflex" -- and what it hands over instead is a bare
+    # "+1 bonus to damage rolls". `kind=` is the word the card prints
+    # before the bonus it grants, which here is nothing. #567.
+    c.bonus("damage", 1, on=c.me, until=When.SONT)
 
 
 @power("f950", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
