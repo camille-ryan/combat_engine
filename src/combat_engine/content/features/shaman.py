@@ -126,8 +126,42 @@ def shaman_f0(c: Cast) -> None:
     c.grant_row("p6515")
 
 
-@power("cf:shaman-f0s0", **TRAIT)
+@power("cf:shaman-f0s0", **TRAIT,
+       dropped=("c.grant_action('call_companion')",))
 def shaman_f0s0(c: Cast) -> None:
+    """The option `chargen` has been offering with no row behind it.
+
+    **An elemental shaman kept none of the eight spirit powers.** The four
+    siblings each `c.forbid` their own pair when their leg is not the one
+    taken, which is how "choose one of the following" is true on the board
+    -- so with this row absent, every pair was forbidden and this one's two
+    were never granted. A drawable build with nothing on it. #588.
+
+    The boon is a save bonus on *allies*, gated on standing beside the
+    companion, and the gate is re-asked at each save rather than laid once:
+    adjacency is a live condition and the companion moves.
+
+    The second sentence is dropped. "If your spirit companion is not
+    present at the start of your turn, you can summon it once during that
+    turn as a free action" is a conditional line in the action menu, and
+    `c.grant_action`'s docstring is explicit that a word it does not know
+    "is carried, costs nothing and does nothing" -- so writing it without
+    the reader would be a modifier nothing consults, which is this
+    component's commonest bug. `c.call_companion` is the action; what is
+    missing is offering it for free, once, only while the spirit is away.
+    """
+    _spirit_choice(c, "elemental", ("p12865", "p12866"))
+    if not c.build("elemental"):
+        return
+    for mate in friends(c):
+        c.bonus(
+            "save", 2, on=mate, until=When.ENCOUNTER,
+            when=lambda ctx, m=mate: beside_spirit(c, m),
+        )
+
+
+@power("cf:shaman-f0s1", **TRAIT)
+def shaman_f0s1(c: Cast) -> None:
     """The boon is a rider on somebody else's healing, so it is laid as a
     watcher on `Healed` in the before-window, where the amount is still
     negotiable, rather than as a second heal that would count as its own.
@@ -153,8 +187,8 @@ def shaman_f0s0(c: Cast) -> None:
     )
 
 
-@power("cf:shaman-f0s1", **TRAIT)
-def shaman_f0s1(c: Cast) -> None:
+@power("cf:shaman-f0s2", **TRAIT)
+def shaman_f0s2(c: Cast) -> None:
     """Untyped: the card prints no word in front of "bonus". The gate is
     re-asked at each damage roll, so an ally who walks away from the spirit
     loses it, which "any ally adjacent to your spirit companion" means."""
@@ -173,8 +207,8 @@ def shaman_f0s1(c: Cast) -> None:
         )
 
 
-@power("cf:shaman-f0s2", **TRAIT, dropped=("c.nearest_enemy()",))
-def shaman_f0s2(c: Cast) -> None:
+@power("cf:shaman-f0s3", **TRAIT, dropped=("c.nearest_enemy()",))
+def shaman_f0s3(c: Cast) -> None:
     """"Cover from other enemies" is narrower than anything the engine can
     say -- what grants the cover is not in the context the gate is handed --
     so this is `partial=True`, which cancels ordinary cover and leaves
@@ -196,8 +230,8 @@ def shaman_f0s2(c: Cast) -> None:
         )
 
 
-@power("cf:shaman-f0s3", **TRAIT)
-def shaman_f0s3(c: Cast) -> None:
+@power("cf:shaman-f0s4", **TRAIT)
+def shaman_f0s4(c: Cast) -> None:
     """All four defences, which is what "all defenses" says, and untyped."""
     _spirit_choice(c, "world speaker", ("p9733", "p9736"))
     if not c.build("world speaker") or c.con_mod <= 0:

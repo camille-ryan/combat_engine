@@ -1024,7 +1024,7 @@ def f2891b(c: Cast) -> None:
     asked as the blow lands rather than snapshotted at the minor action.
 
     `c.grants_advantage(when=)` is that gate -- the same shape
-    `cf:shaman-f0s2` hangs a position test on `c.no_cover` with -- so the
+    `cf:shaman-f0s3` hangs a position test on `c.no_cover` with -- so the
     grant goes on every enemy and each one's lambda re-reads where the
     familiar is standing. `c.grants_in` is the wrong neighbour: it needs a
     zone id, and this radius is centred on a creature.

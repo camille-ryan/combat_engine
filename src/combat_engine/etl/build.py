@@ -1598,7 +1598,7 @@ def _section_rows(
         # `_named_powers` rightly refuses to swap a child's ref into
         # its parent -- and a name the scrubber will not touch is a
         # leak.
-        marks = _sub_marks(body, after_card=per_level)
+        marks = _sub_marks(body, after_card=True)
         head = body[: marks[0][0]] if marks else body
         if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
             continue

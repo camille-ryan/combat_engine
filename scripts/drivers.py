@@ -7838,6 +7838,10 @@ def shaman_spirits(out: Result) -> None:
     where either gate is equally false. The only question that separates
     them is "does *this* build keep *these* powers", which is this rule.
 
+    **The elemental option is the fifth and was absent entirely** until
+    #588 gave it a ref -- so an elemental shaman kept *none* of the eight
+    powers its siblings forbid, which this rule now also asserts.
+
     The negative half is the half that matters: the other spirit's pair
     must be **forbidden**, not merely absent, because `loadout` deals them
     and the row's job is to take them away again.
@@ -7849,10 +7853,11 @@ def shaman_spirits(out: Result) -> None:
 
     # ref -> (its leg, its own pair, the sibling ref)
     PAIRS = {
-        "cf:shaman-f0s0": ("protector", {"p5389", "p6521"}),
-        "cf:shaman-f0s1": ("stalker", {"p5388", "p5510"}),
-        "cf:shaman-f0s2": ("watcher", {"p9732", "p9734"}),
-        "cf:shaman-f0s3": ("world speaker", {"p9733", "p9736"}),
+        "cf:shaman-f0s0": ("elemental", {"p12865", "p12866"}),
+        "cf:shaman-f0s1": ("protector", {"p5389", "p6521"}),
+        "cf:shaman-f0s2": ("stalker", {"p5388", "p5510"}),
+        "cf:shaman-f0s3": ("watcher", {"p9732", "p9734"}),
+        "cf:shaman-f0s4": ("world speaker", {"p9733", "p9736"}),
     }
     missing = [r for r in PAIRS if r not in REGISTRY]
     if missing:
