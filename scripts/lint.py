@@ -226,6 +226,16 @@ def main() -> int:
         )
         faults += 1
 
+    for where, names, at in _gates_on_nothing():
+        print(
+            f"{where}:{at}: compares against {names!r}, which no row"
+            f" declares. The comparison is False for every event it ever"
+            f" sees, so whatever rides on it is silently dead. Either the"
+            f" ref is a second id for a row this tree declares under"
+            f" another one, or the row owes a marker naming it."
+        )
+        faults += 1
+
     for ref, pred, event, has in _dead_triggers():
         print(
             f"{ref}: `{pred}` reads a field {event} does not have"
@@ -1209,6 +1219,102 @@ def _dangling_implementations() -> list[tuple[str, str, str]]:
             if not any(f'"{where}"' in t and asked in t for t in sources.values()):
                 out.append((ref, where,
                             f"that row's source does not contain {asked}"))
+    return out
+
+
+#: A ref, for the gate walk below. Matches the shapes the tree mints and
+#: nothing looser -- a bare word would catch every string in `content/`.
+_REF_SHAPE = re.compile(
+    r"p\d+|m\d+a\d+|i\d+[px]\d+|f\d+[a-z]?|cf:[\w-]+|rt:[\w-]+"
+)
+
+
+def _gates_on_nothing() -> list[tuple[str, str, str]]:
+    """Content **comparing** against a ref that no declared row can produce.
+
+    `f3798` is why this exists. Its trigger predicate asked
+    `ev.trigger.power == "p4807"`, and `p4807` is the compendium's second
+    id for a card this tree declares as `cf:barbarian-f2c0` -- so the
+    comparison was False for every event the row ever saw, the use it
+    hands back was never handed back, and the row carried **no marker**,
+    so it reported finished for as long as it existed.
+
+    **A comparison, not a mention, and that distinction is the whole
+    check.** 23 ref-shaped literals in `content/` name nothing declared
+    and only one of them is a fault:
+
+    * nine sit in a `todo=`/`dropped=` marker, which is the *correct* way
+      to say "this gates on a row nobody has written" -- `f2817` does
+      exactly that for `rt:r16-t1` and its docstring is a model of it;
+    * eleven are the keys of a choice table in `feats/general_c.py`,
+      offered to a player rather than matched against an event;
+    * one is an f-string prefix;
+    * one was `f3798`.
+
+    A walk over mentions would be twelve waivers for one catch, which is
+    the shape `leaks.py`'s over-broad name search was and the reason
+    `--cited` replaced it. A walk over comparisons is one catch and no
+    waivers, because none of the legitimate twenty-two is a comparison.
+
+    **The first version of this walked only decorated row bodies and the
+    plant test caught it**: putting `p4807` back left the check green,
+    because the predicate is an undecorated module-level helper and the
+    constant is module-level too. A row's trigger reaches code the row
+    does not lexically contain, so per-row attribution was the wrong
+    frame -- the file is.
+
+    Content-scoped on purpose and written out rather than taken from
+    `_asked_for()`, for `_dangling_implementations`'s reason: #546 is a
+    differently-scoped check that inherited that default and misses a
+    live fault because of it.
+    """
+    import ast
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+
+    declared = set(REGISTRY)
+    out = []
+    for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
+        text = path.read_text()
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        # Constants compared against, plus the module-level names bound to
+        # a ref-shaped literal -- `_BURN_A_RAGE = "p4807"` then
+        # `ev.power == _BURN_A_RAGE` is the same fault one indirection away,
+        # and is how this file was written after the fault was fixed.
+        aliases: dict[str, tuple[str, int]] = {}
+        for node in tree.body:
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                    and _REF_SHAPE.fullmatch(node.value.value)):
+                aliases[node.targets[0].id] = (node.value.value, node.lineno)
+
+        # `bound=aliases` rather than closing over it: the dict is rebuilt
+        # per file inside the loop, and a closure over a loop variable is
+        # the B023 ruff refuses -- rightly, since a later file's dict would
+        # be the one consulted.
+        def named(side: ast.expr,
+                  bound: dict[str, tuple[str, int]] = aliases,
+                  ) -> tuple[str, int] | None:
+            if (isinstance(side, ast.Constant) and isinstance(side.value, str)
+                    and _REF_SHAPE.fullmatch(side.value)):
+                return side.value, side.lineno
+            if isinstance(side, ast.Name) and side.id in bound:
+                return bound[side.id][0], side.lineno
+            return None
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Compare):
+                continue
+            for side in (node.left, *node.comparators):
+                found = named(side)
+                if found and found[0] not in declared:
+                    out.append((path.name, found[0], f"line {found[1]}"))
     return out
 
 

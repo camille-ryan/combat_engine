@@ -104,9 +104,17 @@ from combat_engine.engine.components import Health, PowerPoints
 from combat_engine.engine.dsl import Power
 from combat_engine.engine.query import has_combat_advantage, team
 
+#: The barbarian card this feat pairs with. **`p4807` is the compendium's
+#: other id for it and nothing declares that one**, so a gate naming it can
+#: never be true -- which is what this predicate did, silently, on a row
+#: carrying no marker. `feats/barbarian_b.py` and
+#: `features/primal_shadow.py` both record the same decision: the ref that
+#: stayed is the positional one.
+_BURN_A_RAGE = "cf:barbarian-f2c0"
 
-def _furious_on_p4807(world, me: int, ev) -> bool:  # noqa: ANN001
-    """`p6189`, used in answer to a hit `p4807` landed.
+
+def _furious_on_burn(world, me: int, ev) -> bool:  # noqa: ANN001
+    """`p6189`, used in answer to a hit `cf:barbarian-f2c0` landed.
 
     The pairing is the event the racial power was answering: it is a
     free action off a `Hit`, and `Hit` names the row that made it.
@@ -114,7 +122,7 @@ def _furious_on_p4807(world, me: int, ev) -> bool:  # noqa: ANN001
     return (
         ev.actor == me
         and ev.power == "p6189"
-        and getattr(getattr(ev, "trigger", None), "power", "") == "p4807"
+        and getattr(getattr(ev, "trigger", None), "power", "") == _BURN_A_RAGE
     )
 
 #: The monk's flurry, which the class page prints as a power and the
@@ -2260,14 +2268,22 @@ def f3797(c: Cast) -> None:
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       trigger="you use p6189 with p4807's attack",
-       on=Trigger(PowerResolved, _furious_on_p4807, "you use it with that"))
+       trigger="you use p6189 with cf:barbarian-f2c0's attack",
+       on=Trigger(PowerResolved, _furious_on_burn, "you use it with that"))
 def f3798(c: Cast) -> None:
-    """"With p4807's attack" is the `Hit` the racial power answered, and
-    the event names it now.
+    """"With that attack" is the `Hit` the racial power answered, and the
+    event names it now.
 
     On the resolution rather than the use, because `dsl.use` marks the
     row spent between the two -- handing the use back any earlier gives
     it back before it is taken.
+
+    **This row could never fire until today.** The predicate asked for
+    `p4807`, which is the compendium's second id for the card and is
+    declared by nothing, so the comparison was False for every event the
+    row ever saw and the use was never handed back. It carried no marker,
+    so it reported finished. `lint.py` now refuses an unmarked row that
+    gates on a ref no row declares, which is the check that would have
+    caught it.
     """
     c.restore_use("p6189")
