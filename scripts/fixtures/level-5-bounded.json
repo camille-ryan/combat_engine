@@ -1096,7 +1096,7 @@
   "ZoneEntered(zone=13, actor=2)",
   "PowerResolved(actor=1, power='p12660', targets=[1], rolls=[])",
   "ActionSpent(actor=1, cost=<ActionType.MINOR: 'minor'>)",
-  "SkillCheck(actor=1, skill='stealth', dc=12, natural=18, bonus=2, total=20, success=True)",
+  "SkillCheck(actor=1, skill='stealth', dc=12, natural=18, bonus=7, total=25, success=True)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=1, target=5)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=1, target=6)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=1, target=7)",
