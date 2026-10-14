@@ -2452,7 +2452,7 @@ def defences(line: ClassLine, scores: dict[Ability, int], level: int) -> dict:
     }
 
 
-def _trained_skills(cls: str, rng: Random) -> frozenset[str]:
+def _trained_skills(cls: str, feats: list[str], rng: Random) -> frozenset[str]:
     """Which skills this character is trained in: the given, plus the chosen.
 
     Off `class_skill`, which `etl/build.py` fills from the two sentences
@@ -2478,15 +2478,32 @@ def _trained_skills(cls: str, rng: Random) -> frozenset[str]:
         " ORDER BY skill",
         (cls.lower(),),
     ).fetchall()
+    # **The feats come first, and apply even to a class with no entry.** A
+    # multiclass feat's "you gain training in Nature" is training the
+    # character has however it was built, so it is not inside the `if not
+    # rows` guard below.
+    from_feats: set[str] = set()
+    for ref in feats:
+        got = db.execute(
+            "SELECT trains FROM feat WHERE ref = ?", (ref,)
+        ).fetchone()
+        if got and got["trains"]:
+            from_feats |= {s for s in got["trains"].split(",") if s}
     if not rows:
-        return frozenset()
+        return frozenset(from_feats)
     row = db.execute(
         "SELECT skill_choices FROM class WHERE lower(name) = ?", (cls.lower(),)
     ).fetchone()
     picks = int((row["skill_choices"] if row else 0) or 0)
     given = {r["skill"] for r in rows if r["granted"]}
     pool = sorted({r["skill"] for r in rows if not r["granted"]} - given)
-    return frozenset(given | set(rng.sample(pool, min(picks, len(pool)))))
+    # Sampled from the pool the class prints, then the feats added. A feat
+    # training a skill the class also offers is one training, not two --
+    # the set does that for free -- but it does **not** buy a free pick in
+    # exchange, which is the printed rule and the reason the sample is
+    # taken before the union rather than from `pool - from_feats`.
+    chosen = set(rng.sample(pool, min(picks, len(pool))))
+    return frozenset(given | chosen | from_feats)
 
 
 def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
@@ -2620,7 +2637,9 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # the fight has rolled by the time it is spawned.
         Skills(
             trained=_trained_skills(
-                who.cls, Random(f"{world.rng.seed}:{who.ref}:{who.level}:skills")
+                who.cls,
+                feats,
+                Random(f"{world.rng.seed}:{who.ref}:{who.level}:skills"),
             )
         ),
         Gear(

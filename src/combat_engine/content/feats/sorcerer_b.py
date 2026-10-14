@@ -239,18 +239,27 @@ def f1161(c: Cast) -> None:
 
 
 @power("f3431", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("chargen.skill_training()",))
+       reach=PERSONAL, target=SELF)
 def f3431(c: Cast) -> None:
-    """Both feat bonuses are ordinary `skill:` modifiers. The training is
-    dropped rather than approximated as a flat +5: `engine/skills.py` says
-    there is no training model at all, so nothing would read the flag and
-    adding the number would make this character trained in a way no other
-    character in the game can be.
+    """Both feat bonuses are ordinary `skill:` modifiers.
 
-    Re-aimed at the name the other twelve rows of this shape use. Where
-    training is granted is `chargen`, not a body -- the character sheet
-    is made before the board is -- and a spelling of its own kept this
-    row out of the group that will close it."""
+    **The training is no longer dropped, and nothing here changed to
+    finish it.** The old note was right on both counts and both have been
+    answered: there was no training model -- `engine/skills.py` said so in
+    its own docstring -- and where training is granted is `chargen` and
+    not a body, because the sheet is made before the board is. So the card
+    names a skill, `feat.trains` carries it, and `chargen` adds it to
+    `Skills.trained` when this feat is taken. #565.
+
+    The +5 and the +2 below **add**: training is a property of the
+    creature and the bonus is a modifier, which is exactly why the first
+    is not stored in `Mods` -- one key for both and the second would have
+    silently replaced the first.
+
+    This row was the only one of the thirteen whose card names its skill
+    outright. The other twelve print "training in one skill from the
+    <class> skill list", which needs the pool *and* a decision, and they
+    keep the marker."""
     c.bonus("skill:intimidate", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
     c.bonus("skill:streetwise", 2, kind="feat", on=c.me, until=When.ENCOUNTER)
 

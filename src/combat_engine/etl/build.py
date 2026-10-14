@@ -277,7 +277,20 @@ CREATE INDEX item_block_owner ON item_block(item_ref);
 -- starts at "Benefit :". See `feat._category`. #557.
 CREATE TABLE feat (
   ref TEXT PRIMARY KEY, id INTEGER, tier TEXT, min_level INTEGER,
-  prereq TEXT, unparsed INTEGER, books TEXT, category TEXT, spec TEXT
+  prereq TEXT, unparsed INTEGER, books TEXT, category TEXT, spec TEXT,
+  -- Skills this feat grants **training** in, comma-separated, where it
+  -- names them outright: "you gain training in Nature". 14 feats do.
+  --
+  -- Only the named ones. 55 more print a *choice* -- "training in one
+  -- skill from the <class> skill list" -- and that is a different fact:
+  -- it needs the pool, which is `class_skill`, and a decision, which is
+  -- `chargen`'s. Storing a guess for those would be worse than storing
+  -- nothing, so they are empty here and still carry their marker.
+  --
+  -- Training is a build-time fact, which is why it is a column and not
+  -- something a row body says. `chargen` applies it; `engine/skills.py`
+  -- pays the +5. #565.
+  trains TEXT
 );
 CREATE INDEX feat_tier ON feat(tier, min_level);
 CREATE INDEX feat_category ON feat(category);

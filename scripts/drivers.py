@@ -6657,6 +6657,40 @@ def trained_skills(out: Result) -> None:
         f"{trained}: {with_it} trained, {both} with a +2 item bonus as well",
     )
 
+    # A feat that names its skill outright trains in it, and buys no free
+    # pick from the class pool in exchange. `f3431` is the only one of the
+    # thirteen whose card names the skill; the other twelve print a choice
+    # from another class's list and keep their marker.
+    from random import Random
+
+    from combat_engine.chargen import _trained_skills
+
+    # **A class whose pool does not contain the feat's skill**, which the
+    # first draft of this got wrong: against a fighter -- whose own pool
+    # includes streetwise -- the assertion passed or failed by seed, since
+    # a class pick can land on the same skill the feat grants. The set is
+    # right to collapse those into one training; the test was wrong to
+    # assume they stay distinct. A cleric's pool has no streetwise, so the
+    # feat's grant is additive whatever the sample does.
+    seed = Random(11)
+    plain = _trained_skills("cleric", [], Random(11))
+    with_feat = _trained_skills("cleric", ["f3431"], Random(11))
+    out.that(
+        set(with_feat) - set(plain) == {"streetwise"},
+        "a feat naming a skill trains in exactly that skill",
+        f"without {sorted(plain)}, with {sorted(with_feat)}",
+    )
+    out.that(
+        len(with_feat) == len(plain) + 1,
+        "and it does not cost the character one of its class picks",
+        f"{len(plain)} without the feat, {len(with_feat)} with it",
+    )
+    out.that(
+        _trained_skills("nosuchclass", ["f3431"], seed) == frozenset({"streetwise"}),
+        "and the feat's training applies even where the class has no entry",
+        "a class with no class_skill rows must still honour the feat",
+    )
+
 
 DRIVERS = {
     "trained_skills": (

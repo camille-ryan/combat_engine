@@ -65,6 +65,36 @@ _TITLE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
 _BRACKET = re.compile(r"^(?P<name>.*?)\s*\[(?P<category>[^\[\]]+)\]$")
 
 
+#: "You gain training in Nature." The skill is named outright, and the
+#: sentence is regular enough to take by position: the word after
+#: "training in", when it is one of the 17.
+#:
+#: **Only a named skill.** 55 feats print "training in one skill from the
+#: <class> skill list" instead, and this must not match them -- the word
+#: after "in" there is "one", which is not a skill, so the test below
+#: rejects it without a special case. Those want `class_skill` and a
+#: decision, which is a different gap and keeps its marker. #565.
+_TRAINS = re.compile(r"training in ([A-Za-z]+)", re.I)
+
+
+def _trains(spec: str) -> str:
+    """Which skills this feat grants training in, comma-separated.
+
+    Empty for the great majority. Every match is checked against
+    `skills.SKILLS` rather than trusted, because the position alone also
+    catches "training in one skill", "training in a skill" and "training
+    in that skill".
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    found = [
+        w.lower() for w in _TRAINS.findall(spec or "") if w.lower() in SKILLS
+    ]
+    # Ordered and de-duplicated: a feat naming the same skill twice is one
+    # training, and a stable order keeps the column comparable run to run.
+    return ",".join(sorted(dict.fromkeys(found)))
+
+
 def _category(document: str, name: str) -> str:
     """The feat's category, as the page prints it in brackets after the name.
 
@@ -356,15 +386,18 @@ def feats(
             if card_name:
                 granted[card_name] = card_ref
             report.feat_cards += 1
+        benefit = _trimmed(
+            source, row, _benefit(head, ref, row["Name"] or "", granted)
+        )
         out.execute(
-            "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 ref, row["ID"], tier, _min_level(tree),
                 json.dumps(tree) if tree else None, opaque,
                 books,
                 _category(row["Txt"] or "", row["Name"] or ""),
-                _trimmed(source, row,
-                         _benefit(head, ref, row["Name"] or "", granted)),
+                benefit,
+                _trains(benefit),
             ),
         )
         # **No description, and that is the answer rather than a gap.** A feat
@@ -426,8 +459,10 @@ def _card(
     # *feats* combine -- a power card handed over by one has nothing to do
     # with it. Empty string, explicitly.
     out.execute(
-        "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?)",
-        (ref, row["ID"], tier, 1, None, 0, books, "", spec),
+        "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?,?)",
+        # A card grants no training of its own -- the training is on the
+        # feat, like the category two lines above. Empty, explicitly.
+        (ref, row["ID"], tier, 1, None, 0, books, "", spec, ""),
     )
     # A card is read in the power dialect, so its printed rules are
     # `power_rules` -- the same lines `power_spec` scrubs two lines up. #349.
