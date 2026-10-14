@@ -1714,14 +1714,28 @@ def i3463x1(c: Cast) -> None:
 
 
 @power("i3560x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Target.ident",))
+       reach=PERSONAL, target=SELF, dropped=("etl.monster.species",))
 def i3560x1(c: Cast) -> None:
     """"Except against gargoyles" is a **species** exclusion.
 
     `SkillCheck.target` landed and gives the creature; what it cannot give
-    is the creature's species. `query.kinds_of` returns an origin and a
-    type and never a species, which is the same gap nine `Target.ident`
-    rows carry. Being sensed by one is narrative.
+    is that creature's species.
+
+    **Re-pointed off `Target.ident`, which was wrong twice.** This row has
+    `target=SELF` and lays a gated `skill:` modifier -- there is no target
+    line here to filter, so a `Target` field could never have answered it.
+    And `Target.ident` is now a field that exists, so the marker had begun
+    to claim the row was ready.
+
+    The old note also said `query.kinds_of` returns "an origin and a type
+    and never a species", and that is too strong: it returns **101
+    distinct words** across the corpus and plenty are species -- `kobold`,
+    `orc`, `plant`. What is true is that the word is **uneven**. A species
+    appears only when the stat block prints it in the parenthetical, and
+    `m5878a5` carries the measurement: `m5445` has its species in both
+    `keywords` and `kind`, so `m5445a3` asks the identical question and
+    fires, while a same-family block carries only size, origin and type.
+    So the gap is the data, which is what the symbol now names. #570.
     """
     c.bonus("skill:intimidate", c.enhancement, on=c.me,
             until=When.ENCOUNTER, kind="item")
