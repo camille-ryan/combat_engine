@@ -1759,18 +1759,26 @@ def f2244(c: Cast) -> None:
        on=Trigger(DamageApplied, lambda w, me, ev: (
            ev.target == me and ev.amount > 0
        ), "you take damage"),
-       dropped=("cf:sorcerer-f0s1",))
+       )
 def f2175(c: Cast) -> None:
-    """The second half plays. p1448's type is `c.element`, which is where
-    the racial choice is recorded and what p1448's own body rolls with,
-    and "the type you have resistance to" is asked of `c.resistances`
-    rather than of the one feature the card names -- `cf:sorcerer-f0s1`
-    has no row, so naming it would make the row inert, while the
-    question the card is really asking is answerable off the character.
+    """Both halves play, and the marker outlived the second one.
+
+    p1448's type is `c.element`, which is where the racial choice is
+    recorded and what p1448's own body rolls with, and "the type you have
+    resistance to" is asked of `c.resistances` rather than of the one
+    feature the card names -- `cf:sorcerer-f0s1` has no row, so naming it
+    would make the row inert, while the question the card is really
+    asking is answerable off the character.
 
     `DamageApplied` is after resistance, which is the printed "after the
-    damage dealt is reduced by your resistance". The keyword half --
-    calling the racial power arcane -- is the standing gap.
+    damage dealt is reduced by your resistance".
+
+    **The marker said the keyword half was the standing gap while the
+    last line of this body wrote it.** `c.counts_as_keyword` exists and
+    `dsl.keywords_of` merges a grant at all 22 sites that read a row's
+    keywords, so "considered an arcane attack power" is said and read.
+    The `dropped=("cf:sorcerer-f0s1",)` is gone: the row it named is
+    still undeclared, but nothing here is waiting for it.
     """
     me = c.me
     mine = c.element(on=me)
