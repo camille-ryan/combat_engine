@@ -79,7 +79,14 @@ from .warlord_b import _covering
 #: answer it with `c.watch`, the shape `p7419` already uses.
 #: …nor change which ability a named row rolls.
 ABILITY = ("c.rolls_with(ref, ability)",)
-#: Nothing announces that the class's extra damage was about to be paid.
+#: **Not an announcement, and this said it was.** It read "nothing
+#: announces that the class's extra damage was about to be paid" --
+#: `features/strikers.extra_damage` pays with `detail=label` and both
+#: damage events carry `detail` and `amount`, so the announcement has
+#: always been there. #569 separates what the rows under this symbol
+#: actually want; `f807` and `f1232` wanted the once-a-round **latch**,
+#: which was private and is `Powers.latched` now. `f1722` is the last
+#: row here that needs it, and wants the payout as well as the latch.
 EXTRA = ("c.on_extra_damage()",)
 
 #: The conditions f2367 narrows its save penalty to.
@@ -226,21 +233,49 @@ def f808(c: Cast) -> None:
     c.bonus("attack", 1, on=me, until=When.ENCOUNTER, when=alone)
 
 
-@power("f1232", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=EXTRA,
+@power("f1232", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you reduce your quarry to 0 hit points",
        on=Trigger(Dropped, lambda w, me, ev: (
            getattr(ev, "source", None) == me
            and w.relations.holds(Relation.QUARRY_OF, me, ev.actor)
        ), "you drop your quarry"))
 def f1232(c: Cast) -> None:
-    """A new quarry the moment the old one falls.
+    """A new quarry the moment the old one falls, and the class's extra
+    damage allowed again against it.
 
     The nearest standing enemy, because a quarry you cannot reach is the
-    feat doing nothing. The second sentence -- reapplying the class's
-    extra damage on the new target -- is dropped: nothing announces that
-    the extra damage was paid, so "even if you already used it" has no
-    counter to override.
+    feat doing nothing.
+
+    **The second sentence was dropped on a premise that was wrong twice.**
+    It read "nothing announces that the extra damage was paid, so 'even if
+    you already used it' has no counter to override". The announcement was
+    never the question -- and the counter is `Powers.latched` now, so
+    `c.unlatch` is the override. #569.
+
+    It had also been filed as "not that gap at all", on the strength of
+    this docstring's own first line: the card's *first* sentence is the new
+    quarry, and the second is the latch override, word for word what
+    `f807` does off an action point.
+
+    **`Window.BEFORE`, and the row is wrong without it.** The card says the
+    damage applies on *that* hit, and the striker's own payout is a `Hit`
+    watcher -- `features/strikers.extra_damage`, registered on the default
+    `Window.AFTER`. An unlatch in the AFTER window arrives after the
+    payout has already declined to pay, so the permission would land one
+    hit late: spent on whatever the ranger hit next instead of the new
+    quarry. The same ordering `p14462` was silently losing.
+
+    Scoped to the new quarry by identity rather than by asking who the
+    quarry is at the time: the printed sentence is about *that* creature,
+    and a third quarry taken in between must not inherit the permission.
+
+    **`AT_WILL`, and the marker was hiding that.** `lint.py`'s check for a
+    triggered trait spent on its first firing skips a row while
+    `p.unfinished` -- rightly, since a marked row is refused in play -- so
+    taking the marker off is what surfaced the header fault underneath.
+    `f807` had the identical one. The card prints no limit of its own: how
+    often this can happen is bounded by quarries dying, not by a use.
     """
     from combat_engine.engine.query import distance_between
 
@@ -248,7 +283,15 @@ def f1232(c: Cast) -> None:
     standing = [f for f in enemies(c.world, me) if not _is_my_quarry(c, f)]
     if not standing:
         return
-    c.quarry(on=min(standing, key=lambda f: distance_between(c.world, me, f)))
+    fresh = min(standing, key=lambda f: distance_between(c.world, me, f))
+    c.quarry(on=fresh)
+
+    def struck_the_new_one(ev: Any) -> None:
+        if ev.attacker == me and ev.target == fresh:
+            c.unlatch("cf:ranger-f1")
+
+    c.watch(Hit, struck_the_new_one, until=When.SONT, on=me,
+            window=Window.BEFORE, label=f"{c.ref} again")
 
 
 @power("f2183", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
