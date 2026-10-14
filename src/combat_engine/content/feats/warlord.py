@@ -27,6 +27,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.martial_leaders import (
+    PRESENCE_AIM_RAISE,
+    PRESENCE_CUSHION_RAISE,
+    PRESENCE_HEAL_RAISE,
+    PRESENCE_HURT_RAISE,
+)
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -229,28 +235,64 @@ def _feature(ref: str, what: str, marker: tuple[str, ...] = FEATURE) -> None:
     feat.__doc__ = what
 
 
-# **Re-pointed off `spec.feature_ref()`, which was never the gap.** Both
-# notes said the prerequisite "names" the feature, and it does: the ref is
-# in the spec, resolved, and `game.db` carries the feature's full rules
-# text. What is missing is that **no content row declares it** -- ordinary
-# authoring on another row, not a facility either feat waits on. Checked:
-# `cf:warlord-marshal-f4s3` is declared and `f790` beside them is blocked
-# on `c.amplify_bonus()` instead, which is the gap these two will have the
-# moment their own feature is written.
-_feature("f789", "Raises what one leader presence restores. The ref resolves "
-                 "and `game.db` holds the feature's text; no row declares "
-                 "`cf:warlord-marshal-f4s2` yet, so there is no payout to "
-                 "raise.", ("content.cf_warlord_marshal_f4s2",))
-_feature("f791", "Raises what a third leader presence grants. Same shape as "
-                 "f789: the ref resolves, the database has the text, and "
-                 "`cf:warlord-marshal-f4s5` is undeclared.",
-         ("content.cf_warlord_marshal_f4s5",))
-_feature("f790", "Raises what `cf:warlord-marshal-f4s3` pays. That row is "
-                 "declared now, and both numbers it hands out -- the damage "
-                 "bonus and the temporary hit points -- are locals in its "
-                 "closure. Adding 2 to each means editing a modifier "
-                 "somebody else laid; a second `c.temp_hp` would be a "
-                 "competing pool rather than a larger one.", AMPLIFY)
+# **Both written, and `spec.feature_ref()` was never the gap on either.**
+# The notes said the prerequisite "names" the feature and it does: the ref
+# resolved all along and `game.db` carried the text. What was missing was
+# that no row *declared* the presence -- so the fix was two rows of
+# ordinary authoring in `features/martial_leaders.py`, not a facility.
+#
+# And `c.amplify_bonus()` was not needed either. `c.change_amount` /
+# `c.amount_for` is exactly "raise a number another row hands out", and the
+# artificer's `empowerments()` two files over had already used that pair
+# for the same shape. Each presence reads its raise with a default of 0;
+# each feat writes it. One source of truth per number.
+
+
+@power("f789", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f789(c: Cast) -> None:
+    """Two more hit points from the presence that heals the ally who spent.
+
+    **The raise, not the total.** `c.amount_for` is largest-wins, so these
+    keys hold what the feat adds rather than what the presence pays: the
+    card says "an **additional** 2" and this row cannot compute the printed
+    amount, which is `level // 2 + cha_mod` and differs per character.
+    `cf:warlord-marshal-f4s2` adds whatever it finds here to its own
+    number.
+    """
+    c.change_amount(PRESENCE_HEAL_RAISE, 2, on=c.me, until=When.ENCOUNTER)
+
+
+@power("f791", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f791(c: Cast) -> None:
+    """One more on the attack roll the tactical presence sharpens.
+
+    Same pair as `f789` above and the same reason for keying the raise
+    rather than the total. `cf:warlord-marshal-f4s5` pays half an
+    Intelligence modifier and reads this on top.
+    """
+    c.change_amount(PRESENCE_AIM_RAISE, 1, on=c.me, until=When.ENCOUNTER)
+@power("f790", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f790(c: Cast) -> None:
+    """Two more on both numbers the resourceful presence pays.
+
+    **`c.amplify_bonus()` was never needed, and this row's note said why it
+    seemed to be**: "both numbers it hands out are locals in its closure;
+    adding 2 to each means editing a modifier somebody else laid". True of
+    the closure, and the wrong conclusion -- the answer is for the laying
+    row to *read* a raise rather than for this one to reach into it, which
+    is what `c.change_amount` / `c.amount_for` has always been for. The
+    artificer's `empowerments()` in the same file had used that pair for
+    the same shape.
+
+    Two keys, because the presence pays two different numbers. One key
+    would have made a feat raising only one of them unwritable, and this
+    card raising both is a coincidence of this card.
+    """
+    c.change_amount(PRESENCE_HURT_RAISE, 2, on=c.me, until=When.ENCOUNTER)
+    c.change_amount(PRESENCE_CUSHION_RAISE, 2, on=c.me, until=When.ENCOUNTER)
 _feature("f788", "A choice of two bonuses when `cf:warlord-marshal-f4s0` is "
                  "used. That row is declared, but the ally's opt-in -- the "
                  "moment the presence is actually taken up -- happens inside "

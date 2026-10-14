@@ -818,8 +818,8 @@ def warlord_presence_resource(c: Cast) -> None:
     key it does not have, which is silently false.
     """
     me = c.me
-    hurt = c.level // 2 + c.int_mod
-    cushion = c.level // 2 + c.cha_mod
+    hurt = c.level // 2 + c.int_mod + c.amount_for(PRESENCE_HURT_RAISE, 0)
+    cushion = c.level // 2 + c.cha_mod + c.amount_for(PRESENCE_CUSHION_RAISE, 0)
 
     def spent(ev: ActionPointSpent) -> None:
         ally = _paying_ally(c, ev)
@@ -872,6 +872,121 @@ def warlord_presence_step(c: Cast) -> None:
         c.grant_action(
             "shift", ActionType.FREE, squares_=squares, on=ally, until=When.EOT
         )
+
+    c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+#: **What a feat adds to a presence's payout**, read with `c.amount_for`
+#: and written with `c.change_amount`. Reserved keys rather than the
+#: presences' own refs, because `amount_for` is *largest wins* and these
+#: hold the **raise** and not the total: the feat prints "an additional 2"
+#: and cannot compute the printed amount, which is `level // 2 + cha_mod`
+#: and differs per character.
+#:
+#: Largest-wins on a raise is indistinguishable from additive while one
+#: feat raises each -- and one does. Two would be a real question and the
+#: cards do not pose it.
+PRESENCE_HEAL_RAISE = "presence:heal-raise"
+PRESENCE_AIM_RAISE = "presence:aim-raise"
+#: The resourceful presence pays two numbers and `f790` adds 2 to **both**,
+#: so two keys rather than one: a single key would make a feat that raised
+#: only one of them unwritable, and the cards here raise both together only
+#: by coincidence of this one feat.
+PRESENCE_HURT_RAISE = "presence:hurt-raise"
+PRESENCE_CUSHION_RAISE = "presence:cushion-raise"
+
+
+@power(
+    "cf:warlord-marshal-f4s2",
+    level=0,
+    cls="warlord",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=CloseBurst(10),
+    target=NO_TARGET,
+    keywords=MARTIAL,
+    requires=on_leg("inspiring"),
+    requires_text="needs the leg whose presence heals the ally who spent",
+)
+def warlord_presence_heal(c: Cast) -> None:
+    """The fifth of the six presences, and it was undeclared while two
+    feats waited on it.
+
+    **`f789` raises what this restores, and its marker blamed the wrong
+    layer** -- `spec.feature_ref()`, as though the ref were unresolved. The
+    ref resolved all along and `game.db` carried this text; the row simply
+    was not written. Checked by reading the card rather than the note.
+
+    The leg is `inspiring` by the ability the card names: the six presences
+    map one-to-one onto the six legs, four were already claimed, and of the
+    two left this one pays off **Charisma** where `f4s5` pays off
+    Intelligence -- which is exactly how `inspiring` and `tactical` divide
+    in `chargen.BUILDS`.
+
+    `c.heal` and not `c.temp_hp`: the card says "regains hit points", and
+    the sibling two rows up uses temporary ones for a different clause, so
+    the two are deliberately distinguishable.
+
+    The "from only one of them" clause needs **two** warlords with this
+    feature to mean anything, and no board in this repo fields two. Left
+    unwritten rather than marked: a second one would make it a real
+    question, and nothing about this row is wrong without it.
+    """
+    me = c.me
+    amount = c.level // 2 + c.cha_mod + c.amount_for(PRESENCE_HEAL_RAISE, 0)
+
+    def spent(ev: ActionPointSpent) -> None:
+        ally = _paying_ally(c, ev)
+        if ally is None or amount <= 0:
+            return
+        c.heal(amount, on=ally)
+
+    c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
+
+
+@power(
+    "cf:warlord-marshal-f4s5",
+    level=0,
+    cls="warlord",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=CloseBurst(10),
+    target=NO_TARGET,
+    keywords=MARTIAL,
+    requires=on_leg("tactical"),
+    requires_text="needs the leg whose presence sharpens the first swing",
+)
+def warlord_presence_aim(c: Cast) -> None:
+    """The sixth presence, and `f791`'s dependency -- undeclared for the
+    same reason `f4s2` was.
+
+    **"The first attack roll of that attack" is `once=True`**, which is the
+    same argument the `resourceful` presence above uses for its damage
+    bonus: the modifier is laid for the turn and spends itself on the first
+    roll that reads it. Gating on the action point instead would read a key
+    the attack context does not carry, which is silently false and this
+    component's named failure mode.
+
+    "The ally **spends an action point to make an attack**" is narrower
+    than the other five, which say "to take an extra action" -- but the
+    narrowing is unobservable at the moment the point is spent, because
+    what the extra action will be used for is not yet decided.
+    `_bought_with_a_point` reads it off the attack itself, which is the
+    only place it is knowable; here the bonus simply waits, and an ally who
+    spends a point on something else never rolls an attack for it to apply
+    to. Same answer, reached by not guessing.
+
+    `tactical` by the ability: half an **Intelligence** modifier, where
+    `f4s2` pays off Charisma.
+    """
+    me = c.me
+    sharper = c.int_mod // 2 + c.amount_for(PRESENCE_AIM_RAISE, 0)
+
+    def spent(ev: ActionPointSpent) -> None:
+        ally = _paying_ally(c, ev)
+        if ally is None or sharper <= 0:
+            return
+        c.bonus("attack", sharper, until=When.EOT, on=ally, once=True)
 
     c.watch(ActionPointSpent, spent, until=When.ENCOUNTER, on=me, label=c.ref)
 
