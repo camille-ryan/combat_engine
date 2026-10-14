@@ -86,10 +86,14 @@ def p997(c: Cast) -> None:
     rule is one `[Arena Fighting]`, one `[Lesser Style]`, any number of
     unbracketed.
 
-    `f994` is Arena Fighting. `f1300` carries no bracket. **They are two
-    plain `if`s, not a chain** -- the first version of this chained them,
-    on a family split I had inferred from the books instead of reading the
-    bracket.
+    `f994` is Arena Fighting and is read off `c.declare`, which is called
+    before the attack. `f1300` carries no bracket and is a plain `c.feat`
+    test that stacks with it. **The first version chained the two**, on a
+    family split inferred from the books instead of read from the bracket.
+
+    `c.declare` is called here even though only one Arena Fighting clause
+    is written: it is the slot the other four go into, and a body that
+    asks `c.feat` today is a body somebody has to remember to convert.
 
     Both hang on the miss and not the hit, which is unusual and is why
     they sit after the early return: one pays "damage equal to your
@@ -105,6 +109,7 @@ def p997(c: Cast) -> None:
     encounter, which a body has no latch for, so it cannot come here at
     all.
     """
+    arena = c.declare("Arena Fighting", "f994")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         return
@@ -114,7 +119,7 @@ def p997(c: Cast) -> None:
     # modifier on a two-handed miss, so the full printed figure would pay
     # it twice. #299's trap, and the reason this row was read before the
     # clause was written.
-    if c.feat("f994") and c.wielding("two-handed"):
+    if arena == "f994" and c.wielding("two-handed"):
         c.flat(2, on=c.target)
     # f1300 carries no bracket, so it stacks with the arena feat above
     # rather than being chained to it. This was an `elif` and was wrong.
@@ -235,9 +240,13 @@ def p1758(c: Cast) -> None:
     skips rather than claiming the chain is complete. #556 is the fix:
     promote that memory into the engine, where nothing has to arm it.
 
+    The two that did move are read off `c.declare`, called before the
+    attack, so the choice between them cannot depend on the roll.
+
     `f1102` and six others also name this row in other categories and
     stack legitimately.
     """
+    arena = c.declare("Arena Fighting", "f978", "f985")
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1))
@@ -255,12 +264,12 @@ def p1758(c: Cast) -> None:
     # has none of, so it answered None and this branch could never pay.
     # The row is melee-only, so the main hand is the weapon swung, which
     # is what `c.weapon_of` picked off the event before the clause moved.
-    if c.feat("f978") and c.wielding("superior"):
+    if arena == "f978" and c.wielding("superior"):
         gear = c.world.get(c.me, Gear)
         weapon = gear.main if gear is not None else None
         if weapon is not None:
             c.flat(weapon.proficiency, on=c.target)
-    elif c.feat("f985") and c.wielding("shield"):
+    elif arena == "f985" and c.wielding("shield"):
         c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
 
 

@@ -669,9 +669,18 @@ declare a weapon, a weapon group or a suit of armour.
   tree still holds examples of the old shape; follow this one.
 
       def p87(c: Cast) -> None:
-          ...
-          if c.feat("f974"):
+          # before the attack, because the card says so
+          style = c.declare("Lesser Style", "f2326", "f2343")
+          arena = c.declare("Arena Fighting", "f974", "f977")
+          if not c.strike():
+              return
+          c.damage(...)
+          if arena == "f974":
               c.bonus(...)
+          elif arena == "f977":
+              ...
+          if c.feat("f1298"):      # no bracket: stacks, no declaration
+              ...
 
   **This block used to say `label="f974"` was not optional, and that example
   raised a `TypeError`.** `c.bonus`, `c.penalty`, `c.flat` and `c.damage`
@@ -733,10 +742,26 @@ declare a weapon, a weapon group or a suit of armour.
      five rows migrated — denying clauses a character is entitled to on
      three of them and allowing two it is not on the fourth.
 
-     **And do not read the category out of `game.db`: it is not there.**
-     The bracket lives in `compendium.sqlite`'s `Feat.PlainTxt` and the
-     ETL strips it. An authoring agent cannot read the compendium, so the
-     grouping has to come down from the main session with the brief. #550.
+     **The category is in `game.db` as `feat.category`** since #557, and
+     `scripts/spec.py` prints it in your brief as
+     `category: [Arena Fighting]`. It used to be nowhere — the bracket
+     lives in `compendium.sqlite`'s page title and the ETL dropped it —
+     which is how the four rows above went wrong.
+
+     **`c.declare(category, *feats)` is how a body picks, and it goes
+     before `c.strike()`.** The printed rule is "you must declare which of
+     each type you are using *before making the attack*", so the choice
+     cannot depend on the roll. It asks the player when more than one is
+     held, remembers the answer for the whole use, and returns `""` when
+     none is.
+
+     A branch then reads `if arena == "f974":` and **never
+     `c.feat("f974")`**. `c.feat` answers "is it held", which is true of
+     every feat the character owns and cannot say which is being applied —
+     and a chain of `c.feat` tests *falls through*, so a character who
+     declared a crit-only feat and then did not crit would quietly collect
+     the next clause instead. More generous than the card, and what #554
+     was open about. #550.
   3. One mechanism instead of two, and the `if` in the body was already the
      dominant one at 193 sites.
 

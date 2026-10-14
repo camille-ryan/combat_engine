@@ -181,9 +181,17 @@ Three reasons, and the second is a rule the engine could otherwise break:
 
   **Never group by the last word of the printed name.** Arena Fighting and
   unbracketed feats are both printed "… Style", and that reading got four
-  of the first five migrated rows wrong. **And the category is not in
-  `game.db`** — the ETL strips the bracket, so the grouping has to arrive
-  with your brief.
+  of the first five migrated rows wrong. The category **is** in `game.db`
+  as `feat.category` since #557, and `scripts/spec.py` prints it in your
+  brief.
+
+  **`c.declare(category, *feats)` picks the one, and it goes before
+  `c.strike()`** — the card says "declare which of each type you are using
+  before making the attack", so the choice cannot depend on the roll. A
+  branch then reads `if arena == "f974":`, never `c.feat("f974")`:
+  `c.feat` says only that it is held, and a chain of those *falls
+  through*, paying a second feat's clause when the first one's condition
+  missed. #554.
 * One mechanism rather than two, and the `if` was already the common one.
 
 **The exception is a feat naming a class of powers** — "any implement

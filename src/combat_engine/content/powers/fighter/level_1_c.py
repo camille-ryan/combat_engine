@@ -61,17 +61,20 @@ def p2099(c: Cast) -> None:
     a chain** -- the first version chained them on a family split I had
     inferred from the books rather than read from the compendium.
 
-    `f973` and `f3245` are Arena Fighting and belong in a chain with
-    `f992`; neither is written yet. `f973`'s clause is a bonus to *this*
+    `f992` is read off `c.declare`, called before the attack, so when the
+    other Arena Fighting clauses land the choice between them is already
+    being made at the right moment. `f973` and `f3245` are Arena Fighting
+    and belong in that chain; neither is written yet. `f973`'s clause is a bonus to *this*
     row's attack roll, and it has to be laid before `c.strike()` rather
     than after -- a `used=` rider reaches it and a hit clause does not.
     `f1317` and `f2363` are Lesser Style and want a second chain.
     """
+    arena = c.declare("Arena Fighting", "f992")
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1), c.str_mod)
 
-    if c.feat("f992"):
+    if arena == "f992":
         c.bonus(FORT, 1, on=c.me, until=When.SONT, kind="feat")
     # f1298 carries no bracket and stacks with the arena feat above. This
     # was an `elif` and was wrong.

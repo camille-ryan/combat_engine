@@ -6050,8 +6050,15 @@ def feat_clause_exclusivity(out: Result) -> None:
     assert known is not None
     held_originally = list(known.known)
 
-    def run(*feats: str, crit: bool = False, held: bool = False) -> set[str]:
-        """Fire `p704`'s body and report which clauses asked for anything."""
+    def run(*feats: str, crit: bool = False, held: bool = False,
+            declares: str = "") -> set[str]:
+        """Fire `p704`'s body and report which clauses asked for anything.
+
+        `declares` stands in for the player's answer to `c.declare` when
+        more than one feat of a category is held. Left empty, the engine's
+        own pick -- the first option -- is taken, which `c.choose`
+        documents as a real choice rather than a fallback.
+        """
         known.known[:] = [*held_originally, *feats]
         asked: set[str] = set()
         spy = Cast(world=world, me=pc, ref="p704", target=mon,
@@ -6078,6 +6085,10 @@ def feat_clause_exclusivity(out: Result) -> None:
         # than recorded -- planting four conditions on the board would
         # make this rule depend on what else clears them.
         setattr(spy, "is_", lambda *_a, **_kw: held)          # noqa: B010
+        if declares:
+            setattr(spy, "choose",                            # noqa: B010
+                    lambda options, *_a, **_kw: declares
+                    if declares in options else (options[0] if options else None))
         REGISTRY["p704"].body(spy)
         return asked - {"strike", "damage"}
 
@@ -6105,11 +6116,31 @@ def feat_clause_exclusivity(out: Result) -> None:
              " `elif` in p704's body becomes a second `if`, and the only"
              f" one that does ({sorted(arena)})")
 
-    out.that(run("f972", "f3188") == {"f3188"},
-             "and on an ordinary hit f3188 pays rather than nothing -- each"
-             " branch carries its own applicability, so the chain does not"
-             " spend the use on a feat that cannot do anything"
-             f" ({sorted(run('f972', 'f3188'))})")
+    # **The declaration is made before the roll and is not revisited**,
+    # which is the printed rule: "you must declare which of each type you
+    # are using before making the attack". This assertion used to say the
+    # opposite -- that on an ordinary hit `f3188` would pay "rather than
+    # nothing", because the chain carried its applicability per branch and
+    # fell through. That was more generous than the card, and `c.declare`
+    # is what fixed it. The rule reddened on this exact line when the verb
+    # landed, which is the instrument doing its job.
+    out.that(run("f972", "f3188", declares="f972") == set(),
+             "declaring f972 and then NOT critting pays nothing -- the"
+             " declaration happens before the attack and does not fall"
+             " through to the other feat"
+             f" ({sorted(run('f972', 'f3188', declares='f972'))})")
+
+    out.that(run("f972", "f3188", declares="f3188") == {"f3188"},
+             "and declaring f3188 instead pays, on the same ordinary hit --"
+             " the control that makes the line above a *choice* and not"
+             " simply a clause that never fires"
+             f" ({sorted(run('f972', 'f3188', declares='f3188'))})")
+
+    out.that(run("f972", "f3188", crit=True, declares="f3188") == {"f3188"},
+             "and a declaration of f3188 holds even on a critical hit,"
+             " where f972 would have paid more -- the player's answer is"
+             " not second-guessed by the outcome"
+             f" ({sorted(run('f972', 'f3188', crit=True, declares='f3188'))})")
 
     # The control against writing the exclusivity too wide, which is the
     # mistake the first version of this rule made.

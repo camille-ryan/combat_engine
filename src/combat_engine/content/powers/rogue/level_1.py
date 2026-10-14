@@ -104,29 +104,35 @@ def p704(c: Cast) -> None:
     `f1300` carries no bracket, so it stacks with whichever arena feat
     paid -- a plain `if`, outside the chain.
 
-    Each branch of the chain carries its own applicability: `f972` pays on
-    a critical hit only, so a character holding it and `f3188` gets the
-    shift on an ordinary hit rather than nothing. When more than one
-    applies the first wins, which is arbitrary -- the printed rule is that
-    the player declares which one **before the attack**. #554.
+    **`c.declare` is called before `c.strike()`, and that is the printed
+    rule**: "you must declare which of each type you are using before
+    making the attack". So a character holding `f972` and `f3188` who
+    declares `f972` and then does not crit gets **nothing** -- the
+    declaration is not revisited once the die is read.
+
+    The first version of this body put the applicability in each branch
+    and fell through, so that character got the shift instead. More
+    generous than the card, and `#554` was open about it until the verb
+    landed. Do not move these tests back onto `c.feat`: that asks "is it
+    held", which is true of every feat the character owns and cannot say
+    which one is being applied.
     """
+    arena = c.declare("Arena Fighting", "f972", "f3188", "f3234")
     if not c.strike():
         return
     c.damage(c.w(1), c.dex_mod)
 
-    # One Arena Fighting feat. f3188 and f3234 are of that category too --
-    # they were plain `if`s in the first version of this and should not have
-    # been -- so all three are one chain, in printed order.
-    if c.feat("f972") and c.crit:
+    if arena == "f972" and c.crit:
         c.penalty(AC, 2, on=c.target, until=When.EONT)
-    elif c.feat("f3188"):
+    elif arena == "f3188":
         c.ignores_difficult(on=c.me, until=When.EOT)
         c.shift(2 if c.race_of(on=c.me) == "r4" else 1)
-    elif c.feat("f3234"):
+    elif arena == "f3234":
         c.push(1, on=c.target)
 
     # f1300 carries no bracket, so any number of its kind apply: a plain
-    # `if`, outside the chain, stacking with whichever arena feat paid.
+    # `c.feat` outside the declaration, stacking with whichever arena feat
+    # paid.
     if (c.feat("f1300") and c.con_mod > 0
             and any(c.is_(hold, on=c.target) for hold in _HELD_FAST)):
         c.flat(c.con_mod, on=c.target)

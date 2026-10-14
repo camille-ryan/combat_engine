@@ -199,6 +199,11 @@ class Cast:
     #: body is not. A body never compares this directly -- `c.instead_of`
     #: is the read.
     variant: int = 0
+    #: Which feat of each bracketed category this use is applying, by
+    #: category. Written by `c.declare` and read by nothing else -- see
+    #: there for why the answer is settled once per use rather than once
+    #: per target or once per clause.
+    declared_feats: dict[str, str] = field(default_factory=dict)
 
     @property
     def attack_mod(self) -> int:
@@ -711,6 +716,57 @@ class Cast:
         who = self.me if on is None else on
         known = self.world.get(who, Powers)
         return known is not None and ref in known.all
+
+    def declare(self, category: str, *feats: str) -> str:
+        """Which feat of one printed category applies to **this use**.
+
+        The compendium prints a feat's category in brackets after its name
+        and the rule is one feat per category per use of a power:
+        `[Arena Fighting]` says "you can take any number but you can use
+        only one at a time", the style families say "any single attack can
+        benefit from only one lesser style feat and one greater style
+        feat". #550 writes those clauses into the power's body, so this is
+        where the one is picked.
+
+        Returns the chosen ref, or `""` when the character holds none of
+        them. A body reads it as `if picked == "f972":` rather than asking
+        `c.feat` again -- that is the whole point, because `c.feat` is true
+        for every feat held and cannot say which one is being applied.
+
+        **Called before the attack, and the rule is in the printed text:**
+        *"if multiple lesser style feats or greater style feats can affect
+        an attack, you must declare which of each type you are using
+        before making the attack."* So the declaration must not consult the
+        outcome -- a character who declares a critical-hit feat and then
+        does not crit gets nothing, rather than falling through to the next
+        branch. The `if`/`elif` chains written before this verb existed did
+        fall through, which was more generous than the card.
+
+        **Settled once per use, not per target or per clause.** The memo
+        lives on this `Cast` and `dsl.use` builds exactly one per use, so a
+        row that calls this from a body running once per target asks the
+        player once and every target honours the same answer. That is the
+        unit the rule names -- "a single application of a power".
+
+        A real choice when more than one is held, through `c.choose`, so
+        the printed "you must declare" is a decision and not a preference
+        baked into the order the clauses happen to be written in. With one
+        held there is nothing to ask.
+
+        **The category is a rules word, not a printed name.** `leaks.py`
+        has no objection to `"Arena Fighting"`: it is the bracket the page
+        prints over a whole family, the same kind of vocabulary as a
+        keyword, and it is a column in `game.db` since #557.
+        """
+        if category in self.declared_feats:
+            return self.declared_feats[category]
+        held = [f for f in feats if self.feat(f)]
+        picked = held[0] if len(held) == 1 else (
+            self.choose(held, f"{self.ref}: which {category} feat applies")
+            or "" if held else ""
+        )
+        self.declared_feats[category] = picked or ""
+        return self.declared_feats[category]
 
     @property
     def primary(self) -> Ability:
