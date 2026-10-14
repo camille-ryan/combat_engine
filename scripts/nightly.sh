@@ -12,7 +12,10 @@
 #   by hand:  uv run bash scripts/nightly.sh
 #   smoke:    scripts/nightly.sh --fast     (skips the two that start a server)
 #
-# Reads nothing, commits nothing, and leaves three things behind:
+# Reads nothing, commits nothing, and leaves three things behind. It tolerates
+# exactly one pre-existing modification -- its own ledger, when the sha is all
+# that moved -- because refusing that made each sweep disable the next one;
+# see the guard below.
 #
 #   logs/nightly-<date>T<hhmm>.log   the full run, stamped to the minute
 #   logs/nightly-latest.log   the most recent ATTEMPT, including a skip
@@ -63,7 +66,45 @@ fi
 # **A dirty tree makes the result unattributable.** The sweep's whole value is
 # "every row was fine at commit X"; run it over uncommitted edits and it says
 # nothing about any commit. Refused rather than run anyway.
-if [ -n "$(git status --porcelain)" ]; then
+#
+# **Except its own ledger, and leaving that out made the sweep disable the
+# next one.** A sweep always rewrites `audited.json`'s `sha` -- the bottom of
+# this script says so and calls it bookkeeping -- and this script does not
+# commit it, correctly. But nothing else does either, so the tree stays dirty
+# and *tomorrow night refuses to run*. Measured on the record:
+#
+#   2026-10-12 02:19  swept at 227e2b0, left audited.json modified
+#   2026-10-13 03:07  SKIPPED -- the tree is dirty:  M audited.json
+#   2026-10-14 02:18  only ran because it was kicked by hand
+#
+# One sweep per two nights at best, and the gap is invisible: a skip is not a
+# failure, so nothing goes red and `logs/NIGHTLY-FAILED` still describes some
+# older run. The guard was refusing a tree whose only edit was the previous
+# sweep's own output.
+#
+# So the ledger is excluded **only when the sha is the single thing that
+# moved**. A human-edited baseline, or one whose `silent_refs` differ, is a
+# real edit and still blocks -- which is the case the guard exists for, since
+# `audit.py` reads that file as its per-ref baseline and a hand-tuned one
+# would certify nothing.
+# **Not stashed, and the first draft of this did stash it.** Putting the
+# ledger aside for the run means popping it afterwards on top of the file the
+# sweep has just rewritten -- a conflict, over the one file whose whole job is
+# recording the run. The flag below leaves it exactly where it is: its `sha`
+# is bookkeeping `audit.py` reads for "owed since", never part of the per-ref
+# baseline, so the sweep behaves identically either way.
+LEDGER=scripts/fixtures/audited.json
+DIRTY=$(git status --porcelain)
+if [ -n "$DIRTY" ] \
+   && [ -z "$(git status --porcelain -- . ":(exclude)$LEDGER")" ] \
+   && [ "$(git diff -U0 -- "$LEDGER" | grep -c '^[-+][^-+]')" = "2" ] \
+   && [ "$(git diff -U0 -- "$LEDGER" | grep -c '^[-+][^-+].*\"sha\"')" = "2" ]; then
+    echo "note: $LEDGER differs from HEAD by its sha alone -- the previous"
+    echo "      sweep's own bookkeeping, not an edit. Sweeping anyway; see"
+    echo "      the comment above this check."
+    DIRTY=""
+fi
+if [ -n "$DIRTY" ]; then
     {
         echo "SKIPPED $(date '+%F %T') -- the tree is dirty, so a sweep would"
         echo "be attributable to no commit. Uncommitted:"
