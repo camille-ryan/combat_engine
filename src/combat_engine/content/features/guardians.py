@@ -263,7 +263,7 @@ def ranger_style_marauder(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
 )
 def ranger_style_two_blade(c: Cast) -> None:
-    """The two-weapon style. **Written: the marker was stale.**
+    """Fighting with a blade in each hand. **Written: the marker was stale.**
 
     Its first clause -- wielding a one-handed weapon in the off hand as
     though it were an off-hand weapon -- is a permission `chargen` already

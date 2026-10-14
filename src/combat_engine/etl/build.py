@@ -1389,6 +1389,25 @@ _SUB_HEAD = re.compile(
     r"<br\s*/?>\s*<b>\s*([A-Z][A-Za-z0-9\u00c0-\u00ff\u2019'&/ ().:-]{2,60}?)\s*</b>\s*<br\s*/?>"
 )
 
+#: The same heading, printed straight after a power card, where the card's
+#: own markup closes with `<br/></p>` and the `\s*` above matches whitespace
+#: rather than a tag. It stays distinct from a card's bold runs, which follow
+#: an **opening** `<p class=...>`.
+#:
+#: **Only the level dialect asks with this**, and the reason is a hazard
+#: rather than tidiness. Allowing `</p>` everywhere gains five more real
+#: sub-options -- and one of them sorts *first* under a pre-existing class's
+#: feature, which shifts four `cf:` refs the tree actively cites onto the
+#: neighbouring sub-option. Silently: every one still resolves, to the wrong
+#: thing. That is the move `_sub_features` warns about below in the same
+#: words. The level dialect's refs are days old and cited nowhere, so it can
+#: take the gain now; the primary dialect's five want the citing rows
+#: re-pointed in the same commit, which is its own change. #586.
+_SUB_HEAD_AFTER_CARD = re.compile(
+    r"(?:<br\s*/?>|</p>)\s*<b>\s*"
+    r"([A-Z][A-Za-z0-9\u00c0-\u00ff\u2019'&/ ().:-]{2,60}?)\s*</b>\s*<br\s*/?>"
+)
+
 #: A per-level heading. **The second class-page dialect**: a build page
 #: prints `CLASS FEATURES` as an empty heading and sets the features under
 #: these instead, interleaved with the power lists.
@@ -1464,10 +1483,20 @@ def _feature_sections(html: str) -> tuple[list[str], bool]:
 
     The build pages print that heading **empty** and set the features under
     `Level N:` headings instead, so the second dialect is a list of sections,
-    each cut at the next `<h1>` as well as the next `<h3>` -- the `<h1>` being
-    the printed power list that follows the feature. The primary dialect must
-    *not* cut at `<h1>`, because there a card inside the section is a feature
-    (`cf:warlock-f4` is printed nowhere else).
+    one per level heading.
+
+    **Both dialects run to the next `<h3>` and neither stops at a card**,
+    which is a correction: cutting the level sections at the first `<h1>` kept
+    the printed power lists out of the feature bodies, and it also threw away
+    every sub-option printed *past* a card. A level-1 domain option is set as
+    a heading, a one-sentence body naming a power, and then that power's whole
+    card -- nine times over, interleaved -- so the first was inside the cut
+    and the other nine were gone. #586.
+
+    What keeps the cards out of the rows is not the section boundary. It is
+    that a card's `<h1>` is a **mark**, so it ends the body above it, and in
+    this dialect it files no row of its own -- see `_sub_features`. The list
+    intros are refused separately by `_POWER_LIST`.
     """
     start = re.search(r"<h3[^>]*>[^<]*CLASS FEATURES[^<]*</h3>", html, re.I)
     if start is None:
@@ -1479,7 +1508,7 @@ def _feature_sections(html: str) -> tuple[list[str], bool]:
         return [section], False
     sections = []
     for m in _LEVEL_HEAD.finditer(html):
-        nxt = re.search(r"<h[13][^>]*>", html[m.end():])
+        nxt = re.search(r"<h3[^>]*>", html[m.end():])
         sections.append(
             html[m.end(): m.end() + nxt.start()] if nxt else html[m.end():]
         )
@@ -1569,7 +1598,7 @@ def _section_rows(
         # `_named_powers` rightly refuses to swap a child's ref into
         # its parent -- and a name the scrubber will not touch is a
         # leak.
-        marks = _sub_marks(body)
+        marks = _sub_marks(body, after_card=per_level)
         head = body[: marks[0][0]] if marks else body
         if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
             continue
@@ -1577,7 +1606,7 @@ def _section_rows(
         written += _feature_row(out, names, ref, bare, ord_, build,
                                 head, _titled(m.group(1)))
         written += _sub_features(out, names, ref, bare, ord_, build,
-                                 body, marks)
+                                 body, marks, cards=not per_level)
         ord_ += 1
     return written, ord_
 
@@ -1607,10 +1636,11 @@ def _feature_row(
     return 1
 
 
-def _sub_marks(body: str) -> list[tuple[int, int, str, str]]:
+def _sub_marks(body: str,
+               after_card: bool = False) -> list[tuple[int, int, str, str]]:
     """Where a feature section stops being about the heading above it."""
     marks: list[tuple[int, int, str, str]] = []
-    for m in _SUB_HEAD.finditer(body):
+    for m in (_SUB_HEAD_AFTER_CARD if after_card else _SUB_HEAD).finditer(body):
         marks.append((m.start(), m.end(), "s", m.group(1)))
     for m in _H1.finditer(body):
         if _FEATURE_CARD.match(body, m.start()):
@@ -1623,6 +1653,7 @@ def _sub_features(
     out: sqlite3.Connection, names: dict[str, dict[str, str]],
     parent: str, cls: str, ord_: int, build: str, body: str,
     marks: list[tuple[int, int, str, str]],
+    cards: bool = True,
 ) -> int:
     """The named things printed *inside* one feature's section.
 
@@ -1647,6 +1678,14 @@ def _sub_features(
     for n, (_, after, kind, name) in enumerate(marks):
         stop = marks[n + 1][0] if n + 1 < len(marks) else len(body)
         fragment = body[after:stop]
+        # **A card is always a boundary and only sometimes a row.** In the
+        # level dialect the cards after a heading are the printed power list,
+        # so filing each as a `...c<N>` row would mint hundreds that duplicate
+        # `power` rows. They still have to be *marked*, because that is what
+        # ends the body above them and what lets the walk carry on to a
+        # sub-option printed past one. #586.
+        if kind == "c" and not cards:
+            continue
         ref = f"{parent}{kind}{per[kind]}"
         per[kind] += 1
         if kind == "c":

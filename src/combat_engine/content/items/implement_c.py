@@ -2155,7 +2155,11 @@ def i2340p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="your star pact boon triggers",
+    # The printed trigger names the pact's boon, and that heading became a
+    # ref's printed name when #586 imported the builds -- so the words a
+    # player is shown are the moment itself, which is what `Trigger` below
+    # already says. The pact is still carried, by `_boon_drop("star")`.
+    trigger="an enemy you cursed drops",
     on=Trigger(Dropped, _boon_drop("star"), "an enemy you cursed drops"),
 )
 def i2343p1(c: Cast) -> None:
