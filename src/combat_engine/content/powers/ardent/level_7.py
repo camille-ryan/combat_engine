@@ -53,7 +53,7 @@ def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
     augments=(
         Augment(1),
@@ -107,7 +107,7 @@ def p10287(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC],
+    keywords=[Keyword.PSIONIC, Keyword.AUGMENTABLE, Keyword.WEAPON],
     augments=(
         Augment(1),
         Augment(
@@ -161,7 +161,7 @@ def p10288(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
     augments=(
         Augment(1, charges=True),
@@ -208,7 +208,7 @@ def p11104(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.HEALING],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.HEALING, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p11105(c: Cast) -> None:
@@ -254,8 +254,7 @@ def p11105(c: Cast) -> None:
         Keyword.PSIONIC,
         Keyword.WEAPON,
         Keyword.PSYCHIC,
-        Keyword.CHARM,
-    ],
+        Keyword.CHARM, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=WILL),
 )
 def p11106(c: Cast) -> None:
@@ -289,7 +288,7 @@ def p11106(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p12956(c: Cast) -> None:
@@ -324,7 +323,7 @@ def p12956(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p12957(c: Cast) -> None:
@@ -357,7 +356,7 @@ def p12957(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p12959(c: Cast) -> None:

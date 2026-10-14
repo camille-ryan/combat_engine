@@ -57,7 +57,7 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
 )
 def p11269(c: Cast) -> None:
@@ -84,7 +84,7 @@ def p11269(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=REF),
 )
 def p11270(c: Cast) -> None:
@@ -164,7 +164,7 @@ def p11272(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.TELEPORTATION],
+    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
 )
 def p13302(c: Cast) -> None:
@@ -197,8 +197,7 @@ def p13302(c: Cast) -> None:
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,
         Keyword.FORCE,
-        Keyword.CONJURATION,
-    ],
+        Keyword.CONJURATION, Keyword.AUGMENTABLE],
 )
 def p13303(c: Cast) -> None:
     """Two clauses are dropped. "Any enemy that enters the shard's space"
@@ -222,7 +221,7 @@ def p13303(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
     augments=(
         Augment(1),
@@ -347,8 +346,7 @@ def p13312(c: Cast) -> None:
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,
         Keyword.LIGHTNING,
-        Keyword.CONJURATION,
-    ],
+        Keyword.CONJURATION, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=REF),
 )
 def p13462(c: Cast) -> None:
@@ -383,7 +381,7 @@ def p13462(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
 )
 def p8226(c: Cast) -> None:
@@ -418,7 +416,7 @@ def p8226(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
     augments=(
         Augment(1),
@@ -448,7 +446,7 @@ def p8227(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
 )
 def p8228(c: Cast) -> None:
@@ -519,7 +517,7 @@ def p8230(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE, Keyword.SUMMONING],
     summon=Summon(
         speed=8,
         attack=Attack(INT, vs=AC),

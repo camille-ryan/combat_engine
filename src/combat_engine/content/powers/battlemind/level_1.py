@@ -80,7 +80,7 @@ def p10442(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p11156(c: Cast) -> None:
@@ -105,7 +105,7 @@ def p11156(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
         Augment(1, reach=Melee(2)),
@@ -190,7 +190,7 @@ def p11160(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(3),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
         Augment(1, reach=CloseBurst(3)),
@@ -252,7 +252,7 @@ def p12420(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.LIGHTNING],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.LIGHTNING, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=REF),
 )
 def p13025(c: Cast) -> None:
@@ -288,7 +288,7 @@ def p13025(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
         Augment(1),
@@ -330,7 +330,7 @@ def p13027(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13028(c: Cast) -> None:
@@ -391,7 +391,9 @@ def p13029(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.COLD, Keyword.POLYMORPH],
+    keywords=[
+        Keyword.PSIONIC, Keyword.WEAPON, Keyword.COLD, Keyword.POLYMORPH, Keyword.AUGMENTABLE,
+    ],
     attack=Attack(CON, vs=FORT),
 )
 def p13030(c: Cast) -> None:
@@ -485,7 +487,7 @@ def p13032(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p2621(c: Cast) -> None:
@@ -517,7 +519,7 @@ def p2621(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
         Augment(1),
@@ -581,7 +583,7 @@ def p2623(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC, Keyword.FEAR],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC, Keyword.FEAR, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p2628(c: Cast) -> None:

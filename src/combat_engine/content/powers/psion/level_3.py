@@ -56,8 +56,7 @@ PSIONIC_PSYCHIC = [Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.PSYCHIC]
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,
         Keyword.FIRE,
-        Keyword.ZONE,
-    ],
+        Keyword.ZONE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=REF),
     augments=(
         Augment(1),
@@ -101,7 +100,7 @@ def p11275(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
 )
 def p11276(c: Cast) -> None:
@@ -127,7 +126,7 @@ def p11276(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
 )
 def p13317(c: Cast) -> None:
@@ -150,7 +149,7 @@ def p13317(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_IMPLEMENT,
+    keywords=[*PSIONIC_IMPLEMENT, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
     dropped=("c.leash(anchors=)",),
 )
@@ -251,7 +250,7 @@ def p13318(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=REF),
     augments=(
         Augment(1),
@@ -327,7 +326,7 @@ def p13320(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=Target(side="enemy", count=1),
-    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.CHARM],
+    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.CHARM, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
 )
 def p8233(c: Cast) -> None:
@@ -370,7 +369,7 @@ def p8233(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
 )
 def p8234(c: Cast) -> None:

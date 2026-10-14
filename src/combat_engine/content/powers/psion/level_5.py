@@ -238,7 +238,9 @@ def p8236(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.POISON],
+    keywords=[
+        Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.POISON, Keyword.AUGMENTABLE, Keyword.SUMMONING,
+    ],
     summon=Summon(
         speed=7,
         modes=("climb",),

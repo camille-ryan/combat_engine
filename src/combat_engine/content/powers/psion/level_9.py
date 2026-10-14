@@ -232,7 +232,7 @@ def p8242(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[*PSIONIC_PSYCHIC, Keyword.ILLUSION],
+    keywords=[*PSIONIC_PSYCHIC, Keyword.ILLUSION, Keyword.AUGMENTABLE, Keyword.SUMMONING],
     summon=Summon(
         speed=8,
         attack=Attack(INT, vs=WILL),

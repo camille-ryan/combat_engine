@@ -32,7 +32,7 @@ from combat_engine.engine import (
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p13783(c: Cast) -> None:

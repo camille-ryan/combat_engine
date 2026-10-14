@@ -201,31 +201,6 @@
   "i782p1": [
    "augmentable"
   ],
-  "p10274": [
-   "augmentable"
-  ],
-  "p10275": [
-   "augmentable"
-  ],
-  "p10276": [
-   "augmentable"
-  ],
-  "p10281": [
-   "augmentable"
-  ],
-  "p10282": [
-   "augmentable"
-  ],
-  "p10287": [
-   "augmentable"
-  ],
-  "p10288": [
-   "augmentable",
-   "weapon"
-  ],
-  "p10438": [
-   "augmentable"
-  ],
   "p10705": [
    "weapon"
   ],
@@ -247,82 +222,6 @@
   "p10774": [
    "rattling"
   ],
-  "p11061": [
-   "augmentable"
-  ],
-  "p11062": [
-   "augmentable"
-  ],
-  "p11069": [
-   "augmentable"
-  ],
-  "p11070": [
-   "augmentable"
-  ],
-  "p11104": [
-   "augmentable"
-  ],
-  "p11105": [
-   "augmentable"
-  ],
-  "p11106": [
-   "augmentable"
-  ],
-  "p11156": [
-   "augmentable"
-  ],
-  "p11157": [
-   "augmentable"
-  ],
-  "p11163": [
-   "augmentable"
-  ],
-  "p11164": [
-   "augmentable"
-  ],
-  "p11169": [
-   "augmentable"
-  ],
-  "p11170": [
-   "augmentable"
-  ],
-  "p11171": [
-   "augmentable"
-  ],
-  "p11208b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p11210b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p11214": [
-   "psionic"
-  ],
-  "p11216b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p11218b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p11223": [
-   "psionic"
-  ],
-  "p11269": [
-   "augmentable"
-  ],
-  "p11270": [
-   "augmentable"
-  ],
-  "p11275": [
-   "augmentable"
-  ],
-  "p11276": [
-   "augmentable"
-  ],
   "p11282": [
    "summoning"
   ],
@@ -331,12 +230,6 @@
   ],
   "p11296": [
    "summoning"
-  ],
-  "p11319": [
-   "augmentable"
-  ],
-  "p11320": [
-   "augmentable"
   ],
   "p11353": [
    "runic"
@@ -410,15 +303,6 @@
   "p11398": [
    "runic"
   ],
-  "p12419": [
-   "augmentable"
-  ],
-  "p12422": [
-   "augmentable"
-  ],
-  "p12425": [
-   "augmentable"
-  ],
   "p12527": [
    "spirit"
   ],
@@ -488,195 +372,6 @@
   "p12876": [
    "spirit"
   ],
-  "p12932": [
-   "augmentable"
-  ],
-  "p12933": [
-   "augmentable"
-  ],
-  "p12934": [
-   "augmentable"
-  ],
-  "p12935": [
-   "augmentable"
-  ],
-  "p12944": [
-   "augmentable"
-  ],
-  "p12945": [
-   "augmentable"
-  ],
-  "p12946": [
-   "augmentable"
-  ],
-  "p12947": [
-   "augmentable"
-  ],
-  "p12956": [
-   "augmentable"
-  ],
-  "p12957": [
-   "augmentable"
-  ],
-  "p12958": [
-   "augmentable"
-  ],
-  "p12959": [
-   "augmentable"
-  ],
-  "p13025": [
-   "augmentable"
-  ],
-  "p13026": [
-   "augmentable"
-  ],
-  "p13027": [
-   "augmentable"
-  ],
-  "p13028": [
-   "augmentable"
-  ],
-  "p13030": [
-   "augmentable"
-  ],
-  "p13039": [
-   "augmentable"
-  ],
-  "p13040": [
-   "augmentable"
-  ],
-  "p13041": [
-   "augmentable"
-  ],
-  "p13042": [
-   "augmentable"
-  ],
-  "p13051": [
-   "augmentable"
-  ],
-  "p13052": [
-   "augmentable"
-  ],
-  "p13053": [
-   "augmentable"
-  ],
-  "p13054": [
-   "augmentable"
-  ],
-  "p13124b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13126b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13128b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13130b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13132b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13134b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13136b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13145": [
-   "psionic"
-  ],
-  "p13150b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13152b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13162": [
-   "psionic"
-  ],
-  "p13177": [
-   "psionic"
-  ],
-  "p13219b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13221b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13223b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p13302": [
-   "augmentable"
-  ],
-  "p13303": [
-   "augmentable"
-  ],
-  "p13305": [
-   "augmentable"
-  ],
-  "p13311": [
-   "augmentable",
-   "summoning"
-  ],
-  "p13317": [
-   "augmentable"
-  ],
-  "p13318": [
-   "augmentable"
-  ],
-  "p13319": [
-   "augmentable"
-  ],
-  "p13320b": [
-   "augmentable"
-  ],
-  "p13325": [
-   "augmentable",
-   "summoning"
-  ],
-  "p13331": [
-   "augmentable"
-  ],
-  "p13331b": [
-   "augmentable"
-  ],
-  "p13333": [
-   "augmentable"
-  ],
-  "p13334": [
-   "augmentable"
-  ],
-  "p13335": [
-   "augmentable"
-  ],
-  "p13341": [
-   "augmentable",
-   "summoning"
-  ],
-  "p13462": [
-   "augmentable"
-  ],
-  "p13462b": [
-   "augmentable"
-  ],
-  "p13466": [
-   "augmentable"
-  ],
   "p13649": [
    "summoning"
   ],
@@ -685,12 +380,6 @@
   ],
   "p13771": [
    "spirit"
-  ],
-  "p13780": [
-   "augmentable"
-  ],
-  "p13783": [
-   "augmentable"
   ],
   "p13817": [
    "shadow"
@@ -877,13 +566,6 @@
   "p15905": [
    "zone"
   ],
-  "p15984b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p15989": [
-   "psionic"
-  ],
   "p15990": [
    "runic"
   ],
@@ -949,25 +631,6 @@
   ],
   "p16123": [
    "elemental"
-  ],
-  "p16135b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16137b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16139b": [
-   "elemental",
-   "full discipline",
-   "psionic"
-  ],
-  "p16150b": [
-   "full discipline",
-   "psionic"
   ],
   "p16236": [
    "elemental"
@@ -1095,27 +758,6 @@
   "p2521": [
    "rattling"
   ],
-  "p2621": [
-   "augmentable"
-  ],
-  "p2622": [
-   "augmentable"
-  ],
-  "p2626": [
-   "augmentable"
-  ],
-  "p2627": [
-   "augmentable"
-  ],
-  "p2628": [
-   "augmentable"
-  ],
-  "p2634": [
-   "augmentable"
-  ],
-  "p2635": [
-   "augmentable"
-  ],
   "p2880": [
    "summoning"
   ],
@@ -1230,45 +872,8 @@
   "p7414": [
    "summoning"
   ],
-  "p7449b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7450b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7452b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7453b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7454b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7458": [
-   "psionic"
-  ],
-  "p7459b": [
-   "full discipline",
-   "psionic"
-  ],
-  "p7464": [
-   "psionic"
-  ],
-  "p7470": [
-   "psionic"
-  ],
   "p750": [
    "teleportation"
-  ],
-  "p7535b": [
-   "full discipline",
-   "psionic"
   ],
   "p7641": [
    "summoning"
@@ -1278,27 +883,6 @@
   ],
   "p7657": [
    "summoning"
-  ],
-  "p8226": [
-   "augmentable"
-  ],
-  "p8227": [
-   "augmentable"
-  ],
-  "p8228": [
-   "augmentable"
-  ],
-  "p8233": [
-   "augmentable"
-  ],
-  "p8234": [
-   "augmentable"
-  ],
-  "p8239": [
-   "augmentable"
-  ],
-  "p8240": [
-   "augmentable"
   ],
   "p9655": [
    "summoning"

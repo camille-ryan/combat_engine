@@ -64,6 +64,7 @@ def _running_jump(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p11208b(c: Cast) -> None:
     """Nothing can refuse a creature an immediate action, so only the
@@ -86,6 +87,7 @@ def p11208b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p11210b(c: Cast) -> None:
     """Falling is not modelled, so "if you don't land, you fall" is dropped."""
@@ -101,6 +103,7 @@ def p11210b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13124b(c: Cast) -> None:
     c.shift(1)
@@ -116,6 +119,7 @@ def p13124b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13126b(c: Cast) -> None:
     """"You are no longer marked" has no method of its own, so the marks
@@ -136,6 +140,7 @@ def p13126b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13128b(c: Cast) -> None:
     """Falling is not modelled, so "if you don't land, you fall" is dropped."""
@@ -151,6 +156,7 @@ def p13128b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13130b(c: Cast) -> None:
     for defence in (AC, FORT, REF, WILL):
@@ -169,6 +175,7 @@ def p13130b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13132b(c: Cast) -> None:
     _running_jump(c)
@@ -182,6 +189,7 @@ def p13132b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13134b(c: Cast) -> None:
     near = c.within(1, side="other")
@@ -199,6 +207,7 @@ def p13134b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13136b(c: Cast) -> None:
     c.shift(2)
@@ -238,6 +247,7 @@ def p13141b(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13219b(c: Cast) -> None:
     _step_or_run(c)
@@ -251,6 +261,7 @@ def p13219b(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13221b(c: Cast) -> None:
     _step_or_run(c)
@@ -287,6 +298,7 @@ def p16133b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16135b(c: Cast) -> None:
     """Shifting through enemy squares is phasing, granted for the turn."""
@@ -304,6 +316,7 @@ def p16135b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16137b(c: Cast) -> None:
     c.shift(1)
@@ -323,6 +336,7 @@ def p16137b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.ELEMENTAL, Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16139b(c: Cast) -> None:
     c.ignores_difficult(until=When.EOT)
@@ -351,6 +365,7 @@ def p16141b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7449b(c: Cast) -> None:
     c.move(c.speed_of() + 2)
@@ -364,6 +379,7 @@ def p7449b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7450b(c: Cast) -> None:
     """The printed target -- "one ally or one prone enemy" -- has no header
@@ -384,6 +400,7 @@ def p7450b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7452b(c: Cast) -> None:
     c.shift(2)
@@ -397,6 +414,7 @@ def p7452b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7453b(c: Cast) -> None:
     holds = [c.ignores_difficult(until=When.EOT)]
@@ -419,6 +437,7 @@ def p7453b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7454b(c: Cast) -> None:
     """"The first enemy you move away from" is read as the one you are
@@ -437,6 +456,7 @@ def p7454b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7535b(c: Cast) -> None:
     _running_jump(c)
@@ -488,6 +508,7 @@ def p16147b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p11216b(c: Cast) -> None:
     """"Each time" means the bonuses add, so they are left untyped; the
@@ -510,6 +531,7 @@ def p11216b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p11218b(c: Cast) -> None:
     if c.str_mod > 0:
@@ -557,6 +579,7 @@ def p13148b(c: Cast) -> None:
     action=MOVE,
     reach=Melee(1),
     target=Target("other", 1),
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13150b(c: Cast) -> None:
     """A jump to a square beside the target, which `c.run_at` is: it closes
@@ -577,6 +600,7 @@ def p13150b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13152b(c: Cast) -> None:
     """The immunity is only from the enemies adjacent when the movement
@@ -594,6 +618,7 @@ def p13152b(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p13223b(c: Cast) -> None:
     _step_or_run(c)
@@ -607,6 +632,7 @@ def p13223b(c: Cast) -> None:
     action=MOVE,
     reach=Melee(1),
     target=Target("other", 1),
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p15984b(c: Cast) -> None:
     """"Shift 1 and slide the target 1, swapping places" is one exchange."""
@@ -623,6 +649,7 @@ def p15984b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p16150b(c: Cast) -> None:
     c.shift(1)
@@ -674,6 +701,7 @@ def p16154b(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.FULL_DISCIPLINE, Keyword.PSIONIC],
 )
 def p7459b(c: Cast) -> None:
     """Only the misses made during the movement count, so the watch is taken

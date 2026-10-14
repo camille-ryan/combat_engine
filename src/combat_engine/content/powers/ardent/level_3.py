@@ -78,7 +78,7 @@ def _beside(c: Cast, anchor: int, mover: int) -> Square | None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
     augments=(
         Augment(1),
@@ -116,7 +116,7 @@ def p10281(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p10282(c: Cast) -> None:
@@ -161,7 +161,7 @@ def p10282(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p11069(c: Cast) -> None:
@@ -201,7 +201,7 @@ def p11069(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FEAR],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FEAR, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=FORT),
 )
 def p11070(c: Cast) -> None:
@@ -232,7 +232,7 @@ def p11070(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p12944(c: Cast) -> None:
@@ -273,7 +273,7 @@ def p12944(c: Cast) -> None:
     action=REACTION,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
     trigger="an enemy targets you with a melee attack",
     on=Trigger(
@@ -325,7 +325,7 @@ def p12946(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p12947(c: Cast) -> None:

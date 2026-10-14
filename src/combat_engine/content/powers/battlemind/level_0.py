@@ -88,7 +88,7 @@ def _first_turn(world: World, me: int, ev: TurnStart) -> bool:
     action=MINOR,
     reach=CloseBurst(3),
     target=ONE_CREATURE,
-    keywords=PSIONIC,
+    keywords=[*PSIONIC, Keyword.AUGMENTABLE],
     augments=(Augment(1, target=UpTo(2)),),
 )
 def p10438(c: Cast) -> None:

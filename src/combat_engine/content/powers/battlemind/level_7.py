@@ -50,7 +50,7 @@ from . import PSIONIC_WEAPON, shift_beside
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(Augment(2, reach=CloseBurst(1), target=EACH_ENEMY),),
     dropped=("dsl.Power.basic_for", "c.no_advantage(gains=)"),
@@ -80,7 +80,7 @@ def p11169(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p11170(c: Cast) -> None:
@@ -138,7 +138,7 @@ def p11170(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=FORT),
 )
 def p11171(c: Cast) -> None:
@@ -164,7 +164,7 @@ def p11171(c: Cast) -> None:
     action=REACTION,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     trigger="an enemy hits you",
     on=Trigger(Hit, hits_me, "an enemy hits you"),
@@ -210,7 +210,7 @@ def p12425(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13051(c: Cast) -> None:
@@ -230,7 +230,7 @@ def p13051(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
         Augment(1, reach=Melee(4)),
@@ -257,7 +257,7 @@ def p13052(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13053(c: Cast) -> None:
@@ -278,7 +278,7 @@ def p13053(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13054(c: Cast) -> None:
@@ -309,7 +309,7 @@ def p13054(c: Cast) -> None:
     action=INTERRUPT,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     trigger="an enemy within 5 squares of you targets an ally with an attack",
     on=Trigger(
@@ -358,7 +358,7 @@ def p2634(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(3),
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p2635(c: Cast) -> None:

@@ -43,7 +43,7 @@ from . import PSIONIC_WEAPON, shift_beside, teleport_beside
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p11163(c: Cast) -> None:
@@ -88,7 +88,7 @@ def p11163(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=REF),
 )
 def p11164(c: Cast) -> None:
@@ -121,7 +121,7 @@ def p11164(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FORCE, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(Augment(1, reach=Melee(2)),),
     dropped=("dsl.Range.by_ability",),
@@ -149,7 +149,7 @@ def p12422(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
     augments=(
         Augment(1, reach=Melee(2)),
@@ -196,7 +196,7 @@ def p13039(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13040(c: Cast) -> None:
@@ -228,7 +228,7 @@ def p13040(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=WILL),
     augments=(
         Augment(1, reach=Melee(5)),
@@ -269,7 +269,7 @@ def p13041(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13042(c: Cast) -> None:
@@ -300,7 +300,7 @@ def p13042(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p13466(c: Cast) -> None:
@@ -347,7 +347,7 @@ def p13466(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PSIONIC_WEAPON,
+    keywords=[*PSIONIC_WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p2626(c: Cast) -> None:
@@ -380,7 +380,7 @@ def p2626(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FEAR],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.FEAR, Keyword.AUGMENTABLE],
     attack=Attack(CON, vs=AC),
 )
 def p2627(c: Cast) -> None:

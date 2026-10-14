@@ -222,6 +222,7 @@ def p13175(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_ALLY,
+    keywords=[Keyword.PSIONIC],
 )
 def p15989(c: Cast) -> None:
     """Rests are not modelled, so the printed Requirement is not declared

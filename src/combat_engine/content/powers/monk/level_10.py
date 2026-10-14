@@ -114,6 +114,7 @@ def p13176(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p13177(c: Cast) -> None:
     c.resist(5, until=When.EONT)
@@ -255,6 +256,7 @@ def p7469(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p7470(c: Cast) -> None:
     """Climbing is a mode, granted for the turn the climb happens in."""

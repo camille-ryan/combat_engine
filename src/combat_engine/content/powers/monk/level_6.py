@@ -71,6 +71,7 @@ def _ends_with(c: Cast, posture: Effect, held: Effect | None) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p11223(c: Cast) -> None:
     """A running jump is written as the movement it is; the Athletics
@@ -163,6 +164,7 @@ def p13161(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p13162(c: Cast) -> None:
     """"Only as the first or the last action of your turn" is a legality
@@ -251,6 +253,7 @@ def p7463(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p7464(c: Cast) -> None:
     c.save(on=c.me, bonus=c.wis_mod)

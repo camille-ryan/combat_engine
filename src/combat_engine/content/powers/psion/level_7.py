@@ -57,7 +57,7 @@ _REFLEX_ACTIONS = (
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
 )
 def p11319(c: Cast) -> None:
@@ -87,7 +87,7 @@ def p11319(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
 )
 def p11320(c: Cast) -> None:
@@ -114,8 +114,7 @@ def p11320(c: Cast) -> None:
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,
         Keyword.ACID,
-        Keyword.CONJURATION,
-    ],
+        Keyword.CONJURATION, Keyword.AUGMENTABLE],
 )
 def p13331(c: Cast) -> None:
     """The servant's own bite, written now. It was dropped in this
@@ -188,8 +187,7 @@ def p13331(c: Cast) -> None:
         Keyword.PSIONIC,
         Keyword.IMPLEMENT,
         Keyword.PSYCHIC,
-        Keyword.FEAR,
-    ],
+        Keyword.FEAR, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
 )
 def p13333(c: Cast) -> None:
@@ -213,7 +211,7 @@ def p13333(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_OTHER,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
     augments=(
         Augment(1, target=EACH_ENEMY),
@@ -247,7 +245,7 @@ def p13334(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.ZONE],
+    keywords=[Keyword.PSIONIC, Keyword.IMPLEMENT, Keyword.ZONE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
 )
 def p13335(c: Cast) -> None:
@@ -318,7 +316,7 @@ def p13444(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_FORCE,
+    keywords=[*PSIONIC_FORCE, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=FORT),
     augments=(
         Augment(1, target=UpTo(2)),
@@ -354,7 +352,7 @@ def p8239(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=PSIONIC_PSYCHIC,
+    keywords=[*PSIONIC_PSYCHIC, Keyword.AUGMENTABLE],
     attack=Attack(INT, vs=WILL),
     dropped=("dsl.Power.basic_for",),
 )

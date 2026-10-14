@@ -64,6 +64,7 @@ def _melee(ctx: dict) -> bool:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p11214(c: Cast) -> None:
     """Standing on liquid is a way of moving, so it is granted as a mode
@@ -102,6 +103,7 @@ def p13144(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p13145(c: Cast) -> None:
     far = c.speed_of() + c.wis_mod
@@ -229,6 +231,7 @@ def p7457(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.PSIONIC],
 )
 def p7458(c: Cast) -> None:
     """The damage bonus is owed only once the temporary hit points are

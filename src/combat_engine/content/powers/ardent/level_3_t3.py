@@ -38,7 +38,7 @@ from combat_engine.engine.events import MoveStart
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSIONIC, Keyword.WEAPON],
+    keywords=[Keyword.PSIONIC, Keyword.WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(CHA, vs=AC),
 )
 def p12945(c: Cast) -> None:
