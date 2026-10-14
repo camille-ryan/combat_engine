@@ -327,6 +327,29 @@ class Target:
     #: block (`m858a2` wants `m499`), so the two spellings are not
     #: interchangeable and guessing from the row's own ref would be wrong.
     ident: str = ""
+    #: Read `kinds` and `ident` as **either** rather than both.
+    #:
+    #: Eight rows print one sentence that needs it: "allies of its own
+    #: sort" counts an ally that carries the printed type word *or* one of
+    #: the caster's own block. Nine with `m1138a4`, which says it the other
+    #: way round -- an orc *or* its own block -- and was the last row still
+    #: marked `Target.ident`. #570.
+    #:
+    #: **Neither test alone is right, and the data is why.** The type words
+    #: are real -- 101 of them across `monster.keywords` -- but uneven: only
+    #: 11 stat blocks carry `kobold`, and `m906`, whose card rallies
+    #: kobolds, is not one of them. Its line reads `(reptile)`. So `kinds`
+    #: alone narrows the offer to the 11 and **excludes the caster's own
+    #: kin**, which is the one thing the card is certainly about; `ident`
+    #: alone drops every other stat block of the same family. The cards
+    #: print the union and so does this.
+    #:
+    #: **Scoped to those two tests on purpose.** A general "any of these
+    #: filters" would be a different and much vaguer field: every other
+    #: clause on a target line is a restriction that genuinely compounds --
+    #: a Medium *and* unheld object, a bloodied *and* adjacent enemy -- and
+    #: OR-ing those would widen pools no card widens.
+    any_of: bool = False
     #: The two clauses an object target line prints on top of its side.
     #: `max_size` is "Medium or smaller"; `loose` is "not fastened in place
     #: or held by a creature". Fields rather than sides of their own,
@@ -2362,9 +2385,18 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         from .query import kinds_of
 
         words = kinds_of(world, target)
-        if aim.kinds and not (words & aim.kinds):
-            return False
+        # `kinds_without` is an exclusion and compounds even under
+        # `any_of`: "any ally of that sort, but never an undead one" means
+        # both, and no card prints an exclusion it also waives.
         if words & aim.kinds_without:
+            return False
+        # Under `any_of` the kind is one of two ways in, so failing it is
+        # not a refusal -- `ident` below is asked instead.
+        if (
+            aim.kinds
+            and not (words & aim.kinds)
+            and not (aim.any_of and aim.ident)
+        ):
             return False
     if aim.living:
         from .query import living
@@ -2391,18 +2423,24 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         from .components import Ident
 
         who = world.get(target, Ident)
-        if who is None:
-            return False
         wanted = aim.ident
         if wanted == "own":
             # Resolved here because this is where the caster is known; a
             # header field cannot hold "whatever block I am".
             mine = world.get(actor, Ident)
-            if mine is None:
+            wanted = mine.ref if mine is not None else ""
+        matched = who is not None and bool(wanted) and who.ref == wanted
+        if not matched:
+            if not aim.any_of or not aim.kinds:
                 return False
-            wanted = mine.ref
-        if who.ref != wanted:
-            return False
+            # **The union, and it is asked here rather than above because
+            # this is the second of the two ways in.** The kind test let
+            # the creature through to this point without deciding, so a
+            # miss on both is the only refusal.
+            from .query import kinds_of
+
+            if not (kinds_of(world, target) & aim.kinds):
+                return False
     return True
 
 

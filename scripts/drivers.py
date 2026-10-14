@@ -6720,6 +6720,65 @@ def target_of_one_kind(out: Result) -> None:
         f"offered {candidates(world, caster, _aimed(mine, own))} after the change",
     )
 
+    # **`any_of`: kind OR own block.** Eight rows print one sentence that
+    # needs it -- "allies of its own sort" counts an ally carrying the
+    # printed type word *or* one of the caster's own block -- and neither
+    # test alone is right, because the words are uneven: only 11 stat
+    # blocks carry `kobold` and `m906`, whose card rallies them, is not one
+    # of them. #570.
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import kinds_of
+
+    # Give the ally a type word if it has none. `c.set_origin` is the
+    # sanctioned writer -- `kinds_of` reads an `origin:<word>` effect
+    # label -- so this is the same route a polymorph takes, not a poke at
+    # the internals.
+    word = next(iter(kinds_of(world, mate)), "")
+    if not word:
+        word = "drivers-sort"
+        Cast(world=world, me=caster, ref="drivers:kind").set_origin(
+            word, on=mate
+        )
+    if word not in kinds_of(world, mate):
+        out.skip("the ally could not be given a type word to match on")
+        return
+
+    # The ally is now a *different* block carrying a known type word.
+    either = Target(side="ally", count=4, kinds=frozenset({word}),
+                    ident="own", any_of=True)
+    out.that(
+        mate in candidates(world, caster, _aimed(mine, either)),
+        'any_of offers an ally that matches the KIND but not the block',
+        f"word={word!r} offered {candidates(world, caster, _aimed(mine, either))}",
+    )
+
+    # **The control that proves the field does anything**: the same two
+    # tests without `any_of` compound, so the ally must drop out.
+    both = Target(side="ally", count=4, kinds=frozenset({word}), ident="own")
+    out.that(
+        mate not in candidates(world, caster, _aimed(mine, both)),
+        "and without it the two compound, so that ally is refused",
+        f"offered {candidates(world, caster, _aimed(mine, both))}",
+    )
+
+    # The other way in: the block matches and the kind does not.
+    world.get(mate, Ident).ref = kind.ref
+    other_way = Target(side="ally", count=4, ident="own", any_of=True,
+                       kinds=frozenset({"no-such-type-word"}))
+    out.that(
+        mate in candidates(world, caster, _aimed(mine, other_way)),
+        "and offers one that matches the BLOCK but not the kind",
+        f"offered {candidates(world, caster, _aimed(mine, other_way))}",
+    )
+
+    # Neither: still refused, or the union has become "anybody".
+    world.get(mate, Ident).ref = "m-some-other-block"
+    out.that(
+        mate not in candidates(world, caster, _aimed(mine, other_way)),
+        "and refuses one that matches neither",
+        f"offered {candidates(world, caster, _aimed(mine, other_way))}",
+    )
+
 
 def _aimed(p, aim):  # noqa: ANN001, ANN202
     """The same row with a different target line, for comparing offers."""
