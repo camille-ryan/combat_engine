@@ -146,13 +146,43 @@ def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
     `skip` is the "choose one" family, which `sub_options` has already claimed
     and which nests **under** the trait that offers it rather than sitting
     beside it.
+
+    **A `Benefits:` line belongs to the trait above it, and was being thrown
+    away.** A variant race prints each alternate trait as two lines --
+
+        <Trait name>: one sentence of flavour
+        Benefits: the mechanics
+
+    -- and `_TRAIT_LABEL` is line-anchored (`(.+)$`), so the trait captured
+    its own line and stopped. `Benefits` then matched the label pattern on
+    the next line and was dropped as `_CHASSIS` furniture. The result was a
+    trait row holding **only the flavour**, which is this module's first
+    rule performed backwards.
+
+    It cost nine traits their rules, measured against the compendium, one of
+    them a +2 to two ability scores. Latent rather than live -- none of the
+    eight races is in `chargen.RACES` -- but a race entering the pool would
+    have shipped a character short its printed benefits with nothing to say
+    so. #582.
+
+    So a chassis label that is `benefits` is **appended to the previous
+    trait** instead of skipped. The other chassis labels are genuinely the
+    race's own furniture (size, speed, languages) and still go.
     """
     out: list[tuple[str, str]] = []
     for found in _TRAIT_LABEL.finditer(spec or ""):
         label = " ".join(found.group(1).split())
+        rules = found.group(2).strip()
+        if label.lower() in ("benefits", "benefit"):
+            if out:
+                # Joined with a space, so the flavour sentence and the rule
+                # read as one line the way the page prints them.
+                name, had = out[-1]
+                out[-1] = (name, f"{had} {rules}".strip())
+            continue
         if label.lower() in _CHASSIS or label in skip:
             continue
-        out.append((label, found.group(2).strip()))
+        out.append((label, rules))
     return out
 
 
