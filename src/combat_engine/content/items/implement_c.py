@@ -1429,11 +1429,23 @@ def i3087p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.sustain_all()",),
 )
 def i3173p1(c: Cast) -> None:
-    """`c.on_sustain` says what a sustain pays out; nothing reaches in and
-    sustains a standing effect from outside, let alone all of them."""
+    """**`c.sustain_all()` was a false marker**, and the claim it rested on
+    -- that nothing sustains a standing effect from outside -- is the one
+    `i2573p1` already refuted. `Effects.sustaining` lists what this creature
+    is keeping going and `Effects.sustain` keeps one going, both public and
+    neither spending an action; `actions._sustaining` is only the menu.
+
+    So "all of them" is that pair with the choice taken out, which is the
+    whole difference between this block and `i2573p1`'s one-of.
+    `sustain_cost` is the printed action, so the `MINOR` filter is the
+    other half of the sentence rather than an assumption.
+    """
+    effects = c.world.effects
+    for eff in effects.sustaining(c.me):
+        if eff.sustain_cost is MINOR:
+            effects.sustain(eff)
     c.temp_hp(2 + c.enhancement, on=c.me)
 
 
@@ -1543,18 +1555,36 @@ def i3403x1(c: Cast) -> None:
     keywords=[Keyword.ACID],
     trigger="you hit and damage an enemy with an attack using this rod",
     on=Trigger(DamageRolled, by_me, "you damage an enemy with this rod"),
-    dropped=("c.ongoing(on_tick=)",),
 )
 def i3403p1(c: Cast) -> None:
     """Declared on the roll rather than on the hit: `c.reduce` takes a
     number off damage that has been rolled and not yet dealt, and by `Hit`
-    there is nothing left to reduce. The free slide each time the burn
-    ticks has no hook to hang from."""
+    there is nothing left to reduce.
+
+    **The per-tick slide is written, and `c.ongoing(on_tick=)` was a false
+    marker.** The hook the old note could not find is `DamageApplied.detail`:
+    `Effects._on_turn_start` stamps the burn it deals with `str(eff)`, so a
+    tick is told apart from every other blow that creature takes, and
+    `p3273` has been paying off exactly that read.
+
+    The subscription goes on the effect's own `subs`, as `p3273` does it, so
+    a save that ends the burn takes the slide with it rather than leaving a
+    listener behind for the next one.
+    """
     foe = getattr(c.trigger, "target", None) or c.target
     if foe is None:
         return
     c.reduce(5, c.trigger)
-    c.ongoing(5, DamageType.ACID, on=foe)
+    burn = c.ongoing(5, DamageType.ACID, on=foe)
+    if burn is None:
+        return
+    me, tag = c.me, str(burn)
+
+    def shove(ev: DamageApplied) -> None:
+        if ev.target == foe and ev.detail == tag:
+            c.slide(1, on=foe)
+
+    burn.subs.append(c.world.bus.on(DamageApplied, shove, owner=me))
 
 
 @power(
@@ -2270,15 +2300,43 @@ def i2618p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an implement power using this staff",
     on=Trigger(Hit, by_me, "you hit with this staff"),
-    dropped=("query.is_summoned()", "c.grant_action(trigger=)"),
+    dropped=("query.is_summoned()",),
 )
 def i2640p1(c: Cast) -> None:
-    """Two narrowings go: `c.summon` records no relation, so the pool is
-    the servants and companions the board holds, and `c.grant_action`
-    carries a cost but not a condition, so the shift is not gated on being
-    hit."""
-    for mine in _mine(c):
-        c.grant_action("shift", INTERRUPT, squares_=2, on=mine, until=When.EONT)
+    """**The trigger is written, and `c.grant_action(trigger=)` was a false
+    marker.** The verb carries the *cost*; the condition is the **watch that
+    lays it**, which is how `f3210` and `f3204` both hang an off-turn grant
+    on something happening. So the offer goes up when one of these creatures
+    is hit instead of standing open to all of them for two turns whatever
+    happens.
+
+    "A melee or ranged attack" is the attacking row's own
+    `reach_of(0).kind`, the narrower half of what `_is_melee` above asks: a
+    close or area attack is neither and must not arm it.
+
+    The pool is read **inside** the watcher, so a creature called up after
+    this row fires is covered for the rest of the window rather than
+    snapshotted out of it.
+
+    What stays approximate, and it is `c.grant_action`'s shape rather than
+    this row's: `actions.legal` builds the menu for the creature whose turn
+    it is, so an interrupt-cost grant is spent at the holder's first
+    opportunity inside the window rather than in the interrupt window
+    itself. Every grant in the tree is offered that way.
+
+    Still dropped: `c.summon` records no relation, so "summoned by your
+    artificer powers" is the servants and companions the board does hold.
+    """
+    def struck(ev: Any) -> None:
+        who = getattr(ev, "target", None)
+        if who is None or who not in _mine(c):
+            return
+        p = get(getattr(ev, "power", "") or "")
+        if p is None or p.reach_of(0).kind not in ("melee", "ranged"):
+            return
+        c.grant_action("shift", INTERRUPT, squares_=2, on=who, until=When.EONT)
+
+    c.watch(Hit, struck, until=When.EONT, on=c.me, label=f"{c.ref} struck")
 
 
 @power(

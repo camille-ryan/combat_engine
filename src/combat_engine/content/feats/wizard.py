@@ -95,21 +95,34 @@ def f1132(c: Cast) -> None:
 
 
 @power("f677", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Summoned.power",))
+       reach=PERSONAL, target=SELF)
 def f677(c: Cast) -> None:
     """The marker this replaces wanted a list of whose summons are whose,
     kept after the fact. A trait does not need one: `Summoned` names the
     summoner as `actor`, and a watch armed at the start of the fight
     catches each arrival as it happens.
 
-    What the event does not carry is the power that did the summoning,
-    so "by your *arcane summoning* powers" is the dropped clause and
-    every creature this wizard brings in is covered. No type word is
-    printed in front of the bonus."""
+    **The keyword gate is written, and the old note here was false.**
+    `Summoned.ref` exists and all three emitters stamp it with the
+    summoning row -- so the arcane half is `c.keywords_of` on that ref,
+    asked the way every other gate in this file is asked. Read through
+    `keywords_of` and not off the header, so a keyword some other feat
+    granted this wizard counts.
+
+    The event firing is itself the "summoning" half of "arcane summoning
+    power", so `Keyword.SUMMONING` is not also asked: the keyword is
+    declared on six rows across the tree and absent from almost every
+    wizard row that summons, and requiring it would refuse arrivals the
+    card plainly covers.
+
+    No type word is printed in front of the bonus."""
     me = c.me
 
     def arrived(ev: Summoned) -> None:
         if ev.actor != me:
+            return
+        p = get(ev.ref)
+        if p is None or Keyword.ARCANE not in c.keywords_of(p):
             return
         for defence in (AC, FORT, REF, WILL):
             c.bonus(defence, 1, on=ev.summon, until=When.ENCOUNTER)

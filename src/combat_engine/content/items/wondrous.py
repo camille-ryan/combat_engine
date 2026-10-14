@@ -2939,15 +2939,40 @@ def i857x1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(DEX, vs=REF),
-    dropped=("c.suppress_item()",),
+    dropped=("c.object_target()",),
 )
 def i1145p1(c: Cast) -> None:
-    """The enhancement bonus can be taken away -- that is `c.decay` -- but
-    "its powers cannot be activated" needs every row the item carries and
-    an item's rows are not enumerable from a body. Unattended objects and
-    magical effects are not targets a power can be aimed at here."""
-    if c.strike():
-        c.decay(on=c.target, amount=6, until=When.SAVE_ENDS)
+    """An item's rows *are* enumerable from a body, so "its powers cannot
+    be activated" plays.
+
+    `equipment.equip` installs them out of `Magic.powers` and puts the
+    record in `Gear.worn`, so the list is one dictionary read away -- and
+    `c.forbid` is exactly the sentence: the creature keeps the row, cannot
+    reach it, and gets it back when the save lands.
+
+    The attacker picks which worn item, because the card aims at an object
+    and this row aims at the creature holding it. The enhancement half
+    stays `c.decay`, which reaches a held magic weapon's attack and damage
+    plus -- so it is called only for the item that carries one, and a
+    chosen item whose bonus goes to a defence keeps it. That narrowness is
+    `c.decay`'s and was here before.
+
+    Dropped: an unattended object or a standing magical effect as the
+    target, with its Reflex of 10 + level. Neither is a thing a power can
+    be aimed at here -- only creatures and squares are."""
+    if not c.strike():
+        return
+    foe = c.target
+    gear = c.world.get(foe, Gear) if foe is not None else None
+    worn = sorted(gear.worn) if gear is not None else []
+    slot = worn[0] if len(worn) == 1 else c.choose(worn, f"{c.ref}: which item")
+    if slot is None or gear is None:
+        return
+    item = gear.worn[slot]
+    for ref in item.powers:
+        c.forbid(ref, on=foe, until=When.SAVE_ENDS)
+    if item.enh_to == "attack_damage":
+        c.decay(on=foe, amount=item.plus or 6, until=When.SAVE_ENDS)
 
 
 @power("i1154x1", level=10, cls=ITEM, action=ActionType.NONE,

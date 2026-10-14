@@ -1194,9 +1194,15 @@ def f1969(c: Cast) -> None:
     """
 
 
+#: "Light armour or chainmail", in the words `Gear.armour` stores -- the
+#: same tuple `cf:fighter-weaponmaster-f3s1` gates its own damage half on.
+#: The empty string is a creature with no `Gear` row of its own.
+_LIGHT_OR_CHAIN = ("", "cloth", "leather", "hide", "chain")
+
+
 @power("f1970", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("Gear.off_hand", "Build.armour", "Weapon.improvised"))
+       dropped=("Weapon.improvised",))
 def f1970(c: Cast) -> None:
     """+1 damage with the weapon style chosen for a class feature.
 
@@ -1207,26 +1213,50 @@ def f1970(c: Cast) -> None:
     a fighter on the great-weapon leg who has swapped to one hand is not
     getting it.
 
-    The other four legs are the ones `cf:fighter-talent-rest` is blocked
-    on and the symbols are its: an empty or occupied off hand, an armour
-    field on `Build`, and improvised weapons. Each would be a gate that
-    is false for every fighter in the tree, so they are dropped rather
-    than guessed at.
+    **Three more legs are written and none of them needed a new reader.**
+    Each asks the question its own leg row already asks, so this row
+    cannot drift from the feature it restates:
+
+    * the two-weapon leg is `Gear.two_weapon`, which counts *melee*
+      weapons -- a blade and a bow is not two;
+    * the brawling leg is `Gear.off` empty with no shield, read exactly
+      as `cf:fighter-weaponmaster-f3s2` reads it, a shield occupying that
+      hand as a second weapon does. The old marker asked for
+      `Gear.off_hand`; the property is `Gear.off` and has been live all
+      along;
+    * the armour leg is `Gear.armour`, a word on the live `Gear` and not
+      a field on `Build`, which is what the old marker looked for. A
+      fighter's chassis wears scale, so this gate is false for every
+      build in the tree today -- it is asked anyway, the way every
+      armour gate in `features/` is, because another row can change what
+      is worn.
+
+    Still dropped, for the one remaining leg: a weapon its wielder is not
+    proficient with counts as improvised, and there is no improvised
+    weapon on the board at all. `Weapon.improvised` is the symbol
+    `cf:fighter-weaponmaster-f3s0` already waits on, and it is the whole
+    of that leg's style -- so the gate is left false rather than guessed.
     """
     me, world = c.me, c.world
-    if not (c.build("great-weapon") or c.build("guardian")):
+    legs = ("great-weapon", "guardian", "tempest", "brawling", "battlerager")
+    if not any(c.build(leg) for leg in legs):
         return
     two_handed = c.build("great-weapon")
 
     def style(ctx: dict[str, Any]) -> bool:
         declared = get(str(ctx.get("power", "")))
+        if declared is None or Keyword.WEAPON not in declared.keywords:
+            return False
         gear = world.get(me, Gear)
         held = gear.main if gear is not None else None
-        return (
-            declared is not None
-            and Keyword.WEAPON in declared.keywords
-            and held is not None
-            and held.two_handed == two_handed
-        )
+        if gear is None or held is None:
+            return False
+        if c.build("great-weapon") or c.build("guardian"):
+            return held.two_handed == two_handed
+        if c.build("tempest"):
+            return gear.two_weapon
+        if c.build("brawling"):
+            return gear.off is None and not gear.shield
+        return gear.armour in _LIGHT_OR_CHAIN
 
     c.bonus("damage", 1, on=me, until=When.ENCOUNTER, when=style)

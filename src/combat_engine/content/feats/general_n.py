@@ -1016,19 +1016,27 @@ _granted("f2891", "f2891b", swap=Swap(6, utility=True))
 
 @power("f2891b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=DIVINE,
-       requires=_keeps_a_familiar, requires_text="you must have a familiar",
-       dropped=("c.grants_in(advantage=)",))
+       requires=_keeps_a_familiar, requires_text="you must have a familiar")
 def f2891b(c: Cast) -> None:
     """The light itself is not a combat effect. What is is "enemies grant
-    combat advantage while within 3 squares of your familiar", and that
-    is a standing area condition: `c.grants_in` carries numbers into a
-    zone and combat advantage is a relation, so this is laid on whoever
-    is inside the radius when the power goes off."""
+    combat advantage **while** within 3 squares of your familiar", and the
+    word is the whole clause: the familiar moves, so the radius has to be
+    asked as the blow lands rather than snapshotted at the minor action.
+
+    `c.grants_advantage(when=)` is that gate -- the same shape
+    `cf:shaman-f0s2` hangs a position test on `c.no_cover` with -- so the
+    grant goes on every enemy and each one's lambda re-reads where the
+    familiar is standing. `c.grants_in` is the wrong neighbour: it needs a
+    zone id, and this radius is centred on a creature.
+    """
     fam = c.familiar()
     if fam is None:
         return
-    for foe in c.within(3, of=fam, side="enemy"):
-        c.grants_advantage(on=foe, to="team", until=When.EONT)
+    for foe in c.enemies():
+        c.grants_advantage(
+            on=foe, to="team", until=When.EONT,
+            when=lambda ctx, f=foe, k=fam: f in c.within(3, of=k),
+        )
 
 
 # -- the divine free-action cards -------------------------------------------

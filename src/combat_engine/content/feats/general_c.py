@@ -450,21 +450,31 @@ def f800(c: Cast) -> None:
 
 
 @power("f651", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_reach(once=)",))
+       reach=PERSONAL, target=SELF)
 def f651(c: Cast) -> None:
     """A campaign-setting option offering a choice of three traits.
 
-    **Two of the three are writable now**, which is what changed: darkvision
-    of 1 square has a verb, and the speed option always did. `c.choose`
-    between them is therefore a real choice rather than one live option and
-    two dead ones -- which is the reason this row was refused outright
-    before, since choosing among three where two do nothing makes the third
-    compulsory.
+    **All three are writable, and the third needed no new verb.** "Add 1
+    to the reach of an attack you make" is `"reach"`, which is an ordinary
+    modifier key: `dsl.stretch` reads it where a melee area is worked out,
+    so the extra square decides what may be *aimed at* and not merely what
+    a body can touch. `once=True` spends it on the next attack, which is
+    the shape `c.as_ranged` and `c.threatens` both lay it in -- the old
+    marker asked for `c.extend_reach(once=)` and that is the same write
+    one layer down.
 
-    Still dropped: adding to the reach of one attack, which has no verb and
-    is one row's want."""
-    pick = c.choose(["darkvision", "speed"], f"{c.ref}: which trait")
+    So `c.choose` is a real choice between three, which is why this row
+    was refused outright at first: choosing among three where two do
+    nothing makes the third compulsory.
+
+    The two held options are laid for the encounter rather than for the
+    printed day or the printed "until the end of your next turn" -- this
+    horizon is one fight, and the speed option has read that way since it
+    was written."""
+    pick = c.choose(["darkvision", "speed", "reach"], f"{c.ref}: which trait")
     if pick == "darkvision":
         c.darkvision(1)
-    else:
+    elif pick == "speed":
         c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)
+    else:
+        c.bonus("reach", 1, on=c.me, until=When.ENCOUNTER, once=True)

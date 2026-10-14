@@ -333,14 +333,24 @@ _F1449 = ("p6980", "p1567", "p841", "p2849")
 
 def _arcane_after(c: Cast) -> None:
     """"After using the power" -- so it is hung on the use and not on the
-    hit, unlike every clause above."""
+    hit, unlike every clause above.
+
+    The card's first sentence makes an associated row **arcane as well as
+    divine**, and the bonus is then "to attack rolls with arcane powers" --
+    so the four refs count themselves. Written as the keyword test alone the
+    bonus paid nothing: a divine character's rows carry no `Keyword.ARCANE`,
+    and the sentence that would have given them one is this row's.
+    """
     me = c.me
 
     def on_used(ev: Any) -> None:
         if ev.actor == me and ev.power in _F1424:
             c.bonus(
                 "attack", 1, on=me, until=When.EONT,
-                when=lambda ctx: Keyword.ARCANE in _keywords(ctx.get("power", "")),
+                when=lambda ctx: (
+                    ctx.get("power") in _F1424
+                    or Keyword.ARCANE in _keywords(ctx.get("power", ""))
+                ),
             )
 
     c.watch(PowerUsed, on_used, on=me, until=When.ENCOUNTER)
@@ -402,8 +412,7 @@ _divine("f1363", "insight", clauses={
     "p839": _bloodied_allies_attack,
     "p3687": _bloodied_allies_attack,
 })
-_divine("f1424", "arcana", also=_arcane_after,
-        dropped=("spec.associated_powers()",))
+_divine("f1424", "arcana", also=_arcane_after)
 _divine("f1426", "thievery", also=_next_big_attack)
 _divine("f1429", "stealth", clauses={
     "p7241": _conceal_self,

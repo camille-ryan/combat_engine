@@ -74,6 +74,7 @@ from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.brutes import NO_BIGGER_THAN_MEDIUM
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
+from combat_engine.content.monsters.level_06.brutes import _living
 from combat_engine.content.monsters.level_07.controllers_sa import _no_sight_past
 from combat_engine.content.monsters.level_08.controllers import (
     _hands_the_use_back,
@@ -126,7 +127,9 @@ from combat_engine.engine.events import (
     Bloodied,
     ConditionApplied,
     DamageApplied,
+    Died,
     Dropped,
+    Healed,
     Hit,
     MoveEnd,
     PowerUsed,
@@ -2766,16 +2769,37 @@ def m3645a2(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.ZONE, Keyword.AREA],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("1d8", 4, dtype=DamageType.POISON),
-    dropped=("c.reanimate(dominated=)",),
+    dropped=("c.restrict_actions()",),
 )
 def m3645a3(c: Cast) -> None:
     """"Can move the cloud 3 squares as a move action" is this same row
     used again once the burst already stands -- the shape
-    `level_07/controllers.py`'s `m2294a3` uses. "A living creature reduced
-    to 0 hit points rises dominated, basic attacks only, cured by healing"
-    is its own chain past what `c.reanimate` can say -- confirmed absent of
-    a way to raise a creature already charmed. The burn, the cover, and the
-    crit die all play."""
+    `level_07/controllers.py`'s `m2294a3` uses. The burn, the cover, and the
+    crit die all play.
+
+    **The rise is written, and `c.reanimate(dominated=)` was a false
+    marker.** Nothing had to be able to raise a creature *and* charm it in
+    one call: `c.reanimate` puts the body back and `c.dominate(by=)` files
+    the `DOMINATED_BY` triple and the condition together, naming this
+    creature as the master -- which is the whole point of #405, since every
+    reader of that relation is silently false when the condition is laid
+    alone. "(no save)" is `until=When.ENCOUNTER`.
+
+    "Rises on its turn" is the **ghost slot**, and the one subtlety is
+    `p13925`'s: that slot only ticks while something is still clocked on the
+    corpse, and `Effects.bereave` empties the corpse the instant after
+    `Died`. So the hold that keeps the slot alive is *owned* by this
+    creature and only clocked against the body, and both watches belong here
+    for the same reason. `Died` is announced before `grid.lift`, so the body
+    is still standing in the zone when the test is made.
+
+    Healing ending it is a subscription on the hold itself, so it dies with
+    the domination rather than outliving it.
+
+    Still dropped: "can use only basic attacks". Nothing narrows a dominated
+    creature's menu to one kind of row -- `c.forbid` takes refs, and the set
+    here is everything that is *not* a basic attack.
+    """
     me = c.me
     standing = [z for z in c.my_zones() if (b := c.world.get(z, Zone)) and b.label == c.ref]
     if standing:
@@ -2800,6 +2824,49 @@ def m3645a3(c: Cast) -> None:
 
         c.watch(ZoneEntered, entered, until=When.SUSTAIN, on=me, label=f"{c.ref} zone")
         c.watch(TurnStart, started, until=When.SUSTAIN, on=me, label=f"{c.ref} zone")
+
+        waiting: set[int] = set()
+
+        def in_the_cloud(who: int) -> bool:
+            # **Not `c.in_squares`**, which filters to the living -- and a
+            # creature announcing `Died` is not one. Driven: the whole chain
+            # below paid nothing with that reading and raised nothing, which
+            # is this component's named failure mode. `grid.lift` runs after
+            # the event, so the body is still standing where it fell.
+            live = c.world.get(ring, Zone)
+            area = live.squares if live is not None else squares_
+            return bool(squares_of(c.world, who) & area)
+
+        def rises(ev: TurnStart) -> None:
+            who = ev.actor
+            if who not in waiting:
+                return
+            waiting.discard(who)
+            if not c.reanimate(on=who, hp=1):
+                return
+            hold = c.dominate(on=who, by=me, until=When.ENCOUNTER)
+            if hold is None:
+                return
+
+            def mended(heal: Healed) -> None:
+                if heal.target == who and heal.amount > 0:
+                    c.end_effect(hold)
+
+            hold.subs.append(c.world.bus.on(Healed, mended, owner=me))
+
+        def felled(ev: Died) -> None:
+            who = ev.actor
+            if who == me or who in waiting:
+                return
+            if not _living(c, who) or not in_the_cloud(who):
+                return
+            waiting.add(who)
+            # Owned by this creature, clocked against the body: `bereave`
+            # sweeps what a corpse *owns*, and the slot has to outlive it.
+            c.world.effects.apply(me, who, When.EONT, label=f"{c.ref} slot")
+
+        c.watch(Died, felled, until=When.SUSTAIN, on=me, label=f"{c.ref} felled")
+        c.watch(TurnStart, rises, until=When.SUSTAIN, on=me, label=f"{c.ref} rises")
     if c.strike():
         c.hit()
         if c.crit:

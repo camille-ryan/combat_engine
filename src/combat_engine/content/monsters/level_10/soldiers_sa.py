@@ -41,11 +41,12 @@ Gaps this file is the first to need, confirmed absent before marking:
   around below -- `c.aura` still returns a real `Zone` entity, and
   `Zone.difficult` is a plain mutable field on it -- so this is a workaround
   noted for the record, not a marker.
-* **`crit_range` is read only off the attacker.** `resolve._mods` hardcodes
-  `attacker` when it looks the bonus up, so "any attack roll **against**
-  the target can score a critical on 18-20" -- a bonus that would have to
-  sit on the far side of somebody else's attack -- has nowhere to land.
-  m956a2.
+* **`crit_range` is read off the attacker, and that is the right side.**
+  This file used to call it a gap: "any attack roll **against** the target
+  can score a critical on 18-20" was read as a bonus wanting to sit on the
+  far side of somebody else's attack. It does not. The wider range belongs
+  to each attacker and the *gate* is what narrows it to one victim, which
+  is how `p1074` prints the same sentence. m956a2 is written.
 
 Two old gaps this brief hits again: `Condition.DISEASED` (no disease track)
 and `ConditionApplied.cancel` (the condition is already on by the time that
@@ -1493,12 +1494,23 @@ def m2087a4(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.escape(as_power=)",),
 )
 def m2087a5(c: Cast) -> None:
-    """The shift-to-another-adjacent-square half is written; the half that
-    lets this same row double as an escape attempt with its own +2 has no
-    way to graft itself onto `c.escape`."""
+    """Both halves. `c.escape` needed no `as_power=`: its docstring *is*
+    this sentence -- "you immediately use the escape action ... costs
+    whatever the row that called it cost" -- and the printed +2 is its
+    `bonus=`. This row is the move action, so the attempt is already
+    priced.
+
+    Asked rather than taken, because the card prints "can also": a creature
+    that is held and would rather reposition keeps that option, and the
+    shift that follows a successful escape is one square and not five.
+    """
+    me = c.me
+    if c.grabbed_by(on=me) and c.may("escape instead of shifting", who=me):
+        if c.escape(on=me, bonus=2):
+            c.shift(1, who=me)
+        return
     foes = [f for f in c.enemies() if c.adjacent(f)]
     foe = c.choose(sorted(foes), f"{c.ref}: which enemy") if foes else None
     if foe is None:
@@ -5037,15 +5049,26 @@ def m956a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d10", 8),
-    dropped=("resolve._mods(side=)",),
 )
 def m956a2(c: Cast) -> None:
     """ "Any attack roll against the target can score a critical hit on
-    18-20" wants `crit_range` read off the defender's side of somebody
-    else's attack, and `resolve._mods` only ever reads it off the
-    attacker."""
-    if c.strike():
-        c.hit()
+    18-20" wanted no `side=` on `resolve._mods` after all. The wider range
+    belongs to the **attackers** -- it is read off whoever is rolling -- and
+    the gate on the damage context is what keeps it to this one creature.
+    `p1074` prints the same sentence and is written exactly this way.
+
+    `c.bonus` already defaults to `When.EONT`, which is the printed "until
+    the end of m956's next turn" measured from the creature that laid it.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.hit()
+    if victim is None:
+        return
+    against = lambda ctx: ctx.get("target") == victim  # noqa: E731
+    for shooter in [c.me, *c.allies()]:
+        c.bonus("crit_range", 2, on=shooter, when=against)
 
 
 @power(

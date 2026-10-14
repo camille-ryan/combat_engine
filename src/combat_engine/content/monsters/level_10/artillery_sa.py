@@ -84,6 +84,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    World,
     get,
     power,
 )
@@ -100,7 +101,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import cover_between, distance_between
+from combat_engine.engine.query import cover_between, distance_between, team
 from combat_engine.engine.triggers import Trigger, about_me, by_me, targets_me
 
 # --------------------------------------------------------------------------
@@ -2259,6 +2260,34 @@ def m5810a2(c: Cast) -> None:
         c.hit(half=True)
 
 
+def _ranged_or_area(ref: str) -> bool:
+    """"A ranged or an area attack power", asked of a row's ref.
+
+    The damage context's `ranged` key is `resolve._is_ranged`, which is the
+    printed "Ranged" line **alone** -- so the area half is read here off the
+    same ref the context already carries. The two kinds are the pair
+    `triggers.by_ranged` and `_shot_me_from_afar` both count: a close burst
+    is not an area attack and is deliberately out.
+    """
+    row = get(ref)
+    return row is not None and row.reach_of(0).kind in ("ranged", "area_burst")
+
+
+def _damaged_me_from_afar(world: World, me: int, ev: Any) -> bool:
+    """"An enemy damages it with a ranged or an area attack power."
+
+    `_shot_me_from_afar` asks the same question of an *attack* event and so
+    reads `attacker` and `power`. `DamageApplied` spells those `source` and
+    `detail`, which is why that helper cannot be handed this event.
+    """
+    if ev.target != me or team(world, ev.source) is team(world, me):
+        return False
+    return _ranged_or_area(ev.detail)
+
+
+_M5810_SHOT = "an enemy damages it with a ranged or an area attack power"
+
+
 @power(
     "m5810a3",
     level=10,
@@ -2267,14 +2296,26 @@ def m5810a2(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("resolve.deal_damage(area=)",),
+    recharge_when=Trigger(DamageApplied, _damaged_me_from_afar, _M5810_SHOT),
 )
 def m5810a3(c: Cast) -> None:
-    """The ranged half plays. The damage context carries `ranged` and
-    nothing that marks a blow as an **area** attack on its own, so a
-    close or area blow this creature takes cannot be told apart from a
-    melee one here."""
-    c.resist(1000, None, until=When.EONT, when=lambda ctx: bool(ctx.get("ranged")))
+    """Both halves of the printed pair, on both sides of the card.
+
+    The context carries no flag saying "this blow was an area attack", and
+    it does not need one: it carries `power`, and the kind is read off that
+    row's own range line -- which is how `resolve._is_ranged` derives the
+    `ranged` key sitting beside it. `_ranged_or_area` is that read.
+
+    The recharge condition is the same sentence and goes in the header,
+    where `recharge_when=` belongs: `recharge=0` is the honest die for a
+    card that prints a condition and no number, and a watcher armed from
+    the body cannot be read by the wire or the policy."""
+    c.resist(
+        1000, None, until=When.EONT,
+        when=lambda ctx: (
+            bool(ctx.get("ranged")) or _ranged_or_area(str(ctx.get("power") or ""))
+        ),
+    )
 
 
 # ==========================================================================

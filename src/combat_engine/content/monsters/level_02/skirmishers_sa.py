@@ -795,21 +795,25 @@ def m115801a3(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=5),
     damage=Damage("1d8", 4),
-    dropped=("c.cannot_attack(when=)",),
 )
 def m1484a0(c: Cast) -> None:
     """It fastens on and feeds, and the burn lasts exactly as long as the hold.
 
     The defences it gains are gated on the hold rather than laid flat, so they
-    come off the moment the creature it is attached to gets free. What is
-    dropped is the other half of being attached: it makes no attack rolls
-    while it holds somebody, and `c.cannot_attack` takes no gate, so writing
-    it bare would silence the creature for the rest of the fight.
+    come off the moment the creature it is attached to gets free.
+
+    "Makes no attack rolls while grabbing" is the same lifetime, not a gate:
+    `c.cannot_attack` takes no `when=`, but `_until_escape` is already how
+    this row gives the burn the grab's span, so the silence is handed to it
+    too and lifts the moment the creature gets free rather than running to
+    the end of the fight.
     """
     if not c.strike():
         return
     c.hit()
     victim = c.target
+    if victim is None:
+        return
     c.grab()
     _until_escape(c, victim, c.ongoing(5, until=When.ENCOUNTER))
     if not _armed(c, c.ref):
@@ -818,6 +822,9 @@ def m1484a0(c: Cast) -> None:
             c.bonus(
                 defence, 5, on=c.me, until=When.ENCOUNTER, when=attached,
             )
+        _until_escape(
+            c, victim, c.cannot_attack(on=c.me, until=When.ENCOUNTER)
+        )
         c.effect(c.ref, on=c.me, until=When.ENCOUNTER)
 
 

@@ -324,23 +324,39 @@ def m1401a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.carrying(thing)",),
 )
 def m1401a2(c: Cast) -> None:
-    """Extra damage near the thing it is set to watch.
+    """Extra damage near the thing it is set to watch, or on whoever is
+    holding it.
 
     `c.guarding` is the relation the board sets when something is put in this
-    creature's charge, so the adjacency half is real and fires whenever an
-    encounter binds one. The other half is not askable: `c.carrying` takes a
-    row's ref and there is no way to ask whether a creature is holding a
-    particular entity.
+    creature's charge, so the adjacency half fires whenever an encounter
+    binds one.
+
+    **The carrying half is written now, and `c.carrying` was the wrong
+    reader rather than a missing one.** That verb takes a row's ref and
+    answers about equipment; the thing being guarded is `Scenery`, and
+    `Scenery.by` is its own field for exactly this -- "whoever is holding
+    or controlling it", one field because held-by and controlled-by are
+    the same question asked by two cards. `query.scenery` already reads it
+    for `loose=`.
+
+    Asked at damage time rather than latched, because the object can
+    change hands mid-fight and that is the whole point of a guard.
     """
+    from combat_engine.engine.components import Scenery
 
     def beside_my_charge(ctx: dict[str, Any]) -> bool:
         victim = ctx.get("target")
-        return victim is not None and any(
-            c.adjacent_to(thing, victim) for thing in c.guarding(of=c.me)
-        )
+        if victim is None:
+            return False
+        for thing in c.guarding(of=c.me):
+            if c.adjacent_to(thing, victim):
+                return True
+            standing = c.world.get(thing, Scenery)
+            if standing is not None and standing.by == victim:
+                return True
+        return False
 
     c.bonus(
         "damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER,
@@ -3334,15 +3350,32 @@ def m6397a3(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=7),
-    dropped=("c.no_conceal()",),
 )
 def m6397a4(c: Cast) -> None:
-    """The opening is laid and plays. What is dropped is the other half:
-    nothing takes the benefit of concealment or invisibility *away from the
-    creature that has it* -- `c.see_invisible` and `c.ignore_cover` are the
-    watcher's side of the same question and would be the wrong creature."""
+    """The opening, and both halves of what the target stops benefiting
+    from.
+
+    **Concealment was never missing, only misnamed.** `c.no_cover` is
+    verbatim "the target does not benefit from cover or concealment", and
+    it sits on whoever is *looked at* -- which is the creature this card is
+    about. `c.see_invisible` and `c.ignore_cover` are the watcher's side of
+    the same question and would have been the wrong creature; the old
+    marker asked for a verb that already existed under the other name.
+    `query.cover_waived` is the reader, and it takes the larger of the two
+    sides rather than their sum.
+
+    Invisibility is the other reader -- `Relation.HIDDEN_FROM`, answered in
+    `query.unseen_by` -- so it is taken away the way `i551x1` takes it
+    away: truesight *of that one creature*, laid on each watcher who is
+    meant to have it. Paid out to this creature and its allies, matching
+    the opening above, which is also paid to the team."""
     if c.strike():
+        foe = c.target
         c.grants_advantage(until=When.EONT, to="team")
+        c.no_cover(until=When.EONT)
+        if foe is not None:
+            for looker in [c.me, *c.allies()]:
+                c.truesight(of=foe, on=looker, until=When.EONT)
 
 
 @power(

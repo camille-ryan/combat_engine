@@ -86,6 +86,7 @@ from combat_engine.engine import (
     Event,
     Forced,
     ForcedMove,
+    Gear,
     Healed,
     Hit,
     InitiativeRolled,
@@ -114,8 +115,9 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import PowerPoints
 from combat_engine.engine.grid import distance as squares_apart
-from combat_engine.engine.grid import neighbours
+from combat_engine.engine.grid import neighbours, spread
 from combat_engine.engine.query import allies, distance_between, squares
+from combat_engine.engine.types import Light
 
 ITEM = "item"
 
@@ -1463,21 +1465,56 @@ def i3010p1(c: Cast) -> None:
     c.watch(PowerResolved, arrived, until=When.EOT)
 
 
+def _against_something_big(c: Cast, who: int) -> bool:
+    """Is `who` standing beside a wall, or beside an object its own size?
+
+    Two readers, because the card names two things. The map's own walls are
+    `world.grid.blocking` -- the question `powers/fighter/level_1_b.py` and
+    `powers/ranger/level_6_sb.py` each write out -- and the furniture is
+    `c.scenery`, whose entity ids carry a `Position` that `c.size_of`
+    reads. `c.scenery` alone was the wrong half: it sees no walls, so a
+    board with no furniture in it answered no.
+    """
+    theirs = squares(c.world, who)
+    if any(sq in c.world.grid.blocking for sq in spread(theirs, 1) - theirs):
+        return True
+    mine = c.size_of(who).order
+    return any(
+        c.size_of(thing).order >= mine
+        for thing in c.scenery(within=1, of=who)
+    )
+
+
 @power("i3273p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION],
-       dropped=("query.against_wall()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION])
 def i3273p1(c: Cast) -> None:
     """The minor action is banked, and "until you attack" ends the hold
-    the one-shot lays. Dropped: the third end -- you stop being beside a
-    wall or an object your own size -- has nothing to ask. `c.scenery`
-    sees the loose objects a room was furnished with and not the map's
-    own walls, so gating on it would end the concealment instantly on
-    every board that has no furniture."""
+    the one-shot lays.
+
+    The third end is written now, and it is checked on each *step* rather
+    than once at the end of a move: a push and a teleport strand the
+    drinker as surely as a walk does. The same check runs the moment the
+    hold is laid, because "until you are not adjacent" is already false for
+    somebody who spends the banked minor out in the open.
+    """
 
     def blend(who: int) -> None:
-        _ends_when_you_attack(
-            c, c.conceal(on=who, total=True, until=When.ENCOUNTER), who
-        )
+        held = c.conceal(on=who, total=True, until=When.ENCOUNTER)
+        if held is None:
+            return
+        _ends_when_you_attack(c, held, who)
+
+        def strand() -> None:
+            if not _against_something_big(c, who):
+                c.end_effect(held, why=f"{c.ref}: nothing to blend against")
+
+        def strayed(ev: Moved) -> None:
+            if ev.actor == who:
+                strand()
+
+        c.watch(Moved, strayed, until=When.ENCOUNTER, on=who,
+                label=f"{c.ref} cover")
+        strand()
 
     c.give(fn=blend, on=c.me, cost=MINOR)
 
@@ -1580,15 +1617,71 @@ def i3300p1(c: Cast) -> None:
             c.end_effect(held, why=f"{c.ref} stripped it")
 
 
+#: The seven eggs, as what each one's zone deals and how much it obscures.
+#: Keyed by the damage because that is what tells them apart without
+#: printing a word of any of their headings -- six signatures over seven
+#: eggs, the two untyped ones sharing their damage *and* their rider and
+#: differing only in a clause nothing here can say.
+_EGGS: tuple[tuple[tuple[DamageType, ...], str], ...] = (
+    ((DamageType.UNTYPED,), ""),
+    ((DamageType.COLD,), Light.DARK),
+    ((DamageType.COLD, DamageType.LIGHTNING), Light.DIM),
+    ((DamageType.LIGHTNING, DamageType.THUNDER), ""),
+    ((DamageType.FIRE, DamageType.POISON), Light.DIM),
+    ((DamageType.FIRE,), ""),
+)
+
+
+def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
+    """What the egg lays on top of its 5 damage, by variety.
+
+    The untyped pair is the save-or-fall, the two cold ones are the slow,
+    and the two fire ones burn -- as **one** hold of both types, which is
+    what `dtypes=` is for and what the printed "ongoing fire and poison
+    damage" means. The lightning-and-thunder egg adds no condition at all,
+    so it falls off the end rather than taking somebody else's branch.
+    """
+    if kinds == (DamageType.UNTYPED,):
+        if not c.save(on=who, bare=True, against=c.ref):
+            c.prone(on=who)
+    elif DamageType.COLD in kinds:
+        c.slowed(on=who, until=When.SOTNT)
+    elif DamageType.FIRE in kinds:
+        c.ongoing(5, dtypes=kinds, on=who)
+
+
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.burns(condition=)",))
+       dropped=("c.zone(exempt_if=)", "c.grant_action(slide=)"))
 def i3569p1(c: Cast) -> None:
-    """Seven eggs on one card. The shared half -- difficult ground and 5
-    damage to whoever starts a turn in it -- is the hazard; the condition
-    each variety adds on top of that is what a hazard cannot carry."""
-    c.hazard(c.area(), 5, _element(c), until=When.ENCOUNTER,
-             difficult=True, sustain=None)
+    """Seven eggs on one card, asked of the decider the way `_element`
+    asks for a damage type -- the choice *is* the variety.
+
+    **Not `c.hazard`, and that is the point of the rewrite.** A hazard
+    bites on entering the zone as well as on starting a turn there, and
+    this card says only the second; `c.burns` carries one damage type where
+    three of these eggs deal two; and neither can lay the condition the
+    variety adds. One `TurnStart` watcher says all three, and needs no
+    once-per-turn latch because a turn starts once.
+
+    Still dropped, both with clauses the tree already has symbols for: the
+    exemptions from the difficult ground, which are by movement mode or by
+    a resistance rather than by id, and the slide or pull the zone's owner
+    may spend an action on.
+    """
+    kinds, dark = c.choose(list(_EGGS), "the egg's element") or _EGGS[0]
+    zone = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER,
+                  difficult=True, obscured=dark)
+
+    def at_dawn(ev: TurnStart) -> None:
+        who = ev.actor
+        if ev.ghost or who not in c.world.zones.occupants(zone):
+            return
+        c.world.damage(c.me, who, 5, kinds[0], detail=f"{c.ref} zone",
+                       dtypes=kinds)
+        _egg_rider(c, kinds, who)
+
+    c.watch(TurnStart, at_dawn, until=When.ENCOUNTER, label=f"{c.ref} bite")
 
 
 @power("i3577p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1676,30 +1769,44 @@ def i3064p1(c: Cast) -> None:
 
 
 @power("i3278p1", level=9, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF,
-       dropped=("resolve.ctx.weapon",))
+       reach=PERSONAL, target=SELF)
 def i3278p1(c: Cast) -> None:
     """The draught ends itself on a natural 1 or 2, which is read off
     `AttackRolled.natural` -- both bonuses go together.
 
-    **Re-pointed, and the damage bonus is narrowed.** `query.is_basic_attack()`
-    named a reader for something the context already says: `power` on the
-    damage side is the ref of the row that rolled the blow, and the engine's
-    own two basics are `basic.MELEE` and `basic.RANGED` -- two string
-    constants. So "of melee basic attacks and of ranged basic attacks" is one
-    membership test, and the bonus used to apply to every attack in the fight.
+    **Re-pointed, and the damage bonus is narrowed twice.**
+    `query.is_basic_attack()` named a reader for something the context
+    already says: `power` on the damage side is the ref of the row that
+    rolled the blow, and the engine's own two basics are `basic.MELEE` and
+    `basic.RANGED` -- two string constants. So "of melee basic attacks and
+    of ranged basic attacks" is one membership test, and the bonus used to
+    apply to every attack in the fight.
 
-    Still dropped: "with thrown weapons", which narrows only the ranged half.
-    `Weapon.thrown` is a field of the weapon and the damage context carries
-    no weapon at all, so the ranged basic gets the bonus whatever is in
-    hand."""
+    "**With thrown weapons**" is the second narrowing and the context does
+    reach it after all: `ctx["ranged"]` says which branch is rolling and
+    `Gear` says what is in hand, which is how
+    `features.strikers._weapon_attack` picks a weapon off the same two keys.
+    A thrown blade is not `Gear.ranged` -- that property answers "can this
+    be *fired*" -- so the ranged basic's weapon is `Gear.main`, and
+    `Weapon.thrown` is a field on it."""
     from combat_engine.engine.basic import MELEE, RANGED
+
+    def paid(ctx: dict[str, Any]) -> bool:
+        row = ctx.get("power")
+        if row == MELEE:
+            return True
+        if row != RANGED:
+            return False
+        gear = c.world.get(c.me, Gear)
+        if gear is None:
+            return False
+        arm = gear.ranged if ctx.get("ranged") and gear.ranged else gear.main
+        return arm is not None and arm.thrown is not None
 
     holds = [
         c.bonus("skill:athletics", 2, on=c.me, kind="power",
                 until=When.ENCOUNTER),
-        c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER,
-                when=lambda ctx: ctx.get("power") in (MELEE, RANGED)),
+        c.bonus("damage", 2, on=c.me, until=When.ENCOUNTER, when=paid),
     ]
 
     def fumbled(ev: AttackRolled) -> None:

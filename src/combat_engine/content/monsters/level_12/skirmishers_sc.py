@@ -95,6 +95,7 @@ from combat_engine.content.monsters.level_11.skirmishers_sc import (
     _foe_within,
     _through_them,
 )
+from combat_engine.content.monsters.level_12.controllers_sa import _saves_against_prone
 from combat_engine.content.monsters.level_12.skirmishers import _either_swing
 from combat_engine.engine import (
     AC,
@@ -175,6 +176,13 @@ from combat_engine.engine.triggers import Trigger, about_me, by_me
 #: is neither, which is the whole reason the seven extra-damage traits here
 #: cannot simply be an ungated damage modifier.
 _WEAPON_RANGES = ("melee", "ranged")
+
+#: "Cannot be pulled, pushed, or slid" written as a *number*.
+#: `movement._settle` clamps at `max(0, squares + forcing - forced)`, so a
+#: resistance larger than any printed shove is a flat refusal -- and larger
+#: than any `"forcing"` bonus that might outbid it, which is the reason this
+#: is not simply the board's width.
+_NO_SHOVE = 99
 
 
 def _weapon_swing(ctx: dict[str, Any]) -> bool:
@@ -2284,14 +2292,18 @@ def m3201a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.save_to_avoid(Condition.PRONE)",),
 )
 def m3201a3(c: Cast) -> None:
-    """One square off every shove is exact. The saving throw against being
-    knocked down is the dropped clause: a saving throw is rolled against a
-    standing effect, and there is no hook that offers one *instead of* a
-    condition landing."""
+    """One square off every shove, and a throw to keep its feet.
+
+    **The claim that no hook offers a throw as the condition arrives was
+    wrong.** `ConditionApplied` is that moment and names its subject, so
+    the throw is rolled as the hold lands and a success takes it straight
+    back off -- the same outcome with a real die behind it. Four rows in
+    this level's controller file already write it, and
+    `_saves_against_prone` is that helper rather than a fifth copy."""
     c.resist_forced(1, on=c.me, until=When.ENCOUNTER)
+    _saves_against_prone(c)
 
 
 # ==========================================================================
@@ -4126,7 +4138,7 @@ def m6000a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.immovable(when=)", "c.squeeze_through()"),
+    dropped=("c.squeeze_through()",),
 )
 def m6000a1(c: Cast) -> None:
     """The shared square is exact, and `difficult=True` is the printed cost of
@@ -4134,13 +4146,23 @@ def m6000a1(c: Cast) -> None:
     is an argument to one move made by the mover, which is the other way
     round.
 
-    Two clauses are dropped. "Cannot be pushed, pulled or slid **by melee or
-    ranged attacks**" is narrower than `c.immovable`, which takes no gate, and
-    refusing every shove would be a stronger swarm than the card prints.
-    Slipping through an opening a Tiny creature fits has no opening on a
-    board to slip through.
+    **The shove clause is written now, and the narrowing was the whole
+    objection.** `c.immovable` takes no gate -- it cancels every
+    `ForcedMove` -- so refusing shoves from bursts too would be a stronger
+    swarm than the card prints. But `c.resist_forced` *does* take a gate,
+    and `movement._settle` hands it the shove's own context: `{"how",
+    "power"}`, where `power` is the row that did the shoving. So
+    `_weapon_swing` is the same gate the seven extra-damage traits in this
+    file already use, and a resistance past any printed distance is a
+    refusal, because `_settle` clamps at zero.
+
+    Still dropped: slipping through an opening a Tiny creature fits, which
+    has no opening on a board to slip through.
     """
     c.shares_space(on=c.me, until=When.ENCOUNTER, difficult=True)
+    c.resist_forced(
+        _NO_SHOVE, on=c.me, until=When.ENCOUNTER, when=_weapon_swing,
+    )
 
 
 @power(

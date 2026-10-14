@@ -1061,20 +1061,32 @@ def p14212(c: Cast) -> None:
         both(about_me, by_keyword(Keyword.TELEPORTATION)),
         "you use a teleportation power",
     ),
-    dropped=("c.hide(partial_cover=)",),
+    dropped=("c.hide(ally_cover=)",),
 )
 def p14213(c: Cast) -> None:
-    """The three states and their "until you attack" end are exact. Hiding
-    on partial cover or on cover an ally is giving you is a relaxation of
-    the stealth rules and nothing holds one.
+    """The three states and their "until you attack" end are exact.
 
-    **Re-pointed off `c.stay_hidden()`.** That symbol was doing duty for
-    three different needs and one of them -- re-hiding after a missed attack
-    -- is met by the `AttackDeclared` AFTER window and never wanted a verb at
-    all (`f1396`). What this row waits on is permission to hide on *partial*
-    cover, which is a different question from keeping hiddenness once cover
-    is gone (`m5281a1`). One symbol for three needs cannot go green correctly
-    for any of them. #390."""
+    **The partial-cover half needs nothing, and that is the correction.**
+    `actions._hiding` offers the hide to anybody with
+    `cover_between(...) or concealment_of(...)` -- any cover and any
+    concealment, partial included, with no superior-cover test anywhere --
+    so the relaxation this card prints is already the engine's baseline and
+    there was never a `partial_cover=` to wait for. "To remain hidden" is
+    free for the same kind of reason: `c.hide` runs until the creature
+    attacks and re-measures no cover in between.
+
+    **Still dropped, and narrowed to the one clause that is real:** using
+    cover your *allies* are giving you. `cover_between` counts creature
+    bodies only on a ranged attack (`if ranged:`) and `_hiding` asks it
+    without that flag, so an ally standing in the way is no cover for
+    hiding. Switching that on is a change to what the engine measures, not
+    something a row can lay.
+
+    **Re-pointed off `c.stay_hidden()` before this.** That symbol was doing
+    duty for three different needs and one of them -- re-hiding after a
+    missed attack -- is met by the `AttackDeclared` AFTER window and never
+    wanted a verb at all (`f1396`). One symbol for three needs cannot go
+    green correctly for any of them. #390."""
     held = [
         c.insubstantial(on=c.me, until=When.EONT),
         c.phasing(on=c.me, until=When.EONT),

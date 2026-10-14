@@ -56,6 +56,7 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
 )
 from combat_engine.content.monsters.level_03.brutes import _squeezes_freely
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
+from combat_engine.content.monsters.level_04.brutes import _seen_used
 from combat_engine.content.monsters.level_05.brutes_sa import _against_the_state
 from combat_engine.content.monsters.level_06.brutes import (
     DEFENCES,
@@ -2210,17 +2211,36 @@ def m5215a3(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=9),
     damage=Damage("3d8", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("c.borrow_row(seen=)",),
+    dropped=("c.learn()",),
     requires=_shapes("beast"),
     requires_text="it must be in beast form",
 )
 def m5215a4(c: Cast) -> None:
-    """The psychic half is exact; "gains a use of a power it has seen the
-    target use this encounter" has no seen-powers ledger to read from."""
+    """The psychic half is exact, and **the seen-powers ledger the old
+    marker asked for already exists**: `_seen_used` walks `bus.log` for
+    `PowerUsed` against `c.borrowed_rows`, which is "an at-will or encounter
+    attack power it has seen the target use during this encounter" exactly,
+    and `c.borrow_row(among=)` takes the refs it hands back and records the
+    pick through `world.decide`.
+
+    `among=` rather than `m2812a3`'s "take the latest": that card names one
+    row, this one asks for *an* attack it has watched, so the set is the
+    candidates and the choice is a real choice. An empty set returns `""`
+    and costs nothing.
+
+    Dropped is the rest of the sentence, which is the same residual
+    `m2812a3` carries under the same symbol: the borrowed row is spent at a
+    fixed +11 vs AC and +9 vs anything else, with the *owner's* ability
+    modifier and none of the owner's damage riders, and only in the other
+    form. A grant carries neither an attack line nor a requirement of its
+    own.
+    """
     me = c.me
     _recharge_on(c, Miss, lambda ev: ev.attacker == me and ev.power == "m5215a4")
     if c.strike():
         c.hit()
+        c.borrow_row(among=_seen_used(c, c.target), uses=1,
+                     until=When.ENCOUNTER)
 
 
 @power(
@@ -3332,12 +3352,17 @@ def m6343a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.hide(when=)",),
 )
 def m6343a1(c: Cast) -> None:
-    """The check and the hide both play; `c.hide` takes no standing gate,
-    so the partial-concealment condition is asked by hand in a watch
-    instead of declared the way `c.bonus`'s `when=` reads it."""
+    """The check and the hide both play, and **`c.hide(when=)` was a marker
+    for nothing**: the clause it named is written, by hand, in the watch
+    below. `c.hide` taking no standing gate is a fact about the verb's shape
+    and not a missing clause -- the printed sentence is "if it has partial
+    concealment it can make a check to become hidden", and that is the gate
+    asked, the check rolled and the hide laid, all of it.
+
+    A marker is for a clause that does not play. This one plays.
+    """
     me = c.me
 
     def try_hide(ev: TurnStart) -> None:

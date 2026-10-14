@@ -109,6 +109,7 @@ from combat_engine.engine.events import (
     DamageRolled,
     Dropped,
     Escaped,
+    ForcedMove,
     Hit,
     Miss,
     Moved,
@@ -3156,6 +3157,25 @@ def m6644a2(c: Cast) -> None:
     never at refusing one."""
 
 
+def _shoved_by_melee_or_ranged(ev: ForcedMove) -> bool:
+    """Is this shove the work of a melee or a ranged **attack**?
+
+    The two words a card uses to exempt everything else: a close blast and
+    an area burst still move the creature, and so does a shove that is no
+    attack at all. `ForcedMove.power` is the row that is doing it --
+    plumbed for `movement._settle`'s `{how, power}` gate and readable here
+    for the same reason -- so `Power.reach.kind` and `Power.is_attack` are
+    the whole question.
+    """
+    row = get(getattr(ev, "power", ""))
+    return (
+        row is not None
+        and row.is_attack
+        and row.reach is not None
+        and row.reach.kind in ("melee", "ranged")
+    )
+
+
 @power(
     "m6644a3",
     level=7,
@@ -3163,17 +3183,31 @@ def m6644a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.immovable(from_=)",),
 )
 def m6644a3(c: Cast) -> None:
-    """Sharing a space and the difficult terrain that comes with it both
-    play. Refusing forced movement from melee and ranged attacks alone does
-    not -- `c.immovable` is all-or-nothing and has no way to name the two
-    sources this card exempts and nothing else. Squeezing through an
-    opening sized for one of its components has no model either and is not
-    a second gap worth a second marker: nothing tracks a sub-creature's
-    size to measure the opening against."""
-    c.shares_space(on=c.me, until=When.ENCOUNTER, difficult=True)
+    """Sharing a space, the difficult terrain that comes with it, and the
+    narrowed refusal all play now.
+
+    **Refused, not resisted.** `c.resist_forced` takes the `when=` gate and
+    would have served -- its gate is handed the same `{how, power}` -- but a
+    resist large enough to swallow any shove leaves `ForcedMove` standing
+    and uncancelled, so a row triggered on "you are pushed" still fires and
+    the log still shows a shove of nought. The card says *cannot*, which is
+    `ev.cancel`; `p158` writes the same gated refusal out for the same
+    reason, since `c.immovable` is all-or-nothing.
+
+    Squeezing through an opening sized for one of its components has no
+    model and is not a second gap worth a marker: nothing tracks a
+    sub-creature's size to measure the opening against."""
+    me = c.me
+    c.shares_space(on=me, until=When.ENCOUNTER, difficult=True)
+
+    def rooted(ev: ForcedMove) -> None:
+        if ev.target == me and _shoved_by_melee_or_ranged(ev):
+            ev.cancel(c.ref)
+
+    c.watch(ForcedMove, rooted, until=When.ENCOUNTER, window=Window.BEFORE,
+            on=me, label=f"{c.ref} rooted")
 
 
 @power(

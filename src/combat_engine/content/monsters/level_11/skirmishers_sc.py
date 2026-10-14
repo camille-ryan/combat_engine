@@ -1075,7 +1075,6 @@ def m2096a1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=14),
-    dropped=("c.no_invisibility()",),
 )
 def m2096a2(c: Cast) -> None:
     """"Grants combat advantage to all attackers" is `to="team"`: the only
@@ -1083,14 +1082,27 @@ def m2096a2(c: Cast) -> None:
     allies, and the relation names beneficiaries one at a time.
 
     Concealment is `c.no_cover`, which is both halves of that printed pair.
-    Invisibility is the dropped clause -- `c.see_invisible` and `c.truesight`
-    both hand the sight to *one* watcher, and nothing takes the benefit away
-    from the creature carrying it.
+
+    **Invisibility is written, and `c.no_invisibility()` was a false
+    marker.** The old note was right that the sense is granted per watcher
+    and wrong that this cannot be said: the watchers are the same side the
+    line above already hands the advantage to, so the loop is the same team.
+    `p1831` prints this sentence word for word and writes it this way.
+
+    `c.truesight(of=)` and not `c.see_invisible(on=)`, which is the broader
+    verb: that one turns the watcher's blindness off against *everybody*, so
+    it would strip some third creature's invisibility too. `of=` is keyed to
+    this target, which is what the card narrows to, and `query.unseen_by`
+    reads both.
     """
     if not c.strike():
         return
+    foe = c.target
     c.grants_advantage(until=When.EONT, to="team")
     c.no_cover(until=When.EONT)
+    if foe is not None:
+        for watcher in (c.me, *c.allies()):
+            c.truesight(of=foe, on=watcher, until=When.EONT)
 
 
 @power(
@@ -1123,21 +1135,22 @@ def m2096a3(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.host_of(ref)",),
 )
 def m2096a4(c: Cast) -> None:
     """Ten of its own hit points for a row back.
 
     The near-death branch is the printed "instead": the damage is not taken
     and the creature steps away, which is what makes this row safe to spend
-    at one hit point. What it does to whatever is carrying it is the dropped
-    clause -- nothing finishes a named creature outright, and the relation
-    that would say which creature that is (`c.master`) is not set by any
-    board the engine fields.
+    at one hit point.
 
-    **Re-pointed.** `c.kill` exists now. What this waits on is a *host*:
-    the card kills the creature it is riding and becomes unattached, and
-    nothing on the board records one creature carrying another.
+    **The host is written, and `c.host_of(ref)` was a false marker.** The
+    board does record one creature carrying another -- `Relation.RIDDEN_BY`,
+    written by `c.ride` and read by `c.mount`, and `movement` already carries
+    the passenger when the mount moves. So "kills its host" is `c.kill` on
+    `c.mount()`, and "becomes unattached" is the relation cleared. It is
+    cleared here rather than left to `_die`, which only drops a relation when
+    the creature really dies: a host that lands at 0 and lies dying is still
+    unattached, and that is the sentence.
     """
     me = c.me
     health = c.world.get(me, Health)
@@ -1146,6 +1159,10 @@ def m2096a4(c: Cast) -> None:
     if which:
         c.restore_use(which, on=me)
     if doomed:
+        host = c.mount()
+        if host is not None:
+            c.kill(on=host)
+            c.world.relations.clear(Relation.RIDDEN_BY, host, me, c.ref)
         c.shift(3)
     else:
         c.flat(10, on=me)

@@ -1657,14 +1657,36 @@ _F3246 = ("p10470", "p1505", "p653", "p1063")
 
 
 @power("f3246", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.vulnerable(once=)",))
+       reach=PERSONAL, target=SELF)
 def f3246(c: Cast) -> None:
-    """Printed as "the *next* attack that hits"; `c.vulnerable` has no
-    one-shot form, so as written every hit inside the duration is paid."""
+    """The Stealth bonus, and 3 extra damage on the *next* blow to land on
+    whoever this hit.
+
+    **No vulnerability is involved and the old marker was aiming at the
+    wrong mechanism.** `c.vulnerable` has no one-shot form, so every hit
+    inside the window was paid; written as a `DamageRolled` watcher with
+    `once=True` it is spent by the first blow and nothing else. The amount
+    on that event is mutable and `resolve.deal_damage` reads it back, and
+    rewriting a field is what `c.watch`'s `once=` counts as doing
+    something (#540), so the hold retires itself.
+
+    **Any attacker, which is the printed word.** "The next attack that
+    hits that enemy" names nobody, so the watcher is keyed on the victim
+    rather than on me -- an ally landing the next blow collects it. The
+    hold sits on the foe and clocks on *my* next turn end, because
+    `When.EONT` is the source's turn and `c.watch` passes the caster as
+    source."""
     c.bonus("skill:stealth", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
 
     def soft(ev: Any) -> None:
-        c.vulnerable(3, on=ev.target, until=When.EONT)
+        foe = ev.target
+
+        def extra(blow: Any) -> None:
+            if blow.target == foe:
+                blow.amount += 3
+
+        c.watch(DamageRolled, extra, on=foe, until=When.EONT, once=True,
+                label=f"{c.ref} soft spot")
 
     _on_hit_with(c, _F3246, soft)
 
@@ -1941,15 +1963,30 @@ def f3311(c: Cast) -> None:
         if ev.attacker != c.me or not getattr(ev, "opportunity", False):
             return
         if c.may("spend a power point") and c.spend_points(1):
-            c.boost_roll(2, kind="attack")
+            # **`c.trigger` bound across the call, and the point was being
+            # spent for nothing without it.** `c.boost_roll` reads the roll
+            # off `self.trigger`, which the dispatcher sets only for a row
+            # declared with `on=` -- and this row deliberately has none, so
+            # that it can also lay the standing modifier above. A watcher
+            # is handed the event and does not rebind the field, so
+            # `boost_roll` found None and returned False **after**
+            # `c.spend_points(1)` had already taken the point.
+            #
+            # Unmarked, so the row reported finished the whole time.
+            # `f3312` below has the same shape and was written with the
+            # bind from the start; this is that fix applied here.
+            was, c.trigger = c.trigger, ev
+            try:
+                c.boost_roll(2, kind="attack")
+            finally:
+                c.trigger = was
 
     c.watch(AttackRolled, bought, until=When.ENCOUNTER, on=c.me,
             label=f"{c.ref} bought")
 
 
 @power("f3312", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.on_skill_check()",))
+       reach=PERSONAL, target=SELF)
 def f3312(c: Cast) -> None:
     """**Re-aimed off `c.bonus('skill:any')`, which was never the hold.**
     `c.bonus` wants a named skill and there is a list of them --
@@ -1957,14 +1994,48 @@ def f3312(c: Cast) -> None:
     already offers this way. So the standing +2 plays, chosen at arm
     time the way `f3214` chooses its defence.
 
-    Dropped: spending a point to raise it, which wants an offer at the
-    moment a check is made and nothing announces that window in time."""
+    **The point-for-a-bonus half plays now, and the old note was wrong
+    about the window.** `SkillCheck` is a `Decision` announced before its
+    modifiers are totalled -- its own docstring says so -- and
+    `c.boost_check` adds to a roll already down, reading the result back
+    out of the event. So the moment is announced and does not need
+    anything new.
+
+    **A watch rather than a declared trigger**, for the reason `f3311`
+    beside it gives: the row also lays a standing modifier, and with an
+    `on=` the body would only ever run when the trigger fired, so the +2
+    would never be laid at all.
+
+    `c.trigger` is bound across the call and put back. `boost_check`
+    reads the event off the `Cast`, and a watcher does not rebind it --
+    the save-and-restore idiom `powers/cleric/level_1_b.py` uses. Without
+    it the verb returns False and the point is paid for nothing.
+
+    The point is spent **first** and the boost abandoned if the pool is
+    empty, again as `f3311` does: the card sells the bonus for the point.
+    What lands is a bare number on a settled roll, so the printed
+    **power** type has nowhere to live -- there is no modifier bucket
+    left once the die is down -- which is the same limit every
+    `boost_check` row in the tree carries."""
     from combat_engine.engine.skills import SKILLS
 
     pick = c.choose(sorted(SKILLS), "which skill")
-    if pick is not None:
-        c.bonus(f"skill:{pick}", 2, on=c.me, until=When.ENCOUNTER,
-                kind="feat")
+    if pick is None:
+        return
+    c.bonus(f"skill:{pick}", 2, on=c.me, until=When.ENCOUNTER, kind="feat")
+
+    def bought(ev: Any) -> None:
+        if ev.actor != c.me or ev.skill != pick:
+            return
+        if c.may("spend a power point") and c.spend_points(1):
+            was, c.trigger = c.trigger, ev
+            try:
+                c.boost_check(3)
+            finally:
+                c.trigger = was
+
+    c.watch(SkillCheck, bought, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} bought")
 
 
 @power("f3313", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

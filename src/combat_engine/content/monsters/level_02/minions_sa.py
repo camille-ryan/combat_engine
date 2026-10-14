@@ -52,6 +52,7 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.components import Budget
 from combat_engine.engine.events import Dropped, Hit, TurnStart
 from combat_engine.engine.monster_math import MINION
 from combat_engine.engine.query import distance_between, enemies
@@ -780,6 +781,24 @@ def m6673a0(c: Cast) -> None:
         c.hit()
 
 
+def _has_acted(world: World, eid: int) -> bool:
+    """Has this creature spent anything this turn?
+
+    `Budget.refresh` puts all three back to 1 at the top of every turn, so
+    a full budget *is* "no actions taken" -- the fact the old marker said
+    was not recorded. Read rather than tallied, which is why no new state
+    was needed.
+
+    Compared against the refreshed values rather than tested for truth, so
+    a creature *granted* an extra action still reads as having acted once
+    it has used one.
+    """
+    budget = world.get(eid, Budget)
+    if budget is None:
+        return False
+    return budget.standard < 1 or budget.move < 1 or budget.minor < 1
+
+
 @power(
     "m6673a1",
     level=2,
@@ -787,12 +806,18 @@ def m6673a0(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.acted_this_turn()",),
+    requires=lambda world, eid: not _has_acted(world, eid),
+    requires_text="it must have taken no actions this turn",
 )
 def m6673a1(c: Cast) -> None:
-    """The step is the playable half. "Must have taken no actions this turn" has
-    nothing to ask: a turn records what it has left to spend and not what it has
-    already spent, so the Requirement is vacuously true."""
+    """The step, and the Requirement that gates it.
+
+    **Written: the budget is the record.** The old note said a turn holds
+    what is left to spend and not what has been spent, and those are the
+    same fact read from either end -- `Budget.refresh` resets standard,
+    move and minor at the top of every turn, so anything below full is an
+    action already taken. `requires=` is read while `actions.legal` builds
+    the menu, so the row is withheld rather than refused mid-body."""
     c.shift(max(1, c.speed_of(c.me) // 2))
 
 

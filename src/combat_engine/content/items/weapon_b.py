@@ -3353,12 +3353,18 @@ def i3430p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.half_damage(when=)",),
 )
 def i3486x1(c: Cast) -> None:
-    """A natural 1 is read off the roll, which carries it. Halving your own
-    damage against one sort of creature has no verb: `c.half_damage` is a
-    miss line and takes no gate."""
+    """A natural 1 is read off the roll, which carries it.
+
+    **The halving against one sort of creature is written.** `c.half_damage`
+    was the wrong neighbour -- that is the "Miss: half damage" line and
+    takes no gate -- but `c.halve(ev)` takes the event outright and
+    `DamageRolled.amount` is writable, which is how `c.half_healing` does it
+    internally and how `p14189` does it in content. So the blow is halved on
+    `DamageRolled` in the BEFORE window, where the number is rolled and not
+    yet dealt, and the gate is this file's own `kinds_of` question asked of
+    the creature taking it."""
     c.bonus(
         "damage",
         0,
@@ -3374,7 +3380,14 @@ def i3486x1(c: Cast) -> None:
         c.condition(on=c.me, until=When.SAVE_ENDS, ongoing=(10, DamageType.UNTYPED))
         c.penalty("attack", 2, on=c.me, until=When.SAVE_ENDS)
 
+    def construct(ev: DamageRolled) -> None:
+        if ev.source != c.me or ev.target is None:
+            return
+        if "construct" in c.kinds_of(on=ev.target):
+            c.halve(ev)
+
     c.watch(AttackRolled, fumble, until=When.ENCOUNTER)
+    c.watch(DamageRolled, construct, until=When.ENCOUNTER, window=Window.BEFORE)
 
 
 @power(
@@ -3544,17 +3557,20 @@ def i625p1(c: Cast) -> None:
         Trigger(SavingThrow, ally_within(5), "an ally makes a saving throw"),
         Trigger(SkillCheck, ally_within(5), "an ally makes a skill check"),
     ),
-    dropped=("dsl.uses(enhancement)",),
 )
 def i939p1(c: Cast) -> None:
     """A +1 power bonus to a d20 an ally within 5 has already rolled.
 
-    The printed allowance is "a number of times a day equal to the
-    enhancement bonus of the weapon" -- a use count that is a *column*
-    rather than a literal, and `uses=` in the header takes a number. One use
-    a day is what it deals, which is the enhancement at the lowest level the
-    item is printed at, so the row is short at higher plusses rather than
-    wrong. #495."""
+    **The printed allowance is written.** "A number of times a day equal to
+    the enhancement bonus of the weapon" does not need a header that takes
+    a column, which is what the old marker asked for: `c.spend_per_day`
+    takes its limit as a runtime `int` -- its own docstring says that limit
+    is often a modifier -- and `c.enhancement` is the column, read off the
+    item this row belongs to. So the allowance is spent in the body, and the
+    False it returns when the day's uses are gone is what refuses the
+    boost. #495."""
+    if not c.spend_per_day(c.ref, c.enhancement):
+        return
     c.boost_roll(1)
 
 
@@ -5293,15 +5309,38 @@ def i1466p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.brutal()",),
 )
 def i1467x1(c: Cast) -> None:
     """The darkvision plays -- the card grants it to whoever is wielding the
     weapon, which is the caster of an item trait.
 
-    Still dropped: rerolling the lowest damage dice is a weapon property
-    with no verb."""
+    **The brutal property is written.** Brutal 1 is "reroll each damage die
+    that comes up 1", which is `c.reroll_ones(below=2)` exactly -- read
+    inside `_roll_damage`, per die, with the rest of the roll standing.
+
+    The gate is laid on the modifier the verb returned, which is `f2705`'s
+    idiom and for the same reason: `c.reroll_ones` takes no `when=` and
+    `c.bonus` always has. **But `_reroll_floor` reads the hold with no
+    context at all**, so the gate cannot be handed the target -- which is
+    the whole of "against bloodied enemies". So the blow in flight is
+    tracked instead: `AttackDeclared` in the BEFORE window records whether
+    this swing's victim is a bloodied enemy, and the gate reads that.
+    """
     c.darkvision()
+    me = c.me
+    bloodied: list[bool] = []
+
+    def aiming(ev: AttackDeclared) -> None:
+        bloodied.clear()
+        if ev.attacker == me and c.bloodied(on=ev.target) and ev.target in c.enemies():
+            bloodied.append(True)
+
+    c.watch(
+        AttackDeclared, aiming, until=When.ENCOUNTER, window=Window.BEFORE,
+    )
+    held = c.reroll_ones(on=me)
+    for _owner, mod in held.mods if held is not None else ():
+        mod.when = lambda _ctx: bool(bloodied)
 
 
 @power(

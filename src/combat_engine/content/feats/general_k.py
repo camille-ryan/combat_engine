@@ -99,6 +99,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.grid import distance as square_distance
 from combat_engine.engine.grid import neighbours
 from combat_engine.engine.query import allies, distance_between, enemies, team
@@ -991,19 +992,40 @@ def f1772(c: Cast) -> None:
             when=lambda ctx: _wielding_group(c, "heavy blade"))
 
 
+def _under_a_primal_shape_or_rage(c: Cast) -> bool:
+    """Is a live effect on me one a rage or a primal polymorph laid?
+
+    The reader the old marker asked for, and it needed no new engine
+    symbol: `durations.keywords_of` turns an effect's label back into the
+    keywords of the row that laid it -- the label leads with that ref --
+    so the question is one pass over what is standing on the caster.
+
+    **Wider than `Effects.stance_of`, deliberately.** A rage is a stance
+    and a polymorph is not -- `c.form` lays an ordinary hold -- so asking
+    only for the stance would have answered half the printed sentence.
+    "Primal polymorph" is the two keywords together, which is why it is a
+    subset test rather than either word alone.
+    """
+    for held in c.world.effects.of(c.me):
+        words = keywords_of(held.label)
+        if Keyword.RAGE in words or {Keyword.POLYMORPH, Keyword.PRIMAL} <= words:
+            return True
+    return False
+
+
 @power("f1865", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.stance_keyword()",))
+       reach=PERSONAL, target=SELF)
 def f1865(c: Cast) -> None:
     """The flat +1 plays. The increase to +2 turns on standing inside a
     primal polymorph or a rage.
 
-    **Re-pointed: `Keyword.RAGE` exists now (#503) and is no longer the
-    hold.** Both keywords are declared on their rows. What is missing is a
-    reader: `Effects.stance_of` gives the effect and nothing turns that back
-    into the row that laid it to ask which keywords it carries. The label
-    leads with the ref, so it is a small reader -- but a reader, not a
-    keyword."""
+    Laid as a second **feat** bonus rather than as an extra point on the
+    first: same-kind bonuses do not add, the larger applies, so the pair
+    reads 1 or 2 and never 3. That is what "the bonus increases to +2"
+    says, and a `+1` stacked on a `+1` would have said something else."""
     c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("speed", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: _under_a_primal_shape_or_rage(c))
 
 
 @power("f1868", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1631,18 +1653,20 @@ _granted("f1766", "f1766b", swap=Swap(9, Usage.DAILY))
        keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.RADIANT],
        trigger="you hit an enemy",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me,
-                  "you hit an enemy"),
-       dropped=("c.grant_attack(kind=)",))
+                  "you hit an enemy"))
 def f1766b(c: Cast) -> None:
     """`c.grant_attack`'s own `damage_bonus` is a bare number with no type
     to it, so the extra die is laid as a one-shot typed damage modifier on
     the ally instead and the granted attack spends it. Same arithmetic,
     and the radiant meets a radiant resistance the way it is printed to.
 
-    `attack_bonus` is the same bare number and has no such workaround:
-    the card prints the +2 as a **power** bonus, and laid untyped it
-    stacks with another power bonus where the printed one would not. So
-    the number is right and its type is dropped."""
+    **The marker on this row was false and nothing had to be written.** It
+    said `attack_bonus` was untyped and would stack where the printed
+    power bonus would not. `c.grant_attack` lays it as
+    `Mod(what="attack", value=attack_bonus, kind="power")` -- typed, and
+    typed as the card prints it -- so the row has been getting the right
+    bonus the whole time. The `damage_bonus` half of that paragraph is
+    still true, which is why the die above is laid by hand."""
     friend = c.target
     if friend is None:
         return

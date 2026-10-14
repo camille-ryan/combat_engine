@@ -83,6 +83,7 @@ from combat_engine.engine import (
     Rerolled,
     SavingThrow,
     SkillCheck,
+    Square,
     Target,
     Trigger,
     TurnStart,
@@ -101,6 +102,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Health, Position
 from combat_engine.engine.query import allies, distance_between, team
+from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.zones import Zone
 
 #: A creature the power summons whose numbers are printed nowhere the spec
@@ -255,13 +257,53 @@ def _until_you_attack(c: Cast, held: Effect | None) -> None:
     target=SELF,
     keywords=[Keyword.ACID],
     attack=Attack((STR, CON, DEX), vs=REF, plus=3),
-    dropped=("c.overrun(squares=)",),
 )
 def p10043(c: Cast) -> None:
     """`c.overrun` is the only verb that walks through occupied squares and
     then says who was passed through, which is what "each creature whose
-    space you enter" needs. It spends the whole speed, not half of it."""
-    for foe in c.overrun():
+    space you enter" needs.
+
+    Half the speed is the destination, not a second argument.
+    `movement.overrun` walks the line from here to `to=` and never consults
+    speed at all -- it is the bare `c.overrun()` that spends the whole of it,
+    by picking out of everywhere a full move reaches. So the candidates come
+    from `reachable_squares` at half, priced as the shift the card prints,
+    and the one with the most enemies on the way is offered first, which is
+    the ranking the engine's own no-destination branch uses and the reason
+    it has one: with nobody playing, the first option is the answer.
+    """
+    me = c.me
+    here = c.here
+    half = max(1, c.speed_of() // 2)
+    # Unoccupied, which is the printed "you must end your movement in an
+    # unoccupied square": `reachable_squares` already refuses a square
+    # somebody is standing in, so the trample can pass through a body and
+    # not stop on one.
+    options = c.world.reachable_squares(me, half, kind="shift")
+    if not options:
+        return
+    standing = {sq: foe for foe in c.enemies() for sq in squares_of(c.world, foe)}
+
+    def crossed(dest: Square) -> int:
+        """How many enemies lie on a straight run from here to there.
+
+        `distance` is the grid's own, so a square is on a shortest run
+        exactly when the two legs through it add up to the whole -- the
+        question `movement.overrun`'s private line walk answers, asked
+        without a second copy of the geometry in this file.
+        """
+        whole = distance(here, dest)
+        return len({
+            foe
+            for sq, foe in standing.items()
+            if distance(here, sq) + distance(sq, dest) == whole
+        })
+
+    ranked = sorted(options, key=lambda dest: (-crossed(dest), dest))
+    where = c.choose(ranked, f"{c.ref}: trample to")
+    if where is None:
+        return
+    for foe in c.overrun(to=where):
         if c.strike(on=foe):
             c.damage("1d8", c.str_mod, dtype=DamageType.ACID, on=foe)
 

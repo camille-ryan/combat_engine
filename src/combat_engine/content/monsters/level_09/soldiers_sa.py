@@ -1653,13 +1653,27 @@ def m4004a2(c: Cast) -> None:
 
 @power(
     "m4004a3", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1), target=ONE_CREATURE,
-    dropped=("etl.monster.vulnerable_amount()",),
+    dropped=("compendium.vulnerable_amount",),
 )
 def m4004a3(c: Cast) -> None:
-    """The vulnerability is printed with no number at all -- a data gap,
-    the same shape `etl.monster.forced_distance()` already names for a
-    missing distance. The second clause, which carries its own number,
-    plays."""
+    """The vulnerability is printed with no number at all. Read off the page
+    by the main session, which is the only reader that can: the clause says
+    the target gains vulnerability to necrotic and stops. The second clause
+    carries its own number and plays.
+
+    **`compendium.` and not `etl.monster.vulnerable_amount()`, which is what
+    this row said first**, citing `etl.monster.forced_distance()` as its
+    precedent -- and that spelling had already been corrected on `m1107a0`
+    for this exact reason. An `etl.` symbol promises a reader can finish the
+    row by writing a parser, and no parser recovers a number the page does
+    not print. `blocked.py` reads the `compendium.` prefix to keep a source
+    gap out of the work queue, so the wrong prefix also counted this row as
+    work owed.
+
+    `dropped=` and not `defect=`: the row plays. `defect=` is for when
+    nothing survives, and on a monster it defects the whole stat block
+    through `loader.defective` and takes m4004 out of `pick` -- over one
+    missing number, with the immobilise clause working."""
     victim = c.target
     if victim is None:
         return
@@ -2127,20 +2141,35 @@ def m5604a2(c: Cast) -> None:
     "m5604a3", level=9, usage=ENCOUNTER, action=STANDARD, reach=CloseBlast(3), target=EACH_ENEMY,
     keywords=[Keyword.FEAR, Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=12), damage=Damage("1d10", 5),
-    dropped=("c.no_walk(from_=)",),
 )
 def m5604a3(c: Cast) -> None:
     """"Cannot move away from m5604" is directional in a way `c.no_walk`
-    is not -- that bars every walk, not only ones that increase distance
-    from one named creature. The penalty half plays."""
+    is not -- that bars every walk. `c.leash` is the reader that measures:
+    a tether of the distance the target is standing at, anchored on this
+    creature, so `movement.reachable` never offers a square that widens the
+    gap and still offers every lateral one.
+
+    **One save ends both**, which is what the card prints, so the tether is
+    hung on the penalty's hold rather than given a clock of its own --
+    `When.SAVE_ENDS` twice would be two saving throws. The anchor follows
+    this creature, so walking away drags the target's whole allowance with
+    it; that is the honest reading of an anchor rather than a fixed point.
+    """
     victim = c.target
     if victim is None or not c.strike():
         return
     c.hit()
     mod = Mod(what="attack", value=-2, kind="untyped", label=c.ref)
-    c.world.effects.apply(
+    dread = c.world.effects.apply(
         victim, c.me, When.SAVE_ENDS, label=f"{c.ref} dread", mods=[(victim, mod)]
     )
+    tether = c.leash(
+        max(1, c.distance(victim)), to=c.me, on=victim, until=When.ENCOUNTER
+    )
+    if dread is not None and tether is not None:
+        dread.on_end.append(
+            lambda: c.world.effects.end(tether, f"{c.ref}: saved")
+        )
 
 
 def _an_immobilized_enemy_m5604(world: World, eid: int) -> bool:

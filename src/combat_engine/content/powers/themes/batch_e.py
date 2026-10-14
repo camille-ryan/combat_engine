@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.powers.augment import augment
+from combat_engine.content.powers.bard._shared import while_in
 from combat_engine.engine import (
     AC,
     DAILY,
@@ -62,6 +63,7 @@ from combat_engine.engine import (
     Defense,
     Dropped,
     Hit,
+    Initiative,
     InitiativeRolled,
     Keyword,
     Melee,
@@ -94,7 +96,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.durations import keywords_of
-from combat_engine.engine.query import allies, distance_between, flanked_by
+from combat_engine.engine.query import allies, distance_between, enemies, flanked_by
 from combat_engine.engine.triggers import Trigger
 
 DEFENCES = (AC, FORT, REF, WILL)
@@ -1084,6 +1086,35 @@ def p14378(c: Cast) -> None:
 # ===========================================================================
 
 
+def _ahead_of_every_enemy(c: Cast) -> bool:
+    """"If your initiative is higher than every enemy's initiative."
+
+    `Initiative.rolled` is the number the die landed on and it is readable
+    the moment `InitiativeRolled` goes out -- `p1440` compares it the same
+    way at the same moment, to decide whether anybody beat the caster. So
+    the old `query.initiative_of()` marker named a reader for a field that
+    was already a field.
+
+    No enemies at all is false: nothing to be ahead of.
+    """
+    mine = c.world.get(c.me, Initiative)
+    if mine is None:
+        return False
+    foes = enemies(c.world, c.me)
+    return bool(foes) and all(
+        (c.world.get(foe, Initiative) or Initiative()).rolled < mine.rolled
+        for foe in foes
+    )
+
+
+def _melee_weapon_swing(ctx: dict[str, Any]) -> bool:
+    """"Any melee weapon attack you make." The attack context carries the
+    row that swung and whether the swing was a ranged one, which is both
+    halves."""
+    row = get(str(ctx.get("power") or ""))
+    return row is not None and Keyword.WEAPON in row.keywords and not ctx.get("ranged")
+
+
 @power(
     "p16000",
     level=0,
@@ -1095,18 +1126,23 @@ def p14378(c: Cast) -> None:
     keywords=MARTIAL,
     trigger="you roll initiative",
     on=Trigger(InitiativeRolled, about_me, "you roll initiative"),
-    dropped=("query.initiative_of()",),
 )
 def p16000(c: Cast) -> None:
-    """Draw and shift the moment initiative is rolled.
+    """Draw and shift the moment initiative is rolled, and open the crit
+    range if nobody beat you to it.
 
-    The draw is written now -- it is free, because this row's free action
-    has already been spent on it.
+    The draw is free, because this row's free action has already been spent
+    on it.
 
-    Still carries `query.initiative_of()`: the second paragraph wants my
-    initiative compared against every enemy's, which nothing exposes, so
-    the wider crit range goes with it.
-    """
+    **The second paragraph is written and needed no reader.**
+    `Initiative.rolled` is the roll, so "higher than every enemy's" is a
+    comparison rather than a gap -- see `_ahead_of_every_enemy`. "Can score
+    a critical hit on a roll of 18-20" is a `crit_range` of 2, the same
+    write `p16515` makes, gated on the swing being a melee weapon one.
+
+    Held to `When.EONT`, which from this moment is the end of the first
+    turn of the encounter -- the printed window exactly, since the row
+    fires before anybody has acted."""
     c.draw()
     c.shift(max(1, c.speed_of(c.me) // 2))
     for foe in c.within(1, side="enemy"):
@@ -1114,6 +1150,11 @@ def p16000(c: Cast) -> None:
             "attack", 2, kind="power", on=c.me, until=When.EONT, once=True,
             when=lambda ctx, f=foe: ctx["target"] == f,
         )
+    if _ahead_of_every_enemy(c):
+        c.bonus(
+            "crit_range", 2, on=c.me, until=When.EONT, when=_melee_weapon_swing,
+        )
+
 @power(
     "p16001",
     level=2,
@@ -1343,30 +1384,43 @@ def p16073(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE, Keyword.ELEMENTAL],
-    dropped=("c.vulnerable(zone=)", "c.douse(zone=)"),
+    dropped=("c.douse(zone=)",),
 )
 def p16076(c: Cast) -> None:
-    """Vulnerability lives on `Defences` and not in `Mods`, so `c.grants_in`
-    cannot carry it and it is laid on arrival instead -- which means it does
-    not lift on the way out. Nothing holds a fire open against being put out.
+    """An aura that makes enemies burn more easily and save worse against
+    a burn.
 
-    **The save penalty is narrowed now**, and the gate needed no new key:
+    Vulnerability lives on `Defences` and not in `Mods`, so `c.grants_in`
+    cannot carry it -- which is true, and was never the whole story.
+    `c.resist_in` exists for the identical objection about resistance, and
+    it is `Cast._while_inside`: the hold goes on at `ZoneEntered`, comes
+    back off at `ZoneExited`, and is cleared off everybody when the zone
+    itself ends, which leaving is not the only way to reach. So this row no
+    longer laid a vulnerability that outlived the aura, and
+    `c.vulnerable(zone=)` wanted a kwarg rather than a mechanism.
+
+    `while_in` is the `bard` wrapper around that private method, so this is
+    one copy of the bookkeeping rather than a fifth.
+
+    **The save penalty is narrowed**, and the gate needed no new key:
     `durations` builds the saving-throw context with `ongoing` and `dtypes`
-    already in it -- put there for exactly this family of printed lines -- so
-    "against ongoing fire damage" is one lambda. `dtypes` plural because a
-    fire-and-radiant burn is both and `ctx["dtype"] is FIRE` would miss it."""
+    already in it -- put there for exactly this family of printed lines --
+    so "against ongoing fire damage" is one lambda. `dtypes` plural because
+    a fire-and-radiant burn is both and `ctx["dtype"] is FIRE` would miss
+    it.
+
+    Still dropped: holding a fire open against being put out. `c.douse`
+    takes a thing on the board, and nothing refuses it."""
     zone = c.aura(2, until=When.ENCOUNTER)
     c.grants_in(zone, "save", -2, side="enemy", kind="power",
                 when=lambda ctx: bool(ctx.get("ongoing"))
                 and DamageType.FIRE in (ctx.get("dtypes") or ()))
-    for foe in c.within(2, side="enemy"):
-        c.vulnerable(5, DamageType.FIRE, on=foe, until=When.ENCOUNTER)
-
-    def arriving(ev: ZoneEntered) -> None:
-        if ev.zone == zone and ev.actor in c.enemies():
-            c.vulnerable(5, DamageType.FIRE, on=ev.actor, until=When.ENCOUNTER)
-
-    c.watch(ZoneEntered, arriving, until=When.ENCOUNTER, on=c.me)
+    while_in(
+        c,
+        zone,
+        lambda who: c.vulnerable(5, DamageType.FIRE, on=who, until=When.ENCOUNTER),
+        "enemy",
+    )
 
 
 # ===========================================================================

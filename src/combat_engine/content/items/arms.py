@@ -58,6 +58,7 @@ from combat_engine.engine import (
     AreaBurst,
     Attack,
     AttackDeclared,
+    AttackRolled,
     Cast,
     CloseBurst,
     Condition,
@@ -77,6 +78,7 @@ from combat_engine.engine import (
     Relation,
     RelationSet,
     SavingThrow,
+    SkillCheck,
     Trigger,
     TurnEnd,
     Usage,
@@ -1176,19 +1178,32 @@ def i783p1(c: Cast) -> None:
 
 
 @power("i791p1", level=6, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.roll_with(ability=)",))
+       reach=PERSONAL, target=SELF)
 def i791p1(c: Cast) -> None:
     """"Use your Intelligence, Wisdom, or Charisma modifier in place of
     your Strength modifier" is the difference between the two added to the
     roll. The *attack* context carries the ref and the header says which
     ability that row rolls, so the swap lands on a Strength attack and
-    nothing else, and `once=True` spends it on one roll as printed.
+    nothing else.
 
-    A Strength check and a Strength-based skill check are the dropped
-    half: `c.check` takes a skill and no ability to roll it with."""
+    **All three printed rolls are written now.** `skills.ability_check`
+    reads the `"ability_check"` key with `ctx["ability"]` in hand, so "a
+    Strength check" is that key gated on the word; `skills.modifier` reads
+    `"skill"` with `ctx["skill"]`, and Athletics is the one skill `SKILLS`
+    maps to Strength, so "a Strength-based skill check" is that key gated
+    on the name. Neither needed a verb that rolls a check with a different
+    ability, which is what the old marker asked for.
+
+    **One latch for all three, not `once=` on each.** The card offers three
+    rolls and means whichever one you used it on; three independent
+    one-shots would pay out up to three times in the same turn. So the
+    holds run to the end of the next turn and the first roll of any of the
+    three kinds takes all of them off.
+    """
     delta = max(c.int_mod, c.wis_mod, c.cha_mod) - c.str_mod
     if delta <= 0:
         return
+    me = c.me
 
     def gate(ctx: dict[str, Any]) -> bool:
         p = get(ctx.get("power") or "")
@@ -1196,7 +1211,33 @@ def i791p1(c: Cast) -> None:
             p is not None and p.attack is not None and p.attack.ability is STR
         )
 
-    c.bonus("attack", delta, on=c.me, until=When.EONT, once=True, when=gate)
+    held = [
+        c.bonus("attack", delta, on=me, until=When.EONT, when=gate),
+        c.bonus(
+            "ability_check", delta, on=me, until=When.EONT,
+            when=lambda ctx: ctx.get("ability") == STR.value,
+        ),
+        c.bonus(
+            "skill", delta, on=me, until=When.EONT,
+            when=lambda ctx: ctx.get("skill") == "athletics",
+        ),
+    ]
+
+    spent: list[bool] = []
+
+    def spend(ev: Any) -> None:
+        # Not `c.watch(once=True)`: that spends itself on whichever event
+        # arrives first, including somebody else's roll.
+        if spent:
+            return
+        if getattr(ev, "actor", None) != me and getattr(ev, "attacker", None) != me:
+            return
+        spent.append(True)
+        for hold in held:
+            c.end_effect(hold, why="used")
+
+    c.watch(AttackRolled, spend, until=When.EONT)
+    c.watch(SkillCheck, spend, until=When.EONT)
 
 
 @power("i796x1", level=6, cls=ITEM, action=ActionType.NONE,

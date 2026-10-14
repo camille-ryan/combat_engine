@@ -316,18 +316,22 @@ def _ally_beside_hit(world: World, me: int, ev: Hit) -> bool:
     return distance_between(world, me, victim) <= 1
 
 
-def _ally_beside_attacked_low(world: World, me: int, ev: AttackDeclared) -> bool:
-    """"An adjacent ally is attacked against AC or Reflex."
+def _ally_beside_hit_low(world: World, me: int, ev: Hit) -> bool:
+    """"An adjacent ally **is hit** by an attack against AC or Reflex."
 
-    Declared on the **announcement** and not on the landing: an interrupt on
-    `AttackDeclared` runs before the roll is judged, and that is the only
-    window in which raising a defence can change the attack that provoked it.
-    The printed "is hit" is the half that is dropped on the row below.
+    Declared on the landing, which is what the card prints. An interrupt
+    answers a `Hit` before `resolve.attack`'s resolve callback, and that
+    callback re-reads the outcome off `result` and re-announces it -- so a
+    row that lowers the total there turns the hit into a miss. `vs` is a
+    plain attribute on the outcome, like `result` itself, so it is read with
+    `getattr`.
     """
-    victim = ev.target
-    if victim == me or team(world, victim) is not team(world, me):
+    victim = getattr(ev, "target", None)
+    if victim is None or victim == me:
         return False
-    if ev.vs not in (AC, REF):
+    if team(world, victim) is not team(world, me):
+        return False
+    if getattr(ev, "vs", None) not in (AC, REF):
         return False
     return distance_between(world, me, victim) <= 1
 
@@ -1031,27 +1035,25 @@ _M115786_MATE_HIT = "an adjacent ally is hit by an attack against AC or Reflex"
     reach=CloseBurst(1),
     target=NO_TARGET,
     trigger=_M115786_MATE_HIT,
-    on=Trigger(AttackDeclared, _ally_beside_attacked_low, _M115786_MATE_HIT),
-    dropped=("c.raise_defence(ev=)",),
+    on=Trigger(Hit, _ally_beside_hit_low, _M115786_MATE_HIT),
 )
 def m115786a2(c: Cast) -> None:
-    """"+2 to AC and Reflex against the triggering attack", answered one event
-    earlier than the card prints it -- and the printed "is hit" is the dropped
-    half rather than the mechanism.
+    """"+2 to AC and Reflex **against the triggering attack**", taken off the
+    attack's own total rather than laid as a modifier.
 
-    A defence is read into the comparison before `Hit` is announced, so a
-    bonus laid there is a modifier for the *next* blow and silently nothing
-    for this one. Cancelling the `Hit` instead does not work either:
-    `resolve.attack` re-announces a cancelled outcome from `result.hit`, which
-    is still True, so the hit comes back. `AttackDeclared` is the window, and
-    the cost of using it is that this fires on blows that would have missed
-    anyway -- a real cost, since an immediate action is one per round.
+    A defence is read into the comparison before the outcome is settled, so a
+    bonus laid on the ally here is a modifier for the *next* blow and
+    silently nothing for this one. `c.boost_roll(-2)` is the same
+    arithmetic from the other side: the total drops by two and
+    `result.hit` is recomputed from the untouched natural, so a blow that
+    cleared the defence by one or two becomes a miss and `resolve.attack`
+    re-announces it as one. A natural 20 stays a critical, which is right --
+    two points of defence never stopped one.
+
+    Declared on the landing, which is what the card prints, so the free
+    action is not spent on a blow that was going to miss anyway.
     """
-    mate = getattr(c.trigger, "target", None)
-    if mate is None:
-        return
-    c.bonus(AC, 2, on=mate, until=When.EOT)
-    c.bonus(REF, 2, on=mate, until=When.EOT)
+    c.boost_roll(-2, kind="attack")
 
 
 # --------------------------------------------------------------------------

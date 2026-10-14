@@ -6384,7 +6384,139 @@ def at_most_one_applies(out: Result) -> None:
     known.known[:] = was
 
 
+def penalty_scoped_to_an_aura(out: Result) -> None:
+    """A penalty against "this creature and its allies within its aura 5".
+
+    `m1032a2` prints "-2 to attacks against this creature **and its allies
+    within its aura** (save ends)", and for its whole life it paid only the
+    first half: the gate was `ctx.get("target") == c.me` and the rest was
+    dropped as `Power.aura`. That marker was wrong twice -- there is no
+    `Power.aura` field, and the radius it called unwritable is printed on
+    the creature's own trait line, which an authoring agent cannot read and
+    the main session can. The referral is what found it.
+
+    **The negative control is the whole rule**, for the reason the aura
+    half went missing in the first place: a gate that answers "yes" too
+    often is indistinguishable from a correct one if nothing ever asks it
+    about a creature that should be outside. So three questions, and the
+    third is the one that fails if the geometry is dropped or the radius is
+    read as a constant `True`:
+
+    * an attack **against the creature itself** takes the -2;
+    * an attack against an **ally standing within 5** takes it;
+    * an attack against that same ally moved **out to 9** does not.
+
+    The ally is moved rather than a second one placed, so the two
+    geometric answers are about one creature and cannot differ by
+    anything but distance. That also matches why the row re-reads
+    `c.allies()` inside the gate instead of snapshotting: the printed
+    clause is re-checked at every swing and allies walk in and out.
+
+    **Each answer is the row's own contribution, not `Mods.total`.** The
+    first draft asserted the totals and read -4, -4, -2 where it wanted
+    -2, -2, 0 -- because `audit.board` lays an **ungated** -2 to attack of
+    its own, labelled `audit:setup`, to provoke the row under test. It
+    applies to every target, so it inflates all three answers and, worse,
+    makes the negative control read -2 instead of 0: the one assertion
+    that proves the geometry is live would have been *failing for the
+    wrong reason*, and tuning the expectation to -4/-4/-2 would have made
+    the rule pass while measuring the harness. That is the fault
+    `scripts/CLAUDE.md` records against `audit.py` itself -- crediting a
+    row with the harness's own provocation, 173 rows reporting `ok` on
+    borrowed evidence.
+
+    So the baseline is subtracted. Still read through `Mods.total`, which
+    is the reader the engine uses, rather than by picking the row's `Mod`
+    out of the list by label.
+
+    **And the baseline is taken before the row fires, which the second
+    draft got wrong in a way only the plant test found.** That draft read
+    it off the leaving enemy, on the argument that the clause excludes it
+    "by construction" -- but whether the clause excludes anybody is the
+    thing under test, so the baseline was circular. Planting `return True`
+    for the gate proved it: the plant lands the row's -2 on the leaving
+    enemy too, the baseline absorbs it, and the **negative control
+    passed** -- the one assertion whose whole job is catching a gate that
+    says yes too often. The rule did go red, on the two assertions that
+    should have been unaffected, which is a red for the wrong reason and
+    would have read as "the aura half broke".
+
+    A pre-fire reading cannot be contaminated by any gate, because the row
+    has not run. That is the only baseline that is independent of what is
+    being measured.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defenses, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Defense
+
+    world, caster, _ = _board("m1032a2")
+    foes = enemies(world, caster)
+    mates = [a for a in allies(world, caster) if a != caster]
+    if not foes or not mates:
+        out.skip(
+            "m1032a2's board has no enemy or no ally, so neither half of"
+            " the printed clause can be posed"
+        )
+        return
+    foe, mate = foes[0], mates[0]
+
+    # The row rolls +13 vs Reflex before it lays anything, so the clause is
+    # only observable on a hit. Flattening the defence is what makes the
+    # roll irrelevant -- the subject here is the gate, not the attack.
+    defs_ = world.get(foe, Defenses)
+    if defs_ is not None:
+        defs_.values[Defense.REF] = 1
+
+    here = world.get(caster, Position).square
+    world.get(mate, Position).square = (here[0] + 2, here[1])
+
+    # Before the row runs, so no gate of its own can colour it.
+    was = world.get(foe, Mods)
+    base = {
+        who: (was.total("attack", {"target": who}) if was else 0)
+        for who in (caster, mate)
+    }
+
+    c = Cast(world=world, me=caster, ref="m1032a2")
+    c.trigger = type("Leaving", (), {"actor": foe})()
+    REGISTRY["m1032a2"].body(c)
+
+    mods = world.get(foe, Mods)
+    if mods is None or not mods.items:
+        out.skip("m1032a2 laid no modifier on the leaving enemy -- it missed")
+        return
+
+    def owed(who: int) -> int:
+        return mods.total("attack", {"target": who}) - base[who]
+
+    out.that(
+        owed(caster) == -2,
+        "the -2 applies to an attack against the creature itself",
+        f"the row contributed {owed(caster)} (total"
+        f" {mods.total('attack', {'target': caster})},"
+        f" pre-fire baseline {base[caster]})",
+    )
+    out.that(
+        owed(mate) == -2,
+        "and to an attack against an ally standing within the aura 5",
+        f"the row contributed {owed(mate)} at distance 2",
+    )
+
+    world.get(mate, Position).square = (here[0] + 9, here[1])
+    out.that(
+        owed(mate) == 0,
+        "and not to that same ally once it is outside the aura",
+        f"the row contributed {owed(mate)} at distance 9",
+    )
+
+
 DRIVERS = {
+    "aura_penalty": (
+        penalty_scoped_to_an_aura,
+        "a penalty scoped to a creature and its allies inside its aura",
+    ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),
     "blindness": (blindness, "a blinded creature cannot see, and can again after"),

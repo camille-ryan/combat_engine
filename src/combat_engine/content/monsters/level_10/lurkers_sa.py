@@ -66,6 +66,7 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Effect,
+    Health,
     Ident,
     Keyword,
     Melee,
@@ -90,7 +91,7 @@ from combat_engine.engine.events import (
     ZoneExited,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import unseen_by
+from combat_engine.engine.query import enemies, hidden_from, unseen_by
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -901,17 +902,47 @@ def m3997a0(c: Cast) -> None:
     ),
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("3d6", 3),
-    dropped=("EffectExpired.effect_id",),
 )
 def m3997a1(c: Cast) -> None:
-    """Domination plays; "ignores the dying condition until it saves
-    against the dominated effect" wants to end on *that* save specifically,
-    and `EffectExpired` carries no id to tell one hold's expiry from
-    another's -- so the nearest honest thing left is a plain `c.condition`
-    rather than a tied one."""
-    if c.strike():
-        c.hit()
-        c.condition(Condition.DOMINATED, until=When.SAVE_ENDS)
+    """Domination, and a body kept on its feet until the hold breaks.
+
+    **"Until it saves against the dominated effect" needed no event id.**
+    `c.dominate` hands back the `Effect` it laid, and an `Effect` carries
+    `on_end` -- so the clause is hung on *that* hold's own ending, which is
+    how `m6113a3` and `m6070a3` tie one clause to one effect. The old
+    marker wanted `EffectExpired.effect_id` to tell one expiry from
+    another; holding the effect means never having to ask.
+
+    **And `c.dominate` rather than the bare condition, which is a second
+    correction.** `Relation.DOMINATED_BY` has fifteen readers and
+    `relations.IMPLIES` maps relation to condition one way only, so the
+    condition alone filed none of them -- including
+    `_dominated_by_any_m3997` just below, this block's own gate on
+    `m3997a2`, which was therefore false after every use of this row.
+
+    **The immunity is laid before the blow**, because `c.immune` refuses
+    what arrives and does not strip what is already there -- a creature
+    taken to 0 by this very attack would otherwise be dying before the
+    line could be written. It is lifted again when the blow turns out not
+    to have dropped it, so nothing is held that the card does not grant."""
+    victim = c.target
+    if victim is None or not c.strike():
+        return
+    spared = c.immune(Condition.DYING, on=victim, until=When.ENCOUNTER)
+    c.hit()
+    held = c.dominate(on=victim, until=When.SAVE_ENDS)
+    if spared is None:
+        return
+    body = c.world.get(victim, Health)
+    if held is None or body is None or body.hp > 0:
+        c.world.effects.end(spared, "the blow did not drop it")
+        return
+
+    def dies_properly() -> None:
+        if not spared.ended:
+            c.world.effects.end(spared, "the target saved")
+
+    held.on_end.append(dies_properly)
 
 
 def _dominated_by_any_m3997(c: Cast, who: int) -> bool:
@@ -1097,15 +1128,24 @@ _M5188_SLAIN = "the m5188 drops to 0 hit points and is killed"
     target=NO_TARGET,
     trigger=_M5188_SLAIN,
     on=Trigger(Dropped, about_me, _M5188_SLAIN),
-    dropped=("Ident.keywords",),
 )
 def m5188a5(c: Cast) -> None:
-    """Staying up and fighting on plays, as a heal back off 0; gaining the
-    undead keyword for the rest of that time does not -- `Ident` carries a
-    ref and nothing a row can add a keyword to."""
+    """Stays up and fights on, and takes a type word for as long as it does.
+
+    Staying up is a heal back off 0 with the dying condition refused.
+
+    **The type word is `c.set_origin`, not `Ident`.** `Ident` carries a
+    ref, which is why the old marker asked for a keyword list on it -- but
+    `query.kinds_of` reads a stat block's own type line *plus anything
+    `c.set_origin` has written*, and that union is the one set `c.is_kind`
+    and `Target.kinds` both answer from. So the word is held as a labelled
+    effect on the same clock as the rest of the clause, which is what "for
+    the rest of that time" means, and a target line reading "each undead
+    creature in the burst" now reaches this one."""
     if getattr(c.trigger, "dead", False):
         c.heal(1, on=c.me)
         c.immune(Condition.DYING, on=c.me, until=When.EONT)
+        c.set_origin("undead", on=c.me, until=When.EONT)
 
 
 # ==========================================================================
@@ -1114,6 +1154,11 @@ def m5188a5(c: Cast) -> None:
 
 _M5817_HEAD = "m5817 head"
 
+#: "On that turn it can use that power and bite with a single standard
+#: action" -- armed by `m5817a5` only when the hiding condition held, and
+#: read by `m5817a4`, which is the standard action the pair is bought with.
+_M5817_PAIRED = "m5817 paired"
+
 
 def _m5817_in_head_form(world: World, eid: int) -> bool:
     return any(eff.label == _M5817_HEAD for eff in world.effects.of(eid))
@@ -1121,6 +1166,28 @@ def _m5817_in_head_form(world: World, eid: int) -> bool:
 
 def _m5817_in_maiden_form(world: World, eid: int) -> bool:
     return not _m5817_in_head_form(world, eid)
+
+
+def _m5817_hidden_from_all(world: World, eid: int) -> bool:
+    """"If it starts its next turn hidden from all enemies", which is both
+    the recharge condition on `m5817a4` and the gate on the paired attack.
+
+    A state, not a moment, which is why it is `recharge_while=` and not a
+    `Trigger`: hiding ends on a move, on an attack, on somebody gaining
+    truesight, and watching every route to re-ask is the fragile way round.
+    `recharge_while=` is asked at the start of this creature's turn, beside
+    the die, which is the clause word for word.
+
+    `query.hidden_from` rather than the relation, because a watcher who
+    sees through the hiding is not one it is hidden from. No enemies at all
+    is false: a creature alone on the board is not hiding from anybody.
+    """
+    foes = enemies(world, eid)
+    return bool(foes) and set(foes) <= hidden_from(world, eid)
+
+
+def _m5817_paired(world: World, eid: int) -> bool:
+    return any(eff.label == _M5817_PAIRED for eff in world.effects.of(eid))
 
 
 @power(
@@ -1215,15 +1282,31 @@ def m5817a3(c: Cast) -> None:
     damage=Damage("3d12", 8, dtype=DamageType.NECROTIC, kind=LIMITED),
     requires=_m5817_in_head_form,
     requires_text="the m5817 must be in head form",
+    recharge_while=_m5817_hidden_from_all,
 )
 def m5817a4(c: Cast) -> None:
     """The grab and the combat advantage it carries play, and the disease is
     written.
 
+    **The card prints two ways back and they are different kinds of
+    thing.** The die stays in the header, which is what the page shows;
+    "if it starts its next turn hidden from all enemies" is the *absence*
+    of being seen and no event announces it, so it is a `recharge_while=`
+    predicate re-asked at the start of this creature's turn beside the die.
+    `m5817a5` prints that sentence, which is why the condition is written
+    there and the field is here: the recharge belongs to the row being
+    recharged.
+
+    The second half of that sentence is paid here too. `m5817a5` arms
+    `_M5817_PAIRED` when the condition held, and this row spends it on a
+    free `m5817a3` -- `c.use_power` never charges an action, which is
+    exactly "with a single standard action", the standard being this one.
+
     The card contracts it *at the end of the encounter*, which this engine
     cannot tell from the end of the fight -- so it lands on the hit, one
     round early and the closest this horizon allows. `c.contract` records it;
     the stage does not advance, which is what the page prints."""
+    paired = c.first and _m5817_paired(c.world, c.me)
     if c.strike():
         c.hit()
         c.grab(dc=22)
@@ -1231,6 +1314,11 @@ def m5817a4(c: Cast) -> None:
             lambda ctx: ctx.get("target") in c.grabbing(of=c.me), until=When.ENCOUNTER,
         )
         c.contract("x5_62")
+    # After the swing this row is about, and asked before it: the hold is
+    # read at the top because a `When.EONT` effect is still standing either
+    # way, and the free attack is the *second* of the two the card pairs.
+    if paired:
+        c.use_power("m5817a3")
 
 
 @power(
@@ -1242,15 +1330,41 @@ def m5817a4(c: Cast) -> None:
     target=NO_TARGET,
     requires=_m5817_in_head_form,
     requires_text="the m5817 must be in head form",
-    dropped=("c.recast(when=)",),
 )
 def m5817a5(c: Cast) -> None:
-    """Phasing and the shift play; recharging `m5817a4` only when it starts
-    its next turn hidden, and folding that attack and a bite into one
-    standard action, has no counterpart -- `c.recast` repeats a row on a
-    clock, not on a state true at the top of a turn."""
+    """Phases away, and buys itself a paired attack next turn if it is
+    still unseen.
+
+    **`c.recast` was the wrong verb, not a missing one.** It repeats a row
+    on a clock, and the card's condition is a *state* true at the top of a
+    turn -- which is `recharge_while=`, a header field on the row being
+    recharged, re-asked by `actions.recharge` beside the die. So the
+    recharge half lives on `m5817a4` and `_m5817_hidden_from_all` is the
+    predicate both halves share.
+
+    "On that turn it can use that power and bite with a single standard
+    action" is the other half, and it needs the moment rather than the
+    state: the watch below fires once, at the start of this creature's next
+    turn, and arms a hold `m5817a4` spends on a free `m5817a3`. Armed here
+    because the clause is this row's sentence; read there because that is
+    the standard action being paid with.
+
+    One shot, latched in the closure: a creature acts many times in a
+    fight and the condition is about *its next* turn, not about every turn
+    after this one."""
+    me = c.me
     c.phasing(until=When.SONT)
     c.shift(c.speed_of())
+    seen: list[int] = []
+
+    def at_my_next_turn(ev: TurnStart) -> None:
+        if seen or ev.actor != me:
+            return
+        seen.append(1)
+        if _m5817_hidden_from_all(c.world, me):
+            c.effect(_M5817_PAIRED, on=me, until=When.EONT)
+
+    c.watch(TurnStart, at_my_next_turn, until=When.ENCOUNTER, on=me)
 
 
 # ==========================================================================

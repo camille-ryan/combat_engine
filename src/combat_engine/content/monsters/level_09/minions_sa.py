@@ -319,18 +319,24 @@ def m6641a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("", 8, kind=MINION),
-    dropped=("c.grab(until=)",),
 )
 def m6684a0(c: Cast) -> None:
-    """Capping the grab at "until the start of its next turn, unless
-    sustained" has no counterweight -- `c.grab` takes no duration and
-    always runs to escape or the end of the fight. The sustain half, paying
-    out fresh damage and dragging the grabbed creature along, plays."""
+    """`c.grab` takes no duration -- it runs to an escape or to the end of
+    the fight -- so the printed clock is kept by the row itself: `c.grab`
+    hands the hold back, and the sustain carrier ends it on the way out.
+
+    The carrier is already the right clock. A `When.SUSTAIN` effect lapses
+    on the turn its action was spent elsewhere, so "until the start of its
+    next turn, unless sustained" needs nothing counted: whatever ends the
+    carrier ends the grab with it, and `Effects._lift` clears the relation,
+    the mirrored condition and the escape DC together.
+    """
     victim = c.target
+    hold = None
     if c.strike():
         c.hit()
         if not c.grabbing(of=c.me):
-            c.grab(dc=17)
+            hold = c.grab(dc=17)
     if victim is None or victim not in c.grabbing(of=c.me):
         return
 
@@ -341,3 +347,13 @@ def m6684a0(c: Cast) -> None:
 
     held = c.effect(f"{c.ref} grip", until=When.SUSTAIN, on=c.me, sustain=ActionType.STANDARD)
     c.on_sustain(held, sustained)
+    if held is not None and hold is not None:
+        # A named closure rather than a lambda: `on_end` is
+        # `list[Callable[[], None]]` and `c.end_effect` answers with the
+        # effect it ended, so the lambda's type is `() -> Effect | None`.
+        # Discarded either way at runtime; the `def` is what makes the
+        # signature true.
+        def unsustained() -> None:
+            c.end_effect(hold, why=f"{c.ref} not sustained")
+
+        held.on_end.append(unsustained)

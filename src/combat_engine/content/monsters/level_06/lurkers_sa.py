@@ -75,6 +75,7 @@ from combat_engine.engine import (
     CloseBlast,
     CloseBurst,
     Condition,
+    Cover,
     Damage,
     DamageType,
     Effect,
@@ -472,12 +473,21 @@ def m2779a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it is hit by a melee or a ranged attack",
     on=Trigger(Hit, both(targets_me, _physical_hit), "it is hit by a melee or a ranged attack"),
-    dropped=("c.cover()",),
 )
 def m2779a4(c: Cast) -> None:
-    """There is no verb to grant cover against the triggering attack --
-    `ignore_cover`/`no_cover` only ever take it away. The swap and the
-    combat-advantage half are exact."""
+    """The swap and the combat-advantage half are exact.
+
+    "Superior cover **against the triggering attack**" is the roll already
+    made, not a hold for the next one, so it is `c.boost_roll` by the
+    cover's own grade rather than the carried `"cover"` modifier
+    `c.cover_in` lays: that one is read with an empty context by
+    `query._carried_cover`, has no way to mean one attack, and shelters
+    this creature from everything afterwards too. Taking the grade off the
+    total is what the interrupt window is for -- `resolve.attack` re-judges
+    `result.hit` after it and re-announces, so a hit this undoes becomes a
+    miss, which is the printed answer for an interrupt that changes the
+    circumstances of the attack it answers.
+    """
     me = c.me
     attacker = getattr(c.trigger, "attacker", None)
     other = next(
@@ -486,6 +496,7 @@ def m2779a4(c: Cast) -> None:
     if other is None:
         return
     c.swap(other)
+    c.boost_roll(-int(Cover.SUPERIOR))
     c.gains_advantage(lambda _ctx: True, until=When.EONT, on=other)
 
 
@@ -1440,6 +1451,25 @@ def m6604a7(c: Cast) -> None:
 # ==========================================================================
 
 
+#: The hold m999a4 puts on a rider, read by m999a2 beside its own species
+#: test. A label rather than `c.immune`, which only ever takes conditions:
+#: m999a2 imposes a defence penalty and poison damage and no condition at
+#: all, so there is no `immune to <cond>` key for a gate to hang on.
+_BREATH_PROOF = "m999a4 proof"
+
+
+def _breath_proof(c: Cast, who: int) -> bool:
+    """Is this creature exempt from m999a2's effects?
+
+    Two printed sentences, one question. m999a2 says its own kind are
+    immune, which is the ref match; m999a4 says the rider it carries is,
+    which is the hold. Asked in one place so the blast and the zone's toll
+    cannot answer it differently -- they already read two separate copies
+    of the species half.
+    """
+    return _ref_of(c, who) == "m999" or c.lingers_label(_BREATH_PROOF, on=who)
+
+
 @power(
     "m999a0",
     level=6,
@@ -1483,12 +1513,13 @@ def m999a1(c: Cast) -> None:
 )
 def m999a2(c: Cast) -> None:
     """The brief's "<m999> are immune" names this creature's own species;
-    written here as a ref match instead of the word, per the report."""
+    written here as a ref match instead of the word, per the report. The
+    rider m999a4 exempts is asked through `_breath_proof` beside it."""
     me = c.me
     victim = c.target
     if c.strike():
         c.hit()
-        if victim is not None and _ref_of(c, victim) != "m999":
+        if victim is not None and not _breath_proof(c, victim):
             for defence in (AC, FORT, REF, WILL):
                 c.penalty(defence, 2, on=victim, until=When.EONT)
     if c.first:
@@ -1496,7 +1527,7 @@ def m999a2(c: Cast) -> None:
         zone = c.zone(area, blocks_sight=True, until=When.ENCOUNTER, label=c.ref)
 
         def toll(ev: TurnStart) -> None:
-            if ev.ghost or _ref_of(c, ev.actor) == "m999":
+            if ev.ghost or _breath_proof(c, ev.actor):
                 return
             if ev.actor in c.world.zones.occupants(zone):
                 c.flat(5, dtype=DamageType.POISON, on=ev.actor)
@@ -1530,12 +1561,19 @@ def m999a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.immune(from_power=)",),
 )
 def m999a4(c: Cast) -> None:
-    """The resist half is exact. "Immune to the effects of its own m999a2"
-    beyond the poison type -- the -2 to all defences -- has no verb: `c.immune`
-    only ever takes conditions, never a power ref to exempt from.
+    """The resist half is exact, and so is the exemption now.
+
+    "Immune to the effects of any m999's m999a2" is not `c.immune`: that
+    verb takes conditions and reads an `immune to <cond>` key, and m999a2
+    imposes a defence penalty and poison damage and no condition at all,
+    so there is nothing for it to refuse. m999a2 already answers the
+    identical printed sentence about its own kind by testing who the
+    creature is before it lays the penalty, so the rider is handed a hold
+    that same test reads -- `_breath_proof`, one question for the blast and
+    for the zone's toll alike. The exemption covers exactly what that test
+    already governs.
 
     `_ridden_by`'s gate is re-checked on every one of this creature's own
     turns rather than declared as `requires=`: this is an `action=NONE`
@@ -1550,6 +1588,8 @@ def m999a4(c: Cast) -> None:
         rider = c.rider()
         if rider is not None and _ridden_by(6)(c.world, me):
             c.resist(5, DamageType.POISON, on=rider, until=When.ENCOUNTER)
+            if not c.lingers_label(_BREATH_PROOF, on=rider):
+                c.effect(_BREATH_PROOF, on=rider, until=When.ENCOUNTER)
 
     c.watch(TurnStart, dawn, until=When.ENCOUNTER, on=me, label=f"{c.ref} saddle")
 

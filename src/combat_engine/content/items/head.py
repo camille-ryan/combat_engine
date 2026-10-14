@@ -96,7 +96,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.basic import RANGED as RANGED_BASIC
-from combat_engine.engine.components import Mods, Powers
+from combat_engine.engine.components import Gear, Mods, Powers
 from combat_engine.engine.durations import keywords_of
 
 ITEM = "item"
@@ -733,7 +733,7 @@ def i481p2(c: Cast) -> None:
 
 
 @power("i725x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.as_weapon(enhancement=)",))
+       reach=PERSONAL, target=SELF)
 def i725x1(c: Cast) -> None:
     """**`todo` became `dropped`: `c.as_weapon` puts a weapon there.**
 
@@ -746,13 +746,22 @@ def i725x1(c: Cast) -> None:
     "counts as a melee basic attack" needs nothing said, because a profile
     in `Gear.weapons` is what the basic attack swings.
 
-    What is dropped is the gore's **own** enhancement bonus. `as_weapon`
-    takes no `enhancement=` and fills the field from `c.enhancement`, which
-    is the wearer's held magic rather than the number this card prints --
-    a helmet has no enhancement column for it to read. `Level 17:`/`27:`
-    are paragon and out of scope either way.
+    **The printed enhancement lands now, and `as_weapon(enhancement=)` was
+    never needed.** `Weapon` is a plain dataclass and is not frozen, so
+    the field is written on the profile this row just laid -- the write
+    `f621` makes on `Weapon.properties` for the same reason and in the
+    same place. `as_weapon` fills it from `c.enhancement`, which is the
+    wearer's held magic; a helmet has no enhancement column, so the +2 is
+    the card's own number and is set over it. Found by ref, because that
+    is what `as_weapon` stamps and this row is the only thing holding it.
+
+    `Level 17:`/`27:` are paragon and out of scope.
     """
     c.as_weapon(damage="1d10", group="unarmed", proficiency=2)
+    gear = c.world.get(c.me, Gear)
+    for weapon in gear.weapons if gear else ():
+        if weapon.ref == c.ref:
+            weapon.enhancement = 2
 
 
 @power("i725p1", level=7, cls=ITEM, usage=DAILY, action=FREE,

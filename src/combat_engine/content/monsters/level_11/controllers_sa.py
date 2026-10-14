@@ -613,18 +613,28 @@ def m115868a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=Target(side="enemy", count=1, label="stunned by it"),
-    dropped=("Target.condition_by",),
 )
 def m115868a3(c: Cast) -> None:
     """No attack roll at all: the damage is the whole of it.
 
-    `Target` filters on side, count and size and not on how a creature stands
-    to the caster, so the restriction is enforced here and the row is aimed at
-    somebody who qualifies rather than thrown away. The printed line is
-    "stunned **by it**", which is `Target.relation` and not
-    `Target.condition`; the filter below asks only the condition.
+    `Target` filters on side, count and size and not on how a creature
+    stands to the caster, so the restriction is enforced here and the row is
+    aimed at somebody who qualifies rather than thrown away.
+
+    "Stunned **by it**" needed no `Target.condition_by`: an `Effect` carries
+    both its `conditions` and its `source`, so the question is one walk of
+    the holds standing on the creature. `powers/fighter/level_9_b.py` asks
+    "this condition, applied by that creature" the same way.
     """
-    victim = _restricted_to(c, 1, lambda who: c.is_(Condition.STUNNED, on=who))
+    me = c.me
+
+    def stunned_by_me(who: int) -> bool:
+        return any(
+            Condition.STUNNED in held.conditions and held.source == me
+            for held in c.world.effects.of(who)
+        )
+
+    victim = _restricted_to(c, 1, stunned_by_me)
     if victim is not None:
         c.damage("4d10", 16, on=victim)
 

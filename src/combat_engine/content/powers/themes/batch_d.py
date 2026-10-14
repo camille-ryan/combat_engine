@@ -80,6 +80,7 @@ from combat_engine.engine.events import (
     Bloodied,
     DamageApplied,
     DamageRolled,
+    Fell,
     Hit,
     InitiativeRolled,
     Miss,
@@ -1108,14 +1109,21 @@ def p14175(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL],
-    dropped=("c.ignore_run_penalty()",),
 )
 def p14176(c: Cast) -> None:
-    """The speed is exact. Running is a real action kind and grants combat
-    advantage in `actions.legal`, but nothing can waive that one grant --
-    `c.no_advantage` shuts every branch, which is a much larger sentence --
-    and the attack penalty for running is modelled nowhere at all."""
+    """The speed is exact, and the run clause is written.
+
+    **It was never `c.no_advantage`.** `actions.py` gates the run's combat
+    advantage grant on a `"run_exposed"` modifier, so a *negative* one
+    turns off that grant and nothing else -- five rows in the tree already
+    do it and the key exists for them. `c.no_advantage` was the wrong
+    neighbour: it shuts every branch, which is a much larger sentence.
+
+    The attack-penalty half needs nothing, and that is a fact about the
+    engine rather than a gap: the run action applies no attack penalty
+    anywhere, so there is none to waive."""
     c.bonus("speed", 2, kind="power", on=c.me, until=When.EOT)
+    c.penalty("run_exposed", 1, on=c.me, until=When.SONT)
 
 
 @power(
@@ -1681,17 +1689,33 @@ def p16435(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.MARTIAL],
     trigger="you take damage from a trap, a hazard, or a fall",
-    on=Trigger(DamageRolled, targets_me, "you take damage"),
-    dropped=("c.is_hazard()", "Fell.damage"),
+    on=(
+        Trigger(DamageRolled, targets_me, "you take damage"),
+        Trigger(Fell, about_me, "you fall"),
+    ),
+    dropped=("c.is_hazard()",),
 )
 def p16436(c: Cast) -> None:
-    """The trap third is written. A hazard's damage arrives from whoever
-    made the zone and is indistinguishable from an attack's, and a fall
-    announces `Fell` with no damage number on it."""
+    """The trap third was written; the fall third is written now.
+
+    **`Fell` carries no damage number and does not need to.** `squares` is
+    what the damage is worked out from and `soften` is how much a listener
+    has taken off -- read back after the window closes, which is how an
+    interrupt answering a fall changes what landing costs without stopping
+    it. `c.cushion(n)` is that one line, and `on=` takes a sequence, so the
+    second printed source is a second `Trigger` rather than a second row.
+
+    Still dropped: a hazard. Its damage arrives from whoever made the zone
+    and is indistinguishable from an attack's, so there is nothing to ask.
+    """
     ev = c.trigger
+    softened = 5 + c.level // 2
+    if isinstance(ev, Fell):
+        c.cushion(softened)
+        return
     if not c.is_trap(ev.source):
         return
-    c.reduce(5 + c.level // 2, ev)
+    c.reduce(softened, ev)
 
 
 # -- x7_994: the beast form --------------------------------------------------

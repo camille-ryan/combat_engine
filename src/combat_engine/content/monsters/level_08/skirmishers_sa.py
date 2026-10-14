@@ -1168,18 +1168,40 @@ def m2077a5(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("1d10", 6),
-    dropped=("c.reroll_damage(ones=)",),
 )
 def m3183a0(c: Cast) -> None:
     """The crit is its own dice, not the engine's double -- `c.damage` is
     called by hand so the necrotic replaces the weapon's d10 instead of
-    doubling it. Rerolling 1s against a bloodied target has no verb that
-    reaches a single face; `c.reroll_damage` redoes the whole roll."""
-    if c.strike():
+    doubling it.
+
+    **The reroll plays now. `c.reroll_ones` is the verb and the old
+    marker named its stronger neighbour.** `c.reroll_damage` rolls the
+    whole expression twice and keeps the better; `c.reroll_ones` replaces
+    each die showing a 1 and leaves the rest of the roll standing, which
+    is what the card prints. It is read inside `_roll_damage`, where the
+    dice are still in hand.
+
+    **The bloodied gate is the hold's lifetime, not a `when=`.**
+    `_reroll_floor` asks `self.total` with no context at all, so a gated
+    modifier would be read against an empty dict and the target could not
+    be consulted from inside it. So the floor is laid only when this
+    target is bloodied and retired as soon as the blow is rolled -- the
+    `powers/battlemind/level_3.py` idiom, and it keeps the hold from
+    following the swing onto a healthy creature later in the fight.
+    """
+    if not c.strike():
+        return
+    floor = None
+    if c.target is not None and c.bloodied(on=c.target):
+        floor = c.reroll_ones(ref=c.ref)
+    try:
         if c.crit:
             c.damage("2d8", 16, dtype=DamageType.NECROTIC)
         else:
             c.hit()
+    finally:
+        if floor is not None:
+            c.world.effects.end(floor, "the swing is over")
 
 
 @power(
@@ -1712,13 +1734,33 @@ def m3593a1(c: Cast) -> None:
 
 @power(
     "m3593a2", level=8, usage=AT_WILL, action=MINOR, reach=PERSONAL, target=NO_TARGET,
-    keywords=[Keyword.POLYMORPH], dropped=("c.forbid(tied_to=)",),
+    keywords=[Keyword.POLYMORPH],
 )
 def m3593a2(c: Cast) -> None:
-    """The disguise is appearance and is noted. Losing the bite for as
-    long as the new shape holds needs `c.forbid` tied to the shape's own
-    end rather than a fixed timer, which is not available."""
-    c.form(until=When.ENCOUNTER, label=c.ref)
+    """The disguise is appearance and is noted. Losing the bite plays.
+
+    **`c.forbid(tied_to=)` was never needed and `Effect.on_end` is the
+    tie.** `c.form` returns its own effect and already uses `on_end` for
+    exactly this -- it is how a granted movement mode is retired when the
+    shape goes -- so the bar is laid as an ordinary `c.forbid` and hung
+    off the shape's end. Taking it the other way round, with a fixed
+    clock, is what the old note was asking for and would have been wrong:
+    the shape can be dropped as a minor action long before any timer.
+
+    `m3593a1` rather than `m3593a0`: the bite is the melee row carrying
+    the disease, and `m3593a0` is the weapon attack this creature keeps
+    in either shape.
+
+    Forbidden and not spent, which is `c.forbid`'s own distinction -- the
+    row comes back when the effect ends, and changing shape does not cost
+    the creature an attack it still owns.
+    """
+    shape = c.form(until=When.ENCOUNTER, label=c.ref)
+    barred = c.forbid("m3593a1", on=c.me, until=When.ENCOUNTER)
+    if barred is not None:
+        shape.on_end.append(
+            lambda: c.world.effects.end(barred, "the shape ended")
+        )
 
 
 @power("m3593a3", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -2215,13 +2257,33 @@ def m5127a1(c: Cast) -> None:
 
 @power(
     "m5127a2", level=8, usage=AT_WILL, action=MOVE, reach=PERSONAL, target=NO_TARGET,
-    keywords=[Keyword.TELEPORTATION], dropped=("c.terrain(at=)",),
+    keywords=[Keyword.TELEPORTATION],
 )
 def m5127a2(c: Cast) -> None:
-    """Landing beside a square of fire has no verb to aim a teleport at
-    terrain; landing beside a creature already burning is written."""
-    foe = next((f for f in c.enemies() if _taking_ongoing(c, f, DamageType.FIRE)), None)
-    spot = _free_square_beside(c, foe) if foe is not None else None
+    """Both landing places now, and the old marker named the wrong layer.
+
+    `c.terrain` is a property of the whole encounter, so aiming it at one
+    square was never the question. A fire that fills at least 1 square is
+    a thing standing on the map, which is `c.scenery(kind)` -- the same
+    reader `monsters/level_05/lurkers_sa._near_a_tree` uses for the
+    identical "is one of those beside me" shape. It returns entity ids,
+    so `_free_square_beside` answers it unchanged.
+
+    The fire is looked for first because it is the printed order, and
+    either branch falls through to the enemy already burning. With
+    neither on the board `to=None` leaves the teleport to pick its own
+    square, which is what the verb does with nothing named.
+    """
+    spot = None
+    for fire in c.scenery("fire"):
+        spot = _free_square_beside(c, fire)
+        if spot is not None:
+            break
+    if spot is None:
+        foe = next(
+            (f for f in c.enemies() if _taking_ongoing(c, f, DamageType.FIRE)), None
+        )
+        spot = _free_square_beside(c, foe) if foe is not None else None
     c.teleport(10, to=spot)
 
 

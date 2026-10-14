@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from combat_engine.content.monsters.level_02.lurkers_sa import _recharge_when_using
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
+from combat_engine.content.monsters.level_03.skirmishers import _free_square_beside
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -988,15 +989,53 @@ def m5132a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=12),
-    dropped=("c.leaves_play()",),
 )
 def m5132a3(c: Cast) -> None:
-    """Domination plays; the m5132 being removed from play and steering the
-    target's own move and standard actions from inside it has no
-    counterpart -- nothing in `Cast` takes a creature off the board and
-    back on at the end of somebody else's save."""
-    if c.strike():
-        c.condition(Condition.DOMINATED, until=When.SAVE_ENDS)
+    """It rides the creature it hits: removed from play, steering, and back
+    out beside the body when the hold breaks.
+
+    **"Removed from play" is `Condition.REMOVED`**, which is the one the
+    rules give `cannot_act` and `cannot_move` -- a creature standing where
+    it was and out of the fight. Nine rows across five classes already
+    write "removed from play" as exactly this, so the old marker asked for
+    a verb the tree had been using all along.
+
+    Steering is `c.dominate` rather than the bare condition, and that is a
+    second correction. `Relation.DOMINATED_BY` has fifteen readers and the
+    condition on its own files none of them -- `relations.IMPLIES` maps
+    relation to condition one way only -- so a target line narrowing to "a
+    creature dominated by it" was empty for anything dominated this way.
+    The printed "its move action to use one of the target's movement modes
+    and its standard action to use one of the target's at-will powers" is
+    what being dominated already is from the other end.
+
+    **The return is hung on the hold's own end, not on a clock.** The
+    `REMOVED` is laid for the encounter and taken off inside the
+    domination's `on_end`, because the printed moment is "when the target
+    saves against this effect" and there is nothing else that both halves
+    share. The hold is ended before the hop, so the creature is no longer
+    `cannot_move` when it is placed.
+
+    "Or in the nearest unoccupied square" is the same fallback
+    `_free_square_beside` already walks outward for, and the creature
+    simply stays where it stood if the board offers nothing."""
+    victim = c.target
+    if victim is None or not c.strike():
+        return
+    me = c.me
+    held = c.dominate(on=victim, until=When.SAVE_ENDS)
+    if held is None:
+        return
+    gone = c.condition(Condition.REMOVED, on=me, until=When.ENCOUNTER)
+
+    def reappears() -> None:
+        if gone is not None and not gone.ended:
+            c.world.effects.end(gone, "the target saved")
+        spot = _free_square_beside(c, victim)
+        if spot is not None:
+            c.teleport(1, who=me, to=spot)
+
+    held.on_end.append(reappears)
 
 
 @power(

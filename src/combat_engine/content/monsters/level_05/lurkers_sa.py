@@ -91,6 +91,7 @@ from combat_engine.engine import (
     Position,
     Ranged,
     Relation,
+    Size,
     Square,
     Target,
     Usage,
@@ -102,6 +103,7 @@ from combat_engine.engine import (
     spread,
 )
 from combat_engine.engine.events import (
+    AttackDeclared,
     AttackRolled,
     Bloodied,
     ConditionApplied,
@@ -116,7 +118,12 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import cover_between, hidden_from, moving_as
+from combat_engine.engine.query import (
+    cover_between,
+    hidden_from,
+    moving_as,
+)
+from combat_engine.engine.query import squares as query_squares
 from combat_engine.engine.triggers import Trigger, about_me, both, by_melee, by_power, targets_me
 
 # --------------------------------------------------------------------------
@@ -347,14 +354,51 @@ def m115702a1(c: Cast) -> None:
     hold.on_end.append(lambda: c.world.effects.end(relay, "charm ended"))
 
 
-def _near_a_tree(world: World, eid: int) -> bool:
-    """"Adjacent to a tree or a Large plant." `query.scenery` reads the first
-    half; the second has no match -- a Large *creature* of the plant kind is
-    not scenery -- so it is not asked, which narrows the gate rather than
-    loosening it."""
-    from combat_engine.engine.query import scenery
+def _large_plants(world: World) -> list[int]:
+    """"A Large plant" -- two existing reads rather than a missing query.
 
-    return bool(scenery(world, "tree", within=1, of=eid))
+    `query.kinds_of` carries the stat block's type words and `Position.size`
+    carries the size, so the pair is asked of each creature on the board.
+    Large *or larger*, by footprint: the card names the smallest size that
+    counts and a bigger plant is not less of one.
+    """
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import creatures, kinds_of
+
+    out = []
+    for other in creatures(world):
+        pos = world.get(other, Position)
+        if pos is None or pos.size.squares < Size.LARGE.squares:
+            continue
+        if "plant" in kinds_of(world, other):
+            out.append(other)
+    return out
+
+
+def _wooded_squares(world: World, eid: int) -> frozenset[Square]:
+    """Every square adjacent to a tree or a Large plant, the creature's own
+    square included when it is standing beside one.
+
+    Both the Requirement and the destination are the same sentence, so they
+    are the same set asked twice -- once of where the creature stands and
+    once of where it may land. `query.scenery(within=, of=)` measures from a
+    creature, which is no use for the second, so the squares are taken off
+    each anchor's own footprint instead.
+    """
+    from combat_engine.engine.query import scenery, squares
+
+    out: set[Square] = set()
+    for anchor in (*scenery(world, "tree"), *_large_plants(world)):
+        if anchor != eid:
+            out |= spread(squares(world, anchor), 1)
+    return frozenset(out)
+
+
+def _near_a_tree(world: World, eid: int) -> bool:
+    """"Adjacent to a tree or a Large plant", asked of where it stands."""
+    from combat_engine.engine.query import squares
+
+    return bool(squares(world, eid) & _wooded_squares(world, eid))
 
 
 @power(
@@ -367,13 +411,29 @@ def _near_a_tree(world: World, eid: int) -> bool:
     keywords=[Keyword.TELEPORTATION],
     requires=_near_a_tree,
     requires_text="it must be adjacent to a tree or a Large plant",
-    dropped=("c.is_kind(size=)",),
 )
 def m115702a2(c: Cast) -> None:
-    """The "or a Large plant" half of the Requirement cannot be asked: there
-    is no size-and-kind query to find a Large plant creature standing beside
-    it, only `c.is_kind` for the word alone."""
-    c.teleport(8)
+    """Both halves of the Requirement are asked, and the destination is the
+    same sentence -- "to a square adjacent to a tree or a Large plant" -- so
+    the blink is offered only the wooded squares within 8.
+
+    Its own square is in that set, which is right: the card says "up to 8
+    squares", and a creature with nowhere better to go stays where it is
+    rather than having the row refuse. The fit test is the grid's, because
+    `c.teleport(to=)` answers False for a square it cannot stand in and
+    there would then be nothing to fall back to.
+    """
+    world, me = c.world, c.me
+    wooded = _wooded_squares(world, me)
+    grid = world.grid
+    options = sorted(
+        sq
+        for sq in spread(query_squares(world, me), 8)
+        if sq in wooded and grid.passable(sq) and grid.occupant(sq) in (None, me)
+    )
+    dest = c.choose(options, f"{c.ref}: blink to a square beside a tree")
+    if dest is not None:
+        c.teleport(8, to=dest)
     for eff in list(c.world.effects.of(c.me)):
         if eff.label == "m115702a1 charm":
             victim = eff.owner
@@ -1083,18 +1143,40 @@ def m3976a1(c: Cast) -> None:
     keywords=[Keyword.ILLUSION, Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=7),
     damage=Damage("", 5, dtype=DamageType.PSYCHIC, kind=LIMITED),
-    dropped=("c.spend_surge(unless=)",),
 )
 def m3976a2(c: Cast) -> None:
-    """The toll on attacking her during this window -- spend a healing surge
-    and heal nothing for it -- has no hook: nothing here makes spending a
-    surge a *cost of attacking*, only a thing a creature may choose on its
-    own turn. The combat-advantage half plays in full."""
+    """The toll on attacking her is `AttackDeclared` plus `c.spend_surge`,
+    which is literally "spend a surge and gain nothing for it".
+
+    `Window.BEFORE`, because `AttackDeclared` is the `Decision` the whole
+    attack resolves inside: the resolve callback rolls the blow and announces
+    the outcome, so a listener at the default AFTER window is past everything
+    it could charge for and a cancel there buys nothing.
+
+    **A creature with no surge left cannot attack her**, which is what "must
+    spend a healing surge" says: the cost is not optional, so the declaration
+    is refused rather than waived. `c.on_attack` is the same watch without a
+    window, so the watch is written out.
+    """
     victim = c.target
-    if c.strike():
-        c.hit()
-        if victim is not None:
-            c.grants_advantage(on=victim, until=When.EONT)
+    if not c.strike():
+        return
+    c.hit()
+    if victim is None:
+        return
+    me = c.me
+    c.grants_advantage(on=victim, until=When.EONT)
+
+    def toll(ev: AttackDeclared) -> None:
+        if ev.attacker != victim or ev.target != me:
+            return
+        if not c.spend_surge(on=victim):
+            ev.cancel(f"{c.ref}: no healing surge to pay")
+
+    c.watch(
+        AttackDeclared, toll, until=When.EONT, on=victim,
+        window=Window.BEFORE, label=f"{c.ref} toll",
+    )
 
 
 @power(

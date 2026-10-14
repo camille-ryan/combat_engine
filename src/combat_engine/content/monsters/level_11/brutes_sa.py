@@ -116,6 +116,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    AttackDeclared,
     Bloodied,
     Cast,
     CloseBlast,
@@ -136,6 +137,7 @@ from combat_engine.engine import (
     Moved,
     Position,
     Ranged,
+    Relation,
     Stats,
     SurgeSpent,
     Target,
@@ -627,7 +629,6 @@ def m1472a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.cannot_attack(except_=)",),
 )
 def m1472a2(c: Cast) -> None:
     """Filed as a standard action and plainly a trait: it is what happens to
@@ -638,21 +639,45 @@ def m1472a2(c: Cast) -> None:
     the compulsion should lift with it. The +2 is gated rather than laid, so
     it is read at the roll against whoever is down at that moment.
 
-    What is dropped is "cannot attack any target other than a prone enemy":
-    `c.cannot_attack` bars everything or one named creature, and there is no
-    form that leaves one class of target open.
+    "Cannot attack any target other than a prone enemy" is a cancelling
+    `AttackDeclared` listener rather than `c.cannot_attack`, which bars
+    everything or one named creature and leaves no class of target open.
+    `Window.BEFORE`, because the resolve callback of that event *is* the
+    attack: at the default window there is nothing left to refuse.
+
+    The bar is re-asked at every swing, like the immobilize -- the condition
+    the card attaches both to is "adjacent to a prone enemy", which comes and
+    goes within a turn.
     """
     me = c.me
 
+    def feeding() -> bool:
+        return any(
+            c.is_(Condition.PRONE, on=foe) and c.distance(foe) <= 1
+            for foe in c.enemies()
+        )
+
     def feed() -> None:
-        if any(c.is_(Condition.PRONE, on=foe) and c.distance(foe) <= 1 for foe in c.enemies()):
+        if feeding():
             c.immobilized(on=me, until=When.EONT)
 
     def on_the_floor(ctx: dict[str, Any]) -> bool:
         who = ctx.get("target")
         return who is not None and c.is_(Condition.PRONE, on=who)
 
+    def only_the_fallen(ev: Any) -> None:
+        who = getattr(ev, "target", None)
+        if ev.attacker != me or who is None or not feeding():
+            return
+        if who in c.enemies() and c.is_(Condition.PRONE, on=who):
+            return
+        ev.cancel(f"{c.ref}: it will not look up from a prone enemy")
+
     c.bonus("attack", 2, until=When.ENCOUNTER, on=me, when=on_the_floor)
+    c.watch(
+        AttackDeclared, only_the_fallen, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=f"{c.ref} bar",
+    )
     _each_of_my_turns(c, feed)
 
 
@@ -2036,25 +2061,22 @@ def m5170a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.speed_while_squeezing()", "c.no_advantage(squeezing=)"),
 )
 def m5170a1(c: Cast) -> None:
-    """Squeezing is three things and this card waives all three; one of them
-    can be said.
+    """Squeezing is three things and this card waives all three, which is
+    exactly `c.waive`'s own worked example.
 
-    The -5 is a number and is cancelled by a number of the same size, gated
-    on the condition so nothing has to remember to put it back.
-    `Condition.SQUEEZING` carries neither a speed modifier nor an advantage
-    grant for the other two to override -- the halved speed is applied by the
-    movement code and the grant is read off the condition table by
-    `query.grants_ca`, which has no modifier hook.
+    Not a countervailing bonus: `Condition.SQUEEZING`'s `Rules` carries
+    `halve_speed`, `attack` and `grants_ca`, and all three are in `_NEUTRAL`
+    -- so the knobs are turned off at the source and the creature is still
+    squeezing, which is the distinction `c.waive` exists for. Cancelling the
+    -5 with a +5 said one third of it and left the other two to the movement
+    code and `query.grants_ca`, neither of which reads a modifier.
     """
-    me = c.me
-
-    def folded(_ctx: dict[str, Any]) -> bool:
-        return c.is_(Condition.SQUEEZING, on=me)
-
-    c.bonus("attack", 5, until=When.ENCOUNTER, on=me, kind="untyped", when=folded)
+    c.waive(
+        Condition.SQUEEZING, "attack", "halve_speed", "grants_ca",
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power(
@@ -2516,16 +2538,24 @@ def m5565a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.terrain('natural world')",),
+    dropped=("story.terrain_words",),
 )
 def m5906a0(c: Cast) -> None:
     """Every hit point back at the top of each turn, as long as it is not yet
     down -- "has at least 1 hit point" is `hp > 0` and not `alive`, which is
     the printed sentence saying it does not knit itself together once felled.
 
-    "While in the natural world" is dropped: `c.terrain` answers words the
-    encounter sets and there is no plane among them, so gating on one would
-    make the trait false in every fight instead of in the few the card means.
+    **The marker was re-aimed and the gap is not a `Cast` one.** `c.terrain`
+    takes any free-form word, so the verb says this already -- what is absent
+    is data: `World.terrain` starts empty and nothing anywhere adds a word to
+    it, `terrain.dress` least of all, so every one of the tree's
+    `c.terrain(...)` gates is false in every fight. `story.terrain_words` is
+    the symbol f2718 and m6530a0 already wait on.
+
+    So "while in the natural world" is the dropped clause and the heal is
+    ungated. Writing the gate would make a solo's signature trait inert in
+    every fight rather than in the few the card excludes, which is the
+    trade f2718 settled the same way.
     """
     me = c.me
 
@@ -2652,7 +2682,6 @@ def m5906a5(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.dismount()",),
 )
 def m5906a6(c: Cast) -> None:
     """It shakes, and whoever is holding on rolls for it.
@@ -2663,9 +2692,11 @@ def m5906a6(c: Cast) -> None:
     be two checks where the card gives one.
 
     Letting go of a grab is `c.escape(auto=True)` aimed at the m5906, since
-    it is the grabbed one here. Getting a rider out of the saddle has no
-    counterpart -- `c.ride` gets on and nothing gets off -- so that half is
-    named.
+    it is the grabbed one here. Getting out of the saddle is the relation
+    itself: `c.ride` is only the setter, and `Relations.clear` is how eight
+    rows already drop one -- the triple goes and the mirrored condition with
+    it. `c.ride(on=mount)` files the mount as the source, so that is the
+    order the clear takes.
     """
     me = c.me
     rider = c.rider()
@@ -2683,6 +2714,9 @@ def m5906a6(c: Cast) -> None:
             ("acrobatics", "athletics"), key=lambda s: c.passive(s, of=rider)
         )
         if not c.check(skill, 19, who=rider):
+            c.world.relations.clear(
+                Relation.RIDDEN_BY, me, rider, f"{c.ref} shook it off"
+            )
             c.fall(1, on=rider)
             _put_beside(c, rider, me)
 
@@ -2943,22 +2977,26 @@ def m6087a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger=_M6087_SMELT_BLOOD,
     on=Trigger(Bloodied, when=_neighbour_bled, text=_M6087_SMELT_BLOOD),
-    dropped=("c.shift(into_space=)",),
 )
 def m6087a1(c: Cast) -> None:
     """`Bloodied` carries `source`, so "by an attack" is the difference
     between a blow and a burn ticking somebody past the line.
 
-    Landing *in* the triggering enemy's square is what is dropped: `c.shift`
-    takes a destination and the grid refuses an occupied one, and nothing
-    makes an exception for a Tiny creature the way the printed line does. The
-    shift still happens, so the row plays and ends up beside its victim.
+    "To a square in the triggering enemy's space" is `c.shift(share=True)`,
+    which is the parameter for a creature that melds with the one it is
+    standing on -- without it the grid refuses the occupied square and the
+    row only ever ended up *beside* its victim. Sharing is the whole point
+    here: m6087a0 is a Melee 0 attack and reaches nothing else.
+
+    The fallback stays, for a shift the engine refuses outright -- a creature
+    that cannot shift at all, or a square `step` will not take. "Can shift up
+    to 3" then leaves the ordinary step.
     """
     who = getattr(c.trigger, "actor", None)
     if who is None or not alive(c.world, who):
         return
     here = c.world.get(who, Position)
-    if here is None or not c.shift(3, to=here.square):
+    if here is None or not c.shift(3, to=here.square, share=True):
         c.shift(3)
 
 
@@ -3036,16 +3074,36 @@ def m6407a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.swap_initiative(a, b)",),
 )
 def m6407a1(c: Cast) -> None:
     """"Surprised" is a condition the engine carries, so "cannot be
     surprised" is an immunity and is exact.
 
-    Rearranging the order is not: `c.swap_initiative` trades the caster's own
-    slot for an ally's, and this card moves two other creatures.
+    "It can swap **any two creatures'** positions in the initiative order" is
+    `Encounter.swap_initiative(a, b)`, which already takes the two-creature
+    form; `c.swap_initiative(other)` is only the wrapper that pins one side
+    to the caster, and that is why this read as unsayable.
+
+    "At the beginning of an encounter" is where a trait is armed, and
+    `Encounter.arm_all` walks the order it has already built, so the slots
+    are there to trade. The pair is a real choice and goes through
+    `c.choose`, which an engine with nobody playing answers with the first
+    option -- the top two of the order -- rather than inventing a policy
+    here.
     """
     c.immune(Condition.SURPRISED, on=c.me, until=When.ENCOUNTER)
+    encounter = getattr(c.world, "encounter", None)
+    if encounter is None:
+        return
+    order = list(encounter.order)
+    first = c.choose(order, f"{c.ref}: move this creature in the order")
+    if first is None:
+        return
+    second = c.choose(
+        [who for who in order if who != first], f"{c.ref}: swap it with"
+    )
+    if second is not None:
+        encounter.swap_initiative(first, second)
 
 
 @power(

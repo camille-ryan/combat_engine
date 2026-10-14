@@ -96,6 +96,7 @@ from combat_engine.engine import (
     query,
     targets_me,
 )
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.types import Light
 
 DEFENCES = (AC, FORT, REF, WILL)
@@ -740,16 +741,29 @@ def p14135(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.RADIANT, Keyword.ZONE],
-    dropped=("c.surge_bonus()",),
 )
 def p14136(c: Cast) -> None:
     """The radiant burn is undead-only, which `c.burns` cannot say, so it is
-    a `TurnEnd` watcher guarded on the zone still standing. The surge-value
-    clause has no verb at all."""
+    a `TurnEnd` watcher guarded on the zone still standing.
+
+    **The surge-value clause plays, and it needed no verb of its own.**
+    `query.surge_value` reads `mods.total("surge_value")` and its own
+    docstring says a single bonus there reaches every place a surge is
+    cashed -- second wind and the natural twenty on a death save
+    included. So it is one more `c.grants_in` on the zone already laid,
+    which also makes it end when somebody walks out, which a plain
+    `c.bonus` could not say.
+
+    `side="ally"` is the printed word, which leaves the caster out. The
+    defences line above reads the same words as `"team"`; that is a
+    separate reading of one sentence and is left as it stands rather than
+    changed from under a row nobody asked about.
+    """
     area = c.area()
     ring = c.zone(area, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
     for d in DEFENCES:
         c.grants_in(ring, d, 2, side="team", kind="untyped")
+    c.grants_in(ring, "surge_value", 5, side="ally", kind="untyped")
 
     def sear(ev: TurnEnd) -> None:
         if ev.ghost or ring not in c.my_zones():
@@ -1274,12 +1288,47 @@ def p16058(c: Cast) -> None:
     keywords=[Keyword.ELEMENTAL],
     trigger="you make an attack roll and miss",
     on=Trigger(Miss, by_me, "you miss with an attack"),
-    dropped=("c.provokes_from()",),
+    dropped=("c.must_take_openings()",),
 )
 def p16059(c: Cast) -> None:
-    """"Use either result" is `keep="best"`. Nothing makes a creature's own
-    allies provoke from it, which is the price half of the card."""
+    """"Use either result" is `keep="best"`. The price half plays now.
+
+    **`c.provoke` is the door and the old note missed it.** Its docstring
+    is "open an opportunity window for a named creature against a
+    target", which is the whole sentence -- `feats/general_r.
+    _provokes_on_standing` makes the same call aimed the other way round,
+    at the creature that stood up.
+
+    The window has to be opened by hand because `movement._step` only
+    offers one against `enemies(world, eid)`, which is the rule this card
+    suspends. So an ally leaving my reach is watched for and the window
+    said out loud.
+
+    **Measured as adjacency**, which is reach 1 and so right for all but
+    a reach weapon; `movement._threat` is what knows better and is engine
+    side. Before and after off the event's own `from_`/`to`, the way
+    `_fled_from_me` below reads a retreat.
+
+    Still dropped: "you must make every opportunity attack you can". That
+    takes the choice away from whoever is deciding, and nothing content
+    writes reaches into how an opening is answered -- it is a `policy/`
+    sentence, not a `Cast` one.
+    """
     c.reroll_attack(keep="best")
+    mine = c.me
+
+    def slipped(ev: Moved) -> None:
+        if ev.actor == mine or ev.actor not in query.allies(c.world, mine):
+            return
+        here = query.squares(c.world, mine)
+        if not here:
+            return
+        was = min(distance(ev.from_, sq) for sq in here)
+        now = min(distance(ev.to, sq) for sq in here)
+        if was <= 1 < now:
+            c.provoke(mine, on=ev.actor, why=f"{c.ref}: an ally broke away")
+
+    c.watch(Moved, slipped, until=When.EONT, label=f"{c.ref} openings")
 
 
 @power(
@@ -1497,13 +1546,61 @@ def p16413(c: Cast) -> None:
     keywords=[Keyword.CHARM],
     trigger="you make an Intimidate check against a creature you can see",
     on=Trigger(SkillCheck, my_check("intimidate"), "you intimidate somebody"),
-    dropped=("c.suppress(keyword=)",),
 )
 def p16414(c: Cast) -> None:
     """The bonus is laid after the die because the trigger is the roll, which
-    is what `c.boost_check` is for. Suspending an effect by keyword and
-    letting it resume has no verb -- `c.end_effect` is final."""
+    is what `c.boost_check` is for.
+
+    **The suppression plays: `Effects.suspend`/`resume` is the pair, and
+    the old note was looking for a `Cast` verb.** They are what
+    `c.suspend_when` is built on and are reachable as
+    `c.world.effects` -- and they are the right pair rather than
+    `c.end_effect`, because the card says the effect *resumes*: ending a
+    save-ends hold would stop it owing its saving throw, and ending an
+    encounter-long one would spend it for good.
+
+    The keyword filter is a label-to-ref read. An effect's label leads
+    with the ref of the row that laid it, so `durations.keywords_of`
+    turns the hold back into that row's keywords -- the same fact
+    `feats/general_o._laid_by` leans on.
+
+    `c.boost_check` has already settled `success` by the time it returns,
+    so "on a success" is read off the event rather than guessed from the
+    DC.
+
+    The resumption is hung on a bookkeeping hold clocked at the end of my
+    next turn, so one `on_end` puts every suspended effect back at the
+    one printed moment. A hold that ended on its own in the meantime is
+    skipped by `resume` itself, which refuses an ended effect.
+    """
     c.boost_check(2)
+    ev = c.trigger
+    victim = getattr(ev, "target", None)
+    if victim is None or not getattr(ev, "success", False):
+        return
+    lifted = [
+        held for held in c.world.effects.of(victim)
+        if keywords_of(held.label) & {Keyword.POLYMORPH, Keyword.ILLUSION}
+        and c.world.effects.suspend(held, f"{c.ref} suppressed it")
+    ]
+    if not lifted:
+        return
+    clock = c.world.effects.apply(
+        c.me, c.me, When.EONT, label=f"{c.ref} suppression",
+    )
+    if clock is None:
+        for held in lifted:
+            c.world.effects.resume(held)
+        return
+    # A `def` with a loop, not a list comprehension in a lambda: `on_end`
+    # wants `() -> None` and the comprehension's value is `list[bool]`.
+    # Building a list of booleans to throw away was the only reason it was
+    # a comprehension.
+    def put_them_back() -> None:
+        for held in lifted:
+            c.world.effects.resume(held)
+
+    clock.on_end.append(put_them_back)
 
 
 # ---------------------------------------------------------------- x7_992
@@ -2000,14 +2097,37 @@ def p16018(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("c.no_conceal_in()",),
+    dropped=("c.cannot_hide()",),
 )
 def p16019(c: Cast) -> None:
-    """Seeing the unseen is a sense of the caster's and that half is exact.
-    "Creatures in the aura cannot benefit from concealment" is about
-    everybody inside it, including two enemies looking at each other, and
-    an aura cannot hold that."""
-    c.aura(1, label=c.ref, until=When.ENCOUNTER, on=c.me)
+    """The concealment half plays, for everybody inside.
+
+    **`c.no_conceal_in()` was a verb that did not need writing.**
+    `c.aura` returns a zone id and `c.grants_in` routes through
+    `_while_inside`, which lays the modifier on each creature as it
+    arrives and takes it back when it leaves -- geometry rather than a
+    clock, which is what "creatures in the aura" means. The key laid is
+    `no_cover`, which is the one `query.cover_waived` reads on the
+    creature being *looked at*, so a creature inside gains no concealment
+    against anybody -- including two enemies looking at each other, which
+    is the case the old note said an aura could not hold.
+
+    `side="any"` because the printed word is "creatures", not allies or
+    enemies; `_side` has had that pool all along.
+
+    **Still dropped: invisibility.** That is a `HIDDEN_FROM` relation and
+    `cover_waived` never consults it -- only `query.sees_through` does, on
+    the watcher. So "cannot benefit from invisibility" would need
+    something standing on the creature that stops it being hidden from
+    anybody, and the surface has only the per-watcher shapes:
+    `c.see_invisible`, `c.truesight(of=)`, `c.unhide` on oneself. The
+    marker is `m6644a2`'s, which is the same gap said about one creature
+    rather than a zone -- every hide method stops at doing or reading a
+    hide, never at refusing one. The caster's own sense is kept below as
+    the half of it that can be said.
+    """
+    zid = c.aura(1, label=c.ref, until=When.ENCOUNTER, on=c.me)
+    c.grants_in(zid, "no_cover", 5, side="any", kind="ignore cover")
     c.see_invisible(on=c.me, until=When.ENCOUNTER)
 
 

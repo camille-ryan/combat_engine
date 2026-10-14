@@ -91,6 +91,7 @@ from combat_engine.engine.events import (
     Dropped,
     Hit,
     InitiativeRolled,
+    MoveEnd,
     TurnEnd,
     TurnStart,
     ZoneEntered,
@@ -904,19 +905,34 @@ def m3791a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("durations.ctx(origin=)",),
 )
 def m3791a5(c: Cast) -> None:
-    """The penalty plays, laid on whoever this creature damages. Narrowing
-    it to effects from a *fey-origin* creature's own powers specifically is
-    the part with nowhere to ask -- the save context's `keywords` reads a
-    row's declared `Keyword`s, which name damage types and tags and never
-    a creature's origin."""
+    """The penalty plays, laid on whoever this creature damages, and the
+    narrowing to a fey-origin creature's own powers plays too.
+
+    `keywords` was the wrong entry to look in -- it reads the row's
+    declared `Keyword`s, which name damage types and tags and never an
+    origin. The entry that answers is `effect`: `Effects.save` puts the
+    whole live `Effect` in the context, and `Effect.source` is the
+    creature that laid it, so `c.is_kind` asks that creature's own type
+    words. `query.kinds_of` reads the origin column among them, which is
+    where the printed word lives.
+
+    No narrowing to ongoing damage, because the card says "ongoing damage
+    **or** effects" -- both halves, which is every save the context can
+    be asked about."""
     me = c.me
+
+    def from_the_fey(ctx: dict[str, Any]) -> bool:
+        eff = ctx.get("effect")
+        return eff is not None and c.is_kind("fey", on=eff.source)
 
     def hurt(ev: DamageApplied) -> None:
         if ev.source == me and ev.target is not None:
-            c.penalty("save", 2, on=ev.target, until=When.ENCOUNTER)
+            c.penalty(
+                "save", 2, on=ev.target, until=When.ENCOUNTER,
+                when=from_the_fey,
+            )
 
     c.watch(DamageApplied, hurt, until=When.ENCOUNTER, on=me, label=f"{c.ref} curse")
 
@@ -1216,14 +1232,27 @@ def m4398a6(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.LIGHTNING],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d6", 4, dtype=DamageType.LIGHTNING, kind=LIMITED),
-    dropped=("Cast.forbid(action=)",),
 )
 def m4398a7(c: Cast) -> None:
-    """The flight itself plays, through `c.flee`. Blocking immediate and
-    opportunity actions specifically for the save-ends window has
-    nowhere to attach -- `c.forbid` takes a row's ref, not an action
-    type, so there is no way to lock out a whole category of action
-    rather than one power."""
+    """The flight plays through `c.flee`, and so does the ban now.
+
+    No new argument was needed. `Encounter.can_spend` allows an immediate
+    only while `Budget.immediate_round` is not this round and an
+    opportunity only while `Budget.opportunity_turn` is not this turn --
+    both are one-per-window stamps -- so **consuming** each is the ban.
+    `Encounter.spend` is the public door that writes them, which keeps the
+    turn stamp's arithmetic where it belongs; nine rows reach the same two
+    fields from the other direction, clearing a stamp to buy an extra
+    swing.
+
+    Stamped at the top of every turn, not only the victim's: an
+    opportunity action is taken on somebody else's turn, so a watch
+    narrowed to the victim would bar it on the one turn it cannot happen.
+    And once in the body, because the round is already part-run when the
+    burst lands and the immediate would otherwise still be there.
+
+    The mirror of `level_01.brutes_sa._no_actions`, which empties the three
+    ordinary slots from a `TurnStart` watch and leaves these two alone."""
     if not c.strike():
         return
     c.hit()
@@ -1234,12 +1263,23 @@ def m4398a7(c: Cast) -> None:
     c.effect(label, until=When.SAVE_ENDS, on=victim)
     me = c.me
 
-    def run_away(ev: TurnStart) -> None:
-        if ev.ghost or ev.actor != victim:
+    def no_reactions() -> None:
+        fight = c.world.encounter
+        if fight is None:
             return
-        if any(e.label == label for e in c.world.effects.of(victim)):
+        fight.spend(victim, ActionType.IMMEDIATE_REACTION)
+        fight.spend(victim, ActionType.OPPORTUNITY)
+
+    def run_away(ev: TurnStart) -> None:
+        if ev.ghost:
+            return
+        if not any(e.label == label for e in c.world.effects.of(victim)):
+            return
+        no_reactions()
+        if ev.actor == victim:
             c.flee(c.speed_of(victim), on=victim)
 
+    no_reactions()
     c.watch(TurnStart, run_away, until=When.SAVE_ENDS, on=me, label=f"{c.ref} {victim} flee")
 
 
@@ -1331,17 +1371,52 @@ def m5336a3(c: Cast) -> None:
     keywords=[Keyword.POISON],
     attack=Attack(vs=REF, printed=14),
     damage=Damage("2d10", 6, dtype=DamageType.POISON),
-    dropped=("c.immovable(except_ref=)",),
 )
 def m5336a4(c: Cast) -> None:
-    """The immobilize plays. "Cannot be pulled, pushed, or slid except by
-    its own `a5`" needs a carve-out `c.immovable` cannot make -- it
-    refuses every forced move alike, which would also block the one row
-    this card means to leave open."""
+    """All of it, carve-out included.
+
+    `c.immovable` refuses every shove alike, which is why it could not say
+    this -- but `c.resist_forced` is the same refusal written as a number,
+    and `movement.forced` hands its gate `{"how", "power"}` with the
+    shoving row's own ref in it. So a resist large enough that `agreed`
+    cannot come out above zero, gated on the power *not* being `m5336a5`,
+    is exactly "cannot be pushed, pulled or slid except by that one".
+
+    `until=When.ENCOUNTER` and a gate reading the immobilize's own
+    lifetime, **not** a second `When.SAVE_ENDS`: the card prints "save
+    ends both", and two save-ends effects would hand the victim two
+    throws and let it shake off half of one thing. The same idiom
+    `c.no_surges(when=)` uses for a clause with no duration of its own.
+
+    "This effect ends if the target teleports" reads `MoveEnd.kind_`,
+    which is the field that exists so a row can ask what kind of move just
+    happened. Ending the immobilize switches the carve-out off with it,
+    because the gate is what holds it up."""
     if not c.strike():
         return
     c.hit()
-    c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS)
+    victim = c.target
+    if victim is None:
+        return
+    held = c.condition(Condition.IMMOBILIZED, until=When.SAVE_ENDS, on=victim)
+    c.resist_forced(
+        99, on=victim, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            held is not None
+            and not held.ended
+            and ctx.get("power") != "m5336a5"
+        ),
+    )
+
+    def blinked(ev: MoveEnd) -> None:
+        if ev.actor != victim or ev.kind_ != "teleport" or held is None:
+            return
+        c.end_effect(held)
+
+    c.watch(
+        MoveEnd, blinked, until=When.ENCOUNTER, on=c.me,
+        label=f"{c.ref} {victim} blink",
+    )
 
 
 @power(

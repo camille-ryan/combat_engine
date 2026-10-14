@@ -3146,21 +3146,29 @@ def m6269a7(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
     trigger="it takes damage while bloodied",
     on=Trigger(DamageRolled, _hurt_while_bloodied, "it takes damage while bloodied"),
-    dropped=("c.form(forbids=)",),
 )
 def m6269a8(c: Cast) -> None:
     """The form carries the insubstantiality and the flight together, so
-    reverting as a minor action takes both away at once. What is dropped is
-    the ban: `c.cannot_attack` hangs on the encounter rather than on the form,
-    so dropping the shape early does not hand the attack back."""
-    c.form(
+    reverting as a minor action takes both away at once -- and the attack
+    ban goes with them now.
+
+    `c.form` hands back the `Effect` it laid, and `durations` runs `on_end`
+    for every ending alike, the deliberate minor-action drop included. So
+    the ban is torn down there rather than left standing on its own
+    encounter-long clock: no argument on `c.form` is needed, which is the
+    same channel `m6572a2` ties a blind-and-restrain to a grab through."""
+    shape = c.form(
         conditions=[Condition.INSUBSTANTIAL],
         modes={"fly": 12},
         until=When.ENCOUNTER,
         revert=MINOR,
         label=c.ref,
     )
-    c.cannot_attack(on=c.me, until=When.ENCOUNTER)
+    ban = c.cannot_attack(on=c.me, until=When.ENCOUNTER)
+    if ban is not None:
+        shape.on_end.append(
+            lambda: c.world.effects.end(ban, "the form ended")
+        )
     c.shift(12)
 
 

@@ -1254,12 +1254,21 @@ def m3780a5(c: Cast) -> None:
     "m3780a6", level=8, usage=ENCOUNTER, action=STANDARD, reach=PERSONAL, target=SELF,
     keywords=[Keyword.POLYMORPH],
     requires=_is_dismounted, requires_text="it must be dismounted",
-    dropped=("c.reach(set=)",),
 )
 def m3780a6(c: Cast) -> None:
-    """Growing, the push it causes and the damage bonus all play. Its
-    melee reach becoming 2 while grown does not: `c.reach` has no setter,
-    the same gap `m3783a3` already names."""
+    """Growing, the push it causes and the damage bonus all play, and so
+    does the reach now.
+
+    `c.reach` has no setter, but it does not need one: `dsl._stretched`
+    reads a `"reach"` modifier on every melee range there is -- the four
+    rows above and the basic attack alike -- which is the same channel
+    `c.as_ranged` and `c.threatens` work through. The printed line is a
+    *set* rather than an add, so the modifier is gated to the rows whose
+    printed reach is the one square it replaces: the two rows already
+    printed at two squares are a long weapon's own reach and the card does
+    not lengthen them. Gated on the hold, like the damage, so both lapse
+    together when it reverts as a free action.
+    """
     me = c.me
     grown = c.resize(Size.LARGE, on=me, until=When.ENCOUNTER)
     if grown is None:
@@ -1270,10 +1279,20 @@ def m3780a6(c: Cast) -> None:
             occ = c.world.grid.occupant(sq)
             if occ is not None and occ != me:
                 c.push(1, on=occ)
-    c.bonus(
-        "damage", 5, on=me, until=When.ENCOUNTER,
-        when=lambda _ctx: grown in c.world.effects.of(me),
-    )
+    standing = lambda _ctx: grown in c.world.effects.of(me)  # noqa: E731
+    c.bonus("damage", 5, on=me, until=When.ENCOUNTER, when=standing)
+
+    def short(ctx: Any) -> bool:
+        row = get(ctx.get("power") or "")
+        printed = row.reach_of(0) if row is not None else None
+        return (
+            standing(ctx)
+            and printed is not None
+            and printed.kind == "melee"
+            and printed.size == 1
+        )
+
+    c.bonus("reach", 1, on=me, until=When.ENCOUNTER, when=short)
     c.endable(grown, cost=FREE)
 
 

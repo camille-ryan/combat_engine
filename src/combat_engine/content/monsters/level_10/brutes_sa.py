@@ -89,6 +89,7 @@ from combat_engine.engine.events import (
     ConditionApplied,
     DamageApplied,
     Dropped,
+    EffectApplied,
     Escaped,
     Hit,
     Moved,
@@ -1647,18 +1648,55 @@ def m4448a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.immune(all=)", "Effect.when(retime=)"),
+    dropped=("c.immune(all=)",),
 )
 def m4448a5(c: Cast) -> None:
-    """Ignoring damage and forced movement both play. "Does not suffer
-    from any effect a save can end" has no blanket form -- `c.immune`
-    only ever waives named conditions, never every save-ends hold at
-    once. Retiming an end-of-turn effect to its own next turn has no
-    hook either: nothing rewrites which creature's turn boundary an
-    effect answers to after the fact."""
+    """Ignoring damage, ignoring forced movement, and the retiming.
+
+    A live `Effect` is a mutable dataclass and its clock is a field, so
+    nothing had to be added to rewrite which turn boundary a hold answers
+    to: `when`, `clock` and `latch`, which is how `p5052` holds a zone a
+    turn longer and how `i1952p1`'s neighbour lengthens one of its own.
+    `latch` is the part that is easy to miss -- without it the very next
+    `TurnEnd` ends the thing just lengthened.
+
+    `EffectApplied` is the moment, because it fires for every effect
+    rather than only the ones imposing a condition, and it fires while the
+    hold is landing -- a sweep at this creature's own turn start would be
+    too late for an end-of-turn hold laid on somebody else's turn.
+
+    A hold already reading "end of this creature's next turn" is left
+    alone: it is already what the card asks for, and rewriting it would
+    latch it a second time.
+
+    **The announcement is only mutated, never ended, and that is the
+    reason the other clause stays dropped.** `Effects.apply` installs
+    conditions *after* this event, so ending a hold here would leave its
+    conditions in `Conditions` with no live effect to take them off --
+    permanently. So "does not suffer from any effect a save can end" is
+    still waiting on a blanket `c.immune`: ending each save-ends hold from
+    this same watcher is the obvious shape and is the bug the apply order
+    was rewritten to prevent."""
     me = c.me
     c.resist(9999, None, until=When.ENCOUNTER, on=me)
     c.immovable(until=When.ENCOUNTER, on=me)
+
+    def retime(ev: EffectApplied) -> None:
+        if ev.target != me:
+            return
+        for held in list(c.world.effects.of(me)):
+            if held.ended or held.when not in (When.EOT, When.EONT):
+                continue
+            if held.when is When.EONT and held.clock == me:
+                continue
+            held.when = When.EONT
+            held.clock = me
+            held.latch = True
+
+    c.watch(
+        EffectApplied, retime, until=When.ENCOUNTER, on=me,
+        label=f"{c.ref} retime",
+    )
 
 
 @power(

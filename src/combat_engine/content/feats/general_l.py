@@ -567,14 +567,19 @@ def f2693(c: Cast) -> None:
 
 
 @power("f2695", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.no_action_point_refresh()",))
+       reach=PERSONAL, target=SELF)
 def f2695(c: Cast) -> None:
     """The daily has a ref and is handed over; the "choose one 1st-level
     at-will" half names a set rather than a ref and is `c.borrow_row`.
 
-    Dropped: "you do not regain the use of that power when you spend an
-    action point", which is a narrowing of the action-point refresh and
-    has nothing to hang on."""
+    **"You do not regain the use of that power when you spend an action
+    point" needs nothing, and the marker that asked for a narrowing was
+    describing a refresh that does not exist.** `c.action_point` decrements
+    the pool, stamps `spent_round` and calls `extra_action`; it hands no
+    use back. `c.restore_use` is the only thing in the vocabulary that
+    does, and nothing calls it on `ActionPointSpent`. So the printed
+    exception is already true of every row on the board and there is
+    nothing here to switch off."""
     c.grant_row("p9501", on=c.me, until=When.ENCOUNTER)
     c.borrow_row("seeker", level=1, uses=1)
 
@@ -1326,24 +1331,31 @@ def f2565(c: Cast) -> None:
 
 
 @power("f2566", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Gear.heavy_shield",))
+       reach=PERSONAL, target=SELF)
 def f2566(c: Cast) -> None:
     """`c.forces` is the key the shove reads off the creature *doing* the
     pushing, and its gate is handed `how` and `power` -- which is exactly
     "your pushes and slides, with a melee attack".
 
-    `Gear.shield` is a flag with no weight to it, so the heavy half of
-    "heavy shield" is dropped rather than guessed at.
+    **The heavy half is written.** `Gear.shield` is no longer a flag: it is
+    0 for none, 1 for light and 2 for heavy, which `chargen._shield_for`
+    writes and `query.shield_bonus` reads -- so "heavy" is `shield == 2`
+    and `c.wielding("shield")`, which only tests truthiness, was one kind
+    too wide. Asked inside the gate rather than once at arming, because a
+    shield can be put down mid-fight.
     """
     me = c.me
-    c.forces(
-        1, on=me, until=When.ENCOUNTER,
-        when=lambda ctx: (
-            ctx.get("how") in ("push", "slide")
+
+    def shoving(ctx: dict[str, Any]) -> bool:
+        gear = c.world.get(me, Gear)
+        return (
+            gear is not None
+            and gear.shield == 2
+            and ctx.get("how") in ("push", "slide")
             and _melee(ctx.get("power", ""))
-            and c.wielding("shield")
-        ),
-    )
+        )
+
+    c.forces(1, on=me, until=When.ENCOUNTER, when=shoving)
 
 
 @power("f2569", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2233,24 +2245,29 @@ def f2622(c: Cast) -> None:
 @power("f2630", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger=_HUNKER + " while wielding a shield",
-       on=Trigger(TotalDefence, about_me, _HUNKER),
-       dropped=("c.bonus(while_adjacent=)",))
+       on=Trigger(TotalDefence, about_me, _HUNKER))
 def f2630(c: Cast) -> None:
     """Allies beside a shield get some of its benefit.
 
-    **"Or until they are no longer adjacent to you" is the dropped clause.**
-    `c.bonus` takes a duration and not a condition to hold under, so an ally
-    that walks away keeps the bonus to the start of my next turn. One clause
-    of a row that plays, which is what `dropped=` is for -- and it is the
-    kinder error of the two, since it only ever pays out too long.
+    **"Or until they are no longer adjacent to you" is written now**, and
+    not as a duration: "while adjacent to you" is geometry, so it is an
+    aura of radius 1 carrying the modifier. `c.grants_in` hangs the hold on
+    the zone's own effect and `_while_inside` takes it back on
+    `ZoneExited`, which is the ally walking away; the aura's own
+    `until=When.SONT` is the other printed ending, and whichever comes
+    first ends it.
+
+    `side="ally"` leaves the wearer out, which is the printed "allies
+    adjacent to you" -- the shield's own bonus is already on its sheet.
     """
     gear = c.world.get(c.me, Gear)
     if gear is None or not gear.shield:
         return
-    for friend in c.allies():
-        if friend != c.me and c.adjacent(friend):
-            c.bonus(AC, 2, on=friend, until=When.SONT, kind="untyped")
-            c.bonus(REF, 2, on=friend, until=When.SONT, kind="untyped")
+    zone = c.aura(1, until=When.SONT)
+    if not zone:
+        return
+    c.grants_in(zone, AC, 2, side="ally", kind="untyped")
+    c.grants_in(zone, REF, 2, side="ally", kind="untyped")
 
 
 @power("f2632", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

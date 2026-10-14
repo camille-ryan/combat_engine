@@ -300,14 +300,36 @@ def _holding_somebody(world: World, eid: int) -> bool:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=8),
     damage=Damage("1d10", 4),
-    dropped=("etl.monster.forced_distance()",),
+    dropped=("compendium.forced_distance",),
 )
 def m1107a0(c: Cast) -> None:
-    """The pull has no distance in the compendium -- "and the target is
-    pulled", with the number gone -- so it is left out rather than guessed at.
-    Everything else plays: the branch is read before the swing, because the
-    reach is 2 and the extra die is for a creature that was *already* next to
-    it, which pulling would have made true of everybody.
+    """The pull has no distance on the page, so there is nothing to write
+    it from -- but the row plays without it.
+
+    **`dropped=` and not `defect=`, and the distinction is the whole
+    note.** The old marker named an extractor, `etl.monster.forced_distance()`,
+    and that was wrong in the way the sweep caught: it promised a reader
+    could finish the row by writing a parser, and no parser recovers a
+    number the page does not print. The page reads "the target is pulled"
+    and stops.
+
+    But `defect=` is for when **nothing survives**, and `content/CLAUDE.md`
+    states the test with the measurement behind it: of 26 rows with a blank
+    attack defence, 23 play and 3 do not, and flagging all 26 would have
+    refused 23 working rows. This row attacks, pays 1d10+4, and pays its
+    extra die -- so it plays, and `defect=` would refuse it *and* defect the
+    whole of m1107 through `loader.defective`, taking the creature out of
+    `pick` over one missing number.
+
+    So the symbol carries the `compendium.` prefix instead, which is what
+    `blocked.py`'s `SOURCE_GAP` separates from work owed. That is the same
+    shape the 22 `compendium.attack_defence` rows already use, and it says
+    the honest thing: the row is as finished as it will ever be, and no
+    symbol is coming.
+
+    The branch is read before the swing, because the reach is 2 and the
+    extra die is for a creature that was *already* next to it, which pulling
+    would have made true of everybody.
     """
     was_adjacent = c.adjacent(c.target)
     if c.strike():

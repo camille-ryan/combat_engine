@@ -710,7 +710,6 @@ def _helpless_in_reach(world: World, eid: int) -> bool:
     keywords=[Keyword.HEALING],
     requires=_helpless_in_reach,
     requires_text="there must be a helpless creature within reach",
-    dropped=("c.coup_de_grace(basic=True)",),
 )
 def m3435a3(c: Cast) -> None:
     """It settles on something that cannot fight back and feeds.
@@ -718,16 +717,17 @@ def m3435a3(c: Cast) -> None:
     `c.coup_de_grace` refuses a row that declares no attack line of its own --
     Camille's call on #250 was to disallow one rather than invent damage for it
     -- and this card prints none, so the swing has to be the creature's own
-    basic attack. The automatic critical that a coup de grace *is* cannot be
-    had that way; maximised damage is the nearest thing the vocabulary offers
-    and is written instead, which is why the clause is marked.
+    basic attack. The automatic critical a coup de grace *is* comes from
+    `c.maximise(critical=True)`, which the row was already calling without
+    the flag: it sets `critical` on the live `Hit` rather than faking the
+    number, so every crit rider on the swing is paid too.
     """
     victim = c.target
     if victim is None:
         return
     c.cure(Condition.INSUBSTANTIAL, on=c.me)
     c.mode("fly", 0, on=c.me, until=When.EONT)
-    c.maximise(on=c.me, until=When.EOT)
+    c.maximise(on=c.me, until=When.EOT, critical=True)
     c.basic(on=victim)
     hp = c.world.get(victim, Health)
     if hp is not None and hp.hp <= 0:

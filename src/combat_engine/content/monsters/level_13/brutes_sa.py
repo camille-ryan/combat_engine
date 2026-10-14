@@ -2511,7 +2511,6 @@ def m6665a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
-    dropped=("c.cannot_stand()",),
 )
 def m6665a2(c: Cast) -> None:
     """Two of the row above, and the follow-up needs to know whether both
@@ -2524,9 +2523,18 @@ def m6665a2(c: Cast) -> None:
     `RelationCleared` with the two prohibitions this creature takes on for
     holding somebody.
 
-    The escape DC and "the target cannot stand up" are the dropped clauses --
-    `c.grab` takes no DC, and nothing takes the stand-up action away from a
-    creature that has it.
+    **"The target cannot stand up" is written, and `c.cannot_stand()` was a
+    false marker** -- as was the sentence here claiming `c.grab` takes no DC,
+    which it does and which this row already passes. `c.prone(held=)` is the
+    printed shape of the clause, and what it lays is `Condition.PINNED`:
+    `conditions` gives that `Rules(no_stand=True)` and `actions.legal` reads
+    it as the one thing a prone creature may otherwise always do.
+
+    The condition is laid here rather than through `c.prone(held=)` because
+    the clock is "until the grab ends", which is no `When` at all -- the same
+    reason the burn above is on the encounter clock and taken off from
+    `RelationCleared`. `c.prone` hands back the *prone* effect, so there
+    would be no handle on the shorter hold to end.
     """
     me, ref = c.me, c.ref
     victim = c.target
@@ -2545,6 +2553,7 @@ def m6665a2(c: Cast) -> None:
         return
     c.grab(on=victim, dc=20)
     burn = c.ongoing(25, on=victim, until=When.ENCOUNTER)
+    pinned = c.condition(Condition.PINNED, on=victim, until=When.ENCOUNTER)
     barred = c.forbid("m6665a3", on=me, until=When.ENCOUNTER)
     rooted = c.no_walk(on=me, until=When.ENCOUNTER)
 
@@ -2553,7 +2562,7 @@ def m6665a2(c: Cast) -> None:
             return
         if ev.source != me:
             return
-        for eff in (burn, barred, rooted):
+        for eff in (burn, pinned, barred, rooted):
             if eff is not None:
                 c.world.effects.end(eff, "the grab ended")
 

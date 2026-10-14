@@ -156,7 +156,7 @@ from combat_engine.engine.query import (
     flanked_by,
 )
 from combat_engine.engine.triggers import about_me, both, by_charge, by_me, by_melee
-from combat_engine.engine.types import Relation
+from combat_engine.engine.types import Light, Relation
 
 #: Which printed ranges count as a melee attack for a rider that says so.
 #: Narrower than the tuple a level down, which folds in close bursts and
@@ -600,15 +600,22 @@ def m115673a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_squeeze_speed()",),
 )
 def m115673a1(c: Cast) -> None:
-    """Difficult terrain is exact. The squeezing half is narrower than any
-    lever the engine has: `Condition.SQUEEZING` is half speed, -5 to attack
-    and combat advantage in one hold, and the card waives only the speed.
-    Taking the whole condition off would hand it two things nobody printed.
+    """Both halves are exact.
+
+    The narrowness was the point and `c.waive` is built for it: it turns
+    off one of the knobs a condition carries without lifting the
+    condition, and `halve_speed` is the whole of what `SQUEEZING` does to
+    speed. So the -5 to attack and the combat advantage stay, which is
+    what the card prints, and the creature still fits in the space it
+    squeezed into -- which suppressing the condition would undo.
+    `_squeezes_freely` next door is the *other* card, waiving all three.
     """
     c.ignores_difficult(on=c.me, until=When.ENCOUNTER)
+    c.waive(
+        Condition.SQUEEZING, "halve_speed", on=c.me, until=When.ENCOUNTER
+    )
 
 
 @power(
@@ -979,16 +986,17 @@ def m1289a2(c: Cast) -> None:
     reach=AreaBurst(1, within=5),
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=17),
-    dropped=("c.conceal(square=)",),
 )
 def m1289a3(c: Cast) -> None:
     """No damage is printed on the Hit line, so nothing is dealt -- the blind
     is the whole consequence and `c.hit` with no declared damage would raise.
 
-    The zone stands for the rest of the encounter and carries nothing:
-    "lightly obscured" is concealment, which is a -2 an attacker takes and
-    hangs on a *creature*; there is no way to hang one on a square.
-    `blocks_sight` would be the wrong word for it -- that is a wall.
+    The zone carries the obscurement now. `obscured=Light.DIM` *is*
+    "lightly obscured" on the very zone this row was already laying, so
+    nothing per-square had to be invented -- and the old caution against
+    `blocks_sight` was right for the reason it gave: that is a wall, and
+    it blinds both sides. `c.conceal_in` is the per-creature sibling of
+    the same gap.
     """
     if c.strike():
         c.blinded(until=When.EONT)
@@ -996,7 +1004,7 @@ def m1289a3(c: Cast) -> None:
         return
     area = c.area()
     if area:
-        c.zone(area, until=When.ENCOUNTER, label=c.ref)
+        c.zone(area, until=When.ENCOUNTER, label=c.ref, obscured=Light.DIM)
 
 
 @power(

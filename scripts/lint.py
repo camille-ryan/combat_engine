@@ -279,6 +279,57 @@ _CONTEXT_OF = {
 _GATE_CONTEXT = {"resist": "damage"}
 
 
+@cache
+def _ctx_forwarders() -> frozenset[str]:
+    """Engine functions that take a `ctx` and hand it to `Mods.total`.
+
+    **The derivation below could not see a context built at a call site
+    and threaded through a helper**, and that is a whole class of key,
+    not a stray one. `dsl._stretched(world, actor, kind, {"power": ...,
+    "kind": ...})` is the case: the literal is written at the two call
+    sites in `dsl.py`, and `_stretched` forwards it as `mods.total("reach",
+    ctx)` -- a `Name`, carrying no keys a walk can read. So `kind` was
+    absent from the union, and the check called two **correct** sites
+    faults: `c.as_ranged`, which gates a `"reach"` bonus on exactly the
+    key `_stretched` supplies, and a content row doing the same.
+
+    Found by an authoring agent, which dropped the gate from its own row
+    to get past the check -- the gate was dead there for an unrelated
+    reason, so nothing was lost, but that is the shape of damage a false
+    alarm does. A checker that cries wolf gets routed around.
+
+    Still derived, which is the point: name a forwarder's parameter `ctx`
+    and pass it to `total`, and its call sites are harvested from the next
+    run. Only the forwarders are discovered here; the literals come from
+    the call-site walk, so `which`'s file narrowing still applies and
+    these keys reach the wide union only.
+    """
+    out: set[str] = set()
+    for path in (ROOT / "src/combat_engine/engine").glob("*.py"):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for fn in ast.walk(tree):
+            if not isinstance(fn, ast.FunctionDef):
+                continue
+            if not any(a.arg == "ctx" for a in fn.args.args):
+                continue
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = getattr(node.func, "id", None) or getattr(
+                    node.func, "attr", None
+                )
+                if name not in ("_mods", "total"):
+                    continue
+                if any(
+                    isinstance(a, ast.Name) and a.id == "ctx" for a in node.args
+                ):
+                    out.add(fn.name)
+    return frozenset(out)
+
+
 def _context_keys(which: str = "") -> frozenset[str]:
     """Every key a modifier context carries, read off the engine.
 
@@ -289,9 +340,9 @@ def _context_keys(which: str = "") -> frozenset[str]:
     checker that cries wolf is worse than no checker, and a list
     somebody has to remember to update is a checker that will.
 
-    So: every dict literal handed to `_mods(...)` or `.total(...)`
-    anywhere in `engine/`, unioned. Add a key at any of those sites and
-    this sees it on the next run.
+    So: every dict literal handed to `_mods(...)`, `.total(...)` or a
+    `_ctx_forwarders()` helper anywhere in `engine/`, unioned. Add a key
+    at any of those sites and this sees it on the next run.
     """
     #: Where each named context is built, so `which` can narrow to one.
     homes = {
@@ -312,7 +363,17 @@ def _context_keys(which: str = "") -> frozenset[str]:
             if not isinstance(node, ast.Call):
                 continue
             name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-            if name not in ("_mods", "total"):
+            # A forwarder's literal counts toward the **wide** union only.
+            # Not a shortcut -- `resolve.py:645` builds
+            # `{**ctx, "power": ..., "kind": "ranged"}` and hands it to
+            # `_stretched`, which spends it on `total("range", ctx)`. That is
+            # a *distance* key, and `_CONTEXT_OF` sends every distance gate
+            # to the wide union already. Counting it as attack context would
+            # mean an `attack`-key gate reading `ctx["kind"]` passes while
+            # still being silently false, which is the hole this check's own
+            # docstring was narrowed to close.
+            forwarded = not which and name in _ctx_forwarders()
+            if name not in ("_mods", "total") and not forwarded:
                 continue
             for arg in node.args:
                 # Either the literal itself or a name bound to one; the

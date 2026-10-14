@@ -6748,7 +6748,7 @@ def _fire_implement_hit(world: World, me: int, ev: Any) -> bool:
     on=Trigger(
         Hit, when=_fire_implement_hit, text=_M6537_BURNED, window=Window.BEFORE
     ),
-    dropped=("c.using(ref)",),
+    dropped=("etl.paragon_path",),
 )
 def m6537a6(c: Cast) -> None:
     """Maximised damage, taken in the `Hit` window because that is before the
@@ -6756,10 +6756,29 @@ def m6537a6(c: Cast) -> None:
     the damage would set one for some later swing.
 
     The dropped clause is the printed Requirement, which is that it is in a
-    named state at the time. The brief spells that state as a printed title
-    and gives no ref for it, and nothing on a board answers "is that row's
-    state standing": `c.stance` and `c.form` are things a row lays on itself
-    and neither is a question another row can ask by ref.
+    named state at the time.
+
+    **The old note here blamed the engine and that half was wrong.** It said
+    "nothing on a board answers 'is that row's state standing'" --
+    `c.lingers_label` is exactly that question, and `c.stance` labels its
+    hold with the laying row's ref when it is given no label, so a stance is
+    askable by ref and has been all along.
+
+    **Referred up and answered from the page, so it is not `defect=` and the
+    marker named the wrong gap twice.** The thing the trigger requires is a
+    **paragon path** -- the compendium holds it, as `ParagonPath` id 404, and
+    the stat block's own equipment line is where it is printed, which is why
+    it read like a title with no row behind it. It is not a stance, not an
+    item, and not absent from the source.
+
+    So nothing is missing from the compendium and `defect=` would be a lie
+    that also takes the whole of m6537 out of `pick` through
+    `loader.defective`. What is missing is **downstream**: this tree ingests
+    no paragon paths at all -- `game.db` has no `paragon_path` table -- so
+    there is no ref to pass `c.lingers_label` and no row to hang the state
+    on. `c.using(ref)`, the old symbol, presumed a ref that does not exist;
+    the want is the extraction, and `m5641a1` in this module is the second
+    row waiting on it.
     """
     c.maximise(on=c.me)
 

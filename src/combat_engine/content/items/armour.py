@@ -995,16 +995,22 @@ def i2441x1(c: Cast) -> None:
 
 
 @power("i2534x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(skill=)",))
+       reach=PERSONAL, target=SELF)
 def i2534x1(c: Cast) -> None:
-    """The card narrows this to Acrobatics and the escape action offers
-    two skills; `escape` is one key for the attempt however it is rolled,
-    so the Athletics half of the choice gets the bonus too."""
+    """The card narrows this to Acrobatics, and the gate says so.
+
+    `escape.attempt` picks the skill it is rolling with and then asks
+    `escape` for its modifiers with that choice in the context -- so the
+    narrowing is `when=` on the one key, and the Athletics half of the
+    choice correctly gets nothing. No new key needed."""
     # Untyped: the card prints no type word. "Twice the armour's
     # enhancement bonus" is where the *number* comes from, not what kind
     # of bonus this one is -- an item bonus here would refuse to stack
     # with the armour's own.
-    c.bonus("escape", 2 * c.enhancement, on=c.me, until=When.ENCOUNTER)
+    c.bonus(
+        "escape", 2 * c.enhancement, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("skill") == "acrobatics",
+    )
 
 
 @power("i2986x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -2023,14 +2029,25 @@ def i2046p1(c: Cast) -> None:
 
 
 @power("i2088p1", level=4, cls=ITEM, usage=AT_WILL, action=STANDARD,
-       reach=Melee(1), target=ONE_CREATURE, charges=True,
-       dropped=("c.jump_charge()",))
+       reach=Melee(1), target=ONE_CREATURE, charges=True)
 def i2088p1(c: Cast) -> None:
-    """The charge is declared so the engine measures reach the way a
-    charge needs; replacing its run with a jump is the missing half."""
+    """The jump covers the ground and the swing still carries the charge.
+
+    No single verb replaces a charge's run, and none is needed: the jump
+    goes first, aimed at the target, and `c.run_at` then walks nothing at
+    all -- it looks for a path *to a square beside the victim* and finds
+    none to take once the jumper is already standing there. So
+    `c.charge_at` still stamps `charge=True` onto the attack, which is
+    what every charge rider reads.
+
+    `//10` is the running start, the same divisor `monk`'s own jump row
+    uses, and the distance is not capped by speed because `c.jump` pays
+    for the move itself rather than drawing on the turn."""
     foe = c.target
-    if foe is not None:
-        c.charge_at(foe)
+    if foe is None:
+        return
+    c.jump(c.check("athletics").total // 10, toward=foe)
+    c.charge_at(foe)
 
 
 def _my_at_will_attacks(c: Cast) -> list[str]:
@@ -3774,16 +3791,36 @@ def i3043p1(c: Cast) -> None:
 
 @power("i3484x1", level=10, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.malfunction()",))
+       dropped=("c.condition(ends_with_check=)",))
 def i3484x1(c: Cast) -> None:
     """Both senses, at a range equal to the armour's enhancement -- so the
-    radius is read off the item rather than printed as a number.
+    radius is read off the item rather than printed as a number. The
+    malfunction fires too.
 
-    Still dropped: the malfunction turns on a natural 1 on an attack roll
-    doing something to the roller, which nothing watches for."""
+    Nothing new was needed for it: `AttackRolled` carries the die, which
+    is the only place a natural 1 can be read, and `i3461x1` already
+    watches it for exactly this and damages the roller. So the restraint
+    is an ordinary watcher.
+
+    Three sub-clauses have nothing behind them to switch and none is a
+    gap in this engine: the air supply and the sealing are scenery,
+    suffocation is not a rule here, and encumbrance is not modelled, so
+    the Strength line reduces to nothing.
+
+    Dropped: the one clause that is a gap -- the malfunction ends on a
+    standard action and an Athletics check against a hard DC, made by the
+    wearer *or an adjacent ally*. An effect carries a saving throw and a
+    `drop_cost`; neither is a check somebody else may roll."""
+    me = c.me
     reach = c.enhancement or 1
     c.blindsight(reach)
     c.tremorsense(reach)
+
+    def fumble(ev: AttackRolled) -> None:
+        if ev.attacker == me and ev.natural == 1:
+            c.condition(Condition.RESTRAINED, on=me, until=When.ENCOUNTER)
+
+    c.watch(AttackRolled, fumble, until=When.ENCOUNTER)
 
 
 @power("i3484p1", level=10, cls=ITEM, usage=ENCOUNTER, action=MINOR,

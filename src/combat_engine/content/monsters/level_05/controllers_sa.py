@@ -219,17 +219,33 @@ def m1505a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d6", 2, kind=LIMITED),
-    dropped=("c.conceal_from()",),
 )
 def m1505a1(c: Cast) -> None:
-    """"All creatures have concealment against it" makes the target's own
-    attacks the hard ones to land -- the opposite direction from `c.conceal`,
-    which gives concealment *to* a creature rather than making its attacks
-    treat others as concealed. No verb says that half; the immobilize is
-    exact."""
-    if c.strike():
-        c.hit()
-        c.immobilized(until=When.SAVE_ENDS)
+    """"All creatures have concealment against it" makes the *target's* own
+    swings the hard ones -- the opposite direction from `c.conceal`, which
+    grants concealment to one creature and is read off whoever is being
+    attacked. The engine holds no concealment state and needs none: the whole
+    of what concealment does is take two off whoever is looking, so an
+    ungated attack penalty on the target says it exactly, which is the model
+    `level_12.lurkers_sa._total_concealment_from` states for the -5 version.
+
+    The one thing a penalty is not is concealment, so this adds to real cover
+    where the printed rule would take the larger of the two. No card in this
+    stat block's reach prints both.
+
+    "(Save ends)" covers both clauses, so there is one saving throw: the
+    penalty hangs on the encounter clock and the hold takes it off when it
+    goes, rather than being laid save-ends itself and giving the creature two
+    chances to shake off half of one sentence.
+    """
+    if not c.strike():
+        return
+    c.hit()
+    victim = c.target
+    hold = c.immobilized(until=When.SAVE_ENDS)
+    blind = c.penalty("attack", 2, on=victim, until=When.ENCOUNTER)
+    if hold is not None and blind is not None:
+        hold.on_end.append(lambda: c.world.effects.end(blind, "saved"))
 
 
 # ==========================================================================
@@ -414,22 +430,33 @@ def m3219a2(c: Cast) -> None:
     keywords=[Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d6", 4, kind=LIMITED),
-    dropped=("c.regeneration(when=)",),
 )
 def m3219a3(c: Cast) -> None:
-    """Regeneration while a target is held by this power has no conditional
-    form -- `c.regeneration` runs for a flat duration, not gated on a hold
-    standing -- so that half is dropped. The hold itself is exact: one
-    effect carries the burn and the immobilize, which is what makes one save
-    end both."""
-    if c.strike():
-        c.hit()
-        victim = c.target
-        if victim is not None:
-            c.condition(
-                Condition.IMMOBILIZED, until=When.SAVE_ENDS, on=victim,
-                ongoing=(5, DamageType.UNTYPED),
-            )
+    """The hold is one effect carrying the burn and the immobilize, which is
+    what makes one save end both.
+
+    "While it has a target immobilized with this power, it gains
+    regeneration 3" is `c.regeneration(unless=)`, which reads state at the
+    moment of the tick rather than switching the whole effect off on a clock
+    -- so the heal simply does not pay on a turn that starts with the hold
+    already shaken off. The printed recharge is "when it does not have a
+    creature immobilized with this power", so there is never a second live
+    hold for a second regeneration to stack with.
+    """
+    if not c.strike():
+        return
+    c.hit()
+    victim = c.target
+    if victim is None:
+        return
+    hold = c.condition(
+        Condition.IMMOBILIZED, until=When.SAVE_ENDS, on=victim,
+        ongoing=(5, DamageType.UNTYPED),
+    )
+    if hold is not None:
+        c.regeneration(
+            3, on=c.me, until=When.ENCOUNTER, unless=lambda: hold.ended
+        )
 
 
 @power(

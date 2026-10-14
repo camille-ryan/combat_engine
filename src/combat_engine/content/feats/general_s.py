@@ -86,6 +86,7 @@ from combat_engine.engine import (
     PowerUsed,
     SavingThrow,
     SecondWind,
+    Size,
     SurgeSpent,
     Swap,
     Trigger,
@@ -102,7 +103,9 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Health, PowerPoints
 from combat_engine.engine.dsl import Power
+from combat_engine.engine.grid import spread
 from combat_engine.engine.query import has_combat_advantage, team
+from combat_engine.engine.query import squares as squares_of
 
 #: The barbarian card this feat pairs with. **`p4807` is the compendium's
 #: other id for it and nothing declares that one**, so a gate naming it can
@@ -1778,18 +1781,57 @@ def f3770(c: Cast) -> None:
 f3771 = _grants("f3771", "f3771b")
 
 
+def _beside_a_big_plant(c: Cast, who: int) -> list[tuple[int, int]]:
+    """Where a move by `who` could start *and* end next to a Large plant.
+
+    Empty when the map holds none of them, or when the mover is not already
+    standing beside one -- which is the printed "can start and end". No
+    `size=` filter was needed: `c.scenery` answers with entity ids and each
+    one carries a `Position`, so `c.size_of` reads the size off it.
+    """
+    big = [
+        thing
+        for thing in c.scenery("plant")
+        if c.size_of(thing).order >= Size.LARGE.order
+    ]
+    if not any(c.adjacent_to(thing, who) for thing in big):
+        return []
+    beside: set[tuple[int, int]] = set()
+    for thing in big:
+        stands = squares_of(c.world, thing)
+        beside |= spread(stands, 1) - stands
+    return sorted(beside & spread(squares_of(c.world, who), 5))
+
+
+def _f3771_move(c: Cast, who: int) -> None:
+    """Shift 5, or teleport it instead where the plants allow that.
+
+    The arrival square is chosen from the qualifying ones rather than from
+    everything within 5, because the printed condition is about where the
+    move *ends*; `c.teleport` then refuses a square it cannot stand in.
+    """
+    arrivals = _beside_a_big_plant(c, who)
+    if arrivals and c.may("teleport instead of shifting", who=who):
+        where = c.choose(arrivals, f"{c.ref}: where to arrive")
+        if where is not None and c.teleport(5, who=who, to=where):
+            return
+    c.shift(5, who=who)
+
+
 @power("f3771b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
        reach=CloseBurst(1), target=ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
-       group=CHANNEL_DIVINITY, dropped=("c.scenery(size=)",))
+       group=CHANNEL_DIVINITY)
 def f3771b(c: Cast) -> None:
-    """"You and one ally", so the caster shifts once on the first target
-    and the ally shifts on its own call. The teleport alternative needs a
-    Large-or-larger plant beside both ends of the move; `c.scenery` finds
-    map features but carries no size."""
+    """"You and one ally", so the caster moves once on the first target
+    and the ally moves on its own call. Each one gets the teleport
+    alternative on its own footing, which is what "this movement" means for
+    a card whose two targets stand in different places."""
     if c.first:
-        c.shift(5, who=c.me)
-    c.shift(5, who=c.target)
+        _f3771_move(c, c.me)
+    victim = c.target
+    if victim is not None:
+        _f3771_move(c, victim)
 
 
 @power("f3773", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

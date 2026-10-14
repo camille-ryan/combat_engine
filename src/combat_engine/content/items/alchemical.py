@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Condition,
     DamageApplied,
     DamageType,
+    Defenses,
     Dropped,
     Effect,
     EffectExpired,
@@ -953,8 +954,7 @@ def i891p1(c: Cast) -> None:
 
 
 @power("i925p1", level=4, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=NO_TARGET, keywords=[Keyword.FIRE],
-       dropped=("c.conjure(hp=)",))
+       reach=Melee(1), target=NO_TARGET, keywords=[Keyword.FIRE])
 def i925p1(c: Cast) -> None:
     """A bomb on a fuse of up to six rounds.
 
@@ -963,33 +963,77 @@ def i925p1(c: Cast) -> None:
     fuse is a counter in its closure, and `c.roll` is the d6 the card asks
     for each round. A delayed power is a watcher that counts.
 
-    The one clause with nothing to hold is "if the bomb is hit by an
-    attack it also explodes": the bomb is a square rather than a thing on
-    the board, and nothing can be aimed at it."""
+    **"If the bomb is hit by an attack it also explodes" is written now,
+    and the old note was wrong that nothing can be aimed at it.**
+    `c.wall(hp=)` spawns a `Barrier` carrying `Health` and a `Position`, so
+    it is a legitimate target, and `c.barrier` hands the entity back from
+    the zone. `solid=False` keeps the square out of `Grid.blocking`, which
+    matters: a bomb is not a wall and must not stop anybody walking past
+    it. "The same defenses as its user" is the user's own `Defenses`
+    copied over the nothing-defences `c.wall` gives a wall.
+
+    One square, so the body moves with the bomb: `c.move_zone` carries the
+    zone and the `Position` is set alongside it, because the barrier is its
+    own entity and the zone mover does not reach it.
+
+    **In the caster's own space the bomb has no body**, which is a reading
+    and not a gap: a square already holds a creature, so there is nothing
+    for the bomb to be aimed at separately from the person standing on it.
+    The adjacent square is preferred, which is what the row already did.
+    """
     here = _free_near(c) or _square_of(c, c.me)
     if here is None:
         return
     at = [here]
     fuse = [c.choose(list(range(1, 7)), f"{c.ref}: rounds before it goes off") or 6]
     hold: list[Effect] = []
+    spent: list[bool] = []
+
+    zone = c.wall(1, at=here, hp=1, solid=False, until=When.ENCOUNTER)
+    body = c.barrier(zone) if zone else None
+    mine = c.world.get(c.me, Defenses)
+    theirs = c.world.get(body, Defenses) if body is not None else None
+    if mine is not None and theirs is not None:
+        theirs.values.update(mine.values)
+        theirs.scale = mine.scale
 
     def detonate() -> None:
+        if spent:
+            return
+        spent.append(True)
         for who in c.in_squares(spread({at[0]}, 1)):
             if c.attack(7, REF, on=who):
                 c.damage("1d10", dtype=DamageType.FIRE, on=who)
+        if zone:
+            c.world.zones.end(zone, "the bomb went off")
         if hold:
             c.end_effect(hold[0], why="the bomb went off")
+
+    def rolls_to(to: Square) -> None:
+        at[0] = to
+        if body is None or not zone:
+            return
+        c.move_zone(zone, 1, to=to)
+        spot = c.world.get(body, Position)
+        if spot is not None:
+            spot.square = to
+            spot.spans = frozenset({to})
 
     def tick(ev: TurnStart) -> None:
         if ev.actor != c.me or ev.ghost:
             return
         near = sorted(sq for sq in spread({at[0]}, 1) if sq != at[0])
-        at[0] = c.choose(near, f"{c.ref}: where the bomb rolls") or at[0]
+        rolls_to(c.choose(near, f"{c.ref}: where the bomb rolls") or at[0])
         fuse[0] -= 1
         if fuse[0] <= 0 or c.roll(6) == 6:
             detonate()
 
+    def struck(ev: Hit) -> None:
+        if body is not None and ev.target == body:
+            detonate()
+
     hold.append(c.watch(TurnStart, tick, until=When.ENCOUNTER))
+    c.watch(Hit, struck, until=When.ENCOUNTER)
 
 
 # -- level 5 ----------------------------------------------------------------

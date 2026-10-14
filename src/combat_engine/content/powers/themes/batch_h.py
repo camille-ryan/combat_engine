@@ -636,24 +636,38 @@ def p15891(c: Cast) -> None:
 @power(
     "p15892", level=6, cls=X7_917, usage=DAILY, action=MINOR,
     reach=CloseBurst(5), target=ONE_CREATURE, keywords=[Keyword.ARCANE],
-    dropped=("c.mark(sustain=)",),
 )
 def p15892(c: Cast) -> None:
-    """The mark and the payout are written. "Sustain Minor" is not: a
-    sustain cost is stored beside the effect and only `c.effect`, `c.zone`
-    and `c.aura` take one -- `c.mark` and `c.condition` have nowhere to put
-    it, so the mark runs its one round and stops."""
+    """The mark, the payout and the sustain are all written.
+
+    A sustain cost is stored beside an effect and `c.mark` has nowhere to
+    put one -- but it does not need one. A "Sustain Minor" mark is a
+    *sustained effect whose payout re-lays the mark*, which is the shape
+    `m958a3` already uses to re-roll an attack every time its hold is
+    sustained: `c.effect(sustain=)` holds the cost, `c.on_sustain` holds
+    what paying it buys. The temp hit points are gated on the live mark
+    rather than on a clock of their own, so they last exactly as long as it
+    is kept up and stop the round it is not.
+    """
     foe = c.target
     if foe is None:
         return
-    c.mark(until=When.EONT, on=foe)
+    marked = [c.mark(until=When.EONT, on=foe)]
     gain = 3 + _best(c)
 
     def landed(ev: Hit) -> None:
-        if ev.attacker == c.me and ev.target == foe and c.marked(foe, by=c.me):
+        hold = marked[0]
+        if hold is None or hold.ended:
+            return
+        if ev.attacker == c.me and ev.target == foe:
             c.temp_hp(gain, on=c.me)
 
-    c.watch(Hit, landed, until=When.EONT)
+    def again() -> None:
+        marked[0] = c.mark(until=When.EONT, on=foe)
+
+    kept = c.effect(f"{c.ref} sustained", until=When.SUSTAIN, sustain=MINOR, on=c.me)
+    c.on_sustain(kept, again)
+    c.watch(Hit, landed, until=When.ENCOUNTER, label=f"{c.ref} drain")
 
 
 @power(
@@ -1505,37 +1519,70 @@ def p16432(c: Cast) -> None:
 @power(
     "p16530", level=0, cls=X7_993, usage=ENCOUNTER, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-    dropped=("spec.inline_block()",),
 )
 def p16530(c: Cast) -> None:
     """The form itself is written: it holds until the encounter ends, it is
     Small, and it can be stepped out of as a minor action with a shift.
 
-    Three clauses are dropped. The page prints a **second block** -- a melee
-    attack usable at will while the form lasts -- under this same ref and
-    with no ref of its own, so there is nothing to decorate and nothing to
-    grant. The ban is by keyword rather than by row, and `c.forbid` names one
-    row. Low-light vision is the twelve-row hold it always is.
+    `c.forbid(lacking=)` says "cannot use powers that lack the beast form
+    keyword" -- the direction `c.forbid` could not express, since it names
+    one row and the card names a keyword -- and `name=` makes the shape
+    askable through `query.in_form` rather than only findable by its label.
 
-    **Two of the three are written now.** `c.forbid(lacking=)` says "cannot
-    use powers that lack the beast form keyword" -- the direction `c.forbid`
-    could not express, since it names one row and the card names a keyword --
-    and `name=` makes the shape askable through `query.in_form` rather than
-    only findable by its label. What is left is the second block the page
-    prints under this ref with no ref of its own.
+    **The second block is written now too.** The page prints it under this
+    same ref with no ref of its own, which is not a missing facility: the
+    content rules document the `b` suffix for exactly that, and `p16070b`
+    in `batch_e.py` is the worked example in this very directory. So the
+    block is minted as `p16530b` below and handed over with `c.grant_row`
+    -- "until the form ends, you can use the secondary power at will" is
+    the grant's own lifetime -- with `c.as_basic` for the printed Special.
+    Both are taken back when the form is stepped out of early, since
+    possession is what gates the block and the form is what grants it.
     """
     beast = c.form(until=When.ENCOUNTER, revert=None, label=c.ref,
                    name="beast")
     c.forbid(lacking=Keyword.BEAST_FORM, on=c.me, until=When.ENCOUNTER)
     small = c.resize(Size.SMALL, until=When.ENCOUNTER)
+    claws = c.grant_row("p16530b", on=c.me, until=When.ENCOUNTER)
+    instead = c.as_basic("p16530b", until=When.ENCOUNTER)
 
     def back() -> None:
         if small is not None:
             c.end_effect(small, on=c.me, why="left the form")
+        for held in (claws, instead):
+            if held is not None:
+                c.end_effect(held, why="left the form")
         c.shift(1)
 
     c.endable(beast, MINOR, then=back)
     c.low_light(until=When.ENCOUNTER)
+
+
+@power(
+    "p16530b", level=0, cls=X7_993, usage=AT_WILL, action=STANDARD,
+    reach=Melee(1), target=ONE_CREATURE, keywords=[Keyword.BEAST_FORM],
+    attack=Attack(Pick.HIGHEST, plus=3, vs=AC),
+)
+def p16530b(c: Cast) -> None:
+    """The second block the page prints under p16530's entry.
+
+    Melee touch is reach 1. "Highest ability modifier" is `Pick.HIGHEST`
+    in the header, which is what a theme's attack line says instead of
+    naming an ability, and the damage reads the same pick back through
+    `c.ability_for`. The 11th- and 21st-level lines are out of scope.
+
+    The ongoing damage is gated on the settled roll rather than asking the
+    board again: `c.strike` hands back the `AttackResult` and a one-shot
+    grant of combat advantage is already spent by the time a body could
+    ask. No `requires=` -- possession is the gate, since p16530 is the only
+    thing that hands this over and takes it back when the form ends.
+    """
+    shot = c.strike()
+    if not shot:
+        return
+    c.damage("1d4", c.mod(c.ability_for()))
+    if shot.advantage:
+        c.ongoing(5, until=When.SAVE_ENDS)
 
 
 @power(

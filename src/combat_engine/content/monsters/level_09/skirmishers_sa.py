@@ -63,6 +63,7 @@ from combat_engine.content.monsters.level_08.skirmishers_sa import (
     _adjacent_foe,
     _ended_flanking,
 )
+from combat_engine.content.powers.wizard.level_1_c import _no_opportunity
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -123,6 +124,7 @@ from combat_engine.engine.events import (
     Healed,
     Hit,
     Miss,
+    MoveEnd,
     MoveStart,
     SavingThrow,
     SkillCheck,
@@ -1473,14 +1475,21 @@ def m3821a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d4", 5),
-    dropped=("c.no_opportunity_attacks()",),
 )
 def m3821a1(c: Cast) -> None:
-    """"The target cannot make opportunity attacks until the end of her
-    next turn" -- narrower than anything that exists: `c.cannot_attack`
-    forbids every attack, not opportunity ones alone."""
+    """The narrower clause exists after all. `_no_opportunity` cancels
+    `OpportunityWindow` in the BEFORE window for one named creature, which
+    is exactly what `c.cannot_attack` overshoots -- that one forbids every
+    attack. It is hung on a hold, so the printed clock is the hold's and
+    the veto comes off with it."""
     if c.strike():
         c.hit()
+        victim = c.target
+        if victim is None:
+            return
+        held = c.effect(f"{c.ref} no openings", until=When.EONT, on=victim)
+        if held is not None:
+            _no_opportunity(c, held, victim)
 
 
 @power(
@@ -1770,14 +1779,40 @@ def m4414a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.in_motion",),
 )
 def m4414a3(c: Cast) -> None:
-    """"+4 to AC and Reflex when targeted while moving" -- a plain walk sets
-    nothing readable. `Movement.using` says what special mode a creature is
-    in (fly, climb, burrow) and is explicitly blank for an ordinary move, so
-    there is no live "is it moving right now" flag to gate on."""
-    c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER)
+    """"+4 to AC and Reflex when targeted while moving" needed no flag.
+
+    `Movement.using` is indeed blank for an ordinary walk, but the window
+    is bracketed by two events that both exist and are both used widely:
+    `MoveStart` fires before the first step and `MoveEnd` once the move is
+    over, so the pair *is* "while it is moving". `f1887` reads the first
+    half for the same reason.
+
+    One hold, not one per step, and `MoveStart` is ignored while one is
+    already standing: a forced slide inside somebody else's turn announces
+    its own start and end, and nesting two would leave the bonus up after
+    the inner one closed."""
+    me = c.me
+    c.bonus("escape", 4, on=me, until=When.ENCOUNTER)
+    held: list[Effect] = []
+
+    def afoot(ev: MoveStart) -> None:
+        if ev.actor != me or held:
+            return
+        for defence in (AC, REF):
+            hold = c.bonus(defence, 4, on=me, until=When.ENCOUNTER)
+            if hold is not None:
+                held.append(hold)
+
+    def still(ev: MoveEnd) -> None:
+        if ev.actor != me:
+            return
+        while held:
+            c.end_effect(held.pop(), why="stopped moving")
+
+    c.watch(MoveStart, afoot, until=When.ENCOUNTER)
+    c.watch(MoveEnd, still, until=When.ENCOUNTER)
 
 
 @power(

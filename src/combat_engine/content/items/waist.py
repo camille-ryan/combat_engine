@@ -105,6 +105,7 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
+from combat_engine.engine.components import Conjuration
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.query import squares
 
@@ -1101,17 +1102,43 @@ def i2208p1(c: Cast) -> None:
 
 @power("i2208p2", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(40), target=NO_TARGET, keywords=[Keyword.ILLUSION],
-       dropped=("c.conjure(defences=)", "c.on_sustain(conjuration)",
-                "c.zone(ends_on=)"))
+       dropped=("c.conjure(defences=)", "c.zone(ends_on=)"))
 def i2208p2(c: Cast) -> None:
     """The illusion stands on the board as a conjuration, sustained by a
-    minor. Three clauses have nowhere to go: its flat defences of 10, the
-    ten squares it moves each time it is sustained -- `c.on_sustain` takes an
-    `Effect` and `c.conjure` hands back an entity -- and the two ways it
-    pops, an attack hitting it or a creature walking into it."""
+    minor.
+
+    **The sustain clause is written, and `c.on_sustain(conjuration)` was a
+    false marker.** It is true that `c.on_sustain` takes an `Effect` and
+    `c.conjure` hands back an entity -- and the bridge between them is a
+    field: `c.conjure` applies the hold with the `sustain_cost` on it and
+    writes its id to `Conjuration.effect`, so the hold is one `get` and one
+    `live` lookup away. `p419` has been doing it that way.
+
+    `c.move` takes the budget it is given rather than the mover's speed, so
+    the ten squares are the sustain's alone. A `speed=` here would also put
+    walking the thing into its creator's action menu, which this card does
+    not grant -- the illusion "moves within its space" and otherwise only
+    when sustained.
+
+    Still dropped: its flat defences of 10, and the two ways it pops -- an
+    attack hitting it, or a creature touching it or entering its space.
+    """
     where = _free_near(c, of=c.me)
-    if where is not None:
-        c.conjure(at=where, label=c.ref, until=When.SUSTAIN, sustain=MINOR)
+    if where is None:
+        return
+    illusion = c.conjure(at=where, label=c.ref, until=When.SUSTAIN,
+                         sustain=MINOR)
+    if not illusion:
+        return
+
+    def drift() -> None:
+        c.move(10, who=illusion)
+
+    conj = c.world.get(illusion, Conjuration)
+    c.on_sustain(
+        c.world.effects.live.get(conj.effect) if conj is not None else None,
+        drift,
+    )
 
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,
@@ -1357,14 +1384,22 @@ def i2718x1(c: Cast) -> None:
 @power("i3162x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=Ranged(20), target=ONE_CREATURE, no_provoke=True,
        trigger="you hit an enemy with an attack using this ammunition",
-       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"),
-       dropped=("c.ongoing(ends_on=)",))
+       on=Trigger(Hit, _ammo_hit, "you hit with this ammunition"))
 def i3162x1(c: Cast) -> None:
-    """The ongoing damage ends on a save rather than on the move action the
-    card prints, which is the only end condition `c.ongoing` has."""
+    """**The printed end condition is written, and `c.ongoing(ends_on=)` was
+    a false marker.** `c.ongoing` does take a `until=`, so the save is a
+    default and not the only thing it has: `When.ENCOUNTER` is "it does not
+    go away on its own", which is what this card says.
+
+    The other half is `c.endable`, which sets `Effect.drop_cost` so
+    `actions.legal` offers the drop to the effect's **owner** -- the burning
+    creature, since the hold sits on it -- for the action the card names. A
+    move action spent on the drop is a move action spent not moving, which
+    is the parenthesis.
+    """
     if not c.ammunition():
         return
-    c.ongoing(5)
+    c.endable(c.ongoing(5, until=When.ENCOUNTER), MOVE)
 
 
 @power("i732x1", level=8, cls=ITEM, action=ActionType.NONE,

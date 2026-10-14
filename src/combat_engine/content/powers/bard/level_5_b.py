@@ -60,6 +60,19 @@ def p14462(c: Cast) -> None:
     the bar is a listener on `AttackDeclared`, which `resolve.attack` honours
     through `declared.cancelled`.
 
+    **`window=Window.BEFORE`, and without it this row did nothing at all.**
+    `c.watch` defaults to `Window.AFTER`, and `Bus.emit` runs BEFORE, then
+    the resolve callback, then AFTER -- and for an attack the resolve
+    callback *is* the whole attack: `resolve.attack` passes `roll` as it,
+    so by the time an AFTER listener ran the blow had been rolled,
+    announced and applied. `declared.cancelled` is read after that and only
+    sets `result.cancelled`, which undoes nothing. `c.cannot_attack` passes
+    `Window.BEFORE` for exactly this reason, and the sentence above about
+    `resolve.attack` honouring the cancel was true only of a BEFORE
+    listener.
+
+    The row carried no marker, so it reported finished the whole time.
+
     **Dropped clause:** "or in your defender's aura" -- nothing marks another
     character's aura as a defender's.
     """
@@ -72,7 +85,8 @@ def p14462(c: Cast) -> None:
         if query.defence(c.world, ev.attacker, Defense.WILL) <= 12 + c.level:
             ev.cancel(f"{c.ref}: cannot attack the caster")
 
-    c.watch(AttackDeclared, bar, until=When.ENCOUNTER)
+    c.watch(AttackDeclared, bar, until=When.ENCOUNTER,
+            window=Window.BEFORE)
 
 
 @power(

@@ -902,10 +902,9 @@ def f828(c: Cast) -> None:
 
 
 @power("f1240", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.on_death_save()",))
+       reach=PERSONAL, target=SELF)
 def f1240(c: Cast) -> None:
-    """All of it but the death saving throw.
+    """All of it, the death saving throw included.
 
     The saving-throw context carries the conditions being saved against,
     so "against the unconscious condition" is a real gate. The origin is
@@ -920,10 +919,12 @@ def f1240(c: Cast) -> None:
     ref of the row that laid it -- and writes the same one on the
     companion, which is what "you choose which one of you" asks for.
 
-    Dropped: the death-saving-throw half. `c.save(against="death")` is
-    rolled from `turns.py` and the context a modifier is asked carries
-    the conditions and not what the throw is against, so the +2 cannot
-    be narrowed to it.
+    The death throw was said to be unreachable and is not: `turns.py`
+    rolls it and asks `Mods.total("save", ...)` with `label="death"` in
+    the context, put there for exactly this sentence. So the two printed
+    gates are one `+2` with an `or` between them, and deliberately not
+    two bonuses: a dying creature is also unconscious, and two holds on
+    the same key would pay +4 on every death save.
     """
     pet = c.beast()
     if pet is None:
@@ -931,7 +932,10 @@ def f1240(c: Cast) -> None:
     c.set_origin("shadow", on=pet, until=When.ENCOUNTER, instead_of="natural")
     c.bonus(
         "save", 2, on=pet, until=When.ENCOUNTER,
-        when=lambda ctx: Condition.UNCONSCIOUS in ctx.get("conditions", ()),
+        when=lambda ctx: (
+            ctx.get("label") == "death"
+            or Condition.UNCONSCIOUS in ctx.get("conditions", ())
+        ),
     )
 
     def along(ev: Any) -> None:

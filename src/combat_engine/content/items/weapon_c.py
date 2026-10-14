@@ -2283,14 +2283,24 @@ def i1494p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.counts_as_kind()",),
+    dropped=("c.set_origin(beneficial_only=)",),
 )
 def i1536x1(c: Cast) -> None:
     """The increase is written as an increase: `c.resist` adds to whatever
     `Defences` already holds, so a wielder with no fire resistance is given
-    none, which is the printed "if you have". Counting as a devil for
-    somebody else's beneficial effect has no reader -- `c.kinds_of` is off
-    the stat block and a character has no type line to add to."""
+    none, which is the printed "if you have".
+
+    The type word is written now. `c.counts_as_kind()` named a reader that
+    exists under another name: `c.set_origin` lays `origin:<word>` as a
+    labelled effect and `query.kinds_of` reads it back for character and
+    monster alike -- which is also the reader `dsl.candidates` narrows a
+    target line with, so "one devil" finds the wielder.
+
+    Still dropped, and narrower than the old marker: the word is written
+    unconditionally, where the card gives it only "for the purpose of any
+    **beneficial** effect". Nothing grades an effect that way, so a row
+    that picks a devil out to hurt it now finds the wielder too."""
+    c.set_origin("devil", on=c.me, until=When.ENCOUNTER)
     d = c.world.get(c.me, Defences)
     if d is not None and d.resist.get(DamageType.FIRE, 0) > 0:
         c.resist(5, DamageType.FIRE, on=c.me)
@@ -2943,17 +2953,29 @@ def i553p2(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("When.CONSCIOUS",),
 )
 def i662p1(c: Cast) -> None:
-    """"Until you fall unconscious" is not a duration the engine has, so
-    the whole bargain runs to the end of the fight -- which is the longer
-    half of the printed "or"."""
-    c.bonus("attack", 2, kind="power", on=c.me, until=When.ENCOUNTER)
-    c.bonus("damage", 2, kind="power", on=c.me, until=When.ENCOUNTER)
-    for d in _DEFENCES:
-        c.penalty(d, 5, on=c.me, until=When.ENCOUNTER)
-    c.resist(5, on=c.me, until=When.ENCOUNTER)
+    """"Until you fall unconscious" wanted no new duration after all.
+
+    Falling unconscious is going to 0 hit points, which is announced as
+    `Dropped` -- `i674x1` below already watches its own -- so the holds run
+    to the end of the encounter and come off early when that lands. Ended
+    rather than timed, the way every other printed "or until" in this file
+    is: `c.end_effect` takes the hold the laying call handed back."""
+    holds = [
+        c.bonus("attack", 2, kind="power", on=c.me, until=When.ENCOUNTER),
+        c.bonus("damage", 2, kind="power", on=c.me, until=When.ENCOUNTER),
+        *(c.penalty(d, 5, on=c.me, until=When.ENCOUNTER) for d in _DEFENCES),
+        c.resist(5, on=c.me, until=When.ENCOUNTER),
+    ]
+
+    def felled(ev: Dropped) -> None:
+        if ev.actor != c.me:
+            return
+        for hold in holds:
+            c.end_effect(hold, why=f"{c.ref}: the wielder is down")
+
+    c.watch(Dropped, felled, until=When.ENCOUNTER, once=True)
 
 
 @power(

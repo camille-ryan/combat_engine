@@ -881,12 +881,24 @@ _riders("f1102", {"p835": _p835_swarm, "p1758": _p1758, "p620": _p620},
 
 
 @power("f1103", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.creature_type(counts_as=)",))
+       reach=PERSONAL, target=SELF)
 def f1103(c: Cast) -> None:
-    """The Perception and Insight bonuses are checks. "You are considered
-    a vampire for the purpose of effects that relate to vampires" is the
-    dropped half: `c.is_kind` reads a creature's type words and nothing
-    adds one."""
+    """The Perception and Insight bonuses are checks, so the card's
+    Special line is the only other half with a fight in it.
+
+    **It is written, and it needed no new reader.** "Counts as a creature
+    of that type for the purpose of effects that relate to it" is the
+    printed shape `c.set_origin` exists for: it holds the word as a
+    labelled effect, `query.kinds_of` reads it alongside a stat block's
+    own `kind` and `origin` columns, and that is the one set `c.is_kind`
+    and `Target.kinds` both answer from. So a target line restricting its
+    pool to that type now reaches this character, which is what the
+    sentence is for. The old marker wanted a `counts_as=` on the reader;
+    the write goes on the creature instead.
+
+    The word is a mechanical type and not a name -- it is the `kind`
+    column of two stat blocks in the database."""
+    c.set_origin("vampire", on=c.me, until=When.ENCOUNTER)
     c.grant_row("f1103b", on=c.me, until=When.ENCOUNTER)
 
 

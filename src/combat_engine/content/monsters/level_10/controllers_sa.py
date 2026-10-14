@@ -57,6 +57,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_01.artillery_sa import _prone_save
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
@@ -65,6 +66,7 @@ from combat_engine.content.monsters.level_10.controllers import (
     EVERY_DEFENCE,
     _my_implement_hit,
 )
+from combat_engine.content.powers.wizard.level_1_c import _no_opportunity
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -1906,12 +1908,20 @@ def m3573a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.save_against_prone()",),
 )
 def m3573a3(c: Cast) -> None:
-    """The one-square-less half of forced movement is exact. Nothing lets
-    a creature roll a save to shrug off being knocked prone outright."""
+    """The one-square-less half of forced movement is exact, and so is the
+    footing.
+
+    "Roll a saving throw to avoid falling prone" is not a new verb: it is
+    `ConditionApplied` -- the only moment the fall can be seen -- plus
+    `c.save(bare=True)`, there being no save-ends hold to shake off, plus
+    `c.cure(PRONE)` on a success. Three in-tree helpers already write that
+    exact shape and `_prone_save` is the one of them that is a helper rather
+    than a row's own closure, so it is reused rather than copied.
+    """
     c.resist_forced(1, on=c.me, until=When.ENCOUNTER)
+    _prone_save(c)
 
 
 @power(
@@ -2042,19 +2052,31 @@ def m3676a3(c: Cast) -> None:
         Trigger(
             SkillCheck, lambda world, me, ev: ev.actor == me, "it makes a skill check it dislikes"
         ),
+        Trigger(
+            SavingThrow,
+            lambda world, me, ev: ev.actor == me,
+            "it makes a saving throw it dislikes",
+        ),
     ],
-    dropped=("SavingThrow.total", "c.boost_check(ability=)"),
 )
 def m3676a4(c: Cast) -> None:
-    """Attack rolls and skill checks can both take the add-after-the-fact
-    bonus. Saving throws have no mutable total to add to, and ability
-    checks have no event of their own at all -- see the module docstring."""
-    ev = c.trigger
-    bonus = c.roll("1d6")
-    if isinstance(ev, AttackRolled):
-        ev.result.total += bonus
-    elif isinstance(ev, SkillCheck):
-        c.boost_check(bonus)
+    """All four printed rolls take the add-after-the-fact bonus, and one
+    verb does all four.
+
+    `c.boost_roll` is the add that does not reroll, and it branches on the
+    triggering event itself: an attack's `result`, a `SavingThrow`'s
+    `natural + bonus` against the one saving-throw threshold in the game,
+    or a `SkillCheck`. So the saving throw needed a trigger rather than a
+    mechanism -- it is declared above now -- and it is `boost_roll` rather
+    than the hand-rolled `result.total` so the boosted attack is judged by
+    the same crit floor `resolve` used to settle it.
+
+    The ability check needed neither: `skills.ability_check` announces a
+    `SkillCheck` under the key `ability:<name>`, deliberately so that a row
+    answering "a check you would make" can hear it, so the unfiltered
+    `SkillCheck` trigger already fires on one.
+    """
+    c.boost_roll(c.roll("1d6"))
 
 
 @power(
@@ -2168,15 +2190,25 @@ def m3788a3(c: Cast) -> None:
     target=EACH_ENEMY,
     damage=Damage("2d8", 5, half_on_miss=True),
     attack=Attack(vs=FORT, printed=12),
-    dropped=("c.grant_action(move_zone)", "c.zone(sight_limit=)"),
+    dropped=("c.grant_action(move_zone)",),
 )
 def m3788a4(c: Cast) -> None:
     """The prone, blind and half-on-miss are exact; so is the re-attack on
-    entering or starting a turn in the haboob. Its concealment has no
-    zone-bound primitive, and nothing offers moving the zone as a
-    chooseable move action -- both named in the module docstring. The
-    LOS-limiting half is flavor with no separate mechanical reading on a
-    board with no walls."""
+    entering or starting a turn in the zone, and so is both halves of what
+    standing in it does.
+
+    "Limits their line of sight to adjacent squares" is not flavour and it
+    is not `blocks_sight`, which cuts both ways and shelters nobody:
+    `c.sight_range` is literally "no line of sight to any creature more
+    than N squares away", read by `query.unseen_by`, and it is a `"bonus"`
+    under its own kind -- so `c.grants_in` hangs it on the zone through
+    `_while_inside` exactly as the concealment beside it is hung, taken on
+    entering and given back on leaving. `side="any"`, because the printed
+    line is about every creature in there rather than one side of the
+    fight.
+
+    What is left is the move action: nothing offers relocating a zone as a
+    choosable move, named in the module docstring."""
     if c.strike():
         c.hit()
         c.condition(Condition.PRONE, Condition.BLINDED, until=When.SAVE_ENDS)
@@ -2188,9 +2220,11 @@ def m3788a4(c: Cast) -> None:
     haboob = c.zone(area, until=When.SUSTAIN, sustain=MOVE, label=c.ref)
     # "Creatures within the haboob gain concealment" -- no narrowing. The
     # second half of that sentence, limiting their line of sight to adjacent
-    # squares, is its own symbol: it cuts sight *out of* the zone rather than
-    # concealing what is in it, and `blocks_sight` is both sides at once.
+    # squares, cuts sight *out of* the zone rather than concealing what is in
+    # it -- a cap on the looker, not terrain in the way, which is why
+    # `blocks_sight` is not it.
     c.conceal_in(haboob, side="any")
+    c.grants_in(haboob, "sight_range", 1, side="any", kind="sight_range")
 
     def tick(ev: Any) -> None:
         foe = ev.actor
@@ -2779,14 +2813,23 @@ def m5606a1(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 5, dtype=DamageType.PSYCHIC),
-    dropped=("c.cannot_opportunity()",),
 )
 def m5606a2(c: Cast) -> None:
-    """The shift-lock lands. Nothing prevents a creature from *making* an
-    opportunity attack -- `c.no_provoke` is the other side of that coin."""
+    """Both halves of the lock land, on one hold with one clock.
+
+    `c.no_provoke` is the other side of the coin -- it stops a creature
+    *giving* an opening -- but the side this card prints is already
+    written: `_no_opportunity` subscribes to `OpportunityWindow` at
+    `Window.BEFORE` and cancels it when the actor is the held creature. It
+    hangs on an effect rather than laying its own, so the shift-lock's hold
+    carries it and the two expire together, which is what "until the end of
+    its next turn" says about both."""
     if c.strike():
         c.hit()
-        c.cannot_shift(until=When.EONT)
+        victim = c.target
+        locked = c.cannot_shift(until=When.EONT)
+        if locked is not None and victim is not None:
+            _no_opportunity(c, locked, victim)
 
 
 @power(
@@ -3568,16 +3611,22 @@ def m5907a5(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.AREA],
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d8", 3, dtype=DamageType.POISON, half_on_miss=True),
-    dropped=("Condition.CANNOT_TELEPORT",),
 )
 def m5907a6(c: Cast) -> None:
-    """The restrained-plus-ongoing half is exact. Nothing in the vocabulary
-    says "cannot teleport" -- only "cannot shift" exists."""
+    """All three clauses of the hit land under one saving throw.
+
+    "Cannot teleport" wants no condition of its own: `c.forbid`'s
+    `keyword=` half is "cannot use powers that *have* this keyword", its
+    docstring names this very sentence, and `i1341x1` already writes it
+    against `Keyword.TELEPORTATION`. Laid until the encounter and ended by
+    the hold's own `on_end` rather than given `When.SAVE_ENDS` of its own,
+    because the card says "save ends **all**" and two save-ends effects are
+    two saving throws."""
     victim = c.target
     if c.strike():
         c.hit()
         if victim is not None:
-            c.world.effects.apply(
+            hold = c.world.effects.apply(
                 victim,
                 c.me,
                 When.SAVE_ENDS,
@@ -3585,6 +3634,16 @@ def m5907a6(c: Cast) -> None:
                 conditions=[Condition.RESTRAINED],
                 ongoing=(10, DamageType.POISON),
             )
+            barred = c.forbid(
+                keyword=Keyword.TELEPORTATION, on=victim, until=When.ENCOUNTER
+            )
+            if hold is not None and barred is not None:
+                # Named, so the callback's type is the `() -> None` that
+                # `on_end` declares; `c.end_effect` answers with an effect.
+                def lift_the_bar(bar: Effect = barred) -> None:
+                    c.end_effect(bar, why="the save ended all of it")
+
+                hold.on_end.append(lift_the_bar)
     else:
         c.hit(half=True)
         if victim is not None:

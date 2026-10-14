@@ -2205,12 +2205,30 @@ def f3168(c: Cast) -> None:
 @power("f3169", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you use p2482",
-       on=Trigger(PowerUsed, _used("p2482"), "you use that power"),
-       dropped=("c.spend_points(choice=)",))
+       on=Trigger(PowerUsed, _used("p2482"), "you use that power"))
 def f3169(c: Cast) -> None:
-    """The insubstantiality plays. Lengthening the teleport the power
-    itself makes would have to reach inside that row, and `PowerUsed` is
-    announced before its body runs."""
+    """Both halves now, and the lengthening reaches inside nothing.
+
+    `p2482` does not hard-code its distance -- it reads
+    `c.squares_for(c.ref, 3)` so that another row can stretch it -- so the
+    two extra squares are an ordinary `c.extend_move`, the same write
+    `f1236` makes on the same row. The old marker asked for a `choice=`
+    on the spend; the choice is `c.may` and the spend is plain
+    `c.spend_points`, both of which were already here.
+
+    **The window is why this works.** `PowerUsed` is announced *before*
+    the body runs, so the modifier is laid before `squares_for` is read.
+
+    Held until the end of this turn rather than for the encounter: the
+    offer is made per use, and a second use in the same fight -- the
+    power's own charge handed back by something else -- must be paid for
+    again rather than riding the first point.
+
+    The point is asked for only if there is one, because `c.may` offering
+    a spend that cannot happen is a question with one honest answer."""
+    paying = c.points() and c.may("spend 1 power point", who=c.me)
+    if paying and c.spend_points(1):
+        c.extend_move("p2482", 2, on=c.me, until=When.EONT)
     c.insubstantial(on=c.me, until=When.EONT)
 
 

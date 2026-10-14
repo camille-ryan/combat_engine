@@ -45,9 +45,12 @@ from combat_engine.content.features.builds import on_leg
 from combat_engine.engine import (
     AC,
     ENCOUNTER,
+    FORT,
     NO_TARGET,
     PERSONAL,
+    REF,
     STR,
+    WILL,
     ActionType,
     Build,
     Cast,
@@ -337,7 +340,7 @@ def sorcerer_f0s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=("c.trade_resistance()", "cf:sorcerer-soul-nat20"),
+    dropped=("cf:sorcerer-soul-nat20",),
 )
 def sorcerer_f0s2(c: Cast) -> None:
     """The third source: a damage modifier and two resistances at once.
@@ -357,11 +360,24 @@ def sorcerer_f0s2(c: Cast) -> None:
     apart. It is laid on the caster because it is a thing the caster
     does, not a thing done to the creature being hit.
 
-    Two clauses are still dropped. The printed trade -- ending the
-    resistance as an immediate interrupt for a +4 power bonus to all
-    defences -- is an immediate action printed inside a trait, with no
-    card ref of its own for `c.grant_row` to hand over; and the
-    natural-20 rider is `cf:sorcerer-soul-nat20`.
+    **The trade is written now.** It is an immediate action printed inside
+    a trait, with no card ref of its own to decorate -- which is exactly
+    the reaction `c.arm_trigger` exists for: it charges the holder the
+    immediate the printed action costs, off the same `Encounter.spend`
+    budget a declared trigger pays from, so the trade and any other
+    immediate cannot both be taken in one round. Asked in the `when=`
+    gate rather than in the body, because the body runs after the budget
+    has already been spent.
+
+    Ending the resistance ends the resistance-gated half with it: the
+    ignore-resistance clause is printed "while this resistance is
+    active", so the four holds go together and the latch stops a second
+    hit buying a second bonus for a resistance that is already gone.
+    Within one fight it never comes back, the printed return being on a
+    rest.
+
+    One clause is still dropped: the natural-20 rider,
+    `cf:sorcerer-soul-nat20`.
     """
     if not c.build("f0s2"):
         return
@@ -370,11 +386,31 @@ def sorcerer_f0s2(c: Cast) -> None:
             "damage", c.dex_mod, until=When.ENCOUNTER, on=c.me,
             when=_arcane_power,
         )
+    sworn = []
     for kind in (DamageType.THUNDER, DamageType.LIGHTNING):
-        c.resist(5, kind, until=When.ENCOUNTER, on=c.me)
-        c.ignore_resistance(
+        sworn.append(c.resist(5, kind, until=When.ENCOUNTER, on=c.me))
+        sworn.append(c.ignore_resistance(
             5, kind, until=When.ENCOUNTER, on=c.me, when=_arcane_power
-        )
+        ))
+    spent = [False]
+
+    def trade(_ev: Hit) -> None:
+        spent[0] = True
+        for hold in sworn:
+            c.end_effect(hold, why="traded for the bonus to defences")
+        for defended in (AC, FORT, REF, WILL):
+            c.bonus(defended, 4, on=c.me, until=When.EONT, kind="power")
+
+    c.arm_trigger(
+        Hit, trade,
+        when=lambda ev: not spent[0]
+        and getattr(ev, "target", None) == c.me
+        and c.may(
+            "end the resistance for a bonus to all defences", default=False
+        ),
+        cost=ActionType.IMMEDIATE_INTERRUPT,
+        until=When.ENCOUNTER, on=c.me, label=f"{c.ref} trade",
+    )
 
 
 # -- the elementalist ------------------------------------------------------

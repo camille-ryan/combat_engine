@@ -112,10 +112,10 @@ from combat_engine.engine.events import (
     Bloodied,
     DamageApplied,
     Dropped,
+    ForcedMove,
     Hit,
     Miss,
     Moved,
-    MoveStart,
     PowerUsed,
     TurnStart,
 )
@@ -277,14 +277,20 @@ def _hit_me_since_my_turn(c: Cast) -> set[int]:
     return recent
 
 
-def _shoved_me(world: World, me: int, ev: Any) -> bool:
-    """Forced movement of this creature. `MoveStart` is the interrupt window --
-    by `MoveEnd` the creature has already been moved -- and it carries `kind_`
-    on every emission."""
-    return getattr(ev, "actor", None) == me and getattr(ev, "kind_", "") in (
-        "push",
-        "pull",
-        "slide",
+def _shoved_me_by_a_foe(world: World, me: int, ev: ForcedMove) -> bool:
+    """"An enemy uses a power that pushes, pulls or slides this creature."
+
+    `ForcedMove` is the only event a shove emits, and it is a cancellable
+    `Decision`, so an interrupt answers it before the creature has moved.
+    `movement.forced` calls `step` directly and never `MoveStart`, which is
+    announced inside walk, shift and teleport alone -- so a trigger declared
+    there could not fire on a shove at all. `source` is who did it, which is
+    the half that was said to be missing.
+    """
+    return (
+        ev.target == me
+        and ev.source != me
+        and team(world, ev.source) is not team(world, me)
     )
 
 
@@ -1140,24 +1146,25 @@ def m5805a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="an enemy pushes, pulls or slides it while it stands in its own zone",
     on=Trigger(
-        MoveStart, _shoved_me, "it is pushed, pulled or slid while in its own zone"
+        ForcedMove,
+        _shoved_me_by_a_foe,
+        "an enemy pushes, pulls or slides it while it stands in its own zone",
     ),
-    dropped=("MoveStart.by",),
 )
 def m5805a4(c: Cast) -> None:
-    """`MoveStart` is the interrupt window -- by `MoveEnd` the creature has
-    already been moved and is no longer in the zone the row is about -- and it
-    carries `kind_` on every emission, which is how the three printed kinds of
-    shove are told from a walk.
+    """`ForcedMove` is the window: a `Decision` emitted before the creature
+    has taken a step, so the zone the row is about is still underfoot, and it
+    names the shover in `source` -- which is "the triggering enemy".
 
-    What it does not carry is who did the shoving, so "the triggering enemy"
-    cannot be named and the swing goes to whoever is in reach instead. The
-    shift is exact: it stays inside the zone, which is what the card says.
+    The swing goes to that creature and not to whoever happens to be in
+    reach, so a push from range is answered by a basic attack that may well
+    find nobody; that is the card, and `c.basic` simply misses out of reach.
+    The shift is exact: it stays inside the zone.
     """
     body = _in_my_zone(c)
     if body is None:
         return
-    foe = next(iter(_adjacent_foes(c)), None)
+    foe = getattr(c.trigger, "source", None)
     if foe is not None:
         c.basic(on=foe)
     here = c.here

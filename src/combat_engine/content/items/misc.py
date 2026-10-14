@@ -135,7 +135,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
-from combat_engine.engine.components import Defences
+from combat_engine.engine.components import Defences, Powers
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.movement import overrun
 
@@ -571,6 +571,32 @@ def _restorable(c: Cast, usage: Usage) -> list[str]:
     for ref in c.expended(on=c.me):
         row = get(ref)
         if row is not None and row.usage is usage:
+            out.append(ref)
+    return out
+
+
+def _item_dailies(c: Cast, who: int, *, unspent: bool) -> list[str]:
+    """That creature's daily **item** blocks, spent or still in hand.
+
+    `c.expended` reads only the spent half and only ever for one creature
+    at a time, which is what the old marker asked a new argument for. The
+    complement is already a method: `Powers.available(ref)` is "known and
+    not used up", so one pass over `Powers.all` answers either side of
+    the question for any creature on the board.
+
+    `cls == ITEM` is what makes it an item power rather than a class one,
+    which is the narrowing the printed line carries and `_restorable`
+    does not make.
+    """
+    held = c.world.get(who, Powers)
+    if held is None:
+        return []
+    out = []
+    for ref in held.all:
+        row = get(ref)
+        if row is None or row.usage is not Usage.DAILY or row.cls != ITEM:
+            continue
+        if held.available(ref) is unspent:
             out.append(ref)
     return out
 
@@ -2126,17 +2152,46 @@ def i3398x1(c: Cast) -> None:
 
 
 @power("i3398p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.expended(unspent=)",))
+       reach=PERSONAL, target=SELF)
 def i3398p1(c: Cast) -> None:
-    """The half that gains plays. The half that pays is re-aimed:
-    `c.expend_row` takes a use off any creature by ref now, so spending
-    is no longer the hold -- what is missing is *which* ref. The cost
-    is "one ally loses a use of a daily magic item power", and nothing
-    lists the rows a **different** creature still has unspent.
-    `c.expended` reads the opposite set and only that one."""
-    spent = _restorable(c, Usage.DAILY)
-    if spent:
-        c.restore_use(spent[0], on=c.me)
+    """One ally pays a daily item use, and the wearer gets one back.
+
+    **Both halves play. `c.expended(unspent=)` was never needed**:
+    `Powers.available` is the complement already, per ref and for any
+    creature, so `_item_dailies` answers "what has that ally still got"
+    without a new argument on the verb that reads the spent set.
+    `c.expend_row` takes the use off by ref, which is the price.
+
+    The ally is chosen in the body rather than targeted, because the card
+    prints no Target line -- and only allies who have something to lose
+    are offered, so the row cannot be spent for nothing.
+
+    "Of the same level or lower" is measured against the block the ally
+    paid, which is the reading the sentence order gives: the cost is
+    named first and the gain is bounded by it. A block's level is its
+    item's, which is the row header's own number.
+    """
+    friends = [
+        who for who in c.allies()
+        if c.can_see(who) and _item_dailies(c, who, unspent=True)
+    ]
+    friend = c.choose(friends, "which ally loses a daily item use")
+    if friend is None:
+        return
+    theirs = c.choose(
+        _item_dailies(c, friend, unspent=True), "which of its daily item blocks"
+    )
+    if theirs is None or not c.expend_row(theirs, on=friend):
+        return
+    paid = get(theirs)
+    cap = paid.level if paid is not None else c.level
+    mine = [
+        ref for ref in _item_dailies(c, c.me, unspent=False)
+        if (row := get(ref)) is not None and row.level <= cap
+    ]
+    pick = c.choose(mine, "which of your daily item blocks comes back")
+    if pick is not None:
+        c.restore_use(pick, on=c.me)
 
 
 def _brought_low_under_mark(world: World, me: int, ev: Any) -> bool:

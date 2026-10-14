@@ -468,7 +468,7 @@ _BATTLERAGER_GROUPS = ("axe", "hammer", "mace", "pick")
     keywords=[Keyword.MARTIAL],
     requires=on_leg("battlerager"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("Keyword.INVIGORATING", "c.temp_hp(add=)"),
+    dropped=("Keyword.INVIGORATING",),
 )
 def fighter_talent_battlerager(c: Cast) -> None:
     """The talent that feeds on landing a blow.
@@ -498,25 +498,40 @@ def fighter_talent_battlerager(c: Cast) -> None:
     `cf:fighter-weaponmaster-f3s0`'s armour gate is, because another row can
     change what is worn.
 
-    Two clauses are dropped. The invigorating keyword does not exist, so
-    "you use an invigorating attack power and miss every target" has no
-    first half to test -- `Keyword.INVIGORATING` is the symbol five feats
-    already wait on. And "plus any temporary hit points normally granted by
-    the power" needs two pools to **add**, which is a printed exception to
-    the rule `resolve.temp_hp` keeps: it takes the larger and returns, so a
-    power granting 5 beside a Constitution modifier of 3 leaves 5 where the
-    card says 8. `c.temp_hp(add=)` is what that wants.
+    **"Plus any temporary hit points normally granted by the power" is the
+    `"temp_hp"` term**, which `resolve.temp_hp` reads off the receiver and
+    adds *before* its non-stacking comparison -- so a power granting 5 beside
+    a Constitution modifier of 3 now leaves 8 rather than 5. The term is
+    gated on the row that just landed, so only the swinging power's own grant
+    is raised; the direct grant below carries this row's ref and is therefore
+    not raised twice.
+
+    The latch keeps every melee or close power this creature has hit with
+    rather than only the last, which is wider than the card by any such row
+    granting a pool on a *miss* later in the fight. Nothing in the tree
+    prints that, and the alternative is a second watch to clear it.
+
+    One clause is dropped. The invigorating keyword does not exist, so "you
+    use an invigorating attack power and miss every target" has no first half
+    to test -- `Keyword.INVIGORATING` is the symbol five feats already wait
+    on.
     """
     me, world = c.me, c.world
+    fed_by: set[str] = set()
 
     def on_hit(ev: Hit) -> None:
         if ev.attacker != me:
             return
         dealt = get(ev.power)
         if dealt is not None and dealt.reach.kind in _MELEE_OR_CLOSE:
+            fed_by.add(ev.power)
             c.temp_hp(c.con_mod, on=me)
 
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=c.ref)
+    c.bonus(
+        "temp_hp", c.con_mod, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") in fed_by,
+    )
 
     if not _light_or_chain(c):
         return

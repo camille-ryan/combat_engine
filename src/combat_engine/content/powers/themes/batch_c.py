@@ -56,6 +56,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    EffectApplied,
     Healed,
     Health,
     Hit,
@@ -150,6 +151,34 @@ def _ally_i_enabled(world: World, me: int, ev: Any) -> bool:
         and spender is not None
         and spender != me
         and spender in allies(world, me)
+    )
+
+
+def _power_bonus_i_gave(world: World, me: int, ev: Any) -> bool:
+    """"You grant an ally a power bonus" -- p16053's other printed half.
+
+    `EffectApplied` says who laid the hold, on whom and under what label, and
+    nothing about what it carries. It does not have to: `Effects.apply` files
+    the effect and installs its modifiers **before** it announces, so the
+    hold being announced is already in `world.effects.of(ev.target)` and
+    `Mod.kind` is the word the card prints in front of "bonus".
+
+    Matched by label, which is the only thing tying the announcement to one
+    of the target's live effects -- without it a standing power bonus laid
+    three rounds ago would answer for every effect that lands afterwards.
+    """
+    from combat_engine.engine.query import allies
+
+    who = getattr(ev, "target", None)
+    if getattr(ev, "source", None) != me or who is None or who == me:
+        return False
+    if who not in allies(world, me):
+        return False
+    label = getattr(ev, "label", "")
+    return any(
+        eff.label == label
+        and any(mod.kind == "power" and mod.value > 0 for _on, mod in eff.mods)
+        for eff in world.effects.of(who)
     )
 
 
@@ -813,28 +842,26 @@ def p16052(c: Cast) -> None:
 @power("p16053", level=2, cls="x7_942", usage=DAILY, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.DIVINE],
        trigger="you grant an ally a power bonus or a healing surge",
-       on=Trigger(SurgeSpent, _ally_i_enabled,
-                  "you enable an ally to spend a healing surge"),
-       dropped=("EffectApplied.mods",))
+       on=(Trigger(SurgeSpent, _ally_i_enabled,
+                   "you enable an ally to spend a healing surge"),
+           Trigger(EffectApplied, _power_bonus_i_gave,
+                   "you grant an ally a power bonus")))
 def p16053(c: Cast) -> None:
-    """The printed trigger is an **or** -- "you grant an ally a power bonus
-    **or** enable him or her to spend a healing surge" -- and the second half
-    is declarable now, so the row fires where it could not before.
+    """The printed trigger is an **or**, and both halves are declared.
 
     `SurgeSpent.source` is who caused the spend (#386), so "an ally I
     enabled" is a spender on my side whose surge I am the source of. A surge
     somebody pays on their own account has itself as the source.
 
-    **Re-aimed off `EffectApplied.kind` first.** `Event.kind` is a property
-    on the base class returning the event's own type name, so that marker
-    read as *arrived* on every event there is while the gap stayed wide open.
-    That half is still open and is now the only marker: the announcement
-    carries a source, a target, a duration and a label, and nothing about the
-    modifiers the effect holds -- so "a **power** bonus" cannot be told from
-    any other kind.
-
-    So this is `dropped=` rather than `todo=`: one of the two printed
-    triggers works and the Effect below has something to hang on.
+    **The other half reads the live effect, not the announcement.**
+    `EffectApplied` carries a source, a target, a duration and a label and
+    nothing about the modifiers -- but `Effects.apply` files the effect and
+    installs its mods *before* it announces, so `world.effects.of(ev.target)`
+    holds the thing being announced and `Mod.kind == "power"` is the printed
+    word. See `_power_bonus_i_gave`. (An earlier marker named
+    `EffectApplied.kind`, which resolves against `Event.kind` -- a property
+    on the base class returning the event's own type name -- so it read as
+    arrived on every event there is.)
 
     All three Effect clauses are sayable. The third -- "the ally's healing
     surge value is reduced by one-half your level" -- is a modifier on
@@ -842,7 +869,11 @@ def p16053(c: Cast) -> None:
     is cashed, so it reaches the ally's second wind and its death-save
     twenty as well as the next surge a leader hands it."""
     ev = c.trigger
+    # `SurgeSpent` names the spender in `actor`; `EffectApplied` names who
+    # the hold landed on in `target`. Either way it is the ally.
     ally = getattr(ev, "actor", None)
+    if ally is None:
+        ally = getattr(ev, "target", None)
     for defence in DEFENCES:
         c.bonus(defence, 2, kind="power", on=c.me, until=When.ENCOUNTER)
     c.temp_hp(c.surge_value(), on=c.me)
@@ -939,20 +970,47 @@ def p16111(c: Cast) -> None:
 
 @power("p16112", level=10, cls="x7_951", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF, keywords=[Keyword.ELEMENTAL],
-       dropped=("query.flanked()", "c.spread_advantage()"))
+       dropped=("c.spread_advantage()",))
 def p16112(c: Cast) -> None:
-    """The aura is real and both riders on it are not.
+    """"You and each ally in the aura grant combat advantage for being
+    flanked **only if** you and every ally in the aura are flanked" is
+    `c.cannot_be_flanked(when=)`, whose own docstring offers "unless both of
+    you are flanked" as the printed shape it exists for. It suppresses the
+    flanking branch and leaves hiding and an outright grant alone, which is
+    what the card narrows.
 
-    The first asks whether *every* member inside is flanked, which needs the
-    question asked of a creature rather than of an attacker-target pair.
+    "Is this creature flanked" is `any(query.flanked_by(w, foe) for foe in
+    enemies)` -- the pair function asked once per enemy, which is what was
+    taken for a missing `query.flanked()`.
 
-    The second is re-aimed off `c.grants_advantage(when=)`. That verb exists
-    now and is not this: the card does not narrow a grant, it **copies** one --
-    an enemy already granting advantage to any member of the aura grants it to
-    all of them. The condition being copied is whatever `has_combat_advantage`
-    happened to answer for somebody else, which nothing can ask on another
-    creature's behalf and then re-publish."""
-    c.aura(5, until=When.ENCOUNTER, on=c.me)
+    The gate is live rather than latched, on both counts: the aura's
+    membership changes as people walk, and so does who is flanked. It is laid
+    on every ally and not only the ones standing inside at the moment of
+    casting, and `ctx["target"]` -- the creature being asked to grant -- is
+    tested for membership there.
+
+    **Dropped clause:** "when one enemy in the aura grants combat advantage
+    to you or an ally, that enemy grants it to you and each ally". The card
+    does not narrow a grant, it **copies** one, and what is copied is
+    whatever `has_combat_advantage` happened to answer for somebody else --
+    which nothing can ask on another creature's behalf and then re-publish."""
+    ring = c.aura(5, until=When.ENCOUNTER, on=c.me)
+    world, me = c.world, c.me
+
+    def flanked(who: int) -> bool:
+        return any(query.flanked_by(world, who, foe) for foe in c.enemies())
+
+    def only_if_all_are(ctx: dict[str, Any]) -> bool:
+        inside = set(world.zones.occupants(ring))
+        if ctx.get("target") not in inside:
+            return False
+        members = [w for w in (me, *c.allies()) if w in inside]
+        return not all(flanked(w) for w in members)
+
+    for member in (me, *c.allies()):
+        c.cannot_be_flanked(
+            on=member, until=When.ENCOUNTER, when=only_if_all_are
+        )
 
 
 # ---------------------------------------------------------------- x7_982 --

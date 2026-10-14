@@ -355,23 +355,34 @@ _origin("r4", "fey", instead_of="natural")
 
 
 @power("rt:r4-t3", level=0, cls="", usage=AT_WILL,
-       action=ActionType.NONE, reach=PERSONAL, target=SELF,
-       dropped=("c.grants_in(unless=)",))
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
 def rt_r4_t3(c: Cast) -> None:
     """An aura and not a snapshot: the printed line is about standing
     within 5 squares, so it has to end when an ally walks out, which is
     what `c.grants_in` says and a plain `c.bonus` cannot.
 
-    "Non-<race> allies" is dropped, and **not for want of a race on the
-    creature** -- `chargen.Character.choices` carries `race:<ref>` on
-    `Build.choices`, so `c.build("race:r4", on=ally)` is the question.
-    It is that `c.grants_in` takes a side and no predicate: the exclusion
-    has a subject and nowhere to sit. `c.bonus(on=ally, when=...)` laid
-    per ally is not a substitute -- it would snapshot the allies standing
-    there when the trait was armed and miss anything summoned later.
+    **The exclusion is written, and `c.grants_in(unless=)` was a false
+    marker.** The note here said the verb "takes a side and no predicate",
+    and `when=` is on the signature: `_while_inside` hands it to `c.bonus`
+    per beneficiary, so the gate is read where every other gated bonus is.
+
+    The subject the exclusion needs arrives in the context rather than in
+    the closure, which is why one lambda serves every ally:
+    `skills.modifier` builds `{"actor", "skill", "target"}` and `actor` is
+    whoever is making the check. Both paths through it carry the key, so
+    the passive score is gated too -- which matters here, since this skill
+    is read without a roll more often than with one.
     """
+    def not_kin(ctx: dict[str, Any]) -> bool:
+        # `ctx.get` and an explicit None test: `c.race_of(on=None)` falls
+        # through to the caster, who *is* r4, so a missing key would read
+        # as "kin" and deny the bonus to everybody.
+        who = ctx.get("actor")
+        return who is not None and c.race_of(on=who) != "r4"
+
     c.grants_in(c.aura(5, label=c.ref, until=_HOLDS),
-                "skill:perception", 1, side="ally", kind="racial")
+                "skill:perception", 1, side="ally", kind="racial",
+                when=not_kin)
 
 
 @power("rt:r4-t4", level=0, cls="", usage=AT_WILL,

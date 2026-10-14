@@ -84,7 +84,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.query import allies, has_combat_advantage
 
-from .styles import hit_with_one_of, used_one_of
+from .styles import among, hit_with_one_of, used_one_of
 
 #: The narrower half of the extra damage: *when* it applies is the
 #: `applies=` callable closed over inside `strikers.extra_damage`, and a
@@ -130,6 +130,24 @@ def _holding(c: Cast, *groups: str) -> bool:
         return False
     ranged = [gear.ranged] if gear.ranged is not None else []
     return any(w.group in groups for w in (*gear.melee, *ranged))
+
+
+def _shot_range(c: Cast, *groups: str) -> int:
+    """How far the thing in hand actually shoots, in squares. 0 if nothing.
+
+    The **normal** range and not the long one: a long shot is legal and
+    takes the -2 `resolve._long_range` charges, and that penalty is read
+    off the row's own printed range line -- which a melee row stretched
+    by a `"reach"` modifier has not got. So the conservative half of the
+    two is the only one that can be charged correctly.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is None:
+        return 0
+    for w in gear.held:
+        if w.group in groups and w.ranged is not None:
+            return w.ranged[0]
+    return 0
 
 
 def _holding_ref(c: Cast, *refs: str) -> bool:
@@ -474,25 +492,62 @@ def f2362(c: Cast) -> None:
 
 @power("f2338", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.as_ranged(ref)",),
-       trigger="you attack with a bow or a crossbow",
-       on=Trigger(AttackDeclared, lambda w, me, ev: ev.attacker == me,
-                  "you attack", window=Window.BEFORE))
+       dropped=("c.ignore_requirement(ref)",),
+       trigger="you attack with a bow or a crossbow")
 def f2338(c: Cast) -> None:
-    """No reprisal from the creature you are shooting at.
+    """No reprisal from the creature you are shooting at, and the named
+    melee rows carry to the bow's range.
 
-    Declared `BEFORE`, for the reason `ranger_b.f2337` is: the
-    provocation happens as the shot is taken, and an `AFTER` window
-    hands over the exemption once the reprisal has been made.
-    `from_=` names the one creature the card exempts, which is not the
-    same as not provoking at all. `AT_WILL` for the reason f2362 is.
+    A trait with a watcher in it rather than a declared trigger, which is
+    the shape `ranger_b.f2337` already has and which the second benefit
+    forces. A melee row's reach is read where the *area* is worked out --
+    `dsl.area_of` asks `_stretched` before anybody has chosen a target --
+    so a modifier laid from an `AttackDeclared` body arrives after the one
+    question it answers, and the row could never be aimed past a square.
+    Armed at the start of the fight, it stands while the area is offered.
 
-    The second benefit is two clauses and both are gaps: turning a named
-    melee row into a ranged one for this use, and letting a crossbow
-    stand in for the light blade it asks for.
+    The watch is `Window.BEFORE` for the reason `f2337`'s is: the
+    provocation happens as the shot is taken, and an `AFTER` window hands
+    over the exemption once the reprisal has been made. `from_=` names
+    the one creature the card exempts, which is not the same as not
+    provoking at all.
+
+    `c.as_ranged` *is* the second benefit -- a `"reach"` bonus -- and the
+    one thing it cannot do is narrow to a list of rows. `_stretched` is
+    handed a context carrying `power`, so `styles.among` is that filter,
+    and the holding question is asked in the same gate rather than at
+    arming, for the reason `ranger_b._wields` exists: a rogue who sheathes
+    the bow stops having the benefit.
+
+    No melee gate, unlike `c.as_ranged`'s own: `_stretched` reads
+    `"reach"` **only** when the range kind is melee -- a ranged line reads
+    `"range"` and a spread reads `"blast_size"` -- so the kind test there
+    can never be false and is not copied here.
+
+    Dropped: shooting a crossbow at a row whose Requirement prints a
+    light blade. `Power.requires` is asked by `dsl.usable` and nothing
+    standing on the creature relaxes it.
     """
-    if _holding(c, "bow", "crossbow"):
-        c.no_provoke(from_=c.trigger.target, on=c.me, until=When.EOT)
+    me = c.me
+    far = _shot_range(c, "bow", "crossbow")
+    if far:
+        c.bonus(
+            "reach", far - 1, on=me, until=When.ENCOUNTER, stacks=False,
+            when=lambda ctx: (
+                among("p4488", "p1387")(ctx)
+                and _holding(c, "bow", "crossbow")
+            ),
+        )
+
+    def exempt(ev: Any) -> None:
+        if ev.attacker != me or not _holding(c, "bow", "crossbow"):
+            return
+        c.no_provoke(from_=ev.target, on=me, until=When.EOT)
+
+    c.watch(
+        AttackDeclared, exempt, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE,
+    )
 
 
 @power("f2354", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -1422,37 +1422,95 @@ def f3620(c: Cast) -> None:
 
 @power("f3621", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.instead_of_surge()", *FEATURE))
+       dropped=FEATURE)
 def f3621(c: Cast) -> None:
-    """The surge half plays.
+    """Both surge halves play. What is left is the third clause, which
+    unwinds a class feature named in prose -- there is nothing to unwind.
 
-    Re-aimed off `c.opt_in`: putting the choice to the ally is sayable
-    now -- `f3619` does it with `c.may` inside a watcher -- and the half
-    that is not is the word *instead*. The surge the ally gives up is the
-    one `p929`'s own body is about to let it spend, and nothing lets a
-    watcher stand in the way of another row's spend. The third clause
-    unwinds a class feature named in prose, which there is nothing to
-    unwind."""
+    The word *instead* was said to be unsayable because nothing lets a
+    watcher stand in the way of another row's spend. It does:
+    `SurgeSpent` is a `Decision`, so a `Window.BEFORE` watch refuses the
+    spend the divine power was about to allow -- `c.surge` returns 0 and
+    heals nobody -- and the printed trade is then paid out by hand, the
+    ally losing the surge for nothing and this character gaining one.
+
+    `ev.source` is the caster `c.surge` stamps, which is what narrows the
+    watch to a surge one of this character's own powers offered. The
+    keyword gate reads the stamped `ev.power`, not a ref: the clause
+    names a class of powers, not one.
+
+    `default=False`, as `f3619` has it and for the same reason: the choice
+    is the ally's, giving up the healing costs the ally and buys this
+    character a surge, and a headless engine takes the first option. So
+    the clause is live and declined in an unattended fight -- which is
+    the conservative half, not the inert one.
+    """
+    me = c.me
     _surge_when_it_lands(
         c, lambda p: Keyword.DIVINE in p.keywords and p.usage is ENCOUNTER
     )
+    traded: list[bool] = []
+
+    def offered(ev: Any) -> None:
+        p = get(ev.power)
+        if (
+            traded
+            or ev.source != me
+            or ev.actor == me
+            or p is None
+            or Keyword.DIVINE not in p.keywords
+        ):
+            return
+        if not c.may("lose the surge instead of spending it",
+                     who=ev.actor, default=False):
+            return
+        traded.append(True)
+        ev.cancel("lost instead of spent")
+        c.spend_surge(on=ev.actor)
+        c.regain_surge(on=me)
+
+    c.watch(SurgeSpent, offered, until=When.ENCOUNTER, window=Window.BEFORE)
 
 
 @power("f3622", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.regain_surge(until=)",))
+       reach=PERSONAL, target=SELF)
 def f3622(c: Cast) -> None:
     """Two printed clauses with two separate "once" limits, so a trait
     with two watchers rather than a triggered row with one shared budget.
-    What is dropped is the surge expiring unspent at the end of the
-    fight -- a surge is a plain number and nothing holds one on loan."""
+
+    No number has to be held on loan for the surge expiring unspent. The
+    hold that notices the spending is a `When.ENCOUNTER` watch, and
+    `on_end` fires for every end alike -- the fight finishing included --
+    so the expiry is that hold's own teardown: nothing spent after the
+    grant means the surge goes again. A surge is fungible, so *any* spend
+    after the grant is the printed "spend the surge".
+
+    "The first time you are bloodied" is a flag of its own, because a
+    creature healed above half and bloodied again crosses the line twice.
+    """
     me = c.me
     _surge_when_it_lands(
         c, lambda p: Keyword.MARTIAL in p.keywords and p.usage is ENCOUNTER
     )
+    bloodied: list[bool] = []
 
     def bled(ev: Any) -> None:
-        if ev.actor == me:
-            c.regain_surge(on=me)
+        if ev.actor != me or bloodied:
+            return
+        bloodied.append(True)
+        c.regain_surge(on=me)
+        kept = [True]
+
+        def spent(sev: Any) -> None:
+            if sev.actor == me:
+                kept[0] = False
+
+        def expire() -> None:
+            if kept[0]:
+                c.spend_surge(on=me)
+
+        hold = c.watch(SurgeSpent, spent, until=When.ENCOUNTER, on=me)
+        hold.on_end.append(expire)
 
     c.watch(Bloodied, bled, until=When.ENCOUNTER)
 

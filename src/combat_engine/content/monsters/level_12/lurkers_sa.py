@@ -2054,7 +2054,6 @@ def m2730a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=NO_TARGET,
-    dropped=("c.drag(grabbed)",),
 )
 def m2730a1(c: Cast) -> None:
     """The flight and the swing play, and so does the grab.
@@ -2062,11 +2061,27 @@ def m2730a1(c: Cast) -> None:
     Declared with no target: the creature it lands beside is chosen after the
     movement, not before the body runs.
 
-    "It can try to move the grabbed target as part of its next move action.
-    If it succeeds it can move at full speed, pulling the target with it" has
-    nothing to call. `c.shift(share=True)` drags for one shift and this is a
-    full move action with a contest in front of it; `c.drag(grabbed)` is the
-    gap.
+    **The drag is written, and it needed no engine verb.** `Moved` is the
+    only movement event carrying `from_`, and that vacated square is
+    exactly where the captive has to end up for the hold to survive the
+    step -- a grab breaks on distance, so sliding it in behind is the
+    printed "pulling the target with it" rather than a re-grab. The same
+    clause is written twice already in the tree, which is what says this is
+    a shape and not a gap; `c.shift(share=True)` is the thing that could
+    not say it, being one shift rather than a whole move.
+
+    The pool is re-read on every step, so a captive that got away stops
+    being dragged without the watch having to notice.
+
+    **The contest in front of it is not rolled, and that is not this row's
+    clause.** Moving a grabbed creature is a general grab rule and nothing
+    in `movement` charges anybody for it -- the two other rows of this
+    shape drag freely too -- so rolling one here alone would make this
+    monster the only creature on the board that pays.
+
+    Held to the end of its next turn, which is the clock the printed "its
+    next move action" sits inside; the engine has no duration that ends
+    with one move action.
     """
     me = c.me
     _recharge_on(
@@ -2080,8 +2095,17 @@ def m2730a1(c: Cast) -> None:
     if victim is None:
         return
     c.basic(on=victim)
-    if c.landed:
-        c.grab(on=victim)
+    if not c.landed:
+        return
+    c.grab(on=victim)
+
+    def along(ev: Moved) -> None:
+        if ev.actor != me:
+            return
+        for caught in c.grabbing(of=me):
+            c.slide(0, on=caught, to=ev.from_)
+
+    c.watch(Moved, along, until=When.EONT, on=me, label=c.ref)
 
 
 @power(
@@ -2356,16 +2380,26 @@ def m3822a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("1d4", 5),
-    dropped=("c.escape_penalty()",),
 )
 def m3822a3(c: Cast) -> None:
-    """The blow and the grab play. The -2 does not: a grab is a relation and
-    an escape attempt takes a one-off bonus at the moment it is made, so
-    there is nowhere to hang a standing modifier on the checks against this
-    creature's grabs."""
+    """The blow, the grab, and the -2 all play.
+
+    **There was somewhere to hang it after all.** `escape.attempt` adds a
+    `grab_defence` modifier read off the *grabber* to the number the check
+    must beat, which is the same arithmetic from the other end: two points
+    harder to beat is a two-point penalty to beating it. The key is there
+    for exactly this sentence -- a rider on the hold rather than on the
+    holder in general -- and `items/hands.py` and one level-4 brute already
+    lay it.
+
+    `stacks=False`, because the hold is a floor and this is an at-will
+    attack line: a monster that swings three times would otherwise be
+    carrying +6 by the end of the fight.
+    """
     if c.strike():
         c.hit()
         c.grab()
+        c.bonus("grab_defence", 2, on=c.me, until=When.ENCOUNTER, stacks=False)
 
 
 @power(

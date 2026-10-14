@@ -2399,18 +2399,31 @@ def i3188x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.killed_this_turn()",),
+    dropped=("c.slay()",),
 )
 def i3188p1(c: Cast) -> None:
     """The reckoning falls at the **second** turn ending the caster sees,
     because the row is used on his own turn and the first one is that
-    turn's. Dropping below 1 hit point kills outright on the card; the
-    damage is dealt and the outright death is the clause nothing says.
+    turn's.
 
-    **Re-pointed.** The row's own death is `c.kill` and that exists now.
-    The condition does not: "if you do not kill a creature before the end
-    of your next turn" needs to know whether the wielder killed anything,
-    and nothing keeps that tally.
+    **The old marker was false: the tally it asked for is in this body.**
+    It said nothing records whether the wielder killed anything, and the
+    `Dropped` watcher below has been appending to `killed` the whole
+    time -- an encounter-clocked watch on the row's own use, which is
+    narrower and more exact than a general "did this creature kill this
+    turn" reader would be. Nothing had to be written and nothing is owed
+    for that clause.
+
+    **What is still owed is the death, and `c.kill` does not cover it.**
+    The card reads "if this damage drops you below 1 hit point, you die",
+    and that is outright death at a threshold of 0. `c.kill` sets hit
+    points to 0 and routes through `resolve._check_down`, which consults
+    `Health.dying_at` -- negative for a character -- so it lays the dying
+    conditions instead, and it refuses outright for a creature already at
+    or below 0, which is exactly where the surge-value blow leaves one.
+    Nothing in the surface drives a creature past `dying_at`, and a body
+    writing `Health.hp` by hand would walk round the engine's one path
+    out of zero. So the clause keeps a marker of its own.
     """
     c.bonus("attack", 2, kind="item", on=c.me, until=When.EONT, once=True)
     c.bonus(

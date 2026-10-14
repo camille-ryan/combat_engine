@@ -1705,21 +1705,34 @@ def i1856p1(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    dropped=("c.bonus(ends_with=)",),
 )
 def i1950p1(c: Cast) -> None:
-    """"Target's save ends both" ties the ally's bonus to a saving throw
-    somebody else rolls, and a duration cannot name another creature's
-    save. The bonus runs to the end of the fight instead, which is the
-    clause that is dropped."""
+    """"Target's save ends **both**", and a duration cannot name another
+    creature's saving throw -- so the bonus hangs on the encounter clock and
+    is taken off when the target's save lands.
+
+    `SavingThrow` carries `against`, which is the hold's own `str`, so the
+    throw that ends the penalty is told from any other save the target rolls
+    -- an ongoing burn, somebody else's daze. `saved` is read at the AFTER
+    window, which is after the roll and before `Effects.save` acts on it.
+    """
     foe = c.target
     if foe is None:
         return
-    c.penalty("save", 2, on=foe, until=When.SAVE_ENDS)
+    hold = c.penalty("save", 2, on=foe, until=When.SAVE_ENDS)
     friends = [c.me, *c.within(10, side="ally")]
     who = c.choose(friends, "gains the bonus to saving throws")
-    if who is not None:
-        c.bonus("save", 2, kind="power", on=who, until=When.ENCOUNTER)
+    if who is None or hold is None:
+        return
+    boon = c.bonus("save", 2, kind="power", on=who, until=When.ENCOUNTER)
+    if boon is None:
+        return
+
+    def ends_both(ev: SavingThrow) -> None:
+        if ev.actor == foe and ev.saved and ev.against == str(hold):
+            c.end_effect(boon, why=f"{c.ref}: the target saved")
+
+    c.watch(SavingThrow, ends_both, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(

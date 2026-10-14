@@ -971,12 +971,21 @@ def i2341p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy",
     on=HIT_BY_ME,
-    dropped=("c.clear_shrouds()",),
 )
 def i2407p1(c: Cast) -> None:
-    """The shrouds are laid on the new enemy but not lifted off the old
-    one: `c.spend_shrouds` invokes them, which is a different thing, and
-    nothing simply removes them."""
+    """Moves the whole count from the enemy struck to another one.
+
+    **Lifting them off the old victim needs no verb, and that is the
+    correction.** `Shrouds` is one `on` and one `count` on the *caster*,
+    not an effect on the victim, and `c.shroud` zeroes the count whenever
+    it is aimed at somebody new -- which is the printed rule that only one
+    creature carries them at a time. So the first call of the loop below
+    has already taken them off, and the old marker asked for a verb whose
+    whole job was done by construction.
+
+    Read before the loop, because the first `c.shroud` is what resets the
+    count the loop is counting out. The cap is `c.shroud`'s own, which is
+    the card's "up to the maximum number allowed"."""
     foe = _struck(c)
     if foe is None:
         return
@@ -1009,7 +1018,6 @@ def i2601x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("AttackDeclared.origin",),
 )
 def i2605p1(c: Cast) -> None:
     """`c.widen_areas` is the wrong verb -- it grows the burst, catching a
@@ -1022,23 +1030,48 @@ def i2605p1(c: Cast) -> None:
     row's target loop, so an appended creature is one its body is then
     called for.
 
-    What is dropped is the shape of the reach: the event names an
-    attacker, a target, a power and a defence, and not the square the
-    burst was centred on -- the same field `i1832x1` wants off `Hit`. So
-    "adjacent to the burst" is read as "adjacent to somebody in it",
-    which misses a creature standing beside an empty edge square.
-    `c.add_target` refuses a creature already in the list, so the loop
-    simply tries the next one.
+    **The shape of the area is read now, and it needed no event field.**
+    This used to be "adjacent to somebody in the burst", because the event
+    names an attacker, a target, a power and a defence and not the square
+    the area was centred on -- and that reading missed a creature standing
+    beside an empty edge square. The centre was never missing: it is
+    `Cast.origin`, and `running_below` already hands back the declaring
+    `Cast` to reach it. So `dsl.area_of` gives the squares the burst or
+    blast actually covers, the rim is one `spread` away, and "adjacent to
+    the burst" is the printed sentence rather than an approximation of it.
+
+    A close burst ignores the centre, which is right: `area_of` spreads it
+    from the caster's own square, so this is one call for all three reach
+    kinds.
+
+    Enemies only, where the card says "1 creature". `c.add_target` appends
+    to the outer power's list and that power then swings at whoever is on
+    it, so offering an ally is a choice no side would make and the engine
+    would make silently.
 
     Paragon's second and third creatures are out of scope."""
+    from combat_engine.engine.dsl import area_of, running_below
+
     spent: list[int] = []
 
     def widen(ev: AttackDeclared) -> None:
         if spent or ev.attacker != c.me:
             return
-        if _reach_of(ev.power) not in ("area_burst", "close_blast", "close_burst"):
+        aimed = get(ev.power or "")
+        if aimed is None or aimed.reach is None:
             return
-        for foe in c.within(1, of=ev.target, side="enemy"):
+        if aimed.reach.kind not in ("area_burst", "close_blast", "close_burst"):
+            return
+        below = running_below(c)
+        covered = area_of(
+            c.world, ev.attacker, aimed, getattr(below, "origin", None),
+        )
+        if not covered:
+            return
+        rim = spread(covered, 1) - covered
+        for foe in c.enemies():
+            if not (query.squares(c.world, foe) & rim):
+                continue
             if c.add_target(foe):
                 spent.append(1)
                 return
@@ -2847,15 +2880,26 @@ def i1973p1(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     trigger="you take psychic damage from an attack",
     on=Trigger(DamageApplied, _psychic_on_me, "you take psychic damage"),
-    dropped=("c.suffering_save_ends()",),
 )
 def i1973p2(c: Cast) -> None:
-    """`c.suffering` returns everyone carrying an effect of mine and cannot
-    be narrowed to the save-ends ones, so a few enemies under a shorter
-    hold are caught too."""
-    foes = set(c.enemies())
-    for who in c.suffering():
-        if who in foes:
+    """Pays out to every enemy under one of my save-ends holds.
+
+    **Narrowed now, and no verb was needed.** `c.suffering` answers "an
+    effect of mine" and cannot be told to mean only the ones a save can
+    end, so this row used to catch enemies under a shorter hold as well.
+    But the duration is on the `Effect` itself -- `durations` derives its
+    own `save_ends` flag as `when is When.SAVE_ENDS` -- so walking
+    `world.effects.of` and reading `eff.when` answers the printed clause
+    exactly, the same walk `i1341x1` makes over a creature's holds.
+
+    `eff.source` is asked as well, because the card says *your* effects
+    and a creature can be under two casters' holds at once."""
+    me = c.me
+    for who in c.enemies():
+        if any(
+            eff.source == me and eff.when is When.SAVE_ENDS
+            for eff in c.world.effects.of(who)
+        ):
             c.flat(5, dtype=DamageType.PSYCHIC, on=who)
 
 

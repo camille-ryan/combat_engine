@@ -77,6 +77,7 @@ from combat_engine.engine import (
     Size,
     SkillCheck,
     Stats,
+    Summoned,
     Target,
     Trigger,
     TurnEnd,
@@ -690,22 +691,38 @@ PRIMAL_POLYMORPH = [Keyword.PRIMAL, Keyword.POLYMORPH]
     target=SELF,
     keywords=PRIMAL_POLYMORPH,
     once_per_round=True,
-    dropped=("c.form(on_revert=)", "c.form(keeps_gear=)"),
+    dropped=("c.form(keeps_gear=)",),
 )
 def p14192(c: Cast) -> None:
-    """Tiny, unable to attack, climbing at half speed. The shift paid on
-    changing *back* hangs on the reversion, which `c.form` has no hook for,
-    and the equipment clause -- worn gear keeps working, shields and item
-    powers do not -- is a second thing it cannot carry."""
-    c.form(
-        modes={"climb": max(1, c.speed_of(c.me) // 2)},
+    """Tiny, unable to attack, climbing at half speed.
+
+    The shift paid on changing *back* wanted no `on_revert=`: `c.form`
+    hands its `Effect` back and already appends to that effect's `on_end`
+    itself, for the movement modes it grants, so the reversion is a hook
+    this row can reach. It over-fires in one way and only one -- the
+    encounter clock ending the form also pays the shift -- which is a
+    square at the end of a fight.
+
+    Still dropped: the equipment clause. Worn gear goes on working while
+    shields and item powers do not, and nothing suspends half of what is
+    held.
+    """
+    me = c.me
+    shape = c.form(
+        modes={"climb": max(1, c.speed_of(me) // 2)},
         until=When.ENCOUNTER,
         revert=MINOR,
         label=c.ref,
     )
-    c.resize(Size.TINY, on=c.me, until=When.ENCOUNTER)
-    c.cannot_attack(on=c.me, until=When.ENCOUNTER)
-    c.bonus("skill:stealth", 4, on=c.me, until=When.ENCOUNTER)
+    # Named, because `on_end` wants `() -> None` and `c.shift` answers with
+    # whether it moved.
+    def step_off() -> None:
+        c.shift(1, who=me)
+
+    shape.on_end.append(step_off)
+    c.resize(Size.TINY, on=me, until=When.ENCOUNTER)
+    c.cannot_attack(on=me, until=When.ENCOUNTER)
+    c.bonus("skill:stealth", 4, on=me, until=When.ENCOUNTER)
 
 
 @power(
@@ -1028,7 +1045,6 @@ def _guard_of(c: Cast) -> int | None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=("c.no_turn(who)", "loader.spawn(x10_57)"),
 )
 def p15885(c: Cast) -> None:
     """`c.cast_from` is the printed "you make the roll using your
@@ -1040,16 +1056,36 @@ def p15885(c: Cast) -> None:
     "your healing surge value" and its defences are the summoner's, which is
     what the block says and what `spawn_associate` reads.
 
-    The half still missing is that the guard has no actions of its own and
-    `c.summon` puts it in the initiative order."""
-    guard = c.summon("x10_57")
-    if not guard:
+    **"The guard lacks actions of its own" is the spawn, not a verb.**
+    `c.no_turn(who)` asked for something `c.summon` was undoing one line
+    later: `c.summon`'s own docstring says `loader.spawn` alone makes an
+    entity that is not in the initiative order, and then it joins the
+    encounter -- which is the half this card does not want. So the summon is
+    `spawn_associate` directly, with no `join`, and nothing has to take a
+    turn away afterwards. `Summoned` is announced by hand because `c.summon`
+    was the only path that emitted it, and a row whose whole Effect is this
+    would otherwise leave no trace in the log.
+
+    Instinctive effects are unharmed by standing outside the order:
+    `turns._uncommanded` runs at the **summoner's** turn end."""
+    from combat_engine.content.loader import spawn_associate
+
+    me = c.me
+    here = query.squares(c.world, me)
+    free = [
+        sq
+        for sq in sorted(grid.spread(here, 5) - here)
+        if c.world.grid.passable(sq) and c.world.grid.occupant(sq) is None
+    ]
+    if not free:
         return
-    c.cast_from(c.me, on=guard, until=When.ENCOUNTER)
+    guard = spawn_associate(c.world, "x10_57", free[0], of=me)
+    c.world.bus.emit(Summoned(actor=me, summon=guard, ref=c.ref))
+    c.cast_from(me, on=guard, until=When.ENCOUNTER)
 
     def toll(ev: Dropped) -> None:
         if ev.actor == guard:
-            c.spend_surge(on=c.me)
+            c.spend_surge(on=me)
 
     c.watch(Dropped, toll, until=When.ENCOUNTER, once=True)
 
@@ -1860,15 +1896,35 @@ def p16632(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.STANCE],
-    dropped=("c.deals(untyped_only=)",),
 )
 def p16633(c: Cast) -> None:
-    """`c.deals` is an override of the whole type, which is more than the
-    card grants -- it recolours a weapon attack that already named one."""
+    """`c.deals` was always the wrong door and `f3404`'s docstring says so:
+    it overrides the whole type, where this card recolours only what a
+    weapon attack left **untyped**. `DamageRolled.dtype` is the door --
+    mutable, and `resolve.deal_damage` reads it back off the event after the
+    emit -- which is where `f3404` and `i1431x1` both retype a blow.
+
+    "Can change" is asked once, as the stance is taken, for the reason
+    `f3404` gives: untyped damage is never resisted and necrotic often is,
+    so a single answer is what keeps the stance meaning one thing for as
+    long as it stands.
+    """
+    me = c.me
     c.stance(label=c.ref)
-    c.phasing(on=c.me, until=When.STANCE)
-    c.resist(10, DamageType.NECROTIC, on=c.me, until=When.STANCE)
-    c.deals(DamageType.NECROTIC, on=c.me, until=When.STANCE)
+    c.phasing(on=me, until=When.STANCE)
+    c.resist(10, DamageType.NECROTIC, on=me, until=When.STANCE)
+    if not c.may("deal necrotic damage instead of untyped", who=me):
+        return
+
+    def recolour(ev: DamageRolled) -> None:
+        if ev.source != me or ev.dtype is not DamageType.UNTYPED:
+            return
+        row = REGISTRY.get(str(ev.detail or ""))
+        if row is not None and Keyword.WEAPON in row.keywords:
+            ev.dtype = DamageType.NECROTIC
+
+    c.watch(DamageRolled, recolour, on=me, until=When.STANCE,
+            window=Window.BEFORE, label=f"{c.ref} necrotic")
 
 
 # -- x7_867 -----------------------------------------------------------------

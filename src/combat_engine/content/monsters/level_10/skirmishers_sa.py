@@ -51,6 +51,8 @@ printed ref.
 
 from __future__ import annotations
 
+from typing import Any
+
 from combat_engine.content.monsters.level_01.skirmishers_sa import _moved_far
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
@@ -259,23 +261,47 @@ def _m1032_leaving_reach(world: World, me: int, ev: MoveStart) -> bool:
     keywords=[Keyword.FEAR, Keyword.NECROTIC],
     trigger="an enemy moves out of its reach",
     on=Trigger(MoveStart, _m1032_leaving_reach, "an enemy moves out of its reach"),
-    dropped=("Power.aura",),
 )
 def m1032a2(c: Cast) -> None:
     """Targets the creature that is leaving, read off the trigger rather than
     `c.targets` -- an immediate reaction's own target list is routinely
-    empty. The penalty against this creature lands; extending it to "allies
-    within its aura" has nowhere to go, because no row anywhere establishes
-    a standing aura for this creature and the header has no field to declare
-    one on."""
+    empty.
+
+    **The second half of the penalty -- attacks against this creature's
+    allies, not only against it -- used to be dropped as `Power.aura`, and
+    that marker was wrong twice.** There is no `Power.aura` field to want,
+    and the radius it claimed was unwritable is printed: m1032's stat block
+    carries a standing aura 5 on its own trait line. An authoring agent
+    cannot see that line -- it is not in `monster_power`, because the trait
+    is not an ability and gets no row -- so the row was referred up and the
+    main session read the page. That is the referral working; the answer was
+    "5".
+
+    No aura *object* is needed, and laying one here would be wrong: the aura
+    is a standing trait of the creature and this is a reaction, so `c.aura`
+    would bring it into being only once something had already run out of
+    reach. What the clause needs is the geometry, asked live off each swing
+    -- the same shape `level_05/soldiers_sa.py` uses -- so it tracks allies
+    walking in and out of the 5 while the penalty stands.
+
+    `c.allies()` is re-read inside the gate rather than snapshotted for the
+    same reason."""
     foe = getattr(c.trigger, "actor", None)
     if foe is None:
         return
+    me = c.me
+
+    def against_me_or_my_aura(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        if who is None or who == me:
+            return who == me
+        return who in c.allies() and distance_between(c.world, me, who) <= 5
+
     if c.attack(13, REF, on=foe):
         c.damage("2d6", 5, dtype=DamageType.NECROTIC, on=foe)
         c.penalty(
             "attack", 2, on=foe, until=When.SAVE_ENDS,
-            when=lambda ctx: ctx.get("target") == c.me,
+            when=against_me_or_my_aura,
         )
 
 

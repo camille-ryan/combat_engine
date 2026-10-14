@@ -84,6 +84,7 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Health,
+    Ident,
     Initiative,
     Keyword,
     Melee,
@@ -98,6 +99,7 @@ from combat_engine.engine import (
     UpTo,
     Usage,
     When,
+    Window,
     World,
     get,
     power,
@@ -106,6 +108,7 @@ from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
     DamageApplied,
+    Died,
     Dropped,
     Escaped,
     ForcedMove,
@@ -2664,17 +2667,70 @@ def m5734a5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.HEALING],
-    dropped=("c.revives_unless(within=)",),
 )
 def m5798a0(c: Cast) -> None:
     """Falls unconscious instead of dying to anything but acid or fire,
     and rises on its own next turn with 30 hit points -- the troll shape,
-    timed to a turn boundary. That a hit dealing acid or fire damage
-    *while already down* permanently ends this, and that the trait is
-    lost once its twin dies, both need to watch who else shares this
-    creature's own kind on the board, which `c.revives_unless` has no
-    reach for -- it takes only damage types."""
+    timed to a turn boundary. Both remaining clauses play as well.
+
+    `c.revives_unless` was never where the reach was missing: it writes
+    `Undying` for the policy to read and implements none of the rising.
+    The rising is `_revives_once`'s own three watchers, and every one of
+    them is laid with a label opening on this row's ref -- so "he does not
+    return to life in this way" and "the other loses this trait" are the
+    same operation, ending those holds, and the clock they were given
+    never comes round.
+
+    The twin is findable because the two brothers share one stat block:
+    the other creature on the board whose `Ident.ref` is this one's, which
+    is how `m3997a1`'s block asks the same question. `Died` is the
+    moment -- not `Dropped`, which is what this trait exists to stop
+    being fatal."""
+    me = c.me
+    kind = _ref_of(c, me)
     _revives_once(c, 30, DamageType.ACID, DamageType.FIRE, delayed=True)
+
+    def brother() -> int | None:
+        if not kind:
+            return None
+        for other, ident in c.world.each(Ident):
+            if other != me and ident.ref == kind:
+                return other
+        return None
+
+    def lose_the_trait(why: str) -> None:
+        from combat_engine.engine.components import Undying
+
+        for held in list(c.world.effects.of(me)):
+            if held.label.startswith(c.ref):
+                c.world.effects.end(held, why)
+        # `c.revives_unless` writes a **component**, not an effect, so the
+        # sweep above cannot reach it -- and leaving it would tell the
+        # policy a body on the floor is still going to stand up.
+        c.world.drop(me, Undying)
+
+    def burned_while_down(ev: DamageApplied) -> None:
+        if ev.target != me or not c.is_(Condition.UNCONSCIOUS, on=me):
+            return
+        if not {DamageType.ACID, DamageType.FIRE} & set(ev.types()):
+            return
+        twin = brother()
+        if twin is not None and distance_between(c.world, me, twin) <= 5:
+            lose_the_trait("burned while down, within 5 of its brother")
+
+    def brother_died(ev: Died) -> None:
+        if ev.actor == me or not kind:
+            return
+        ident = c.world.get(ev.actor, Ident)
+        if ident is not None and ident.ref == kind:
+            lose_the_trait("its brother is dead")
+
+    c.watch(
+        DamageApplied, burned_while_down, until=When.ENCOUNTER, on=me,
+        label=f"{c.ref} burned down",
+    )
+    c.watch(Died, brother_died, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} twin died")
 
 
 @power(
@@ -3165,19 +3221,43 @@ _M6448_PRONE_START = "an enemy adjacent to it starts its turn prone"
     keywords=[Keyword.WEAPON],
     trigger=_M6448_PRONE_START,
     on=Trigger(TurnStart, _adjacent_enemy_starts_prone, _M6448_PRONE_START),
-    dropped=("Cast.use_power(suppress=)",),
 )
 def m6448a4(c: Cast) -> None:
-    """"But it cannot slide or pull the target with this attack" has
-    nowhere to attach -- borrowing the other row's own attack and damage
-    line through `c.use_power` runs its whole body, forced movement
-    included, and nothing lets one clause of a borrowed row be switched
-    off for a single use."""
+    """"But it cannot slide or pull the target with this attack" needs no
+    argument on `c.use_power`.
+
+    `c.push`, `c.pull` and `c.slide` all hand `movement.forced` the
+    shoving row's own ref, which stamps it onto the `ForcedMove` -- and
+    that event is a `Decision`, which is how `c.immovable` refuses a shove
+    at all. So the ban is a refusal standing only for the length of this
+    one borrowed use, narrowed by the borrowed row's ref and by the
+    triggering enemy.
+
+    **Push is deliberately left alone**: the card names slide and pull,
+    and the two rows this borrows from do one each -- `a1` slides, `a2`
+    pulls -- so a blanket refusal would be a stronger line than printed
+    and the narrowing is what makes it worth writing."""
     foe = _triggering_enemy(c)
     if foe is None:
         return
     choice = c.choose(["m6448a1", "m6448a2"], f"{c.ref}: which weapon") or "m6448a1"
-    c.use_power(choice, on=foe)
+
+    def refuse(ev: ForcedMove) -> None:
+        if (
+            ev.target == foe
+            and ev.power == choice
+            and ev.how.value in ("pull", "slide")
+        ):
+            ev.cancel(f"{c.ref} cannot slide or pull with this attack")
+
+    hold = c.watch(
+        ForcedMove, refuse, until=When.ENCOUNTER, window=Window.BEFORE,
+        on=c.me, label=f"{c.ref} no shove",
+    )
+    try:
+        c.use_power(choice, on=foe)
+    finally:
+        c.world.effects.end(hold, "the borrowed attack is over")
 
 
 # ==========================================================================
