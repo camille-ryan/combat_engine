@@ -122,7 +122,25 @@ FEATURE = ("c.class_feature()",)
 #: out of a list is `c.borrow_row`, so these rows are not waiting on the
 #: borrowing any more; they are waiting on there being anything to point
 #: at. None of the options is a ref in the tree.
-BORROW = ("spec.feature_ref()",)
+#:
+#: **Re-pointed off `spec.feature_ref()`, which named the wrong layer.**
+#: The note above was right all along -- there is nothing to point at --
+#: and the symbol said the opposite, that a ref existed and the brief had
+#: failed to resolve it. Measured: `game.db` has **no** school or domain
+#: table among its 24, only these 6 feat specs mention either, and no
+#: `class_feature` or `power` spec mentions them at all. The taxonomy is
+#: absent, so there is no ref to resolve.
+#:
+#: **Not #548, which is the sibling it was briefly merged with.** That one
+#: is `racial_trait`: sub-options printed *with* refs, 18 of which have no
+#: row. Here there are no refs. Checked, and the check is what separated
+#: them: all **125** `cf:` refs named in any spec do have a row, 0 missing.
+#:
+#: It is also why this family keeps leaking printed names into specs --
+#: `sanitise.scrub` has no table entry for a name with nothing behind it.
+#: Importing the taxonomy removes the cause rather than detecting the
+#: symptom, which is what #494's budget ceiling asks for. #581.
+BORROW = ("etl.build_sub_option()",)
 #: A suit of armour or a shield, which is not the same column as the
 #: weapons and implements `chargen.proficiency` deals.
 ARMOUR = ("chargen.armor_proficiency()",)

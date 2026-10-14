@@ -2107,16 +2107,28 @@ def f3787(c: Cast) -> None:
 
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.feature_ref()",))
+       reach=PERSONAL, target=SELF,
+       todo=("content.rt_r68_t0",))
 def f3788(c: Cast) -> None:
     """`engine/equipment.py` puts no speed penalty on heavy armour, so the
     first clause has nothing to cancel. What is left is an altitude limit
     on a *racial* trait.
 
-    Re-aimed: racial traits are imported now and `rt:` rows exist, but not
-    for this race -- r68 has two racial powers in `content/races/` and no
-    trait row at all, so the thing this raises a ceiling on has no ref.
-    The same absence a dozen rows carry as `spec.feature_ref()`."""
+    **Re-aimed again, and the previous aim was wrong about the data.** It
+    said "the thing this raises a ceiling on has no ref". It has two:
+    `rt:r67-t1` and `rt:r68-t0`, and **both are in `game.db` with their
+    full text**. What is missing is that no content row declares either --
+    ordinary authoring, the same shape `f789` and `f791` turned out to be
+    once their presence was written.
+
+    So once the trait exists, this is the `c.change_amount` /
+    `c.amount_for` pair and not a facility gap: the trait reads its
+    altitude ceiling with a default, this feat raises it to 2. That is how
+    the three warlord rows were written, and `c.amplify_bonus()` was not
+    needed for any of them either.
+
+    One marker, one gap: the undeclared trait. #581 is the sibling where
+    the sub-option has no ref at all, which this is **not**."""
 
 
 @power("f3789", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
