@@ -6512,6 +6512,107 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def a_target_line_naming_an_earlier_swing(out: Result) -> None:
+    """"One creature it hit this turn", and the row that says **missed**.
+
+    Four rows narrow their *target* by what the caster already swung at,
+    which is a different thing from the Requirement
+    `a_hit_earlier_this_turn` covers: a Requirement allows the row and
+    then lets it be aimed at anybody, where these narrow the pool itself.
+    `Target.hit_by_me_this_turn` and `Target.missed_by_me_this_turn`
+    read `query.my_hits_this_turn` and `my_misses_this_turn`. #576.
+
+    **Asserted through `candidates()`, which is the half that silently
+    goes missing.** A new `Target` field has to be named in that
+    function's hand-kept "is any relational field set" guard *as well as*
+    tested in `_stands_right`, or the explicit-target arm honours it and
+    the offer path does not -- #381's disagreement arriving one field at a
+    time, and the fault `ident`'s driver caught on its first run.
+
+    Five questions, and the last two are the ones with teeth:
+
+    * nobody swung at: the pool is **empty**;
+    * after hitting one of two enemies, the pool is exactly that one;
+    * the **other** enemy is excluded -- which is what fails if the guard
+      entry is missing, because `candidates()` then returns both;
+    * a **miss** does not satisfy a hit-shaped field, nor a hit a
+      miss-shaped one. `i1132p1` prints "missed" and was mis-marked to the
+      hit field one commit ago, so this is the control for my own error;
+    * the memory dies with the turn.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY, Target, candidates
+    from combat_engine.engine.events import Hit, Miss, TurnStart
+    from combat_engine.engine.query import enemies
+
+    world, caster, _ = _board()
+    foes = enemies(world, caster)
+    if len(foes) < 2:
+        out.skip("the board fields fewer than two enemies, so 'the one you "
+                 "hit' cannot be told from 'any enemy'")
+        return
+    struck, spared = foes[0], foes[1]
+
+    # A real row, re-aimed, rather than a hand-built Power: `candidates`
+    # reads the whole header and a synthetic one drifts from the corpus.
+    row = REGISTRY.get("i2133p1")
+    if row is None:
+        out.skip("i2133p1 is not declared")
+        return
+
+    def pool(**fields) -> list[int]:  # noqa: ANN003
+        row.target = Target("enemy", 1, **fields)
+        return candidates(world, caster, row)
+
+    out.that(
+        pool(hit_by_me_this_turn=True) == [],
+        "nothing hit this turn offers no target at all",
+        f"it offered {pool(hit_by_me_this_turn=True)}",
+    )
+
+    world.bus.log.append(
+        Hit(attacker=caster, target=struck, power="x", critical=False)
+    )
+    got = pool(hit_by_me_this_turn=True)
+    out.that(
+        got == [struck],
+        "after one blow lands, exactly that creature is offered",
+        f"it offered {got}, wanted [{struck}]",
+    )
+    out.that(
+        spared not in got,
+        "and the enemy it did not hit is excluded",
+        f"{spared} was offered anyway, which is `candidates()` ignoring "
+        f"the field -- check the hand-kept guard, not `_stands_right`",
+    )
+
+    # The two fields are not each other's negation, which is why they are
+    # two fields: a miss must not satisfy the hit-shaped one.
+    out.that(
+        pool(missed_by_me_this_turn=True) == [],
+        "a hit does not satisfy the missed-shaped field",
+        f"it offered {pool(missed_by_me_this_turn=True)} off a hit alone",
+    )
+    world.bus.log.append(
+        Miss(attacker=caster, target=spared, power="x")
+    )
+    missed = pool(missed_by_me_this_turn=True)
+    out.that(
+        missed == [spared],
+        "and a miss offers the creature that was missed, not the one hit",
+        f"it offered {missed}, wanted [{spared}]",
+    )
+
+    world.bus.log.append(TurnStart(actor=caster, round=2))
+    out.that(
+        pool(hit_by_me_this_turn=True) == []
+        and pool(missed_by_me_this_turn=True) == [],
+        "both pools empty again once the creature's own turn begins",
+        f"hit={pool(hit_by_me_this_turn=True)} "
+        f"missed={pool(missed_by_me_this_turn=True)}",
+    )
+
+
 def a_hit_earlier_this_turn(out: Result) -> None:
     """"You must have hit an enemy with a weapon attack during this turn."
 
@@ -7393,6 +7494,10 @@ DRIVERS = {
     "aura_penalty": (
         penalty_scoped_to_an_aura,
         "a penalty scoped to a creature and its allies inside its aura",
+    ),
+    "hit_target_line": (
+        a_target_line_naming_an_earlier_swing,
+        "a target line narrowed by what the caster already hit or missed",
     ),
     "hit_this_turn": (
         a_hit_earlier_this_turn,

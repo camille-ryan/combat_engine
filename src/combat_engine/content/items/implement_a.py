@@ -104,6 +104,7 @@ from combat_engine.engine import (
     SavingThrow,
     SkillCheck,
     Summoned,
+    Target,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -3057,19 +3058,23 @@ def i2133x1(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    dropped=("Target.hit_by_me_this_turn",),
+    target=Target("enemy", 1, label="an enemy you already hit this turn",
+                  hit_by_me_this_turn=True),
 )
 def i2133p1(c: Cast) -> None:
     """"An at-will attack" is taken as the basic, which is the one row
-    every creature is certain to have. The target restriction is still
-    gone, but not for the reason this note used to give.
+    every creature is certain to have. The target restriction is written
+    now.
 
-    It said nothing records who was hit earlier this turn.
-    `query.my_hits_this_turn` does, off the log, and has been readable all
-    along -- #576. The gap is that the card narrows the **target** to a
-    creature already hit, and `Target` carries no such field; a
-    `requires=` would let the power through and then be aimed anywhere."""
+    "An enemy that you already hit with an attack during this turn" is a
+    **target line**, so it narrows the pool rather than gating the power:
+    a `requires=` would let the swing through and then let it land on
+    anybody. `Target.hit_by_me_this_turn` reads
+    `query.my_hits_this_turn`.
+
+    "With an attack" and not a kind of attack, so no keyword or reach test
+    -- unlike `m1097a3`, which says melee, and `p15928`, which says
+    weapon. The card's breadth is the card's."""
     c.basic(on=c.target)
 
 

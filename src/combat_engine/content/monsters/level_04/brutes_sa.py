@@ -1428,22 +1428,31 @@ def m4622a1(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(1),
-    target=ONE_CREATURE,
-    dropped=("Target.hit_by_me_this_turn", "loader.monster_shield()"),
+    # `side="enemy"`, which is what `ONE_CREATURE` is: a card's "one
+    # creature" is an enemy in this engine's vocabulary, and the five
+    # legal sides are enemy/ally/any/other/self. Writing "creature" here
+    # raised `KeyError` at play time -- see the guard in `dsl.candidates`.
+    target=Target("enemy", 1, label="one creature it hit this turn",
+                  hit_by_me_this_turn=True),
+    dropped=("loader.monster_shield()",),
 )
 def m4622a2(c: Cast) -> None:
-    """The shove and the step into the vacated square are exact. "One creature
-    it hit this turn" is a target line `Target` cannot express -- which this
-    note had right, and it was the only one of six to say so.
+    """The shove and the step into the vacated square are exact, and the
+    target line is written now.
 
-    **The second half of it was wrong**: the turn's hits *are* recorded,
-    by `query.my_hits_this_turn` off the log, and three rows printing this
-    as a Requirement are written off that reader now (#576). So the
-    remaining gap is exactly the target field and nothing else; a
-    `requires=` is the wrong shape, because it would allow the row and then
-    let it be aimed at anybody.
+    **This note named its own gap correctly and was the only one of six to
+    do so** -- "a target line `Target` cannot express". It can now:
+    `Target.hit_by_me_this_turn`, reading `query.my_hits_this_turn`. The
+    half it got wrong was the claim that the turn's hits are unrecorded;
+    they were always on the log.
 
-    The shield the Requirement names is still not in a monster's hands."""
+    A `requires=` would have been the wrong shape even so, because the
+    card narrows *which creature* and a Requirement would allow the shove
+    and then let it land on anybody.
+
+    **Still `dropped=`, for the other clause.** The printed Requirement is
+    a shield, and `loader.py` hands every stat block an empty `Gear()`, so
+    no monster can be using one. One marker, one gap."""
     victim = c.target
     if victim is None:
         return

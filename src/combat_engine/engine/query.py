@@ -101,6 +101,26 @@ def my_hits_this_turn(world: World, eid: int) -> list[Any]:
             if isinstance(e, Hit) and e.attacker == eid]
 
 
+def my_misses_this_turn(world: World, eid: int) -> list[Any]:
+    """Every swing this creature has **missed** with since its turn began.
+
+    The mirror of `my_hits_this_turn`, and not a nicety: `i1132p1` prints
+    *"you must have **missed** an enemy with a melee attack during this
+    turn"* and then attacks "the same enemy". Nothing else in the corpus
+    reads a miss this way, but one row needing it is the difference
+    between the row being written and being mis-marked -- and it *was*
+    mis-marked, by me, at `81e1e08`: I re-pointed it to a hit-shaped
+    symbol off a docstring that had said "hit or missed" and been right.
+
+    `Miss` carries the same `attacker` and `target` as `Hit`, so this is
+    the same walk with one isinstance changed.
+    """
+    from .events import Miss
+
+    return [e for e in since_turn_began(world, eid)
+            if isinstance(e, Miss) and e.attacker == eid]
+
+
 def hit_me_this_turn(world: World, eid: int) -> set[int]:
     """Who has landed a blow on this creature since its turn began.
 

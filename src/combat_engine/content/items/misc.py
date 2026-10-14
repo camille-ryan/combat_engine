@@ -2811,22 +2811,29 @@ def i455p1(c: Cast) -> None:
 
 
 @power("i1132p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_CREATURE,
-       dropped=("Target.hit_by_me_this_turn",))
+       reach=Melee(1),
+       target=Target("enemy", 1, label="an enemy you missed this turn",
+                     missed_by_me_this_turn=True))
 def i1132p1(c: Cast) -> None:
-    """"The same enemy" is still whichever one the row is aimed at, and the
-    reason is a target line rather than a missing record.
+    """"The same enemy" is the one you **missed**, which is the whole point
+    of this card and the thing two notes in a row got wrong.
 
-    **The note this replaces was wrong about the engine.** It said nothing
-    records what a creature has hit this turn; `query.my_hits_this_turn`
-    does, and `lurkers_sa._landed_with` was already reading the log for it
-    as a `requires=` gate. Three rows that print this as a *Requirement*
-    are written off that reader now -- #576.
+    The printed Requirement is *"you must have **missed** an enemy with a
+    melee attack during this turn"*, and the effect then swings at that
+    same enemy. So `missed_by_me_this_turn`, not the hit-shaped field
+    beside it: the two are not opposites, since a creature can be both hit
+    and missed in one turn.
 
-    What is left here is the narrower thing: the card restricts the
-    **target** to a creature this wielder hit this turn, and `Target` has
-    no field for it. A `requires=` would be the wrong shape -- it would
-    allow the power and then let it be aimed anywhere."""
+    **I mis-marked this row at `81e1e08`** -- re-pointed it to
+    `Target.hit_by_me_this_turn` with the rest of its family, off a
+    docstring that said "hit **or** missed" and was right. Reading the
+    card is what caught it, one commit later. The original note's only
+    real error was the claim that neither was recorded; both are, off the
+    log.
+
+    The Requirement is the target line rather than a `requires=`, because
+    the card narrows *which enemy* and a Requirement would allow the swing
+    and then let it land on anybody."""
     foe = c.target
     if foe is not None and c.basic(on=foe):
         c.grants_advantage(on=foe, until=When.EONT)

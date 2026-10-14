@@ -2004,10 +2004,10 @@ def m5494a4(c: Cast) -> None:
         "enemy", 1,
         label="bloodied, hit this turn by claw",
         bloodied=True,
+        hit_by_me_this_turn=True,
     ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Target.hit_by_me_this_turn",),
 )
 def m5494a5(c: Cast) -> None:
     """Bloodied is the target line now. The claw half is still the dropped

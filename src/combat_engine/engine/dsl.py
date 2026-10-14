@@ -29,6 +29,8 @@ from .query import (
     creatures,
     enemies,
     line_of_effect,
+    my_hits_this_turn,
+    my_misses_this_turn,
     scenery,
     squares,
     targetable,
@@ -418,6 +420,30 @@ class Target:
     #: those, and the rows printing *nonbloodied* would have been unwritable --
     #: or worse, written as the thing they are not.
     bloodied: bool | None = None
+    #: "One creature it hit this turn." Four rows print it as a **target
+    #: line**, which is why this is a field and not a `requires=`: a
+    #: Requirement allows the row and then lets it be aimed at anybody,
+    #: and these cards narrow the pool itself.
+    #:
+    #: Plain bool rather than `bloodied`'s tri-state, because no card in
+    #: the corpus prints the negation -- nothing says "a creature you have
+    #: *not* hit this turn". Widen it if one turns up; do not widen it in
+    #: advance, which is the mistake `conditions` records from the other
+    #: direction.
+    #:
+    #: Reads `query.my_hits_this_turn`, the shared log walk. Six rows'
+    #: docstrings claimed the turn's hits were unrecorded and all six were
+    #: wrong -- `lurkers_sa._landed_with` had been reading them as a
+    #: `requires=` gate the whole time. #576.
+    hit_by_me_this_turn: bool = False
+    #: "You must have **missed** an enemy with a melee attack during this
+    #: turn", and then "the same enemy". `i1132p1`, and so far only it.
+    #:
+    #: A separate field rather than a tri-state on the one above, because
+    #: the two are not opposites: a creature can be both hit and missed in
+    #: one turn, so "not hit" and "missed" are different pools and a row
+    #: asking for the second would silently get the first.
+    missed_by_me_this_turn: bool = False
     #: The negative of `conditions`: a creature carrying **any** of these is
     #: refused. "One creature that is not grabbed", "blinded creatures are
     #: immune".
@@ -490,6 +516,14 @@ class Target:
             return f"Each {who} in the area"
         return f"One {who}" if self.count == 1 else f"Up to {self.count} {who}s"
 
+
+#: Every `side` `candidates()` can build a pool for, plus `"self"`, which
+#: it answers before reaching the pool. Declared here so the import-time
+#: guard and the pool cannot drift apart -- the guard exists because they
+#: could, and `KeyError: 'creature'` is what that looked like.
+_SIDES = frozenset({
+    "self", "enemy", "ally", "any", "other", "other_ally", "team", "object",
+})
 
 ONE_CREATURE = Target("enemy", 1)
 #: A power aimed at anybody at all. `ONE_CREATURE` is the *enemy* pool, so a
@@ -1457,6 +1491,21 @@ def power(
     second ability. Never a name: the engine has no use for one, and the
     agent that wrote this function was never shown it.
     """
+    # **A `Target.side` the pool has no entry for is refused here**, the
+    # same bargain `c.bonus(once=)` struck in #544: an unrecognised key is
+    # a typo, and the only question is whether it is reported at import or
+    # raises in play. `candidates()` builds its pool as a dict literal and
+    # subscripts it, so `Target("creature", 1)` -- a plausible spelling,
+    # since a card's "one creature" is `ONE_CREATURE` and that is
+    # `side="enemy"` -- got all the way to `KeyError: 'creature'` inside a
+    # row the auditor was firing. Written by me, caught by `audit.py`
+    # rather than by `lint.py`, which is one wide sweep too late.
+    if target is not None and getattr(target, "side", "") not in _SIDES:
+        raise ValueError(
+            f"{ref}: target side {getattr(target, 'side', None)!r} is not one "
+            f"of {sorted(_SIDES)}. A card's 'one creature' is `ONE_CREATURE`, "
+            f"which is side='enemy'."
+        )
     todo, dropped = tuple(todo), tuple(dropped)
     for want in (*todo, *dropped):
         if not _SYMBOL.fullmatch(want.strip()):
@@ -2063,6 +2112,8 @@ def candidates(
         # that way and the driver caught it on its first run.
         or aim.ident
         or aim.kind_or_ident
+        or aim.hit_by_me_this_turn
+        or aim.missed_by_me_this_turn
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2433,6 +2484,18 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # defaulting into one of them.
         if hp is None or hp.bloodied is not aim.bloodied:
             return False
+    if aim.hit_by_me_this_turn and target not in {
+        # **`actor`, not the target.** "One creature **it** hit this turn"
+        # is about who swung, and this predicate is handed both -- the one
+        # place the distinction is free. Reading the target's own hits
+        # would answer "a creature that hit something", which no card asks.
+        hit.target for hit in my_hits_this_turn(world, actor)
+    }:
+        return False
+    if aim.missed_by_me_this_turn and target not in {
+        swing.target for swing in my_misses_this_turn(world, actor)
+    }:
+        return False
     if aim.ident:
         # Scenery and anything else with no `Ident` is not of any block, so
         # it fails rather than defaulting into the kind being asked for.
