@@ -33,7 +33,7 @@ class Action:
     #: power | move | run | shift | charge | stand | escape | second_wind |
     #: total_defence | coup_de_grace |
     #: bull_rush | grab | aid_attack | aid_defence |
-    #: sustain | drop | wield | item | instinctive | command | end
+    #: sustain | move_zone | drop | wield | item | instinctive | command | end
     kind: str
     cost: ActionType
     ref: str = ""
@@ -956,6 +956,45 @@ def _recovery(world: World, encounter: Encounter, actor: int) -> list[Action]:
         for cost in sorted(costs, key=lambda a: a.value):
             if encounter.can_spend(actor, cost):
                 out.append(Action(kind="escape", cost=cost))
+    # **"As a minor action it can move the zone up to 3 squares."** Nine
+    # monster rows print a line of this shape and none of them offered it:
+    # `c.move_zone` has existed and worked, and `c.grant_action` knew four
+    # words -- `shift`, `stand`, `escape`, `second_wind` -- so the fifth was
+    # *carried*, which its own docstring warns "costs nothing and does
+    # nothing". The word needed a reader, which is this. #583.
+    #
+    # **One entry per zone, and the destination is not enumerated here.**
+    # `c.move_zone` already asks `World.decide` for a square when `to` is
+    # None, bounded by the granted distance -- so offering every reachable
+    # square per zone would both duplicate that and multiply the menu by
+    # `spread()`. A creature may hold several zones (`m1003a2` prints "up
+    # to three such portals at a time"), so *which* zone is the choice the
+    # card actually asks about and it is the one this enumerates.
+    #
+    # **Its own zones, by `Zone.owner`.** The negative control the family
+    # invites is moving somebody else's zone, which none of the four
+    # existing granted words can get wrong because none of them takes an
+    # object.
+    #
+    # An aura is refused, which is the printed rule and `c.move_zone`'s
+    # own guard -- filtered here as well so the menu does not offer an
+    # entry that would return False.
+    #
+    # The granted distance is **not** carried on the `Action`. Adding a
+    # field would widen a structure the UI and the AI policy both read
+    # without running anything, for a number `perform` can read back out
+    # of `_granted` itself -- which is where every other granted word
+    # gets its parameters too.
+    for what, cost in _granted(world, actor):
+        if what != "move_zone" or not encounter.can_spend(actor, cost):
+            continue
+        from .zones import Zone as _Zone
+
+        for zone, held in world.each(_Zone):
+            if held.owner == actor and held.aura is None and held.squares:
+                out.append(Action(kind="move_zone", cost=cost,
+                                  targets=(zone,)))
+
     health = world.get(actor, Health)
     known = world.get(actor, Powers)
     # Second wind is a character's action. Monsters carry surges -- one per
@@ -1353,6 +1392,29 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # way a failed `hide` is a spent minor.
         attempt(world, actor)
         return True
+
+    if action.kind == "move_zone":
+        # The granted distance, read back out of `_granted` rather than
+        # carried on the `Action` -- see the offer side in `_recovery`. The
+        # largest grant wins where a creature holds two, which is the same
+        # answer `c.amount_for` gives for a raised number and for the same
+        # reason: two rows granting the move are not additive.
+        reach = max(
+            (n for (what, _c), n in _granted(world, actor).items()
+             if what == "move_zone"),
+            default=0,
+        )
+        zone = action.targets[0] if action.targets else None
+        if zone is None or reach <= 0:
+            return False
+        # Imported here because `perform` binds `Cast` in a branch further
+        # down, which makes the name local to the whole function.
+        from .cast import Cast
+        # `c.move_zone` asks `World.decide` for the square when `to` is
+        # None, and re-checks the aura rule and the zone's existence -- so
+        # this neither duplicates the destination search nor trusts the
+        # menu's view of a board that may have moved since it was drawn.
+        return Cast(world=world, me=actor, ref="move_zone").move_zone(zone, reach)
 
     if action.kind == "sustain":
         eff = world.effects.live.get(action.subject or -1)

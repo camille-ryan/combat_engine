@@ -6512,6 +6512,132 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def a_granted_action_that_walks_a_zone(out: Result) -> None:
+    """"As a minor action it can move the zone up to 3 squares."
+
+    Nine monster rows print a line of this shape and **none of them offered
+    it**. `c.move_zone` has existed and worked the whole time; what was
+    missing was a reader for the word. `c.grant_action` knew four --
+    `shift`, `stand`, `escape`, `second_wind` -- and its own docstring warns
+    that "anything else is carried, costs nothing and does nothing". So the
+    nine laid a `"move_zone as minor"` modifier that nothing read. #583.
+
+    **The negative control is the one the family invites and the four
+    existing words cannot get wrong**, because none of them takes an
+    object: a granted move must not relocate **somebody else's** zone.
+    `_recovery` filters on `Zone.owner`, and if that filter goes the menu
+    offers a creature the enemy's zone to walk.
+
+    Six questions:
+
+    * no grant, no entry -- the zone sits there unoffered;
+    * granted, and the entry appears, at the cost the card printed;
+    * it is offered **per zone**, so a creature holding two gets two
+      (`m1003a2` prints "up to three such portals at a time");
+    * **another creature's zone is never offered**  <- the control;
+    * performing it actually moves the zone;
+    * an **aura** is refused, which is the printed rule and `c.move_zone`'s
+      own guard -- filtered on the offer side too, so the menu never shows
+      an entry that would fail.
+    """
+    from combat_engine.engine import ActionType, Cast, When
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.zones import Zone
+
+    world, caster, _ = _board()
+    enc = world.encounter
+    if enc is None:
+        out.skip("the board has no encounter, so nothing can be offered")
+        return
+    foes = enemies(world, caster)
+    if not foes:
+        out.skip("the board fields no enemy to own a rival zone")
+        return
+    rival = foes[0]
+
+    here = world.get(caster, Position)
+    if here is None:
+        out.skip("the caster is off the grid")
+        return
+    x, y = here.square
+
+    c = Cast(world=world, me=caster, ref="driver:move_zone")
+    mine = c.zone([(x + 2, y)], label="driver:mine", until=When.ENCOUNTER)
+    second = c.zone([(x + 3, y)], label="driver:second", until=When.ENCOUNTER)
+
+    # The rival's, laid by the rival so `Zone.owner` is theirs.
+    theirs = Cast(world=world, me=rival, ref="driver:theirs").zone(
+        [(x + 6, y)], label="driver:theirs", until=When.ENCOUNTER
+    )
+
+    def entries() -> list:
+        return [a for a in legal(world, enc, caster)
+                if a.kind == "move_zone"]
+
+    out.that(
+        entries() == [],
+        "a zone nobody granted a move for is not offered",
+        f"it offered {entries()}",
+    )
+
+    c.grant_action("move_zone", ActionType.MINOR, squares_=3, on=caster,
+                   until=When.ENCOUNTER)
+    got = entries()
+    out.that(
+        bool(got) and all(a.cost is ActionType.MINOR for a in got),
+        "the grant puts the move in the menu, at the printed cost",
+        f"it offered {got}",
+    )
+    offered = {a.targets[0] for a in got if a.targets}
+    # **Not an exact set, and the first draft asserted one.** It read
+    # `offered == {mine, second}` and failed naming a third zone -- which
+    # turned out to be `audit:setup zone`, laid by the board itself and
+    # owned by the caster. The menu was right and the assertion was wrong,
+    # so this asks the question the card asks: is each of my zones offered.
+    out.that(
+        {mine, second} <= offered,
+        "one entry per zone the creature owns, and two for two",
+        f"it offered zones {sorted(offered)}, wanted both of "
+        f"{sorted({mine, second})}",
+    )
+    # The board lays `audit:setup foe zone` as well, so this is posed twice
+    # over: by the rival zone laid above and by the harness's own.
+    not_mine = {
+        zid for zid, z in world.each(Zone)
+        if z.owner != caster and z.aura is None
+    }
+    out.that(
+        theirs not in offered and not (offered & not_mine),
+        "and never another creature's zone",
+        f"it offered {sorted(offered & not_mine) or [theirs]}, which "
+        f"belong(s) to somebody else",
+    )
+
+    before = min(world.get(mine, Zone).squares)
+    pick = next(a for a in got if a.targets and a.targets[0] == mine)
+    perform(world, enc, caster, pick)
+    after = min(world.get(mine, Zone).squares)
+    out.that(
+        after != before,
+        "performing it moves that zone",
+        f"it sat still at {before}",
+    )
+
+    # An aura belongs to its owner and travels with them, which `c.move_zone`
+    # refuses. The menu must not offer it either.
+    aura = c.aura(2, label="driver:aura", until=When.ENCOUNTER)
+    if aura is None:
+        out.skip("c.aura laid nothing, so the aura half cannot be posed")
+        return
+    out.that(
+        aura not in {a.targets[0] for a in entries() if a.targets},
+        "an aura is not offered, because it moves with its owner",
+        "the menu offered the aura, which `c.move_zone` would refuse",
+    )
+
+
 def a_target_line_naming_an_earlier_swing(out: Result) -> None:
     """"One creature it hit this turn", and the row that says **missed**.
 
@@ -7494,6 +7620,10 @@ DRIVERS = {
     "aura_penalty": (
         penalty_scoped_to_an_aura,
         "a penalty scoped to a creature and its allies inside its aura",
+    ),
+    "move_zone": (
+        a_granted_action_that_walks_a_zone,
+        "a granted action that walks one of the creature's own zones",
     ),
     "hit_target_line": (
         a_target_line_naming_an_earlier_swing,
