@@ -329,6 +329,20 @@ class Target:
     ident: str = ""
     #: Read `kinds` and `ident` as **either** rather than both.
     #:
+    #: **Named narrowly on purpose, and the first version was not.** I
+    #: called this `any_of`, and four rows already carry
+    #: `dropped=("Target.any_of",)` meaning the *general* disjunction over
+    #: any two fields -- `m6172a2` says it outright, "until `Target.any_of`
+    #: can hold two alternatives", wanting flanked **or** prone, and
+    #: `m5302a4` wants immobilised **or** grabbed. Taking that name for
+    #: this narrower thing would have made the symbol exist without
+    #: satisfying a single row that asked for it, which is exactly the
+    #: fault `content/CLAUDE.md` states: a symbol doing duty for two needs
+    #: cannot go red or green correctly for either.
+    #:
+    #: So the general `Target.any_of` is still unbuilt and still wanted by
+    #: those four, and this field says only what it does.
+    #:
     #: Eight rows print one sentence that needs it: "allies of its own
     #: sort" counts an ally that carries the printed type word *or* one of
     #: the caster's own block. Nine with `m1138a4`, which says it the other
@@ -349,7 +363,7 @@ class Target:
     #: clause on a target line is a restriction that genuinely compounds --
     #: a Medium *and* unheld object, a bloodied *and* adjacent enemy -- and
     #: OR-ing those would widen pools no card widens.
-    any_of: bool = False
+    kind_or_ident: bool = False
     #: The two clauses an object target line prints on top of its side.
     #: `max_size` is "Medium or smaller"; `loose` is "not fastened in place
     #: or held by a creature". Fields rather than sides of their own,
@@ -2048,6 +2062,7 @@ def candidates(
         # disagreement arriving one field at a time. `ident` was written
         # that way and the driver caught it on its first run.
         or aim.ident
+        or aim.kind_or_ident
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2386,16 +2401,17 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
 
         words = kinds_of(world, target)
         # `kinds_without` is an exclusion and compounds even under
-        # `any_of`: "any ally of that sort, but never an undead one" means
+        # `kind_or_ident`: "any ally of that sort, but never an undead
+        # one" means
         # both, and no card prints an exclusion it also waives.
         if words & aim.kinds_without:
             return False
-        # Under `any_of` the kind is one of two ways in, so failing it is
+        # Under `kind_or_ident` the kind is one of two ways in, so failing it is
         # not a refusal -- `ident` below is asked instead.
         if (
             aim.kinds
             and not (words & aim.kinds)
-            and not (aim.any_of and aim.ident)
+            and not (aim.kind_or_ident and aim.ident)
         ):
             return False
     if aim.living:
@@ -2431,7 +2447,7 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
             wanted = mine.ref if mine is not None else ""
         matched = who is not None and bool(wanted) and who.ref == wanted
         if not matched:
-            if not aim.any_of or not aim.kinds:
+            if not aim.kind_or_ident or not aim.kinds:
                 return False
             # **The union, and it is asked here rather than above because
             # this is the second of the two ways in.** The kind test let

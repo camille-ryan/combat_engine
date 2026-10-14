@@ -6720,7 +6720,7 @@ def target_of_one_kind(out: Result) -> None:
         f"offered {candidates(world, caster, _aimed(mine, own))} after the change",
     )
 
-    # **`any_of`: kind OR own block.** Eight rows print one sentence that
+    # **`kind_or_ident`: kind OR own block.** Eight rows print one sentence that
     # needs it -- "allies of its own sort" counts an ally carrying the
     # printed type word *or* one of the caster's own block -- and neither
     # test alone is right, because the words are uneven: only 11 stat
@@ -6745,15 +6745,15 @@ def target_of_one_kind(out: Result) -> None:
 
     # The ally is now a *different* block carrying a known type word.
     either = Target(side="ally", count=4, kinds=frozenset({word}),
-                    ident="own", any_of=True)
+                    ident="own", kind_or_ident=True)
     out.that(
         mate in candidates(world, caster, _aimed(mine, either)),
-        'any_of offers an ally that matches the KIND but not the block',
+        'kind_or_ident offers an ally that matches the KIND but not the block',
         f"word={word!r} offered {candidates(world, caster, _aimed(mine, either))}",
     )
 
     # **The control that proves the field does anything**: the same two
-    # tests without `any_of` compound, so the ally must drop out.
+    # tests without `kind_or_ident` compound, so the ally must drop out.
     both = Target(side="ally", count=4, kinds=frozenset({word}), ident="own")
     out.that(
         mate not in candidates(world, caster, _aimed(mine, both)),
@@ -6763,7 +6763,7 @@ def target_of_one_kind(out: Result) -> None:
 
     # The other way in: the block matches and the kind does not.
     world.get(mate, Ident).ref = kind.ref
-    other_way = Target(side="ally", count=4, ident="own", any_of=True,
+    other_way = Target(side="ally", count=4, ident="own", kind_or_ident=True,
                        kinds=frozenset({"no-such-type-word"}))
     out.that(
         mate in candidates(world, caster, _aimed(mine, other_way)),
