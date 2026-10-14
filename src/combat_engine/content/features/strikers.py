@@ -91,21 +91,21 @@ def extra_damage(
     to raise, and the rogue's fork is exactly that sentence.
     """
     me = c.me
-    paid: dict[int, object] = {}
-
-    def window() -> object:
-        fight = c.world.encounter
-        if not per_turn or fight is None:
-            return c.world.round
-        return (c.world.round, fight.index)
 
     def on_hit(ev: Hit) -> None:
         if ev.attacker != me or not applies(ev.target):
             return
-        now = window()
-        if paid.get(me) == now:
+        # **The latch lives on the creature now, not in this closure.**
+        # It was `paid: dict[int, object]` here, and being unreachable is
+        # why two feats could not be written: "a second helping after an
+        # action point" wants to hand the payment back, and "pays the
+        # extra damage on a miss" wants to spend it from outside. Both
+        # blamed a missing announcement, which `detail=label` below has
+        # always provided. `Powers.latched` keyed by this label, and the
+        # window reasoning moved with it into `c.payment_window`. #569.
+        if c.latched(label, per_turn=per_turn):
             return
-        paid[me] = now
+        c.latch(label, per_turn=per_turn)
         # **The die is asked for, not closed over.** Four feats raise a
         # striker's extra damage from d6s to d8s and one to d10s, and with the
         # string baked in at arming time there was nothing for them to change.

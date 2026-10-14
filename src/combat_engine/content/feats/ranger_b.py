@@ -1060,13 +1060,36 @@ def f2100(c: Cast) -> None:
 # -- the class's extra damage, which announces nothing ----------------------
 
 
-@power("f807", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+@power("f807", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you spend an action point",
+       on=Trigger(ActionPointSpent, _my_point, "you spend an action point"))
 def f807(c: Cast) -> None:
-    """A second helping of the class's extra damage after an action
-    point. The point is a real event; what is missing is that nothing
-    announces the extra damage was paid, so there is no once-a-round
-    counter to override."""
+    """A second helping of the class's extra damage after an action point.
+
+    **The old note blamed the wrong half.** It said "nothing announces the
+    extra damage was paid, so there is no once-a-round counter to
+    override" -- and the announcement was never missing:
+    `features/strikers.extra_damage` pays out with `detail=label` and both
+    damage events carry it. What was missing is the *counter*, which lived
+    in a closure inside that helper and so could not be overridden by
+    anybody. It is `Powers.latched` now and `c.unlatch` is the override.
+    #569.
+
+    **`AT_WILL`, and it was `ENCOUNTER` until `lint.py` said so**: a
+    triggered trait declared for the encounter is spent on its first
+    firing, and this card prints no limit of its own. The limit is the
+    action points -- a character has one or two a day -- so the row must
+    be allowed to answer each of them. My first docstring here claimed a
+    `once=True` that was not written and would have been wrong for the
+    same reason.
+
+    `c.unlatch` answering False is what distinguishes a real refund from a
+    no-op, so a second point spent in a window the striker has not paid in
+    announces nothing rather than implying a helping that was never owed.
+    """
+    if c.unlatch("cf:ranger-f1"):
+        c.note(f"{c.ref}: the quarry damage may be dealt again this round")
 
 
 @power("f1722", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

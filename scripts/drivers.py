@@ -6512,6 +6512,72 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def a_reachable_latch(out: Result) -> None:
+    """A once-a-round payout can be asked about and handed back.
+
+    `features/strikers.extra_damage` kept its latch in a closure, so two
+    feats could not be written at all -- "a second helping of the extra
+    damage after an action point" and "pays the extra damage on a miss".
+    Both docstrings blamed a missing *announcement*; the announcement was
+    never missing, since the payout passes `detail=label` and both damage
+    events carry it. What was missing was a latch anybody could reach.
+    #569.
+
+    Five assertions, and the fourth is the one the closure existed for:
+
+    * a fresh creature has not paid;
+    * latching makes it paid;
+    * `unlatch` hands it back **and says it did**, so a row paying an
+      action point for the refund can tell that from a no-op;
+    * a **per-turn** latch is a different window from a per-round one --
+      the rogue may pay again on somebody else's turn, which a per-round
+      latch silently refused, and that is the whole reason
+      `c.payment_window` takes the initiative slot and not just the round;
+    * and unlatching something never latched answers False rather than
+      raising.
+    """
+    from combat_engine.engine.cast import Cast
+
+    world, caster, _ = _board("p704")
+    c = Cast(world=world, me=caster, ref="drivers:latch")
+    label = "drivers:striker"
+
+    out.that(
+        not c.latched(label),
+        "a creature that has not paid reads unlatched",
+        f"latched={c.latched(label)}",
+    )
+    c.latch(label)
+    out.that(
+        c.latched(label),
+        "and reads latched once it has",
+        f"latched={c.latched(label)}",
+    )
+    gave = c.unlatch(label)
+    out.that(
+        gave and not c.latched(label),
+        "unlatch hands it back and reports that it did",
+        f"returned {gave}, now latched={c.latched(label)}",
+    )
+
+    # **The per-turn window.** Latched per round, a per-turn question must
+    # still read unpaid -- they are different windows, which is what the
+    # rogue's card needs and a single round counter cannot say.
+    c.latch(label)
+    out.that(
+        c.latched(label) and not c.latched(label, per_turn=True),
+        "a per-round latch does not answer a per-turn question",
+        f"round={c.latched(label)} turn={c.latched(label, per_turn=True)}",
+    )
+    c.unlatch(label)
+
+    out.that(
+        not c.unlatch("drivers:never-latched"),
+        "and unlatching something never spent answers False",
+        "a refund of nothing must be distinguishable from a real one",
+    )
+
+
 def target_of_one_kind(out: Result) -> None:
     """"Up to four of its own kind" offers only that kind.
 
@@ -6895,6 +6961,10 @@ def trained_skills(out: Result) -> None:
 
 
 DRIVERS = {
+    "reachable_latch": (
+        a_reachable_latch,
+        "a once-a-round payout can be asked about and handed back",
+    ),
     "target_kind": (
         target_of_one_kind,
         "a target line naming one kind offers only that kind",

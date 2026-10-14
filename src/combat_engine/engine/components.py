@@ -863,6 +863,26 @@ class Powers:
     amounts: dict[str, list[tuple[int, Callable[[dict[str, Any]], bool] | None]]] = (
         field(default_factory=dict)
     )
+
+    #: Which "once per round" or "once per turn" payouts this creature has
+    #: already spent, by the paying feature's label, holding the window it
+    #: was spent in.
+    #:
+    #: **It lived in a closure and that is why two rows could not be
+    #: written.** `features/strikers.extra_damage` kept `paid: dict[int,
+    #: object]` inside itself, so nothing outside could ask whether the
+    #: striker had paid this round or hand the payment back -- and two
+    #: feats are exactly those sentences: "a second helping after an action
+    #: point" and "pays the extra damage on a miss". Both blamed a missing
+    #: *announcement*, which was never the gap: `extra_damage` already
+    #: passes `detail=label` and the damage events carry it. #569.
+    #:
+    #: The value is the window, not a boolean, because the window is the
+    #: thing with the rule in it: per *round* for two strikers and per
+    #: *turn* for the rogue, which a solo with two initiative slots can
+    #: reach twice. A boolean would need clearing by somebody, and the
+    #: round number clears itself.
+    latched: dict[str, Any] = field(default_factory=dict)
     #: Extra squares a named row moves you, when something has lengthened it.
     #:
     #: The exact sibling of `dice` above, and the same argument wins it: the

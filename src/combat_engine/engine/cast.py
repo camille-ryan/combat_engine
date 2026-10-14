@@ -3504,6 +3504,72 @@ class Cast:
             return None
         return self.effect(_ANY_SIZE, on=who, until=until)
 
+    def payment_window(self, *, per_turn: bool = False) -> object:
+        """The window a "once per round" or "once per turn" payout sits in.
+
+        Per *round* for two strikers and per *turn* for the rogue, and the
+        difference is not cosmetic: a rogue may pay again on somebody
+        else's turn, off an immediate action or an opportunity attack, and
+        a per-round latch silently refused that. The initiative slot being
+        played is what names a turn -- the round alone cannot, and the
+        actor cannot either, because a solo with a second turn owns two
+        slots. Lifted verbatim out of `features/strikers.extra_damage`,
+        which is where that reasoning was written down.
+        """
+        fight = self.world.encounter
+        if not per_turn or fight is None:
+            return self.world.round
+        return (self.world.round, fight.index)
+
+    def latched(
+        self, label: str, *, on: int | None = None, per_turn: bool = False
+    ) -> bool:
+        """Has that creature already spent this payout in the current window?
+
+        **Moved out of a closure so two feats could be written.**
+        `features/strikers.extra_damage` kept its latch in a local dict, so
+        nothing outside could ask whether the striker had already paid --
+        and "a second helping after an action point" and "pays the extra
+        damage on a miss" are exactly that question from two sides. Both
+        rows blamed a missing *announcement*, which was never the gap:
+        `extra_damage` passes `detail=label` and the damage events carry
+        it. #569.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, _Powers)
+        if known is None:
+            return False
+        return known.latched.get(label) == self.payment_window(per_turn=per_turn)
+
+    def latch(
+        self, label: str, *, on: int | None = None, per_turn: bool = False
+    ) -> None:
+        """Spend the payout for this window."""
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, _Powers)
+        if known is not None:
+            known.latched[label] = self.payment_window(per_turn=per_turn)
+
+    def unlatch(self, label: str, *, on: int | None = None) -> bool:
+        """Hand the payout back, so it may be spent again this window.
+
+        Answers whether there was one to give back, so a row paying for the
+        privilege -- an action point, a daily use -- can tell a refund from
+        a no-op rather than spending itself on nothing.
+        """
+        from .components import Powers as _Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, _Powers)
+        if known is None or label not in known.latched:
+            return False
+        del known.latched[label]
+        return True
+
     def lingers_label(self, label: str, *, on: int | None = None) -> bool:
         """Is a hold with this label standing on the creature?
 
