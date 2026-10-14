@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from random import Random
@@ -2452,6 +2453,38 @@ def defences(line: ClassLine, scores: dict[Ability, int], level: int) -> dict:
     }
 
 
+def _from_class_list(db: sqlite3.Connection, printed: str,
+                     rng: Random) -> set[str]:
+    """One skill from the class list a feat names. 32 feats print this.
+
+    `feat.trains_from` holds the printed words, unresolved, because four of
+    the 32 name a **build** rather than a class -- "executioner assassin",
+    "blackguard paladin", "cavalier paladin", "binder warlock". Deciding
+    what to do about that is this function's job and not the extractor's.
+
+    **The build case is deliberately refused, not approximated.** Taking
+    the last word gives the parent class, whose list is a *superset* of the
+    build's, so a character could be trained in a skill the card does not
+    offer. One printed sentence silently becoming a wider one is the fault
+    this repo keeps finding, so those four train nothing here and the rows
+    keep a marker naming the sub-option gap. #548, #575.
+
+    Matched case-insensitively against `class_skill.class`, like
+    `_trained_skills` below and for the same #339 reason: the table's key
+    is the printed word and `Character.cls` is a slug.
+    """
+    rows = db.execute(
+        "SELECT skill FROM class_skill WHERE lower(class) = ? ORDER BY skill",
+        (printed.lower(),),
+    ).fetchall()
+    if not rows:
+        # Either a build ("executioner assassin") or a class this build
+        # does not import. Nothing, rather than the parent's wider list.
+        return set()
+    pool = sorted({r["skill"] for r in rows})
+    return {rng.choice(pool)} if pool else set()
+
+
 def _trained_skills(cls: str, feats: list[str], rng: Random) -> frozenset[str]:
     """Which skills this character is trained in: the given, plus the chosen.
 
@@ -2485,10 +2518,26 @@ def _trained_skills(cls: str, feats: list[str], rng: Random) -> frozenset[str]:
     from_feats: set[str] = set()
     for ref in feats:
         got = db.execute(
-            "SELECT trains FROM feat WHERE ref = ?", (ref,)
+            "SELECT trains, trains_choice, trains_from FROM feat WHERE ref = ?",
+            (ref,),
         ).fetchone()
-        if got and got["trains"]:
+        if got is None:
+            continue
+        # **Granted, chosen and chosen-from-a-list are three different
+        # sentences**, and reading them all as the first would train one
+        # character in every option a card offers a choice between --
+        # three skills off `f1222`. #574.
+        if got["trains"]:
             from_feats |= {s for s in got["trains"].split(",") if s}
+        if got["trains_choice"]:
+            offered = [s for s in got["trains_choice"].split(",") if s]
+            if offered:
+                # Its own draw from the same stream as the class pool
+                # below, so a character's training stays settled by its
+                # seed rather than by how many dice the fight has rolled.
+                from_feats.add(rng.choice(sorted(offered)))
+        if got["trains_from"]:
+            from_feats |= _from_class_list(db, got["trains_from"], rng)
     if not rows:
         return frozenset(from_feats)
     row = db.execute(

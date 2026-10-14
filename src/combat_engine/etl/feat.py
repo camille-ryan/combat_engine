@@ -65,34 +65,99 @@ _TITLE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
 _BRACKET = re.compile(r"^(?P<name>.*?)\s*\[(?P<category>[^\[\]]+)\]$")
 
 
-#: "You gain training in Nature." The skill is named outright, and the
-#: sentence is regular enough to take by position: the word after
-#: "training in", when it is one of the 17.
+#: **Three printed shapes, and the first version of this read only one of
+#: them -- badly.** 69 feats say "training in"; it resolved 14.
 #:
-#: **Only a named skill.** 55 feats print "training in one skill from the
-#: <class> skill list" instead, and this must not match them -- the word
-#: after "in" there is "one", which is not a skill, so the test below
-#: rejects it without a special case. Those want `class_skill` and a
-#: decision, which is a different gap and keeps its marker. #565.
-_TRAINS = re.compile(r"training in ([A-Za-z]+)", re.I)
+#: It was `r"training in ([A-Za-z]+)"`, taking the word after "training in"
+#: and checking it against `SKILLS`. The commonest printed form is
+#: "training in **the** Nature skill", where that word is `the`, so the
+#: check threw it away and the column stayed empty. Three rows were marked
+#: as waiting on a chargen facility that already existed; what had failed
+#: was this regex. #574.
+#:
+#: The three shapes, measured over all 69:
+#:
+#: ```
+#: 27  granted outright     "training in the Nature skill"
+#:  6  a choice of named    "training in the Stealth skill or the Intimidate skill"
+#: 32  a choice from a list "training in one skill from the monk's class list"
+#:  4  unresolvable         "an appropriate skill", "a skill"
+#: ```
+#:
+#: **The second and third must not collapse into the first**, which is the
+#: half that would have made widening the regex *worse* rather than better:
+#: `chargen` unions the column, so `f1222` -- "the Arcana skill, the Nature
+#: skill, or the Religion skill" -- would have trained one character in
+#: three skills off one feat.
+#:
+#: The clause, not the sentence. Bounded at `.` and `;` because a feat's
+#: benefit is one sentence and the next one is somebody else's business.
+_CLAUSE = re.compile(r"training in ([^.;]*)", re.I)
+#: A straight apostrophe or the compendium's curly one, written as an
+#: escape because the literal is a ruff RUF001. Missing U+2019 is why the
+#: first measurement of the third shape found 4 of 32: every page spells
+#: the possessive with it, not with ASCII `'`.
+_APOS = "['\u2019]"
+#: "...from the monk's class list", "...from the bard's list of class
+#: skills", "...from the executioner assassin's class skills list".
+_POOL = re.compile(
+    rf"training in (?:one|a) skill (?:of your choice )?from the (.+?){_APOS}?s?"
+    rf"\s*(?:class skills?|list of class skills|class)\b",
+    re.I,
+)
 
 
-def _trains(spec: str) -> str:
-    """Which skills this feat grants training in, comma-separated.
+def _training(spec: str) -> tuple[str, str, str]:
+    """`(granted, choice, from_class)` -- the three shapes, kept apart.
 
-    Empty for the great majority. Every match is checked against
-    `skills.SKILLS` rather than trusted, because the position alone also
-    catches "training in one skill", "training in a skill" and "training
-    in that skill".
+    * `granted` -- skills the feat trains in outright, comma-separated. A
+      feat naming two gets both, because the card gives both.
+    * `choice` -- skills to pick **one** of. Also comma-separated, and the
+      difference from `granted` is the whole point: `chargen` must sample
+      one rather than union them.
+    * `from_class` -- the printed class whose list to pick one from, as
+      written. Not resolved to a slug here, because four of the 32 name a
+      *build* -- "executioner assassin" -- and flattening that to the
+      parent class would widen the pool past what the card offers. The
+      reader decides; this records.
+
+    All empty for the great majority of feats. Every skill word is checked
+    against `skills.SKILLS` rather than trusted, because the clause also
+    contains "one", "a", "the" and whatever the sentence goes on to say.
     """
     from combat_engine.engine.skills import SKILLS
 
+    spec = spec or ""
+    if "training in" not in spec.lower():
+        return "", "", ""
+
+    pool = _POOL.search(spec)
+    if pool:
+        # A list beats a named skill: "one skill from the ranger's list"
+        # names no skill at all, so there is nothing for the other two
+        # branches to find and no ambiguity to resolve.
+        return "", "", pool.group(1).strip().lower()
+
+    clause = _CLAUSE.search(spec)
+    text = clause.group(1) if clause else ""
     found = [
-        w.lower() for w in _TRAINS.findall(spec or "") if w.lower() in SKILLS
+        w.lower() for w in re.findall(r"[A-Za-z]+", text)
+        if w.lower() in SKILLS
     ]
     # Ordered and de-duplicated: a feat naming the same skill twice is one
     # training, and a stable order keeps the column comparable run to run.
-    return ",".join(sorted(dict.fromkeys(found)))
+    found = sorted(dict.fromkeys(found))
+    if not found:
+        # "an appropriate skill", "a skill", "a skill on the class list of
+        # the class associated with your theme". Four rows, and none of
+        # them names anything this can store. `NULL`, not a guess.
+        return "", "", ""
+    # **"or" decides, and only inside the clause.** Looking at the whole
+    # spec would catch an "or" in the next sentence and turn a grant of two
+    # skills into a choice between them.
+    if re.search(r"\bor\b", text, re.I):
+        return "", ",".join(found), ""
+    return ",".join(found), "", ""
 
 
 def _category(document: str, name: str) -> str:
@@ -390,14 +455,14 @@ def feats(
             source, row, _benefit(head, ref, row["Name"] or "", granted)
         )
         out.execute(
-            "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ref, row["ID"], tier, _min_level(tree),
                 json.dumps(tree) if tree else None, opaque,
                 books,
                 _category(row["Txt"] or "", row["Name"] or ""),
                 benefit,
-                _trains(benefit),
+                *_training(benefit),
             ),
         )
         # **No description, and that is the answer rather than a gap.** A feat
@@ -459,10 +524,11 @@ def _card(
     # *feats* combine -- a power card handed over by one has nothing to do
     # with it. Empty string, explicitly.
     out.execute(
-        "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO feat VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         # A card grants no training of its own -- the training is on the
-        # feat, like the category two lines above. Empty, explicitly.
-        (ref, row["ID"], tier, 1, None, 0, books, "", spec, ""),
+        # feat, like the category two lines above. Empty, explicitly, in
+        # all three columns.
+        (ref, row["ID"], tier, 1, None, 0, books, "", spec, "", "", ""),
     )
     # A card is read in the power dialect, so its printed rules are
     # `power_rules` -- the same lines `power_spec` scrubs two lines up. #349.

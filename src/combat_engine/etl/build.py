@@ -290,7 +290,16 @@ CREATE TABLE feat (
   -- Training is a build-time fact, which is why it is a column and not
   -- something a row body says. `chargen` applies it; `engine/skills.py`
   -- pays the +5. #565.
-  trains TEXT
+  trains TEXT,
+  -- Skills to pick **one** of, where `trains` is "you get all of these".
+  -- Separate columns because `chargen` unions `trains`, so a choice stored
+  -- there would train one character in every option -- three skills off
+  -- `f1222`. #574.
+  trains_choice TEXT,
+  -- The printed class whose skill list to pick one from, as written: four
+  -- of the 32 name a build ("executioner assassin"), and flattening that
+  -- to the parent class would offer skills the card does not.
+  trains_from TEXT
 );
 CREATE INDEX feat_tier ON feat(tier, min_level);
 CREATE INDEX feat_category ON feat(category);
