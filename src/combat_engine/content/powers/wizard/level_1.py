@@ -48,7 +48,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p1167(c: Cast) -> None:
@@ -65,7 +65,7 @@ def p1167(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_ENEMY,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.FIRE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.FIRE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p1166(c: Cast) -> None:
@@ -83,7 +83,7 @@ def p1166(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.EVOCATION],
 )
 def p463(c: Cast) -> None:
     # No attack roll at all: the damage simply happens.
@@ -99,7 +99,7 @@ def p463(c: Cast) -> None:
     # "Area 1 square within 10 squares": a burst of radius 0.
     reach=AreaBurst(0, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p1164(c: Cast) -> None:
@@ -122,7 +122,7 @@ def p1164(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p1169(c: Cast) -> None:
@@ -139,7 +139,7 @@ def p1169(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p1171(c: Cast) -> None:
@@ -158,7 +158,7 @@ def p1171(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p1424(c: Cast) -> None:
@@ -179,7 +179,7 @@ def p1424(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.NECROMANCY],
     attack=Attack(INT, vs=FORT),
 )
 def p416(c: Cast) -> None:
@@ -198,7 +198,7 @@ def p416(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(2, within=20),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.ENCHANTMENT],
     attack=Attack(INT, vs=WILL),
 )
 def p451(c: Cast) -> None:
@@ -228,7 +228,7 @@ def p451(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p464(c: Cast) -> None:
@@ -256,7 +256,7 @@ def p464(c: Cast) -> None:
     reach=Ranged(20),
     # Printed as "one creature or object". Objects are not on the board.
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p465(c: Cast) -> None:

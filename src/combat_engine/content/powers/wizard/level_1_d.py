@@ -78,7 +78,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     action=STANDARD,
     reach=AreaBurst(2, within=10),
     target=NO_TARGET,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.ZONE, Keyword.AREA],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.ZONE, Keyword.AREA, Keyword.EVOCATION],
     # Declared for the second stanza, which is the only thing here that rolls.
     attack=Attack(INT, vs=REF),
 )
@@ -189,7 +189,7 @@ def p3216(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p4019(c: Cast) -> None:
@@ -264,7 +264,7 @@ def p4305(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.CONJURATION, Keyword.EVOCATION],
 )
 def p4309(c: Cast) -> None:
     """The pillar occupies its square, which is what makes it a conjuration
@@ -317,8 +317,7 @@ def p4309(c: Cast) -> None:
         Keyword.FIRE,
         Keyword.FORCE,
         Keyword.ZONE,
-        Keyword.AREA,
-    ],
+        Keyword.AREA, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p5799(c: Cast) -> None:
@@ -351,7 +350,7 @@ def p5799(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p5800(c: Cast) -> None:
@@ -373,7 +372,7 @@ def p5800(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p5801(c: Cast) -> None:
@@ -429,7 +428,7 @@ def p5802(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=UpTo(2),
-    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.CONJURATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p5803(c: Cast) -> None:
@@ -480,7 +479,7 @@ def p5803(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_ENEMY,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.AREA],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.AREA, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p7406(c: Cast) -> None:
@@ -567,7 +566,7 @@ def _commands_on_opportunity(c: Cast, made: int, *, mark: bool = False) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=ARCANE_IMPLEMENT,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(speed=5, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int")),
 )
 def p11840(c: Cast) -> None:
@@ -608,7 +607,7 @@ def p11840(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=ARCANE_IMPLEMENT,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(speed=8, attack=Attack(INT, vs=REF), damage=Damage("1d10", "int")),
 )
 def p11841(c: Cast) -> None:
@@ -634,7 +633,7 @@ def p11841(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.SUMMONING],
     summon=Summon(
         speed=6, defences=2, modes=("fly",),
         attack=Attack(INT, vs=REF),

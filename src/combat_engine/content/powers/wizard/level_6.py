@@ -331,7 +331,7 @@ def p11035(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.CLOSE, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.CLOSE, Keyword.ZONE, Keyword.SHADOW],
     out_of_combat=True,
 )
 def p13985(c: Cast) -> None:
@@ -346,7 +346,7 @@ def p13985(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ALLY,
-    keywords=[Keyword.ARCANE, Keyword.CLOSE],
+    keywords=[Keyword.ARCANE, Keyword.CLOSE, Keyword.SHADOW],
 )
 def p13986(c: Cast) -> None:
     """Darkvision has nothing to read -- the engine keeps no light level and no
@@ -680,7 +680,7 @@ def p6902(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(speed=6, defences=2),
 )
 def p4112(c: Cast) -> None:

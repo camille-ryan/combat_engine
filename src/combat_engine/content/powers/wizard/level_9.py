@@ -51,7 +51,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     action=STANDARD,
     reach=AreaBurst(3, within=20),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p191(c: Cast) -> None:
@@ -78,7 +78,7 @@ def p191(c: Cast) -> None:
     # "One creature adjacent to the sword" -- the sword is placed next to
     # whoever was picked, which is the same thing said from the other end.
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.CONJURATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p419(c: Cast) -> None:
@@ -126,7 +126,7 @@ def p419(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.POISON],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.POISON, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p480(c: Cast) -> None:

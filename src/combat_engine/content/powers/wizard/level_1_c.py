@@ -143,7 +143,7 @@ def _no_opportunity(c: Cast, held: Effect, who: int) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.MELEE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.MELEE, Keyword.TRANSMUTATION],
     attack=Attack(INT, vs=FORT),
 )
 def p14538(c: Cast) -> None:
@@ -172,7 +172,7 @@ def p14538(c: Cast) -> None:
     # caster's own square rather than part of the burst -- `EACH_CREATURE`
     # would freeze the wizard standing at the middle of it.
     target=EACH_OTHER,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.CLOSE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.CLOSE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p14539(c: Cast) -> None:
@@ -189,7 +189,7 @@ def p14539(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p14541(c: Cast) -> None:
@@ -236,8 +236,7 @@ def p14541(c: Cast) -> None:
         Keyword.NECROTIC,
         Keyword.FEAR,
         Keyword.ZONE,
-        Keyword.CLOSE,
-    ],
+        Keyword.CLOSE, Keyword.NETHERMANCY],
     attack=Attack(INT, vs=WILL),
 )
 def p14542(c: Cast) -> None:
@@ -275,7 +274,9 @@ def p14542(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.RADIANT, Keyword.CHARM, Keyword.CLOSE],
+    keywords=[
+        *ARCANE_IMPLEMENT, Keyword.RADIANT, Keyword.CHARM, Keyword.CLOSE, Keyword.ENCHANTMENT,
+    ],
     attack=Attack(INT, vs=WILL),
 )
 def p14543(c: Cast) -> None:
@@ -299,7 +300,7 @@ def p14543(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.AREA],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.AREA, Keyword.ENCHANTMENT],
     attack=Attack(INT, vs=WILL),
 )
 def p14544(c: Cast) -> None:
@@ -332,7 +333,7 @@ def p14544(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.CHARM],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.CHARM, Keyword.ENCHANTMENT],
     attack=Attack(INT, vs=WILL),
 )
 def p14545(c: Cast) -> None:
@@ -369,7 +370,7 @@ def p14545(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ALLY,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.CLOSE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.CLOSE, Keyword.EVOCATION],
 )
 def p16274(c: Cast) -> None:
     """A held damage modifier rather than a watcher, so the engine's own
@@ -416,7 +417,7 @@ def p16274(c: Cast) -> None:
     # squares is laid in the body, and everybody standing in it is a target.
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p16275(c: Cast) -> None:
@@ -463,7 +464,7 @@ def p16275(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.ZONE, Keyword.AREA],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.ZONE, Keyword.AREA, Keyword.TRANSMUTATION],
     attack=Attack(INT, vs=REF),
 )
 def p16276(c: Cast) -> None:
@@ -544,7 +545,7 @@ def _p16276_attack(c: Cast, victim: int) -> None:
     # "One creature adjacent to the blade" -- the blade is put down beside
     # whoever was picked, which is the same sentence from the other end.
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.CONJURATION, Keyword.TRANSMUTATION],
     attack=Attack(INT, vs=REF),
 )
 def p16277(c: Cast) -> None:

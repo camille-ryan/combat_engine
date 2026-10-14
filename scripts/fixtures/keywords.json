@@ -201,24 +201,6 @@
   "i782p1": [
    "augmentable"
   ],
-  "p10070": [
-   "evocation"
-  ],
-  "p10071": [
-   "evocation"
-  ],
-  "p10073": [
-   "enchantment"
-  ],
-  "p10138": [
-   "enchantment"
-  ],
-  "p10144": [
-   "evocation"
-  ],
-  "p10146": [
-   "enchantment"
-  ],
   "p10274": [
    "augmentable"
   ],
@@ -240,15 +222,6 @@
   "p10288": [
    "augmentable",
    "weapon"
-  ],
-  "p10417": [
-   "evocation"
-  ],
-  "p10419": [
-   "evocation"
-  ],
-  "p10421": [
-   "evocation"
   ],
   "p10438": [
    "augmentable"
@@ -273,24 +246,6 @@
   ],
   "p10774": [
    "rattling"
-  ],
-  "p11030": [
-   "evocation"
-  ],
-  "p11031": [
-   "evocation"
-  ],
-  "p11033": [
-   "evocation"
-  ],
-  "p11034": [
-   "evocation"
-  ],
-  "p11036": [
-   "evocation"
-  ],
-  "p11037": [
-   "evocation"
   ],
   "p11061": [
    "augmentable"
@@ -455,45 +410,6 @@
   "p11398": [
    "runic"
   ],
-  "p1164": [
-   "evocation"
-  ],
-  "p1166": [
-   "evocation"
-  ],
-  "p1167": [
-   "evocation"
-  ],
-  "p1169": [
-   "evocation"
-  ],
-  "p1171": [
-   "evocation"
-  ],
-  "p11840": [
-   "summoning"
-  ],
-  "p11841": [
-   "summoning"
-  ],
-  "p11842": [
-   "summoning"
-  ],
-  "p11843": [
-   "summoning"
-  ],
-  "p11844": [
-   "summoning"
-  ],
-  "p11845": [
-   "summoning"
-  ],
-  "p1195": [
-   "evocation"
-  ],
-  "p1217": [
-   "illusion"
-  ],
   "p12419": [
    "augmentable"
   ],
@@ -527,12 +443,6 @@
   "p12534": [
    "spirit"
   ],
-  "p12547": [
-   "evocation"
-  ],
-  "p12548": [
-   "evocation"
-  ],
   "p12601": [
    "channel divinity"
   ],
@@ -541,33 +451,6 @@
   ],
   "p12651": [
    "channel divinity"
-  ],
-  "p12732": [
-   "evocation"
-  ],
-  "p12733": [
-   "enchantment"
-  ],
-  "p12734": [
-   "evocation"
-  ],
-  "p12735": [
-   "enchantment"
-  ],
-  "p12740": [
-   "evocation"
-  ],
-  "p12742": [
-   "enchantment"
-  ],
-  "p12743": [
-   "enchantment"
-  ],
-  "p12744": [
-   "enchantment"
-  ],
-  "p12748": [
-   "enchantment"
   ],
   "p12865": [
    "spirit"
@@ -800,15 +683,6 @@
   "p13710": [
    "channel divinity"
   ],
-  "p13741": [
-   "transmutation"
-  ],
-  "p13742": [
-   "transmutation"
-  ],
-  "p13743": [
-   "transmutation"
-  ],
   "p13771": [
    "spirit"
   ],
@@ -970,94 +844,8 @@
   "p13957": [
    "shadow"
   ],
-  "p13970": [
-   "necromancy"
-  ],
-  "p13971": [
-   "nethermancy"
-  ],
-  "p13972": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13973": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13974": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13975": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13976": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13977": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13978": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13979": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13980": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13982": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13983": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13985": [
-   "shadow"
-  ],
-  "p13986": [
-   "shadow"
-  ],
-  "p13987": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13988": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13988b": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13990": [
-   "necromancy",
-   "shadow"
-  ],
-  "p13991": [
-   "nethermancy",
-   "shadow"
-  ],
-  "p13992": [
-   "shadow"
-  ],
-  "p13993": [
-   "nethermancy",
-   "shadow"
-  ],
   "p14231": [
    "channel divinity"
-  ],
-  "p1424": [
-   "evocation"
   ],
   "p14245": [
    "channel divinity"
@@ -1077,71 +865,14 @@
   "p14293b": [
    "channel divinity"
   ],
-  "p1430": [
-   "evocation"
-  ],
-  "p1435": [
-   "evocation"
-  ],
-  "p14538": [
-   "transmutation"
-  ],
-  "p14539": [
-   "evocation"
-  ],
-  "p14541": [
-   "evocation"
-  ],
-  "p14542": [
-   "nethermancy"
-  ],
-  "p14543": [
-   "enchantment"
-  ],
-  "p14544": [
-   "enchantment"
-  ],
-  "p14545": [
-   "enchantment"
-  ],
-  "p14549": [
-   "evocation"
-  ],
-  "p14550": [
-   "nethermancy"
-  ],
-  "p14551": [
-   "transmutation"
-  ],
-  "p14552": [
-   "transmutation"
-  ],
-  "p14559": [
-   "enchantment"
-  ],
-  "p14560": [
-   "enchantment"
-  ],
-  "p14561": [
-   "transmutation"
-  ],
   "p146": [
    "channel divinity"
-  ],
-  "p1530": [
-   "evocation"
-  ],
-  "p1553": [
-   "evocation"
   ],
   "p15885": [
    "summoning"
   ],
   "p1589": [
    "channel divinity"
-  ],
-  "p159": [
-   "evocation"
   ],
   "p15905": [
    "zone"
@@ -1280,37 +1011,6 @@
   "p16266": [
    "elemental"
   ],
-  "p16274": [
-   "evocation"
-  ],
-  "p16275": [
-   "evocation"
-  ],
-  "p16276": [
-   "transmutation"
-  ],
-  "p16277": [
-   "transmutation"
-  ],
-  "p16280": [
-   "evocation"
-  ],
-  "p16281": [
-   "evocation"
-  ],
-  "p16281b": [
-   "evocation"
-  ],
-  "p16285": [
-   "necromancy",
-   "shadow"
-  ],
-  "p16288": [
-   "evocation"
-  ],
-  "p16288b": [
-   "evocation"
-  ],
   "p16350": [
    "shadow"
   ],
@@ -1371,21 +1071,6 @@
   "p16588": [
    "evocation"
   ],
-  "p173": [
-   "evocation"
-  ],
-  "p185": [
-   "evocation"
-  ],
-  "p189": [
-   "evocation"
-  ],
-  "p191": [
-   "evocation"
-  ],
-  "p192": [
-   "evocation"
-  ],
   "p2248": [
    "rattling"
   ],
@@ -1395,29 +1080,17 @@
   "p2266": [
    "rattling"
   ],
-  "p2272": [
-   "evocation"
-  ],
   "p2284": [
    "rattling"
   ],
   "p2286": [
    "rattling"
   ],
-  "p2351": [
-   "evocation"
-  ],
-  "p2375": [
-   "evocation"
-  ],
   "p2399": [
    "rattling"
   ],
   "p2509": [
    "rattling"
-  ],
-  "p251": [
-   "evocation"
   ],
   "p2521": [
    "rattling"
@@ -1442,9 +1115,6 @@
   ],
   "p2635": [
    "augmentable"
-  ],
-  "p2816": [
-   "evocation"
   ],
   "p2880": [
    "summoning"
@@ -1476,86 +1146,17 @@
   "p380": [
    "illusion"
   ],
-  "p4016": [
-   "summoning"
-  ],
-  "p4019": [
-   "evocation"
-  ],
-  "p4022": [
-   "evocation"
-  ],
-  "p4025": [
-   "evocation"
-  ],
-  "p4028": [
-   "evocation"
-  ],
-  "p4078": [
-   "summoning"
-  ],
-  "p4082": [
-   "summoning"
-  ],
-  "p4084": [
-   "evocation"
-  ],
-  "p4106": [
-   "summoning"
-  ],
-  "p4112": [
-   "summoning"
-  ],
-  "p4117": [
-   "summoning"
-  ],
   "p4141": [
    "summoning"
   ],
   "p4148": [
    "summoning"
   ],
-  "p416": [
-   "necromancy"
-  ],
-  "p419": [
-   "evocation"
-  ],
-  "p4309": [
-   "evocation"
-  ],
-  "p435": [
-   "evocation"
-  ],
   "p4488": [
    "rattling"
   ],
   "p4490": [
    "rattling"
-  ],
-  "p451": [
-   "enchantment"
-  ],
-  "p454": [
-   "evocation"
-  ],
-  "p463": [
-   "evocation"
-  ],
-  "p464": [
-   "evocation"
-  ],
-  "p464b": [
-   "evocation"
-  ],
-  "p465": [
-   "evocation"
-  ],
-  "p465b": [
-   "evocation"
-  ],
-  "p480": [
-   "evocation"
   ],
   "p5366": [
    "summoning"
@@ -1617,45 +1218,14 @@
   "p5545": [
    "spirit"
   ],
-  "p5799": [
-   "evocation"
-  ],
-  "p5800": [
-   "evocation"
-  ],
-  "p5801": [
-   "evocation"
-  ],
-  "p5803": [
-   "evocation"
-  ],
-  "p5804": [
-   "evocation"
-  ],
-  "p5806": [
-   "evocation"
-  ],
   "p6521": [
    "spirit"
   ],
   "p6593": [
    "rattling"
   ],
-  "p6903": [
-   "evocation"
-  ],
   "p6945": [
    "spirit"
-  ],
-  "p6958": [
-   "necromancy"
-  ],
-  "p6959": [
-   "necromancy",
-   "summoning"
-  ],
-  "p7406": [
-   "evocation"
   ],
   "p7414": [
    "summoning"
@@ -1695,9 +1265,6 @@
   ],
   "p750": [
    "teleportation"
-  ],
-  "p7510": [
-   "evocation"
   ],
   "p7535b": [
    "full discipline",

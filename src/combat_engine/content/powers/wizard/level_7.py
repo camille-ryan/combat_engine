@@ -74,7 +74,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     action=STANDARD,
     reach=AreaBurst(2, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p1430(c: Cast) -> None:
@@ -110,7 +110,7 @@ def p1430(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(2, within=20),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p189(c: Cast) -> None:
@@ -128,7 +128,7 @@ def p189(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=UpTo(3),
-    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.LIGHTNING, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p251(c: Cast) -> None:
@@ -146,7 +146,7 @@ def p251(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p454(c: Cast) -> None:
@@ -167,7 +167,7 @@ def p454(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.ENCHANTMENT],
     attack=Attack(INT, vs=WILL),
 )
 def p10146(c: Cast) -> None:
@@ -201,7 +201,7 @@ def p10146(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CLOSE, Keyword.FORCE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CLOSE, Keyword.FORCE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p10421(c: Cast) -> None:
@@ -222,7 +222,7 @@ def p10421(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(2, within=20),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.ACID, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.ACID, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p11036(c: Cast) -> None:
@@ -250,8 +250,7 @@ def p11036(c: Cast) -> None:
         *ARCANE_IMPLEMENT,
         Keyword.CLOSE,
         Keyword.FIRE,
-        Keyword.TELEPORTATION,
-    ],
+        Keyword.TELEPORTATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p12548(c: Cast) -> None:
@@ -344,7 +343,9 @@ def p12745(c: Cast) -> None:
     action=STANDARD,
     reach=MeleeOrRanged(1, 5),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.ZONE],
+    keywords=[
+        *ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.ZONE, Keyword.NECROMANCY, Keyword.SHADOW,
+    ],
     attack=Attack(INT, vs=FORT),
 )
 def p13987(c: Cast) -> None:
@@ -406,7 +407,10 @@ def p13987(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.PSYCHIC],
+    keywords=[
+        *ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.PSYCHIC,
+        Keyword.NETHERMANCY, Keyword.SHADOW,
+    ],
     attack=Attack(INT, vs=WILL),
 )
 def p13988(c: Cast) -> None:
@@ -519,7 +523,7 @@ def p14558(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.TELEPORTATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.TELEPORTATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=WILL),
 )
 def p2816(c: Cast) -> None:
@@ -559,7 +563,7 @@ def p3221(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.ACID],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.ACID, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p4028(c: Cast) -> None:
@@ -603,7 +607,7 @@ def p4028(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.ACID],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CONJURATION, Keyword.ACID, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p5806(c: Cast) -> None:
@@ -635,7 +639,7 @@ def p5806(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.THUNDER],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.THUNDER, Keyword.EVOCATION],
     attack=Attack(INT, vs=WILL),
 )
 def p6903(c: Cast) -> None:
@@ -662,7 +666,7 @@ def p6903(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p7510(c: Cast) -> None:

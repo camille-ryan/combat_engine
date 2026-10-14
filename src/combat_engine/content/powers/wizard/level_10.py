@@ -412,7 +412,7 @@ def p12749(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
+    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION, Keyword.SHADOW],
 )
 def p13992(c: Cast) -> None:
     """The printed Requirement and destination are both a square of dim light
@@ -432,7 +432,7 @@ def p13992(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.AREA, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.AREA, Keyword.ZONE, Keyword.NETHERMANCY, Keyword.SHADOW],
 )
 def p13993(c: Cast) -> None:
     """Blindness is a property of standing in the dark rather than a duration,
@@ -492,7 +492,7 @@ def p13993(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.AREA, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.AREA, Keyword.ZONE, Keyword.TRANSMUTATION],
 )
 def p14561(c: Cast) -> None:
     """"Attempts to leave a square in the zone" is answered at `MoveStart`, the
@@ -773,7 +773,7 @@ def p7401(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(speed=3, defences=2, attack=Attack(INT, vs=REF),
                   damage=Damage("5d6", "int")),
 )

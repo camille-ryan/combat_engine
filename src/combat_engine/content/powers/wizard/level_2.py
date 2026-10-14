@@ -332,7 +332,7 @@ def p11032(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=Target("any", 1, label="One creature"),
-    keywords=[Keyword.ARCANE, Keyword.CHARM],
+    keywords=[Keyword.ARCANE, Keyword.CHARM, Keyword.ENCHANTMENT],
     out_of_combat=True,
 )
 def p12742(c: Cast) -> None:
@@ -349,7 +349,7 @@ def p12742(c: Cast) -> None:
     action=REACTION,
     reach=Ranged(5),
     target=ONE_ALLY,
-    keywords=[Keyword.ARCANE],
+    keywords=[Keyword.ARCANE, Keyword.NECROMANCY, Keyword.SHADOW],
     trigger="a nonminion living creature dies within 5 squares of you",
     on=Trigger(
         Died,
@@ -640,7 +640,7 @@ def p6900(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.SHADOW],
+    keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.SUMMONING],
     summon=Summon(),
 )
 def p4106(c: Cast) -> None:

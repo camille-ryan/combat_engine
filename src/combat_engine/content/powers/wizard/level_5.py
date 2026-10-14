@@ -101,7 +101,7 @@ def _staff(world: World, eid: int) -> bool:
     # "One creature adjacent to the hand" -- the hand is placed next to
     # whoever was picked, which is the same thing said from the other end.
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.CONJURATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p1195(c: Cast) -> None:
@@ -155,7 +155,7 @@ def p1195(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(3, within=20),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p1553(c: Cast) -> None:
@@ -237,7 +237,7 @@ def p67(c: Cast) -> None:
     action=INTERRUPT,
     reach=Melee(2),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.THUNDER, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
     requires=_staff,
     requires_text="needs a staff in hand",
@@ -269,7 +269,7 @@ def p10071(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(3, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.LIGHTNING],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.LIGHTNING, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p11034(c: Cast) -> None:
@@ -304,7 +304,7 @@ def p11034(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.CHARM, Keyword.ENCHANTMENT],
     attack=Attack(INT, vs=WILL),
 )
 def p12744(c: Cast) -> None:
@@ -346,7 +346,7 @@ def p12744(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.POLYMORPH],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.POLYMORPH, Keyword.TRANSMUTATION],
     attack=Attack(INT, vs=FORT),
 )
 def p14551(c: Cast) -> None:
@@ -378,7 +378,7 @@ def p14551(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.POLYMORPH],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.POLYMORPH, Keyword.TRANSMUTATION],
     attack=Attack(INT, vs=FORT),
 )
 def p14552(c: Cast) -> None:
@@ -426,7 +426,7 @@ def p14552(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=Target("any", 1, label="You or one ally"),
-    keywords=[Keyword.ARCANE, Keyword.FIRE],
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.EVOCATION],
 )
 def p16280(c: Cast) -> None:
     """The aura follows whoever it was hung on, which is what `c.aura(on=)` is
@@ -476,7 +476,7 @@ def p16280(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(20),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p16281(c: Cast) -> None:
@@ -502,7 +502,7 @@ def p16281(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.ACID, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.ACID, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p192(c: Cast) -> None:
@@ -542,7 +542,7 @@ def p192(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=20),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.RADIANT],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.RADIANT, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p2375(c: Cast) -> None:
@@ -636,7 +636,7 @@ def p4074(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(2, within=20),
     target=EACH_ENEMY,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.NECROTIC, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.AREA, Keyword.NECROTIC, Keyword.ZONE, Keyword.NECROMANCY],
     attack=Attack(INT, vs=REF),
 )
 def p6958(c: Cast) -> None:
@@ -689,7 +689,7 @@ def p6958(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.POISON],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.POISON, Keyword.SUMMONING],
     summon=Summon(
         speed=4, modes=("fly",),
         attack=Attack(INT, vs=REF), damage=Damage("1d8", "int"),
@@ -720,7 +720,7 @@ def p11842(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.SUMMONING],
     summon=Summon(
         speed=4, attack=Attack(INT, vs=REF),
         damage=Damage("1d10", "int", dtype=DamageType.FIRE),
@@ -751,7 +751,7 @@ def p11843(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=ARCANE_IMPLEMENT,
+    keywords=[*ARCANE_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(speed=6, attack=Attack(INT, vs=REF), damage=Damage("2d6", "int")),
 )
 def p4078(c: Cast) -> None:

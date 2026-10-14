@@ -87,7 +87,7 @@ BLADESPELL = Trigger(
     action=STANDARD,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ILLUSION],
     out_of_combat=True,
 )
 def p1217(c: Cast) -> None:
@@ -165,7 +165,7 @@ def p12731(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.SHADOW],
+    keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.NETHERMANCY],
     out_of_combat=True,
 )
 def p13971(c: Cast) -> None:
@@ -246,7 +246,7 @@ def p16273(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.SHADOW],
+    keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.NECROMANCY],
 )
 def p13970(c: Cast) -> None:
     """"Reduced by 5, if any" -- so a creature with no necrotic resistance

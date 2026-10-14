@@ -34,7 +34,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     action=STANDARD,
     reach=CloseBlast(5),
     target=EACH_OTHER,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p159(c: Cast) -> None:
@@ -52,7 +52,7 @@ def p159(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(2, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ZONE, Keyword.EVOCATION],
     attack=Attack(INT, vs=FORT),
 )
 def p185(c: Cast) -> None:
@@ -74,7 +74,7 @@ def p185(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.CONJURATION],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.CONJURATION, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
 )
 def p1435(c: Cast) -> None:
