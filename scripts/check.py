@@ -291,11 +291,72 @@ def _nightly_state() -> list[str]:
             # earlier run and the protocol reads it as the current one.
             out.append(f"         logs/NIGHTLY-FAILED is from BEFORE that"
                        f" -- {NIGHTLY_RED.read_text().splitlines()[0]}")
-        return out
+        return [*out, *_stale_net()]
     if NIGHTLY_RED.exists():
-        return [f"nightly: last run {when} RED{old}"
-                f" -- {NIGHTLY_RED.read_text().splitlines()[0]}"]
-    return [f"nightly: last run {when} clean{old}"]
+        why = NIGHTLY_RED.read_text().splitlines()[0]
+        return [f"nightly: last run {when} RED{old} -- {why}", *_stale_net()]
+    return [f"nightly: last run {when} clean{old}", *_stale_net()]
+
+
+
+#: How long the net may go unpaid before saying so. A day plus an hour: the
+#: sweep is nightly, and the agent has landed as much as 60 minutes late, so
+#: 24 would cry wolf every morning the machine was slow to wake.
+STALE_AFTER_HOURS = 26
+
+
+def _stale_net() -> list[str]:
+    """How long since a sweep actually reached a verdict, when that is news.
+
+    **A skip is not a verdict, and nothing was counting them.** `#566`: the
+    agent fired three times since it was installed and *every one* either
+    skipped or had to be kicked by hand -- a dirty tree, then a `check.py`
+    already running -- so no sweep has ever been paid on the schedule. Each
+    of those nights the line above read correctly and said nothing about the
+    net going unpaid, because it reports the last **attempt**.
+
+    Read off the dated logs rather than the marker or the latest-copy,
+    because they are the only per-attempt record that survives: the most
+    recent one whose first line is not `SKIPPED` is the last time every row
+    was actually looked at. Silent when that is recent, so an ordinary
+    morning gains no line.
+    """
+    logs = sorted((ROOT / "logs").glob("nightly-20*.log"), reverse=True)
+    for log in logs:
+        try:
+            head = log.read_text()[:200]
+        except OSError:
+            continue
+        if head.lstrip().startswith("SKIPPED"):
+            continue
+        stamped = re.search(r"(\d{4}-\d\d-\d\d) (\d\d:\d\d)", head)
+        if not stamped:
+            continue
+        ran = datetime.strptime(
+            f"{stamped.group(1)} {stamped.group(2)}", "%Y-%m-%d %H:%M"
+        )
+        hours = (datetime.now() - ran).total_seconds() / 3600
+        if hours < STALE_AFTER_HOURS:
+            return []
+        skipped = sum(
+            1 for other in logs
+            if other > log and _skipped(other)
+        )
+        tail = f", {skipped} attempt(s) skipped since" if skipped else ""
+        return [f"         the net last reached a verdict {ran:%F %H:%M},"
+                f" {int(hours / 24)}d ago{tail}"]
+    if logs:
+        return ["         no attempt on record has reached a verdict --"
+                " every one skipped"]
+    return []
+
+
+def _skipped(log: Path) -> bool:
+    """Did this attempt skip rather than sweep?"""
+    try:
+        return log.read_text()[:200].lstrip().startswith("SKIPPED")
+    except OSError:
+        return False
 
 
 def _sweep_owed() -> str:
