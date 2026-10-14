@@ -19,6 +19,23 @@ the AI policy without running anything — and **the body is code** against a
 * Almost every `Cast` method defaults to `c.target`, not `c.me`. If the
   sentence is about the character, pass `on=c.me`. This is the commonest
   single mistake here.
+
+  **In a `target=NO_TARGET` row it is not a risk, it is a certainty**, and
+  `lint.py` fails you for it now. There is no target, so a bare call acts
+  on nobody: `c.bloodied()` is False in every fight, `c.held()` is an
+  empty list. 20 rows were written that way and **all 20 audited green**,
+  because each had a second clause — a heal, a shift, a summon — that did
+  fire. The row fires, does something, and reports finished. #564 is the
+  harder half: in a row that *has* a target the same call is usually
+  right, and only the card can say.
+
+  **Naming the attacker does not name the victim.** `c.basic(who=other)`
+  says who swings; `on=` is who gets hit, and it defaults the same way.
+  Ten rows lent a swing with no `on=`, and `c.basic` returns False before
+  it rolls — so "an ally can make a basic attack" never happened once.
+  `_foe_beside(c, who)` in `monsters/level_01/skirmishers_sa.py` is the
+  helper: adjacency to the **attacker**, since adjacency to the caster is
+  the wrong question when somebody else is swinging.
 * A declared trigger must be `on=Trigger(event, predicate, text)`.
   `trigger="..."` **alone is prose the engine never reads** — the row will
   never fire.
