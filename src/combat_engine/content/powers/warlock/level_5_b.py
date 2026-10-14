@@ -196,7 +196,7 @@ def p12892(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.RADIANT],
+    keywords=[Keyword.ARCANE],
 )
 def p13642(c: Cast) -> None:
     """The ward is the primary; the reaction printed under it is `p13642b`,
@@ -204,6 +204,13 @@ def p13642(c: Cast) -> None:
     holder decline it. The shield bonus is its own `kind`, which is how it
     fails to stack with a real shield. The hold this leaves carries the
     row's own name, which is what the secondary's Requirement reads.
+
+    **`Keyword.RADIANT` came off.** This card prints `Arcane` and nothing
+    else, and this body deals no damage of any type -- the radiant blow is
+    `p13642b`, whose card prints `Arcane, Radiant` and whose header already
+    declares both. So the keyword was sitting on the half that cannot use
+    it, where a feat reading "your radiant powers" would have found the
+    ward. #590.
     """
     c.world.effects.apply(
         c.me,
