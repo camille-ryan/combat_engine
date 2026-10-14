@@ -278,7 +278,7 @@ def p5133(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.PRIMAL, Keyword.HEALING],
+    keywords=[Keyword.PRIMAL],
     requires=_took_second_wind,
     requires_text="must have used your second wind during this encounter",
 )

@@ -368,16 +368,26 @@ def p1886(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC],
+    keywords=[*ARCANE_IMPLEMENT],
     attack=Attack(CHA, vs=WILL),
 )
 def p3405(c: Cast) -> None:
     """The way out is the target's own choice, which is what `c.may` asks --
     it puts the question to `c.target` and not to the caster. The dark pact
-    rider would let the attack go against Fortitude instead."""
+    rider would let the attack go against Fortitude instead.
+
+    **Untyped, both blows, which is what the card prints.** The keyword
+    line is `Arcane, Implement` and the hit line reads "1d8 + Charisma
+    modifier damage" with no type at all, so the `PSYCHIC` this carried was
+    invented -- and invented in a direction that matters: psychic
+    resistance would have absorbed a blow the card types not at all, and
+    psychic vulnerability would have raised it. The second blow was
+    already untyped, so the two halves of one card disagreed with each
+    other. #590.
+    """
     if not c.strike():
         return
-    c.damage("1d8", c.cha_mod, dtype=DamageType.PSYCHIC)
+    c.damage("1d8", c.cha_mod)
     fog = c.dazed(until=When.EOTNT)
     if fog is not None and c.may("tear free of it"):
         c.damage("2d8")

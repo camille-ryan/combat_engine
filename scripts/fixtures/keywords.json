@@ -21,9 +21,6 @@
   "p11609": [
    "healing"
   ],
-  "p12650": [
-   "healing"
-  ],
   "p13650": [
    "teleportation"
   ],
@@ -42,9 +39,6 @@
   "p16286": [
    "implement"
   ],
-  "p3405": [
-   "psychic"
-  ],
   "p4020": [
    "conjuration"
   ],
@@ -54,9 +48,6 @@
   "p5848": [
    "cold",
    "radiant"
-  ],
-  "p9870": [
-   "healing"
   ]
  },
  "omits": {}

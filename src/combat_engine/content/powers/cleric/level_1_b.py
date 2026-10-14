@@ -461,7 +461,7 @@ def p12637(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.HEALING],
+    keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
     attack=Attack(WIS, vs=AC),
 )
 def p12650(c: Cast) -> None:
