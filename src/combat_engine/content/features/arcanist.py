@@ -547,3 +547,68 @@ def shair_familiar(c: Cast) -> None:
 )
 def shair_cantrips(c: Cast) -> None:
     """Four cantrips again, on the other page, and inert for the same reason."""
+
+
+# --------------------------------------------------------------------------
+# The mage's school tiers, `cf:wizard-mage-f4sN`
+#
+# Eighteen sub-options over three tiers, imported by #584 and #586 -- the
+# class had never had a single feature read, so none of these refs existed
+# until then. This is the middle tier, and the only one of the three whose
+# six benefits are all the same shape: two named skills, +2 each, no type
+# word in front of the number.
+#
+# **Hand-written one by one rather than looped over a table**, which is the
+# global rule and earns its keep here: the six pairs overlap but no two are
+# the same pair, and a table would hide that `f4s0` and `f4s5` share one
+# skill and differ in the other.
+#
+# `until=When.ENCOUNTER` and no `kind=`, which is what
+# `cf:wizard-arcanist-f0s2` does for its standing bonus and for the same two
+# reasons: a class feature is re-armed every fight, and the card prints no
+# word before "bonus", so the bonus is untyped.
+#
+# The schools these belong to are printed names and are in `localization/`;
+# the ref is what says which. #581.
+# --------------------------------------------------------------------------
+
+
+def _expert(ref: str, first: str, second: str):  # noqa: ANN202
+    """Two skills, +2 each -- the whole of one middle-tier benefit.
+
+    The one helper the global rule allows, for a run of rows that genuinely
+    share a shape. It takes the two skill names rather than deriving them,
+    so each row below still says its own pair out loud.
+    """
+
+    @power(
+        ref,
+        level=4,
+        cls="wizard",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+    )
+    def row(c: Cast) -> None:
+        c.bonus(f"skill:{first}", 2, until=When.ENCOUNTER, on=c.me)
+        c.bonus(f"skill:{second}", 2, until=When.ENCOUNTER, on=c.me)
+
+    row.__name__ = "mage_expert_" + ref.rsplit("-", 1)[-1]
+    row.__doc__ = (
+        f"The middle tier of the school chosen for `cf:wizard-mage-f0`: "
+        f"+2 to {first} and +2 to {second}.\n\n"
+        f"    A skill bonus is a `skill:<name>` modifier, which is what the\n"
+        f"    50 content files that lay one already write and what\n"
+        f"    `engine/skills.py` reads beside the training `Skills` records."
+    )
+    return row
+
+
+mage_expert_s0 = _expert("cf:wizard-mage-f4s0", "bluff", "diplomacy")
+mage_expert_s1 = _expert("cf:wizard-mage-f4s1", "endurance", "intimidate")
+mage_expert_s2 = _expert("cf:wizard-mage-f4s2", "bluff", "stealth")
+mage_expert_s3 = _expert("cf:wizard-mage-f4s3", "athletics", "endurance")
+mage_expert_s4 = _expert("cf:wizard-mage-f4s4", "intimidate", "stealth")
+mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate")
