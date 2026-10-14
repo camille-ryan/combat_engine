@@ -6574,7 +6574,95 @@ def a_lent_basic_attack(out: Result) -> None:
     )
 
 
+def trained_skills(out: Result) -> None:
+    """Being trained in a skill is worth +5, and only on that skill.
+
+    `engine/skills.py` carried the absence of this in its own docstring --
+    *"there is no training model ... nothing here decides who is trained
+    and the +5 is not applied by default"* -- so every skill check in the
+    game was rolled by an untrained character, including the opposed check
+    that decides whether a creature escapes a grab. #565.
+
+    Four assertions, and the last two are the ones that could have been
+    quietly wrong:
+
+    * a dealt character **is** trained in something, which is the half
+      that depends on `class_skill` having been extracted at all;
+    * a trained skill is exactly `TRAINING` higher than the same skill
+      untrained -- measured by clearing the set and re-asking, so the
+      ability modifier and half level cancel and 5 is the only term left;
+    * **an untrained skill is unchanged**, which is what fails if the
+      bonus is laid as a blanket `skill` modifier instead of per skill;
+    * and training **adds to** a card's own bonus rather than replacing
+      it. That is why it is not a `Mods` entry: `Mods.total` buckets by
+      key and the second +5 would have lost to the first.
+    """
+    from combat_engine.engine.components import Mod, Mods, Skills
+    from combat_engine.engine.skills import TRAINING, modifier
+
+    # A **character's** board. The default is a monster, and a monster has
+    # no training by design -- a stat block prints its skill totals outright
+    # rather than its training -- so `_board()` skipped this rule loudly
+    # instead of asserting anything.
+    world, caster, _ = _board("p704")
+    sk = world.get(caster, Skills)
+    if sk is None or not sk.trained:
+        out.skip(
+            "the board's caster has no Skills component or no training,"
+            " so neither half of the sum can be posed"
+        )
+        return
+
+    trained = sorted(sk.trained)[0]
+    other = next(
+        (s for s in ("arcana", "religion", "history", "nature", "heal",
+                     "diplomacy", "bluff")
+         if s not in sk.trained),
+        "",
+    )
+    out.that(
+        bool(sk.trained),
+        "a dealt character is trained in at least one skill",
+        f"trained in {sorted(sk.trained)}",
+    )
+
+    with_it = modifier(world, caster, trained)
+    before_other = modifier(world, caster, other) if other else 0
+    sk.trained = frozenset()
+    without = modifier(world, caster, trained)
+    after_other = modifier(world, caster, other) if other else 0
+
+    out.that(
+        with_it - without == TRAINING,
+        f"a trained skill is +{TRAINING} over the same skill untrained",
+        f"{trained}: {with_it} trained, {without} untrained",
+    )
+    out.that(
+        not other or before_other == after_other,
+        "and an untrained skill is not touched by somebody else's training",
+        f"{other}: {before_other} then {after_other}",
+    )
+
+    # Training plus a card's own bonus. Restored first, then a modifier on
+    # the same key -- the two must add.
+    sk.trained = frozenset({trained})
+    mods = world.get(caster, Mods) or world.add(caster, Mods())
+    mods.items.append(
+        Mod(what=f"skill:{trained}", value=2, kind="item", label="drivers:training")
+    )
+    both = modifier(world, caster, trained)
+    out.that(
+        both == with_it + 2,
+        "and a card's own bonus adds to training rather than replacing it",
+        f"{trained}: {with_it} trained, {both} with a +2 item bonus as well",
+    )
+
+
 DRIVERS = {
+    "trained_skills": (
+        trained_skills,
+        "being trained in a skill is worth +5, on that skill only",
+    ),
     "lent_basic": (
         a_lent_basic_attack,
         "a swing one row lends another creature, and who it is aimed at",

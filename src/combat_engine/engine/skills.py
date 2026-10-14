@@ -1,12 +1,22 @@
 """Skill checks.
 
-A check is d20 + the ability modifier + half level, which is the 4e floor,
-plus whatever modifiers are standing. There is **no training model**:
-`game.db` carries no skill list per class, so nothing here decides who is
-trained and the +5 is not applied by default. It is still sayable --
-`c.bonus("skill:stealth", 5)` is read like any other modifier -- and a
-`Skills` component seeding it from the chassis is the one thing this file
-is short of.
+A check is d20 + the ability modifier + half level + **5 if trained** +
+whatever modifiers are standing.
+
+**That +5 is new, and this file used to say it could not be had.** The old
+note read: *"There is no training model: `game.db` carries no skill list
+per class, so nothing here decides who is trained and the +5 is not
+applied by default ... a `Skills` component seeding it from the chassis is
+the one thing this file is short of."* Both halves are now built --
+`class_skill` in `game.db` carries 205 rows across all 25 classes, and
+`components.Skills` is the set `chargen` fills from it. #565.
+
+Training is **not** a `Mods` entry, and the distinction is load-bearing: it
+is a property of the creature rather than an effect laid on it, so it must
+not be ended, suspended, stacked with itself or scoped by a `when=`. It
+also has to add to a card's own bonus rather than replace it --
+`c.bonus("skill:stealth", 5)` and being trained in stealth are different
+facts, and one key for both would have made the second quietly win.
 
 The modifier key is `skill:<name>`, and a blanket `skill` modifier applies
 to every check, which is what an armour penalty or a racial bonus to all of
@@ -22,13 +32,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .components import Mods, Stats
+from .components import Mods, Skills, Stats
 from .events import SkillCheck
 from .types import Ability
 
 if TYPE_CHECKING:
     from .ecs import World
 
+
+#: What being trained in a skill is worth. The 4e number, and the only
+#: reason it is a constant rather than a literal is that two places ask
+#: -- the sum here, and `drivers.py` asserting it.
+TRAINING = 5
 
 #: Which ability each skill keys off. The one piece of rules data here, and
 #: it is the same table for every class.
@@ -95,6 +110,21 @@ def modifier(
         out += stats.half_level
         if ability is not None:
             out += stats.mod(ability)
+    # **The +5 this file said it was missing.** Read off `Skills.trained`,
+    # which `chargen` fills from `class_skill` -- the table that did not
+    # exist when the module docstring above was written.
+    #
+    # Not a `Mods` entry. Training is a property of the creature and not an
+    # effect laid on it, so it must not be ended, suspended, stacked with
+    # itself, or scoped by a `when=` -- and a `skill:<name>` modifier is all
+    # four of those things. It also has to be distinguishable from a card's
+    # own +5: `c.bonus("skill:stealth", 5)` and being trained in stealth are
+    # different facts that add, and bucketing both under one key would make
+    # the second silently replace the first.
+    trained = world.get(eid, Skills)
+    if trained is not None and skill.lower() in trained.trained:
+        out += TRAINING
+
     mods = world.get(eid, Mods)
     if mods is not None:
         ctx = {"actor": eid, "skill": skill.lower(), "target": target}

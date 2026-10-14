@@ -29,6 +29,7 @@ from .components import (
     Powers,
     Scenery,
     Side,
+    Skills,
     Stats,
     Weapon,
 )

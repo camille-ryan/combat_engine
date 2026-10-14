@@ -44,6 +44,7 @@ from combat_engine.engine import (
     Powers,
     Side,
     Size,
+    Skills,
     Stats,
     Team,
     Weapon,
@@ -2451,6 +2452,43 @@ def defences(line: ClassLine, scores: dict[Ability, int], level: int) -> dict:
     }
 
 
+def _trained_skills(cls: str, rng: Random) -> frozenset[str]:
+    """Which skills this character is trained in: the given, plus the chosen.
+
+    Off `class_skill`, which `etl/build.py` fills from the two sentences
+    every class page prints -- "Trained Skills: Stealth, Thievery." and
+    "Class Skills: ...". `granted=1` is the first sentence, `granted=0` the
+    pool, and `class.skill_choices` is how many of the pool to take. #565.
+
+    **Matched case-insensitively on purpose.** `Character.cls` is a slug
+    (`"fighter"`) and the table's key is the printed word (`"Fighter"`),
+    which is the same mismatch #339 is about. Asking `lower()` of both is
+    what keeps this working either side of that rename.
+
+    Ordered before it is sampled, and sampled from its own stream, so a
+    character's training is settled by its seed and not by how many dice
+    the fight has rolled. An unknown class trains in nothing rather than
+    raising -- a monster has no entry here and is not meant to.
+    """
+    from combat_engine.db import game
+
+    db = game()
+    rows = db.execute(
+        "SELECT skill, granted FROM class_skill WHERE lower(class) = ?"
+        " ORDER BY skill",
+        (cls.lower(),),
+    ).fetchall()
+    if not rows:
+        return frozenset()
+    row = db.execute(
+        "SELECT skill_choices FROM class WHERE lower(name) = ?", (cls.lower(),)
+    ).fetchone()
+    picks = int((row["skill_choices"] if row else 0) or 0)
+    given = {r["skill"] for r in rows if r["granted"]}
+    pool = sorted({r["skill"] for r in rows if not r["granted"]} - given)
+    return frozenset(given | set(rng.sample(pool, min(picks, len(pool)))))
+
+
 def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     """Put a character on the board and return its entity id."""
     from combat_engine.engine.types import modifier
@@ -2576,6 +2614,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # that hands out a second says so; the pool is not a class feature.
         ActionPoints(points=1),
         BuildState(choices=set(who.choices)),
+        # **Training, which nothing recorded until #565.** Its own stream,
+        # like the loadout's and the gear's, so which skills a character is
+        # trained in is a property of its seed rather than of how many dice
+        # the fight has rolled by the time it is spawned.
+        Skills(
+            trained=_trained_skills(
+                who.cls, Random(f"{world.rng.seed}:{who.ref}:{who.level}:skills")
+            )
+        ),
         Gear(
             weapons=carried,
             # **The kind, not merely whether.** `_shield_for` already
@@ -2610,10 +2657,16 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         gear.stowed |= {w.ref for w in belt}
     # A racial skill bonus is a sheet number and not a thing that happens
     # in a fight, so it is laid straight into `Mods` where the armour
-    # penalty and the enhancement bonus already live -- there is no
-    # `Skills` component and `engine/skills.py` reads `skill:<name>` off
-    # exactly this list. A trait row could not say it: a row is armed at
-    # the top of an encounter and a skill check is rolled outside one.
+    # penalty and the enhancement bonus already live -- `engine/skills.py`
+    # reads `skill:<name>` off exactly this list. A trait row could not say
+    # it: a row is armed at the top of an encounter and a skill check is
+    # rolled outside one.
+    #
+    # **Still `Mods` now that `Skills` exists, and deliberately.** That
+    # component is *training* -- a yes or no worth a flat 5 -- and a racial
+    # +2 is a bonus on top of it. They add, so they are different stores;
+    # folding the race in would have made a trained dwarf and an untrained
+    # one indistinguishable.
     if race is not None and race.skills:
         from combat_engine.engine.components import Mod
 

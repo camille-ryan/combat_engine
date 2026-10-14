@@ -87,6 +87,28 @@ class Side:
 
 
 @dataclass
+class Skills:
+    """Which skills this creature is **trained** in.
+
+    `engine/skills.py` asked for exactly this, by name: *"a `Skills`
+    component seeding it from the chassis is the one thing this file is
+    short of"*. Until it existed there was no training model at all --
+    nothing decided who was trained, so the +5 was never applied and the
+    50 content files that lay a `skill:` modifier were adding to a check
+    nobody had the base training for.
+
+    **A set of lowercase skill names**, matching the keys of
+    `skills.SKILLS` and the `skill:<name>` modifier key the tree already
+    writes. Empty means "nobody recorded any", which is what every monster
+    is: a stat block prints its skill totals outright rather than its
+    training, so a monster's numbers come from `Mods` and this stays
+    empty. Only `chargen` fills it.
+    """
+
+    trained: frozenset[str] = frozenset()
+
+
+@dataclass
 class Stats:
     level: int = 1
     scores: dict[Ability, int] = field(default_factory=dict)

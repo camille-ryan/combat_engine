@@ -109,9 +109,46 @@ CREATE TABLE class (
   name TEXT PRIMARY KEY, role TEXT, source TEXT,
   hp_first INTEGER, hp_per_level INTEGER, surges INTEGER,
   defences TEXT, armour TEXT, weapons TEXT, implements TEXT,
-  abilities TEXT, ref TEXT, id INTEGER
+  abilities TEXT, ref TEXT, id INTEGER,
+  -- How many trained skills this class chooses at 1st level, on top of
+  -- the ones it is simply given. See `class_skill.granted`.
+  skill_choices INTEGER
 );
 CREATE INDEX class_ref ON class(ref);
+
+-- Who is trained in what. **`engine/skills.py` named this absence in its
+-- own module docstring** -- "there is no training model: `game.db` carries
+-- no skill list per class, so nothing here decides who is trained and the
+-- +5 is not applied by default" -- and 16 rows carry a marker for it, 14
+-- of them spelled `chargen.skill_training()`.
+--
+-- Two kinds of row, which the page prints as two sentences and which
+-- `granted` separates:
+--
+--   granted=1  the class simply has it. "Trained Skills: Stealth."
+--   granted=0  it is in the pool to choose from. "Class Skills: ..."
+--
+-- A granted skill is also printed in the pool, and that is checked rather
+-- than assumed: all 25 classes' granted skills are a subset of their own
+-- pool, so the `ability=""` fallback below never fires. Measured, 0 rows.
+--
+-- `ability` is the page's bracketed word, and it is **not** needed to do
+-- the sum -- `engine/skills.py` already carries skill -> ability as "the
+-- one piece of rules data here ... the same table for every class", and
+-- `skills.modifier` reads it from there. It is stored as a **cross-check**
+-- of both: the page and that table are independent statements of the same
+-- fact, and a disagreement would mean the parse drifted or the table is
+-- wrong. All 205 rows agree today. Keeping it costs a column and buys the
+-- only evidence either one is right.
+--
+-- Skill names are rules vocabulary, not printed names: all 17 are in
+-- `dsl.SKILLS` already and the tree writes `skill:stealth` as a modifier
+-- key in 50 files. Nothing to scrub.
+CREATE TABLE class_skill (
+  class TEXT, ref TEXT, skill TEXT, ability TEXT, granted INTEGER
+);
+CREATE INDEX class_skill_class ON class_skill(class);
+CREATE INDEX class_skill_ref ON class_skill(ref);
 
 -- The features themselves, which `class` above never carried. Only the
 -- chassis numbers were read off the page, so every `cf:` ref in the tree
@@ -954,6 +991,88 @@ def _disease_names(source: sqlite3.Connection) -> dict[str, str]:
 #: Read out of the compendium rather than transcribed: seventeen classes
 #: are too many to copy by hand without a mistake, and a number nobody can
 #: trace back to a page is a number nobody can check.
+#: The two sentences a class page spends on skills, each on its own line.
+#:
+#:     Trained Skills : Stealth, Thievery. From the class skills list
+#:                      below, choose 4 more trained skills at 1st level.
+#:     Class Skills : Acrobatics (Dex), Athletics (Str), Bluff (Cha), ...
+#:
+#: Line-anchored rather than counted in characters: the first sentence runs
+#: to one line on every one of the 25 pages, and a `.{0,300}` window has to
+#: guess where to stop and then guesses wrong on the longest pool.
+_TRAINED_LINE = re.compile(r"Trained Skills?\s*:\s*(.*?)\n", re.I)
+_POOL_LINE = re.compile(r"Class Skills?\s*:\s*(.*?)\n", re.I)
+
+#: The pool's own format: a skill, then its ability in brackets.
+_POOL_ENTRY = re.compile(r"\b([A-Za-z]+)\s*\(\s*([A-Za-z]{3})\s*\)")
+
+#: **A digit or a word, because the corpus writes both.** 24 of the 25
+#: classes print "choose 3 more trained skills"; one prints "choose four
+#: more". A digits-only pattern read that class as choosing none, which is
+#: a character short three trained skills and nothing to say so -- the
+#: measurement is what caught it, not a failure.
+_CHOOSE = re.compile(
+    r"choose\s+(\d+|one|two|three|four|five|six|seven|eight)"
+    r"\s+(?:more\s+)?trained",
+    re.I,
+)
+_WORD_COUNT = {
+    "one": 1, "two": 2, "three": 3, "four": 4,
+    "five": 5, "six": 6, "seven": 7, "eight": 8,
+}
+
+
+def _skills_of(plain: str) -> tuple[int, list[tuple[str, str, int]]]:
+    """This class's trained skills and the pool it chooses the rest from.
+
+    Returns how many it chooses, and one entry per skill as
+    `(skill, ability, granted)`.
+
+    **The granted skills are read off the first sentence only**, cut at
+    "From the class skills list". Without the cut the pool's own names
+    bleed into the granted set through the same sentence, and every class
+    reads as trained in everything it could have chosen.
+
+    A skill not in `dsl.SKILLS` is dropped rather than stored: the pool is
+    parsed by shape -- a word followed by a three-letter bracket -- and
+    that shape also matches things which are not skills on pages that
+    print anything else the same way.
+    """
+    # The same import `_feat_skills` and `etl/feat.py` already make -- this
+    # vocabulary is where the ETL legitimately reaches into the engine, and
+    # a second spelling of the list is the thing to avoid.
+    from combat_engine.engine.skills import SKILLS
+
+    tm = _TRAINED_LINE.search(plain)
+    pm = _POOL_LINE.search(plain)
+    head = tm.group(1) if tm else ""
+    cm = _CHOOSE.search(head)
+    picks = 0
+    if cm:
+        word = cm.group(1).lower()
+        picks = int(word) if word.isdigit() else _WORD_COUNT.get(word, 0)
+
+    first = re.split(r"From the class skills", head, flags=re.I)[0]
+    granted = {
+        w.lower()
+        for w in re.findall(r"\b([A-Za-z]+)\b", first)
+        if w.lower() in SKILLS
+    }
+
+    out: list[tuple[str, str, int]] = []
+    for skill, ability in _POOL_ENTRY.findall(pm.group(1) if pm else ""):
+        low = skill.lower()
+        if low in SKILLS:
+            out.append((low, ability.lower(), int(low in granted)))
+    # A granted skill the pool somehow omits is still training the class
+    # has. Measured as never happening on the 25 -- every granted skill is
+    # printed in its own pool -- so this is a guard rather than a path, and
+    # it carries no ability because there is nowhere to read one from.
+    seen = {s for s, _a, _g in out}
+    out.extend((s, "", 1) for s in sorted(granted - seen))
+    return picks, out
+
+
 _CHASSIS = {
     "hp_first": r"Hit Points at 1st Level\s*:?\s*(\d+)",
     "hp_per_level": r"Hit Points per Level Gained\s*:?\s*(\d+)",
@@ -1012,8 +1131,9 @@ def _classes(
             m = re.search(pattern, plain, re.I)
             if m:
                 found[field_] = m.group(1).strip()
+        picks, skills = _skills_of(plain)
         out.execute(
-            "INSERT OR REPLACE INTO class VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO class VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 bare, row["Role"] or "", row["Source"] or "",
                 int(found.get("hp_first", 0) or 0),
@@ -1024,7 +1144,12 @@ def _classes(
                 row["Abilities"] or "",
                 f"c{row['ID']}",
                 row["ID"],
+                picks,
             ),
+        )
+        out.executemany(
+            "INSERT INTO class_skill VALUES (?,?,?,?,?)",
+            [(bare, f"c{row['ID']}", s, a, g) for s, a, g in skills],
         )
         # The printed name, where printed names live. `bare` is the slug and
         # stays in the table as the key the content tree is organised by.
