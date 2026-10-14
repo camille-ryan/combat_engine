@@ -229,12 +229,22 @@ def _feature(ref: str, what: str, marker: tuple[str, ...] = FEATURE) -> None:
     feat.__doc__ = what
 
 
-_feature("f789", "Raises what one leader presence restores. The prerequisite "
-                 "names `cf:warlord-marshal-f4s2` and no row in the tree "
-                 "declares it, so there is no payout to raise.", BORROW)
-_feature("f791", "Raises what a third leader presence grants. The "
-                 "prerequisite names `cf:warlord-marshal-f4s5` and no row "
-                 "declares it.", BORROW)
+# **Re-pointed off `spec.feature_ref()`, which was never the gap.** Both
+# notes said the prerequisite "names" the feature, and it does: the ref is
+# in the spec, resolved, and `game.db` carries the feature's full rules
+# text. What is missing is that **no content row declares it** -- ordinary
+# authoring on another row, not a facility either feat waits on. Checked:
+# `cf:warlord-marshal-f4s3` is declared and `f790` beside them is blocked
+# on `c.amplify_bonus()` instead, which is the gap these two will have the
+# moment their own feature is written.
+_feature("f789", "Raises what one leader presence restores. The ref resolves "
+                 "and `game.db` holds the feature's text; no row declares "
+                 "`cf:warlord-marshal-f4s2` yet, so there is no payout to "
+                 "raise.", ("content.cf_warlord_marshal_f4s2",))
+_feature("f791", "Raises what a third leader presence grants. Same shape as "
+                 "f789: the ref resolves, the database has the text, and "
+                 "`cf:warlord-marshal-f4s5` is undeclared.",
+         ("content.cf_warlord_marshal_f4s5",))
 _feature("f790", "Raises what `cf:warlord-marshal-f4s3` pays. That row is "
                  "declared now, and both numbers it hands out -- the damage "
                  "bonus and the temporary hit points -- are locals in its "

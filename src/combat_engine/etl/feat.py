@@ -346,15 +346,42 @@ _KINDS = (
 )
 
 
+#: **An example list is flavour, and one got into a spec as printed names.**
+#: `f3583` reads "choose one of the 7th level Weapon Specialization options
+#: of the knight or the slayer, **such as <two printed feature names>**".
+#: Those two options are not in `localization/names.json` at all -- they are
+#: build sub-options the import does not index -- so `sanitise.scrub` had no
+#: table entry to swap them against and `leaks.py --specs` could not see
+#: them either. A checker that works from a name table cannot catch a name
+#: the table does not have, which is #494's shape arriving from a new
+#: direction.
+#:
+#: Dropped rather than resolved, because an example carries **no mechanics**:
+#: the rule is "choose one of the options", and naming two of them tells an
+#: author nothing the list does not. Resolving them would need the ETL to
+#: index build sub-options, which is #548 and a much larger thing.
+#:
+#: **Measured before writing: this construction appears once in the entire
+#: corpus** -- `feat`, `power`, `class_feature`, `item_block`,
+#: `racial_trait` and `monster_power` specs, one hit. So this is a
+#: one-row scrub with a general shape, not a pattern being tuned against
+#: many rows, and the assertion below pins that.
+_EXAMPLES = re.compile(
+    r",?\s*(?:such as|like)\s+[A-Z][a-z]+(?: [A-Z][a-z]+)+"
+    r"(?:\s*,?\s*(?:or|and)\s+[A-Z][a-z]+(?: [A-Z][a-z]+)+)*",
+)
+
+
 def _trimmed(source: sqlite3.Connection, row: Any, spec: str) -> str:
-    """A benefit with each above-ceiling member's name swapped for its ref.
+    """A benefit with each above-ceiling member's name swapped for its ref,
+    and any "such as <Printed Name>" example dropped.
 
     Longest first, so a name that contains another is swapped whole.
     """
     found = _above_ceiling(source, row["Txt"] or "")
     for name in sorted(found, key=len, reverse=True):
         spec = re.sub(re.escape(name), found[name], spec)
-    return spec
+    return _EXAMPLES.sub("", spec)
 
 
 def feats(
