@@ -1126,7 +1126,7 @@ _M2330_KILL = "it reduces an enemy to 0 hit points"
 )
 def m2330a2(c: Cast) -> None:
     c.temp_hp(20, on=c.me)
-    c.grants_advantage(to="team", until=When.SONT)
+    c.grants_advantage(on=c.me, to="enemies", until=When.SONT)
 
 
 # ==========================================================================

@@ -1493,7 +1493,10 @@ def m3222a3(c: Cast) -> None:
     the choice is the m3222's."""
     c.shift(2)
     far = c.choose([False, True], f"{c.ref}: swing at range")
-    c.basic(ranged=bool(far))
+    pool = c.enemies() if far else [f for f in c.enemies() if c.adjacent(f)]
+    foe = next(iter(pool), None)
+    if foe is not None:
+        c.basic(on=foe, ranged=bool(far))
     c.shift(2)
 
 

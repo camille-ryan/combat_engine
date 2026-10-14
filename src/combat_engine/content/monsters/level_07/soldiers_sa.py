@@ -2638,7 +2638,9 @@ def m5990a3(c: Cast) -> None:
     if mate is None:
         return
     c.shift(3, who=mate)
-    c.basic(who=mate)
+    prey = next((f for f in c.enemies() if c.adjacent_to(mate, f)), None)
+    if prey is not None:
+        c.basic(who=mate, on=prey)
 
 
 # ==========================================================================

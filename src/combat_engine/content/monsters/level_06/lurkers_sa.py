@@ -431,7 +431,9 @@ def m2779a1(c: Cast) -> None:
     requires_text="it must be bloodied",
 )
 def m2779a2(c: Cast) -> None:
-    c.basic()
+    foe = next((f for f in c.enemies() if c.adjacent(f)), None)
+    if foe is not None:
+        c.basic(on=foe)
     c.heal(14, on=c.me)
 
 

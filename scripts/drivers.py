@@ -6512,7 +6512,73 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def a_lent_basic_attack(out: Result) -> None:
+    """"An ally can make a basic attack" -- and who it swings at.
+
+    `c.basic(who=other)` names the **attacker**. The victim is `on=`, which
+    defaults through `Cast._who` to the *caster's* target -- so a row that
+    lends a swing and declares `target=NO_TARGET` passed `None`, and
+    `c.basic` returns False on its third line before rolling anything.
+
+    Ten rows were written that way and every one of them audited green,
+    because each had a second clause -- a heal, a shift, a summon -- that
+    did fire. The printed attack never happened in any fight.
+
+    The negative control is the whole point and it is not hypothetical: it
+    is the state the tree was in. Asserting only that the lent swing lands
+    would pass just as well against a `c.basic` that quietly picked a
+    target of its own, which is the other way this could have been
+    "fixed" and would have been wrong -- the card names who swings, not
+    who gets hit, and choosing the victim is the row's job.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.query import allies, enemies
+
+    world, caster, _ = _board("m4612a0")
+    foes = enemies(world, caster)
+    mates = [a for a in allies(world, caster) if a != caster]
+    if not foes or not mates:
+        out.skip(
+            "m4612a0's board has no ally to lend the swing to, or no enemy"
+            " to lend it against"
+        )
+        return
+    mate, foe = mates[0], foes[0]
+
+    # Stand the enemy next to the *ally*, which is the geometry the printed
+    # clause is about -- not next to the caster.
+    spot = world.get(mate, Position).square
+    world.get(foe, Position).square = (spot[0] + 1, spot[1])
+
+    swings: list[tuple[int, int]] = []
+    world.bus.on(AttackDeclared, lambda ev: swings.append((ev.attacker, ev.target)))
+
+    c = Cast(world=world, me=caster, ref="drivers:lent-basic")
+    landed = c.basic(who=mate, on=foe)
+    out.that(
+        landed and (mate, foe) in swings,
+        "a lent basic attack is declared by the ally, against the named enemy",
+        f"returned {landed}; declared {swings}",
+    )
+
+    # The same call with no victim -- what every one of the ten rows did.
+    before = len(swings)
+    again = c.basic(who=mate)
+    out.that(
+        not again and len(swings) == before,
+        "and with no `on=` it declares nothing at all, rather than"
+        " choosing a victim of its own",
+        f"returned {again}; declared {swings[before:]}",
+    )
+
+
 DRIVERS = {
+    "lent_basic": (
+        a_lent_basic_attack,
+        "a swing one row lends another creature, and who it is aimed at",
+    ),
     "aura_penalty": (
         penalty_scoped_to_an_aura,
         "a penalty scoped to a creature and its allies inside its aura",

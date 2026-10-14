@@ -54,6 +54,7 @@ from combat_engine.content.monsters.level_01.skirmishers_sa import (
     _by_hand,
     _damaged_me,
     _elemental_hurt,
+    _foe_beside,
     _foe_moved_within,
     _i_rolled_one,
     _moved_far,
@@ -388,7 +389,9 @@ def m1134a2(c: Cast) -> None:
     """A swing and nine points back. The Requirement is a gate rather than a
     body check: a row that looks and returns is an action the policy spent on
     nothing."""
-    c.basic()
+    foe = next(iter(_adjacent_foes(c, 1)), None)
+    if foe is not None:
+        c.basic(on=foe)
     c.heal(9, on=c.me)
 
 
@@ -1640,7 +1643,9 @@ _M3538_DOWN = "it drops to 0 hit points"
     on=Trigger(Dropped, about_me, _M3538_DOWN),
 )
 def m3538a4(c: Cast) -> None:
-    c.basic()
+    foe = next(iter(_adjacent_foes(c, 1)), None)
+    if foe is not None:
+        c.basic(on=foe)
 
 
 # --------------------------------------------------------------------------
@@ -2222,7 +2227,9 @@ def m5115a3(c: Cast) -> None:
             continue
         ident = c.world.get(other, Ident)
         if ident is not None and ident.ref == "m5115":
-            c.basic(who=other)
+            prey = _foe_beside(c, other)
+            if prey is not None:
+                c.basic(who=other, on=prey)
 
 
 _M5115_BURNED = "it takes acid, cold, fire, lightning or thunder damage"

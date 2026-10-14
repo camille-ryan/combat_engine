@@ -2233,9 +2233,9 @@ def m3830a4(c: Cast) -> None:
 )
 def m3830a5(c: Cast) -> None:
     me = c.me
-    c.bonus("speed", 2, on=me, until=When.ENCOUNTER, when=lambda ctx: c.bloodied())
+    c.bonus("speed", 2, on=me, until=When.ENCOUNTER, when=lambda ctx: c.bloodied(on=me))
     for d in ALL_DEFENCES:
-        c.bonus(d, 2, on=me, until=When.ENCOUNTER, when=lambda ctx: c.bloodied())
+        c.bonus(d, 2, on=me, until=When.ENCOUNTER, when=lambda ctx: c.bloodied(on=me))
 
 
 # ==========================================================================
@@ -2943,7 +2943,7 @@ def m5136a0(c: Cast) -> None:
     def scorched(ev: DamageApplied) -> None:
         if ev.target != me:
             return
-        amount = 8 if c.bloodied() else 4
+        amount = 8 if c.bloodied(on=c.me) else 4
         for foe in c.enemies():
             if c.distance(foe) <= 2:
                 c.flat(amount, on=foe)

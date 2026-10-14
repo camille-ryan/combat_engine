@@ -1924,7 +1924,12 @@ def m4741a3(c: Cast) -> None:
     spot = next(iter(c.world.reachable_squares(c.me, 1)), None)
     spawn = c.summon("m4743", at=spot)
     if spawn is not None and spawn >= 0:
-        c.basic(who=spawn)
+        # "a melee or ranged basic attack" -- melee if the square it
+        # appeared in put somebody in reach, otherwise it shoots.
+        beside = next((f for f in c.enemies() if c.adjacent_to(spawn, f)), None)
+        prey = beside if beside is not None else next(iter(c.enemies()), None)
+        if prey is not None:
+            c.basic(who=spawn, on=prey, ranged=beside is None)
     c.flat(10, on=c.me)
 
 

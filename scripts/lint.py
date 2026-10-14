@@ -82,6 +82,16 @@ def main() -> int:
         )
         faults += 1
 
+    for where, ref, verb in _subjectless_calls():
+        print(
+            f"{where}: {ref} declares target=NO_TARGET and calls c.{verb}()"
+            f" with no `on=`. `on` defaults through `Cast._who`, which is"
+            f" `self.target` -- and a NO_TARGET row has none, so this acts on"
+            f" nobody every time. Pass `on=c.me` if the clause is about the"
+            f" caster."
+        )
+        faults += 1
+
     for where, key in _unread_modifiers():
         print(
             f"{where}: c.bonus({key!r}, ...) -- nothing reads that key,"
@@ -407,6 +417,121 @@ def _context_keys(which: str = "") -> frozenset[str]:
                 if isinstance(k, ast.Constant) and isinstance(k.value, str)
             }
     return frozenset(keys)
+
+
+@cache
+def _subjectless_verbs() -> frozenset[str]:
+    """`Cast` verbs whose `on=` defaults to the target and never to the caster.
+
+    **Derived off `Cast`, for the reason `_context_keys` is**: a hand-kept
+    list of 92 method names would be stale within a week.
+
+    Three tests, and the second two are what make the set mean something:
+
+    * `on: int | None = None` -- there is a subject to default;
+    * the body resolves it with `self._who(on)`, which is
+      `self.target if on is None else on`. Verbs that write
+      `on or self.me` are **excluded** -- `c.aura` and `c.watch` are the
+      common ones, and counting them put the first measurement of this at
+      888 sites instead of 162;
+    * and no `or self.me` / `if on is not None else self.me` fallback after
+      it. `c.end_effect`, `c.save` and `c.regeneration` all have one, so a
+      bare call there is correct and must not be flagged.
+    """
+    import inspect
+
+    from combat_engine.engine.cast import Cast
+
+    out: set[str] = set()
+    for name in dir(Cast):
+        if name.startswith("__"):
+            continue
+        fn = getattr(Cast, name, None)
+        if not callable(fn):
+            continue
+        try:
+            sig = inspect.signature(fn)
+            src = inspect.getsource(fn)
+        except (TypeError, ValueError, OSError):
+            continue
+        p = sig.parameters.get("on")
+        if p is None or p.default is not None:
+            continue
+        if not re.search(r"self\._who\(\s*on\s*\)", src):
+            continue
+        if re.search(r"_who\(\s*on\s*\)\s*or\s+self\.me", src):
+            continue
+        if re.search(
+            r"_who\(\s*on\s*\)\s*if\s+on\s+is\s+not\s+None\s+else\s+self\.me", src
+        ):
+            continue
+        out.add(name)
+    return frozenset(out)
+
+
+def _subjectless_calls() -> list[tuple[str, str, str]]:
+    """A row declaring `target=NO_TARGET` acting on its own absent target.
+
+    **`on=` defaults to `c.target`, not `c.me`**, which `content/CLAUDE.md`
+    already calls "the commonest single mistake here". What it could not say
+    is when the mistake is *provable*: usually `c.target` is set and reading
+    the card is the only way to know which creature the sentence means. A
+    row whose header declares `target=NO_TARGET` has no target at all, so a
+    bare call there is dead by construction and needs no card to judge.
+
+    Nine sites in eight rows when this was written, and every one was a real
+    fault:
+
+    * seven monster traits printing "while **this creature** is bloodied"
+      -- `c.bloodied()` with no subject returns False for ever, so the
+      bonus, the shift, the Requirement and the doubled aura damage were
+      all permanently off. None carried a marker.
+    * `p10191b` read "your implement's enhancement bonus" as `c.held()`,
+      which asks what the *target* is holding. It always came to the
+      printed 5 -- and the docstring had rationalised that as "everything
+      chargen deals is plain", which is true and is not why.
+
+    That last one is the case for this being static rather than left to the
+    audit: the row fires, does something, and audits green. Only the
+    *subject* is wrong, and nothing at runtime can tell that from a card
+    that really does mean nobody.
+    """
+    verbs = _subjectless_verbs()
+    out: list[tuple[str, str, str]] = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for fn in ast.walk(tree):
+            if not isinstance(fn, ast.FunctionDef):
+                continue
+            ref = ""
+            no_target = False
+            for dec in fn.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                for kw in dec.keywords:
+                    if kw.arg == "target" and isinstance(kw.value, ast.Name):
+                        no_target = kw.value.id == "NO_TARGET"
+                if dec.args and isinstance(dec.args[0], ast.Constant):
+                    ref = str(dec.args[0].value)
+            if not no_target or not ref:
+                continue
+            for node in ast.walk(fn):
+                if not isinstance(node, ast.Call):
+                    continue
+                f = node.func
+                if not isinstance(f, ast.Attribute) or f.attr not in verbs:
+                    continue
+                if not (isinstance(f.value, ast.Name) and f.value.id == "c"):
+                    continue
+                # An explicit subject -- either spelling -- is the author
+                # saying who, which is all this check wants.
+                if node.args or any(k.arg == "on" for k in node.keywords):
+                    continue
+                out.append((f"{path}:{node.lineno}", ref, f.attr))
+    return out
 
 
 def _unknown_context_keys() -> list[tuple[str, str, str]]:

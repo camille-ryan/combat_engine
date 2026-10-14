@@ -7606,6 +7606,20 @@ class Cast:
                 "me": [self.me],
                 "ally": self.allies(),
                 "team": [self.me, *self.allies()],
+                # **The printed sentence this could not say.** Every word
+                # above names a slice of the caster's own side, which is
+                # right for "one ally gains combat advantage against the
+                # target" -- and wrong for the other direction, where a
+                # creature takes a drawback and *its enemies* are the ones
+                # who gain. 8 monster rows print "grants combat advantage
+                # to any enemy" (or "to all enemies"), and `m2330a2` was
+                # written `to="team"` for want of this: 20 temporary hit
+                # points and the penalty handed to its own allies.
+                #
+                # A specific enemy already worked -- 25 sites pass one by
+                # id -- so the relation has always accepted enemies as
+                # beneficiaries and only the side word was missing.
+                "enemies": self.enemies(),
             }[to]
         if when is None:
             granted = self.world.effects.apply(

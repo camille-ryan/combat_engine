@@ -3413,7 +3413,7 @@ def m878a4(c: Cast) -> None:
 def m878a5(c: Cast) -> None:
     c.bonus(
         "attack", 1, on=c.me, kind="racial", until=When.ENCOUNTER,
-        when=lambda _ctx: c.bloodied(),
+        when=lambda _ctx: c.bloodied(on=c.me),
     )
 
 

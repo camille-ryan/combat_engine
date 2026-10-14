@@ -949,7 +949,7 @@ def m1814a2(c: Cast) -> None:
 def m1814a3(c: Cast) -> None:
     def gate(ctx: dict[str, Any]) -> bool:
         mark = _M1814_MARK.get(c.me)
-        return bool(c.bloodied()) and mark is not None and ctx.get("target") == mark[1]
+        return bool(c.bloodied(on=c.me)) and mark is not None and ctx.get("target") == mark[1]
 
     c.bonus("damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER, when=gate)
 
@@ -1039,7 +1039,7 @@ def m1832a2(c: Cast) -> None:
     on=Trigger(Hit, both(by_me, by_melee), "it makes a successful melee attack"),
 )
 def m1832a3(c: Cast) -> None:
-    if c.bloodied():
+    if c.bloodied(on=c.me):
         c.shift(2)
 
 
@@ -3152,7 +3152,7 @@ def m6080a1(c: Cast) -> None:
     c.aura(5, until=When.ENCOUNTER, label=c.ref)
 
     def halve(ev: Healed) -> None:
-        if not c.bloodied():
+        if not c.bloodied(on=c.me):
             return
         if team(c.world, ev.target) is team(c.world, me):
             return

@@ -1364,7 +1364,7 @@ def _attacked_by_me_this_turn(c: Cast) -> set[int]:
     ),
 )
 def m5159a3(c: Cast) -> None:
-    if not c.bloodied():
+    if not c.bloodied(on=c.me):
         return
     already = _attacked_by_me_this_turn(c)
     foe = next((f for f in c.enemies() if f not in already), None)

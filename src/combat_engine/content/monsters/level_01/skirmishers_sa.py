@@ -166,6 +166,25 @@ def _adjacent_foes(c: Cast, reach: int = 1) -> list[int]:
     return [foe for foe in c.enemies() if c.distance(foe) <= reach]
 
 
+def _foe_beside(c: Cast, who: int) -> int | None:
+    """An enemy in reach of **that** creature, for a swing this row lends.
+
+    `_adjacent_foes` asks adjacency to the caster, which is the wrong
+    question whenever the attacker is somebody else -- a pack-mate, a
+    companion beast, a creature just summoned.
+
+    **The reason this exists at all.** `c.basic(who=other)` names the
+    attacker and leaves the victim to `on=`, which defaults through
+    `Cast._who` to the *caster's* target -- and all four rows that lend a
+    swing declare `target=NO_TARGET`, so there was no target, and
+    `c.basic` returns False before it rolls anything. The lent attack
+    never happened in any fight, and the rows audited green because the
+    clause beside it -- a heal, a shift, a summon -- did fire.
+    """
+    beside = sorted(foe for foe in c.enemies() if c.adjacent_to(who, foe))
+    return beside[0] if beside else None
+
+
 def _armed(c: Cast, label: str) -> bool:
     """Is a watch with this label already standing on the caster?
 
@@ -1002,7 +1021,9 @@ def m4612a0(c: Cast) -> None:
             return
         if distance_between(c.world, me, ev.actor) > 3:
             return
-        c.basic(who=ev.actor)
+        prey = _foe_beside(c, ev.actor)
+        if prey is not None:
+            c.basic(who=ev.actor, on=prey)
 
     c.aura(3, until=When.ENCOUNTER)
     c.watch(Dropped, last_bite, until=When.ENCOUNTER, on=me, label=f"{c.ref} aura")
@@ -1095,7 +1116,9 @@ def m4612a3(c: Cast) -> None:
     if beast is None:
         return
     c.shift(max(1, c.speed_of(beast) // 2), who=beast)
-    c.basic(who=beast)
+    prey = _foe_beside(c, beast)
+    if prey is not None:
+        c.basic(who=beast, on=prey)
 
 
 _M4612_FOE_MOVES = "an enemy within 5 squares of it moves"

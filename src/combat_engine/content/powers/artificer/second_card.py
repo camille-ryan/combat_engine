@@ -83,7 +83,7 @@ def p10191b(c: Cast) -> None:
     ward = _anchor(c.world, c.me, "p10191")
     if ward is None:
         return
-    hurt = 5 + max((w.enhancement for w in c.held()), default=0)
+    hurt = 5 + max((w.enhancement for w in c.held(on=c.me)), default=0)
     for foe in c.within(1, of=ward, side="enemy"):
         c.flat(hurt, dtype=DamageType.FIRE, on=foe)
         c.mark(on=foe, by=ward, until=When.EONT)

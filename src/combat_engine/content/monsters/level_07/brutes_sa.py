@@ -607,7 +607,9 @@ def m2058a1(c: Cast) -> None:
     requires_text="the m2058 must be bloodied",
 )
 def m2058a2(c: Cast) -> None:
-    c.basic()
+    foe = next((f for f in c.enemies() if c.adjacent(f)), None)
+    if foe is not None:
+        c.basic(on=foe)
     c.heal(42, on=c.me)
 
 
