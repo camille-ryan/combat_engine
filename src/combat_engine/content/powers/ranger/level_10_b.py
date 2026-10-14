@@ -42,7 +42,7 @@ def _beast_saved_ends(world: World, me: int, ev: ConditionApplied) -> bool:
     action=REACTION,
     reach=CloseBurst(20),
     target=NO_TARGET,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     trigger=_BEAST_SADDLED,
     on=Trigger(ConditionApplied, when=_beast_saved_ends, text=_BEAST_SADDLED),
 )

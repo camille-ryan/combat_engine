@@ -55,7 +55,7 @@ def _beast_hit_near_me(world: World, me: int, ev: AttackRolled) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
 )
 def p11573(c: Cast) -> None:
     """"Any foe to whom you are both adjacent" is a standing question, not a
@@ -94,7 +94,7 @@ def p11573(c: Cast) -> None:
     action=INTERRUPT,
     reach=CloseBurst(20),
     target=NO_TARGET,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     trigger=_BEAST_HIT,
     on=Trigger(AttackRolled, when=_beast_hit_near_me, text=_BEAST_HIT),
 )
@@ -122,7 +122,7 @@ def p4398(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=NO_TARGET,
-    keywords=MARTIAL_HEALING,
+    keywords=[*MARTIAL_HEALING, Keyword.BEAST],
 )
 def p4399(c: Cast) -> None:
     """"As if it had spent a healing surge" -- so a surge's worth of hit

@@ -325,7 +325,7 @@ def p10599(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
 )
 def p10600(c: Cast) -> None:

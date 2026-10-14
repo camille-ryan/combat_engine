@@ -52,7 +52,7 @@ def has_beast_companion(world: World, eid: int) -> bool:
     action=MINOR,
     reach=CloseBurst(1),
     target=SELF,
-    keywords=[Keyword.MARTIAL],
+    keywords=[Keyword.MARTIAL, Keyword.BEAST],
     requires=has_beast_companion,
     requires_text="you must have a beast companion you can ride",
 )

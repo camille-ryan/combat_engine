@@ -381,7 +381,7 @@ def p11575(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(3),
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
 )
 def p12504(c: Cast) -> None:

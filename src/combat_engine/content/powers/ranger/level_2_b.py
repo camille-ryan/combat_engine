@@ -157,7 +157,7 @@ def _shoved_us(world: World, me: int, ev: ForcedMove) -> bool:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:5"),
     requires_text="you must have a comp:5 beast companion",
 )
@@ -183,7 +183,7 @@ def p13696(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:3"),
     requires_text="you must have a comp:3 beast companion",
     trigger=_HIT_ON_AC_OR_REF,
@@ -219,7 +219,7 @@ def p13698(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:91"),
     requires_text="you must have a comp:91 beast companion",
 )
@@ -240,7 +240,7 @@ def p13699(c: Cast) -> None:
     action=FREE,
     reach=CloseBurst(5),
     target=NO_TARGET,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:4"),
     requires_text="you must have a comp:4 beast companion",
     trigger=_SHOVED,
@@ -270,7 +270,7 @@ def p13700(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:6"),
     requires_text="you must have a comp:6 beast companion",
 )
@@ -290,7 +290,7 @@ def p13701(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:2"),
     requires_text="you must have a comp:2 beast companion",
     trigger=_MELEE_DAMAGE,
@@ -320,7 +320,7 @@ def p13702(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL_STANCE,
+    keywords=[*MARTIAL_STANCE, Keyword.BEAST],
     requires=_beast_is("comp:1"),
     requires_text="you must have a comp:1 beast companion",
 )
@@ -346,7 +346,7 @@ def p13703(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:7"),
     requires_text="you must have a comp:7 beast companion",
     trigger=_CLIMB_OR_SAVE,
@@ -379,7 +379,7 @@ def p13704(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     requires=_beast_is("comp:8"),
     requires_text="you must have a comp:8 beast companion",
     trigger=_MELEE_DAMAGE,
@@ -411,7 +411,7 @@ def p13705(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(20),
     target=NO_TARGET,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
 )
 def p4381(c: Cast) -> None:
     """The printed Target is the beast, which is not a target the engine
@@ -433,7 +433,7 @@ def p4381(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=NO_TARGET,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
     out_of_combat=True,
 )
 def p4383(c: Cast) -> None:

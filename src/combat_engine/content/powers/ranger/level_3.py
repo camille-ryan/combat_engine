@@ -264,7 +264,7 @@ def p10609(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
 )
 def p10610(c: Cast) -> None:
@@ -437,7 +437,7 @@ def p2603(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
 )
 def p4384(c: Cast) -> None:
@@ -488,7 +488,7 @@ def p4385(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
 )
 def p4386(c: Cast) -> None:

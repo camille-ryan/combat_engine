@@ -106,15 +106,30 @@ _KEYWORDS = [
     "evocation", "enchantment", "necromancy", "nethermancy", "transmutation",
     "elemental", "summoning", "spirit", "runic", "augmentable",
     "full discipline", "channel divinity", "sleep",
-    # **`beast` is left out on purpose and is not an oversight.** 83 cards
-    # print it as its own comma-separated word, so it is a real keyword --
-    # but each entry here is matched by `\b<word>\b` against the *whole*
-    # flattened line, independently of the others, so adding it would also
-    # tag every `beast form` card with it. That is the same confusion the
-    # note above describes from the other side. It wants the matcher to
-    # split on commas, which is a change to how all 66 words are read and
-    # belongs with its own measurement.
+    # **`beast` needed a guard, not a new matcher.** Each entry here is
+    # matched by `\b<word>\b` against the *whole* flattened line, so a bare
+    # `beast` would also tag every `beast form` card -- the same confusion
+    # the note above describes from the other side.
+    #
+    # The note this replaces said the answer was to split the line on
+    # commas. **Measured, and that is wrong**: a comma split gains the 40
+    # `beast` cards and **loses the keywords of 380 refs**, because the line
+    # is not reliably delimited. A single keyword has no comma at all
+    # ("Daily Martial Immediate Interrupt Personal"), and "Immediate
+    # Interrupt" is not an *action*, so there is no reliable place to stop
+    # reading either. Searching the whole line is robust precisely because
+    # the line has no structure to rely on.
+    #
+    # So the guard is in `_GUARDED` below: `beast` matches only where
+    # `form` does not follow it. Gains 40, loses 0, and no card comes out
+    # carrying both. #589.
+    "beast",
 ]
+
+#: Entries whose plain `\b<word>\b` would swallow a longer keyword that
+#: contains them. Longest-first ordering is not enough, because `_shape`
+#: tests every entry independently rather than consuming the line.
+_GUARDED = {"beast": r"\bbeast\b(?!\s+form)"}
 
 
 def parse(row: dict, document: str) -> Power:
@@ -249,5 +264,5 @@ def _shape(p: Power, body: str) -> None:
     # single word inside it, or the phrase never gets its turn.
     p.keywords = tuple(
         w for w in sorted(_KEYWORDS, key=len, reverse=True)
-        if re.search(rf"\b{w}\b", low)
+        if re.search(_GUARDED.get(w, rf"\b{w}\b"), low)
     )

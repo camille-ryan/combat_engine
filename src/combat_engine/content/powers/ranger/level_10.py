@@ -445,7 +445,7 @@ def p13627(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=MARTIAL,
+    keywords=[*MARTIAL, Keyword.BEAST],
 )
 def p4411(c: Cast) -> None:
     """Printed as a close burst 20 aimed at the ranger and the beast

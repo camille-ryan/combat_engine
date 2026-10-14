@@ -139,7 +139,7 @@ def _melee_row(ref: str) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
     charges=True,
 )
@@ -214,7 +214,7 @@ def p10615(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
     charges=True,
 )

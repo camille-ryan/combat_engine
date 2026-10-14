@@ -216,7 +216,7 @@ def p10625(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5, by_weapon=True),
     target=ONE_CREATURE,
-    keywords=MARTIAL_RANGED,
+    keywords=[*MARTIAL_RANGED, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
     thrown_by_hand=True,
     requires=_wielding_a_thrown_weapon,
@@ -392,7 +392,7 @@ def p4402(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.BEAST],
     attack=Attack(STR, vs=AC),
 )
 def p4403(c: Cast) -> None:
