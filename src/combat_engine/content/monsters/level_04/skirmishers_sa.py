@@ -1612,13 +1612,23 @@ def m3536a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d6", 5),
-    dropped=("spec.weapon_ref()",),
 )
 def m3548a0(c: Cast) -> None:
     """The high-crit line *replaces* the damage rather than adding to it, and
     it is a roll -- so it is paid flat, past the engine's rule that a critical
     maxes the declared dice. The printed weapon requirement has no ref: a
-    monster carries no named gear."""
+    monster carries no named gear.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     if c.strike():
         _crit_line(c, "1d6", 11)
 
@@ -1633,12 +1643,22 @@ def m3548a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d6", 4),
-    dropped=("spec.weapon_ref()",),
 )
 def m3548a1(c: Cast) -> None:
     """The extraction lost the range band for this one -- the card is a thrown
     weapon and the spec prints no number, so 6 is the ordinary thrown range
-    rather than a figure read off the page."""
+    rather than a figure read off the page.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     if c.strike():
         c.hit()
 
@@ -1670,7 +1690,6 @@ def m3548a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("spec.weapon_ref()",),
 )
 def m3548a3(c: Cast) -> None:
     if c.strike():
@@ -1702,7 +1721,18 @@ def m3548a4(c: Cast) -> None:
 )
 def m3548a5(c: Cast) -> None:
     """"Once per round" is the whole difference from the ordinary version of
-    this trait, which is why it is a different helper rather than a flag."""
+    this trait, which is why it is a different helper rather than a flag.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     _per_round_rider(c, "2d6", _had_advantage)
 
 
@@ -1877,12 +1907,23 @@ def m3560a1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=[Keyword.WEAPON],
-    dropped=("spec.weapon_ref()", "compendium.attack_defence"),
+    dropped=("compendium.attack_defence",),
 )
 def m3560a2(c: Cast) -> None:
     """A burst that swings the creature's own basic attack at everything
     inside it, which rolls its own attack -- so the mangled defence on this
-    row's line never has to be read."""
+    row's line never has to be read.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     c.basic(on=c.target)
 
 
@@ -1943,12 +1984,23 @@ def m3562a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     charges=True,
-    dropped=("spec.weapon_ref()", "compendium.attack_defence"),
+    dropped=("compendium.attack_defence",),
 )
 def m3562a1(c: Cast) -> None:
     """`charges=True` or the engine measures a sword's reach before the run
     and refuses the row for every distance a charge is for. The waiver is
-    narrowed to the square it leaves, which is the window `kind` names."""
+    narrowed to the square it leaves, which is the window `kind` names.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     foe = c.target
     if foe is None:
         return

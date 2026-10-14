@@ -1112,14 +1112,24 @@ def m3546a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("1d10", 4),
     requires_text="a particular weapon in hand",
-    dropped=("spec.weapon_ref()",),
 )
 def m3546a1(c: Cast) -> None:
     """The Requirement names a specific weapon, and the only handle on one is
     its printed name -- so the gate is the dropped half and the benefit is
     written. "Any ally who hits the target" is a watch on the victim rather
     than on the allies: one hold, and it does not have to be re-laid when
-    somebody new walks up."""
+    somebody new walks up.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     victim = c.target
     if victim is None or not c.strike():
         return
@@ -1182,12 +1192,22 @@ def m3546a2(c: Cast) -> None:
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d10", 4, kind=LIMITED),
     requires_text="a particular weapon in hand",
-    dropped=("spec.weapon_ref()",),
 )
 def m3546a3(c: Cast) -> None:
     """The allies' bonus is laid on each of them gated on this victim, which
     is where the attack context carries the question: a hold on the target
-    cannot say whose roll it helps."""
+    cannot say whose roll it helps.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     victim = c.target
     if victim is None or not c.strike():
         return

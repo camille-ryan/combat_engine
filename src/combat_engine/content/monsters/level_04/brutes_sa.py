@@ -397,12 +397,22 @@ def m1131a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("2d10", 5, kind=LIMITED),
-    dropped=("spec.weapon_ref()",),
 )
 def m1131a1(c: Cast) -> None:
     """The printed recharge is the bloodied line as well as the die, so both are
     armed. The Requirement names a weapon, and a monster's gear is a word in the
-    spec rather than a thing in its hands."""
+    spec rather than a thing in its hands.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     if c.first:
         _recharge_when_bloodied(c)
     if c.strike():
@@ -946,13 +956,23 @@ def m3133a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("spec.weapon_ref()",),
 )
 def m3133a4(c: Cast) -> None:
     """The opening is read from the blow's own context -- `advantage` is in both
     modifier contexts -- and "melee" from the absence of `ranged`. The weapon
     the Requirement names is a word in the spec and not a thing in the
-    creature's hands."""
+    creature's hands.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     c.bonus(
         "damage", 0, dice="1d6", on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: bool(ctx.get("advantage")) and not ctx.get("ranged"),

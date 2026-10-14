@@ -1211,13 +1211,23 @@ def m6006a5(c: Cast) -> None:
     target=SELF,
     trigger="it starts its turn",
     on=Trigger(TurnStart, about_me, "it starts its turn"),
-    dropped=("spec.weapon_ref()",),
 )
 def m6006a6(c: Cast) -> None:
     """A plain "+3 bonus" with no type word is untyped, so no `kind=`. `once=`
     is "a single attack roll". The narrowing to one implement cannot be said:
     a monster carries no named gear and the spec gives no ref for the one this
-    card wants."""
+    card wants.
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
+    """
     c.bonus("attack", 3, until=When.EOT, on=c.me, once=True)
 
 

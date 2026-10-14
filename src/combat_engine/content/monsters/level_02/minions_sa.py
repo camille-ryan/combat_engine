@@ -350,7 +350,6 @@ def m3243a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    dropped=("spec.weapon_ref()",),
 )
 def m3243a1(c: Cast) -> None:
     """The parting swing is the creature's own basic attack, so a block whose
@@ -359,6 +358,17 @@ def m3243a1(c: Cast) -> None:
     "Requires a flail" cannot be enforced: a monster carries no named gear and
     the spec gives no ref for the weapon this card wants, so the Requirement is
     vacuously true rather than checked.
+    
+
+    **The printed Requirement needs no gate, and this is settled
+    rather than pending.** It names the creature's own kit, and a
+    monster holds no `Gear.weapons` *deliberately* -- Camille's call on
+    #516, recorded in #518: "we are not giving monsters equipment". An
+    empty hand is also what keeps `dsl.usable` from refusing a
+    monster's weapon rows (`dsl.py:1139`). So the Requirement is true
+    whenever the creature exists, and `spec.weapon_ref()` named a
+    symbol that will never arrive -- nothing is missing from the spec,
+    which prints the weapon plainly.
     """
     reachable = [foe for foe in c.within(1, side="enemy")]
     if reachable:
