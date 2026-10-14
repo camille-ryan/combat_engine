@@ -133,10 +133,21 @@ def _report(
         print("\n".join(lines))
 
     jready, jwaiting, stale, unchecked = [], [], [], []
+    jsourced: list[tuple[str, str]] = []
     for ref, entry in sorted(entries.items()):
         wants = entry.get("wants", "")
         if ref in declared:
             stale.append((ref, wants))
+            continue
+        if wants.startswith(SOURCE_GAP):
+            # **The same separation the tree half makes, and this half did
+            # not.** A `compendium.` want is not work owed: the page does
+            # not print what the row would be written from, so no symbol
+            # can arrive. `p2621:augment1` is the case -- its Augment 1
+            # heading has only a `Special:` line under it -- and it was
+            # counted with the blocked ones, which mixes "nobody has done
+            # this" with "nobody can" exactly as #360 argued.
+            jsourced.append((ref, wants))
             continue
         verdict = _exists(wants, have) if wants else False
         if verdict is None:
@@ -159,6 +170,9 @@ def _report(
             print(f"  blocked {ref:<10} {wants or '(no method named)'} — {why}")
         for ref, wants in stale:
             print(f"  written {ref:<10} was waiting on {wants}; drop it from the list")
+        for ref, wants in jsourced:
+            print(f"  source  {ref:<10} {wants} — the page does not print "
+                  f"it; nothing to build")
 
     print(f"\n  tree: {ready} ready, {partial} partial, "
           f"{waiting} still blocked, {sourced} waiting on the compendium")
@@ -166,7 +180,8 @@ def _report(
         print(f"  of the {waiting} blocked, {capped} also want something the "
               f"page does not print, so they cannot fully clear")
     print(f"  {BLOCKED.relative_to(ROOT)}: {len(jready)} ready, "
-          f"{len(jwaiting)} still blocked, {len(stale)} to remove")
+          f"{len(jwaiting)} still blocked, {len(jsourced)} waiting on the "
+          f"compendium, {len(stale)} to remove")
     if unchecked:
         # Loud, and a non-zero exit. Printing a line and carrying on was
         # the whole failure: the summary read "0 ready" and nobody
@@ -366,6 +381,14 @@ def _symbols(wants: str) -> list[str]:
     from the day it was filed. Every such wait is for a new attribute on an
     existing thing, which is the commonest shape there is, and the instrument
     could not see any of them.
+
+    **And a bare ref counts, which it did not.** `_one` has always been able
+    to check one -- a row waiting on another row is the same kind of wait --
+    but nothing handed it one out of prose, so an entry whose whole want was
+    "the `cf:barbarian-f1s0` row" reported NOT CHECKED for ever. Three of the
+    eight unreadable entries named a ref, and one of those three had gone
+    stale: `cf:warden-f1-rest` said "four refs nobody has declared" when all
+    four were declared, unmarked, and carrying the rider it wanted.
     """
     import re
 
@@ -378,6 +401,9 @@ def _symbols(wants: str) -> list[str]:
         # the `c.` of a sentence that merely mentions one.
         if (head and "." in head) or token.endswith(")"):
             out.append(token)
+    # Refs, in the shapes `_one` recognises. Added after the dotted paths so
+    # an entry naming both is checked on both.
+    out.extend(re.findall(r"\b(?:cf|rt):[\w-]+|\b[pmifr]\d+[a-z]?\d*\b", wants))
     return out
 
 

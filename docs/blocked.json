@@ -15,10 +15,6 @@
     "wants": "the cf:barbarian-f1s0 row, which is the one option of the four nobody has declared",
     "why": "filed when the compendium carried only the first option's text and the class had two derived legs. Both are fixed: class_feature carries cf:barbarian-f1s0 .. f1s3 and chargen.BUILDS[\"barbarian\"] has five named legs that 23 riders ask about. Three of the four sub-option rows are written in features/primal_shadow.py; the fourth is named by a feat as todo=(\"cf:barbarian-f1s0\",) and has no declaration"
   },
-  "cf:barbarian-rage": {
-    "wants": "Keyword.RAGE on the class's daily attack rows -- the p4807 gap -- so that the row this feature grants at 5th level exists for c.grant_row to hand over",
-    "why": "the feature is two sentences and neither can be said. Every daily attack power of the class carries a keyword nothing declares, and the level-5 row the second sentence grants is p4807, which is blocked on that same keyword. Until the keyword exists the feature has nothing to mark and nothing to give, and until now nothing recorded that the feature itself was missing -- only the row it grants"
-  },
   "cf:druid-at-wills": {
     "wants": "a per-class at-will count in chargen.SLOTS, and a composition rule chargen.loadout can honour",
     "why": "the class's first printed feature is that a druid begins with three at-will attack powers and that at least one of them, and no more than two, must have the beast form keyword. SLOTS is two at-wills for every class in the game, and loadout picks them by the build's primary ability with no notion of a required keyword -- so the druid it deals has two at-wills and neither is a beast form row, which leaves the class's other feature, the shape change, leading nowhere. Nothing recorded it: the shape change is declared, so the class read as finished"
@@ -59,10 +55,6 @@
     "wants": "a ref for the fifth companion spirit, whose block the importer glued onto the end of cf:shaman-f0c0 instead of giving it a cf:shaman-f0sN of its own",
     "why": "four of the five spirits now have a sub-option ref with their boon printed on it, and chargen.BUILDS[\"shaman\"] now carries a leg per spirit, so cf:shaman-f0s0 to cf:shaman-f0s3 are written and each takes the other spirits' two rows away from a shaman that did not choose it. The fifth has no ref, so its boon -- a saving-throw bonus beside the spirit, and a free-action call once a turn -- has nothing to decorate, and its two rows, p12865 and p12866, are the only ones loadout still leaves on every shaman whatever leg it is on"
   },
-  "cf:sorcerer-elementalist": {
-    "wants": "c.vulnerable gated on the caster's own attacks rather than on a damage type, plus a saving-throw bonus against ongoing damage of one type",
-    "why": "the leg half is done -- chargen.BUILDS[\"sorcerer\"] carries one leg per elemental specialty, each holding the damage type its specialty is sworn to, and every row in features/sorcerer.py gates on one with on_leg. What is left is two clauses no modifier can be: \"vulnerable 3 to your elemental attacks\" names the attacker and c.vulnerable names a type, and the saving-throw bonus is against ongoing damage of one kind rather than against a condition"
-  },
   "cf:sorcerer-soul-nat20": {
     "wants": "an event announcing a power use's finished effects (the p10354 gap), carrying the natural roll",
     "why": "each source ends with a rider on a natural 20 -- and one of them a second on a natural 1 -- that lands after the attack's other effects. AttackRolled is the only event carrying the natural and it fires before the damage, so a slide-and-prone hung there would resolve in the wrong order, and Hit carries no natural at all"
@@ -72,12 +64,8 @@
     "why": "both written halves of the sorcerer's source end with the same clause -- the caster's arcane powers ignore a target's resistance to the sworn type up to the value of the caster's own -- and resistance is subtracted from a flat number on the target with nothing on the attacker's side consulted, so the clause has nowhere to be read"
   },
   "cf:sorcerer-soul-rest": {
-    "wants": "events.ShortRested -- an event a rest emits, so a feature clocked on one has something to run inside",
-    "why": "the page prints four sources. Three have a leg in chargen.BUILDS[\"sorcerer\"] now and are written; the fourth is a three-phase cycle chosen at the end of a short or an extended rest and stepped on by being bloodied or spending a daily. turns.short_rest exists and emits nothing, so there is no moment at which a phase could be picked, and a leg carrying one phase of three would deal a sorcerer a feature that never advances"
-  },
-  "cf:warden-f1-rest": {
-    "wants": "nothing but the rows: cf:warden-f1s0 .. f1s3 are four refs nobody has declared",
-    "why": "this was filed against chargen.BUILDS and against an event announcing a second wind, and neither is missing any more. The class has a named leg per printed option and cf:warden-f1 asks all four by name; events.SecondWind exists and features/guardians.py already imports it. What is left is four undeclared sub-option refs, one second-wind rider each -- work, not a gap"
+    "wants": "a leg in chargen.BUILDS[\"sorcerer\"] for the fourth source, carrying the three-phase cycle rather than one phase of it",
+    "why": "the page prints four sources. Three have a leg and are written. The fourth is a three-phase cycle chosen at the end of a short or an extended rest and stepped on by being bloodied or by spending a daily. **events.ShortRested is emitted now** -- turns.py:686, with ExtendedRested beside it, and features/sorcerer.py already listens -- so the moment the old wants asked for exists and this is no longer blocked on the engine. What is left is the leg: BUILDS has wild, dragon and the four elements, and a leg carrying one phase of three would deal a sorcerer a feature that never advances."
   },
   "cf:warlord-archer": {
     "wants": "c.attacks_with(ability=)",
@@ -184,7 +172,7 @@
     "why": "the clause is +5 to Perception checks made for one reason, and a check carries no reason to gate on, so the bonus would apply to every Perception check the ardent makes"
   },
   "p2621:augment1": {
-    "wants": "the card's Augment 1 body in the compendium import, which etl.sanitise.power_spec finds empty",
+    "wants": "compendium.augment_body -- the imported page prints only a Special: line between the two Augment headings, so Augment 1 has no Hit line to write and no symbol can ever arrive",
     "why": "the imported entry has no Hit line under its Augment 1 heading -- only the Special that belongs to the whole power sits between the two headings -- so there is no clause to write"
   },
   "p2622:augment1": {
