@@ -3603,7 +3603,11 @@ def m6575a1(c: Cast) -> None:
     keywords=[Keyword.ZONE],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d6", 0, kind=LIMITED),
-    dropped=("c.grant_action('move_zone')",),
+    # Same gap as the eight rows carrying `c.grant_action(move_zone)`,
+    # spelled with quotes. One mechanism, one symbol: a family split
+    # across two spellings cannot be counted, and this row's own note is
+    # the clearest statement of what is missing.
+    dropped=("c.grant_action(move_zone)",),
 )
 def m6575a2(c: Cast) -> None:
     """The zone, its toll and the short sight it imposes all play. What is
