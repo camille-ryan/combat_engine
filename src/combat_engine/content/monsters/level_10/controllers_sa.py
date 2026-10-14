@@ -2190,7 +2190,16 @@ def m3788a3(c: Cast) -> None:
     target=EACH_ENEMY,
     damage=Damage("2d8", 5, half_on_miss=True),
     attack=Attack(vs=FORT, printed=12),
-    dropped=("c.grant_action(move_zone)",),
+    # **Not `c.grant_action(move_zone)`, which the other five rows in this
+    # family took.** Theirs print a free-standing "as a minor action it can
+    # move the zone N squares"; this one prints the move **on its Sustain
+    # line** -- "Sustain: it sustains the haboob and can move it up to six
+    # squares by spending a move action". So the move is not a standing
+    # option every turn: it is part of sustaining, and offering it
+    # separately would let the zone be walked on a turn the creature never
+    # paid to sustain. One gap, and it is the sustain that has to carry a
+    # distance. #583
+    dropped=("c.sustain(moves=)",),
 )
 def m3788a4(c: Cast) -> None:
     """The prone, blind and half-on-miss are exact; so is the re-attack on
@@ -2718,7 +2727,6 @@ def m5476a4(c: Cast) -> None:
     reach=AreaBurst(4, within=10),
     target=NO_TARGET,
     keywords=[Keyword.ILLUSION, Keyword.ZONE, Keyword.AREA],
-    dropped=("c.grant_action(move_zone)",),
 )
 def m5476a5(c: Cast) -> None:
     """The zone, its exemption and the on-end slide are written. Nothing
@@ -2726,6 +2734,11 @@ def m5476a5(c: Cast) -> None:
     fight -- the symbol that does not resolve, per the module docstring."""
     area = frozenset(c.area())
     zone = c.zone(area, until=When.ENCOUNTER, difficult=True, label=c.ref)
+    # "move the zone 4 squares as a minor action" -- a standing option on every later
+    # turn, offered through the action menu now that
+    # `move_zone` has a reader. #583
+    c.grant_action("move_zone", ActionType.MINOR, squares_=4,
+                   on=c.me, until=When.ENCOUNTER)
     for friend in {c.me, *c.allies()}:
         c.ignores_difficult(c.ref, on=friend, until=When.ENCOUNTER)
 
@@ -3293,11 +3306,15 @@ def m5787a6(c: Cast) -> None:
     reach=AreaBurst(4, within=10),
     target=NO_TARGET,
     keywords=[Keyword.ILLUSION, Keyword.ZONE, Keyword.AREA],
-    dropped=("c.grant_action(move_zone)",),
 )
 def m5787a7(c: Cast) -> None:
     area = frozenset(c.area())
     zone = c.zone(area, until=When.ENCOUNTER, difficult=True, label=c.ref)
+    # "move the zone 4 squares as a minor action" -- a standing option on every later
+    # turn, offered through the action menu now that
+    # `move_zone` has a reader. #583
+    c.grant_action("move_zone", ActionType.MINOR, squares_=4,
+                   on=c.me, until=When.ENCOUNTER)
     for friend in {c.me, *c.allies()}:
         c.ignores_difficult(c.ref, on=friend, until=When.ENCOUNTER)
 

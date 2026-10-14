@@ -3603,11 +3603,6 @@ def m6575a1(c: Cast) -> None:
     keywords=[Keyword.ZONE],
     attack=Attack(vs=FORT, printed=7),
     damage=Damage("2d6", 0, kind=LIMITED),
-    # Same gap as the eight rows carrying `c.grant_action(move_zone)`,
-    # spelled with quotes. One mechanism, one symbol: a family split
-    # across two spellings cannot be counted, and this row's own note is
-    # the clearest statement of what is missing.
-    dropped=("c.grant_action(move_zone)",),
 )
 def m6575a2(c: Cast) -> None:
     """The zone, its toll and the short sight it imposes all play. What is
@@ -3617,6 +3612,11 @@ def m6575a2(c: Cast) -> None:
     if c.first:
         area = c.area()
         c.zone(area, until=When.ENCOUNTER, label=c.ref)
+        # "move the zone 2 squares as a minor action" -- a standing option on every later
+        # turn, offered through the action menu now that
+        # `move_zone` has a reader. #583
+        c.grant_action("move_zone", ActionType.MINOR, squares_=2,
+                       on=c.me, until=When.ENCOUNTER)
 
         def choked(who: int) -> None:
             c.flat(5, on=who)

@@ -2515,7 +2515,6 @@ def m2329a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.ZONE],
     attack=Attack(vs=WILL, printed=17),
-    dropped=("c.grant_action(move_zone)",),
 )
 def m2329a2(c: Cast) -> None:
     """A zone that attacks again every time somebody starts a turn in it.
@@ -2549,6 +2548,11 @@ def m2329a2(c: Cast) -> None:
         return
     me = c.me
     zone = c.zone(c.area(), label=_M2329_ZONE, until=When.EONT, sustain=MINOR)
+    # "move the zone 3 squares as a move action" -- a standing option on every later
+    # turn, offered through the action menu now that
+    # `move_zone` has a reader. #583
+    c.grant_action("move_zone", ActionType.MOVE, squares_=3,
+                   on=c.me, until=When.ENCOUNTER)
 
     def again(ev: TurnStart) -> None:
         if ev.ghost or ev.actor == me or ev.actor not in c.enemies():

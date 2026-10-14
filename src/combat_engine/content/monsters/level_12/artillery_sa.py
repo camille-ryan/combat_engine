@@ -333,7 +333,13 @@ def m1003a1(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("c.grant_action(move_zone)",),
+    # **Not the zone family's gap, checked by reading the body.** The five
+    # rows written off `move_zone` all lay a `c.zone`; this lays a
+    # `c.conjure`, and `c.move_zone` takes a `Zone` -- so there is nothing
+    # for a granted move to pick up. Same gap as `m958a3`, whose note puts
+    # it exactly: "a sustained attack has no conjured anchor on the board
+    # for `c.move_zone` to relocate". #583
+    dropped=("c.move_zone(conjuration=)",),
 )
 def m1003a2(c: Cast) -> None:
     """A conjuration it shoots through, and it may hold three of them.

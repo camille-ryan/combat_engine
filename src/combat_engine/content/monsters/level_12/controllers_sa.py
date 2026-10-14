@@ -1974,7 +1974,13 @@ def m1599a0(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.ZONE],
     attack=Attack(vs=REF, printed=16),
     damage=Damage("1d6", 6, dtype=DamageType.POISON, kind=LIMITED),
-    dropped=("c.grant_action(move_zone)",),
+    # **The move itself is writable now; the cap is not.** The card reads
+    # "can move the zone up to 3 squares as a minor action **once per
+    # round**", and `c.grant_action` takes no per-round limit -- so
+    # granting it would offer the move as often as the creature has minor
+    # actions. One narrowing short, and it is the narrowing that keeps a
+    # controller from walking its zone twice a turn. #583
+    dropped=("c.grant_action(per_round=)",),
 )
 def m1599a1(c: Cast) -> None:
     """A zone that keeps attacking whoever walks into it.

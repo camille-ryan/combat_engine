@@ -1465,7 +1465,10 @@ def m2295a0(c: Cast) -> None:
     damage=Damage("2d6", 5, dtype=DamageType.NECROTIC, kind=LIMITED),
     dropped=(
         "c.bonus('save:death')",
-        "c.grant_action(move_zone)",
+        # A conjured sphere, not a zone -- `c.move_zone` takes a `Zone`, so
+        # there is nothing for a granted move to pick up. `m958a3`'s gap,
+        # not the one the five written rows had. #583
+        "c.move_zone(conjuration=)",
         "c.grant_action(standard)",
     ),
 )

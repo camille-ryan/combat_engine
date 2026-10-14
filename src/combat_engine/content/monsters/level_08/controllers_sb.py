@@ -3022,7 +3022,6 @@ def m959a4(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FORCE, Keyword.ZONE],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d6", 4, dtype=DamageType.FORCE),
-    dropped=("c.grant_action(move_zone)",),
 )
 def m959a5(c: Cast) -> None:
     """"The m959 is immune to this effect" is the `TurnStart` gate skipping
@@ -3034,6 +3033,11 @@ def m959a5(c: Cast) -> None:
     if c.first:
         me = c.me
         zone = c.zone(c.area(), until=When.ENCOUNTER, label=c.ref)
+        # "move the zone 4 squares as a move action" -- a standing option on every later
+        # turn, offered through the action menu now that
+        # `move_zone` has a reader. #583
+        c.grant_action("move_zone", ActionType.MOVE, squares_=4,
+                       on=c.me, until=When.ENCOUNTER)
 
         def tick(ev: TurnStart) -> None:
             if ev.ghost or ev.actor == me:
