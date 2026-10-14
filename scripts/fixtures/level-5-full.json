@@ -2497,7 +2497,7 @@
   "MoveEnd(actor=3, at=(2, 0), kind_='walk')",
   "PowerResolved(actor=3, power='p12712', targets=[3], rolls=[])",
   "ActionSpent(actor=3, cost=<ActionType.MINOR: 'minor'>)",
-  "SkillCheck(actor=3, skill='stealth', dc=19, natural=20, bonus=9, total=29, success=True)",
+  "SkillCheck(actor=3, skill='stealth', dc=19, natural=20, bonus=14, total=34, success=True)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=3, target=7)",
   "EffectApplied(source=3, target=3, duration='end of encounter', label='hide unseen')",
   "TurnEnd(actor=3, round=9)",

@@ -1474,7 +1474,7 @@
   "EffectApplied(source=3, target=8, duration='end of this turn', label='p12712 advantage')",
   "PowerResolved(actor=3, power='p12712', targets=[3], rolls=[])",
   "ActionSpent(actor=3, cost=<ActionType.MINOR: 'minor'>)",
-  "SkillCheck(actor=3, skill='stealth', dc=14, natural=18, bonus=9, total=27, success=True)",
+  "SkillCheck(actor=3, skill='stealth', dc=14, natural=18, bonus=14, total=32, success=True)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=3, target=6)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=3, target=7)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=3, target=8)",
