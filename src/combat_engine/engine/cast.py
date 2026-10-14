@@ -2550,8 +2550,24 @@ class Cast:
         """`to` names the destination outright, for a row that does.
         `by` names who is doing the moving, when it is not the caster."""
         who = self._who(on)
-        return 0 if who is None else forced(
-            self.world, by if by is not None else self.me, who,
+        if who is None:
+            return 0
+        # **The squares belong to whoever is doing the forcing**, which is
+        # the opposite of `c.shift` and `c.teleport`: those read the mover,
+        # because "whenever you shift" is about the creature stepping. Here
+        # the card is "when one of *your* powers allows you to push, the
+        # maximum distance increases by 2" -- the pusher's rider, applied to
+        # somebody else's trip. Reading the victim would have let a creature
+        # lengthen the pushes it suffers.
+        #
+        # Skipped when `to` names the destination outright, for the reason
+        # `c.shift` skips it there: a row that says where the creature ends
+        # up is not asking how far it may go. #581.
+        mover = by if by is not None else self.me
+        if to is None:
+            squares_ += self._extra_every(mover, "push")
+        return forced(
+            self.world, mover, who,
             Forced.PUSH, squares_, anchor=anchor, to=to, power=self.ref,
         )
 
@@ -2567,8 +2583,24 @@ class Cast:
         """`to` names the destination outright, for a row that does.
         `by` names who is doing the moving, when it is not the caster."""
         who = self._who(on)
-        return 0 if who is None else forced(
-            self.world, by if by is not None else self.me, who,
+        if who is None:
+            return 0
+        # **The squares belong to whoever is doing the forcing**, which is
+        # the opposite of `c.shift` and `c.teleport`: those read the mover,
+        # because "whenever you shift" is about the creature stepping. Here
+        # the card is "when one of *your* powers allows you to push, the
+        # maximum distance increases by 2" -- the pusher's rider, applied to
+        # somebody else's trip. Reading the victim would have let a creature
+        # lengthen the pushes it suffers.
+        #
+        # Skipped when `to` names the destination outright, for the reason
+        # `c.shift` skips it there: a row that says where the creature ends
+        # up is not asking how far it may go. #581.
+        mover = by if by is not None else self.me
+        if to is None:
+            squares_ += self._extra_every(mover, "pull")
+        return forced(
+            self.world, mover, who,
             Forced.PULL, squares_, anchor=anchor, to=to, power=self.ref,
         )
 
@@ -2614,8 +2646,16 @@ class Cast:
 
                 at = here.square if here is not None else None
                 to = min(mine, key=lambda sq: distance(sq, at)) if at else min(mine)
-        return 0 if who is None else forced(
-            self.world, by if by is not None else self.me, who,
+        if who is None:
+            return 0
+        # The pusher's rider, as in `c.push` above -- and asked after the
+        # `toward=` branch, because that branch *computes* a `to` and a
+        # destination is not lengthened.
+        mover = by if by is not None else self.me
+        if to is None:
+            squares_ += self._extra_every(mover, "slide")
+        return forced(
+            self.world, mover, who,
             Forced.SLIDE, squares_, anchor=anchor, to=to, power=self.ref,
         )
 

@@ -7739,13 +7739,14 @@ def mage_school_riders(out: Result) -> None:
     """
     import combat_engine.content  # noqa: F401  -- populates REGISTRY
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Health, Mods
+    from combat_engine.engine.components import Health, Mods, Position
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import Hit
     from combat_engine.engine.query import enemies
 
     ILLUSION, NECROMANCY, NEITHER = "p1217", "p416", "p1225"
     NETHERMANCY, FIRE_ARCANE = "p13971", "p10191"
+    ENCHANTMENT = "p451"
 
     # ---- the illusion tier: a -2 on the next swing AT THE CASTER --------
     ref = "cf:wizard-mage-f0s2"
@@ -7788,6 +7789,39 @@ def mage_school_riders(out: Result) -> None:
                  f"against the caster {at_caster}, against another"
                  f" {at_other}, difference {at_caster - at_other}")
 
+    # ---- the enchantment tier: 2 more squares of forced movement -------
+    ref = "cf:wizard-mage-f0s0"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        world, caster, _ = _board(ref)
+        victim = sorted(enemies(world, caster))[0]
+        # **No second arming.** `_board(ref)` already armed the row, and
+        # calling its body again laid the rider twice -- a push of 1 came
+        # out at 5 and the first draft of this rule read that as the engine
+        # being wrong. The modifier is additive by design, so a double
+        # arming is indistinguishable from a bigger bonus.
+
+        # Driven through the verb, not the modifier: the point of the three
+        # new readers is that `c.push` *consults* the rider, and a test that
+        # read `Mods` back would pass whether it did or not.
+        def shoved(power: str, who: int = victim) -> int:
+            start = world.get(who, Position).square
+            Cast(world=world, me=caster, ref=power).push(1, on=who)
+            end = world.get(who, Position).square
+            from combat_engine.engine.grid import distance
+            return distance(start, end)
+
+        far = shoved(ENCHANTMENT)
+        out.that(far == 3,
+                 "a push of 1 from an arcane enchantment power travels 3",
+                 f"it travelled {far}")
+        near = shoved(NEITHER)
+        out.that(near == 1,
+                 "and a push of 1 from a power of neither school travels 1"
+                 " -- the negative control",
+                 f"it travelled {near}")
+
     # ---- the nethermancy tier: distant enemies look half-hidden --------
     ref = "cf:wizard-mage-f0s4"
     if ref not in REGISTRY:
@@ -7826,10 +7860,10 @@ def mage_school_riders(out: Result) -> None:
         out.skip(f"{ref} is not declared")
     else:
         world, caster, _ = _board(ref)
-        REGISTRY[ref].body(Cast(world=world, me=caster, ref=ref))
         mods = world.need(caster, Mods)
-        out.that(mods.total("damage", {"power": FIRE_ARCANE}) >= 1,
-                 "a damage bonus on an arcane fire power")
+        out.that(mods.total("damage", {"power": FIRE_ARCANE}) == 1,
+                 "a +1 damage bonus on an arcane fire power",
+                 f"it gave {mods.total('damage', {'power': FIRE_ARCANE})}")
         out.that(mods.total("damage", {"power": NEITHER}) == 0,
                  "and none on a power that is neither -- the negative control",
                  f"it gave {mods.total('damage', {'power': NEITHER})}")

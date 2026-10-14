@@ -802,3 +802,44 @@ def mage_apprentice_s5(c: Cast) -> None:
 
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, when=arcane_fire)
     c.ignore_resistance(dtype=DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
+
+
+@power(
+    "cf:wizard-mage-f0s0",
+    level=1,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_apprentice_s0(c: Cast) -> None:
+    """Two more squares of forced movement, on this caster's own powers.
+
+    `c.extend_every` already lengthened every move of a *kind*; `c.shift`
+    and `c.teleport` consulted it and the three forced-movement verbs did
+    not, so a rider on a push had nowhere to land. Those three read it now.
+
+    **The squares are the pusher's, not the pushed creature's**, which is
+    the opposite of a shift and the whole reason the three readers are not
+    copies of `c.shift`'s line. "When one of *your* powers allows you to
+    pull, push, or slide a creature" is a rider the wizard carries and
+    spends on somebody else's trip; reading the victim would have let a
+    creature lengthen the pushes it suffers.
+
+    Three calls rather than one because the card names three verbs and the
+    engine keeps them apart -- a push and a slide differ in where the
+    creature may end up, so one symbol over all three would be the kind of
+    collapse `MANOEUVRE_BULL_RUSH_FOLLOW` exists to avoid.
+    """
+    def arcane_enchantment(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power", "")))
+        if rolled is None:
+            return False
+        held = rolled.keywords or ()
+        return Keyword.ARCANE in held and Keyword.ENCHANTMENT in held
+
+    for kind in ("push", "pull", "slide"):
+        c.extend_every(kind, 2, on=c.me, until=When.ENCOUNTER,
+                       when=arcane_enchantment)
