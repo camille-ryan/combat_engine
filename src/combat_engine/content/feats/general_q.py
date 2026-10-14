@@ -2158,7 +2158,7 @@ def f3391(c: Cast) -> None:
 
 @power("f3392", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.skill_training()",))
+       )
 def f3392(c: Cast) -> None:
     """One of another class's at-wills, chosen by level rather than by
     ref, which is exactly the set `c.borrow_row` reads off the registry.

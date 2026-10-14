@@ -1916,7 +1916,6 @@ def f2149(c: Cast) -> None:
 
 @power("f2241", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("chargen.skill_training()",),
        proficiency=("w:ki-focus",))
 def f2241(c: Cast) -> None:
     """The power is a ref, so the middle clause is the one that plays.

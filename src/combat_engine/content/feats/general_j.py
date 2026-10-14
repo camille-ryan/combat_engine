@@ -441,19 +441,43 @@ def _one_of(refs: frozenset[str]):  # noqa: ANN202
 
 
 @power("f1461", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("chargen.skill_training()",))
+       reach=PERSONAL, target=SELF)
 def f1461(c: Cast) -> None:
     """The substitution plays and names no window, so it answers the
-    charge, the opportunity attack and a defender's swing alike.
+    charge, the opportunity attack and a defender's swing alike. The +1
+    to trained skill checks is written now.
 
-    **Re-aimed.** The marker named `c.bonus('skill:any')` and that verb
-    is not what is missing: `skills.modifier` totals a blanket `skill`
-    key beside `skill:<name>` for every check, so "a bonus to all of
-    them" is already sayable. What is missing is *which* skills this
+    **Both of this note's blockers have landed, and neither needed
+    anything here.** It read: *"what is missing is which skills this
     character is trained in -- `skills.py` says outright there is no
-    training model and `game.db` carries no skill list per class -- so
-    the blanket key would pay on every untrained check as well."""
+    training model and `game.db` carries no skill list per class"*. #565
+    built both: `Skills.trained` holds the set and `class_skill` holds 205
+    rows across all 25 classes. The marker was honest when written and
+    went stale without anybody noticing, which is the half worth
+    recording.
+
+    So the shape the note already worked out is the shape it takes: the
+    blanket `skill` key, which `skills.modifier` totals for **every**
+    check, narrowed by a gate so it pays only on a trained one. The
+    context carries `actor` and `skill`, which is what makes the gate
+    answerable at all -- without those keys it would be silently false,
+    this component's named failure mode.
+
+    **Read off the context's actor, not `c.me`.** They are the same
+    creature here, and asking the context is what keeps it right if this
+    bonus is ever laid on somebody else: a gate that closes over the
+    caster answers about the wrong sheet the moment it does."""
+    me = c.me
+
+    from combat_engine.engine import Skills
+
+    def trained_in_what_is_rolled(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("actor", me)
+        held = c.world.get(who, Skills)
+        return held is not None and str(ctx.get("skill", "")) in held.trained
+
+    c.bonus("skill", 1, kind="feat", on=me, until=When.ENCOUNTER,
+            when=trained_in_what_is_rolled)
     c.as_basic("p2848", "p3423", "p839", "p835")
 
 

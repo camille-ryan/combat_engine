@@ -126,7 +126,20 @@ BORROW = ("spec.feature_ref()",)
 #: A suit of armour or a shield, which is not the same column as the
 #: weapons and implements `chargen.proficiency` deals.
 ARMOUR = ("chargen.armor_proficiency()",)
-TRAINING = ("chargen.skill_training()",)
+#: **Retired: the rows that shared it no longer share a gap.** `feat.trains`
+#: read 14 of 69 printed trainings because the commonest form is "training
+#: in **the** Nature skill" and the extractor dropped it to the article
+#: (#574). With three columns -- granted, a choice of named skills, a choice
+#: from a class list -- four of these rows are satisfied outright and three
+#: are refused for a different reason, so one symbol cannot report for
+#: either set. A marker names one gap.
+#:
+#: What is left is only the **build** case: `class_skill` is keyed by class,
+#: and these three cards name a build whose list is a subset of its
+#: parent's. `chargen._from_class_list` trains nothing rather than offering
+#: the parent's wider list, which is the conservative direction and a
+#: refusal rather than an approximation.
+BUILD_SKILLS = ("class_skill.build",)
 #: Dim light and darkness are not states of a square this engine keeps.
 #: Changing the dice another row rolls -- up, down, or maximised.
 DICE = ("c.change_dice()",)
@@ -1254,7 +1267,7 @@ def f3678b(c: Cast) -> None:
 
 @power("f3615", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=TRAINING, proficiency=("w:ki-focus",))
+       dropped=BUILD_SKILLS, proficiency=("w:ki-focus",))
 def f3615(c: Cast) -> None:
     """The extra damage plays, held to once a fight by `once=True`. All
     four arms of the gate can be asked now: one-handed is a property the
@@ -1293,7 +1306,7 @@ def f3617(c: Cast) -> None:
 
 @power("f3618", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=TRAINING, proficiency=("w:holy-symbol",))
+       dropped=BUILD_SKILLS, proficiency=("w:holy-symbol",))
 def f3618(c: Cast) -> None:
     """`p13816` is a ref now, so the card's third clause is an ordinary
     `c.grant_row` -- and that turns the row into a trait.
@@ -1585,8 +1598,7 @@ def f3627(c: Cast) -> None:
 
 
 @power("f3628", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=TRAINING,
-       proficiency=("w:staff", "w:totem"))
+       reach=PERSONAL, target=SELF,        proficiency=("w:staff", "w:totem"))
 def f3628(c: Cast) -> None:
     """`p1455` is a ref and the row is declared, so the power half is an
     ordinary `c.grant_row`. "Once per day" is not a fight's business --
@@ -1596,7 +1608,7 @@ def f3628(c: Cast) -> None:
 
 @power("f3629", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=TRAINING, proficiency=("w:holy-symbol",))
+       dropped=BUILD_SKILLS, proficiency=("w:holy-symbol",))
 def f3629(c: Cast) -> None:
     """Both powers are refs now, so both are ordinary grants. `p13554` is
     printed as "you can use it as an encounter power" and carries its own
@@ -1789,7 +1801,7 @@ def f3644(c: Cast) -> None:
 
 
 @power("f3645", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=(*FEATURE, *TRAINING))
+       reach=PERSONAL, target=SELF, todo=FEATURE)
 def f3645(c: Cast) -> None:
     """Berserker Fury is a class feature named in prose, and the benefit
     is nothing but that feature with a day's limit on it."""
@@ -2004,8 +2016,7 @@ def f3659(c: Cast) -> None:
 
 
 @power("f3661", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=TRAINING,
-       proficiency=("w:staff", "w:totem"))
+       reach=PERSONAL, target=SELF,        proficiency=("w:staff", "w:totem"))
 def f3661(c: Cast) -> None:
     """`f3628` with a different power, and the spec now prints that
     power's ref. `p15852` is declared, so the power half is the same
@@ -2051,7 +2062,7 @@ def f3663(c: Cast) -> None:
 
 @power("f3664", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=TRAINING, proficiency=("w:wand",))
+       proficiency=("w:wand",))
 def f3664(c: Cast) -> None:
     """Hands over the card printed beside it rather than `f3668b`, which
     is the same card on the other feat's page.
@@ -2226,8 +2237,7 @@ def f3674(c: Cast) -> None:
 
 
 @power("f3675", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=TRAINING,
-       proficiency=("w:orb", "w:staff", "w:wand"))
+       reach=PERSONAL, target=SELF,        proficiency=("w:orb", "w:staff", "w:wand"))
 def f3675(c: Cast) -> None:
     """Hands over the card printed beside it, which is `p15850` reprinted
     on the feat's page."""

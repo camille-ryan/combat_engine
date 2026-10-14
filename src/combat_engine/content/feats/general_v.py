@@ -1617,10 +1617,21 @@ def f3547(c: Cast) -> None:
 
 
 @power("f3548", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.skill_training()",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.skill_power_choice()",))
 def f3548(c: Cast) -> None:
     """Which skill powers a character may choose is settled when it is
-    built, and counting as trained for that choice is the whole benefit."""
+    built, and counting as trained for that choice is the whole benefit.
+
+    **Re-pointed, because this is not skill training.** It shared a symbol
+    with twelve rows that grant training, and the training model landed
+    (#565) without making this writable: the card does not say the
+    character *is* trained, it says it may **choose skill powers as if**
+    it were. That is a question about the selectable set, and nothing in
+    `chargen` offers skill powers at all -- so `Skills.trained` is the
+    wrong thing to add to and would hand out the +5 this card never
+    grants. #575.
+    """
 
 
 @power("f3549", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
