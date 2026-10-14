@@ -1351,7 +1351,14 @@ _TRAILING_SECTION = re.compile(
     r"\s*(?:</b>)?\s*(?::|<br|</p>|$)"
 )
 
-_FEATURE_HEAD = re.compile(r"<b>\s*([A-Z][A-Z0-9 \u2019'&/-]{3,60}?)\s*</b>")
+#: A capitalised feature heading.
+#:
+#: **Parentheses and accented letters are printed in these.** Six features
+#: were lost because the heading disambiguates which build it belongs to in
+#: brackets, and a lost heading is worse than a missing row: the text falls
+#: into the *previous* feature's body, so one row goes missing and another
+#: gets a spec with somebody else's rules on the end of it.
+_FEATURE_HEAD = re.compile(r"<b>\s*([A-Z][A-Z0-9\u00c0-\u00dd \u2019'&/().-]{3,60}?)\s*</b>")
 
 #: A **sub-option** of the feature above it, set in title case: the
 #: fighter's talents, the rogue's tactics, the wizard's implement
@@ -1369,8 +1376,17 @@ _FEATURE_HEAD = re.compile(r"<b>\s*([A-Z][A-Z0-9 \u2019'&/-]{3,60}?)\s*</b>")
 #: has a comma on the left and `<b>At-Will</b>&nbsp;` a space on the
 #: right. Matching bare title-case `<b>` instead found 848 of these, most
 #: of them the word "Encounter".
+#:
+#: **The delimiters identify a heading, not the character class**, which is
+#: what makes widening the class safe: a bold run inside a power card has a
+#: comma or a space beside it rather than a `<br/>`, and that test is
+#: unchanged. 34 sub-options were being dropped for holding a character the
+#: class omitted -- one accented letter, which cost a whole domain every one
+#: of its tiers, and brackets, which cost nine channel divinity options, the
+#: six secondary school tiers and four pairs of seasonal and sacrificial
+#: variants.
 _SUB_HEAD = re.compile(
-    r"<br\s*/?>\s*<b>\s*([A-Z][A-Za-z0-9\u2019'&/ .:-]{2,60}?)\s*</b>\s*<br\s*/?>"
+    r"<br\s*/?>\s*<b>\s*([A-Z][A-Za-z0-9\u00c0-\u00ff\u2019'&/ ().:-]{2,60}?)\s*</b>\s*<br\s*/?>"
 )
 
 #: A per-level heading. **The second class-page dialect**: a build page
