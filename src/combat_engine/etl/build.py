@@ -1423,6 +1423,36 @@ _CARD_NAME = re.compile(r"<h1[^>]*>(.*?)</h1>", re.S)
 _CARD_LEVEL = re.compile(r'<span class="level">(.*?)</span>', re.S)
 
 
+def _titled(caps: str) -> str:
+    """Title-case a heading the page prints in capitals.
+
+    `str.title()` treats an apostrophe as a word boundary, so a heading
+    printed in capitals reached the localisation with a capital in the middle
+    of a possessive -- 25 class features carried one. That field is the
+    **display name**, the one thing here whose whole job is to be read.
+
+    **Only a capitals heading wants this.** 18 monster abilities and one item
+    hold a capital after an apostrophe because the page prints one -- a
+    contraction, or a proper name with an apostrophe inside it -- and those
+    are stored verbatim, as they must be. This runs on the one field that is
+    derived rather than printed.
+
+    What it cannot know: a name whose letter after the apostrophe genuinely
+    starts a word. 24 of the 25 are possessives and the 25th is a proper name
+    wanting the same lowercase, so the rule is right for every heading in the
+    corpus today -- but a surname in the Irish style would come out wrong, and
+    this corpus does print those elsewhere. The printed mixed-case spelling
+    would settle it and the page does not give one.
+    """
+    # Not a raw string: the escape is how the curly quote gets in here
+    # without `RUF001`, and the pattern has no backslash to protect.
+    return re.sub(
+        "(['\\u2019])([A-Z])",
+        lambda m: m.group(1) + m.group(2).lower(),
+        caps.title(),
+    )
+
+
 def _feature_sections(html: str) -> tuple[list[str], bool]:
     """The runs of markup a class page sets its features in, and which
     dialect it is printed in.
@@ -1545,7 +1575,7 @@ def _section_rows(
             continue
         ref = f"{stem}-f{ord_}"
         written += _feature_row(out, names, ref, bare, ord_, build,
-                                head, m.group(1).title())
+                                head, _titled(m.group(1)))
         written += _sub_features(out, names, ref, bare, ord_, build,
                                  body, marks)
         ord_ += 1
