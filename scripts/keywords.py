@@ -56,8 +56,23 @@ and live in `damage=`.
 
 Scoped to the words the ETL **records as keywords** -- `power._KEYWORDS`, the
 only vocabulary where the database's silence means "the card did not print
-it" -- the same question gives **16**, and all 16 are real. So that is the
-scope, and it is why this direction is worth gating at all.
+it" -- the same question gives a couple of dozen rather than 4,494. That is
+the scope, and it is why this direction is worth gating at all.
+
+**It is not a list of faults, and this file said it was.** The first draft
+claimed every one of them was real. All 22 of the original set were then
+read, and **9 were the header's fault and 13 were the card's keyword line
+being incomplete**: `p13982`'s rules text says "the burst creates a zone" in
+as many words and its keyword line omits `Zone`; four item blocks say "make
+a melee basic attack with the weapon" under a line that does not print
+`Weapon`; `p5848` prints `Varies` where the text names two damage types. All
+13 are kept deliberately.
+
+So the useful reading of a hit here is **"these two disagree", not "the
+header is wrong"**, and the nine that were wrong clustered in one shape
+worth knowing: a keyword belonging to the secondary card printed *under* a
+power, declared on the parent, where nothing can use it and a feat hunting
+that keyword finds the wrong half. #590.
 
 ## What it deliberately does not check
 
