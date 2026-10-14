@@ -781,8 +781,14 @@ def mage_apprentice_s5(c: Cast) -> None:
     I had this marked as wanting a resistance-ignoring facility.
     `c.ignore_resistance(dtype=, when=)` has been there all along -- the
     same lesson the engine file states, that of roughly 21 verbs wanted
-    across one issue 15 already existed. `vocab.py --find` did not surface
-    it and `--brief` did.
+    across one issue 15 already existed.
+
+    **And `vocab.py --find` did surface it; I called it wrong.** It takes
+    `nargs="+"` and ANDs the words, so `--find ignore resistance` returns
+    36 places with this verb at the top, while `--find "ignore resistance"`
+    is one literal argument that cannot match the underscore in the name.
+    It even prints "try one word, or a synonym" on an empty result, which
+    is the line I skipped. Pass words, never a quoted phrase.
 
     **The two clauses are scoped differently and the card says so.** The
     damage bonus is "with arcane fire attacks", so it is gated on the power
