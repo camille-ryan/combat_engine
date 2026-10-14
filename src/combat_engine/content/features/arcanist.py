@@ -38,6 +38,7 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Companion, Weapon
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared, Hit, Miss, Summoned
+from combat_engine.engine.query import distance_between
 
 # -- the cleric ------------------------------------------------------------
 
@@ -636,6 +637,7 @@ mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate")
 
 _ILLUSION_HIT = "you hit a target with an arcane illusion power"
 _NECROMANCY_HIT = "you hit at least one target with an arcane necromancy power"
+_NETHERMANCY_HIT = "you hit a target with an arcane nethermancy power"
 
 
 def _my_school_hit(word: Keyword):  # noqa: ANN202
@@ -714,3 +716,89 @@ def mage_apprentice_s3(c: Cast) -> None:
     bare call would grant them to nobody.
     """
     c.temp_hp(2, on=c.me)
+
+
+@power(
+    "cf:wizard-mage-f0s4",
+    level=1,
+    cls="wizard",
+    usage=AT_WILL,
+    action=ActionType.FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    trigger=_NETHERMANCY_HIT,
+    on=Trigger(Hit, _my_school_hit(Keyword.NETHERMANCY), _NETHERMANCY_HIT),
+)
+def mage_apprentice_s4(c: Cast) -> None:
+    """The creature struck sees distant enemies as half-hidden.
+
+    **Written as the penalty concealment confers, not as concealment**, and
+    the direction is why. `c.conceal(on=X)` grants it *to* X -- everything
+    attacking X is -2 -- and this card does the opposite: the creature hit
+    treats *other* creatures as concealed, so what moves is its own attack
+    roll and only against targets more than 2 squares from it.
+
+    Partial concealment is -2 to the attacker, which `c.conceal`'s own
+    docstring states, so the number is the card's and not a guess. What is
+    not modelled is concealment as a *state* -- a row asking "is that
+    creature concealed" will not see this -- and no row in the tree asks
+    that of a third party, which is why this is the faithful reading rather
+    than a lossy one.
+
+    The distance is measured at each attack rather than once: both
+    creatures move.
+    """
+    victim = getattr(c.trigger, "target", None)
+    if victim is None:
+        return
+    world = c.world
+
+    def far_from_victim(ctx: dict[str, Any], who: int = victim) -> bool:
+        aim = ctx.get("target")
+        return (
+            isinstance(aim, int)
+            and aim != who
+            and distance_between(world, who, aim) > 2
+        )
+
+    c.penalty("attack", 2, on=victim, until=When.EONT, when=far_from_victim)
+
+
+@power(
+    "cf:wizard-mage-f0s5",
+    level=1,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_apprentice_s5(c: Cast) -> None:
+    """Two standing clauses, and both verbs already existed.
+
+    I had this marked as wanting a resistance-ignoring facility.
+    `c.ignore_resistance(dtype=, when=)` has been there all along -- the
+    same lesson the engine file states, that of roughly 21 verbs wanted
+    across one issue 15 already existed. `vocab.py --find` did not surface
+    it and `--brief` did.
+
+    **The two clauses are scoped differently and the card says so.** The
+    damage bonus is "with arcane fire attacks", so it is gated on the power
+    that is rolling; the resistance clause is "your attacks", unqualified,
+    so it carries no gate at all. Writing the second with the first's gate
+    would have been the tidier-looking mistake.
+
+    The +2 at 11th level and +3 at 21st are paragon and epic, so they are
+    out of scope rather than missing.
+    """
+    def arcane_fire(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power", "")))
+        if rolled is None:
+            return False
+        held = rolled.keywords or ()
+        return Keyword.ARCANE in held and Keyword.FIRE in held
+
+    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, when=arcane_fire)
+    c.ignore_resistance(dtype=DamageType.FIRE, on=c.me, until=When.ENCOUNTER)

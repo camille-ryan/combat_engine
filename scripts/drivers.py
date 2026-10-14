@@ -7721,14 +7721,16 @@ def trained_skills(out: Result) -> None:
 
 
 def mage_school_riders(out: Result) -> None:
-    """The two mage school tiers that rider on the caster's own hit.
+    """The four mage school tiers an `audit` board cannot pose.
 
-    **`audit` cannot see either of these.** Both reported "never usable
-    here" the moment they were written: the board poses no wizard landing an
-    illusion or a necromancy power, so the trigger never fires and the row
-    is credited with nothing either way. That is the blind spot `drivers`
-    exists for, and the reason these two assertions are here rather than in
-    a sweep.
+    **`audit` cannot see three of these four.** Each reported "never usable
+    here" the moment it was written: the board poses no wizard landing an
+    illusion, a necromancy or a nethermancy power, so the trigger never
+    fires and the row is credited with nothing either way. That is the blind
+    spot `drivers` exists for, and the reason these assertions are here
+    rather than in a sweep. The fourth is a standing trait that does fire,
+    and whether its two clauses are *scoped* right is still invisible to a
+    sweep.
 
     The negative control is the keyword, not the event: a hit with a wizard
     power carrying **neither** school keyword must leave both rows cold. A
@@ -7736,12 +7738,14 @@ def mage_school_riders(out: Result) -> None:
     read the keyword or just said yes.
     """
     import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health, Mods
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import Hit
     from combat_engine.engine.query import enemies
 
     ILLUSION, NECROMANCY, NEITHER = "p1217", "p416", "p1225"
+    NETHERMANCY, FIRE_ARCANE = "p13971", "p10191"
 
     # ---- the illusion tier: a -2 on the next swing AT THE CASTER --------
     ref = "cf:wizard-mage-f0s2"
@@ -7783,6 +7787,52 @@ def mage_school_riders(out: Result) -> None:
                  " nothing against anybody else",
                  f"against the caster {at_caster}, against another"
                  f" {at_other}, difference {at_caster - at_other}")
+
+    # ---- the nethermancy tier: distant enemies look half-hidden --------
+    ref = "cf:wizard-mage-f0s4"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        world, caster, _ = _board(ref)
+        foes = sorted(enemies(world, caster))
+        victim = foes[0]
+        world.bus.emit(Hit(attacker=caster, target=victim, power=NETHERMANCY,
+                           critical=False))
+        mods = world.need(victim, Mods)
+
+        # Two squares is the card's line, so the assertion is about the
+        # boundary rather than about "far" in the abstract. Distances are
+        # read off the board rather than assumed, because the harness places
+        # the creatures and this rule must not depend on where.
+        from combat_engine.engine.query import distance_between
+        near = [e for e in world.entities
+                if e != victim and distance_between(world, victim, e) <= 2]
+        far = [e for e in world.entities
+               if e != victim and distance_between(world, victim, e) > 2]
+        if not near or not far:
+            out.skip(f"{ref}: the board puts nothing both inside and outside"
+                     f" 2 squares of the victim")
+        else:
+            at_far = mods.total("attack", {"target": far[0]})
+            at_near = mods.total("attack", {"target": near[0]})
+            out.that(at_far - at_near == -2,
+                     "the struck creature is -2 against a target more than 2"
+                     " squares off and unchanged against a closer one",
+                     f"far {at_far}, near {at_near}")
+
+    # ---- the pyromancy tier: a damage rider and no fire resistance ------
+    ref = "cf:wizard-mage-f0s5"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        world, caster, _ = _board(ref)
+        REGISTRY[ref].body(Cast(world=world, me=caster, ref=ref))
+        mods = world.need(caster, Mods)
+        out.that(mods.total("damage", {"power": FIRE_ARCANE}) >= 1,
+                 "a damage bonus on an arcane fire power")
+        out.that(mods.total("damage", {"power": NEITHER}) == 0,
+                 "and none on a power that is neither -- the negative control",
+                 f"it gave {mods.total('damage', {'power': NEITHER})}")
 
     # ---- the necromancy tier: 2 temporary hit points --------------------
     ref = "cf:wizard-mage-f0s3"
@@ -7893,7 +7943,7 @@ DRIVERS = {
     ),
     "mage_schools": (
         mage_school_riders,
-        "the two mage school tiers that rider on the caster's own hit",
+        "the four mage school tiers an audit board cannot pose",
     ),
     "reachable_latch": (
         a_reachable_latch,
