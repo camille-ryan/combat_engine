@@ -7719,7 +7719,111 @@ def trained_skills(out: Result) -> None:
     )
 
 
+
+def mage_school_riders(out: Result) -> None:
+    """The two mage school tiers that rider on the caster's own hit.
+
+    **`audit` cannot see either of these.** Both reported "never usable
+    here" the moment they were written: the board poses no wizard landing an
+    illusion or a necromancy power, so the trigger never fires and the row
+    is credited with nothing either way. That is the blind spot `drivers`
+    exists for, and the reason these two assertions are here rather than in
+    a sweep.
+
+    The negative control is the keyword, not the event: a hit with a wizard
+    power carrying **neither** school keyword must leave both rows cold. A
+    rule that only fired the matching power would pass whether the gate
+    read the keyword or just said yes.
+    """
+    import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.engine.components import Health, Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    ILLUSION, NECROMANCY, NEITHER = "p1217", "p416", "p1225"
+
+    # ---- the illusion tier: a -2 on the next swing AT THE CASTER --------
+    ref = "cf:wizard-mage-f0s2"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        world, caster, _ = _board(ref)
+        foe = sorted(enemies(world, caster))[0]
+
+        def held(w=world, who=foe, r: str = ref) -> int:  # noqa: ANN001
+            mods = w.get(who, Mods)
+            return 0 if mods is None else sum(1 for m in mods.items
+                                              if m.label.startswith(r))
+
+        out.that(held() == 0, f"{ref} lays nothing before anything is hit")
+        world.bus.emit(Hit(attacker=caster, target=foe, power=NEITHER,
+                           critical=False))
+        out.that(held() == 0,
+                 "and nothing after a wizard power with neither school keyword"
+                 " -- the negative control",
+                 f"a hit with {NEITHER} laid {held()} modifier(s)")
+        world.bus.emit(Hit(attacker=caster, target=foe, power=ILLUSION,
+                           critical=False))
+        out.that(held() == 1,
+                 "a hit with an illusion power lays the penalty on the target",
+                 f"it laid {held()}")
+
+        # **The difference, not the total.** `audit:setup` lays its own
+        # ungated -2 to attack on this board, so an absolute reading is -4
+        # against the caster and -2 against anybody else -- and an assertion
+        # on the total passes or fails on the harness's modifier rather than
+        # on this row's. The claim is that the gate is worth exactly 2 and
+        # only against the caster.
+        mods = world.need(foe, Mods)
+        at_caster = mods.total("attack", {"target": caster})
+        at_other = mods.total("attack", {"target": foe})
+        out.that(at_caster - at_other == -2,
+                 "the penalty is worth exactly 2 against the caster and"
+                 " nothing against anybody else",
+                 f"against the caster {at_caster}, against another"
+                 f" {at_other}, difference {at_caster - at_other}")
+
+    # ---- the necromancy tier: 2 temporary hit points --------------------
+    ref = "cf:wizard-mage-f0s3"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+    world, caster, _ = _board(ref)
+    foe = sorted(enemies(world, caster))[0]
+    health = world.need(caster, Health)
+    health.temp = 0
+
+    world.bus.emit(Hit(attacker=caster, target=foe, power=NEITHER,
+                       critical=False))
+    out.that(health.temp == 0,
+             "the necromancy tier grants nothing for a power of neither"
+             " school -- the negative control",
+             f"temp hp went to {health.temp}")
+    world.bus.emit(Hit(attacker=caster, target=foe, power=NECROMANCY,
+                       critical=False))
+    out.that(health.temp == 2,
+             "and 2 temporary hit points for a necromancy hit",
+             f"temp hp is {health.temp}")
+
+    # "At least one target" with no counter: three hits leave 2, because
+    # temporary hit points do not stack. The row relies on that rather than
+    # keeping its own once-per-power guard.
+    world.bus.emit(Hit(attacker=caster, target=foe, power=NECROMANCY,
+                       critical=False))
+    world.bus.emit(Hit(attacker=caster, target=foe, power=NECROMANCY,
+                       critical=False))
+    out.that(health.temp == 2,
+             "and three hits in one burst still leave 2 -- the larger pool"
+             " wins, so 'at least one target' needs no guard",
+             f"temp hp is {health.temp}")
+
+
 DRIVERS = {
+    "mage_schools": (
+        mage_school_riders,
+        "the two mage school tiers that rider on the caster's own hit",
+    ),
     "reachable_latch": (
         a_reachable_latch,
         "a once-a-round payout can be asked about and handed back",

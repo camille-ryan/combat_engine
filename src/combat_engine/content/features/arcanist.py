@@ -18,6 +18,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AT_WILL,
     ENCOUNTER,
     FREE,
     NO_TARGET,
@@ -36,7 +37,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Companion, Weapon
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import AttackDeclared, Miss, Summoned
+from combat_engine.engine.events import AttackDeclared, Hit, Miss, Summoned
 
 # -- the cleric ------------------------------------------------------------
 
@@ -612,3 +613,104 @@ mage_expert_s2 = _expert("cf:wizard-mage-f4s2", "bluff", "stealth")
 mage_expert_s3 = _expert("cf:wizard-mage-f4s3", "athletics", "endurance")
 mage_expert_s4 = _expert("cf:wizard-mage-f4s4", "intimidate", "stealth")
 mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate")
+
+
+# --------------------------------------------------------------------------
+# The mage's first school tier, `cf:wizard-mage-f0sN`
+#
+# Two of the six are written below. The other four want engine readers that
+# do not exist and carry markers saying which -- they are not here, because a
+# row is implemented before it is added or it carries a marker, and a marker
+# on a row nobody has declared is not a thing. #581.
+#
+# Both of these rider on **the wizard's own hit with a power carrying the
+# school's keyword**, which is only sayable since #589 recorded the schools
+# and `7abc66e` put them in the headers a gate actually reads. The keyword
+# comes off `get(ev.power)` -- the REGISTRY row -- which is the lesson from
+# `f1836`: the database is not what a gate can see.
+#
+# `usage=AT_WILL, action=FREE` with a declared `on=`, the shape `rt:r18-t3`
+# uses: the cards print no limit, so a limit here would be a budget the page
+# does not have.
+# --------------------------------------------------------------------------
+
+_ILLUSION_HIT = "you hit a target with an arcane illusion power"
+_NECROMANCY_HIT = "you hit at least one target with an arcane necromancy power"
+
+
+def _my_school_hit(word: Keyword):  # noqa: ANN202
+    """My own hit with a power carrying this school's keyword."""
+
+    def landed(world: World, me: int, ev: Hit) -> bool:
+        if ev.attacker != me:
+            return False
+        row = get(ev.power)
+        return bool(row and word in (row.keywords or ()))
+
+    return landed
+
+
+@power(
+    "cf:wizard-mage-f0s2",
+    level=1,
+    cls="wizard",
+    usage=AT_WILL,
+    action=ActionType.FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    trigger=_ILLUSION_HIT,
+    on=Trigger(Hit, _my_school_hit(Keyword.ILLUSION), _ILLUSION_HIT),
+)
+def mage_apprentice_s2(c: Cast) -> None:
+    """A -2 on the next swing the target takes **at the caster**, not on its
+    next swing at anybody.
+
+    `once=True` beside a `when=` gate is the whole of that, and it is right
+    for a reason worth writing down because the comment on `Cast`'s
+    once-keys reads the other way at a glance: it says a one-shot on
+    `attack` is "spent by the attack roll", which would mean an attack on
+    somebody else burns this penalty for free.
+
+    It does not. Driven on a board: the hold survives the target attacking a
+    bystander, whose target the gate rejects, and is spent by the attack on
+    the caster. 160 rows in the tree already pair the two and all of them
+    depend on that.
+
+    The victim comes off `c.trigger` rather than `c.target`: this row has no
+    target of its own, so a bare call would act on nobody.
+    """
+    victim = getattr(c.trigger, "target", None)
+    if victim is None:
+        return
+    me = c.me
+    c.penalty("attack", 2, on=victim, until=When.EONT, once=True,
+              when=lambda ctx: ctx.get("target") == me)
+
+
+@power(
+    "cf:wizard-mage-f0s3",
+    level=1,
+    cls="wizard",
+    usage=AT_WILL,
+    action=ActionType.FREE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+    trigger=_NECROMANCY_HIT,
+    on=Trigger(Hit, _my_school_hit(Keyword.NECROMANCY), _NECROMANCY_HIT),
+)
+def mage_apprentice_s3(c: Cast) -> None:
+    """Two temporary hit points for landing one.
+
+    **"At least one target" needs no once-per-power guard**, which is the
+    only subtle thing here. A burst that hits three creatures fires this
+    three times, and `resolve.temp_hp` is explicit that temporary hit points
+    do not stack -- the larger pool wins -- so three grants of 2 leave 2.
+    The printed clause is satisfied by the engine's own rule rather than by
+    a counter this row would otherwise have to keep.
+
+    `on=c.me` because the gain is the caster's: the row has no target, so a
+    bare call would grant them to nobody.
+    """
+    c.temp_hp(2, on=c.me)
