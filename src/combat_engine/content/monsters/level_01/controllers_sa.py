@@ -251,8 +251,8 @@ def m4760a0(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=Melee(10),
-    target=Target(side="other_ally", count=1, label=f"{_SPAWN} ally"),
-    dropped=("Target.ident",),
+    target=Target(side="other_ally", count=1, ident=_SPAWN,
+                  label=f"{_SPAWN} ally"),
 )
 def m4760a1(c: Cast) -> None:
     """`c.grant_attack` rather than `c.basic`, because the +2 and the swing are

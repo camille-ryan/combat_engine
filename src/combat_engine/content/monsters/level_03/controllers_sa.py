@@ -3796,10 +3796,10 @@ def m858a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=Target(side="ally", count=4, label="of its own kind"),
+    target=Target(side="ally", count=4, label="of its own kind",
+                  ident=_M858_KIN),
     requires=_kin_in_reach(_M858_KIN, 10),
     requires_text="one of its own kind must be within 10 squares",
-    dropped=("Target.ident",),
 )
 def m858a2(c: Cast) -> None:
     """"Up to four of them" counts a kind, which `Target` cannot filter on, so

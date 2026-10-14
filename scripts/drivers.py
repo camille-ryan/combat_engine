@@ -6512,6 +6512,100 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def target_of_one_kind(out: Result) -> None:
+    """"Up to four of its own kind" offers only that kind.
+
+    Nine rows filtered this in their **bodies** -- comparing `Ident.ref`
+    and returning for a target of the wrong block -- and that is not the
+    same thing. The targeter chooses first, so a row printing "up to four
+    of its own kind" was offered any four allies, rejected the wrong ones
+    one at a time, and paid nothing for them: the printed count is spent
+    on candidates the card never allowed.
+
+    `Target.ident` declares it instead, tested inside `_stands_right`,
+    which is the one predicate `candidates()` and `use` share -- #381 is
+    what happens when those two disagree, so a second copy of this test
+    would be the bug rather than the fix.
+
+    The negative control is an ally of a **different** block standing in
+    exactly the same place: it must drop out of the offer entirely, not be
+    offered and then refused.
+    """
+    from combat_engine.engine.components import Ident, Position
+    from combat_engine.engine.dsl import REGISTRY, Target, candidates
+
+    world, caster, _ = _board("m858a2")
+    mine = REGISTRY["m858a2"]
+    kind = world.get(caster, Ident)
+    if kind is None:
+        out.skip("m858a2's caster carries no Ident, so no kind can be asked for")
+        return
+
+    allies_ = [a for a in _allies_of(world, caster) if a != caster]
+    if not allies_:
+        out.skip("m858a2's board fields no ally to offer")
+        return
+
+    # Stand one ally close, and make it the caster's own kind.
+    mate = allies_[0]
+    here = world.get(caster, Position).square
+    world.get(mate, Position).square = (here[0] + 1, here[1])
+    world.get(mate, Ident).ref = kind.ref
+
+    same = Target(side="ally", count=4, ident=kind.ref)
+    other = Target(side="ally", count=4, ident="m-nothing-of-this-kind")
+
+    offered = candidates(world, caster, _aimed(mine, same))
+    out.that(
+        mate in offered,
+        "an ally of the caster's own kind is offered",
+        f"offered {offered}, wanted {mate} among them",
+    )
+
+    refused = candidates(world, caster, _aimed(mine, other))
+    out.that(
+        mate not in refused,
+        "and the same ally is not offered for a different kind",
+        f"offered {refused} for a kind nothing on the board is",
+    )
+
+    # And the field must not narrow a row that does not ask for a kind.
+    wide = candidates(world, caster, _aimed(mine, Target(side="ally", count=4)))
+    out.that(
+        mate in wide,
+        "while a target line naming no kind is unnarrowed",
+        f"offered {wide}",
+    )
+
+    # **`ident="own"`**, which four of the eight rows need and a literal
+    # cannot say: the block being asked for is whichever creature casts.
+    own = Target(side="ally", count=4, ident="own")
+    out.that(
+        mate in candidates(world, caster, _aimed(mine, own)),
+        'ident="own" offers an ally of the caster\'s own block',
+        f"offered {candidates(world, caster, _aimed(mine, own))}",
+    )
+    world.get(mate, Ident).ref = "m-some-other-block"
+    out.that(
+        mate not in candidates(world, caster, _aimed(mine, own)),
+        'and drops it the moment its block differs',
+        f"offered {candidates(world, caster, _aimed(mine, own))} after the change",
+    )
+
+
+def _aimed(p, aim):  # noqa: ANN001, ANN202
+    """The same row with a different target line, for comparing offers."""
+    from dataclasses import replace
+
+    return replace(p, target=aim)
+
+
+def _allies_of(world, who):  # noqa: ANN001, ANN202
+    from combat_engine.engine.query import allies
+
+    return allies(world, who)
+
+
 def a_weapon_requirement(out: Result) -> None:
     """A printed "Requirement: you must be wielding <a weapon>" is enforced.
 
@@ -6801,6 +6895,10 @@ def trained_skills(out: Result) -> None:
 
 
 DRIVERS = {
+    "target_kind": (
+        target_of_one_kind,
+        "a target line naming one kind offers only that kind",
+    ),
     "weapon_requirement": (
         a_weapon_requirement,
         "a printed Requirement naming one weapon is enforced, by ref",

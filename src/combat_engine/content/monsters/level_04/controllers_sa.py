@@ -2124,8 +2124,8 @@ def m4687a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=Target("other_ally", 4, label="up to four allies of one lesser kind"),
-    dropped=("Target.ident",),
+    target=Target("other_ally", 4, ident=_M4687_ROTTER,
+                  label="up to four allies of one lesser kind"),
 )
 def m4687a2(c: Cast) -> None:
     """The printed line names a particular lesser block, and the only handle

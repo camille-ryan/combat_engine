@@ -308,6 +308,25 @@ class Target:
     #: else is a weapon group or property. Without it the row is aimed at
     #: creatures that have nothing for it to do anything to.
     holding: str = ""
+    #: The target must be a creature of **this block**, by ref -- "up to
+    #: four of its own kind", "each ally of its own kind".
+    #:
+    #: **Nine rows filtered this in their bodies and that is not the same
+    #: thing.** A body check runs after the targeter has already chosen, so
+    #: a row printing "up to four of its own kind" was offered any four
+    #: allies, rejected the wrong ones one at a time and paid nothing for
+    #: them -- the count is spent on candidates the card never allowed.
+    #: Declared here instead, so `candidates()` and `use` agree, which is
+    #: the whole reason `_stands_right` is one predicate (#381).
+    #:
+    #: A ref, never a name: `Ident.ref` is what a monster carries. The one
+    #: special value is **`"own"`** -- "of its own kind", which is the
+    #: commonest printing of this line and cannot be a literal, because
+    #: the block being asked for is whichever creature is casting. Four of
+    #: the eight rows print it that way, and two of those name a *different*
+    #: block (`m858a2` wants `m499`), so the two spellings are not
+    #: interchangeable and guessing from the row's own ref would be wrong.
+    ident: str = ""
     #: The two clauses an object target line prints on top of its side.
     #: `max_size` is "Medium or smaller"; `loose` is "not fastened in place
     #: or held by a creature". Fields rather than sides of their own,
@@ -1998,6 +2017,14 @@ def candidates(
         or aim.ongoing
         or aim.ongoing_types
         or aim.bloodied is not None
+        # **A new `Target` field must be named here as well as tested in
+        # `_stands_right`**, or the offer path skips it in silence. This
+        # guard is a hand-kept list of "is any relational field set", so
+        # adding one to the predicate alone leaves the explicit-target arm
+        # honouring it and `candidates()` not -- which is #381's
+        # disagreement arriving one field at a time. `ident` was written
+        # that way and the driver caught it on its first run.
+        or aim.ident
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2357,6 +2384,24 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # bloodied nor unbloodied -- so it fails either way round rather than
         # defaulting into one of them.
         if hp is None or hp.bloodied is not aim.bloodied:
+            return False
+    if aim.ident:
+        # Scenery and anything else with no `Ident` is not of any block, so
+        # it fails rather than defaulting into the kind being asked for.
+        from .components import Ident
+
+        who = world.get(target, Ident)
+        if who is None:
+            return False
+        wanted = aim.ident
+        if wanted == "own":
+            # Resolved here because this is where the caster is known; a
+            # header field cannot hold "whatever block I am".
+            mine = world.get(actor, Ident)
+            if mine is None:
+                return False
+            wanted = mine.ref
+        if who.ref != wanted:
             return False
     return True
 

@@ -1199,8 +1199,9 @@ def m3770a2(c: Cast) -> None:
     recharge=4,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
-    dropped=("Target.ident",),
+    # `EACH_ALLY` plus the kind, which the shared constant cannot carry.
+    target=Target(side="ally", count=99, everyone=True, ident="own",
+                  label="each ally of its own kind"),
 )
 def m3770a3(c: Cast) -> None:
     """The target line narrows to allies off this very stat block, counted by

@@ -842,8 +842,8 @@ def m5285a2(c: Cast) -> None:
     recharge=0,
     action=STANDARD,
     reach=CloseBlast(5),
-    target=Target(side="ally", everyone=True, label="each ally of its own kind"),
-    dropped=("Target.ident",),
+    target=Target(side="ally", everyone=True, ident="own",
+                  label="each ally of its own kind"),
 )
 def m5285a3(c: Cast) -> None:
     """"Each <this creature> in the blast" is a target line about what a

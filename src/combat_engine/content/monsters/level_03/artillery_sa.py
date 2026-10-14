@@ -405,8 +405,8 @@ def m1222a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.ident",),
+    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+                  ident="own"),
 )
 def m1222a2(c: Cast) -> None:
     """The card names its own stat block, so the sort is the ref."""
@@ -1003,8 +1003,8 @@ def m4513a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.ident",),
+    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+                  ident="own"),
 )
 def m4513a2(c: Cast) -> None:
     _rally(c, "m4513")
@@ -2322,8 +2322,8 @@ def m913a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.ident",),
+    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+                  ident="own"),
 )
 def m913a2(c: Cast) -> None:
     _rally(c, "m913")
