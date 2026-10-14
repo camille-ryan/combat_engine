@@ -3026,7 +3026,6 @@ def m6078a1(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d6", 8, dtype=[DamageType.PSYCHIC, DamageType.NECROTIC],
                   kind=LIMITED),
-    dropped=("Target.creature_kind",),
 )
 def m6078a2(c: Cast) -> None:
     """Two type filters `Target` cannot make -- "living creatures" and
@@ -3036,6 +3035,15 @@ def m6078a2(c: Cast) -> None:
     keyword list said necrotic, the header said psychic, and the card says
     the one roll is both -- so whichever a reader consulted, it was half
     right. #423's walk catches exactly that shape.
+    
+
+    **The marker is retired rather than satisfied: this card wants no
+    narrowing.** The burst takes every creature and the type word decides
+    which *branch* each one is in, so filtering the offer would break the
+    row rather than finish it -- the half that spares or skips a kind needs
+    that creature to have been targeted in the first place. `Target` has
+    carried `kinds`, `kinds_without` and `living` throughout; none of them
+    is the thing this row wanted. #570.
     """
     victim = c.target
     if victim is None:

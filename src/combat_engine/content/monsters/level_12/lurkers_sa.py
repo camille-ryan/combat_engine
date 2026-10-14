@@ -2749,12 +2749,14 @@ def m5235a0(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(5),
-    target=ONE_CREATURE,
+    # "one living humanoid creature": `kinds` and `living` have both
+    # been in `Target` all along, so this was never blocked. #570.
+    target=Target(side="enemy", count=1, living=True,
+                  kinds=frozenset({"humanoid"})),
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=15),
     requires=_not_dominating,
     requires_text="the m5235 must not be dominating a creature with this power",
-    dropped=("Target.creature_kind",),
 )
 def m5235a1(c: Cast) -> None:
     """It climbs inside, and the two clocks are one printed sentence.

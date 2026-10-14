@@ -2220,8 +2220,8 @@ def m906a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY),
-    dropped=("Target.creature_kind",),
+    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+                  kinds=frozenset({"kobold"}), ident="own", any_of=True),
 )
 def m906a2(c: Cast) -> None:
     """This card names a creature-type word rather than its own stat block, so

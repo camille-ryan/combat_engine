@@ -818,8 +818,10 @@ def m1138a3(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
-    dropped=("Target.creature_kind", "Target.ident"),
+    # "an orc ally or one of its own kind" -- the union, which one
+    # field cannot say. `ONE_ALLY` plus the two tests. #570.
+    target=Target(side="ally", count=1, kinds=frozenset({"orc"}),
+                  ident="own", any_of=True),
 )
 def m1138a4(c: Cast) -> None:
     """"One orc or [it]" has no symbol in `Target`, so the kind is checked

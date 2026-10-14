@@ -352,7 +352,6 @@ _M4415_DOWN = "the creature drops to 0 hit points"
     damage=Damage("", 5, dtype=DamageType.POISON, kind=MINION),
     trigger=_M4415_DOWN,
     on=Trigger(Dropped, about_me, _M4415_DOWN),
-    dropped=("Target.creature_kind",),
 )
 def m4415a1(c: Cast) -> None:
     """The attack half spares its own sort and the Effect half heals them, so
@@ -363,6 +362,15 @@ def m4415a1(c: Cast) -> None:
 
     The caster is left out of the healing. It is a plant and it is on 0 hit
     points, so the printed line would otherwise bring it back up.
+    
+
+    **The marker is retired rather than satisfied: this card wants no
+    narrowing.** The burst takes every creature and the type word decides
+    which *branch* each one is in, so filtering the offer would break the
+    row rather than finish it -- the half that spares or skips a kind needs
+    that creature to have been targeted in the first place. `Target` has
+    carried `kinds`, `kinds_without` and `living` throughout; none of them
+    is the thing this row wanted. #570.
     """
     victim = c.target
     if victim is None:
