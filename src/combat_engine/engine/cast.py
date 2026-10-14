@@ -692,11 +692,13 @@ class Cast:
             held = self.world.effects.apply(
                 who, self.me, until,
                 label=f"{self.ref} unorigin:{instead_of.strip().lower()}",
+                by=self.ref,
             )
         for word in words:
             held = self.world.effects.apply(
                 who, self.me, until,
                 label=f"{self.ref} origin:{word.strip().lower()}",
+                by=self.ref,
             )
         return held
 
@@ -933,11 +935,20 @@ class Cast:
             from .durations import keywords_of
 
             label = against or self.ref
+            # **Find the effect this save is against, so its keywords are
+            # the laying row's.** `against` is a label, and for a burn that
+            # label is the printed amount -- so asking `keywords_of(label)`
+            # answered nothing. The effect carries `by`; matching it back by
+            # label is what gets hold of it. #580
+            held = next(
+                (e for e in self.world.effects.of(who) if e.label == label),
+                None,
+            )
             plus = bonus + self.total(
                 "save", who, {"actor": who, "label": label,
                               "conditions": frozenset(), "ongoing": False,
                               "dtype": None,
-                              "keywords": keywords_of(label)}
+                              "keywords": keywords_of(held or label)}
             )
             ev = self.world.bus.emit(
                 SavingThrow(
@@ -1082,7 +1093,8 @@ class Cast:
                 place(self.world, who, live.square)
 
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} size", on_end=[revert]
+            who, self.me, until, label=f"{self.ref} size", on_end=[revert],
+            by=self.ref,
         )
 
     def turn_of(self) -> int | None:
@@ -1114,7 +1126,11 @@ class Cast:
         if who is None:
             return None
         return self.world.effects.apply(
-            who, self.me, until, label=label, sustain_cost=sustain
+            who, self.me, until, label=label, sustain_cost=sustain,
+            # `label` here is whatever the row passed, which is prose on
+            # plenty of cards. `by` is the row itself, so a keyword gate
+            # still finds it. #580
+            by=self.ref,
         )
 
     def end_effect(
@@ -1231,7 +1247,8 @@ class Cast:
         if not pairs:
             return None
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} unseen", relations=pairs
+            who, self.me, until, label=f"{self.ref} unseen", relations=pairs,
+            by=self.ref,
         )
 
     def hide(self, *, from_: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
@@ -1351,6 +1368,7 @@ class Cast:
                 who, self.me, until, label=f"{self.ref} sure-footed {scope}",
                 on_suspend=[lambda: held.discard(word)],
                 on_resume=[lambda: held.add(word)],
+                by=self.ref,
             )
         if word in moves.ignores:
             return None
@@ -1363,6 +1381,7 @@ class Cast:
             who, self.me, until, label=f"{self.ref} sure-footed",
             on_suspend=[lambda: moves.ignores.discard(word)],
             on_resume=[lambda: moves.ignores.add(word)],
+            by=self.ref,
         )
 
     def speed_of(self, who: int | None = None) -> int:
@@ -1652,6 +1671,7 @@ class Cast:
         effect = self.world.effects.apply(
             who, self.me, until,
             label=f"{self.ref}: {holding} counts as {satisfies}",
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -1734,6 +1754,7 @@ class Cast:
 
         effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} is a weapon",
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -1790,6 +1811,7 @@ class Cast:
         effect = self.world.effects.apply(
             who, self.me, until,
             label=f"{self.ref}: {ref} counts as {keyword.value}",
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -1939,6 +1961,7 @@ class Cast:
                     who, self.me, When.EOT,
                     label=f"{self.ref} granted damage",
                     mods=[(who, Mod(what="damage", value=damage_bonus, kind="power"))],
+                    by=self.ref,
                 )
             )
         if attack_bonus:
@@ -1947,6 +1970,7 @@ class Cast:
                     who, self.me, When.EOT,
                     label=f"{self.ref} granted attack",
                     mods=[(who, Mod(what="attack", value=attack_bonus, kind="power"))],
+                    by=self.ref,
                 )
             )
         # **Lend the row if the creature does not know it.** `usable`
@@ -2507,6 +2531,9 @@ class Cast:
             who, self.me, until, label=f"ongoing {amount}",
             ongoing=(amount, dtypes[0] if dtypes else dtype),
             ongoing_types=tuple(dtypes),
+            # The label is the printed amount, so it resolves to no row --
+            # which is how a psychic burn answered "not psychic". #580
+            by=self.ref,
         )
 
     # -- moving things around ------------------------------------------------
@@ -3394,6 +3421,7 @@ class Cast:
             save_mod=save_mod,
             ongoing=ongoing,
             escalate=escalate,
+            by=self.ref,
         )
 
     def prone(
@@ -3484,6 +3512,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} immune to {', '.join(c.value for c in conditions)}",
             mods=mods,
+            by=self.ref,
         )
 
     #: The size rule all three basic manoeuvres print: "smaller than you, the
@@ -3912,6 +3941,7 @@ class Cast:
                 who, self.me, until, label=f"{self.ref} vulnerable when",
                 on_suspend=[lift_scoped],
                 on_resume=[lambda: defences.vulnerable_when.append(entry)],
+                by=self.ref,
             )
 
         for kind in kinds:
@@ -3936,6 +3966,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} vulnerable",
             on_suspend=[undo], on_resume=[redo],
+            by=self.ref,
         )
 
     def resist(
@@ -3998,7 +4029,8 @@ class Cast:
                     defences.resist.pop(kind, None)
 
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} resist", on_end=[undo]
+            who, self.me, until, label=f"{self.ref} resist", on_end=[undo],
+            by=self.ref,
         )
 
     def ignore_resistance(
@@ -4070,6 +4102,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} ignores {shown} resist{suffix}",
             mods=[(who, m) for m in mods],
+            by=self.ref,
         )
 
     def resistances(self, *, on: int | None = None) -> dict[DamageType, int]:
@@ -4172,6 +4205,7 @@ class Cast:
         effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} grants {ref}",
             on_end=[lambda: known.known.remove(ref) if ref in known.known else None],
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -4322,6 +4356,8 @@ class Cast:
             label=name,
             sustain_cost=sustain if until is When.SUSTAIN else None,
             on_end=[lambda: self._banish(eid)],
+            # A conjuration's label is what it is called, not a ref. #580
+            by=self.ref,
         )
         conj = self.world.get(eid, Conjuration)
         if conj is not None:
@@ -4414,6 +4450,7 @@ class Cast:
             label=f"{self.ref} control",
             sustain_cost=sustain,
             on_end=[release],
+            by=self.ref,
         )
 
     def grow(self, squares_: int = 1, *, on: int | None = None) -> bool:
@@ -4536,7 +4573,8 @@ class Cast:
                 moves.modes[name] = had
 
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} {name}", on_end=[undo]
+            who, self.me, until, label=f"{self.ref} {name}", on_end=[undo],
+            by=self.ref,
         )
 
     def form(
@@ -4573,6 +4611,7 @@ class Cast:
             label=label or self.ref,
             conditions=conditions,
             drop_cost=revert,
+            by=self.ref,
         )
         if name:
             from .components import Shapes
@@ -4614,7 +4653,8 @@ class Cast:
         if previous is not None:
             self.world.effects.end(previous, "took another stance")
         return self.world.effects.apply(
-            who, self.me, When.STANCE, label=label or self.ref, conditions=conditions
+            who, self.me, When.STANCE, label=label or self.ref, conditions=conditions,
+            by=self.ref,
         )
 
     def cannot_shift(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
@@ -4700,6 +4740,7 @@ class Cast:
         return self.world.effects.apply(
             who, marker, until, label=f"{self.ref} mark",
             relations=[(Relation.MARKED_BY, marker, who)],
+            by=self.ref,
         )
 
     def curse(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
@@ -4715,6 +4756,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} curse",
             relations=[(Relation.CURSED_BY, self.me, who)],
+            by=self.ref,
         )
 
     def cursed(self, on: int | None = None) -> bool:
@@ -4753,6 +4795,7 @@ class Cast:
             who, self.me, When.ENCOUNTER, label=f"{self.ref} grab",
             relations=[(Relation.GRABBED_BY, holder, who)],
             escape_dc=dc,
+            by=self.ref,
         )
 
     def dominate(
@@ -4784,6 +4827,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} dominate",
             relations=[(Relation.DOMINATED_BY, master, who)],
+            by=self.ref,
         )
 
     def grabbing(self, *, of: int | None = None) -> list[int]:
@@ -4941,6 +4985,7 @@ class Cast:
         return self.world.effects.apply(
             self.me, self.me, until, label=f"{self.ref} quarry",
             relations=[(Relation.QUARRY_OF, self.me, who)],
+            by=self.ref,
         )
 
     # -- the three relations that simply name a second creature -------------
@@ -5090,7 +5135,8 @@ class Cast:
 
         who = on or self.me
         worn = self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} swapped sight", drop_cost=revert
+            who, self.me, until, label=f"{self.ref} swapped sight", drop_cost=revert,
+            by=self.ref,
         )
         holds = [self.see_invisible(on=who, until=until)]
         for other in creatures(self.world):
@@ -5524,6 +5570,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} instead of a basic attack",
             on_end=[restore],
+            by=self.ref,
         )
 
     def lend_augment(
@@ -5580,6 +5627,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} lends {ref} an augment at {cost}",
             on_end=[restore],
+            by=self.ref,
         )
 
     def no_basic(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
@@ -5609,6 +5657,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} no basic attack",
             on_end=[restore],
+            by=self.ref,
         )
 
     def absorb(self, ev: Any = None, *, on: int | None = None) -> int:
@@ -6317,7 +6366,8 @@ class Cast:
                 was_side.team = old_team
 
         hold = self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} risen", on_end=[lay_down]
+            who, self.me, until, label=f"{self.ref} risen", on_end=[lay_down],
+            by=self.ref,
         )
         if hold is None:
             lay_down()
@@ -6601,6 +6651,7 @@ class Cast:
             # resume, which is the half it is easy not to assert.
             on_suspend=[lambda: caught.contracted.pop(ref, None)],
             on_resume=[lambda: caught.contracted.__setitem__(ref, stage)],
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -6868,6 +6919,7 @@ class Cast:
         # nothing alive to ever give it back.
         effect = self.world.effects.apply(
             who, self.me, until, label=label, on_end=undo,
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -6927,6 +6979,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} rolls {ref} with {ability.value}",
             on_end=[lambda: _drop_roll(known, ref, entry)],
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -6974,6 +7027,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} rolls {ref} as {dice}",
             on_end=[lambda: _drop_dice(known, ref, entry)],
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -7021,6 +7075,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} makes {ref} grant {amount}",
             on_end=[lambda: _drop_amount(known, ref, entry)],
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -7117,6 +7172,7 @@ class Cast:
         effect = self.world.effects.apply(
             who, self.me, until,
             label=f"{self.ref} pre-empts {ref} {what}",
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -7362,6 +7418,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} leash {radius}",
             on_end=[undo],
+            by=self.ref,
         )
 
     def attacks_defence(
@@ -7481,6 +7538,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} waives {condition.value}",
             on_end=[undo],
+            by=self.ref,
         )
 
     def extend_move(
@@ -7531,6 +7589,7 @@ class Cast:
             who, self.me, until,
             label=f"{self.ref} moves {ref} {squares_:+d}",
             on_end=[lambda: _drop_squares(known, ref, entry)],
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -7782,6 +7841,7 @@ class Cast:
             granted = self.world.effects.apply(
                 who, self.me, until, label=f"{self.ref} advantage",
                 relations=[(Relation.GRANTS_CA_TO, who, b) for b in beneficiaries],
+                by=self.ref,
             )
         else:
             # **A gated grant cannot be a relation.** A `Relation` carries no
@@ -7804,6 +7864,7 @@ class Cast:
                 who, self.me, until, label=f"{self.ref} advantage",
                 mods=[(who, Mod(what="grants_ca_to", value=1, kind=self.ref,
                                 label=self.ref, when=gate))],
+                by=self.ref,
             )
         if once:
             # "Grants combat advantage to the *next* attack against it."
@@ -7858,6 +7919,7 @@ class Cast:
             who, self.me, until, label=f"{self.ref} gains advantage",
             mods=[(who, Mod(what="gains_ca_when", value=1, kind=self.ref,
                             label=self.ref, when=when))],
+            by=self.ref,
         )
 
     def treat_roll_as(
@@ -8030,7 +8092,8 @@ class Cast:
         )
         shown = f"+{dice}" if dice else f"{value:+d}"
         effect = self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} {key}{shown}", mods=[(who, mod)]
+            who, self.me, until, label=f"{self.ref} {key}{shown}", mods=[(who, mod)],
+            by=self.ref,
         )
         if once and effect is not None:
             from .events import AttackRolled, DamageRolled, Hit
@@ -8644,7 +8707,8 @@ class Cast:
 
         sub = self.world.bus.on(event, fire, window=window, owner=self.me)
         effect = self.world.effects.apply(
-            who, self.me, until, label=label or f"{self.ref} trigger", subs=[sub]
+            who, self.me, until, label=label or f"{self.ref} trigger", subs=[sub],
+            by=self.ref,
         )
         holder.append(effect)
         return effect
@@ -8815,6 +8879,7 @@ class Cast:
                     who, who, for_,
                     label=label or f"{self.ref} suspended",
                     on_end=[lambda: self.world.effects.resume(held)],
+                    by=self.ref,
                 )
             ]
 
@@ -9612,7 +9677,8 @@ class Cast:
             self.world.relations.clear(Relation.CASTS_FROM, borrower, who)
 
         return self.world.effects.apply(
-            borrower, self.me, until, label=f"{self.ref} origin", on_end=[undo]
+            borrower, self.me, until, label=f"{self.ref} origin", on_end=[undo],
+            by=self.ref,
         )
 
     # -- a condition held in abeyance ----------------------------------------
@@ -9652,7 +9718,8 @@ class Cast:
             conds.suppressed.difference_update(hushed)
 
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} ignored", on_end=[undo]
+            who, self.me, until, label=f"{self.ref} ignored", on_end=[undo],
+            by=self.ref,
         )
 
     # -- a number that lived in a closure ------------------------------------
@@ -9948,6 +10015,10 @@ class Cast:
             effect.source,
             effect.when,
             label=effect.label,
+            # **The row that laid it, not the row moving it.** Transferring
+            # a hold to another creature does not make it somebody else's
+            # effect, so its keywords must not change hands either. #580
+            by=getattr(effect, "by", "") or effect.label,
             conditions=effect.conditions,
             mods=[(to if eid == old else eid, m) for eid, m in effect.mods],
             ongoing=effect.ongoing,
@@ -10188,6 +10259,7 @@ class Cast:
             label=f"{self.ref} floor",
             sustain_cost=sustain if until is When.SUSTAIN else None,
             on_end=[lambda: self.world.grid.bridged.difference_update(laid)],
+            by=self.ref,
         )
 
     def move_zone(self, zone: int, squares_: int, *, to: Square | None = None) -> bool:
@@ -11017,7 +11089,9 @@ class Cast:
                 self.world.effects.end(eff, "deals another type now")
         through = Keyword.IMPLEMENT if implement else Keyword.WEAPON
         return self.world.effects.apply(
-            who, self.me, until, label=f"deals:{dtype.value}:{through.value}"
+            who, self.me, until, label=f"deals:{dtype.value}:{through.value}",
+            # A structured key, not a ref: `by` carries the row. #580
+            by=self.ref,
         )
 
     def _typed(self, dtype: DamageType) -> DamageType:
@@ -11144,7 +11218,8 @@ class Cast:
             Note(text=f"{arm.ref} is decaying: enhancement {arm.enhancement}")
         )
         return self.world.effects.apply(
-            who, self.me, until, label=f"{self.ref} decays {arm.ref}", on_end=[restore]
+            who, self.me, until, label=f"{self.ref} decays {arm.ref}", on_end=[restore],
+            by=self.ref,
         )
 
     def draw(self, ref: str = "", *, on: int | None = None) -> bool:
@@ -11234,6 +11309,7 @@ class Cast:
         # The effect first, as `forbid` and `rolls_with` do.
         effect = self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} draws for {cost.value}",
+            by=self.ref,
         )
         if effect is None:
             return None
@@ -11392,6 +11468,7 @@ class Cast:
             label=f"{self.ref} link",
             sustain_cost=sustain if until is When.SUSTAIN else None,
             on_end=[close],
+            by=self.ref,
         )
 
     def wall(
@@ -11567,6 +11644,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=f"{self.ref} aloft",
             on_end=[land], sustain_cost=sustain,
+            by=self.ref,
         )
 
     def fall(self, squares_: int = 0, *, on: int | None = None, safe: bool = False) -> int:

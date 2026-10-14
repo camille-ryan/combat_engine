@@ -93,10 +93,11 @@ def _shook_off(word: Keyword):  # noqa: ANN202
         for eff in world.effects.of(saver):
             if str(eff) != ev.against or eff.source != me:
                 continue
-            p = get(eff.label.split()[0]) if eff.label else None
-            if p is not None and p.attack is not None and word in keywords_of(
-                eff.label
-            ):
+            # `eff.by` is the laying row, where the label is only
+            # sometimes -- a burn's label is its printed amount. #580
+            laid_by = getattr(eff, "by", "") or (eff.label or "")
+            p = get(laid_by.split()[0]) if laid_by else None
+            if p is not None and p.attack is not None and word in keywords_of(eff):
                 return True
         return False
 

@@ -6512,6 +6512,129 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def an_effects_keywords_come_from_the_row_that_laid_it(out: Result) -> None:
+    """"A +2 bonus to saving throws against charm and psychic effects."
+
+    `Effect` stores no keywords, so the only way to answer "is this a
+    psychic effect" is to find the row that laid it. `durations.keywords_of`
+    did that by taking the **first word of the label** -- which works
+    because almost every site labels with its own ref, and silently failed
+    for the six in `cast.py` that label by content. `c.ongoing` writes
+    `"ongoing 5"`; `c.deals` writes `"deals:fire:weapon"`.
+
+    So a psychic monster's burn answered *no keywords*, and `p16438`'s
+    augment -- "make a saving throw against any charm effect and psychic
+    effect at the **start** of your turn" -- was told the psychic effect was
+    not psychic. 62 rows carry a watched keyword and lay a label of that
+    shape; 4 rows ask the question. #580.
+
+    The fix is `Effect.by`, a **plain attribute** (Camille's call) carrying
+    the laying ref, defaulted from the label so the other 327 call sites
+    keep today's behaviour.
+
+    Six questions, and the last two are the ones a weaker rule would miss:
+
+    * a psychic power's burn reports **psychic**;
+    * a fire burn does **not**  <- the control, which fails if `by` is
+      wired to something constant;
+    * a row labelling by its own ref still answers, so nothing regressed;
+    * a prose label still answers, because `by` is set from the row rather
+      than parsed out of the words;
+    * the **saving throw's context** carries the keywords, which is the
+      half that reaches a rule rather than a lookup;
+    * **`c.transfer` keeps the original layer's keywords.** Moving a hold to
+      another creature does not make it somebody else's effect, and the
+      transfer site is the one place `by` must not be `self.ref`.
+    """
+    from combat_engine.engine import Cast, DamageType, When
+    from combat_engine.engine.durations import keywords_of
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.types import Keyword
+
+    world, caster, _ = _board()
+
+    def burn(ref: str, dtype: DamageType, who: int) -> object:
+        before = set(world.effects.live)
+        Cast(world=world, me=who, ref=ref).ongoing(5, dtype, on=who)
+        laid = [e for i, e in world.effects.live.items() if i not in before]
+        return laid[0] if laid else None
+
+    # `m4389a1` is a psychic monster ability; its burn is labelled "ongoing 5".
+    psychic = burn("m4389a1", DamageType.PSYCHIC, caster)
+    if psychic is None:
+        out.skip("the psychic burn did not land, so nothing can be asked")
+        return
+    out.that(
+        Keyword.PSYCHIC in keywords_of(psychic),
+        "a psychic row's burn reports psychic, though its label is the amount",
+        f"label={psychic.label!r} by={getattr(psychic, 'by', None)!r} "
+        f"-> {sorted(k.value for k in keywords_of(psychic))}",
+    )
+
+    world.effects.end(psychic, "driver")
+    # A row with no psychic keyword, laying the same shape of effect.
+    plain = burn("mba", DamageType.FIRE, caster)
+    out.that(
+        plain is not None and Keyword.PSYCHIC not in keywords_of(plain),
+        "and a burn from a row without the keyword does not",
+        f"by={getattr(plain, 'by', None)!r} -> "
+        f"{sorted(k.value for k in keywords_of(plain)) if plain else None}",
+    )
+    if plain is not None:
+        world.effects.end(plain, "driver")
+
+    # The ordinary case, which must not have regressed: a label that *is*
+    # the ref, and a label that is prose.
+    c = Cast(world=world, me=caster, ref="m4389a1")
+    own = c.effect("m4389a1 hold", until=When.ENCOUNTER, on=caster)
+    prose = c.effect("shrugging it off", until=When.ENCOUNTER, on=caster)
+    out.that(
+        own is not None and Keyword.PSYCHIC in keywords_of(own),
+        "a row labelling with its own ref still answers",
+        f"by={getattr(own, 'by', None)!r}",
+    )
+    out.that(
+        prose is not None and Keyword.PSYCHIC in keywords_of(prose),
+        "and so does one labelling with prose, which the label never could",
+        f"label={prose.label!r} by={getattr(prose, 'by', None)!r}",
+    )
+
+    # The half that reaches a rule: the save's own context.
+    held = burn("m4389a1", DamageType.PSYCHIC, caster)
+    if held is None:
+        out.skip("no burn to save against")
+    else:
+        seen: list = []
+        c.bonus(
+            "save", 2, on=caster, until=When.ENCOUNTER,
+            when=lambda ctx: (seen.append(set(ctx.get("keywords", ()))), True)[1],
+        )
+        world.effects.save(held)
+        out.that(
+            any(Keyword.PSYCHIC in got for got in seen),
+            "the saving throw's context carries the laying row's keywords",
+            f"the save was offered {seen}",
+        )
+
+    # Transfer keeps the original layer.
+    mates = [a for a in allies(world, caster) if a != caster]
+    if not mates:
+        out.skip("no ally to transfer a hold to")
+        return
+    moving = burn("m4389a1", DamageType.PSYCHIC, caster)
+    if moving is None:
+        out.skip("no hold to transfer")
+        return
+    other = Cast(world=world, me=mates[0], ref="driver:thief")
+    landed = other.transfer(moving, to=mates[0])
+    out.that(
+        landed is not None and Keyword.PSYCHIC in keywords_of(landed),
+        "a transferred hold keeps the keywords of the row that laid it",
+        f"after transfer by={getattr(landed, 'by', None)!r} -- if this is "
+        f"'driver:thief' the transfer site is claiming the effect",
+    )
+
+
 def a_granted_action_that_walks_a_zone(out: Result) -> None:
     """"As a minor action it can move the zone up to 3 squares."
 
@@ -7620,6 +7743,10 @@ DRIVERS = {
     "aura_penalty": (
         penalty_scoped_to_an_aura,
         "a penalty scoped to a creature and its allies inside its aura",
+    ),
+    "effect_keywords": (
+        an_effects_keywords_come_from_the_row_that_laid_it,
+        "an effect's keywords come from the row that laid it, not its label",
     ),
     "move_zone": (
         a_granted_action_that_walks_a_zone,

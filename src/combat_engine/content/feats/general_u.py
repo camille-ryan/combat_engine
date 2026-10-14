@@ -155,7 +155,7 @@ def _save_against(c: Cast, who: int, *words: Keyword, bonus: int = 0) -> bool:
     wanted = set(words)
     for eff in c.world.effects.of(who):
         # `keywords_of` answers a *tuple* whatever its annotation says.
-        if eff.when is When.SAVE_ENDS and wanted & set(keywords_of(eff.label)):
+        if eff.when is When.SAVE_ENDS and wanted & set(keywords_of(eff)):
             return c.save(on=who, bonus=bonus, against=eff.label)
     return False
 

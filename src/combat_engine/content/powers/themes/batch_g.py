@@ -1580,7 +1580,7 @@ def p16414(c: Cast) -> None:
         return
     lifted = [
         held for held in c.world.effects.of(victim)
-        if keywords_of(held.label) & {Keyword.POLYMORPH, Keyword.ILLUSION}
+        if keywords_of(held) & {Keyword.POLYMORPH, Keyword.ILLUSION}
         and c.world.effects.suspend(held, f"{c.ref} suppressed it")
     ]
     if not lifted:

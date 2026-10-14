@@ -195,7 +195,7 @@ def f1088(c: Cast) -> None:
         if hold is None:
             return
         burn = hold.ongoing_types or ((hold.ongoing[1],) if hold.ongoing else ())
-        if Keyword.NECROTIC in keywords_of(hold.label) or DamageType.NECROTIC in burn:
+        if Keyword.NECROTIC in keywords_of(hold) or DamageType.NECROTIC in burn:
             c.resist(c.cha_mod, DamageType.NECROTIC, on=ev.actor, until=When.EONT)
 
     c.watch(PowerUsed, on_use, until=When.ENCOUNTER, on=me, label=c.ref)

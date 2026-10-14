@@ -1581,7 +1581,7 @@ def p16438(c: Cast) -> None:
         for eff in c.world.effects.of(c.me):
             if eff.when is not When.SAVE_ENDS:
                 continue
-            if {Keyword.CHARM, Keyword.PSYCHIC} & keywords_of(eff.label):
+            if {Keyword.CHARM, Keyword.PSYCHIC} & keywords_of(eff):
                 c.save(on=c.me, against=eff.label)
                 return
 

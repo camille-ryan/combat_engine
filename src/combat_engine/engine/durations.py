@@ -158,8 +158,15 @@ class Effect:
         return f"e{self.id}[{', '.join(bits)}]"
 
 
-def keywords_of(label: str) -> frozenset:
-    """The keywords of the row that laid an effect, read off its label.
+def keywords_of(which: object) -> frozenset:
+    """The keywords of the row that laid an effect.
+
+    Takes the **effect** or its label. Pass the effect where you have one:
+    it carries `by`, the ref of the row that laid it, and the label does
+    not always. Six sites in `cast.py` label by content rather than by ref
+    -- `c.ongoing` writes `"ongoing 5"`, `c.deals` writes
+    `"deals:fire:weapon"` -- and for those the label answers nothing while
+    `by` answers correctly. #580.
 
     `Effect` carries no keywords, and giving it some would mean every
     site that lays one passing them down. It does not have to: an
@@ -176,6 +183,10 @@ def keywords_of(label: str) -> frozenset:
     """
     from .dsl import get
 
+    # The effect knows which row laid it; a bare label only sometimes does.
+    by = getattr(which, "by", None)
+    label = by if by else (which if isinstance(which, str)
+                           else getattr(which, "label", "") or "")
     p = get(label.split()[0]) if label else None
     # **`frozenset`, not the tuple `Power.keywords` is.** The annotation
     # said frozenset and the return did not, so `{Keyword.FEAR} & ...`
@@ -230,6 +241,7 @@ class Effects:
         on_resume: Iterable[Callable[[], None]] = (),
         sustain_cost: ActionType | None = None,
         drop_cost: ActionType | None = None,
+        by: str = "",
     ) -> Effect:
         # Ongoing damage of one type does not stack -- the highest applies.
         # The rule lived in `Cast.ongoing` alone, and this is the door a
@@ -309,6 +321,27 @@ class Effects:
             sustain_cost=sustain_cost,
             drop_cost=drop_cost,
         )
+        # **The ref of the row that laid this, as a plain attribute.**
+        #
+        # `keywords_of` below has always answered "which keywords does this
+        # effect have" by taking the **first word of the label** and looking
+        # it up as a ref -- which works because almost every site labels with
+        # its own ref, and silently fails for the few that label by content.
+        # `c.ongoing` writes `"ongoing 5"` and `c.deals` writes
+        # `"deals:fire:weapon"`, so a psychic monster's burn answered *no
+        # keywords* and `p16438`'s augment -- "make a saving throw against any
+        # charm or psychic effect at the start of your turn" -- was told the
+        # psychic effect was not psychic. 62 rows carry a watched keyword and
+        # lay a label of that shape. #580.
+        #
+        # **An attribute, not a field**, on Camille's call and for the reason
+        # `Moved.kind_` records: a field would reach the wire and every replay
+        # fixture, neither of which is a change in how a fight resolves.
+        #
+        # **Defaulted from the label**, so all 333 call sites keep exactly
+        # today's behaviour and only the six in `cast.py` that label by
+        # content need to say anything.
+        eff.by = by or (label.split()[0] if label else "")
         self.live[eff.id] = eff
 
         # Everything the effect installs goes on **before** anything is
@@ -740,7 +773,12 @@ class Effects:
             # printed lines that want this say "against charm effects",
             # "against poison", "against fear", and there were eighteen
             # of them marked for a field `Effect` does not carry.
-            "keywords": keywords_of(eff.label),
+            # **The effect, not its label.** The label is the laying ref for
+            # most sites and the printed amount for `c.ongoing`, so passing
+            # it answered "no keywords" for every burn -- which is the half
+            # of #580 that reaches a *rule*: "a +2 to saves against charm
+            # and psychic effects" never saw a psychic burn.
+            "keywords": keywords_of(eff),
         }
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()

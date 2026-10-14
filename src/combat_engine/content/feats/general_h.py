@@ -1601,7 +1601,7 @@ def _poisoned(c: Cast, who: int) -> bool:
     for eff in c.world.effects.of(who):
         if eff.ended:
             continue
-        if Keyword.POISON in keywords_of(eff.label):
+        if Keyword.POISON in keywords_of(eff):
             return True
         burn = eff.ongoing
         if burn is not None and DamageType.POISON in (

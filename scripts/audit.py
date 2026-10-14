@@ -223,6 +223,15 @@ KNOWN_SILENT = {
     # worked here: give that helper the event, or promote it the way
     # `_gains_property` was promoted. It is not a board gap.
     "i1101x1": "lengthens a weapon's range through a writer that still announces nothing",
+    # **Silent because its work is other rows'**, which is #553's shape and
+    # the first row to land in this list through `Effect.by` (#580). Its
+    # whole content is ending the oath hold `p3069` laid and spending
+    # `p3069` again -- so the effect that appears belongs to `p3069`, whose
+    # ref the effect now carries, and crediting `f2164b` for it was the
+    # wholesale window being generous. The row is right; the observable is
+    # somebody else's.
+    "f2164b": "its clause is implemented by p3069, whose ref the effect now "
+              "carries -- #553",
     # **Nineteen rows, and the same shape as `f1873` and the four above for
     # the third time -- so the shape is worth naming rather than re-deriving.**
     #
@@ -3257,33 +3266,18 @@ VERDICT_SILENT = (
     "f139",
 )
 
-#: The one pinned row that does **not** verdict correctly, named so the rest
-#: can be a gate. Red if it heals, red if anything joins it; see the `--verdicts`
-#: branch in `main`.
+#: Pinned rows that do **not** verdict correctly, named so the rest can be a
+#: gate. Red if one heals, red if anything joins it.
 #:
-#: `p14262`'s whole content is in its body, so hollowing it should take all its
-#: credit away and the fixture is a fair one. It keeps `ConditionApplied,
-#: EffectApplied` because an **item's properties arm inside its own use** --
-#: driven by hand, `i561x1 ac+2` and `i561x1 fort+2`, at a depth *below* the
-#: row's own `PowerUsed`.
-#:
-#: Two mechanisms were tried against it and both are measured failures, which
-#: is why this entry exists rather than a fix:
-#:
-#: * **depth** keeps them, because deeper is the signature of a row's own
-#:   nested work -- that is what `_after_its_own_use` is for;
-#: * **label** loses 23 real rows. `startswith(ref)` is not sound: `c.ongoing`
-#:   labels `"ongoing 5"`, `c.deals` labels `"deals:fire:weapon"`, one monster
-#:   file labels `"{entity}:{ref}"`, and several rows use prose. The trait
-#:   branch's "an effect's label is the ref of the row that laid it" is true of
-#:   `c.effect`, `c.bonus` and `c.condition` and false of those.
-#:
-#: The fix wants a dedicated field on the effect carrying the laying row's ref,
-#: which is an engine change. #579.
-VERDICT_KNOWN = {
-    "p14262": "an item's properties arm inside its own use; neither depth nor "
-              "label can attribute them -- #579",
-}
+#: **Empty, and that is the point of having had it.** It held `p14262` for
+#: one day: the row kept `ConditionApplied, EffectApplied` after its body
+#: was emptied, because an item's properties arm inside its own use and the
+#: last-resort path credited the whole window. Two mechanisms were tried --
+#: depth kept them (deeper is a row's own nested work) and label lost 23
+#: working rows (`c.ongoing` labels `"ongoing 5"`). `Effect.by` made the
+#: test exact rather than a guess, and the entry came straight back out.
+#: #579, #580.
+VERDICT_KNOWN: dict[str, str] = {}
 
 
 def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
@@ -3509,11 +3503,33 @@ def audit(ref: str) -> Result:
             # every attack emits one: see `PROVOKE_NOISE`. Subtracting the
             # whole of `PROVOKE_NOISE` here would re-judge a great many rows
             # that have nothing to do with this change.
+            #
+            # **The two effect kinds are attributed, now that an effect says
+            # who laid it.** `p14262` -- the tenth pinned row, and the one
+            # failure `--verdicts` carried for its whole life -- was
+            # credited with `ConditionApplied, EffectApplied` *after its
+            # body was emptied*, because an **item's properties arm inside
+            # the row's own use** and this path credited every event in the
+            # window wholesale.
+            #
+            # An earlier attempt attributed by **label** and had to be
+            # reverted: it reached 10 of 10 here and silenced **23 working
+            # rows**, because `startswith(ref)` is not sound --
+            # `c.ongoing` labels `"ongoing 5"`, `c.deals` labels
+            # `"deals:fire:weapon"`, one monster file labels
+            # `"{entity}:{ref}"`. `Effect.by` is the laying ref outright
+            # (#580), so the same test is exact instead of a guess.
+            mine_eff = {
+                i for i, e in world.effects.live.items()
+                if getattr(e, "by", "") == ref
+            }
+            laid = bool(mine_eff - had)
             out.events |= (
-                {e.kind for e in world.bus.log[cursor:]} - {"RelationCleared"}
+                {e.kind for e in world.bus.log[cursor:]}
+                - {"RelationCleared", "EffectApplied"}
             ) | _own_unbinding(world, cursor)
-            if set(world.effects.live) - had:
-                out.events.add("ConditionApplied")
+            if laid:
+                out.events |= {"ConditionApplied", "EffectApplied"}
         except Exception:  # the traceback is the finding
             out.error = traceback.format_exc()
             return out
