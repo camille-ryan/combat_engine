@@ -184,8 +184,8 @@ def shaman_f0s2(c: Cast) -> None:
     an ally's nearest, so "treat any enemy adjacent to your spirit companion
     as their nearest enemy" has nothing to change.
     """
-    _spirit_choice(c, "world speaker", ("p9732", "p9734"))
-    if not c.build("world speaker"):
+    _spirit_choice(c, "watcher", ("p9732", "p9734"))
+    if not c.build("watcher"):
         return
     for foe in c.enemies():
         c.no_cover(
@@ -199,8 +199,8 @@ def shaman_f0s2(c: Cast) -> None:
 @power("cf:shaman-f0s3", **TRAIT)
 def shaman_f0s3(c: Cast) -> None:
     """All four defences, which is what "all defenses" says, and untyped."""
-    _spirit_choice(c, "watcher", ("p9733", "p9736"))
-    if not c.build("watcher") or c.con_mod <= 0:
+    _spirit_choice(c, "world speaker", ("p9733", "p9736"))
+    if not c.build("world speaker") or c.con_mod <= 0:
         return
     for mate in friends(c):
         gate = _provoked_beside(c, mate)

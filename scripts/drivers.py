@@ -7819,7 +7819,73 @@ def mage_school_riders(out: Result) -> None:
              f"temp hp is {health.temp}")
 
 
+
+def shaman_spirits(out: Result) -> None:
+    """Each Companion Spirit option keeps its own two powers and loses the
+    others'.
+
+    **Two of the four were crossed.** `cf:shaman-f0s2` is the Watcher
+    option -- its boon is the no-cover one its card prints and its powers
+    are `p9732`/`p9734` -- and it gated on `c.build("world speaker")`.
+    `cf:shaman-f0s3` is World Speaker and gated on `c.build("watcher")`.
+    Since `_spirit_choice` **forbids** the pair when the gate fails, a
+    Watcher shaman lost its own two powers *and* its boon, and was handed
+    the other spirit's instead. Measured before the fix: `watcher` kept
+    `p9733, p9736`.
+
+    Nothing caught it. `legs.py` compares a leg's name against the page and
+    both names exist; `audit` fires a row on a board with no build choice,
+    where either gate is equally false. The only question that separates
+    them is "does *this* build keep *these* powers", which is this rule.
+
+    The negative half is the half that matters: the other spirit's pair
+    must be **forbidden**, not merely absent, because `loadout` deals them
+    and the row's job is to take them away again.
+    """
+    import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    # ref -> (its leg, its own pair, the sibling ref)
+    PAIRS = {
+        "cf:shaman-f0s0": ("protector", {"p5389", "p6521"}),
+        "cf:shaman-f0s1": ("stalker", {"p5388", "p5510"}),
+        "cf:shaman-f0s2": ("watcher", {"p9732", "p9734"}),
+        "cf:shaman-f0s3": ("world speaker", {"p9733", "p9736"}),
+    }
+    missing = [r for r in PAIRS if r not in REGISTRY]
+    if missing:
+        out.skip(f"not declared: {', '.join(missing)}")
+        return
+    every = {p for _, pair in PAIRS.values() for p in pair}
+
+    for ref, (leg, own) in sorted(PAIRS.items()):
+        world, me, _ = _board(ref)
+        held = world.get(me, Build)
+        if held is None:
+            world.add(me, Build(choices=frozenset({leg})))
+        else:
+            held.choices = frozenset({leg})
+        known = world.need(me, Powers)
+        known.known = sorted(set(known.known) | every)
+        known.forbidden = set()
+        for other in sorted(PAIRS):
+            REGISTRY[other].body(Cast(world=world, me=me, ref=other))
+        kept = every - known.forbidden
+        out.that(own <= kept,
+                 f"{ref} keeps its own two powers when its leg is taken",
+                 f"build {leg!r} kept {sorted(kept)}, wanted {sorted(own)}")
+        out.that(not ((every - own) & kept),
+                 f"{ref} forbids the other spirits' powers",
+                 f"build {leg!r} also kept {sorted((every - own) & kept)}")
+
+
 DRIVERS = {
+    "shaman_spirits": (
+        shaman_spirits,
+        "each Companion Spirit keeps its own powers and loses the others'",
+    ),
     "mage_schools": (
         mage_school_riders,
         "the two mage school tiers that rider on the caster's own hit",
