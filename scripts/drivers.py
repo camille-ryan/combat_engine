@@ -6577,6 +6577,68 @@ def a_reachable_latch(out: Result) -> None:
         "a refund of nothing must be distinguishable from a real one",
     )
 
+    # **`f1722`'s trigger, which the board cannot pose.** It needs a ranger
+    # holding a daily, a quarry, and a miss against it -- so the predicate
+    # is tested directly, with the three near-misses its card excludes.
+    # Without this the row sits "never usable here" and unverified, which
+    # is how a wrong predicate survives.
+    from combat_engine.content.feats.ranger_b import (
+        _my_ranger_daily_missed_quarry as missed,
+    )
+    from combat_engine.engine import Relation
+    from combat_engine.engine.dsl import REGISTRY
+
+    foe = next(iter(_enemies_of(world, caster)), None)
+    if foe is None:
+        out.skip("p704's board fields no enemy to be made a quarry")
+        return
+    world.relations.set(Relation.QUARRY_OF, caster, foe)
+
+    daily = next(
+        (r for r, p in REGISTRY.items()
+         if p.cls == "ranger" and p.usage.name == "DAILY"), "",
+    )
+    other = next(
+        (r for r, p in REGISTRY.items()
+         if p.cls == "ranger" and p.usage.name == "ENCOUNTER"), "",
+    )
+    not_ranger = next(
+        (r for r, p in REGISTRY.items()
+         if p.cls == "fighter" and p.usage.name == "DAILY"), "",
+    )
+
+    def ev(power: str, target: int):  # noqa: ANN202
+        return type("M", (), {"attacker": caster, "power": power, "target": target})()
+
+    out.that(
+        bool(daily) and missed(world, caster, ev(daily, foe)),
+        "f1722 accepts a daily ranger attack missing the quarry",
+        f"power={daily!r}",
+    )
+    out.that(
+        not other or not missed(world, caster, ev(other, foe)),
+        "and refuses a ranger ENCOUNTER power -- the card says daily",
+        f"power={other!r}",
+    )
+    out.that(
+        not not_ranger or not missed(world, caster, ev(not_ranger, foe)),
+        "and refuses another class's daily -- the card names the class",
+        f"power={not_ranger!r}",
+    )
+    stranger = next((f for f in _enemies_of(world, caster) if f != foe), None)
+    if stranger is not None:
+        out.that(
+            not missed(world, caster, ev(daily, stranger)),
+            "and refuses a miss against somebody who is not the quarry",
+            f"target={stranger}",
+        )
+
+
+def _enemies_of(world, who):  # noqa: ANN001, ANN202
+    from combat_engine.engine.query import enemies
+
+    return enemies(world, who)
+
 
 def target_of_one_kind(out: Result) -> None:
     """"Up to four of its own kind" offers only that kind.

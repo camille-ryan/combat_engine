@@ -62,6 +62,38 @@ from combat_engine.engine.query import (
 
 from .builds import RUFFIAN_GROUPS, on_leg
 
+#: The ranger's quarry damage, named once because two rows pay it.
+#:
+#: `f1722` pays it on a *miss* -- "whenever you miss with a daily ranger
+#: attack against your quarry, you can choose to apply your damage" -- and
+#: the dice have to be the same string the feature itself passes, or a feat
+#: that raises the die would raise one payout and not the other.
+QUARRY_LABEL = "cf:ranger-f1"
+QUARRY_DICE = "1d6"
+
+
+def pay_extra(c: Cast, label: str, dice: str, *, on: int,
+              per_turn: bool = False) -> bool:
+    """Pay a striker's extra damage, if the window has not been spent.
+
+    Factored out of `extra_damage` below because **a second row pays the
+    same sentence**: `f1722` applies the quarry damage on a miss, and the
+    printed "you can still deal it only once per round" is this latch, not
+    a second one of its own. Copying the three lines into the feat would
+    have been two payouts to keep in step -- and the die is asked for
+    rather than closed over precisely so that a feat raising it is read by
+    whoever pays.
+
+    Answers whether it paid, so a row offering the choice can tell "you
+    had already used it" from "there was nothing to add".
+    """
+    if c.latched(label, per_turn=per_turn):
+        return False
+    c.latch(label, per_turn=per_turn)
+    rolled = c.dice_for(label, dice, {"target": on})
+    c.damage(rolled, c.total(f"{label} damage"), on=on, detail=label)
+    return True
+
 
 def extra_damage(
     c: Cast,
@@ -103,18 +135,14 @@ def extra_damage(
         # blamed a missing announcement, which `detail=label` below has
         # always provided. `Powers.latched` keyed by this label, and the
         # window reasoning moved with it into `c.payment_window`. #569.
-        if c.latched(label, per_turn=per_turn):
-            return
-        c.latch(label, per_turn=per_turn)
-        # **The die is asked for, not closed over.** Four feats raise a
-        # striker's extra damage from d6s to d8s and one to d10s, and with the
-        # string baked in at arming time there was nothing for them to change.
-        # `dice_for` falls through to `dice` for anybody carrying no such feat.
-        # The target goes in the context because one of those feats narrows by
-        # it -- "against a creature marked by your ..." -- and the gate has no
-        # other way to know who was hit.
-        rolled = c.dice_for(label, dice, {"target": ev.target})
-        c.damage(rolled, c.total(f"{label} damage"), on=ev.target, detail=label)
+        # **The die is asked for, not closed over**, which `pay_extra`
+        # does: four feats raise a striker's extra damage from d6s to d8s
+        # and one to d10s, and with the string baked in at arming time
+        # there was nothing for them to change. The target goes in the
+        # context because one of those feats narrows by it -- "against a
+        # creature marked by your ..." -- and the gate has no other way to
+        # know who was hit.
+        pay_extra(c, label, dice, on=ev.target, per_turn=per_turn)
 
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=label)
 

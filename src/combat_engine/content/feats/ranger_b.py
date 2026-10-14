@@ -29,9 +29,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.features.strikers import (
+    QUARRY_DICE,
+    QUARRY_LABEL,
+    pay_extra,
+)
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    DAILY,
     ENCOUNTER,
     PERSONAL,
     REF,
@@ -172,6 +178,24 @@ def _i_crit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 
 def _my_point(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me
+
+
+def _my_ranger_daily_missed_quarry(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """"Whenever you miss with a daily ranger attack against your quarry".
+
+    All three clauses are the card's and none is redundant: a *daily*, a
+    *ranger* power, and the quarry as the target. The sibling predicates
+    above test the martial keyword instead, which is the wrong question
+    here -- this card names the class, not the power source.
+    """
+    p = get(ev.power)
+    return (
+        ev.attacker == me
+        and p is not None
+        and p.cls == "ranger"
+        and p.usage is DAILY
+        and world.relations.holds(Relation.QUARRY_OF, me, ev.target)
+    )
 
 
 def _hit_quarry_with(ref: str):  # noqa: ANN202
@@ -1135,9 +1159,37 @@ def f807(c: Cast) -> None:
         c.note(f"{c.ref}: the quarry damage may be dealt again this round")
 
 
-@power("f1722", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+@power("f1722", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you miss your quarry with a daily ranger attack",
+       on=Trigger(Miss, _my_ranger_daily_missed_quarry,
+                  "you miss your quarry with a daily ranger attack"))
 def f1722(c: Cast) -> None:
-    """Pays the class's extra damage on a *miss*. Same gap as f807, from
-    the other side: the once-a-round limit is what the row is spending,
-    and nothing counts it."""
+    """Pays the class's extra damage on a *miss*.
+
+    **Same latch as `f807` and `f1232`, spent rather than handed back.**
+    The old note said "nothing counts it", and the counter is
+    `Powers.latched` now -- so this row asks it the ordinary way, through
+    `strikers.pay_extra`, which is the same payout the feature itself
+    makes. The printed "you can still deal it only once per round" *is*
+    that latch and not a second limit of its own, which is why the row
+    adds no counter of its own.
+
+    `pay_extra` answering False is the already-spent case, and the card
+    offers a choice -- "you can choose to apply" -- so a round where the
+    damage has already been dealt declines quietly rather than announcing
+    a payout of nothing.
+
+    `AT_WILL`: the limit is the once-a-round damage and the daily powers
+    themselves, not a use of this trait, and a triggered trait declared
+    `ENCOUNTER` is spent on its first firing. `lint.py` refuses the other
+    spelling, as it did for both sibling rows the moment their markers
+    came off.
+    """
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    if c.may("apply the quarry damage on this miss") and pay_extra(
+        c, QUARRY_LABEL, QUARRY_DICE, on=foe
+    ):
+        c.note(f"{c.ref}: the quarry damage is dealt on the miss")
