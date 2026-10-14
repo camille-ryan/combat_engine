@@ -623,7 +623,7 @@ def f1835(c: Cast) -> None:
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("Keyword.SPIRIT",))
+       dropped=("power.keywords.spirit_in_headers",))
 def f1836(c: Cast) -> None:
     """Swaps the die a racial power adds to a roll: 1d10 rather than 1d6.
 
@@ -645,10 +645,21 @@ def f1836(c: Cast) -> None:
     rather than two keywords' worth. `p6186` now says which kind of roll it
     is and which power rolled it, so the narrowing is exact.
 
-    The spirit half cannot be said: the engine has `Keyword.BEAST_FORM` and
-    no spirit keyword, which is the `#486` family -- a keyword the database
-    names and no header declares. A `dropped=` rather than a silent
-    widening, because the widening is what was wrong here.
+    **The spirit half is still dropped, and the marker moved one layer.** It
+    used to say `Keyword.SPIRIT`, which arrived with #589 -- the ETL's
+    keyword list had never been reconciled against the pages, and the word
+    is now recorded on **66 powers**.
+
+    That is not enough, and writing the clause on the strength of it would
+    have been **silently false**. The gate reads `get(ref).keywords`, which
+    is `REGISTRY` -- the *content header* -- and **no header declares the
+    keyword**: 66 in the database, 0 in the tree. So the widened gate
+    compiled, fired, and audited green off its Nature half while the spirit
+    half could never match anything.
+
+    So what this waits on is the 66 headers, which is `#486`'s family -- a
+    keyword the database names and no header declares -- and the marker now
+    says that instead of the enum.
     """
 
     def narrowed(ctx: dict[str, Any]) -> bool:

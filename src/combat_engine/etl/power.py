@@ -93,6 +93,27 @@ _KEYWORDS = [
     # The same shape as `bladespell` and `beast form` above, which is three
     # omissions found one at a time. #503.
     "rage",
+    # **The reconciliation this list's comments kept promising.** Every
+    # comma-separated word on every power's keyword line, compared against
+    # these entries: about 1,100 cards print one of the following and the
+    # database recorded none of them. The three omissions above were each
+    # found one at a time; this is the sweep. #589.
+    #
+    # Five are schools of magic and are what the mage's school-tier
+    # sub-options gate on; `channel divinity` is the same for the
+    # warpriest's. `augmentable` is on 229 cards and drives the augment
+    # shape, `full discipline` on 105 is the psionic one.
+    "evocation", "enchantment", "necromancy", "nethermancy", "transmutation",
+    "elemental", "summoning", "spirit", "runic", "augmentable",
+    "full discipline", "channel divinity", "sleep",
+    # **`beast` is left out on purpose and is not an oversight.** 83 cards
+    # print it as its own comma-separated word, so it is a real keyword --
+    # but each entry here is matched by `\b<word>\b` against the *whole*
+    # flattened line, independently of the others, so adding it would also
+    # tag every `beast form` card with it. That is the same confusion the
+    # note above describes from the other side. It wants the matcher to
+    # split on commas, which is a change to how all 66 words are read and
+    # belongs with its own measurement.
 ]
 
 

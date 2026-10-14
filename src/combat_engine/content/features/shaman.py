@@ -87,16 +87,39 @@ def _provoked_beside(c: Cast, who: int):  # noqa: ANN202
 @power(
     "cf:shaman-f0",
     **TRAIT,
-    dropped=("Keyword.SPIRIT",),
+    dropped=("c.forbid(when=)",),
 )
 def shaman_f0(c: Cast) -> None:
     """The feature's writable half is the power it hands over.
 
     "Your spirit companion must be present when you use a spirit power" is
-    dropped: there is no `Keyword.SPIRIT`, so there is no set of rows to
-    gate. The spirit-melee rows are gated anyway -- their reach is measured
-    from the companion and cannot be measured without one -- but a ranged
-    spirit power is not, and that is the gap.
+    still dropped, and **the marker has moved because the old one arrived.**
+    It said `Keyword.SPIRIT`, and #589 recorded that keyword on 66 powers --
+    so the set of rows to gate now exists and names itself.
+
+    What is missing is the *shape* of the refusal. `c.forbid(keyword=)`
+    exists and is a timed effect: it adds to `Powers.forbidden_keywords` and
+    gives the rows back when the duration ends. This sentence is not a
+    duration, it is a **live condition** -- `c.companion()` is there or it is
+    not, and it can change twice in a round. Laying the refusal at arming
+    would bar every spirit power for the whole encounter, including while the
+    companion is standing next to its owner, which is worse than the gap.
+
+    So the want is a refusal asked at the moment of use against a predicate,
+    the same distinction #489 draws for a recharge: a state, not a moment.
+
+    **There is a second hold and the marker names the first on purpose.**
+    Even given that refusal, the set it would bar is read from the content
+    *headers*, and none of the 66 powers the database now calls spirit
+    declares the keyword -- `#486`'s family, the same one `f1836` sits in.
+    The marker names the engine facility because that one does not exist at
+    all, where the headers are a known content debt with a count against it;
+    if the headers land first this row still will not play, which is what a
+    reader needs to know before picking it up.
+
+    The spirit-melee rows are gated anyway -- their reach is measured from
+    the companion and cannot be measured without one -- so what is actually
+    unguarded is a *ranged* spirit power.
 
     The Companion Spirit choice is the `cf:shaman-f0sN` rows.
     """

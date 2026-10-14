@@ -133,6 +133,31 @@ class Keyword(StrEnum):
     #: Third omission of that kind found one at a time, after `bladespell`
     #: (#319) and `beast form` (#478). #503.
     RAGE = "rage"
+    #: The five **schools of magic** that are printed as keywords, and the
+    #: four other class keywords the ETL's list had never been reconciled
+    #: against the pages for. About 1,100 cards print one of these and the
+    #: database recorded none: the word was parsed, found to have no member
+    #: here, and dropped -- the path `rage`, `bladespell` and `beast form`
+    #: each took before it, one at a time. #589.
+    #:
+    #: A school is the gate every mage school-tier sub-option is written
+    #: from, and `channel divinity` is the same for the warpriest's nine, so
+    #: these are what #581's content half stands on.
+    #:
+    #: **Pyromancy is deliberately absent.** No card prints it; its
+    #: sub-option is written from "arcane fire attacks", which is this
+    #: enum's `FIRE` plus `ARCANE`. One of the six schools is not a keyword
+    #: and the pages are consistent about it.
+    EVOCATION = "evocation"
+    ENCHANTMENT = "enchantment"
+    NECROMANCY = "necromancy"
+    NETHERMANCY = "nethermancy"
+    TRANSMUTATION = "transmutation"
+    SPIRIT = "spirit"
+    RUNIC = "runic"
+    AUGMENTABLE = "augmentable"
+    FULL_DISCIPLINE = "full discipline"
+    CHANNEL_DIVINITY = "channel divinity"
     SLEEP = "sleep"
     GAZE = "gaze"
     DISEASE = "disease"
