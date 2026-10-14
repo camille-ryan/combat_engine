@@ -6512,6 +6512,114 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def a_weapon_requirement(out: Result) -> None:
+    """A printed "Requirement: you must be wielding <a weapon>" is enforced.
+
+    `f3485b`, `f3486b` and `f3487b` dropped that line under a symbol
+    saying the engine had "no group and no ref" for the weapon. It has
+    both: `w3739` is a superior polearm with a group, a category, a price
+    and a place in `chargen.PRINTED`. So the rows now declare
+    `requires=_wields_w3739`.
+
+    **The trade this rule exists to police.** Enforcing the Requirement
+    moves all three from "fires and does something" to "never usable here"
+    on the audit board, because the board's character is not dealt that
+    weapon -- the audit's 1,069 board-unreachable family. That is correct
+    and it is also exactly how a row gets turned off by accident, so the
+    positive control is the point: with the weapon in hand the Requirement
+    passes, and without it the row is refused rather than silently
+    swinging anyway.
+
+    Matched on the ref rather than the slug, which is what keeps the
+    printed name out of `general_v.py`; the negative control is a
+    *different* superior polearm, because `c.wielding` tests group and
+    category and would have passed any of them.
+
+    **`usable` returns `(ok, reason)`**, and the first draft of this rule
+    wrote `not usable(...)` -- a non-empty tuple is always truthy, so the
+    refusal list was always empty and two assertions failed against
+    perfectly good rows. The rule was wrong, not the content; `[0]` is the
+    whole fix, and it is worth a line because the same mistake reads as a
+    content bug.
+    """
+    from combat_engine.chargen import PRINTED
+    from combat_engine.engine.components import Gear, Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+
+    world, caster, _ = _board("p704")
+    gear = world.get(caster, Gear)
+    if gear is None:
+        out.skip("p704's board deals no Gear, so nothing can be put in hand")
+        return
+
+    arm = PRINTED.get("w3739")
+    if arm is None:
+        out.skip("w3739 is not in chargen.PRINTED, so it cannot be dealt")
+        return
+
+    rows = [r for r in ("f3485b", "f3486b", "f3487b") if r in REGISTRY]
+    out.that(
+        len(rows) == 3,
+        "all three rows that require the weapon are declared",
+        f"found {rows}",
+    )
+
+    # **Known first, or every assertion below passes for the wrong reason.**
+    # These are `b`-suffix cards a parent feat hands over, so a character
+    # without the feat is refused `not known` -- which is what the first
+    # draft of this rule measured. Both negative controls passed while the
+    # Requirement was never consulted at all, the same vacuous pass
+    # `at_most_one_applies` records. With the rows known, the weapon is the
+    # only term that varies.
+    known = world.get(caster, Powers)
+    if known is None:
+        out.skip("p704's board gives the caster no Powers component")
+        return
+    known.known = [*known.known, *rows]
+
+    # Empty-handed of it: the Requirement must refuse them, **and the
+    # reason must be the Requirement**. Asserting only the boolean is not
+    # enough and the plant test proved it: with `requires=` stripped from
+    # `f3485b` the row is still refused, for an unrelated reason that
+    # `usable` reports as "requirement not met", so the assertion passed
+    # over a row whose printed Requirement had just been deleted.
+    WANT = "it must be wielding the printed weapon"
+    gear.weapons = [w for w in gear.weapons if w.ref != "w3739"]
+    said = {r: usable(world, caster, REGISTRY[r]) for r in rows}
+    refused = [r for r, (ok, why) in said.items() if not ok and why == WANT]
+    out.that(
+        len(refused) == len(rows),
+        "without the weapon every one is refused, naming the Requirement",
+        f"refused for that reason: {refused}; all verdicts {said}",
+    )
+
+    # A different superior polearm is not the one the card names.
+    other = next(
+        (w for w in PRINTED.values()
+         if w.ref != "w3739" and w.group == arm.group and w.category == arm.category),
+        None,
+    )
+    if other is not None:
+        gear.weapons = [*gear.weapons, other]
+        other_said = {r: usable(world, caster, REGISTRY[r]) for r in rows}
+        still = [r for r, (ok, why) in other_said.items() if not ok and why == WANT]
+        out.that(
+            len(still) == len(rows),
+            "and another weapon of the same group and category does not satisfy it",
+            f"{other.ref} left these still refused on the Requirement: {still}",
+        )
+        gear.weapons = [w for w in gear.weapons if w.ref != other.ref]
+
+    # The weapon itself: the Requirement must pass.
+    gear.weapons = [*gear.weapons, arm]
+    allowed = [r for r in rows if usable(world, caster, REGISTRY[r])[0]]
+    out.that(
+        len(allowed) == len(rows),
+        "and with the weapon in hand every one is allowed",
+        f"allowed {allowed} of {rows}",
+    )
+
+
 def a_lent_basic_attack(out: Result) -> None:
     """"An ally can make a basic attack" -- and who it swings at.
 
@@ -6693,6 +6801,10 @@ def trained_skills(out: Result) -> None:
 
 
 DRIVERS = {
+    "weapon_requirement": (
+        a_weapon_requirement,
+        "a printed Requirement naming one weapon is enforced, by ref",
+    ),
     "trained_skills": (
         trained_skills,
         "being trained in a skill is worth +5, on that skill only",

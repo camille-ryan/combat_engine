@@ -91,6 +91,7 @@ from combat_engine.engine import (
     Usage,
     When,
     Window,
+    World,
     about_me,
     by_me,
     distance,
@@ -131,8 +132,28 @@ R44 = ("p7441", "p7442", "p7443")
 SWAP = ("chargen.power_swap()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A printed weapon the engine has no group and no ref for.
-WEAPON_REF = ("spec.weapon_ref()",)
+#: **Retired.** It read "a printed weapon the engine has no group and no
+#: ref for", and the engine has both: the weapon these three rows require
+#: is `w3739`, a superior polearm with a group, a category, a price and a
+#: place in `chargen.PRINTED`, so a character can be dealt one. The three
+#: rows now declare the Requirement they were dropping. Kept as a comment
+#: rather than deleted so the next reader meets the correction.
+
+
+def _wields_w3739(world: World, eid: int) -> bool:
+    """The printed Requirement of `f3485b`, `f3486b` and `f3487b`.
+
+    **Matched on the ref, not the slug**, which keeps the printed name out
+    of this file altogether. `query.holding` would answer the same
+    question by slug -- a weapon type is deliberately sayable here -- but
+    the ref says it with no name at all, and `c.wielding` cannot be used:
+    it tests property, group and category and excludes the slug on
+    purpose, so asking it would pass any superior polearm.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(eid, Gear)
+    return any(w.ref == "w3739" for w in (gear.held if gear is not None else ()))
 #: Spending a use of another row as the price of this one.
 EXPEND = ("c.expend_row()",)
 #: Suppressing a clause of the power that triggered this one.
@@ -464,7 +485,8 @@ def f3485(c: Cast) -> None:
        reach=Melee(1), target=Target(side="enemy", count=1, max_size=Size.LARGE),
        keywords=[Keyword.MARTIAL, Keyword.WEAPON],
        attack=Attack((STR, DEX), vs=REF),
-       dropped=WEAPON_REF)
+       requires=_wields_w3739,
+       requires_text="it must be wielding the printed weapon")
 def f3485b(c: Cast) -> None:
     """"Strength or Dexterity" is the header after all: `Attack.ability`
     takes a tuple and `ability_for` answers `max(..., key=stats.mod)`,
@@ -505,7 +527,8 @@ def f3486(c: Cast) -> None:
 
 @power("f3486b", level=1, cls="", usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.MARTIAL, Keyword.STANCE], dropped=WEAPON_REF)
+       keywords=[Keyword.MARTIAL, Keyword.STANCE], requires=_wields_w3739,
+       requires_text="it must be wielding the printed weapon")
 def f3486b(c: Cast) -> None:
     """The stance is the hold and the grab is a watch on what the stance
     makes possible. `When.STANCE` is the duration the watch takes, so it
@@ -541,7 +564,8 @@ def f3487(c: Cast) -> None:
        reach=Melee(1), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.WEAPON, Keyword.RELIABLE],
        attack=Attack((STR, DEX), vs=REF),
-       dropped=WEAPON_REF)
+       requires=_wields_w3739,
+       requires_text="it must be wielding the printed weapon")
 def f3487b(c: Cast) -> None:
     """"Miss: this power is not expended" is the reliable keyword and is
     declared in the header rather than written in the body. The -2 to
