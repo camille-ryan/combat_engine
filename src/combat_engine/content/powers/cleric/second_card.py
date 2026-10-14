@@ -32,7 +32,7 @@ def _finished(ref: str):  # noqa: ANN202
     action=ActionType.NONE,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    keywords=[Keyword.DIVINE, Keyword.WEAPON, Keyword.RADIANT],
+    keywords=[Keyword.DIVINE, Keyword.WEAPON, Keyword.RADIANT, Keyword.CHANNEL_DIVINITY],
     attack=Attack(STR, vs=WILL),
     trigger="you make the p14293 attack",
     on=Trigger(PowerResolved, _finished("p14293"), "you use the p14293 power"),

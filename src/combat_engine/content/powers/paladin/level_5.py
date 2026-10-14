@@ -243,7 +243,7 @@ def p13559(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.PSYCHIC, Keyword.CHARM],
+    keywords=[*DIVINE_WEAPON, Keyword.PSYCHIC, Keyword.CHARM, Keyword.SHADOW],
     attack=Attack(STR, vs=WILL),
 )
 def p13820(c: Cast) -> None:
@@ -276,7 +276,7 @@ def _crush(c: Cast, victim: int, amount: int) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.SHADOW],
     attack=Attack(STR, vs=AC),
 )
 def p13821(c: Cast) -> None:

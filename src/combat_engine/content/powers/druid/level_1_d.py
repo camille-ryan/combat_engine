@@ -255,7 +255,9 @@ def p13512(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.THUNDER, Keyword.BEAST_FORM],
+    keywords=[
+        *PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.THUNDER, Keyword.BEAST_FORM, Keyword.ELEMENTAL,
+    ],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
@@ -539,7 +541,7 @@ def _p5366_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
         instinctive=_p5366_instinct,
@@ -595,7 +597,7 @@ def _p5367_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=5, modes=("swim",),
         attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
@@ -642,7 +644,7 @@ def _p5369_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d6", "wis"),
         instinctive=_p5369_instinct,

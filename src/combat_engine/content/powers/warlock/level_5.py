@@ -199,7 +199,7 @@ def p62(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(10),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.CONJURATION],
+    keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.CONJURATION, Keyword.ELEMENTAL],
 )
 def p16263(c: Cast) -> None:
     """Two conjurations, each with a one-square aura that bites.

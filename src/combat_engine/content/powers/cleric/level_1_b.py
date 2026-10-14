@@ -480,7 +480,7 @@ def p12650(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_ALLY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p12651(c: Cast) -> None:
@@ -523,7 +523,7 @@ def p13709(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_ALLY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p13710(c: Cast) -> None:
@@ -722,7 +722,7 @@ def p12605(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_IMPLEMENT, Keyword.NECROTIC],
+    keywords=[*DIVINE_IMPLEMENT, Keyword.NECROTIC, Keyword.SHADOW],
 )
 def p13922(c: Cast) -> None:
     """No attack roll: the whole printed line is an Effect, so the damage is

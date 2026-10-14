@@ -210,7 +210,7 @@ def p14516(c: Cast) -> None:
     action=MOVE,
     reach=CloseBurst(1),
     target=UpTo(2, "ally"),
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.ELEMENTAL],
 )
 def p16123(c: Cast) -> None:
     """The defence bonus is gated on the attack being an opportunity one,

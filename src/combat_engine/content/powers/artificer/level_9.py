@@ -150,7 +150,7 @@ def p4147(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
+    keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=8,
         attack=Attack(INT, vs=AC, plus=2),

@@ -156,7 +156,7 @@ def p4140(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.WEAPON],
+    keywords=[Keyword.ARCANE, Keyword.WEAPON, Keyword.SUMMONING],
     requires=holding_a_melee_weapon,
     requires_text="must be holding a melee weapon",
     thrown_by_hand=True,
@@ -184,7 +184,7 @@ def p4141(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6,
         attack=Attack(INT, vs=AC, plus=2),

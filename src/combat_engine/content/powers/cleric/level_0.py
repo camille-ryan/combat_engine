@@ -104,7 +104,7 @@ def _fresh_roll(c: Cast, ev: Any) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON_RADIANT,
+    keywords=[*DIVINE_WEAPON_RADIANT, Keyword.CHANNEL_DIVINITY],
     attack=Attack(WIS, vs=WILL),
     group=CHANNEL_DIVINITY,
 )
@@ -183,7 +183,7 @@ def p12614(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_ALLY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p12638(c: Cast) -> None:
@@ -212,7 +212,7 @@ def p12638(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=ANY_CREATURE,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p14292(c: Cast) -> None:
@@ -241,7 +241,7 @@ def p14292(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON_RADIANT,
+    keywords=[*DIVINE_WEAPON_RADIANT, Keyword.CHANNEL_DIVINITY],
     attack=Attack(STR, vs=AC),
     group=CHANNEL_DIVINITY,
 )
@@ -266,7 +266,7 @@ def p14293(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=ONE_ALLY,
-    keywords=[Keyword.DIVINE, Keyword.SHADOW, Keyword.PSYCHIC],
+    keywords=[Keyword.DIVINE, Keyword.SHADOW, Keyword.PSYCHIC, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p16415(c: Cast) -> None:

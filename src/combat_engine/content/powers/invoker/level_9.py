@@ -407,7 +407,7 @@ def p7190(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=DIVINE_IMPLEMENT,
+    keywords=[*DIVINE_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6,
         modes=("fly",),

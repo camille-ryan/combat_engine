@@ -150,7 +150,7 @@ def p11834(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
 )
 def p16245(c: Cast) -> None:
     """Phasing is granted for the move and no longer -- `c.move` still has to
@@ -169,7 +169,7 @@ def p16245(c: Cast) -> None:
     action=INTERRUPT,
     reach=CloseBurst(2),
     target=NO_TARGET,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
     trigger=_ELEMENT_LANDS,
     on=Trigger(DamageRolled, when=_element_near_me, text=_ELEMENT_LANDS),
 )
@@ -192,7 +192,7 @@ def p16246(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.ZONE, Keyword.ELEMENTAL],
 )
 def p16248(c: Cast) -> None:
     """Three squares, made as one zone: a zone is a set of squares and three

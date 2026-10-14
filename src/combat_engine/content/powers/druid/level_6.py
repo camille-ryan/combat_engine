@@ -190,7 +190,7 @@ def p14509(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(10),
     target=SELF,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.ELEMENTAL],
 )
 def p16121(c: Cast) -> None:
     """Six pillars, as conjurations: a conjuration occupies its square and

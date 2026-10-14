@@ -287,7 +287,7 @@ def p12620(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(5),
     target=EACH_ALLY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.SHADOW],
 )
 def p13930(c: Cast) -> None:
     """"Loses a healing surge" is not a heal: the surge is spent and pays
@@ -308,7 +308,7 @@ def p13930(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=ONE_ALLY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.SHADOW],
 )
 def p13931(c: Cast) -> None:
     """Both halves are one hold, so sustaining keeps them together and the

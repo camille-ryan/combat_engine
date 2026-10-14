@@ -228,7 +228,7 @@ def p9743(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1, from_="companion"),
     target=EACH_ENEMY,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
 )
 def p11357(c: Cast) -> None:
@@ -257,7 +257,7 @@ def p11357(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.FEAR],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.FEAR, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
 )
 def p11363(c: Cast) -> None:
@@ -281,7 +281,7 @@ def p11363(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12866(c: Cast) -> None:
     mate = c.target
@@ -299,7 +299,7 @@ def p12866(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p12867(c: Cast) -> None:
@@ -330,7 +330,7 @@ def p12867(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1, from_="companion"),
     target=EACH_OTHER,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.ZONE, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
 )
 def p12868(c: Cast) -> None:
@@ -357,7 +357,7 @@ def p12868(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p3778(c: Cast) -> None:
@@ -381,7 +381,7 @@ def p3778(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p3780(c: Cast) -> None:
@@ -427,7 +427,7 @@ def p3783(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
 )
 def p3784(c: Cast) -> None:
@@ -452,7 +452,7 @@ def p3784(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p3786(c: Cast) -> None:
@@ -583,7 +583,7 @@ def p5432(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p5440(c: Cast) -> None:
@@ -642,7 +642,7 @@ def p5451(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
 )
 def p5510(c: Cast) -> None:
@@ -662,7 +662,7 @@ def p5510(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.COLD],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.COLD, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p5538(c: Cast) -> None:
@@ -685,7 +685,7 @@ def p5538(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
 )
 def p6521(c: Cast) -> None:
@@ -705,7 +705,7 @@ def p6521(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p9734(c: Cast) -> None:
     victim = c.target
@@ -757,7 +757,7 @@ def p9735(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.PSYCHIC, Keyword.SPIRIT],
     attack=Attack(WIS, vs=WILL),
 )
 def p9736(c: Cast) -> None:
@@ -784,7 +784,7 @@ def p9736(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p9738(c: Cast) -> None:
@@ -808,7 +808,7 @@ def p9738(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_CREATURE,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.LIGHTNING],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.LIGHTNING, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p9739(c: Cast) -> None:

@@ -59,7 +59,7 @@ def _ally_takes_it(world: World, me: int, ev: Any) -> bool:
     action=REACTION,
     reach=Ranged(20, by_weapon=True),
     target=ONE_ALLY,
-    keywords=[Keyword.MARTIAL],
+    keywords=[Keyword.MARTIAL, Keyword.WEAPON],
     requires=_shooting,
     requires_text="must be wielding a bow or a crossbow",
     trigger="an ally is hit by an attack",

@@ -245,7 +245,7 @@ def p13752(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.SHADOW],
     attack=Attack(CHA, vs=FORT),
 )
 def p13906(c: Cast) -> None:
@@ -263,7 +263,7 @@ def p13906(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.NECROTIC],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.NECROTIC, Keyword.SHADOW],
     attack=Attack(CHA, vs=FORT),
 )
 def p13916(c: Cast) -> None:
@@ -308,7 +308,7 @@ def p15904(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, within=10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.ACID, Keyword.ZONE],
     attack=Attack(CON, vs=FORT),
 )
 def p15905(c: Cast) -> None:

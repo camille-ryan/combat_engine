@@ -303,7 +303,7 @@ def p13648(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.SHADOW],
 )
 def p13885(c: Cast) -> None:
     """Ending the step inside an enemy's space is `share=True`, and being
@@ -329,7 +329,7 @@ def p13885(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.SHADOW],
 )
 def p13886(c: Cast) -> None:
     """Both states are put up before the step and clocked to the end of this
@@ -347,7 +347,7 @@ def p13886(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.TELEPORTATION],
+    keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.TELEPORTATION, Keyword.SHADOW],
 )
 def p13956(c: Cast) -> None:
     """The shade occupies its square, which is the clause only a conjuration
@@ -373,7 +373,7 @@ def p13956(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
 )
 def p16265(c: Cast) -> None:
     """One type, chosen when the row is used, and the lash reads the same

@@ -278,7 +278,7 @@ def _drops_near(world: World, me: int, ev: Dropped) -> bool:
     action=REACTION,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    keywords=[*DIVINE_IMPLEMENT, Keyword.PSYCHIC],
+    keywords=[*DIVINE_IMPLEMENT, Keyword.PSYCHIC, Keyword.SHADOW],
     attack=Attack(WIS, vs=FORT),
     trigger=_SOMEBODY_DROPS,
     on=Trigger(Dropped, when=_drops_near, text=_SOMEBODY_DROPS),
@@ -428,7 +428,7 @@ def p14300(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.SHADOW],
     attack=Attack(WIS, vs=AC),
 )
 def p16422(c: Cast) -> None:

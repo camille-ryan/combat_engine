@@ -89,7 +89,7 @@ def p7658(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.HEALING],
+    keywords=[Keyword.ARCANE, Keyword.HEALING, Keyword.SUMMONING],
     summon=Summon(speed=5),
 )
 def p4148(c: Cast) -> None:

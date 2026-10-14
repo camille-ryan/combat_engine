@@ -88,7 +88,7 @@ _SOMEBODY_FAILS = "you or one ally in the burst fails a skill check"
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_IMPLEMENT, Keyword.COLD, Keyword.NECROTIC],
+    keywords=[*DIVINE_IMPLEMENT, Keyword.COLD, Keyword.NECROTIC, Keyword.SHADOW],
     attack=Attack(WIS, vs=REF),
 )
 def p13939(c: Cast) -> None:
@@ -109,7 +109,7 @@ def p13939(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_IMPLEMENT, Keyword.PSYCHIC],
+    keywords=[*DIVINE_IMPLEMENT, Keyword.PSYCHIC, Keyword.SHADOW],
     attack=Attack(WIS, vs=WILL),
 )
 def p13940(c: Cast) -> None:
@@ -127,7 +127,7 @@ def p13940(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=EACH_ENEMY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.SHADOW],
 )
 def p13941(c: Cast) -> None:
     """Knowledge and nothing else: the printed Effect is what you learn, so
@@ -153,7 +153,7 @@ def p13941(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.SHADOW],
 )
 def p13942(c: Cast) -> None:
     """"On a hit or a miss" is two events and one latch, so both subscriptions
@@ -184,7 +184,7 @@ def p13942(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(2),
     target=ONE_ALLY,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY, Keyword.SHADOW],
     group=CHANNEL_DIVINITY,
 )
 def p13943(c: Cast) -> None:
@@ -206,7 +206,7 @@ def p13943(c: Cast) -> None:
     action=MOVE,
     reach=CloseBurst(1),
     target=ONE_OTHER_ALLY,
-    keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
+    keywords=[Keyword.DIVINE, Keyword.TELEPORTATION, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p14231(c: Cast) -> None:
@@ -309,7 +309,7 @@ def p14236(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=NO_TARGET,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     out_of_combat=True,
     group=CHANNEL_DIVINITY,
 )
@@ -520,7 +520,7 @@ def p14261(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(5),
     target=NO_TARGET,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p14262(c: Cast) -> None:
@@ -674,7 +674,7 @@ def _both_flank(c: Cast, foe: int, me: int, friend: int) -> Any:
     action=STANDARD,
     reach=CloseBurst(10),
     target=ONE_OTHER_ALLY,
-    keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
+    keywords=[Keyword.DIVINE, Keyword.TELEPORTATION, Keyword.CHANNEL_DIVINITY],
     requires=_next_to_an_enemy,
     requires_text="you must be adjacent to an enemy",
     group=CHANNEL_DIVINITY,

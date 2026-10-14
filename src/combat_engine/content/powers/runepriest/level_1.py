@@ -71,7 +71,7 @@ def _rune(c: Cast, which: str) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11354(c: Cast) -> None:
@@ -103,7 +103,7 @@ def p11354(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11355(c: Cast) -> None:
@@ -139,7 +139,7 @@ def p11355(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11356(c: Cast) -> None:
@@ -177,7 +177,7 @@ def p11356(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11368(c: Cast) -> None:
@@ -208,7 +208,7 @@ def p11368(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=FORT),
 )
 def p11369(c: Cast) -> None:
@@ -248,7 +248,7 @@ def p11369(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.THUNDER],
+    keywords=[*DIVINE_WEAPON, Keyword.THUNDER, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11370(c: Cast) -> None:
@@ -268,7 +268,7 @@ def p11370(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11371(c: Cast) -> None:
@@ -306,7 +306,7 @@ def p11371(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_ENEMY,
-    keywords=[*DIVINE_WEAPON, Keyword.FIRE, Keyword.HEALING],
+    keywords=[*DIVINE_WEAPON, Keyword.FIRE, Keyword.HEALING, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11372(c: Cast) -> None:

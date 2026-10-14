@@ -244,7 +244,7 @@ def p13580(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.SHADOW],
     attack=Attack(STR, vs=AC),
 )
 def p13817(c: Cast) -> None:
@@ -260,7 +260,7 @@ def p13817(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.SHADOW],
     attack=Attack(STR, vs=AC),
 )
 def p13837(c: Cast) -> None:
@@ -277,7 +277,7 @@ def p13837(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.SHADOW],
     attack=Attack(STR, vs=AC),
 )
 def p13843(c: Cast) -> None:

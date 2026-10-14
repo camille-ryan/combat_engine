@@ -672,6 +672,7 @@ def i1397x1(c: Cast) -> None:
         both(_my_marked_melee, by_melee),
         "an enemy you marked hurts you in melee",
     ),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1397p1(c: Cast) -> None:
     """The augment is read back off how many points were spent on this row.
@@ -841,6 +842,7 @@ def i1556p1(c: Cast) -> None:
     target=SELF,
     trigger="you push or slide an enemy with an attack using this weapon",
     on=Trigger(ForcedMove, _shoved_by_me, "you push or slide an enemy"),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1618p1(c: Cast) -> None:
     """Declared `SELF`, because the shove event names neither an attacker
@@ -1806,6 +1808,7 @@ def i478p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i510p1(c: Cast) -> None:
     """"Your next attack that hits an aberrant creature" is a gated
@@ -2019,7 +2022,7 @@ def i1043p1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.TELEPORTATION],
+    keywords=[Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     trigger="you hit an enemy with an attack using this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
 )
@@ -4163,7 +4166,7 @@ def i2867p1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.PSYCHIC],
+    keywords=[Keyword.PSYCHIC, Keyword.AUGMENTABLE],
     trigger="you hit an enemy with an attack using this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
 )
@@ -5790,6 +5793,7 @@ def i2416p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i2435p1(c: Cast) -> None:
     c.damage("2d6" if c.points_spent(c.ref) >= 1 else "1d6")

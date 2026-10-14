@@ -390,7 +390,7 @@ def p7162(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=DIVINE_IMPLEMENT,
+    keywords=[*DIVINE_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6,
         attack=Attack(WIS, vs=REF),
@@ -417,7 +417,7 @@ def p11282(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.IMPLEMENT],
+    keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6,
         modes=("fly",),

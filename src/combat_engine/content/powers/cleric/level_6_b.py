@@ -163,7 +163,7 @@ def p12613(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=NO_TARGET,
-    keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.ZONE],
+    keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.ZONE, Keyword.SHADOW],
 )
 def p13926(c: Cast) -> None:
     """The damage bonus is gated on where the *victim* is standing at the
@@ -201,7 +201,7 @@ def p13926(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=DIVINE,
+    keywords=[*DIVINE, Keyword.SHADOW],
     trigger=_ENEMY_DIES,
     on=Trigger(Died, when=enemy_within(5), text=_ENEMY_DIES),
 )

@@ -249,7 +249,7 @@ def p12891(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.NECROTIC, Keyword.SHADOW],
     attack=Attack(CHA, vs=REF),
 )
 def p13905(c: Cast) -> None:
@@ -267,7 +267,7 @@ def p13905(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.PSYCHIC, Keyword.ZONE, Keyword.SHADOW],
     attack=Attack(CHA, vs=WILL),
 )
 def p13915(c: Cast) -> None:

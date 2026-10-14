@@ -57,7 +57,7 @@ def _the_primary_drops(ref: str):  # noqa: ANN202
     action=OPPORTUNITY,
     reach=CloseBurst(1),
     target=NO_TARGET,
-    keywords=[Keyword.DIVINE, Keyword.WEAPON, Keyword.LIGHTNING],
+    keywords=[Keyword.DIVINE, Keyword.WEAPON, Keyword.LIGHTNING, Keyword.RUNIC],
     attack=Attack(STR, vs=REF),
     requires=active("p11394"),
     requires_text="the p11394 power must be active",

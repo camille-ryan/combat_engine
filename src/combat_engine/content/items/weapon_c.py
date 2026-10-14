@@ -2266,6 +2266,7 @@ def i1494x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_opportunity), "you hit with an opportunity attack"
     ),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1494p1(c: Cast) -> None:
     """The augment is read back off how many points were spent on this

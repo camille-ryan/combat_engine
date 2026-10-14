@@ -322,7 +322,9 @@ def p13527(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_ENEMY,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.FIRE, Keyword.BEAST_FORM],
+    keywords=[
+        *PRIMAL_IMPLEMENT, Keyword.CLOSE, Keyword.FIRE, Keyword.BEAST_FORM, Keyword.ELEMENTAL,
+    ],
     attack=Attack(WIS, vs=REF),
     requires=in_beast_form,
     requires_text=BEAST_FORM,
@@ -351,7 +353,7 @@ def p16122(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6, attack=Attack(WIS, vs=FORT), damage=Damage("2d6", "wis"),
         instinctive=hunt,
@@ -395,7 +397,7 @@ def _p5377_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6, modes=("swim",),
         attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
@@ -439,7 +441,7 @@ def _p7414_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=8, modes=("fly",),
         attack=Attack(WIS, vs=REF), damage=Damage("2d6", "wis"),

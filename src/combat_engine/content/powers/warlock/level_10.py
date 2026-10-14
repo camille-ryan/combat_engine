@@ -294,7 +294,7 @@ def p13653(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION],
+    keywords=[Keyword.ARCANE, Keyword.TELEPORTATION, Keyword.SHADOW],
 )
 def p13888(c: Cast) -> None:
     """The way out is `drop_cost`, and what follows it hangs on `on_end`.
@@ -331,7 +331,7 @@ def p13888(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.SHADOW],
 )
 def p13957(c: Cast) -> None:
     """"A move of at least 3 squares" is measured from where the turn began.
@@ -366,7 +366,7 @@ def p13957(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(3),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.ZONE, Keyword.ELEMENTAL],
 )
 def p16266(c: Cast) -> None:
     """The extra squares of shift are not written: `actions.legal` offers a

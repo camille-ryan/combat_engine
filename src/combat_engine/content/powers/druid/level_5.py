@@ -266,7 +266,7 @@ def p13519(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=PRIMAL_WEAPON,
+    keywords=[*PRIMAL_WEAPON, Keyword.ELEMENTAL],
     attack=Attack(WIS, vs=AC),
 )
 def p16120(c: Cast) -> None:
@@ -328,7 +328,7 @@ def _p5371_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.FIRE, Keyword.SUMMONING],
     summon=Summon(
         speed=6, attack=Attack(WIS, vs=REF),
         damage=Damage("1d8", "wis", dtype=DamageType.FIRE),
@@ -371,7 +371,7 @@ def _p5373_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6, attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),
         instinctive=_p5373_instinct,
@@ -431,7 +431,7 @@ def _p5374_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=7, attack=Attack(WIS, vs=REF), damage=Damage("1d10", "wis"),
         instinctive=_p5374_instinct,
@@ -463,7 +463,7 @@ def _p9655_instinct(c: Cast, who: int) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SUMMONING],
     summon=Summon(
         speed=6, modes=("climb",),
         attack=Attack(WIS, vs=REF), damage=Damage("1d8", "wis"),

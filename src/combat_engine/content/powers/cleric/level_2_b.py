@@ -118,7 +118,7 @@ def _dying_ally_near(world: World, eid: int) -> bool:
     action=MINOR,
     reach=CloseBurst(5),
     target=Target("self", 0, label="One dying ally in the burst"),
-    keywords=DIVINE_HEALING,
+    keywords=[*DIVINE_HEALING, Keyword.SHADOW],
     requires=_dying_ally_near,
     requires_text="a dying ally within 5 squares",
 )
@@ -180,7 +180,7 @@ def p13923(c: Cast) -> None:
     action=MINOR,
     reach=AreaBurst(1, within=10),
     target=NO_TARGET,
-    keywords=[Keyword.DIVINE, Keyword.ZONE],
+    keywords=[Keyword.DIVINE, Keyword.ZONE, Keyword.SHADOW],
 )
 def p13924(c: Cast) -> None:
     """"Heavily obscured" and "blocks line of sight" are the same field here:

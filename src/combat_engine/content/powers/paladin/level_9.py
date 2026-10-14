@@ -287,8 +287,7 @@ def p13563(c: Cast) -> None:
     reach=CloseBlast(3),
     target=ANY_CREATURE,
     keywords=[
-        *DIVINE_WEAPON, Keyword.NECROTIC, Keyword.FEAR, Keyword.TELEPORTATION,
-    ],
+        *DIVINE_WEAPON, Keyword.NECROTIC, Keyword.FEAR, Keyword.TELEPORTATION, Keyword.SHADOW],
     attack=Attack(STR, vs=WILL),
 )
 def p13824(c: Cast) -> None:
@@ -326,7 +325,7 @@ def p13824(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_OTHER,
-    keywords=[*DIVINE_WEAPON, Keyword.PSYCHIC],
+    keywords=[*DIVINE_WEAPON, Keyword.PSYCHIC, Keyword.SHADOW],
     attack=Attack(STR, vs=FORT),
 )
 def p13825(c: Cast) -> None:

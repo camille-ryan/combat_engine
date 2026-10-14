@@ -259,7 +259,7 @@ def p9766(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(20),
     target=ONE_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12532(c: Cast) -> None:
     """The printed second block is `p12532b`, the standard-action attack the
@@ -280,7 +280,7 @@ def p12532(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_ALLY,
-    keywords=[*PRIMAL_IMPLEMENT, Keyword.POLYMORPH],
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.POLYMORPH, Keyword.SPIRIT],
     attack=Attack(WIS, vs=FORT),
 )
 def p12875(c: Cast) -> None:
@@ -312,7 +312,7 @@ def p12875(c: Cast) -> None:
     action=STANDARD,
     reach=SPIRIT_MELEE,
     target=ONE_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p13771(c: Cast) -> None:
     mate = c.target
@@ -330,7 +330,7 @@ def p13771(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2, from_="companion"),
     target=EACH_OTHER,
-    keywords=PRIMAL_IMPLEMENT,
+    keywords=[*PRIMAL_IMPLEMENT, Keyword.SPIRIT],
     attack=Attack(WIS, vs=REF),
 )
 def p9764(c: Cast) -> None:

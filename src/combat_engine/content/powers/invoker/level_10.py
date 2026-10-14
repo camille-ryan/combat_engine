@@ -204,7 +204,7 @@ def p7194(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(10),
     target=NO_TARGET,
-    keywords=[Keyword.DIVINE, Keyword.HEALING],
+    keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.SUMMONING],
     summon=Summon(speed=6, modes=("fly",)),
 )
 def p11296(c: Cast) -> None:

@@ -275,7 +275,7 @@ def p13565(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.NECROTIC],
+    keywords=[Keyword.NECROTIC, Keyword.SHADOW],
 )
 def p13826(c: Cast) -> None:
     """Bloodied is asked when the aura bites rather than when it is raised:
@@ -304,7 +304,7 @@ def p13826(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(3),
     target=EACH_ALLY,
-    keywords=[],
+    keywords=[Keyword.SHADOW],
 )
 def p13827(c: Cast) -> None:
     """Offered rather than imposed: it is the target's hit points and the

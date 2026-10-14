@@ -1836,6 +1836,7 @@ def i1993x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this orb",
     on=Trigger(Hit, by_me, "you hit with this orb"),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1993p1(c: Cast) -> None:
     foe = _struck(c)
@@ -1868,7 +1869,7 @@ def i1994x1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.CHARM],
+    keywords=[Keyword.CHARM, Keyword.AUGMENTABLE],
     trigger="you hit an enemy with an attack using this orb",
     on=Trigger(Hit, by_me, "you hit with this orb"),
 )
@@ -1910,6 +1911,7 @@ def i1995x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this orb",
     on=Trigger(Hit, by_me, "you hit with this orb"),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1995p1(c: Cast) -> None:
     foe = _struck(c)
@@ -1976,6 +1978,7 @@ def i1997x1(c: Cast) -> None:
     trigger="you make an area or a close attack with a psionic power",
     on=Trigger(AttackDeclared, _area_by_me, "you make a close or area attack"),
     todo=("c.exclude_squares()",),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1997p1(c: Cast) -> None:
     """`c.widen_areas` grows a burst and nothing punches holes in one, so
@@ -2366,6 +2369,7 @@ def i2489p1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.FORCE)), "you hit with a force attack"
     ),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i2596p1(c: Cast) -> None:
     foe = _struck(c)
@@ -2479,6 +2483,7 @@ def i2619x1(c: Cast) -> None:
     target=SELF,
     trigger="you make a psionic area or close attack using this staff",
     on=Trigger(AttackDeclared, _area_by_me, "you make a close or area attack"),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i2619p1(c: Cast) -> None:
     """`c.widen_areas` grows the next burst rather than the one already
@@ -2622,6 +2627,7 @@ def i2639x1(c: Cast) -> None:
     target=SELF,
     trigger="an enemy hits you",
     on=Trigger(Hit, hits_me, "an enemy hits you"),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i2639p1(c: Cast) -> None:
     """An interrupt resolves before the damage, so resistance laid here is
@@ -4001,7 +4007,7 @@ def i2602p1(c: Cast) -> None:
     action=FREE,
     reach=CloseBurst(1),
     target=NO_TARGET,
-    keywords=[Keyword.PSYCHIC],
+    keywords=[Keyword.PSYCHIC, Keyword.AUGMENTABLE],
     trigger="you hit an enemy with a psychic or a radiant attack",
     on=Trigger(
         Hit,

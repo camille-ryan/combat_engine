@@ -155,7 +155,7 @@ def p11832(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.STANCE],
+    keywords=[Keyword.ARCANE, Keyword.STANCE, Keyword.ELEMENTAL],
 )
 def p16236(c: Cast) -> None:
     held = c.stance(conditions=(Condition.SLOWED,), label=c.ref)
@@ -172,7 +172,7 @@ def p16236(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.FIRE],
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.ELEMENTAL],
 )
 def p16237(c: Cast) -> None:
     """The partial concealment is not written -- concealment is not modelled.
@@ -210,7 +210,7 @@ def p16237(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(1),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.ZONE, Keyword.ELEMENTAL],
 )
 def p16239(c: Cast) -> None:
     """"One extra square for each square of movement **toward you**" is laid

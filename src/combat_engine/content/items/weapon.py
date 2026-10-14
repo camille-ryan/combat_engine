@@ -1154,7 +1154,7 @@ def i2100x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=ONE_CREATURE,
-    keywords=[Keyword.WEAPON],
+    keywords=[Keyword.WEAPON, Keyword.AUGMENTABLE],
     attack=Attack(STR, vs=AC),
 )
 def i2108p1(c: Cast) -> None:

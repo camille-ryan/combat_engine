@@ -236,7 +236,7 @@ def p14504(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[*PRIMAL, Keyword.BEAST_FORM],
+    keywords=[*PRIMAL, Keyword.BEAST_FORM, Keyword.ELEMENTAL],
     requires=in_beast_form,
     requires_text=BEAST_FORM,
 )

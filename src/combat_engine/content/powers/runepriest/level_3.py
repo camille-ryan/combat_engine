@@ -58,7 +58,7 @@ def _rune(c: Cast, which: str) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
+    keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11382(c: Cast) -> None:
@@ -83,7 +83,7 @@ def p11382(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.HEALING],
+    keywords=[*DIVINE_WEAPON, Keyword.HEALING, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11383(c: Cast) -> None:
@@ -112,7 +112,7 @@ def p11383(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11384(c: Cast) -> None:
@@ -145,7 +145,7 @@ def p11384(c: Cast) -> None:
     action=INTERRUPT,
     reach=CloseBurst(5),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.RADIANT],
+    keywords=[*DIVINE_WEAPON, Keyword.RADIANT, Keyword.RUNIC],
     attack=Attack(STR, vs=FORT),
     trigger="an enemy makes an attack roll against your ally",
     on=Trigger(
@@ -176,7 +176,7 @@ def p11385(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(1),
     target=EACH_OTHER,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p15990(c: Cast) -> None:

@@ -453,7 +453,7 @@ ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_OTHER,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.COLD, Keyword.ELEMENTAL],
     attack=Attack(INT, vs=FORT),
 )
 def p16093(c: Cast) -> None:
@@ -473,7 +473,7 @@ def p16093(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(1, 10),
     target=EACH_CREATURE,
-    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.THUNDER, Keyword.ZONE],
+    keywords=[*ARCANE_IMPLEMENT, Keyword.FIRE, Keyword.THUNDER, Keyword.ZONE, Keyword.ELEMENTAL],
     attack=Attack(INT, vs=REF),
 )
 def p16094(c: Cast) -> None:
@@ -500,7 +500,7 @@ def p16094(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE],
+    keywords=[Keyword.ARCANE, Keyword.ELEMENTAL],
 )
 def p16095(c: Cast) -> None:
     """"Each creature", as printed -- the caster is not excepted."""
@@ -525,7 +525,7 @@ def p16095(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.FIRE],
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.ELEMENTAL],
 )
 def p16096(c: Cast) -> None:
     """"Willingly leaves" is asked of `Moved`, which is the only movement
@@ -573,7 +573,7 @@ def p16096(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.ZONE],
+    keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.ZONE, Keyword.ELEMENTAL],
 )
 def p16097(c: Cast) -> None:
     """The ice and the icicles are two things: a difficult zone, and three
@@ -631,7 +631,7 @@ def p16097(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.ARCANE, Keyword.FIRE],
+    keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.ELEMENTAL],
 )
 def p16098(c: Cast) -> None:
     """All three clauses are laid again on each sustain, which is what
@@ -661,7 +661,7 @@ def p16098(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(5),
     target=NO_TARGET,
-    keywords=[Keyword.ARCANE, Keyword.CONJURATION],
+    keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.ELEMENTAL],
     dropped=("c.conjure(porous=)", "c.opportunity_from(square)"),
 )
 def p16099(c: Cast) -> None:
@@ -1044,7 +1044,7 @@ def _guard_of(c: Cast) -> int | None:
     action=MINOR,
     reach=Ranged(5),
     target=NO_TARGET,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.SUMMONING],
 )
 def p15885(c: Cast) -> None:
     """`c.cast_from` is the printed "you make the roll using your
@@ -1346,7 +1346,7 @@ def _my_melee_roll(world: Any, me: int, ev: Any) -> bool:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.WEAPON],
+    keywords=[Keyword.WEAPON, Keyword.ELEMENTAL],
     trigger="you make a melee weapon attack roll",
     on=Trigger(AttackRolled, _my_melee_roll, "you make a melee attack roll"),
 )
@@ -1383,7 +1383,7 @@ def p16081(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.ELEMENTAL],
     trigger="you are bloodied by an attack",
     on=Trigger(Bloodied, about_me, "you are bloodied"),
 )
@@ -1415,6 +1415,7 @@ def _melee_weapon(ctx: dict[str, Any]) -> bool:
     reach=PERSONAL,
     target=SELF,
     todo=("spec.feature_ref()",),
+    keywords=[Keyword.ELEMENTAL],
 )
 def p16083(c: Cast) -> None:
     """The whole effect is "resistance equal to what your level 5 feature
@@ -1431,7 +1432,7 @@ def p16083(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.STANCE],
+    keywords=[Keyword.STANCE, Keyword.ELEMENTAL],
 )
 def p16084(c: Cast) -> None:
     """19-20 is `crit_range` 1; 18-20 would be 2.
@@ -1462,7 +1463,7 @@ def p16084(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.CHARM],
+    keywords=[Keyword.CHARM, Keyword.ELEMENTAL],
 )
 def p16391(c: Cast) -> None:
     """Narrowed to the two kinds of attack the card names, which is the half
@@ -1509,7 +1510,7 @@ def p16391(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
     trigger="you would make a Diplomacy or an Intimidate check",
     on=Trigger(
         SkillCheck, my_check("diplomacy", "intimidate"), "one of those checks",
@@ -1573,7 +1574,7 @@ def p16393(c: Cast) -> None:
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(5),
     target=NO_TARGET,
-    keywords=[Keyword.CHARM, Keyword.FIRE],
+    keywords=[Keyword.CHARM, Keyword.FIRE, Keyword.ELEMENTAL],
     trigger="an enemy within 5 squares hits you",
     on=Trigger(Hit, both(hits_me, enemy_within(5)), "an enemy within 5 hits you"),
 )

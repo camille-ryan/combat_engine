@@ -1059,6 +1059,7 @@ def i1953x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an insubstantial enemy with an attack using this orb",
     on=HIT_BY_ME,
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1953p1(c: Cast) -> None:
     """Two halves: the quality standing now is taken off, and `c.immune`

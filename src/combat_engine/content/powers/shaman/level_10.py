@@ -133,8 +133,7 @@ def p9769(c: Cast) -> None:
     reach=CloseBurst(3, from_="companion"),
     target=NO_TARGET,
     keywords=[
-        Keyword.PRIMAL, Keyword.FEAR, Keyword.HEALING, Keyword.ZONE
-    ],
+        Keyword.PRIMAL, Keyword.FEAR, Keyword.HEALING, Keyword.ZONE, Keyword.SPIRIT],
 )
 def p12534(c: Cast) -> None:
     """"The zone moves with the spirit companion" is an aura on the spirit
@@ -170,7 +169,7 @@ def p12534(c: Cast) -> None:
     action=MINOR,
     reach=Melee(5, from_="companion"),
     target=ONE_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12876(c: Cast) -> None:
     """Lightly obscured is concealment, which has no verb -- the engine's
@@ -220,7 +219,7 @@ def p5459(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p6945(c: Cast) -> None:
     """There is no verb for giving a healing surge back -- `c.spend_surge`

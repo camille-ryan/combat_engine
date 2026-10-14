@@ -1058,7 +1058,7 @@ def p16025(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.WEAPON],
+    keywords=[Keyword.WEAPON, Keyword.ELEMENTAL],
     charges=True,
 )
 def p16085(c: Cast) -> None:
@@ -1081,6 +1081,7 @@ def p16085(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.ELEMENTAL],
 )
 def p16086(c: Cast) -> None:
     """The defences are for allies and the resistance is for "you and your
@@ -1110,7 +1111,7 @@ def p16086(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.POLYMORPH],
+    keywords=[Keyword.POLYMORPH, Keyword.ELEMENTAL],
 )
 def p16087(c: Cast) -> None:
     """`c.form` carries the condition and the movement mode together and has
@@ -1134,7 +1135,7 @@ def p16087(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.ELEMENTAL],
 )
 def p16088(c: Cast) -> None:
     c.surge(on=c.me)
@@ -1179,6 +1180,7 @@ AP_BOON = (
     target=NO_TARGET,
     trigger="you or an ally you can see spends an action point to make an attack",
     on=AP_BOON,
+    keywords=[Keyword.ELEMENTAL],
 )
 def p16397(c: Cast) -> None:
     """Six printed results, each an ordinary verb. Result 2 is untyped
@@ -1214,6 +1216,7 @@ def p16397(c: Cast) -> None:
     target=SELF,
     trigger="you roll initiative",
     on=Trigger(InitiativeRolled, _mine, "you roll initiative"),
+    keywords=[Keyword.ELEMENTAL],
 )
 def p16398(c: Cast) -> None:
     """At the moment initiative is rolled the caster has had no turn, so
@@ -1238,6 +1241,7 @@ def _used_p16397(world: World, me: int, ev: Any) -> bool:
     trigger="you use p16397",
     on=Trigger(PowerUsed, _used_p16397, "you use p16397"),
     dropped=("c.pick_roll()",),
+    keywords=[Keyword.ELEMENTAL],
 )
 def p16399(c: Cast) -> None:
     """The surge is paid. The dropped clause is choosing the face.
@@ -1272,6 +1276,7 @@ def _roll_near_me(world: World, me: int, ev: Event) -> bool:
             AttackRolled, _roll_near_me, "a creature within 5 makes an attack roll"
         ),
     ),
+    keywords=[Keyword.ELEMENTAL],
 )
 def p16400(c: Cast) -> None:
     """A d6, used as a bonus **or a penalty** -- the card offers the choice

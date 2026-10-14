@@ -175,7 +175,7 @@ def p9748(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(20),
     target=ONE_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p11358(c: Cast) -> None:
     """The printed target is an ally *or a liftable object* standing by the
@@ -196,7 +196,7 @@ def p11358(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5, from_="companion"),
     target=ONE_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12527(c: Cast) -> None:
     """"Makes a saving throw **or** gains temporary hit points" is a choice,
@@ -219,7 +219,7 @@ def p12527(c: Cast) -> None:
     action=MINOR,
     reach=Melee(5, from_="companion"),
     target=ONE_ALLY,
-    keywords=[Keyword.PRIMAL, Keyword.HEALING],
+    keywords=[Keyword.PRIMAL, Keyword.HEALING, Keyword.SPIRIT],
 )
 def p12869(c: Cast) -> None:
     """Regeneration is a watch on the beneficiary's own turn start. The
@@ -250,7 +250,7 @@ def p12869(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
     trigger=(
         "an enemy that started its turn adjacent to your spirit companion "
         "ends its movement no longer adjacent to it"
@@ -274,7 +274,7 @@ def p9744(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(1, from_="companion"),
     target=EACH_ALLY,
-    keywords=PRIMAL,
+    keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p9745(c: Cast) -> None:
     """"You and each ally in the burst" is two pools: the shaman is a

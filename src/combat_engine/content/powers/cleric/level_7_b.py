@@ -210,7 +210,7 @@ def p13712(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.NECROTIC],
+    keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.NECROTIC, Keyword.SHADOW],
     requires=_a_bloodied_enemy,
     requires_text="needs a bloodied enemy",
 )

@@ -183,7 +183,7 @@ def p12617(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.PSYCHIC],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.PSYCHIC, Keyword.SHADOW],
     attack=Attack(WIS, vs=AC),
 )
 def p13928(c: Cast) -> None:
@@ -222,7 +222,7 @@ def p13928(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBlast(3),
     target=EACH_ENEMY,
-    keywords=[*DIVINE_IMPLEMENT, Keyword.NECROTIC, Keyword.ZONE],
+    keywords=[*DIVINE_IMPLEMENT, Keyword.NECROTIC, Keyword.ZONE, Keyword.SHADOW],
     attack=Attack(WIS, vs=WILL),
 )
 def p13929(c: Cast) -> None:

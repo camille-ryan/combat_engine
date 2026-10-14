@@ -100,7 +100,7 @@ def p1299(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ILLUSION],
     out_of_combat=True,
 )
 def p380(c: Cast) -> None:
@@ -131,7 +131,7 @@ def p729(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.TELEPORTATION],
 )
 def p750(c: Cast) -> None:
     # Printed with the Teleportation keyword, which the engine's list does
@@ -275,7 +275,7 @@ def p13640(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.ARCANE, Keyword.ILLUSION, Keyword.PSYCHIC],
+    keywords=[Keyword.ARCANE, Keyword.ILLUSION, Keyword.PSYCHIC, Keyword.SHADOW],
 )
 def p13880(c: Cast) -> None:
     """The likeness itself is a named hold -- nobody here is fooled by a
@@ -305,7 +305,7 @@ def p13880(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
 )
 def p16262(c: Cast) -> None:
     """"Ignore forced movement" is `c.immovable`. The second half -- a save

@@ -126,7 +126,7 @@ def p11833(c: Cast) -> None:
     action=STANDARD,
     reach=AreaBurst(3, within=10),
     target=NO_TARGET,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
 )
 def p16242(c: Cast) -> None:
     """What survives is the ice: difficult terrain over the burst, until the
@@ -147,7 +147,7 @@ def p16242(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=ARCANE,
+    keywords=[*ARCANE, Keyword.ELEMENTAL],
 )
 def p16243(c: Cast) -> None:
     """The altitude limit is not modelled and neither is the Sustain line --

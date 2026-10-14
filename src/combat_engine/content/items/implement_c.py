@@ -1028,7 +1028,7 @@ def i2586p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(3),
     target=ONE_CREATURE,
-    keywords=[Keyword.TELEPORTATION],
+    keywords=[Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
     trigger="you hit an enemy within 3 squares with a force attack",
     on=Trigger(Hit, both(by_me, by_keyword(Keyword.FORCE)), "you hit with force"),
 )

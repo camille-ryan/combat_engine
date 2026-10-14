@@ -474,7 +474,7 @@ def i1583x1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    keywords=[Keyword.HEALING],
+    keywords=[Keyword.HEALING, Keyword.SPIRIT],
     trigger="you hit an enemy adjacent to your spirit companion",
     on=HIT_BY_ME,
 )
@@ -2804,6 +2804,7 @@ def i1967x1(c: Cast) -> None:
         both(targets_me, _vs_ac_or_fort),
         "an enemy attack targets your AC or Fortitude",
     ),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1967p1(c: Cast) -> None:
     """`AttackDeclared` is a `Decision` announced before the roll and the
@@ -2847,6 +2848,7 @@ def i1970x1(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i1970p1(c: Cast) -> None:
     c.shift(c.int_mod)
@@ -3348,6 +3350,7 @@ def i2603p1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.PSYCHIC)), "you hit with a psychic power"
     ),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i2621p1(c: Cast) -> None:
     """The augment widens the radius rather than adding a second effect, so
@@ -3537,6 +3540,7 @@ def i2645x1(c: Cast) -> None:
     on=Trigger(
         AttackDeclared, both(targets_me, _vs_will), "an enemy attacks your Will"
     ),
+    keywords=[Keyword.AUGMENTABLE],
 )
 def i2645p1(c: Cast) -> None:
     n = c.enhancement

@@ -54,7 +54,7 @@ def _rune(c: Cast, which: str) -> bool:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.LIGHTNING],
+    keywords=[*DIVINE_WEAPON, Keyword.LIGHTNING, Keyword.RUNIC],
     attack=Attack(STR, vs=REF),
 )
 def p11394(c: Cast) -> None:
@@ -80,7 +80,7 @@ def p11394(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FIRE],
+    keywords=[*DIVINE_WEAPON, Keyword.FIRE, Keyword.RUNIC],
     attack=Attack(STR, vs=AC),
 )
 def p11396(c: Cast) -> None:
@@ -107,7 +107,7 @@ def p11396(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.RUNIC],
     attack=Attack(STR, vs=WILL),
 )
 def p11397(c: Cast) -> None:
@@ -138,7 +138,7 @@ def p11397(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=DIVINE_WEAPON,
+    keywords=[*DIVINE_WEAPON, Keyword.RUNIC],
     attack=Attack(STR, vs=WILL),
 )
 def p11398(c: Cast) -> None:

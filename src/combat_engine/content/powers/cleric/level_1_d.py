@@ -261,7 +261,7 @@ def p14298(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.DIVINE],
+    keywords=[Keyword.DIVINE, Keyword.SHADOW],
     out_of_combat=True,
 )
 def p16418(c: Cast) -> None:
@@ -276,7 +276,7 @@ def p16418(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.SHADOW],
     attack=Attack(WIS, vs=AC),
 )
 def p16419(c: Cast) -> None:
@@ -295,7 +295,7 @@ def p16419(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.SHADOW],
     attack=Attack(WIS, vs=WILL),
 )
 def p16420(c: Cast) -> None:
@@ -326,7 +326,7 @@ def p16420(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.PSYCHIC],
+    keywords=[*DIVINE_WEAPON, Keyword.FEAR, Keyword.PSYCHIC, Keyword.SHADOW],
     attack=Attack(WIS, vs=AC),
 )
 def p16421(c: Cast) -> None:

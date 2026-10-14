@@ -101,7 +101,7 @@ def p1590(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.DIVINE],
+    keywords=[Keyword.DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
 def p1589(c: Cast) -> None:
@@ -122,7 +122,7 @@ def p1589(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(2),
     target=EACH_ENEMY,
-    keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.RADIANT],
+    keywords=[Keyword.DIVINE, Keyword.IMPLEMENT, Keyword.RADIANT, Keyword.CHANNEL_DIVINITY],
     attack=Attack(WIS, vs=WILL),
     group=CHANNEL_DIVINITY,
 )

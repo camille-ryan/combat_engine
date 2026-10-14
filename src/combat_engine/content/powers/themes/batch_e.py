@@ -1546,7 +1546,7 @@ def p16377(c: Cast) -> None:
     action=INTERRUPT,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.PSIONIC],
+    keywords=[Keyword.PSIONIC, Keyword.AUGMENTABLE],
     trigger="you are hit by a charm or a psychic attack",
     on=Trigger(
         Hit,
@@ -1596,7 +1596,7 @@ def p16438(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.PSIONIC],
+    keywords=[Keyword.PSIONIC, Keyword.AUGMENTABLE],
 )
 def p16439(c: Cast) -> None:
     """"While adjacent to you" is geometry rather than a clock, so the
@@ -1616,7 +1616,7 @@ def p16439(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.PSIONIC],
+    keywords=[Keyword.PSIONIC, Keyword.AUGMENTABLE],
 )
 def p16440(c: Cast) -> None:
     """All four faces. The fourth hands power points back, which is the

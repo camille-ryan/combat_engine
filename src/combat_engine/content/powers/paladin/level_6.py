@@ -224,7 +224,7 @@ def p13560(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[Keyword.FEAR],
+    keywords=[Keyword.FEAR, Keyword.SHADOW],
 )
 def p13822(c: Cast) -> None:
     me = c.me
@@ -244,7 +244,7 @@ def p13822(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    keywords=[],
+    keywords=[Keyword.SHADOW],
 )
 def p13823(c: Cast) -> None:
     """A rolled extra die, so it is `c.flat(c.roll(...))` rather than a
