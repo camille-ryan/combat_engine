@@ -728,7 +728,8 @@ def i2003p1(c: Cast) -> None:
 
 
 @power("i2109p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF)
+       reach=PERSONAL, target=SELF,
+       keywords=[Keyword.AUGMENTABLE])
 def i2109p1(c: Cast) -> None:
     c.resist(10 if c.spend_points(1) else 5, on=c.me, until=When.SONT)
 

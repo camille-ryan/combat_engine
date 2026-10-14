@@ -684,7 +684,8 @@ def i1198x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you are immobilized by an attack",
        on=Trigger(ConditionApplied, _condition_on_me(Condition.IMMOBILIZED),
-                  "you are immobilized"))
+                  "you are immobilized"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1198p1(c: Cast) -> None:
     """Augment 1 buys half your speed instead of the printed square."""
     c.cure(Condition.IMMOBILIZED, on=c.me)
@@ -707,7 +708,8 @@ def i1212p1(c: Cast) -> None:
 @power("i1423p1", level=2, cls=ITEM, usage=ENCOUNTER, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you take damage from an attack",
-       on=Trigger(DamageApplied, targets_me, "you take damage"))
+       on=Trigger(DamageApplied, targets_me, "you take damage"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1423p1(c: Cast) -> None:
     c.conceal(on=c.me, until=When.EONT)
     if c.spend_points(1):
@@ -1185,7 +1187,8 @@ def i1001p1(c: Cast) -> None:
 
 @power("i1055p1", level=3, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=NO_TARGET, trigger="an enemy hits you",
-       on=Trigger(AttackRolled, _rolled_on_me, "an enemy hits you"))
+       on=Trigger(AttackRolled, _rolled_on_me, "an enemy hits you"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1055p1(c: Cast) -> None:
     """Declared on `AttackRolled` rather than `Hit` because the defence
     that was hit is the whole of the effect and only that event says
@@ -1284,7 +1287,8 @@ def i1558p1(c: Cast) -> None:
 @power("i1654p1", level=3, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an enemy misses you with a melee attack",
-       on=Trigger(Miss, both(targets_me, by_melee), "an enemy misses you"))
+       on=Trigger(Miss, both(targets_me, by_melee), "an enemy misses you"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1654p1(c: Cast) -> None:
     foe = _foe(c)
     if foe is not None:
@@ -1455,7 +1459,7 @@ def i2434p1(c: Cast) -> None:
 
 @power("i2460p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
        reach=PERSONAL, target=SELF,
-       keywords=[Keyword.ILLUSION])
+       keywords=[Keyword.ILLUSION, Keyword.AUGMENTABLE])
 def i2460p1(c: Cast) -> None:
     """See `_erode`. Augment 1 buys the larger starting number, and the
     hold ends itself when it reaches nothing."""
@@ -1544,7 +1548,7 @@ def i2870x1(c: Cast) -> None:
 
 
 @power("i2870p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION])
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ILLUSION, Keyword.AUGMENTABLE])
 def i2870p1(c: Cast) -> None:
     """"Against enemies more than 2 squares away" is a gate on the
     attacker, which the attack context does carry."""
@@ -1800,7 +1804,8 @@ def i1175x1(c: Cast) -> None:
 
 @power("i1175p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=SELF, trigger="an enemy hits you",
-       on=Trigger(Hit, targets_me, "an enemy hits you"))
+       on=Trigger(Hit, targets_me, "an enemy hits you"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1175p1(c: Cast) -> None:
     c.insubstantial(on=c.me, until=When.EONT)
     if c.spend_points(1):
@@ -1825,7 +1830,7 @@ def i1181p1(c: Cast) -> None:
 
 
 @power("i1258p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.PSYCHIC],
+       reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.PSYCHIC, Keyword.AUGMENTABLE],
        trigger="you use a psychic power",
        on=Trigger(PowerUsed, _my_power_with(Keyword.PSYCHIC, other_than="i1258p1"),
                   "you use a psychic power"))
@@ -1842,7 +1847,8 @@ def i1258p1(c: Cast) -> None:
 @power("i1324p1", level=4, cls=ITEM, usage=ENCOUNTER,
        action=ActionType.NONE, reach=PERSONAL, target=SELF,
        trigger="you are subjected to an effect that a save can end",
-       on=Trigger(EffectApplied, _save_ends_on_me, "a save-ends effect lands"))
+       on=Trigger(EffectApplied, _save_ends_on_me, "a save-ends effect lands"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1324p1(c: Cast) -> None:
     """`EffectApplied` rather than `ConditionApplied`: a hold that carries
     only ongoing damage imposes no condition and would never announce."""
@@ -1901,7 +1907,8 @@ def i1392p1(c: Cast) -> None:
 
 @power("i1674p1", level=4, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=NO_TARGET, trigger="you spend a healing surge",
-       on=Trigger(SurgeSpent, about_me, "you spend a healing surge"))
+       on=Trigger(SurgeSpent, about_me, "you spend a healing surge"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1674p1(c: Cast) -> None:
     times = 3 if c.spend_points(1) else 2
     for mate in c.within(1, side="ally"):
@@ -2014,7 +2021,7 @@ def i2046x1(c: Cast) -> None:
 
 
 @power("i2046p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
-       reach=CloseBurst(1), target=EACH_ENEMY, keywords=[Keyword.PSYCHIC],
+       reach=CloseBurst(1), target=EACH_ENEMY, keywords=[Keyword.PSYCHIC, Keyword.AUGMENTABLE],
        trigger="an enemy attack hits your Will",
        on=Trigger(AttackRolled, _hit_my_will, "an attack hits your Will"),
        augments=(Augment(1, reach=CloseBurst(2)),))
@@ -2379,7 +2386,8 @@ def i530x1(c: Cast) -> None:
 @power("i530p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you take damage of a type this armour does not turn",
-       on=Trigger(DamageApplied, targets_me, "you take damage"))
+       on=Trigger(DamageApplied, targets_me, "you take damage"),
+       keywords=[Keyword.AUGMENTABLE])
 def i530p1(c: Cast) -> None:
     """"The armour's resistance changes" is two operations: `i530x1`'s
     hold goes -- `c.resist` files an undo on it, so ending it puts the old
@@ -2439,7 +2447,8 @@ def i610x1(c: Cast) -> None:
 @power("i632p1", level=4, cls=ITEM, usage=DAILY, action=REACTION,
        reach=PERSONAL, target=NO_TARGET,
        trigger="an ally near your spirit companion hits an enemy",
-       on=Trigger(Hit, _ally_hits, "an ally hits an enemy"))
+       on=Trigger(Hit, _ally_hits, "an ally hits an enemy"),
+       keywords=[Keyword.SPIRIT])
 def i632p1(c: Cast) -> None:
     """The companion is the centre of both halves, so the distance is
     measured from it rather than from you."""
@@ -2611,7 +2620,8 @@ def i2124p1(c: Cast) -> None:
 @power("i2445p1", level=5, cls=ITEM, usage=ENCOUNTER, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you take damage from an attack",
-       on=Trigger(DamageApplied, targets_me, "you take damage"))
+       on=Trigger(DamageApplied, targets_me, "you take damage"),
+       keywords=[Keyword.AUGMENTABLE])
 def i2445p1(c: Cast) -> None:
     if c.spend_points(1):
         c.conceal(on=c.me, until=When.EONT, total=True)
@@ -3405,7 +3415,7 @@ def i689x1(c: Cast) -> None:
 
 
 @power("i689p1", level=8, cls=ITEM, usage=DAILY, action=REACTION,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
+       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
        trigger="an enemy misses you with an attack",
        on=Trigger(Miss, targets_me, "an enemy misses you"))
 def i689p1(c: Cast) -> None:
@@ -3830,7 +3840,7 @@ def i3484p1(c: Cast) -> None:
 
 
 @power("i550p1", level=10, cls=ITEM, usage=DAILY, action=INTERRUPT,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
+       reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION, Keyword.AUGMENTABLE],
        trigger="an enemy hits you",
        on=Trigger(Hit, targets_me, "an enemy hits you"))
 def i550p1(c: Cast) -> None:

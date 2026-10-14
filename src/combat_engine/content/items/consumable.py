@@ -393,7 +393,7 @@ def i1483p2(c: Cast) -> None:
 
 @power("i1595p1", level=1, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(5), target=ONE_CREATURE,
-       keywords=[Keyword.IMPLEMENT, Keyword.POISON],
+       keywords=[Keyword.IMPLEMENT, Keyword.POISON, Keyword.PSYCHIC],
        attack=Attack(DEX, vs=REF))
 def i1595p1(c: Cast) -> None:
     """"Each Failed Saving Throw" is `escalate`, which `durations` runs on

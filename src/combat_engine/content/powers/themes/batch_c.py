@@ -526,7 +526,7 @@ def p16570(c: Cast) -> None:
 
 
 @power("p16571", level=2, cls="x7_1000", usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
+       reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE, Keyword.TRANSMUTATION],
        out_of_combat=True)
 def p16571(c: Cast) -> None:
     """Folding a carried object into a ring and back. Nothing on a board
@@ -1161,7 +1161,7 @@ def p16457(c: Cast) -> None:
 
 @power("p16588", level=0, cls="x7_1004", usage=ENCOUNTER, action=MINOR,
        reach=AreaBurst(1, 10), target=EACH_CREATURE,
-       keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.ACID],
+       keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.ACID, Keyword.EVOCATION],
        attack=Attack(STR, vs=FORT))
 def p16588(c: Cast) -> None:
     if c.strike(plus=_best(c) - c.attack_mod):

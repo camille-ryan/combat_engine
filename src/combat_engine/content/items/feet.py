@@ -695,7 +695,8 @@ def i753p1(c: Cast) -> None:
 @power("i1005p1", level=7, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="an enemy misses you with an attack",
-       on=Trigger(Miss, targets_me, "an enemy misses you"))
+       on=Trigger(Miss, targets_me, "an enemy misses you"),
+       keywords=[Keyword.AUGMENTABLE])
 def i1005p1(c: Cast) -> None:
     """The augment is a power point spent to hand the use straight back,
     which is what `c.restore_use` is for."""

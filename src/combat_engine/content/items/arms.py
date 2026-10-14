@@ -743,7 +743,8 @@ def i782x1(c: Cast) -> None:
 
 
 @power("i782p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF)
+       reach=PERSONAL, target=SELF,
+       keywords=[Keyword.AUGMENTABLE])
 def i782p1(c: Cast) -> None:
     """"Until you make an attack" is not a `When` and does not need to be:
     the augmented concealment is held to the end of the fight and torn
@@ -1852,7 +1853,8 @@ def i713p1(c: Cast) -> None:
 @power("i730p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF,
        trigger="you take damage from an attack",
-       on=Trigger(DamageApplied, _damage_on_me, "you are damaged"))
+       on=Trigger(DamageApplied, _damage_on_me, "you are damaged"),
+       keywords=[Keyword.AUGMENTABLE])
 def i730p1(c: Cast) -> None:
     c.temp_hp(10 if c.spend_points(1) else 5, on=c.me)
     c.shift(1)
