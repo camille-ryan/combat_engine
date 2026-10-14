@@ -1373,6 +1373,30 @@ _SUB_HEAD = re.compile(
     r"<br\s*/?>\s*<b>\s*([A-Z][A-Za-z0-9\u2019'&/ .:-]{2,60}?)\s*</b>\s*<br\s*/?>"
 )
 
+#: A per-level heading. **The second class-page dialect**: a build page
+#: prints `CLASS FEATURES` as an empty heading and sets the features under
+#: these instead, interleaved with the power lists.
+#:
+#: Nineteen non-hybrid classes are printed this way and every one of them
+#: imported **zero** features before this. Nothing reported it, because the
+#: heading search succeeded: the run between it and the next `<h3>` is ten
+#: bytes of whitespace, so `_FEATURE_HEAD` matched nothing and the loop ran
+#: over an empty string. A class with no features looks exactly like a class
+#: whose features are all cards.
+_LEVEL_HEAD = re.compile(r"<h3[^>]*>\s*Level\s+\d+:\s*</h3>", re.I)
+
+#: "You gain one of the following powers of your choice." -- the intro to a
+#: printed power list, which is not a feature.
+#:
+#: Only the level dialect needs this, and that asymmetry is the page's, not
+#: a convenience: in the primary dialect the power lists sit *outside* the
+#: `CLASS FEATURES` section and never reach the loop at all. Here they are
+#: between the features, so 77 of them would otherwise each file a row whose
+#: whole rules text is an instruction to go and choose.
+_POWER_LIST = re.compile(
+    r"\b(?:add|gain|choose|know|select)\b[^.]{0,40}?\bof the following\b", re.I
+)
+
 #: A whole power card printed inside a feature section -- the same shape
 #: `feat._CARD` reads, and for the same reason. cf:warlock-f4 and
 #: the ranger's quarry are printed nowhere else, so deleting the card
@@ -1381,6 +1405,39 @@ _FEATURE_CARD = re.compile(r'<h1[^>]*class="[a-z-]*power"', re.I)
 _H1 = re.compile(r"<h1\b")
 _CARD_NAME = re.compile(r"<h1[^>]*>(.*?)</h1>", re.S)
 _CARD_LEVEL = re.compile(r'<span class="level">(.*?)</span>', re.S)
+
+
+def _feature_sections(html: str) -> tuple[list[str], bool]:
+    """The runs of markup a class page sets its features in, and which
+    dialect it is printed in.
+
+    The primary one is a single section: everything between the
+    `CLASS FEATURES` heading and the next `<h3>`. Anything before it is the
+    chassis and the build summaries; anything after is prose about deities
+    and party role.
+
+    The build pages print that heading **empty** and set the features under
+    `Level N:` headings instead, so the second dialect is a list of sections,
+    each cut at the next `<h1>` as well as the next `<h3>` -- the `<h1>` being
+    the printed power list that follows the feature. The primary dialect must
+    *not* cut at `<h1>`, because there a card inside the section is a feature
+    (`cf:warlock-f4` is printed nowhere else).
+    """
+    start = re.search(r"<h3[^>]*>[^<]*CLASS FEATURES[^<]*</h3>", html, re.I)
+    if start is None:
+        return [], False
+    rest = html[start.end():]
+    end = re.search(r"<h3[^>]*>", rest)
+    section = rest[: end.start()] if end else rest
+    if len(re.sub(r"<[^>]+>", "", section).strip()) >= 40:
+        return [section], False
+    sections = []
+    for m in _LEVEL_HEAD.finditer(html):
+        nxt = re.search(r"<h[13][^>]*>", html[m.end():])
+        sections.append(
+            html[m.end(): m.end() + nxt.start()] if nxt else html[m.end():]
+        )
+    return sections, True
 
 
 def _features(source: sqlite3.Connection, out: sqlite3.Connection,
@@ -1410,56 +1467,73 @@ def _features(source: sqlite3.Connection, out: sqlite3.Connection,
             continue
         build = name.partition("(")[2].rstrip(")").strip()
         html = row["Txt"] or ""
-        # The section is its own heading. Anything before it is the
-        # chassis and the build summaries; anything after is prose about
-        # deities and party role.
-        start = re.search(r"<h3[^>]*>[^<]*CLASS FEATURES[^<]*</h3>", html, re.I)
-        if start is None:
+        sections, per_level = _feature_sections(html)
+        if not sections:
             continue
-        rest = html[start.end():]
-        end = re.search(r"<h3[^>]*>", rest)
-        section = rest[: end.start()] if end else rest
         stem = f"cf:{bare.lower()}" if not build else (
             f"cf:{bare.lower()}-{_slug(build)}"
         )
-        heads = list(_FEATURE_HEAD.finditer(section))
-        for i, m in enumerate(heads):
-            stop = heads[i + 1].start() if i + 1 < len(heads) else len(section)
-            body = section[m.end(): stop]
-            # The page ends the feature list with a bare uppercase run --
-            # no tag at all, just `<br/><br/>SWORDMAGE OVERVIEW<br/>` --
-            # so the last feature of every class swallowed the essay about
-            # deities and party role that follows it.
-            body = _TRAILING_ESSAY.split(body, 1)[0]
-            # The same essay, arriving under a title-case heading instead of
-            # an uppercase one. Six classes end their feature list this way,
-            # and the tail cost two things at once: it broke `duplicate_of`
-            # by byte-identity for the last *card* of the section, and it
-            # carried deity and race names into a brief that the scrubber
-            # never saw, because the names are in text belonging to no row.
-            body = _TRAILING_SECTION.split(body, 1)[0]
-            # A feature that *is* a power is already a `Feature` row in
-            # `power`, embedded here as its own card. Keep the prose that
-            # introduces it and drop the card from the *parent's* spec, so
-            # the two do not disagree -- and file the card as a row of its
-            # own below rather than deleting it, which is what left
-            # `cf:warlock-f4` unnameable.
-            #
-            # The same cut serves the sub-options: everything from the
-            # first of them belongs to *it* and not to the heading above.
-            # Leaving it on both put a sub-option's printed name in the
-            # parent's spec as prose, where the `own` guard in
-            # `_named_powers` rightly refuses to swap a child's ref into
-            # its parent -- and a name the scrubber will not touch is a
-            # leak.
-            marks = _sub_marks(body)
-            head = body[: marks[0][0]] if marks else body
-            ref = f"{stem}-f{i}"
-            written += _feature_row(out, names, ref, bare, i, build,
-                                    head, m.group(1).title())
-            written += _sub_features(out, names, ref, bare, i, build,
-                                     body, marks)
+        # One running ordinal across the sections, incremented for every
+        # heading whether or not it files a row -- which is what the primary
+        # dialect's `enumerate` did, so no `cf:` ref already written into the
+        # tree moves. The level dialect has several sections and the primary
+        # one has exactly one, so there it still counts 0, 1, 2 as before.
+        ord_ = 0
+        for section in sections:
+            got, ord_ = _section_rows(out, names, section, stem, bare, build,
+                                      ord_, per_level)
+            written += got
     return written
+
+
+def _section_rows(
+    out: sqlite3.Connection, names: dict[str, dict[str, str]],
+    section: str, stem: str, bare: str, build: str,
+    ord_: int, per_level: bool,
+) -> tuple[int, int]:
+    """Every feature in one section, and the ordinal to carry on from."""
+    written = 0
+    heads = list(_FEATURE_HEAD.finditer(section))
+    for i, m in enumerate(heads):
+        stop = heads[i + 1].start() if i + 1 < len(heads) else len(section)
+        body = section[m.end(): stop]
+        # The page ends the feature list with a bare uppercase run --
+        # no tag at all, just `<br/><br/>SWORDMAGE OVERVIEW<br/>` --
+        # so the last feature of every class swallowed the essay about
+        # deities and party role that follows it.
+        body = _TRAILING_ESSAY.split(body, 1)[0]
+        # The same essay, arriving under a title-case heading instead of
+        # an uppercase one. Six classes end their feature list this way,
+        # and the tail cost two things at once: it broke `duplicate_of`
+        # by byte-identity for the last *card* of the section, and it
+        # carried deity and race names into a brief that the scrubber
+        # never saw, because the names are in text belonging to no row.
+        body = _TRAILING_SECTION.split(body, 1)[0]
+        # A feature that *is* a power is already a `Feature` row in
+        # `power`, embedded here as its own card. Keep the prose that
+        # introduces it and drop the card from the *parent's* spec, so
+        # the two do not disagree -- and file the card as a row of its
+        # own below rather than deleting it, which is what left
+        # `cf:warlock-f4` unnameable.
+        #
+        # The same cut serves the sub-options: everything from the
+        # first of them belongs to *it* and not to the heading above.
+        # Leaving it on both put a sub-option's printed name in the
+        # parent's spec as prose, where the `own` guard in
+        # `_named_powers` rightly refuses to swap a child's ref into
+        # its parent -- and a name the scrubber will not touch is a
+        # leak.
+        marks = _sub_marks(body)
+        head = body[: marks[0][0]] if marks else body
+        if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
+            continue
+        ref = f"{stem}-f{ord_}"
+        written += _feature_row(out, names, ref, bare, ord_, build,
+                                head, m.group(1).title())
+        written += _sub_features(out, names, ref, bare, ord_, build,
+                                 body, marks)
+        ord_ += 1
+    return written, ord_
 
 
 def _feature_row(

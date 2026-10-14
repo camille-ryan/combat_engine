@@ -108,6 +108,32 @@ DEFERRED = {
     "thunderborn": "#339 -- a sub-option name used as a BUILDS key",
 }
 
+#: Specs whose hit is a **positional heading**, per `(table, ref)`, with the
+#: reason. The same discipline as `DEFERRED` above and for the same reason: a
+#: listed row that stops hitting is a failure, because the entry has gone
+#: stale, and a row that is not listed is a failure because it is new.
+#:
+#: Why these are not leaks, which is the part worth not re-deriving. A build's
+#: class page labels a "choose one of the following" group by **where it
+#: falls** -- the heading over the nine domain features is the words *level 5
+#: domain feature* -- so `identifies` sees a four-word phrase, finds no word
+#: invented, and reports it on length alone. The feat below prints the same
+#: four words meaning *whichever of the nine the character took*, so the
+#: heading's ref is not what the sentence means: substituting it would be
+#: **wrong**, not merely unnecessary. The group's ref names the heading; the
+#: nine sub-options under it are the rows a feat is gated on.
+#:
+#: So the matcher is right to find them and the swap would be wrong, which is
+#: why this is a baseline rather than a widening of `identifies`. #494 set a
+#: budget ceiling on tuning the name search and this is the cheap side of it.
+#: Found by #584, which imported the nineteen classes that had never had their
+#: features read -- the headings did not exist to collide with before.
+SPEC_KNOWN = {
+    ("feat", "f3589"): "#584 -- a positional group heading, not the row meant",
+    ("feat", "f3590"): "#584 -- a positional group heading, not the row meant",
+    ("feat", "f3591"): "#584 -- a positional group heading, not the row meant",
+}
+
 #: Read once each. `_components` asks them per candidate word.
 _DICT: frozenset[str] | None = None
 _TRUSTED: frozenset[str] | None = None
@@ -686,6 +712,8 @@ def specs() -> int:
                     continue
                 break
 
+    seen = {(table, ref) for table, ref, _n, _r in found}
+    found = [f for f in found if (f[0], f[1]) not in SPEC_KNOWN]
     for table, ref, _name, refs in found[:40]:
         print(f"{table}.{ref}: prints the name of {', '.join(refs[:3])}")
     if found:
@@ -694,6 +722,19 @@ def specs() -> int:
         print("Every one of them is shown to an author verbatim. "
               "See `_cross_reference` in etl/build.py.")
         return 1
+    # A baseline that cannot go stale quietly, which is the half a bare
+    # allowance gets wrong: an entry whose row has stopped hitting is dead
+    # weight and says so, the discipline `DEFERRED` and `todo.py` both apply.
+    stale = sorted(k for k in SPEC_KNOWN if k not in seen)
+    if stale:
+        print("\nSPEC_KNOWN entries no longer hit -- delete them:")
+        for table, ref in stale:
+            print(f"  {table}.{ref}: {SPEC_KNOWN[(table, ref)]}")
+        return 1
+    if SPEC_KNOWN:
+        print(f"{len(SPEC_KNOWN)} known positional headings, named:")
+        for (table, ref), why in sorted(SPEC_KNOWN.items()):
+            print(f"  {table}.{ref}: {why}")
     print("no printed names in any spec")
     bad = _self_named_clauses()
     return bad or columns(index)

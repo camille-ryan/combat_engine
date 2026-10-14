@@ -123,6 +123,18 @@ RULES_TERMS = {
     "holy symbol", "orb", "rod", "wand", "tome", "totem",
     "leather armor", "hide armor", "chainmail", "scale armor", "plate armor",
     "light shield", "heavy shield", "bow", "sword", "axe",
+    # **A class mechanic several classes print a heading for.** Five classes
+    # grant channel divinity and each labels its own group of them, so the
+    # phrase is this game's vocabulary and not one class's property: it is
+    # written 69 times across 36 tracked files, and `content/feats/general_j`
+    # holds a table of four *different* classes' versions of it.
+    #
+    # Listed when #584 imported the nineteen classes whose features had never
+    # been read, one of which labels its group with exactly these words. That
+    # turned a docstring about the shared mechanic into a reported leak -- the
+    # #438 shape, where widening the name index makes old text a finding. The
+    # alternative was scrubbing the mechanic's name out of 36 files.
+    "channel divinity", "channel divinity powers",
     # **Being off the ground is a state the engine models.**
     # `engine/falling.py` holds `AIRBORNE = ("fly", "hover", "levitate",
     # "climb")` and decides who falls by it, so the word is this engine's
