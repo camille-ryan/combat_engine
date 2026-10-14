@@ -2812,11 +2812,21 @@ def i455p1(c: Cast) -> None:
 
 @power("i1132p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Melee(1), target=ONE_CREATURE,
-       dropped=("c.hit_this_turn()",))
+       dropped=("Target.hit_by_me_this_turn",))
 def i1132p1(c: Cast) -> None:
-    """Nothing records what a creature has hit or missed this turn, so the
-    printed Requirement is unenforced and "the same enemy" becomes
-    whichever one the row is aimed at."""
+    """"The same enemy" is still whichever one the row is aimed at, and the
+    reason is a target line rather than a missing record.
+
+    **The note this replaces was wrong about the engine.** It said nothing
+    records what a creature has hit this turn; `query.my_hits_this_turn`
+    does, and `lurkers_sa._landed_with` was already reading the log for it
+    as a `requires=` gate. Three rows that print this as a *Requirement*
+    are written off that reader now -- #576.
+
+    What is left here is the narrower thing: the card restricts the
+    **target** to a creature this wielder hit this turn, and `Target` has
+    no field for it. A `requires=` would be the wrong shape -- it would
+    allow the power and then let it be aimed anywhere."""
     foe = c.target
     if foe is not None and c.basic(on=foe):
         c.grants_advantage(on=foe, until=When.EONT)

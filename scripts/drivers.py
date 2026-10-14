@@ -6512,6 +6512,186 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def a_hit_earlier_this_turn(out: Result) -> None:
+    """"You must have hit an enemy with a weapon attack during this turn."
+
+    Three rows print a Requirement of this shape and **six rows'
+    docstrings each asserted the fact was not recorded** -- one of them
+    that `requires=` "is handed a world and an eid with no turn history in
+    it". `requires=` is handed exactly `(world, eid)`, `world.bus.log`
+    *is* the turn history, and `lurkers_sa._landed_with` had been reading
+    it as a `requires=` gate the whole time. `query.my_hits_this_turn` is
+    that walk, shared. #576.
+
+    **This rule is not optional cover, it is the only cover.** Enforcing
+    the Requirement moved `m1097a3` and `i3151p1` from "fires and does
+    something" to "never usable here": the audit board does not make a
+    creature attack before spending its minor action, so a green audit
+    says nothing about either row. That is the blind spot the plan names
+    and `drivers.py` exists for.
+
+    Four questions per row, and the third is the one that matters:
+
+    * with nothing hit this turn, the row is **refused**, and refused *for
+      this reason* -- not merely refused, because `usable` reports
+      "requirement not met" for unrelated causes too and asserting the
+      bare boolean let a planted deletion through on `a_weapon_requirement`;
+    * after a qualifying blow, it is allowed;
+    * after a blow of the **wrong kind**, it is still refused. `p15928`
+      wants a weapon attack and `m1097a3` a melee one, so a hit that is
+      neither must not open either -- this is what fails if the keyword
+      and reach tests are dropped and the gate degrades to "hit anything";
+    * once the creature's own turn starts again, the memory is **gone**.
+
+    And for `i3151p1`, a fifth that is about the *other* half of its card:
+    the ally arrives beside **the enemy actually hit**, not beside an
+    enemy of the harness's choosing. Its body used `c.choose(foes, ...)`
+    before, which is strictly better than the printed "the enemy you hit
+    this turn" -- so the assertion names the victim and not just that
+    somebody moved.
+    """
+    # **Content first, and this rule needed saying so.** `REGISTRY` is
+    # populated by importing the content package, which every other rule
+    # gets for free because it calls `_board` before touching the registry.
+    # This one scans the corpus *first*, to pick its controls, and the scan
+    # silently found nothing -- so the rule skipped itself with a message
+    # blaming the corpus for a gap that was really an unimported package.
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.events import Hit, TurnStart
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Keyword
+
+    # A real ref of each kind, taken from the corpus rather than written
+    # down, so a renamed row cannot make this rule quietly vacuous.
+    def pick(want_weapon: bool, want_melee: bool) -> str:
+        for ref, row in REGISTRY.items():
+            if row.attack is None or getattr(row, "reach", None) is None:
+                continue
+            if (Keyword.WEAPON in row.keywords) != want_weapon:
+                continue
+            if (row.reach.kind == "melee") != want_melee:
+                continue
+            return ref
+        return ""
+
+    melee_weapon = pick(True, True)
+    neither = pick(False, False)
+    if not melee_weapon or not neither:
+        out.skip("the corpus offers no melee weapon row and no row that is "
+                 "neither, so the wrong-kind control cannot be posed")
+        return
+
+    CASES = (
+        ("p15928", "it must have hit an enemy with a weapon attack this turn"),
+        ("m1097a3", "it must have hit with a melee attack this turn"),
+        ("i3151p1", "you must have hit an enemy with a weapon this turn"),
+    )
+    for ref, want in CASES:
+        if ref not in REGISTRY:
+            out.skip(f"{ref} is not declared")
+            continue
+        world, caster, _ = _board(ref)
+        foes = enemies(world, caster)
+        if not foes:
+            out.skip(f"{ref}'s board fields no enemy to have hit")
+            continue
+        foe = foes[0]
+        known = world.get(caster, Powers)
+        if known is not None and ref not in known.known:
+            known.known = [*known.known, ref]
+
+        # **Bound as defaults, not captured.** `world` and `caster` are
+        # rebound every pass of the loop, so a closure over them reads
+        # whichever board the loop reached last -- which would make every
+        # assertion after the first case measure the wrong fight.
+        def why(w=world, who=caster, r: str = ref) -> str:  # noqa: ANN001
+            ok, reason = usable(w, who, REGISTRY[r])
+            return "" if ok else str(reason)
+
+        out.that(
+            want in why(),
+            f"{ref} is refused before anything has been hit",
+            f"it said {why()!r}, wanted {want!r}",
+        )
+
+        world.bus.log.append(
+            Hit(attacker=caster, target=foe, power=neither, critical=False)
+        )
+        out.that(
+            want in why(),
+            f"{ref} is still refused after a hit of the wrong kind",
+            f"a hit with {neither} (no weapon keyword, not melee) said {why()!r}",
+        )
+
+        world.bus.log.append(
+            Hit(attacker=caster, target=foe, power=melee_weapon, critical=False)
+        )
+        out.that(
+            not why(),
+            f"{ref} is allowed once a melee weapon blow has landed",
+            f"it still said {why()!r} after a hit with {melee_weapon}",
+        )
+
+        world.bus.log.append(TurnStart(actor=caster, round=2))
+        out.that(
+            want in why(),
+            f"{ref} is refused again once its own next turn begins",
+            f"the memory outlived the turn: {why()!r}",
+        )
+
+    # The remembered victim, which is `i3151p1`'s second clause.
+    if "i3151p1" in REGISTRY:
+        world, caster, _ = _board("i3151p1")
+        foes = enemies(world, caster)
+        friends = [a for a in allies(world, caster) if a != caster]
+        if len(foes) < 2 or not friends:
+            out.skip("i3151p1 needs two enemies and an ally to tell the "
+                     "remembered victim from a chosen one")
+        else:
+            # **The blow lands on the *second* enemy, and that is the whole
+            # design of this control.** `c.choose` with no decider installed
+            # takes the first option, which is `foes[0]` -- so hitting
+            # `foes[0]` makes "the enemy you hit" and "any enemy" the same
+            # creature and the assertion cannot tell them apart. The first
+            # version of this plant did exactly that and **stayed green**
+            # with the row reverted to `c.choose`, which `scripts/CLAUDE.md`
+            # says is a finding either way: it was the plant that was wrong.
+            hit_one = foes[1]
+            here = world.get(hit_one, Position)
+            if here is not None:
+                # The remembered enemy is parked far away, so arriving
+                # beside it and arriving beside the nearest one are
+                # different squares by a distance no rounding can hide.
+                mine = world.get(caster, Position)
+                if mine is not None:
+                    here.square = (mine.square[0] + 11, mine.square[1])
+            known = world.get(caster, Powers)
+            if known is not None and "i3151p1" not in known.known:
+                known.known = [*known.known, "i3151p1"]
+            world.bus.log.append(
+                Hit(attacker=caster, target=hit_one, power=melee_weapon,
+                    critical=False)
+            )
+            c = Cast(world=world, me=caster, ref="i3151p1")
+            c.target = friends[0]
+            REGISTRY["i3151p1"].body(c)
+            ally_at = world.get(friends[0], Position)
+            victim_at = world.get(hit_one, Position)
+            if ally_at is None or victim_at is None:
+                out.skip("i3151p1's ally or victim left the grid")
+            else:
+                gap = distance(ally_at.square, victim_at.square)
+                out.that(
+                    gap <= 1,
+                    "i3151p1 lands the ally beside the enemy it actually hit",
+                    f"the ally ended {gap} squares from the remembered victim",
+                )
+
+
 def every_move_of_a_kind(out: Result) -> None:
     """"One extra square on every shift", and not on anything else.
 
@@ -7213,6 +7393,10 @@ DRIVERS = {
     "aura_penalty": (
         penalty_scoped_to_an_aura,
         "a penalty scoped to a creature and its allies inside its aura",
+    ),
+    "hit_this_turn": (
+        a_hit_earlier_this_turn,
+        "a Requirement naming a blow landed earlier this turn, and its kind",
     ),
     "extend_every": (
         every_move_of_a_kind,

@@ -148,6 +148,26 @@ def _rolled(world: World, eid: int) -> int:
     return 0 if init is None else init.rolled
 
 
+def _hit_with_a_weapon_this_turn(world: World, eid: int) -> bool:
+    """"Requirement: You must have hit an enemy with a weapon attack during
+    this turn."
+
+    `query.my_hits_this_turn` walks the log back to this creature's own
+    `TurnStart`; the weapon half is each hit's **power header**, because
+    `Keyword.WEAPON` is what the card names and not what is in hand -- an
+    unarmed strike and a thrown rock are both held weapons by `Gear` and
+    neither is a weapon attack.
+    """
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.query import my_hits_this_turn
+
+    for hit in my_hits_this_turn(world, eid):
+        row = get(hit.power)
+        if row is not None and Keyword.WEAPON in row.keywords:
+            return True
+    return False
+
+
 def _enhanced(c: Cast) -> bool:
     """"Special: You can spend a minor action when you use this power to
     enhance it." Every x7_670 attack row prints one, each naming a different
@@ -1173,13 +1193,24 @@ def p14216(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.DIVINE, Keyword.WEAPON],
-    dropped=("c.hit_this_turn()",),
+    requires=_hit_with_a_weapon_this_turn,
+    requires_text="it must have hit an enemy with a weapon attack this turn",
 )
 def p15928(c: Cast) -> None:
     """Highest ability modifier vs. AC, rolled in the body -- see the
-    module docstring. The Requirement is the dropped half: nothing records
-    that a weapon attack landed earlier this turn, and `requires=` is
-    handed a world and an eid with no turn history in it."""
+    module docstring.
+
+    **The Requirement is written now, and the note it replaces was wrong
+    about the engine.** It read: *"nothing records that a weapon attack
+    landed earlier this turn, and `requires=` is handed a world and an eid
+    with no turn history in it."* Both halves are false. `requires=` is
+    handed exactly `(world, eid)`, and `world.bus.log` **is** the turn
+    history -- `monsters/level_05/lurkers_sa._landed_with` had been reading
+    it as a `requires=` gate for this creature's whole life.
+
+    `query.my_hits_this_turn` is that walk, shared. The weapon half is the
+    hit's own power header, since `Keyword.WEAPON` is what the card names
+    rather than what is in hand."""
     c.attack(_best(c), vs=AC)
     if c.landed:
         c.damage(c.w())

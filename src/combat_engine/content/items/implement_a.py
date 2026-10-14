@@ -3058,12 +3058,18 @@ def i2133x1(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("c.hit_this_turn()",),
+    dropped=("Target.hit_by_me_this_turn",),
 )
 def i2133p1(c: Cast) -> None:
     """"An at-will attack" is taken as the basic, which is the one row
-    every creature is certain to have. Nothing records who was hit earlier
-    this turn, so the target restriction is gone."""
+    every creature is certain to have. The target restriction is still
+    gone, but not for the reason this note used to give.
+
+    It said nothing records who was hit earlier this turn.
+    `query.my_hits_this_turn` does, off the log, and has been readable all
+    along -- #576. The gap is that the card narrows the **target** to a
+    creature already hit, and `Target` carries no such field; a
+    `requires=` would let the power through and then be aimed anywhere."""
     c.basic(on=c.target)
 
 

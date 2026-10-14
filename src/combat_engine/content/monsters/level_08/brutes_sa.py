@@ -2007,12 +2007,21 @@ def m5494a4(c: Cast) -> None:
     ),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=FORT, printed=11),
-    dropped=("c.hit_this_turn()",),
+    dropped=("Target.hit_by_me_this_turn",),
 )
 def m5494a5(c: Cast) -> None:
     """Bloodied is the target line now. The claw half is still the dropped
     clause, so the redirect stays -- and it keeps asking bloodied of what it
-    scans, because `c.enemies()` is the unfiltered pool."""
+    scans, because `c.enemies()` is the unfiltered pool.
+
+    **The one row in this family that did not claim the fact was
+    unrecorded.** The other five said so and were wrong; this one rolled
+    its own `_m5494_claws` bucket instead, which works. It is also the
+    shape `lurkers_sa._landed_with` argues against -- *"a flag would need
+    its own reset watch for a fact the log already answers"* -- and
+    `query.my_hits_this_turn` is now that answer, narrowed here by
+    `ev.power`. Worth folding when the `Target` field lands, so the
+    redirect and the target line read the same source. #576."""
     bucket = getattr(c.world, "_m5494_claws", {})
     clawed = bucket.get(c.me, set())
     victim = c.target

@@ -152,6 +152,26 @@ from combat_engine.engine.triggers import Trigger, about_me, by_me, targets_me
 # --------------------------------------------------------------------------
 
 
+def _hit_in_melee_this_turn(world: World, eid: int) -> bool:
+    """"Minor, **after hitting with a melee attack**" -- a condition on
+    taking the action, so a `requires=` and not a trigger window.
+
+    `query.my_hits_this_turn` walks the log back to this creature's own
+    `TurnStart`. The melee half is each hit's **power header**, which is
+    where reach lives; `p.reach.kind == "melee"` is the same test the
+    ranger and fighter feat files already use for "a melee attack of
+    mine".
+    """
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.query import my_hits_this_turn
+
+    for hit in my_hits_this_turn(world, eid):
+        row = get(hit.power)
+        if row is not None and row.reach.kind == "melee":
+            return True
+    return False
+
+
 def _regen_unless_radiant(c: Cast, amount: int) -> None:
     """"Regains N hit points whenever it starts its turn... when it takes
     radiant damage, its regeneration does not function on its next turn."
@@ -401,7 +421,8 @@ def m1097a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="it hits with a melee attack",
-    dropped=("c.hit_this_turn()",),
+    requires=_hit_in_melee_this_turn,
+    requires_text="it must have hit with a melee attack this turn",
 )
 def m1097a3(c: Cast) -> None:
     """"Minor, after hitting with a melee attack" is a condition on taking
@@ -409,9 +430,16 @@ def m1097a3(c: Cast) -> None:
     for a minor action, so the declared `Trigger(Hit, ...)` this carried was
     never subscribed and the shift never happened (#426).
 
-    The shift plays now, as the minor action the card prints. What is dropped
-    is the "after hitting" half: `c.hit_this_turn()` is the reader it wants
-    and it does not exist, which is a group of six rows.
+    **The "after hitting" half is written now, and this row had already
+    worked out where it belongs.** The note above is right that it is "a
+    condition on taking the action", which is exactly what `requires=` is
+    -- so the only thing missing was the reader, and it existed:
+    `monsters/level_05/lurkers_sa._landed_with` has been walking
+    `world.bus.log` as a `requires=` gate all along.
+
+    `query.my_hits_this_turn` is that walk, shared, and the melee half is
+    the hit's own power header. Six rows said this fact was unrecorded;
+    none of them was right. #576.
     """
     c.shift(1)
 

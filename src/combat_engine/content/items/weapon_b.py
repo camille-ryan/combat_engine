@@ -366,6 +366,36 @@ def _square_of(c: Cast, who: int):  # noqa: ANN202
     return pos.square if pos is not None else None
 
 
+def _my_weapon_hits(c: Cast) -> list[Any]:
+    """The weapon blows this wielder has landed since its turn began,
+    oldest first.
+
+    `query.my_hits_this_turn` is the shared log walk; `Keyword.WEAPON` on
+    the hit's own power header is the "with a weapon" half, which is what
+    the card names rather than what `Gear` is holding.
+    """
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.query import my_hits_this_turn
+
+    return [
+        hit for hit in my_hits_this_turn(c.world, c.me)
+        if (row := get(hit.power)) is not None and Keyword.WEAPON in row.keywords
+    ]
+
+
+def _hit_a_weapon_blow_this_turn(world: World, eid: int) -> bool:
+    """The same question as a `requires=`, which is handed `(world, eid)`
+    rather than a `Cast`."""
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.query import my_hits_this_turn
+
+    for hit in my_hits_this_turn(world, eid):
+        row = get(hit.power)
+        if row is not None and Keyword.WEAPON in row.keywords:
+            return True
+    return False
+
+
 def _free_beside(c: Cast, who: int) -> list[Any]:
     """Empty squares next to a creature, for a row that names one."""
     here = _square_of(c, who)
@@ -3154,16 +3184,37 @@ def i3150p1(c: Cast) -> None:
     reach=CloseBurst(5),
     target=Target(side="ally", count=2),
     keywords=[Keyword.TELEPORTATION],
-    dropped=("c.hit_this_turn()",),
+    requires=_hit_a_weapon_blow_this_turn,
+    requires_text="you must have hit an enemy with a weapon this turn",
 )
 def i3151p1(c: Cast) -> None:
-    """The Requirement -- you must already have hit somebody this turn --
-    is a fact about the turn that nothing records, so the row is freely
-    usable and the enemy is chosen rather than remembered."""
-    foes = c.enemies()
-    if not foes:
+    """Both halves hang on the same remembered blow, and both are written
+    now.
+
+    The note this replaces said the turn's hits were "a fact about
+    nothing records, so the row is freely usable and the enemy is chosen
+    rather than remembered". The log records it --
+    `query.my_hits_this_turn` -- and the difference matters twice over:
+    the Requirement was unenforced, **and** `c.choose` was picking any
+    enemy where the card says *"the enemy you hit this turn"*. A free
+    choice is strictly better than the printed line, since the remembered
+    enemy may be the inconvenient one.
+
+    **The most recent hit, not the first.** The card's "the enemy you hit
+    this turn" is singular and the reader returns them oldest-first, so a
+    turn with two blows takes the last -- the one the wielder just landed,
+    which is what the sentence means when it is read beside a move
+    action.
+
+    "With this weapon" is as narrow as the engine can be here: the hit's
+    power carries `Keyword.WEAPON`, and which *weapon* swung is not on the
+    event. The wielder is holding this one -- it is the item's own power --
+    so the only reading this misses is a character with a second weapon
+    who hit with that instead. Named rather than silently widened."""
+    hits = _my_weapon_hits(c)
+    if not hits:
         return
-    foe = c.choose(foes, "who the allies arrive beside")
+    foe = hits[-1].target
     spots = _free_beside(c, foe)
     if spots and c.target is not None:
         c.teleport(20, who=c.target, to=spots[0])

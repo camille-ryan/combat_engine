@@ -44,6 +44,85 @@ if TYPE_CHECKING:
     from .ecs import World
 
 
+def since_turn_began(world: World, eid: int) -> list[Any]:
+    """Everything that has happened since this creature's own turn began.
+
+    **The log is the only record of what a creature has done or had done to
+    it.** Nothing on a creature remembers who hurt it or what it has
+    already hit, and a flag would need its own reset watch for a fact the
+    log already answers.
+
+    This module held **no log walk at all** before, which is why 63 content
+    files grew their own: 74 functions reach into `world.bus.log`, 21 of
+    them bounded exactly this way, and five helper names are defined in
+    more than one file -- `_hit_me_since_my_turn` in three. Each copy
+    re-derived the same two subtleties:
+
+    * the scan stops at **this creature's** `TurnStart`, not at any;
+    * a **ghost** turn does not count. A ghost turn is a dead creature's,
+      ticked so durations measured against it can end, so the branch is
+      unreachable for a creature actually using a row -- which is why one
+      of the three copies omitted it with no consequence. Kept here
+      because a shared reader should settle the question rather than leave
+      21 authors to flip a coin on it.
+
+    Oldest first, so a caller reading "the enemy you hit this turn" gets
+    them in the order they happened.
+    """
+    from .events import TurnStart
+
+    out: list[Any] = []
+    for past in reversed(world.bus.log):
+        if isinstance(past, TurnStart) and past.actor == eid and not past.ghost:
+            break
+        out.append(past)
+    out.reverse()
+    return out
+
+
+def my_hits_this_turn(world: World, eid: int) -> list[Any]:
+    """Every blow this creature has landed since its own turn began.
+
+    The reader for "you must have hit an enemy during this turn", which
+    three rows print and six rows' docstrings each claimed was unrecorded.
+    It was recorded all along -- `monsters/level_05/lurkers_sa._landed_with`
+    has been doing it as a `requires=` gate -- just not anywhere another
+    row could reach.
+
+    **Returns the hits, not a yes or no**, because the cards need more than
+    the Requirement: `i3151p1` teleports allies *"adjacent to the enemy you
+    hit this turn"*, so it needs the victim, and `p15928` narrows to "a
+    weapon attack", so it needs each hit's power to ask its header. A bool
+    would have served one row of the three.
+    """
+    from .events import Hit
+
+    return [e for e in since_turn_began(world, eid)
+            if isinstance(e, Hit) and e.attacker == eid]
+
+
+def hit_me_this_turn(world: World, eid: int) -> set[int]:
+    """Who has landed a blow on this creature since its turn began.
+
+    The mirror of `my_hits_this_turn`, and the one that already existed --
+    three times, in `monsters/level_04/lurkers_sa`,
+    `monsters/level_04/skirmishers_sa` and `monsters/level_12/soldiers_sa`,
+    each as a private `_hit_me_since_my_turn`.
+
+    **Ask it inside the gate, never when the action is spent.** A creature
+    spends a minor action before being hit as often as after, so a set
+    taken early is stale the moment anybody lands a blow -- the point
+    `soldiers_sa`'s copy makes and the reason this is a function rather
+    than something cached.
+    """
+    from .events import Hit
+
+    return {
+        e.attacker for e in since_turn_began(world, eid)
+        if isinstance(e, Hit) and e.target == eid
+    }
+
+
 def creatures(world: World) -> list[int]:
     """Everything that can be targeted, flanked, covered or walked around.
 
