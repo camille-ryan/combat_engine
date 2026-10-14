@@ -103,6 +103,14 @@ CHECKS = (
     # its header, so this is most of what can be wrong with one.
     Instrument("cards", ("uv", "run", "scripts/cards.py", "--quiet"),
                "every monster header says the numbers its stat block prints"),
+    # **The third of the same question, and the one nothing asked.** `bonuses`
+    # compares a printed bonus type, `cards` a stat block's numbers; a power's
+    # printed *keyword list* was hand-declared against nothing. `cards` has the
+    # right shape for it and only ever reads a damage type, so a row with no
+    # `damage=` returned before the keywords were looked at. Half a second: an
+    # import of `content/` and two queries. #486.
+    Instrument("keywords", ("uv", "run", "scripts/keywords.py", "--quiet"),
+               "every header declares the keywords its card printed"),
     # **Added because its new half caught a real fork on its first run**, and
     # because nothing else asks this question: a leg's fork decides which rows a
     # character is offered and which race scores best in a draw, and until

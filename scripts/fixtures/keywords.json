@@ -1,0 +1,2176 @@
+{
+ "omits": {
+  "i1005p1": [
+   "augmentable"
+  ],
+  "i1055p1": [
+   "augmentable"
+  ],
+  "i1096p1": [
+   "augmentable"
+  ],
+  "i1175p1": [
+   "augmentable"
+  ],
+  "i1198p1": [
+   "augmentable"
+  ],
+  "i1258p1": [
+   "augmentable"
+  ],
+  "i1324p1": [
+   "augmentable"
+  ],
+  "i1397p1": [
+   "augmentable"
+  ],
+  "i1423p1": [
+   "augmentable"
+  ],
+  "i1494p1": [
+   "augmentable"
+  ],
+  "i1583p1": [
+   "spirit"
+  ],
+  "i1595p1": [
+   "psychic"
+  ],
+  "i1618p1": [
+   "augmentable"
+  ],
+  "i1654p1": [
+   "augmentable"
+  ],
+  "i1674p1": [
+   "augmentable"
+  ],
+  "i1953p1": [
+   "augmentable"
+  ],
+  "i1967p1": [
+   "augmentable"
+  ],
+  "i1970p1": [
+   "augmentable"
+  ],
+  "i1993p1": [
+   "augmentable"
+  ],
+  "i1994p1": [
+   "augmentable"
+  ],
+  "i1995p1": [
+   "augmentable"
+  ],
+  "i1997p1": [
+   "augmentable"
+  ],
+  "i2046p1": [
+   "augmentable"
+  ],
+  "i2108p1": [
+   "augmentable"
+  ],
+  "i2109p1": [
+   "augmentable"
+  ],
+  "i2435p1": [
+   "augmentable"
+  ],
+  "i2445p1": [
+   "augmentable"
+  ],
+  "i2460p1": [
+   "augmentable"
+  ],
+  "i2596p1": [
+   "augmentable"
+  ],
+  "i2598p1": [
+   "augmentable"
+  ],
+  "i2619p1": [
+   "augmentable"
+  ],
+  "i2621p1": [
+   "augmentable"
+  ],
+  "i2624p1": [
+   "augmentable"
+  ],
+  "i2639p1": [
+   "augmentable"
+  ],
+  "i2645p1": [
+   "augmentable"
+  ],
+  "i2870p1": [
+   "augmentable"
+  ],
+  "i2871p1": [
+   "augmentable"
+  ],
+  "i510p1": [
+   "augmentable"
+  ],
+  "i530p1": [
+   "augmentable"
+  ],
+  "i550p1": [
+   "augmentable"
+  ],
+  "i632p1": [
+   "spirit"
+  ],
+  "i689p1": [
+   "augmentable"
+  ],
+  "i730p1": [
+   "augmentable"
+  ],
+  "i782p1": [
+   "augmentable"
+  ],
+  "p10070": [
+   "evocation"
+  ],
+  "p10071": [
+   "evocation"
+  ],
+  "p10073": [
+   "enchantment"
+  ],
+  "p10138": [
+   "enchantment"
+  ],
+  "p10144": [
+   "evocation"
+  ],
+  "p10146": [
+   "enchantment"
+  ],
+  "p10274": [
+   "augmentable"
+  ],
+  "p10275": [
+   "augmentable"
+  ],
+  "p10276": [
+   "augmentable"
+  ],
+  "p10281": [
+   "augmentable"
+  ],
+  "p10282": [
+   "augmentable"
+  ],
+  "p10287": [
+   "augmentable"
+  ],
+  "p10288": [
+   "augmentable",
+   "weapon"
+  ],
+  "p10417": [
+   "evocation"
+  ],
+  "p10419": [
+   "evocation"
+  ],
+  "p10421": [
+   "evocation"
+  ],
+  "p10438": [
+   "augmentable"
+  ],
+  "p10705": [
+   "weapon"
+  ],
+  "p10737": [
+   "rattling"
+  ],
+  "p10749": [
+   "rattling"
+  ],
+  "p10756": [
+   "rattling"
+  ],
+  "p10766": [
+   "rattling"
+  ],
+  "p10767": [
+   "rattling"
+  ],
+  "p10774": [
+   "rattling"
+  ],
+  "p11030": [
+   "evocation"
+  ],
+  "p11031": [
+   "evocation"
+  ],
+  "p11033": [
+   "evocation"
+  ],
+  "p11034": [
+   "evocation"
+  ],
+  "p11036": [
+   "evocation"
+  ],
+  "p11037": [
+   "evocation"
+  ],
+  "p11061": [
+   "augmentable"
+  ],
+  "p11062": [
+   "augmentable"
+  ],
+  "p11069": [
+   "augmentable"
+  ],
+  "p11070": [
+   "augmentable"
+  ],
+  "p11104": [
+   "augmentable"
+  ],
+  "p11105": [
+   "augmentable"
+  ],
+  "p11106": [
+   "augmentable"
+  ],
+  "p11156": [
+   "augmentable"
+  ],
+  "p11157": [
+   "augmentable"
+  ],
+  "p11163": [
+   "augmentable"
+  ],
+  "p11164": [
+   "augmentable"
+  ],
+  "p11169": [
+   "augmentable"
+  ],
+  "p11170": [
+   "augmentable"
+  ],
+  "p11171": [
+   "augmentable"
+  ],
+  "p11208": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11208b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11210": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11210b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11212": [
+   "psionic"
+  ],
+  "p11213": [
+   "psionic"
+  ],
+  "p11214": [
+   "psionic"
+  ],
+  "p11216": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11216b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11218": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11218b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11220": [
+   "psionic"
+  ],
+  "p11221": [
+   "psionic"
+  ],
+  "p11223": [
+   "psionic"
+  ],
+  "p11224": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11224b": [
+   "full discipline"
+  ],
+  "p11226": [
+   "full discipline",
+   "psionic"
+  ],
+  "p11226b": [
+   "full discipline"
+  ],
+  "p11228": [
+   "psionic"
+  ],
+  "p11229": [
+   "psionic"
+  ],
+  "p11231": [
+   "psionic"
+  ],
+  "p11232": [
+   "psionic"
+  ],
+  "p11269": [
+   "augmentable"
+  ],
+  "p11270": [
+   "augmentable"
+  ],
+  "p11275": [
+   "augmentable"
+  ],
+  "p11276": [
+   "augmentable"
+  ],
+  "p11282": [
+   "summoning"
+  ],
+  "p11288": [
+   "summoning"
+  ],
+  "p11296": [
+   "summoning"
+  ],
+  "p11319": [
+   "augmentable"
+  ],
+  "p11320": [
+   "augmentable"
+  ],
+  "p11353": [
+   "runic"
+  ],
+  "p11354": [
+   "runic"
+  ],
+  "p11355": [
+   "runic"
+  ],
+  "p11356": [
+   "runic"
+  ],
+  "p11357": [
+   "spirit"
+  ],
+  "p11358": [
+   "spirit"
+  ],
+  "p11360": [
+   "spirit"
+  ],
+  "p11363": [
+   "spirit"
+  ],
+  "p11364": [
+   "spirit"
+  ],
+  "p11365": [
+   "spirit"
+  ],
+  "p11368": [
+   "runic"
+  ],
+  "p11369": [
+   "runic"
+  ],
+  "p11370": [
+   "runic"
+  ],
+  "p11371": [
+   "runic"
+  ],
+  "p11372": [
+   "runic"
+  ],
+  "p11382": [
+   "runic"
+  ],
+  "p11383": [
+   "runic"
+  ],
+  "p11384": [
+   "runic"
+  ],
+  "p11385": [
+   "runic"
+  ],
+  "p11394": [
+   "runic"
+  ],
+  "p11394b": [
+   "runic"
+  ],
+  "p11396": [
+   "runic"
+  ],
+  "p11397": [
+   "runic"
+  ],
+  "p11398": [
+   "runic"
+  ],
+  "p1164": [
+   "evocation"
+  ],
+  "p1166": [
+   "evocation"
+  ],
+  "p1167": [
+   "evocation"
+  ],
+  "p1169": [
+   "evocation"
+  ],
+  "p1171": [
+   "evocation"
+  ],
+  "p11840": [
+   "summoning"
+  ],
+  "p11841": [
+   "summoning"
+  ],
+  "p11842": [
+   "summoning"
+  ],
+  "p11843": [
+   "summoning"
+  ],
+  "p11844": [
+   "summoning"
+  ],
+  "p11845": [
+   "summoning"
+  ],
+  "p1195": [
+   "evocation"
+  ],
+  "p1217": [
+   "illusion"
+  ],
+  "p12419": [
+   "augmentable"
+  ],
+  "p12422": [
+   "augmentable"
+  ],
+  "p12425": [
+   "augmentable"
+  ],
+  "p12527": [
+   "spirit"
+  ],
+  "p12528": [
+   "spirit"
+  ],
+  "p12529": [
+   "spirit"
+  ],
+  "p12530": [
+   "spirit"
+  ],
+  "p12531": [
+   "spirit"
+  ],
+  "p12532": [
+   "spirit"
+  ],
+  "p12532b": [
+   "spirit"
+  ],
+  "p12534": [
+   "spirit"
+  ],
+  "p12547": [
+   "evocation"
+  ],
+  "p12548": [
+   "evocation"
+  ],
+  "p12601": [
+   "channel divinity"
+  ],
+  "p12638": [
+   "channel divinity"
+  ],
+  "p12651": [
+   "channel divinity"
+  ],
+  "p12732": [
+   "evocation"
+  ],
+  "p12733": [
+   "enchantment"
+  ],
+  "p12734": [
+   "evocation"
+  ],
+  "p12735": [
+   "enchantment"
+  ],
+  "p12740": [
+   "evocation"
+  ],
+  "p12742": [
+   "enchantment"
+  ],
+  "p12743": [
+   "enchantment"
+  ],
+  "p12744": [
+   "enchantment"
+  ],
+  "p12748": [
+   "enchantment"
+  ],
+  "p12865": [
+   "spirit"
+  ],
+  "p12866": [
+   "spirit"
+  ],
+  "p12867": [
+   "spirit"
+  ],
+  "p12868": [
+   "spirit"
+  ],
+  "p12869": [
+   "spirit"
+  ],
+  "p12870": [
+   "spirit"
+  ],
+  "p12871": [
+   "spirit"
+  ],
+  "p12871b": [
+   "spirit"
+  ],
+  "p12873": [
+   "spirit"
+  ],
+  "p12874": [
+   "spirit"
+  ],
+  "p12875": [
+   "spirit"
+  ],
+  "p12876": [
+   "spirit"
+  ],
+  "p12932": [
+   "augmentable"
+  ],
+  "p12933": [
+   "augmentable"
+  ],
+  "p12934": [
+   "augmentable"
+  ],
+  "p12935": [
+   "augmentable"
+  ],
+  "p12944": [
+   "augmentable"
+  ],
+  "p12945": [
+   "augmentable"
+  ],
+  "p12946": [
+   "augmentable"
+  ],
+  "p12947": [
+   "augmentable"
+  ],
+  "p12956": [
+   "augmentable"
+  ],
+  "p12957": [
+   "augmentable"
+  ],
+  "p12958": [
+   "augmentable"
+  ],
+  "p12959": [
+   "augmentable"
+  ],
+  "p13025": [
+   "augmentable"
+  ],
+  "p13026": [
+   "augmentable"
+  ],
+  "p13027": [
+   "augmentable"
+  ],
+  "p13028": [
+   "augmentable"
+  ],
+  "p13030": [
+   "augmentable"
+  ],
+  "p13039": [
+   "augmentable"
+  ],
+  "p13040": [
+   "augmentable"
+  ],
+  "p13041": [
+   "augmentable"
+  ],
+  "p13042": [
+   "augmentable"
+  ],
+  "p13051": [
+   "augmentable"
+  ],
+  "p13052": [
+   "augmentable"
+  ],
+  "p13053": [
+   "augmentable"
+  ],
+  "p13054": [
+   "augmentable"
+  ],
+  "p13124": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13124b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13126": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13126b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13128": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13128b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13130": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13130b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13132": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13132b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13134": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13134b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13136": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13136b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13138": [
+   "psionic"
+  ],
+  "p13139": [
+   "psionic"
+  ],
+  "p13140": [
+   "psionic"
+  ],
+  "p13141": [
+   "psionic"
+  ],
+  "p13141b": [
+   "psionic"
+  ],
+  "p13144": [
+   "psionic"
+  ],
+  "p13145": [
+   "psionic"
+  ],
+  "p13146": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13146b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13148": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13148b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13150": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13150b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13152": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13152b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13154": [
+   "psionic"
+  ],
+  "p13156": [
+   "psionic"
+  ],
+  "p13157": [
+   "psionic"
+  ],
+  "p13158": [
+   "psionic"
+  ],
+  "p13159": [
+   "psionic"
+  ],
+  "p13160": [
+   "psionic"
+  ],
+  "p13161": [
+   "psionic"
+  ],
+  "p13162": [
+   "psionic"
+  ],
+  "p13163": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13163b": [
+   "full discipline"
+  ],
+  "p13165": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13165b": [
+   "full discipline"
+  ],
+  "p13167": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13167b": [
+   "full discipline"
+  ],
+  "p13169": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13169b": [
+   "full discipline"
+  ],
+  "p13171": [
+   "psionic"
+  ],
+  "p13172": [
+   "psionic"
+  ],
+  "p13173": [
+   "psionic"
+  ],
+  "p13175": [
+   "psionic"
+  ],
+  "p13176": [
+   "psionic"
+  ],
+  "p13177": [
+   "psionic"
+  ],
+  "p13178": [
+   "psionic"
+  ],
+  "p13179": [
+   "psionic"
+  ],
+  "p13219": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13219b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13221": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13221b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13223": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13223b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13225": [
+   "full discipline",
+   "psionic"
+  ],
+  "p13225b": [
+   "full discipline"
+  ],
+  "p13302": [
+   "augmentable"
+  ],
+  "p13303": [
+   "augmentable"
+  ],
+  "p13305": [
+   "augmentable"
+  ],
+  "p13311": [
+   "augmentable",
+   "summoning"
+  ],
+  "p13317": [
+   "augmentable"
+  ],
+  "p13318": [
+   "augmentable"
+  ],
+  "p13319": [
+   "augmentable"
+  ],
+  "p13320b": [
+   "augmentable"
+  ],
+  "p13325": [
+   "augmentable",
+   "summoning"
+  ],
+  "p13331": [
+   "augmentable"
+  ],
+  "p13331b": [
+   "augmentable"
+  ],
+  "p13333": [
+   "augmentable"
+  ],
+  "p13334": [
+   "augmentable"
+  ],
+  "p13335": [
+   "augmentable"
+  ],
+  "p13341": [
+   "augmentable",
+   "summoning"
+  ],
+  "p13462": [
+   "augmentable"
+  ],
+  "p13462b": [
+   "augmentable"
+  ],
+  "p13466": [
+   "augmentable"
+  ],
+  "p13649": [
+   "summoning"
+  ],
+  "p13710": [
+   "channel divinity"
+  ],
+  "p13741": [
+   "transmutation"
+  ],
+  "p13742": [
+   "transmutation"
+  ],
+  "p13743": [
+   "transmutation"
+  ],
+  "p13771": [
+   "spirit"
+  ],
+  "p13780": [
+   "augmentable"
+  ],
+  "p13783": [
+   "augmentable"
+  ],
+  "p13817": [
+   "shadow"
+  ],
+  "p13818": [
+   "shadow"
+  ],
+  "p13820": [
+   "shadow"
+  ],
+  "p13821": [
+   "shadow"
+  ],
+  "p13822": [
+   "shadow"
+  ],
+  "p13823": [
+   "shadow"
+  ],
+  "p13824": [
+   "shadow"
+  ],
+  "p13825": [
+   "shadow"
+  ],
+  "p13826": [
+   "shadow"
+  ],
+  "p13827": [
+   "shadow"
+  ],
+  "p13837": [
+   "shadow"
+  ],
+  "p13843": [
+   "shadow"
+  ],
+  "p13877": [
+   "shadow"
+  ],
+  "p13878": [
+   "shadow"
+  ],
+  "p13879": [
+   "shadow"
+  ],
+  "p13880": [
+   "shadow"
+  ],
+  "p13882": [
+   "shadow"
+  ],
+  "p13883": [
+   "shadow"
+  ],
+  "p13883b": [
+   "shadow"
+  ],
+  "p13885": [
+   "shadow"
+  ],
+  "p13886": [
+   "shadow"
+  ],
+  "p13888": [
+   "shadow"
+  ],
+  "p13902": [
+   "shadow"
+  ],
+  "p13904": [
+   "shadow"
+  ],
+  "p13905": [
+   "shadow"
+  ],
+  "p13906": [
+   "shadow"
+  ],
+  "p13914": [
+   "shadow",
+   "zone"
+  ],
+  "p13915": [
+   "shadow"
+  ],
+  "p13916": [
+   "shadow"
+  ],
+  "p13922": [
+   "shadow"
+  ],
+  "p13923": [
+   "shadow"
+  ],
+  "p13924": [
+   "shadow"
+  ],
+  "p13926": [
+   "shadow"
+  ],
+  "p13927": [
+   "shadow"
+  ],
+  "p13928": [
+   "shadow"
+  ],
+  "p13929": [
+   "shadow"
+  ],
+  "p13930": [
+   "shadow"
+  ],
+  "p13931": [
+   "shadow"
+  ],
+  "p13939": [
+   "shadow"
+  ],
+  "p13940": [
+   "shadow"
+  ],
+  "p13941": [
+   "shadow"
+  ],
+  "p13942": [
+   "shadow"
+  ],
+  "p13943": [
+   "channel divinity",
+   "shadow"
+  ],
+  "p13944": [
+   "shadow"
+  ],
+  "p13945": [
+   "shadow"
+  ],
+  "p13952": [
+   "shadow"
+  ],
+  "p13952b": [
+   "shadow"
+  ],
+  "p13955": [
+   "shadow"
+  ],
+  "p13956": [
+   "shadow"
+  ],
+  "p13957": [
+   "shadow"
+  ],
+  "p13970": [
+   "necromancy"
+  ],
+  "p13971": [
+   "nethermancy"
+  ],
+  "p13972": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13973": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13974": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13975": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13976": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13977": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13978": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13979": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13980": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13982": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13983": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13985": [
+   "shadow"
+  ],
+  "p13986": [
+   "shadow"
+  ],
+  "p13987": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13988": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13988b": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13990": [
+   "necromancy",
+   "shadow"
+  ],
+  "p13991": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p13992": [
+   "shadow"
+  ],
+  "p13993": [
+   "nethermancy",
+   "shadow"
+  ],
+  "p14231": [
+   "channel divinity"
+  ],
+  "p1424": [
+   "evocation"
+  ],
+  "p14245": [
+   "channel divinity"
+  ],
+  "p14262": [
+   "channel divinity"
+  ],
+  "p14275": [
+   "channel divinity"
+  ],
+  "p14292": [
+   "channel divinity"
+  ],
+  "p14293": [
+   "channel divinity"
+  ],
+  "p14293b": [
+   "channel divinity"
+  ],
+  "p1430": [
+   "evocation"
+  ],
+  "p1435": [
+   "evocation"
+  ],
+  "p14538": [
+   "transmutation"
+  ],
+  "p14539": [
+   "evocation"
+  ],
+  "p14541": [
+   "evocation"
+  ],
+  "p14542": [
+   "nethermancy"
+  ],
+  "p14543": [
+   "enchantment"
+  ],
+  "p14544": [
+   "enchantment"
+  ],
+  "p14545": [
+   "enchantment"
+  ],
+  "p14549": [
+   "evocation"
+  ],
+  "p14550": [
+   "nethermancy"
+  ],
+  "p14551": [
+   "transmutation"
+  ],
+  "p14552": [
+   "transmutation"
+  ],
+  "p14559": [
+   "enchantment"
+  ],
+  "p14560": [
+   "enchantment"
+  ],
+  "p14561": [
+   "transmutation"
+  ],
+  "p146": [
+   "channel divinity"
+  ],
+  "p1530": [
+   "evocation"
+  ],
+  "p1553": [
+   "evocation"
+  ],
+  "p15885": [
+   "summoning"
+  ],
+  "p1589": [
+   "channel divinity"
+  ],
+  "p159": [
+   "evocation"
+  ],
+  "p15905": [
+   "zone"
+  ],
+  "p15983": [
+   "psionic"
+  ],
+  "p15984": [
+   "full discipline",
+   "psionic"
+  ],
+  "p15984b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p15986": [
+   "psionic"
+  ],
+  "p15987": [
+   "full discipline",
+   "psionic"
+  ],
+  "p15987b": [
+   "full discipline"
+  ],
+  "p15989": [
+   "psionic"
+  ],
+  "p15990": [
+   "runic"
+  ],
+  "p16081": [
+   "elemental"
+  ],
+  "p16082": [
+   "elemental"
+  ],
+  "p16083": [
+   "elemental"
+  ],
+  "p16084": [
+   "elemental"
+  ],
+  "p16085": [
+   "elemental"
+  ],
+  "p16086": [
+   "elemental"
+  ],
+  "p16087": [
+   "elemental"
+  ],
+  "p16088": [
+   "elemental"
+  ],
+  "p16093": [
+   "elemental"
+  ],
+  "p16094": [
+   "elemental"
+  ],
+  "p16095": [
+   "elemental"
+  ],
+  "p16096": [
+   "elemental"
+  ],
+  "p16097": [
+   "elemental"
+  ],
+  "p16098": [
+   "elemental"
+  ],
+  "p16099": [
+   "elemental"
+  ],
+  "p16118": [
+   "elemental"
+  ],
+  "p16119": [
+   "elemental"
+  ],
+  "p16120": [
+   "elemental"
+  ],
+  "p16121": [
+   "elemental"
+  ],
+  "p16122": [
+   "elemental"
+  ],
+  "p16123": [
+   "elemental"
+  ],
+  "p16133": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16133b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16135": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16135b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16137": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16137b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16139": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16139b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16141": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16141b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16143": [
+   "elemental",
+   "psionic"
+  ],
+  "p16144": [
+   "elemental",
+   "psionic"
+  ],
+  "p16145": [
+   "elemental",
+   "psionic"
+  ],
+  "p16146": [
+   "psionic"
+  ],
+  "p16147": [
+   "psionic"
+  ],
+  "p16147b": [
+   "psionic"
+  ],
+  "p16149": [
+   "psionic"
+  ],
+  "p16150": [
+   "full discipline",
+   "psionic"
+  ],
+  "p16150b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p16152": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16152b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16154": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16154b": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16156": [
+   "psionic"
+  ],
+  "p16158": [
+   "psionic"
+  ],
+  "p16159": [
+   "elemental",
+   "psionic"
+  ],
+  "p16160": [
+   "psionic"
+  ],
+  "p16161": [
+   "psionic"
+  ],
+  "p16162": [
+   "psionic"
+  ],
+  "p16163": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16163b": [
+   "full discipline"
+  ],
+  "p16166": [
+   "elemental",
+   "full discipline",
+   "psionic"
+  ],
+  "p16166b": [
+   "full discipline"
+  ],
+  "p16168": [
+   "full discipline",
+   "psionic"
+  ],
+  "p16168b": [
+   "full discipline"
+  ],
+  "p16170": [
+   "elemental",
+   "psionic"
+  ],
+  "p16171": [
+   "psionic"
+  ],
+  "p16173": [
+   "elemental",
+   "psionic"
+  ],
+  "p16174": [
+   "elemental",
+   "psionic"
+  ],
+  "p16175": [
+   "elemental",
+   "psionic"
+  ],
+  "p16176": [
+   "psionic"
+  ],
+  "p16236": [
+   "elemental"
+  ],
+  "p16237": [
+   "elemental"
+  ],
+  "p16239": [
+   "elemental"
+  ],
+  "p16242": [
+   "elemental"
+  ],
+  "p16243": [
+   "elemental"
+  ],
+  "p16245": [
+   "elemental"
+  ],
+  "p16246": [
+   "elemental"
+  ],
+  "p16248": [
+   "elemental"
+  ],
+  "p16256": [
+   "elemental"
+  ],
+  "p16261": [
+   "elemental"
+  ],
+  "p16262": [
+   "elemental"
+  ],
+  "p16263": [
+   "elemental"
+  ],
+  "p16265": [
+   "elemental"
+  ],
+  "p16266": [
+   "elemental"
+  ],
+  "p16274": [
+   "evocation"
+  ],
+  "p16275": [
+   "evocation"
+  ],
+  "p16276": [
+   "transmutation"
+  ],
+  "p16277": [
+   "transmutation"
+  ],
+  "p16280": [
+   "evocation"
+  ],
+  "p16281": [
+   "evocation"
+  ],
+  "p16281b": [
+   "evocation"
+  ],
+  "p16285": [
+   "necromancy",
+   "shadow"
+  ],
+  "p16288": [
+   "evocation"
+  ],
+  "p16288b": [
+   "evocation"
+  ],
+  "p16350": [
+   "shadow"
+  ],
+  "p16391": [
+   "elemental"
+  ],
+  "p16392": [
+   "elemental"
+  ],
+  "p16394": [
+   "elemental"
+  ],
+  "p16397": [
+   "elemental"
+  ],
+  "p16398": [
+   "elemental"
+  ],
+  "p16399": [
+   "elemental"
+  ],
+  "p16400": [
+   "elemental"
+  ],
+  "p16415": [
+   "channel divinity"
+  ],
+  "p16418": [
+   "shadow"
+  ],
+  "p16419": [
+   "shadow"
+  ],
+  "p16420": [
+   "shadow"
+  ],
+  "p16421": [
+   "shadow"
+  ],
+  "p16422": [
+   "shadow"
+  ],
+  "p16438": [
+   "augmentable"
+  ],
+  "p16439": [
+   "augmentable"
+  ],
+  "p16440": [
+   "augmentable"
+  ],
+  "p16501": [
+   "spirit"
+  ],
+  "p16571": [
+   "transmutation"
+  ],
+  "p16588": [
+   "evocation"
+  ],
+  "p173": [
+   "evocation"
+  ],
+  "p185": [
+   "evocation"
+  ],
+  "p189": [
+   "evocation"
+  ],
+  "p191": [
+   "evocation"
+  ],
+  "p192": [
+   "evocation"
+  ],
+  "p2248": [
+   "rattling"
+  ],
+  "p2253": [
+   "rattling"
+  ],
+  "p2266": [
+   "rattling"
+  ],
+  "p2272": [
+   "evocation"
+  ],
+  "p2284": [
+   "rattling"
+  ],
+  "p2286": [
+   "rattling"
+  ],
+  "p2351": [
+   "evocation"
+  ],
+  "p2375": [
+   "evocation"
+  ],
+  "p2399": [
+   "rattling"
+  ],
+  "p2509": [
+   "rattling"
+  ],
+  "p251": [
+   "evocation"
+  ],
+  "p2521": [
+   "rattling"
+  ],
+  "p2621": [
+   "augmentable"
+  ],
+  "p2622": [
+   "augmentable"
+  ],
+  "p2626": [
+   "augmentable"
+  ],
+  "p2627": [
+   "augmentable"
+  ],
+  "p2628": [
+   "augmentable"
+  ],
+  "p2634": [
+   "augmentable"
+  ],
+  "p2635": [
+   "augmentable"
+  ],
+  "p2816": [
+   "evocation"
+  ],
+  "p2880": [
+   "summoning"
+  ],
+  "p3314": [
+   "summoning"
+  ],
+  "p3778": [
+   "spirit"
+  ],
+  "p3780": [
+   "spirit"
+  ],
+  "p3784": [
+   "spirit"
+  ],
+  "p3786": [
+   "spirit"
+  ],
+  "p3789": [
+   "spirit"
+  ],
+  "p3795": [
+   "spirit"
+  ],
+  "p3796": [
+   "spirit"
+  ],
+  "p380": [
+   "illusion"
+  ],
+  "p4016": [
+   "summoning"
+  ],
+  "p4019": [
+   "evocation"
+  ],
+  "p4022": [
+   "evocation"
+  ],
+  "p4025": [
+   "evocation"
+  ],
+  "p4028": [
+   "evocation"
+  ],
+  "p4078": [
+   "summoning"
+  ],
+  "p4082": [
+   "summoning"
+  ],
+  "p4084": [
+   "evocation"
+  ],
+  "p4106": [
+   "summoning"
+  ],
+  "p4112": [
+   "summoning"
+  ],
+  "p4117": [
+   "summoning"
+  ],
+  "p4141": [
+   "summoning"
+  ],
+  "p4148": [
+   "summoning"
+  ],
+  "p416": [
+   "necromancy"
+  ],
+  "p419": [
+   "evocation"
+  ],
+  "p4309": [
+   "evocation"
+  ],
+  "p435": [
+   "evocation"
+  ],
+  "p4488": [
+   "rattling"
+  ],
+  "p4490": [
+   "rattling"
+  ],
+  "p451": [
+   "enchantment"
+  ],
+  "p454": [
+   "evocation"
+  ],
+  "p463": [
+   "evocation"
+  ],
+  "p464": [
+   "evocation"
+  ],
+  "p464b": [
+   "evocation"
+  ],
+  "p465": [
+   "evocation"
+  ],
+  "p465b": [
+   "evocation"
+  ],
+  "p480": [
+   "evocation"
+  ],
+  "p5366": [
+   "summoning"
+  ],
+  "p5367": [
+   "summoning"
+  ],
+  "p5369": [
+   "summoning"
+  ],
+  "p5371": [
+   "summoning"
+  ],
+  "p5373": [
+   "summoning"
+  ],
+  "p5374": [
+   "summoning"
+  ],
+  "p5375": [
+   "summoning"
+  ],
+  "p5377": [
+   "summoning"
+  ],
+  "p5388": [
+   "spirit"
+  ],
+  "p5389": [
+   "spirit"
+  ],
+  "p5396": [
+   "spirit"
+  ],
+  "p5436": [
+   "spirit"
+  ],
+  "p5438": [
+   "spirit"
+  ],
+  "p5440": [
+   "spirit"
+  ],
+  "p5445": [
+   "spirit"
+  ],
+  "p5454": [
+   "spirit"
+  ],
+  "p5510": [
+   "spirit"
+  ],
+  "p5537": [
+   "spirit"
+  ],
+  "p5538": [
+   "spirit"
+  ],
+  "p5545": [
+   "spirit"
+  ],
+  "p5799": [
+   "evocation"
+  ],
+  "p5800": [
+   "evocation"
+  ],
+  "p5801": [
+   "evocation"
+  ],
+  "p5803": [
+   "evocation"
+  ],
+  "p5804": [
+   "evocation"
+  ],
+  "p5806": [
+   "evocation"
+  ],
+  "p6521": [
+   "spirit"
+  ],
+  "p6593": [
+   "rattling"
+  ],
+  "p6903": [
+   "evocation"
+  ],
+  "p6945": [
+   "spirit"
+  ],
+  "p6958": [
+   "necromancy"
+  ],
+  "p6959": [
+   "necromancy",
+   "summoning"
+  ],
+  "p7406": [
+   "evocation"
+  ],
+  "p7414": [
+   "summoning"
+  ],
+  "p7449": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7449b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7450": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7450b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7452": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7452b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7453": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7453b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7454": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7454b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7455": [
+   "psionic"
+  ],
+  "p7456": [
+   "psionic"
+  ],
+  "p7457": [
+   "psionic"
+  ],
+  "p7458": [
+   "psionic"
+  ],
+  "p7459": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7459b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7460": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7460b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7461": [
+   "psionic"
+  ],
+  "p7462": [
+   "psionic"
+  ],
+  "p7463": [
+   "psionic"
+  ],
+  "p7464": [
+   "psionic"
+  ],
+  "p7465": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7465b": [
+   "full discipline"
+  ],
+  "p7466": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7466b": [
+   "full discipline"
+  ],
+  "p7467": [
+   "psionic"
+  ],
+  "p7468": [
+   "psionic"
+  ],
+  "p7469": [
+   "psionic"
+  ],
+  "p7470": [
+   "psionic"
+  ],
+  "p750": [
+   "teleportation"
+  ],
+  "p7510": [
+   "evocation"
+  ],
+  "p7535": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7535b": [
+   "full discipline",
+   "psionic"
+  ],
+  "p7641": [
+   "summoning"
+  ],
+  "p7650": [
+   "summoning"
+  ],
+  "p7657": [
+   "summoning"
+  ],
+  "p8226": [
+   "augmentable"
+  ],
+  "p8227": [
+   "augmentable"
+  ],
+  "p8228": [
+   "augmentable"
+  ],
+  "p8233": [
+   "augmentable"
+  ],
+  "p8234": [
+   "augmentable"
+  ],
+  "p8239": [
+   "augmentable"
+  ],
+  "p8240": [
+   "augmentable"
+  ],
+  "p9655": [
+   "summoning"
+  ],
+  "p9732": [
+   "spirit"
+  ],
+  "p9733": [
+   "spirit"
+  ],
+  "p9734": [
+   "spirit"
+  ],
+  "p9736": [
+   "spirit"
+  ],
+  "p9738": [
+   "spirit"
+  ],
+  "p9739": [
+   "spirit"
+  ],
+  "p9744": [
+   "spirit"
+  ],
+  "p9745": [
+   "spirit"
+  ],
+  "p9749": [
+   "spirit"
+  ],
+  "p9750": [
+   "spirit"
+  ],
+  "p9751": [
+   "spirit"
+  ],
+  "p9753": [
+   "spirit"
+  ],
+  "p9758": [
+   "spirit"
+  ],
+  "p9760": [
+   "spirit"
+  ],
+  "p9761": [
+   "spirit"
+  ],
+  "p9762": [
+   "spirit"
+  ],
+  "p9764": [
+   "spirit"
+  ]
+ }
+}
