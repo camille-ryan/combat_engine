@@ -60,6 +60,24 @@ CHECKS = (
                "every ref a row's prose names resolves to something"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
+    # **The instrument that says whether the one above means anything**, and it
+    # was missing. `audit` reported silent 193 -> 107 at `65421a0` and all 86
+    # of the difference was credited with one event the rows cannot emit --
+    # `f139`, whose whole body is `c.bonus("range", 5)`, was credited with
+    # setting a relation. A 17-instrument sweep ran clean through it; this
+    # caught it in **seconds**, and nothing was running it.
+    #
+    # Worse than missing it: `audit`'s baseline only went red because the
+    # number *improved*, so re-recording would have made the artifact
+    # permanent and every later sweep green. That is the shape
+    # `scripts/CLAUDE.md` warns about -- "a check that cannot pass is the same
+    # failure pointed the other way" -- arriving from the other side.
+    #
+    # Cheap enough to be unconditional: ten pinned rows, each run twice
+    # (as written and `hollowed`), seconds. `VERDICT_KNOWN` carries the one
+    # standing failure by name so this is a gate and not an allowance. #578.
+    Instrument("verdicts", ("uv", "run", "scripts/audit.py", "--verdicts"),
+               "the verdict itself is honest, on rows whose answer is known"),
     Instrument("leaks", ("uv", "run", "scripts/leaks.py"),
                "no printed name reached the tree"),
     Instrument("specs", ("uv", "run", "scripts/leaks.py", "--specs"),

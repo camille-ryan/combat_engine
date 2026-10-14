@@ -3257,6 +3257,34 @@ VERDICT_SILENT = (
     "f139",
 )
 
+#: The one pinned row that does **not** verdict correctly, named so the rest
+#: can be a gate. Red if it heals, red if anything joins it; see the `--verdicts`
+#: branch in `main`.
+#:
+#: `p14262`'s whole content is in its body, so hollowing it should take all its
+#: credit away and the fixture is a fair one. It keeps `ConditionApplied,
+#: EffectApplied` because an **item's properties arm inside its own use** --
+#: driven by hand, `i561x1 ac+2` and `i561x1 fort+2`, at a depth *below* the
+#: row's own `PowerUsed`.
+#:
+#: Two mechanisms were tried against it and both are measured failures, which
+#: is why this entry exists rather than a fix:
+#:
+#: * **depth** keeps them, because deeper is the signature of a row's own
+#:   nested work -- that is what `_after_its_own_use` is for;
+#: * **label** loses 23 real rows. `startswith(ref)` is not sound: `c.ongoing`
+#:   labels `"ongoing 5"`, `c.deals` labels `"deals:fire:weapon"`, one monster
+#:   file labels `"{entity}:{ref}"`, and several rows use prose. The trait
+#:   branch's "an effect's label is the ref of the row that laid it" is true of
+#:   `c.effect`, `c.bonus` and `c.condition` and false of those.
+#:
+#: The fix wants a dedicated field on the effect carrying the laying row's ref,
+#: which is an engine change. #579.
+VERDICT_KNOWN = {
+    "p14262": "an item's properties arm inside its own use; neither depth nor "
+              "label can attribute them -- #579",
+}
+
 
 def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
     """Check the verdict against rows whose right answer is known.
@@ -3600,11 +3628,33 @@ def main() -> int:
 
     if args.verdicts:
         wrong = verdicts()
-        for line in wrong:
+        # **A named baseline, not a bare allowance**, which is what lets this
+        # go into `check.py` at all. The same shape as `cards.KNOWN`,
+        # `leaks.DEFERRED` and `localise.KNOWN_LABEL_DRIFT`: a new complaint
+        # is red, and a *healed* one is red too, so the list can only be
+        # tightened. `scripts/CLAUDE.md` forbids the version of this that
+        # just raises a number until it passes.
+        seen = {
+            ref for ref in VERDICT_KNOWN
+            if any(line.startswith(ref) for line in wrong)
+        }
+        fresh = [
+            line for line in wrong
+            if not any(line.startswith(r) for r in VERDICT_KNOWN)
+        ]
+        healed = sorted(set(VERDICT_KNOWN) - seen)
+        for line in fresh:
             print(f"  FAIL  {line}")
+        for line in wrong:
+            if line not in fresh:
+                print(f"  known {line}")
+        for ref in healed:
+            print(f"  FAIL  {ref} verdicts correctly now -- take it out of "
+                  f"VERDICT_KNOWN; the list may only shrink")
         total = len(VERDICT_ROWS) + len(VERDICT_SILENT)
-        print(f"\n{total - len(wrong)} of {total} pinned rows verdict correctly")
-        return 1 if wrong else 0
+        print(f"\n{total - len(wrong)} of {total} pinned rows verdict correctly"
+              + (f", {len(wrong) - len(fresh)} known" if wrong != fresh else ""))
+        return 1 if (fresh or healed) else 0
 
     mark = _mark()
     full = not (args.refs or args.calls or args.changed or args.since
