@@ -1296,13 +1296,27 @@ def f1392(c: Cast) -> None:
 
 
 @power("f1393", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.extend_move(any_of=)",))
+       reach=PERSONAL, target=SELF)
 def f1393(c: Cast) -> None:
     """One extra square on every shift and every teleport a power grants.
-    Both are distances a row names when it moves you; nothing lengthens
-    one from the outside, and twelve rows between the two symbols want
-    it."""
+
+    The plainest of the eight rows `c.extend_every` was built for -- two
+    clauses, no gate on either, and the card's "whenever **one of your
+    powers** lets you" is the verb's own scope rather than a condition:
+    the squares are read inside `c.shift` and `c.teleport`, which are
+    only ever reached from a row's body.
+
+    **Two calls, not one.** The two kinds do not pool -- a shift is
+    lengthened by the shift clause and nothing else -- which is the
+    distinction the old `any_of` symbol could not draw and the reason it
+    sat on this row rather than being written around.
+
+    The ritual clause has no combat meaning. It takes no marker: the
+    `narrative=` vocabulary is `skill:` only, and `f1394` below shows the
+    shape for a card that is *entirely* out of combat, which this is
+    not."""
+    c.extend_every("shift", 1)
+    c.extend_every("teleport", 1)
 
 
 @power("f1394", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

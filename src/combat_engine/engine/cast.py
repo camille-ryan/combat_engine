@@ -95,6 +95,20 @@ _ANY_SIZE = "manoeuvre:any-size"
 #: `Cast.amount_for`, because seven rows raise it off the printed 2 and the
 #: number was written inside `aid_attack` where none of them could reach.
 MANOEUVRE_AID = "manoeuvre:aid"
+#: A distance stretched for **every move of a kind**, rather than for one
+#: named row -- "one extra square on every shift", "one more square on
+#: every swordmage teleport you make". Eight rows print that sentence.
+#:
+#: `c.extend_move` has always keyed on a row's ref, which is right for "a
+#: named row moves you further" and cannot say "any of them": twelve rows
+#: between two symbols wanted the kind instead, and `f1393`'s note said so
+#: -- "both are distances a row names when it moves you; nothing lengthens
+#: one from the outside".
+#:
+#: Stored in the same `Powers.extra_squares` under a reserved key, so the
+#: gates, the durations and `squares_for` all work unchanged -- the same
+#: arrangement `manoeuvre:` above uses for a number nobody could reach.
+MOVE_KIND = "move:"
 #: The bonus to the *check* an aid another action rolls, as against the bonus
 #: it hands out. Two different numbers on two cards that print both of them
 #: in one sentence -- "a +5 bonus to checks you make to aid another. When you
@@ -2665,6 +2679,7 @@ class Cast:
         mover = self.me if who is None else who
         if to is not None:
             return shift(self.world, mover, to, share=share)
+        squares_ += self._extra_every(mover, "shift")
         # **Priced as a shift**, which is where "it ignores difficult terrain
         # when it shifts" is actually spent: a one-square shift cannot enter
         # difficult terrain because the square costs two, so the exemption is
@@ -3309,6 +3324,7 @@ class Cast:
         `_nearest_first`.
         """
         mover = self.me if who is None else who
+        squares_ += self._extra_every(mover, "teleport")
         origin = squares(self.world, mover)
         # Filtered by the mover's whole footprint, not by the one square.
         # `movement.step` requires every square a Large creature covers to
@@ -7520,6 +7536,81 @@ class Cast:
             return None
         known.extra_squares.setdefault(ref, []).insert(0, entry)
         return effect
+
+    def extend_every(
+        self,
+        kind: str,
+        squares_: int,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """Lengthen **every move of a kind**. `c.extend_every("shift", 1)`.
+
+        `extend_move` above keys on one row's ref, which is right for "this
+        power teleports you further" and cannot say *any* of them. Eight
+        rows print the other sentence -- "one extra square on every shift",
+        "one more square on every swordmage teleport you make" -- and
+        `f1393`'s note is the clearest statement of what was missing:
+        *"both are distances a row names when it moves you; nothing
+        lengthens one from the outside."*
+
+        **Read by the movement verb, not by the row.** This is the one
+        difference from `extend_move`, and it is what makes the kind
+        knowable at all: a row calls `c.shift(2)` or `c.teleport(8)`, so
+        the verb knows which kind this is and the row does not have to say.
+        `c.squares_for` cannot do it -- twelve content sites call it as
+        `c.squares_for(c.ref, 3)`, keyed on the ref by construction.
+
+        So, unlike `extend_move`, **a row needs no change to be lengthened**
+        and the usual warning is inverted: there is no "modifier nothing
+        consults" hazard here, because `shift` and `teleport` consult it
+        unconditionally.
+
+        **It adds on top of `extend_move`**, for the same reason the entries
+        within one ref add: two feats each granting a square grant two, and
+        a row-specific square plus a kind-wide square is two squares.
+
+        `c.shift(to=...)` is **not** lengthened. A named destination is an
+        instruction rather than a distance -- "shift into the space it
+        left" has no number to increase.
+
+        Defaults to the caster, like `extend_move` and every movement verb
+        beside it. Stored under the reserved `MOVE_KIND` key, so the gates,
+        the durations and the removal all work unchanged.
+        """
+        return self.extend_move(
+            MOVE_KIND + kind, squares_, on=on, until=until, when=when
+        )
+
+    def _extra_every(self, mover: int, kind: str) -> int:
+        """The kind-wide half of a move's distance, for `mover`.
+
+        Deliberately not `squares_for`, which reads `self.me`: `c.shift(
+        who=other)` lends a shift, and the squares belong to **whoever is
+        moving**. Naming the attacker does not name the victim, and the
+        same mistake is on record here for `c.basic` -- ten rows lent a
+        swing that never happened.
+        """
+        from .components import Powers
+
+        known = self.world.get(mover, Powers)
+        if known is None:
+            return 0
+        # `power` is the row doing the moving, which is what makes the
+        # narrowed cards sayable at all: four of the eight print "whenever
+        # you teleport **with a swordmage power**" or "whenever you use a
+        # martial encounter or daily power that allows you to shift", and
+        # the gate needs the source row's own header to answer either.
+        # `self.ref` is that row by construction -- a body calling
+        # `c.shift` is the power granting the shift.
+        seen = {"kind": kind, "who": mover, "power": self.ref}
+        return sum(
+            n
+            for n, gate in known.extra_squares.get(MOVE_KIND + kind, ())
+            if gate is None or gate(seen)
+        )
 
     def squares_for(
         self, ref: str = "", default: int = 0, ctx: dict[str, Any] | None = None

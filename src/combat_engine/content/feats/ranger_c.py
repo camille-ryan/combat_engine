@@ -79,7 +79,7 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.grid import between
 from combat_engine.engine.query import squares
 
-from .styles import used_one_of
+from .styles import martial_encounter_or_daily, used_one_of
 
 #: "Forgo one die of that damage". The payout **is** announced -- the
 #: rider pays through `c.damage(detail="cf:ranger-f1")` and `DamageRolled`
@@ -192,6 +192,13 @@ def _martial_encounter(ref: str) -> bool:
         and Keyword.MARTIAL in p.keywords
         and p.usage is ENCOUNTER
     )
+
+
+#: The wider reading lives in `styles.martial_encounter_or_daily`, shared
+#: with the three `[Greater Style]` rows that print the same sentence.
+#: `_martial_encounter` above stays encounter-only: `f2803`'s card says
+#: "a martial encounter power" and `f2469`'s says "encounter or daily",
+#: so one function serving both would pay `f2803` on dailies.
 
 
 def _my_ranger_attack(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -551,12 +558,27 @@ def f2462(c: Cast) -> None:
 
 
 @power("f2469", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_move(any_of=)",))
+       reach=PERSONAL, target=SELF)
 def f2469(c: Cast) -> None:
     """Two extra squares on a shift a martial encounter or daily power
-    grants. Nothing adds to the distance somebody else's row moves you,
-    and the shift is inside that row's body. `f2361` waits on the
-    same."""
+    grants.
+
+    The shift is inside the granting row's body with its distance already
+    decided, which is what blocked this: nothing reached in from outside.
+    `c.extend_every` reads the squares inside `c.shift` itself and asks
+    the gate with `ctx["power"]` -- the moving row's own ref -- so "a
+    martial encounter or daily power" is answerable without a list of
+    them.
+
+    `styles.martial_encounter_or_daily`, not the `_martial_encounter`
+    above: this card
+    says "encounter or daily" where `f2803`'s says encounter only, and
+    both were read off the page rather than shared."""
+
+    def granted_by_a_martial_power(ctx: dict[str, Any]) -> bool:
+        return martial_encounter_or_daily(ctx.get("power", ""))
+
+    c.extend_every("shift", 2, when=granted_by_a_martial_power)
 
 
 @power("f2473", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

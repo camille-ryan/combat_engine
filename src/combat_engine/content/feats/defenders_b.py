@@ -291,11 +291,33 @@ def f2262(c: Cast) -> None:
 
 
 @power("f2263", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.extend_move(any_of=)",))
+       reach=PERSONAL, target=SELF, dropped=("etl.paragon_path",))
 def f2263(c: Cast) -> None:
-    """One more square on every swordmage teleport. The distance is an
-    argument each row passes to `c.teleport` and nothing adds to it --
-    the symbol the ranger's f786 and the avenger's f1527 both name."""
+    """One more square on every teleport a swordmage power grants.
+
+    `c.extend_every` reads the squares inside `c.teleport`, so the gate
+    is asked with the **moving row's own ref** -- `ctx["power"]`, which
+    is `Cast.ref` at the call site. That is what makes this card sayable
+    where the old ref-keyed `c.extend_move` could not: the clause names a
+    class of powers and no finite list of them.
+
+    Gated per teleport rather than checked once, for the reason `f2264`
+    below gives about stances: the class of the row being used is not a
+    property of the creature, so the question has to be asked each time.
+
+    **`todo` became `dropped`.** The printed clause has two halves and
+    only the paragon path half is missing -- `game.db` carries no paragon
+    path, so a paragon path power's `cls` is not the swordmage line and
+    cannot be recognised. The row plays, one named clause short, which is
+    exactly the difference between the two markers. The class gate itself
+    is a column (`requires: class swordmage`) and `chargen.meets`
+    enforces it, so this body does not re-ask it."""
+
+    def a_swordmage_power(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return p is not None and p.cls == "swordmage"
+
+    c.extend_every("teleport", 1, when=a_swordmage_power)
 
 
 @power("f2264", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

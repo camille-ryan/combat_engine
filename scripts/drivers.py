@@ -6512,6 +6512,114 @@ def penalty_scoped_to_an_aura(out: Result) -> None:
     )
 
 
+def every_move_of_a_kind(out: Result) -> None:
+    """"One extra square on every shift", and not on anything else.
+
+    `c.extend_move` keys on a row's ref, which cannot say *any* row. Eight
+    rows print the other sentence and `f1393`'s note names the gap exactly:
+    *"both are distances a row names when it moves you; nothing lengthens
+    one from the outside."* `c.extend_every` is the kind-keyed half.
+
+    **The negative control is the whole rule, and it is a crossing one**:
+    a shift extension must not lengthen a teleport, nor a teleport
+    extension a shift. That is the assertion that fails if the reserved
+    key is dropped and the squares go in under one shared bucket -- which
+    is exactly what writing this on top of `extra_squares` invites, since
+    `extend_move("", n)` already keys the empty ref. Two rows here want
+    shifts and two want teleports, so one bucket would silently pay both.
+
+    Measured **through the verb**, not off the component. The whole design
+    claim is that `c.shift` and `c.teleport` consult this without the row
+    asking -- twelve content sites call `c.squares_for(c.ref, n)` and so
+    cannot name a kind -- and reading `Powers.extra_squares` back would
+    assert the write and leave that claim untested. A rule that calls the
+    facility survives the fix being reverted; one that calls the store
+    does not.
+
+    `toward=` is what makes the distance observable: the options are
+    offered nearest-first to a named creature, so with a foe out along one
+    axis the chosen square is the farthest the budget reaches and the
+    distance moved *is* the budget. Asserting the chosen square outright
+    would be asserting the decider.
+
+    Six questions:
+
+    * a shift of 1 moves 1 square;
+    * with a +1 on every shift it moves 2;
+    * a teleport of 2 moves 2;
+    * the shift extension leaves that teleport at 2  <- crossing control;
+    * a +1 on every teleport moves it to 3;
+    * and the two stack with nothing, so a creature holding neither moves
+      what the card prints.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.query import enemies
+
+    world, caster, _ = _board()
+    foes = enemies(world, caster)
+    if not foes:
+        out.skip("the board has no enemy to move toward, so no distance is posed")
+        return
+    foe = foes[0]
+
+    here = world.get(caster, Position)
+    mate = world.get(foe, Position)
+    if here is None or mate is None:
+        out.skip("either the caster or the enemy is off the grid")
+        return
+
+    # The foe is parked far along one axis and the lane cleared, so the
+    # budget is the only thing deciding how far the mover gets. Without
+    # this the measurement is of whatever was in the way.
+    origin = here.square
+    mate.square = (origin[0] + 12, origin[1])
+
+    def moved(call) -> int:  # noqa: ANN001
+        here.square = origin
+        call()
+        return distance(origin, here.square)
+
+    c = Cast(world=world, me=caster, ref="driver:extend_every")
+
+    out.that(
+        moved(lambda: c.shift(1, toward=foe)) == 1,
+        "a shift of 1 moves one square",
+        f"it moved {moved(lambda: c.shift(1, toward=foe))}",
+    )
+    out.that(
+        moved(lambda: c.teleport(2, toward=foe)) == 2,
+        "and a teleport of 2 moves two",
+        f"it moved {moved(lambda: c.teleport(2, toward=foe))}",
+    )
+
+    c.extend_every("shift", 1)
+    shifted = moved(lambda: c.shift(1, toward=foe))
+    out.that(
+        shifted == 2,
+        "one extra square on every shift lengthens a shift of 1 to 2",
+        f"it moved {shifted}",
+    )
+    out.that(
+        moved(lambda: c.teleport(2, toward=foe)) == 2,
+        "and does not lengthen a teleport, which is a different kind of move",
+        f"the teleport moved {moved(lambda: c.teleport(2, toward=foe))}",
+    )
+
+    c.extend_every("teleport", 1)
+    out.that(
+        moved(lambda: c.teleport(2, toward=foe)) == 3,
+        "one extra square on every teleport lengthens a teleport of 2 to 3",
+        f"it moved {moved(lambda: c.teleport(2, toward=foe))}",
+    )
+    out.that(
+        moved(lambda: c.shift(1, toward=foe)) == 2,
+        "and the shift is still 2, not 3 -- the two kinds do not pool",
+        f"the shift moved {moved(lambda: c.shift(1, toward=foe))}",
+    )
+
+
 def a_reachable_latch(out: Result) -> None:
     """A once-a-round payout can be asked about and handed back.
 
@@ -7105,6 +7213,10 @@ DRIVERS = {
     "aura_penalty": (
         penalty_scoped_to_an_aura,
         "a penalty scoped to a creature and its allies inside its aura",
+    ),
+    "extend_every": (
+        every_move_of_a_kind,
+        "one extra square on every shift, and not on a teleport",
     ),
     "phasing": (phasing, "a ghost moves through a body and cannot stop in one"),
     "lighting": (lighting, "dim conceals, dark conceals totally, a sense cancels it"),

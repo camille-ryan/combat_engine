@@ -62,7 +62,7 @@ from combat_engine.engine.events import Moved, PowerUsed
 from combat_engine.engine.grid import distance, neighbours
 from combat_engine.engine.query import enemies, has_combat_advantage
 
-from .styles import among
+from .styles import among, longer_shift_on_a_martial_hit
 
 #: **A standing clause and a triggered one on the same card.** The
 #: dispatcher only reaches a no-action row when its declared trigger
@@ -273,15 +273,31 @@ def f2359(c: Cast) -> None:
 
 
 @power("f2360", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.extend_move(any_of=)",))
+       reach=PERSONAL, target=SELF)
 def f2360(c: Cast) -> None:
     """The damage half is a standing modifier with two named rows. The
-    other clause lengthens a shift by 1, and nothing adds to one."""
+    other clause lengthens every shift by 1 until the end of a turn in
+    which a martial encounter or daily power of yours hit.
+
+    **The note this replaces said "lengthens a shift by 1", and that is
+    not what the card says.** It reads as a standing extension, and the
+    printed clause is triggered -- by a hit, during your turn, expiring
+    at the end of it. Writing the standing version would have been a
+    strictly better feat than the one on the page. The marker named a
+    missing verb and the docstring beside it had the mechanic wrong,
+    which is the pattern worth noticing: the symbol was honest, the prose
+    was the stale part.
+
+    `styles.longer_shift_on_a_martial_hit` holds it, because the same
+    sentence is printed on `ranger_b.f2361` and `rogue_b.f2362` -- one
+    card per class. The weapon gate is this file's `_holding` and is
+    passed in, since each file rewrites that one on purpose."""
     picked = among("p2109", "p1018")
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: picked(ctx) and _holding(c, "light blade"),
     )
+    longer_shift_on_a_martial_hit(c, lambda: _holding(c, "light blade"))
 
 
 @power("f2363", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

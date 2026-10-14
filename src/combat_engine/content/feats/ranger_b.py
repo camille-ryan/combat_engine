@@ -69,7 +69,12 @@ from combat_engine.engine.events import AttackDeclared
 from combat_engine.engine.grid import spread
 from combat_engine.engine.query import allies, distance_between, enemies, flanked_by
 
-from .styles import among, hit_with_one_of, used_one_of
+from .styles import (
+    among,
+    hit_with_one_of,
+    longer_shift_on_a_martial_hit,
+    used_one_of,
+)
 
 # The warlord prints f2325's cover sentence with Strength in it, and the
 # trace is the same one. Shared rather than copied: `query.cover_between`
@@ -847,11 +852,18 @@ def f2335(c: Cast) -> None:
 
 
 @power("f2361", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.extend_move(any_of=)",))
+       reach=PERSONAL, target=SELF)
 def f2361(c: Cast) -> None:
     """Dexterity in place of Strength on the two rows the card names, and
-    the shift clause is still a gap.
+    every shift a square longer until the end of a turn in which a
+    martial encounter or daily power of yours hit.
+
+    The shift clause is `styles.longer_shift_on_a_martial_hit`, shared
+    with `fighter_c.f2360` and `rogue_b.f2362` -- the same sentence
+    printed once per class. It is **triggered and expires**, not a
+    standing extension; the note here previously called it "the shift
+    clause" with no more detail and `f2360`'s called it a standing
+    lengthening, which the card does not say.
 
     The same shape as `f1309` above: the swap is gated with `when=` rather
     than checked once, because it is laid when the feat arms and the blade
@@ -877,6 +889,7 @@ def f2361(c: Cast) -> None:
     """
     for ref in ("p4387", "p1418"):
         c.rolls_with(ref, Ability.DEX, when=_wields("light blade"))
+    longer_shift_on_a_martial_hit(c, lambda: _holding(c, "light blade"))
 
 
 # -- the beast companion ----------------------------------------------------

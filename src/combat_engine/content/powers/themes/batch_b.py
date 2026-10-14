@@ -744,15 +744,33 @@ def p12341(c: Cast) -> None:
     reach=Ranged(5),
     target=ONE_ALLY,
     keywords=ARCANE,
-    dropped=("c.extend_move(any_of=)",),
 )
 def p12342(c: Cast) -> None:
-    """The concealment half is exact and hangs off the shift actually
-    happening; the two extra squares of that shift have nothing to hold
-    them."""
+    """Two extra squares on the target's next shift, and concealment for
+    taking it.
+
+    **`on=who`, and that is the whole reason `c.extend_every` reads the
+    *mover's* squares rather than the caster's.** The target is an ally,
+    so a store keyed to `c.me` -- which is what `c.squares_for` reads --
+    would lengthen the wrong creature's shift. `Cast._who` defaulting to
+    the target is the commonest mistake in this tree; here the default is
+    what the card wants and it is passed explicitly anyway, because the
+    distinction is the point.
+
+    **"The next time" is spent in the watcher, not in the engine.** The
+    extension is ended inside the same `Moved` callback that pays the
+    concealment, so it needs no one-shot in `Powers.extra_squares`: the
+    shift has already resolved by the time an `AFTER` watch runs, so the
+    squares were available for it and are gone before a second one. The
+    existing `done` guard was already the right shape -- it only had
+    nothing to spend.
+
+    Laid `until=When.EONT` as well, so an ally who never shifts does not
+    carry the squares into the next turn."""
     who = c.target
     if who is None:
         return
+    longer = c.extend_every("shift", 2, on=who, until=When.EONT)
     done: list[int] = []
 
     def shifted(ev: Moved) -> None:
@@ -760,6 +778,8 @@ def p12342(c: Cast) -> None:
             return
         done.append(1)
         c.conceal(on=who, until=When.EOTNT)
+        if longer is not None:
+            c.end_effect(longer)
 
     c.watch(Moved, shifted, until=When.EONT)
 

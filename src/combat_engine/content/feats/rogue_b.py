@@ -93,13 +93,13 @@ from .styles import among, hit_with_one_of, used_one_of
 APPLIES = ("c.extra_damage(applies=)",)
 #: One weapon group standing in for another, for named rows only.
 #: Nothing adds to the distance somebody else's shift covers.
-#: **Folded into `c.extend_move(any_of=)`.** `c.extend_shift` was a second
-#: symbol for one gap -- `f1393`'s note said so outright, "twelve rows
-#: between the two symbols want it" -- and `c.extend_move` (#502) covers a
-#: shift as readily as a teleport, because both take their distance as an
-#: argument. What is left on these rows is the *class* form: they lengthen
-#: every shift a martial power grants, not one named row.
-EXTEND_SHIFT = ("c.extend_move(any_of=)",)
+#: **Retired: the two rows that shared it want different things.**
+#: `c.extend_every` landed the class form -- lengthen every move of a
+#: kind, not one named row -- and `f1393`, `f2263`, `f2360`, `f2361` and
+#: `f2469` are written off it. What is left on the two rows here is not
+#: the extension at all, and it is not the *same* leftover on both, so
+#: one symbol cannot go red or green correctly for either. A marker names
+#: one gap. See `f2362` and `f2459` below.
 
 #: The class feature whose payout half this file keeps reaching for.
 _SNEAK = "cf:rogue-scoundrel-f4"
@@ -470,7 +470,7 @@ def f2388(c: Cast) -> None:
 
 
 @power("f2362", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=EXTEND_SHIFT,
+       reach=PERSONAL, target=SELF, dropped=("Power.second_trigger",),
        trigger="you attack with an associated power",
        on=Trigger(PowerResolved, lambda w, me, ev: (
            ev.actor == me and ev.power == "p4488"
@@ -481,10 +481,24 @@ def f2362(c: Cast) -> None:
     The two are the same row's bookends and picking the wrong one puts
     the shift on the far side of the swing from where the card prints
     it. `AT_WILL`, because the card prints no limit and an `ENCOUNTER`
-    triggered row fires once a fight. The other benefit -- every shift
-    this turn is a square longer -- is dropped: nothing reaches into the
-    distance another row's shift covers, which `ranger_b.f2361` named
-    first.
+    triggered row fires once a fight.
+
+    **The other benefit's gap is no longer the extension, and the marker
+    moved.** `c.extend_every` lengthens every shift of a kind now, and
+    `styles.longer_shift_on_a_martial_hit` writes this card's exact
+    sentence for `fighter_c.f2360` and `ranger_b.f2361` -- one card
+    printed once per class. It cannot be written *here*, for a reason
+    with nothing to do with movement: **this row already has a declared
+    trigger**, so its body runs only when `p4488` resolves, while the
+    shift clause triggers on a hit with any martial encounter or daily
+    power. Two printed triggers on one row, and the dispatcher reaches a
+    no-action row through one of them.
+
+    So the symbol is `Power.second_trigger`, which is the thing actually
+    missing. The alternative -- drop the declared trigger and watch both
+    events from the body, the `f1395` shape -- would rewrite a clause
+    that works today, so it is a change to propose rather than to make
+    while writing a different one.
     """
     if _holding(c, "light blade"):
         _slip_away(c, 2)
@@ -1056,13 +1070,39 @@ def f2429(c: Cast) -> None:
 
 
 @power("f2459", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTEND_SHIFT)
+       reach=PERSONAL, target=SELF, todo=("events.Moved.stretched_",))
 def f2459(c: Cast) -> None:
     """Every shift is a square longer, at the price of combat advantage.
-    A shift is taken inside the granting row's body with its distance
-    already decided; `c.forces` lengthens a push and there is no twin of
-    it for a shift. `ranger_b.f2361` and f2362 above want the same
-    verb."""
+
+    **The extension is writable now and is deliberately not written.**
+    `c.extend_every("shift", 1)` is one line, and `c.grants_advantage`
+    exists. What is missing is the word **"if"**: the card reads "you
+    *can* shift 1 additional square. **If you do so**, you grant combat
+    advantage until the start of your next turn." The squares go into the
+    shift's *budget*, and the decider need not spend them -- so whether
+    the clause was taken is not observable, and nothing can say when the
+    cost falls due.
+
+    Laying the +1 alone would make this feat **strictly better than the
+    one on the page**: a free square on every shift, no advantage
+    granted. So it keeps `todo=` and stays refused, rather than taking
+    `dropped=`.
+
+    **That is a distinction the marker vocabulary does not draw**, and it
+    is worth stating. `dropped=` means "plays, one named clause missing",
+    and `ranger_b.f2361` was moved from `todo` to `dropped` on exactly
+    that reading -- correctly, because the clause it lost was a
+    *benefit*. Here the missing clause is a *cost*, and a row that plays
+    with its cost missing is not incomplete, it is wrong. Refusing it is
+    the conservative direction.
+
+    The fix is an event rather than a harness that reconstructs it:
+    `c.shift` knows both the printed distance and the extra, so `Moved`
+    can carry how many squares beyond the print were spent -- a plain
+    attribute, the way `kind_` rides, for the same reason `kind_` is one:
+    it must not reach the wire or the replay fixtures. `movement.py`
+    builds the event, so the number has to be threaded down to it, which
+    is why this is its own change and not a line here."""
 
 
 @power("f2468", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
