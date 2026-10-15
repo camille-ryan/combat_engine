@@ -5895,6 +5895,77 @@ def area_or_close_is_one_set(out: Result) -> None:
              f" blast={provokes('close_blast')}")
 
 
+def band_stays_in_tier(out: Result) -> None:
+    """The three-level band does not cross a tier boundary. Camille, 2026-10-15.
+
+    *"There's a kind of step change going into paragon tier which makes lvl+3
+    monsters appropriate WITHIN heroic tier, but not going across to
+    paragon."* The band was unclamped, so it ignored the step in both
+    directions: measured before the fix, a level-8 party drew up to level 11,
+    a level-10 party up to 13, and a paragon party at 11 reached back **down**
+    to 8.
+
+    **The recorded fixtures do not cover this**, which is why the rule exists.
+    All seven still verify unchanged, because `story._compose` sorts the pool
+    nearest-the-party-first and the XP budget fills before it reaches the top
+    of the band -- so the only level-10 fixture never fielded the level 11-13
+    creatures it was entitled to. A fixture that passes either way is no
+    evidence about a boundary.
+
+    Asserted at the boundary rather than in the middle: level 10 and level 11
+    are the pair that moved, and a level in the middle of a tier would pass
+    without the clamp.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content import loader
+    from combat_engine.db import game
+
+    db = game()
+
+    def levels_for(level: int, band: int = 3) -> list[int]:
+        refs = loader.pick(level, limit=0, band=band)
+        return sorted({
+            db.execute("SELECT level FROM monster WHERE ref=?", (r,)).fetchone()[0]
+            for r in refs
+        })
+
+    top = levels_for(10)
+    out.that(bool(top) and max(top) <= 10,
+             "a level-10 party's band stops at 10 -- it reached 13 before"
+             " this, which is three paragon levels of creature",
+             f"levels {top}")
+    out.that(bool(top) and min(top) == 7,
+             "and still reaches three levels down, so the clamp took the"
+             " boundary and not the band",
+             f"levels {top}")
+
+    low = levels_for(8)
+    out.that(bool(low) and max(low) <= 10,
+             "a level-8 party stops at 10 as well, rather than drawing the"
+             " level 11 it was entitled to",
+             f"levels {low}")
+
+    para = levels_for(11)
+    out.that(bool(para) and min(para) >= 11,
+             "and the clamp works downward too: a paragon party at 11 no"
+             " longer reaches back into heroic, which it did to level 8",
+             f"levels {para}")
+
+    mid = levels_for(5)
+    out.that(mid == [2, 3, 4, 5, 6, 7, 8],
+             "a level in the middle of a tier is untouched -- the control,"
+             " and the reason asserting one would have proved nothing",
+             f"levels {mid}")
+
+    # A solo gets `band=1` from `story._compose` and must still be clamped,
+    # since level 10 + 1 is 11.
+    solo = levels_for(10, band=1)
+    out.that(bool(solo) and max(solo) <= 10,
+             "a solo's narrower band is clamped on the same boundary -- 10+1"
+             " is still across it",
+             f"levels {solo}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -10045,6 +10116,9 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
+    "band_stays_in_tier": (band_stays_in_tier,
+                           "the three-level band does not cross a tier"
+                           " boundary -- Camille, 2026-10-15"),
     "blank_defence_is_defective": (blank_defence_is_defective,
                                    "\"+X vs <blank>\" is malformed and the"
                                    " whole entry drops -- Camille, #612"),

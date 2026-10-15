@@ -592,10 +592,21 @@ def pick(
     # **A band, not one level.** Camille's call: a fight may field anything within
     # three levels either way, which is what the printed encounter-building rules
     # allow and is the difference between "two usable solos" and a real choice.
+    #
+    # **But the band does not cross a tier boundary.** Camille's call,
+    # 2026-10-15: *"there's a kind of step change going into paragon tier which
+    # makes lvl+3 monsters appropriate WITHIN heroic tier, but not going across
+    # to paragon."* Without this the band quietly ignored the step: a level-8
+    # party drew up to level 11, a level-10 party up to 13, and a paragon party
+    # at 11 reached back down to 8. Three levels of slack is variety inside a
+    # tier and a different kind of fight across one.
+    lo, hi = max(1, level - band), level + band
+    floor_ = (max(1, level) - 1) // 10 * 10 + 1      # 1, 11, 21
+    lo, hi = max(lo, floor_), min(hi, floor_ + 9)    # ...10, 20, 30
     sql = ("SELECT ref FROM monster "
            f"WHERE level BETWEEN ? AND ? AND minion = {1 if minion else 0} "
            "AND conjuration = 0")
-    params: list = [max(1, level - band), level + band]
+    params: list = [lo, hi]
     if role:
         sql += " AND role = ?"
         params.append(role)
