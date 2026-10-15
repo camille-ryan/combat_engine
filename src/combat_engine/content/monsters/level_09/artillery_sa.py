@@ -1580,7 +1580,7 @@ def m5559a5(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m5909a0(c: Cast) -> None:
-    c.ignores_difficult("shift", on=c.me, until=When.ENCOUNTER)
+    c.ignores_difficult(on=c.me, when="shift", until=When.ENCOUNTER)
 
 
 @power(
@@ -1939,7 +1939,7 @@ def m6230a5(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6286a0(c: Cast) -> None:
-    c.ignores_difficult("shift", on=c.me, until=When.ENCOUNTER)
+    c.ignores_difficult(on=c.me, when="shift", until=When.ENCOUNTER)
 
 
 @power(

@@ -2330,6 +2330,14 @@ def m4766a4(c: Cast) -> None:
     creature -- which is a scope on the square's provenance, not on how this
     creature is going. `when="shift"` would answer a sentence this card does
     not say.
+
+    **And not `c.ignores_difficult("swarm")` either**, which is what the
+    twin `m190a4` does and is why this marker was briefly removed.
+    `Grid.difficult` holds one label per square and the only labels any zone
+    writes are `forest`, `ice`, `rubble`, `water` and `web` -- measured
+    across the tree. `"swarm"` is a creature *kind*, read by
+    `query.kinds_of`, and no square ever carries it, so that call matches
+    nothing. Four rows make it; see #598.
     """
     c.ignores_difficult("web", on=c.me)
 

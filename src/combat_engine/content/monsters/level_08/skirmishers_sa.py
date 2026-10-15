@@ -1411,7 +1411,7 @@ def m3289a4(c: Cast) -> None:
 
 @power("m3289a5", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m3289a5(c: Cast) -> None:
-    c.ignores_difficult("shift", on=c.me, until=When.ENCOUNTER)
+    c.ignores_difficult(on=c.me, when="shift", until=When.ENCOUNTER)
 
 
 @power("m3289a6", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -1560,7 +1560,7 @@ def m3310a3(c: Cast) -> None:
 
 @power("m3310a4", level=8, usage=AT_WILL, action=MINOR, reach=PERSONAL, target=NO_TARGET)
 def m3310a4(c: Cast) -> None:
-    c.ignores_difficult("shift", on=c.me, until=When.EOT)
+    c.ignores_difficult(on=c.me, when="shift", until=When.EOT)
     c.shift(3)
 
 
@@ -2786,7 +2786,7 @@ def m6063a1(c: Cast) -> None:
 
 @power("m6063a2", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m6063a2(c: Cast) -> None:
-    c.ignores_difficult("shift", on=c.me, until=When.ENCOUNTER)
+    c.ignores_difficult(on=c.me, when="shift", until=When.ENCOUNTER)
 
 
 @power(

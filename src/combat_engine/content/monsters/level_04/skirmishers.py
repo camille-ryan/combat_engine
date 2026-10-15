@@ -385,7 +385,7 @@ def m128a4(c: Cast) -> None:
 def m134a0(c: Cast) -> None:
     """`kind` names which sort of rough ground, which is the whole of this
     line: webs and nothing else."""
-    c.ignores_difficult("webs", until=When.ENCOUNTER)
+    c.ignores_difficult("web", until=When.ENCOUNTER)
 
 
 @power(

@@ -1722,12 +1722,29 @@ def m4382a2(c: Cast) -> None:
 
 @power(
     "m4382a3", level=8, usage=ENCOUNTER, action=MOVE, reach=PERSONAL, target=SELF,
+    dropped=("c.ignores_difficult(hazardous=)",),
 )
 def m4382a3(c: Cast) -> None:
-    """"Ignoring difficult and hazardous terrain and squeezing penalties"
-    is three separate exemptions, all for this one move."""
+    """Shift 6, through enemies and over liquid, ignoring rough ground.
+
+    **`share=True` was missing and the card prints it.** "The m4382 can move
+    across liquid and **through enemies' spaces**" is the whole reason this
+    is a move power rather than a plain shift, and without the flag the
+    shift stopped at the first enemy in the way. `m4381a4` is this identical
+    card and has carried the flag since it was written; this row did not,
+    and nothing noticed because the shift still happened -- just not through
+    anybody.
+
+    The two exemptions left are the marker. `kind` on
+    `c.ignores_difficult` is a terrain **label** -- the word the map and
+    `c.zone(difficult=)` give a square, like "web" or "mud" -- so there is
+    no label for hazardous terrain, which is damaging ground rather than
+    slow ground, and none for a squeezing penalty either. Marked rather
+    than approximated, because `ignores_difficult("hazardous")` would be a
+    label nothing writes and so silently nothing.
+    """
     c.ignores_difficult(on=c.me, until=When.EOT)
-    c.shift(6)
+    c.shift(6, share=True)
 
 
 # ==========================================================================

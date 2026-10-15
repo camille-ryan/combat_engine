@@ -1956,7 +1956,7 @@ def _in_beast_form(c: Cast) -> bool:
     target=NO_TARGET,
 )
 def m5786a0(c: Cast) -> None:
-    c.ignores_difficult("shift", on=c.me, until=When.ENCOUNTER)
+    c.ignores_difficult(on=c.me, when="shift", until=When.ENCOUNTER)
 
 
 @power(
