@@ -1905,13 +1905,41 @@ def f1352(c: Cast) -> None:
 
 
 @power("f2149", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.chosen_weapon_group()",))
+       reach=PERSONAL, target=SELF)
 def f2149(c: Cast) -> None:
-    """Widens two other feats from the weapon group each was taken for to
-    every group. Both are refs, and what is missing is the *choice* each
-    of them recorded -- a feat's arguments are not stored anywhere.
-    Re-aimed onto the symbol f233 itself is blocked on, since f233 is
-    half of this row's own gate and the two want the same thing."""
+    """Both other feats' benefits, with the group filter taken off.
+
+    `f233` is +1 feat bonus to damage with one chosen weapon group, `f1032`
+    +1 to attack with one; this card is both of them "with all weapons you
+    are proficient with", so it is the same two modifiers **without** the
+    group gate. Nothing had to be recorded after all.
+
+    The old marker said what is missing is "the *choice* each of them
+    recorded", and re-aimed itself onto the symbol `f233` was blocked on.
+    That was the right instinct about the pair and wrong about the gap: this
+    row needs no choice **precisely because it removes the restriction a
+    choice would express**. It was blocked on the hardest reading of a card
+    that is the easier one of the three.
+
+    **Proficiency is not gated and that is deliberate.** A character attacks
+    with what it is holding and `chargen` hands it weapons it is proficient
+    with, so "all weapons you are proficient with" and "the weapon in hand"
+    are the same set here -- the same approximation `f1032` documents for
+    reading a group off the gear, rather than a second answer to one
+    question.
+
+    `kind="feat"` on both, so a character holding this **and** `f233` gets
+    one +1 and not two: same type, larger wins. That is what the printed
+    word buys and the reason it is not left off.
+    """
+    def weapon_power(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return p is not None and Keyword.WEAPON in p.keywords
+
+    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=weapon_power)
+    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=weapon_power)
 
 
 @power("f2241", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

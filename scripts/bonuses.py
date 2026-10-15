@@ -79,6 +79,17 @@ BORROWED = {
     ("f2095", "racial"),   # extends rt:r5-t0's save bonus
     ("f3163", "racial"),   # replaces rt:r24-t2's +2
     ("f2398", "racial"),   # raises rt:r8-t0' +1 to +2
+    # **A feat granting two *other feats'* benefits wholesale.** "You gain
+    # the benefits of <f233> and <f1032> with all weapons you are proficient
+    # with" prints no type word of its own -- correctly, because it hands out
+    # somebody else's bonuses and both of those cards print "feat bonus". So
+    # the type belongs to the borrowed benefit, exactly as the note above
+    # describes, and untyped is the one reading that is definitely wrong: it
+    # would stack with `f233` itself and pay +2 where the rules pay +1.
+    #
+    # Two entries because the row lays two calls, attack and damage, and the
+    # key is per (ref, kind).
+    ("f2149", "feat"),     # borrows f233's and f1032's feat bonuses
     # **A third shape: the card adds an object's own bonus to a roll.**
     # "Add the proficiency bonus and enhancement bonus of this weapon to
     # your attack roll when making a bull rush" names two types, and

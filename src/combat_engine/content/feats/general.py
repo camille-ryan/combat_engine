@@ -58,7 +58,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Defences
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import distance_between, holding, team
 
 DIVINE = [Keyword.DIVINE]
 
@@ -464,10 +464,39 @@ def f178(c: Cast) -> None:
 
 
 @power("f233", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.chosen_weapon_group()",))
+       reach=PERSONAL, target=SELF)
 def f233(c: Cast) -> None:
-    """+1 damage with one chosen weapon group. Nothing stores which group the
-    character chose, and the damage context carries no weapon to gate on."""
+    """+1 feat bonus to damage with one chosen weapon group.
+
+    **Both of the holds this row carried were already answered by `f1032`**,
+    which is the same card one line over -- "choose a weapon group", +1 to
+    *attack* instead of damage -- and has been written and unmarked
+    throughout. The marker here said nothing stores the chosen group and the
+    damage context carries no weapon to gate on. Neither is what the row
+    needs:
+
+    * the group is **read off the weapon in hand**, which is what the choice
+      comes to for a character carrying one, and every chassis carries one.
+      `f1032`'s docstring makes that argument and this follows it rather
+      than inventing a second answer;
+    * the gate asks `holding(...)`, which reads the gear **now**, so the
+      damage context never has to carry a weapon at all. It carries `power`,
+      which is what the keyword half asks about.
+
+    `kind="feat"` because the card prints "feat bonus", so two feats of this
+    shape do not stack -- which is the whole reason the type word matters.
+    """
+    gear = c.world.get(c.me, Gear)
+    arm = gear.main if gear else None
+    if arm is None:
+        return
+    group = arm.group
+    c.bonus(
+        "damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: bool(holding(c.world, c.me, group))
+        and (p := get(ctx.get("power", ""))) is not None
+        and Keyword.WEAPON in p.keywords,
+    )
 
 
 @power("f238", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
