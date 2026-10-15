@@ -131,6 +131,46 @@ the AI policy without running anything — and **the body is code** against a
 
 Plus `out_of_combat=True` for a row that is complete and inert in a fight.
 
+## What `usage=` means on an `action=NONE` trait, which is less than it looks
+
+Measured on **2026-10-15**, after I corrected eight rows on a premise that
+was false and had to go and check:
+
+```
+2,326 rows are action=NONE with usage=ENCOUNTER and no declared trigger
+```
+
+So `usage=ENCOUNTER` on a standing trait is the tree's **majority**
+convention, not an error, and the claim that `AT_WILL` was the convention
+"without exception" — which two of my own commit messages assert — is
+wrong. Read this instead of those.
+
+It is also nearly inert, and the reason is worth knowing because it decides
+which of the two cases is a real fault:
+
+* **No declared trigger.** `turns.arm_traits` arms the row at the start of
+  the fight with `use(..., spend=True)`, so an `ENCOUNTER` usage is spent
+  by the arming — after the trait has already done its work. Arming happens
+  once per creature per encounter and the world is fresh each time, so the
+  spend is never observed. Either value plays identically.
+* **A declared trigger.** `arm_traits` deliberately skips these ("arming it
+  at the start would fire it once, out of nowhere, and never again"), so the
+  row fires on its trigger instead — and `ENCOUNTER` means **once per
+  fight**. If the card prints no such limit, that is a real and silent
+  narrowing. `lint.py` checks exactly this case and currently names 18 feats
+  for it.
+
+`cards.py` is the other half and only sees what the card prints: it reads a
+usage from the **head** of the spec, so a trait whose text opens with
+"(…; at-will)" is checked and the far commoner trait that prints no usage
+word at all is not. That is why `m2022c0a1` was caught and six identical
+siblings were not. A card that states nothing is never a fault there.
+
+So: prefer `AT_WILL` on a trait when the card prints it or prints nothing —
+it cannot be wrong, where `ENCOUNTER` becomes wrong the day the row grows a
+trigger — but do not go changing existing rows over it, and do not call it
+the convention.
+
 **Symbols only, never prose** — a sentence is refused at import. Reuse a
 symbol already in the tree so the groups mean something:
 `uv run scripts/blocked.py --group`.
