@@ -51,13 +51,29 @@ defence" was 28 rows describing text the importer *added*.
 
 ## What to do next, in order
 
-1. **#614 `c.reshape_area()` is the best-shaped build left** — 6 heroic rows,
-   one real mechanism, and the measurement is already on the issue: one
-   funnel line (`dsl.py:1774`), 9 `area_of` callers, ~12 content predicates
-   reading `p.reach_of(...).kind`. Needs the design decision first: a
-   per-use reshape has to be visible to the header readers, so it probably
-   wants a third axis beside `branch=` and `augment=` rather than an effect
-   the body lays.
+1. **#614 `c.reshape_area()` is the best-shaped build left, and the design is
+   settled** — 5 heroic rows (not 6; `f3782` subtracts a square rather than
+   swapping a shape, and `i526p1` moves a wall, so it is three mechanisms).
+
+   The pattern is `durations.keywords_of`: a `(world, actor, p)` reader that
+   every site uses instead of the header field, because a feat altering one
+   character's power is exactly what a header cannot say. Its docstring
+   carries the trap too — 22 sites, and a grant honoured at 21 is a modifier
+   nothing consults at the 22nd.
+
+   **The size looks much worse than it is.** 97 `.reach_of(` sites and 282
+   bare `.reach` reads is the scary number and it is misleading: the content
+   `kind` readers are overwhelmingly melee tests (27 of ~44), and all five
+   area predicates treat area as **one class** — not one separates blast
+   from burst, so every one gives the same answer before and after. What
+   must consult the override is the funnel (`dsl.py:1774`, 9 `area_of`
+   callers), the render path already going through it, and the ranged/provoke
+   test at `dsl.py:1331`/`1354` — which legitimately *changes* its answer,
+   since a close blast does not provoke the way an area burst does.
+
+   Do **#616** first (the five duplicated area-shape tuples, one of which
+   disagrees about `"wall"`), because this change leans on them being one
+   thing.
 2. **#612's upstream half** — teach the ETL to prefer the damage expression
    *after* a pasted line. Moves all 109 blank-defence lines. **Blocked on
    Camille confirming the `m2085a1` reading** (`1d8+5` over the pasted
