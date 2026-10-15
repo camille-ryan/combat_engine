@@ -367,3 +367,53 @@ verb.
 * **#603** `m509c0` belongs in the associate table, not `monster`.
 * **#602** needs nothing further for play; a reader for the stored
   suppression outside `_lay_regeneration` is the open half.
+
+## Added after the session's own appendix: read the *rows*, not only the cards
+
+The appendix above says "read every card a symbol carries and the symbols
+beside it before building". One more step belongs in front of that: **read
+the rows themselves.** Three symbols opened late in the session had their
+answer in their own source:
+
+* `c.forgo_damage()` — the hook it wanted was already a parameter on
+  `features.pay_extra`, for the opposite reason (four feats *raise* the
+  die through it).
+* `p992`'s Arena Fighting feats — `f3188`, `f2356` and `f2714` are written
+  as riders, carrying no marker, so chains written into the power paid
+  every clause twice.
+* `c.beast_independent()` — all 8 rows are **already written** for two of
+  their three clauses, through a `_leash(...)` factory in `ranger_c.py`,
+  and the factory's own docstring explains the third better than I had:
+  the sentence is conditional on the beast *acting independently*, there
+  is no such mode, and **both** halves of it -- the tether and the
+  adjacency waiver -- are meaningless until there is. It even records that
+  it was re-pointed off `c.leash()` when that landed and finished none of
+  them.
+
+So the ordering is: the rows, then the cards, then the neighbouring
+symbols, and only then the verb. Two of the three dense symbols opened
+wanted no verb; the third wanted a feature.
+
+## A lead I followed and refuted, recorded so nobody follows it again
+
+`f993`'s clause into `p992` re-ranks four recorded fights, and the bisect
+is exact:
+
+    arena == "f993" and False                      -> 0 divergences
+    arena == "f993" and c.con_mod > 0 and False    -> 4 divergences
+
+`c.may` is innocent, `c.declare` is innocent, `c.temp_hp` is innocent, and
+`doctrine.heals`/`benefits` are innocent -- disabling each branch for
+`p992` leaves all four. So **evaluating `c.con_mod` moves four fights**,
+and two things follow: a dealt fighter holds `f993` even though the string
+appears in no fixture's JSON, and `c.con_mod` is `world.need(me,
+Stats).mod(CON)` where `need` *raises* rather than creating.
+
+The obvious next hypothesis -- that an exception inside `policy/threat.py`'s
+speculative scoring silently prices the row at 0.0 -- is **wrong**. I
+instrumented the `except Exception: out = 0.0` at `threat.py:346` and ran
+all seven fixtures: **0 swallowed**. Struck rather than left standing;
+there are three more such sites in that file and instrumenting all four
+properly is the twenty-minute job that either finds it or clears the file.
+
+On #606, with the clause's text, so it can be picked up cold.
