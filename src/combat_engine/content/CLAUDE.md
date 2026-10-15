@@ -95,10 +95,34 @@ the AI policy without running anything — and **the body is code** against a
   a blank attack defence, **23 play and 3 do not** — flagging all 26 would have
   refused 23 working rows.
 
-  **On a monster it defects the whole stat block.** `loader.defective` derives
-  it from the rows and `pick` stops offering the creature — a monster fielded
-  without the ability its card is about is wrong in every fight. `todo=` and
-  `dropped=` do not do this: those mean unfinished, not wrong.
+  **It drops the whole compendium entry, whatever kind of entry that is.**
+  Camille's rule, widened on **2026-10-15** from the monster case:
+
+  > *"defective entries should be dropped from the game… I mean that the
+  > ENTIRE compendium entry should be dropped if any part of it is
+  > defective."*
+
+  A stat block already behaved that way and the argument generalises: a
+  monster fielded without the ability its card is *about* is wrong in every
+  fight, not merely incomplete, and so is a tome still paying out its
+  Property while the Power it is named for cannot be written. Before the
+  widening a defective item Power dropped only itself, so the item was
+  still dealt and still worn.
+
+  `dsl.entry_defect` is the one reader and `dsl.entry_of` is what counts as
+  one entry: a stat block's abilities belong to the creature, an item's
+  Power **and** Property belong to the item, and a `p…b` second card
+  belongs to the power it was printed inside. A feat pair (`f959`/`f960b`)
+  is two different printed ids and so genuinely two entries — the
+  convention cannot be read off the ref. `loader.defective` is now one line
+  over it, and that fixed a latent miss of its own: its old prefix walk
+  looked for `m1932a…` and would never have matched a conjuration's
+  `m1932c0a…`.
+
+  `todo=` and `dropped=` do **not** do this, and that is the line worth
+  holding: those mean unfinished, not wrong, so the rest of the creature
+  plays and `todo.py` reports the row ready the day its symbol lands.
+  `drivers.defective_entry` asserts both halves. #600.
 
   **You do not decide this yourself.** An authoring agent cannot read the
   compendium. Refer the garbled line up to the main session, which can, and

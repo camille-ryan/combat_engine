@@ -1571,7 +1571,7 @@ def m6570a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def m6570a2(c: Cast) -> None:
     """It brings a second creature onto the board and the spec does not say

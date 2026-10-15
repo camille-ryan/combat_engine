@@ -387,7 +387,7 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
     advisor will want it the moment a race's value depends on tier, and
     adding it then is a key change rather than a signature change.
     """
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.dsl import REGISTRY, entry_defect
 
     from . import RACES, build_of
 
@@ -414,7 +414,10 @@ def race_options(cls: str, level: int = 1, build: Build | None = None) -> list[C
                     sum(1 for r in rows
                         if not REGISTRY[r].todo and not REGISTRY[r].obsolete
                         and not REGISTRY[r].declined
-                        and not REGISTRY[r].defect)
+                        # `entry_defect`, not `.defect`: the whole entry is
+                        # dropped if any part of it is defective, which is
+                        # Camille's rule of 2026-10-15. #600.
+                        and not entry_defect(r))
                 ),
                 "surges": float(race.surges),
                 "speed_above_six": float(max(0, race.speed - 6)),
@@ -536,7 +539,7 @@ def legal_feats(
     """
     import re
 
-    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.dsl import REGISTRY, entry_defect
 
     from . import Character, build_of, meets
 
@@ -559,7 +562,11 @@ def legal_feats(
         # The compendium is missing what it would be written from, so it is
         # refused in play and must not be offered to a player or to the dealer
         # either -- the same argument `obsolete=` carries above. #360.
-        and not REGISTRY[ref].defect
+        #
+        # **`entry_defect`, not `.defect`.** The entire entry is dropped if
+        # any part of it is defective, which is Camille's rule of
+        # 2026-10-15 and was already how a stat block behaved. #600.
+        and not entry_defect(ref)
         and not second_block(ref)
         and ref not in held
         and meets(gates[ref], who, held)

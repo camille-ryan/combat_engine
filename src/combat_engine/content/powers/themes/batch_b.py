@@ -1645,7 +1645,7 @@ def p16050(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    todo=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def p16089(c: Cast) -> None:
     """`c.summon` wants a ref and the spec prints the summoned creature's

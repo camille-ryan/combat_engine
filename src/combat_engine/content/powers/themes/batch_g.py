@@ -836,7 +836,7 @@ def p14129(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.POLYMORPH],
-    dropped=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
     narrative=("skill:insight",),
 )
 def p14130(c: Cast) -> None:

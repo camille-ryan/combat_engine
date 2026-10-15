@@ -1667,6 +1667,91 @@ def get(ref: str) -> Power | None:
     return REGISTRY.get(ref)
 
 
+#: How a row's ref names the **compendium entry** it was printed in. One
+#: entry is one page, and a page may print several rows:
+#:
+#: * `m1234a5` and `m1234c0a5` -- a stat block's abilities, so the entry is
+#:   the creature. `m1234c0` is a conjuration printed inside an item's own
+#:   page (#601) and is its own entry, which is why the `c<n>` is kept.
+#: * `i601p1`, `i601x1` -- an item's Power and its Property. The unit of
+#:   *work* is the block (`content/CLAUDE.md`), and the unit of **printing**
+#:   is the item.
+#: * `p123b` -- a second card printed inside another power's entry, 154 of
+#:   them. The `b` is dropped, so the pair is one entry.
+#:
+#: Anything else -- `f959`, `cf:fighter-...`, `rt:r33-...`, `comp:...` -- is
+#: its own entry and comes back unchanged. A feat pair is `f959`/`f960b`,
+#: two *different* ids, so it is genuinely two entries and the convention
+#: cannot be read off the ref.
+_ENTRY = (
+    re.compile(r"^(m\d+(?:c\d+)?)a\d+.*$"),
+    re.compile(r"^(i\d+)[a-z]\d+[a-z]?$"),
+    re.compile(r"^(p\d+)b$"),
+)
+
+
+def entry_of(ref: str) -> str:
+    """The compendium entry a row was printed in. See `_ENTRY`."""
+    for pattern in _ENTRY:
+        hit = pattern.match(ref)
+        if hit:
+            return hit.group(1)
+    return ref
+
+
+def entry_defect(ref: str) -> str:
+    """Why this row's whole **entry** is unfit to appear in the game.
+
+    **Camille's rule, 2026-10-15, widened from the monster case:** *"the
+    ENTIRE compendium entry should be dropped if any part of it is
+    defective."*
+
+    `defect=` already meant that for a stat block -- `loader.defective`
+    derives it from the rows and `pick` stops offering the creature, because
+    a monster fielded without the thing its card is about is wrong in every
+    fight. The same argument holds for an item and for a power and nothing
+    was doing it: a tome whose Power is defective was still dealt, still
+    worn, and still paid out its Property, so a player held a working
+    fraction of an object the compendium cannot describe.
+
+    Derived from the rows and never listed again, for `loader.defective`'s
+    reason: `defect=` on the row is the one place the fact lives, so a
+    second list cannot go stale against it.
+
+    Returns the offending row's reason prefixed with its ref, or `""`.
+
+    **Indexed rather than walked.** `usable` is on the path of every
+    power-use check, and a scan of 23,000 rows per call is not something to
+    put there. `REGISTRY` is filled once at import and never afterwards, so
+    the index is built on first ask; `_forget_defects` exists for the one
+    caller that legitimately adds a row later, which is a plant test.
+    """
+    if _DEFECTS is None:
+        _index_defects()
+    assert _DEFECTS is not None
+    return _DEFECTS.get(entry_of(ref), "")
+
+
+#: Entry -> the first defective row in it and its reason. `None` until asked.
+_DEFECTS: dict[str, str] | None = None
+
+
+def _index_defects() -> None:
+    """One pass over `REGISTRY`, keyed by entry. See `entry_defect`."""
+    global _DEFECTS
+    found: dict[str, str] = {}
+    for row, p in sorted(REGISTRY.items()):
+        if p.defect:
+            found.setdefault(entry_of(row), f"{row}: {p.defect}")
+    _DEFECTS = found
+
+
+def _forget_defects() -> None:
+    """Drop the index, for a test that declares a row after the first ask."""
+    global _DEFECTS
+    _DEFECTS = None
+
+
 def declared() -> list[str]:
     return sorted(REGISTRY)
 
@@ -2250,10 +2335,17 @@ def usable(
         # not `todo=`'s: nothing is coming, so there is nothing to wait for,
         # and offering a fraction of it would be worse than the absence.
         return False, "not being built"
-    if p.defect:
+    if p.defect or entry_defect(p.ref):
         # **The compendium is missing what this row would be written from.**
         # Refused rather than offered half-written, for the reason above: a
         # wrong result is harder to see than a missing one. #360.
+        #
+        # **`entry_defect` as well as `p.defect`, which is Camille's rule of
+        # 2026-10-15**: the entire entry is dropped if any part of it is
+        # defective. It already worked that way for a stat block, through
+        # `loader.defective`; an item whose Power was defective was still
+        # dealt and still paid out its Property, so a player held a working
+        # fraction of an object the compendium cannot describe. #600.
         return False, "the compendium is missing what this row needs"
     if p.todo:
         return False, "not finished yet"

@@ -1713,7 +1713,8 @@ def i3336p1(c: Cast) -> None:
        reach=Ranged(5), target=Target(side="other", count=1,
                                       max_size=Size.TINY),
        requires=_something_tiny, requires_text="a Tiny beast within 5 squares",
-       keywords=[Keyword.POLYMORPH], dropped=("spec.stat_block()",))
+       keywords=[Keyword.POLYMORPH],
+       defect="the card defers the statistics and the entry prints no block")
 def i3364p1(c: Cast) -> None:
     """"Tiny" is the target line's own `max_size`, so the body does not
     re-ask it. The size change and the mount relation are both sayable;
@@ -2039,7 +2040,7 @@ def i2408p1(c: Cast) -> None:
 
 @power("i2714p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
        reach=Ranged(5), target=NO_TARGET, keywords=[Keyword.SUMMONING],
-       dropped=("spec.stat_block()",))
+       defect="the card defers the statistics and the entry prints no block")
 def i2714p1(c: Cast) -> None:
     """The summoned creature's own stat block is printed nowhere the spec
     carries -- the entry names it and never prints it -- so it takes the

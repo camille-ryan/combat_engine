@@ -2710,7 +2710,7 @@ def m6600a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def m6636a0(c: Cast) -> None:
     """The spec names the ring this trait reads by **this row's own ref**, so the
@@ -2814,7 +2814,7 @@ def m936a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=9),
     damage=Damage("1d6", 3, kind=LIMITED),
-    dropped=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def m936a2(c: Cast) -> None:
     """"Until the target saves" is the target's clock and not the caster's, so

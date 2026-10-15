@@ -2195,7 +2195,7 @@ def i1655x1(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(5),
     target=NO_TARGET,
-    dropped=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def i1662p1(c: Cast) -> None:
     """The horse is an ally that carries you, so it is a summon and a
@@ -3163,7 +3163,7 @@ def i1592p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def i1659p1(c: Cast) -> None:
     _figurine(c, speed=8)

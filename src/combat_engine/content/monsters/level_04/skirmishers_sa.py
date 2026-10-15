@@ -807,7 +807,7 @@ def m1469a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def m1469a3(c: Cast) -> None:
     """Everything this row does is put a *different* stat block on the board,

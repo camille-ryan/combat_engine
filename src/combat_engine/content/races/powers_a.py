@@ -938,7 +938,7 @@ def p16473(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    dropped=FROM_BLOCK,
+    defect="the card defers the statistics and the entry prints no block",
 )
 def p16476(c: Cast) -> None:
     """**It has a row now** (#459), so this is `c.summon` and the numbers are

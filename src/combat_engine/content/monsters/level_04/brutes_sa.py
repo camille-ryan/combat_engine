@@ -336,7 +336,7 @@ def m1034a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def m1034a1(c: Cast) -> None:
     """The card says the creature calls up the help described in the encounter's
@@ -2308,7 +2308,7 @@ def m6341a1(c: Cast) -> None:
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
     attack=Attack(vs=FORT, printed=7),
     damage=Damage(bonus=5, dtype=DamageType.POISON, kind=MINION),
-    dropped=("spec.stat_block()",),
+    defect="the card defers the statistics and the entry prints no block",
 )
 def m6341a2(c: Cast) -> None:
     """The target line narrows by a type word, which `c.is_kind` does answer, so

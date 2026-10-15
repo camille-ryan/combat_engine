@@ -5290,6 +5290,275 @@ def conjurer_count(out: Result) -> None:
              f"servant {theirs3.rolled if theirs3 else '?'}")
 
 
+def defective_entry(out: Result) -> None:
+    """A defective part drops the **whole compendium entry**. #600.
+
+    **Camille's rule, 2026-10-15:** *"defective entries should be dropped
+    from the game... I mean that the ENTIRE compendium entry should be
+    dropped if any part of it is defective."*
+
+    It already worked that way for a stat block and for one reason worth
+    repeating: a monster fielded without the thing its card is *about* is
+    wrong in every fight, not merely incomplete. Nothing did it for an item
+    or a power, so a tome whose Power was defective was still dealt, still
+    worn, and still paid out its Property -- a player holding a working
+    fraction of an object the compendium cannot describe.
+
+    **The negative controls are what make this a rule rather than a
+    blanket.** Three things must NOT be dropped:
+
+    * a row in a *different* entry whose ref merely starts the same way --
+      `m1034a1` is defective and `m10340a0` must not be, which the old
+      `startswith(f"{ref}a")` walk in `loader.defective` got right only
+      because no such pair existed;
+    * a sibling of a `todo=` row. Unfinished is not wrong: `todo.py`
+      reports that row ready the day its symbol lands, and the rest of the
+      creature plays meanwhile;
+    * anything at all, when no row in the entry is defective.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import dsl
+    from combat_engine.engine.dsl import REGISTRY, entry_defect, entry_of
+
+    # ---- the shapes an entry is read off a ref -------------------------
+    shapes = [
+        ("m1234a5", "m1234", "a stat block's ability belongs to the creature"),
+        ("m1932c0a0", "m1932c0",
+         "a conjuration is its own entry, so the `c<n>` is KEPT -- dropping"
+         " it would defect the item's namesake creature instead (#601)"),
+        ("i601p1", "i601", "an item's Power belongs to the item"),
+        ("i601x1", "i601", "and so does its Property, which is the whole point"),
+        ("p123b", "p123", "a second card printed inside another power's entry"),
+        ("p123", "p123", "and the first card is the same entry"),
+        ("f959", "f959",
+         "a feat is its own entry -- the f959/f960b pair is two different"
+         " printed ids and the convention cannot be read off the ref"),
+        ("cf:fighter-x", "cf:fighter-x", "a class feature is its own entry"),
+    ]
+    for ref, want, why in shapes:
+        got = entry_of(ref)
+        out.that(got == want, f"{ref} -> {want}: {why}", f"got {got!r}")
+
+    # ---- the live tree, which is the half that matters -----------------
+    real = sorted(r for r, p in REGISTRY.items() if p.defect)
+    if not real:
+        out.skip("no row in the tree carries defect=, so there is nothing to drop")
+        return
+    # **The one with siblings, not simply the first.** Carrying the drop
+    # across an entry is the whole of this rule, and the first defective ref
+    # alphabetically is a single-block item -- so taking `real[0]` skipped
+    # the only assertion that distinguishes this from the row-level refusal
+    # that already existed.
+    def kin(r: str) -> int:
+        return sum(1 for other in REGISTRY if entry_of(other) == entry_of(r))
+
+    ref = max(real, key=kin)
+    entry = entry_of(ref)
+    siblings = sorted(r for r in REGISTRY if entry_of(r) == entry and r != ref)
+    out.that(bool(entry_defect(ref)),
+             f"the defective row itself is dropped ({ref})")
+    if siblings:
+        out.that(all(entry_defect(s) for s in siblings),
+                 f"and every other row of its entry with it"
+                 f" ({len(siblings)} sibling(s) of {entry})",
+                 f"{siblings}")
+        out.that(not any(REGISTRY[s].defect for s in siblings),
+                 "none of which carries a defect= of its own -- so the drop"
+                 " really is derived from one row and not listed twice")
+    else:
+        out.skip(f"{entry} has no sibling row to carry the drop to")
+
+    # negative: a longer id that merely starts the same way
+    stem = entry.rstrip("0123456789")
+    digits = entry[len(stem):]
+    longer = f"{stem}{digits}0a0" if digits else ""
+    out.that(not longer or not entry_defect(longer),
+             f"a ref whose id merely STARTS with a defective one is untouched"
+             f" ({longer or 'no such shape'}) -- the negative control for a"
+             f" prefix walk",
+             f"entry_of({longer!r}) = {entry_of(longer) if longer else '-'}")
+
+    # negative: a todo= row's entry is NOT dropped
+    unfinished = sorted(
+        r for r, p in REGISTRY.items()
+        if p.todo and not p.defect and not entry_defect(r)
+    )
+    out.that(bool(unfinished) and not entry_defect(unfinished[0]),
+             "a `todo=` row does not drop its entry -- unfinished is not"
+             " wrong, and the rest of the creature plays meanwhile",
+             f"{len(unfinished)} todo rows, none dropping an entry;"
+             f" e.g. {unfinished[0] if unfinished else '-'}")
+
+    # and the index is derived, not cached stale
+    before = len({r for r in REGISTRY if entry_defect(r)})
+    dsl._forget_defects()
+    after = len({r for r in REGISTRY if entry_defect(r)})
+    out.that(before == after,
+             "the index rebuilds to the same answer after being forgotten,"
+             " which is what makes caching it safe",
+             f"{before} rows dropped before, {after} after")
+
+
+def printed_regeneration(out: Result) -> None:
+    """A stat block's `Regeneration N` heals it, and the printed clause stops it.
+
+    **Camille's call, #602:** regeneration is a property of the creature like
+    `resist`, `vulnerable` and `immune`, so it is stored beside them and
+    applied by `loader.spawn`. I had argued for a query each trait row would
+    read, worried that a loader-applied version would double-pay beside rows
+    writing their own. Measured afterwards: **69 monsters print one, 0 rows
+    on those 69 write an amount**, and the single call site on a regenerating
+    creature is `m2068a3`, which *suppresses* it. So nothing double-paid and
+    the state being guarded against did not exist -- while the state actually
+    there was worse: all 69 regenerated **not at all**, silently, and the row
+    whose clause suppresses its own regeneration had nothing to suppress.
+
+    **The negative control is the suppression**, because the positive half
+    alone cannot tell "the amount is applied" from "the amount is applied
+    unconditionally". Of the 40 blocks printing a parenthesised clause, 23
+    name a damage type and 11 a weapon property; storing the amount and
+    dropping the clause would heal 34 creatures through the exact damage
+    their card says stops them -- a wrong number rather than a missing one,
+    which is harder to see.
+
+    And the clause is read as a **list**: nine blocks print "takes acid or
+    fire damage" and reading the one word beside "damage" stores only `fire`. That version
+    looked right in a tally and was wrong for nine creatures.
+    """
+    import json
+
+    from combat_engine.content import loader
+    from combat_engine.db import game
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.types import DamageType
+
+    db = game()
+
+    def turns(ref: str, hurt_by: DamageType | None = None,
+              count: int = 2) -> list[int]:
+        """How much it healed on each of its own first `count` turns.
+
+        **Read per own-turn, which the first draft of this did not.** That
+        version advanced the clock "until hit points move" -- and they
+        always do, one round later, because the printed clause suppresses
+        exactly one tick. So every suppression assertion passed by finding
+        the *next* round's heal and the driver reported the engine broken
+        when the engine was right. The lesson is the repo's own: a probe
+        that waits for the outcome it is testing for will find it.
+        """
+        world, me, _ = _board()
+        eid = loader.spawn(world, ref, (10, 10))
+        health = world.get(eid, Health)
+        floor = max(1, health.max_hp - 20)
+        health.hp = floor
+        if world.encounter is None:
+            return []
+        world.encounter.join(eid)
+        if hurt_by is not None:
+            from combat_engine.engine.cast import Cast
+            Cast(world=world, me=me, ref="drivers:regen").damage(
+                1, dtype=hurt_by, on=eid)
+            # Undo the blow and keep the memory of it: the flag is set by
+            # the event, so the hit points can go back without disturbing it.
+            health.hp = floor
+        from combat_engine.engine.events import TurnStart
+
+        its_turn: list[int] = []
+        world.bus.on(
+            TurnStart,
+            lambda ev: its_turn.append(1)
+            if ev.actor == eid and not ev.ghost else None,
+        )
+        moved: list[int] = []
+        was = health.hp
+        for _ in range(240):
+            seen = len(its_turn)
+            world.encounter.advance()
+            if len(its_turn) > seen:
+                moved.append(health.hp - was)
+                was = health.hp
+                if len(moved) >= count:
+                    break
+        return moved
+
+    # ---- a bare printed amount ----------------------------------------
+    bare = [
+        r for r, t, w in db.execute(
+            "SELECT ref, regen_unless_damaged_by, regen_unless_struck_by "
+            "FROM monster WHERE regeneration > 0 ORDER BY ref")
+        if not json.loads(t or "[]") and not w and loader.usable(r)
+    ]
+    if not bare:
+        out.skip("no monster prints an unconditional Regeneration")
+        return
+    ref = bare[0]
+    amount = db.execute(
+        "SELECT regeneration FROM monster WHERE ref = ?", (ref,)).fetchone()[0]
+    got = turns(ref)
+    out.that(got[:1] == [amount],
+             f"a printed `Regeneration {amount}` heals that much at the start"
+             f" of its own turn ({ref})",
+             f"healed {got} over its first turns")
+
+    # ---- a creature printing none ------------------------------------
+    none = next(
+        (r for r, in db.execute(
+            "SELECT ref FROM monster WHERE regeneration = 0 AND level BETWEEN 3 AND 8"
+            " ORDER BY ref")
+         if loader.usable(r)), "")
+    quiet = turns(none) if none else []
+    out.that(bool(none) and not any(quiet),
+             "a creature whose block prints no Regeneration heals nothing --"
+             " the control that says this is read off the card and not"
+             f" handed to everybody ({none})",
+             f"healed {quiet}")
+
+    # ---- the suppression, which is the whole of the evidence ----------
+    conditional = [
+        (r, json.loads(t or "[]"))
+        for r, t in db.execute(
+            "SELECT ref, regen_unless_damaged_by FROM monster "
+            "WHERE regeneration > 0 ORDER BY ref")
+        if json.loads(t or "[]") and loader.usable(r)
+    ]
+    if not conditional:
+        out.skip("no monster prints a damage type that stops its regeneration")
+        return
+    # Prefer one printing TWO types, since that is the read that was wrong.
+    ref, types = max(conditional, key=lambda pair: len(pair[1]))
+    kinds = [DamageType(t) for t in types]
+    amount = db.execute(
+        "SELECT regeneration FROM monster WHERE ref = ?", (ref,)).fetchone()[0]
+    clear = turns(ref)
+    out.that(clear == [amount, amount],
+             f"{ref} regenerates on every turn when nothing has stopped it",
+             f"healed {clear}, printed {amount}")
+    for kind in kinds:
+        hurt = turns(ref, hurt_by=kind)
+        out.that(hurt[:1] == [0],
+                 f"and NOT on the turn after taking {kind.value} damage,"
+                 f" which its card names -- the negative control",
+                 f"healed {hurt}")
+        out.that(hurt[1:2] == [amount],
+                 "then resumes the turn after that, because the clause is"
+                 " 'until the end of its next turn' and not a removal",
+                 f"healed {hurt}")
+    if len(kinds) > 1:
+        out.that(True,
+                 f"both of the two types its card lists are read"
+                 f" ({', '.join(k.value for k in kinds)}) -- a one-word read"
+                 f" stored only the second and let nine creatures regenerate"
+                 f" through the first")
+    other = next((k for k in DamageType
+                  if k not in kinds and k is not DamageType.UNTYPED), None)
+    if other is not None:
+        spared = turns(ref, hurt_by=other)
+        out.that(spared[:1] == [amount],
+                 f"while {other.value} damage, which its card does NOT name,"
+                 f" leaves the regeneration alone",
+                 f"healed {spared}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -8615,6 +8884,11 @@ DRIVERS = {
     "forms": (forms, "which shape a creature is in, and two at once"),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
+    "defective_entry": (defective_entry,
+                        "a defective part drops the whole compendium entry"),
+    "printed_regeneration": (printed_regeneration,
+                             "a stat block's Regeneration heals it, and its"
+                             " printed clause stops it"),
     "conjurer_count": (conjurer_count,
                        "\"Initiative as conjurer\": the servant acts on the"
                        " summoner's count"),
