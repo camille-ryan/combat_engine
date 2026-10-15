@@ -2186,13 +2186,31 @@ def m2338a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("spec.monster_ref()",),
+    todo=("etl.sanitise.alias_collision",),
 )
 def m2338a3(c: Cast) -> None:
-    """Immunity to one named trap's effect, and the brief gives no ref for
-    the trap: the id in the sentence is this creature's own, substituted for
-    a second stat block's. There is nothing to be immune *to* until that ref
-    arrives, so the whole row waits on it."""
+    """Immunity to one named trap's effect, and the brief cannot name the
+    trap: the id in the sentence is **this creature's own**, standing where
+    a *trap's* name was -- not a second stat block's, which the old note
+    here said. The printed sentence is "A <creature> is immune to the
+    effect of a psychic <word> trap", and `<word>` is also a fragment of
+    the creature's own name, so both became the same ref and the row now
+    reads as immune to itself.
+
+    **Re-pointed off `spec.monster_ref()`, which named the wrong cause.**
+    The compendium is not missing a ref; the ETL replaced a word the
+    sentence was about. `sanitise.aliases` splits a creature's printed name
+    into fragments on purpose -- a stat block never prints its own full
+    name, it writes "the <type> shifts 1 square" -- and its own docstring
+    names this cost in as many words: *"a wrong alias is worse than a
+    missing one -- it would swap a word the sentence was about."*
+
+    Measured: neither fragment is a name in its own right. Nothing in the
+    tree is printed with either as its whole name -- no creature, no
+    ability -- so the only entry matching is this creature's own alias
+    list. The positional treatment #506 describes is the fix; no symbol
+    anybody can land will produce the missing word.
+    """
 
 
 # ==========================================================================

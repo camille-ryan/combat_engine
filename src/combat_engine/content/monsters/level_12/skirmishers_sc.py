@@ -1687,13 +1687,29 @@ def m2341a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("spec.monster_ref()",),
+    todo=("etl.sanitise.alias_collision",),
 )
 def m2341a5(c: Cast) -> None:
     """The whole row says this creature counts as a particular sort of
-    servant of a particular sort of master, and the brief names both only by
-    printed name. `c.set_origin` wants a word and there is no ref to put in
-    its place."""
+    servant of a particular sort of master, and the brief can name neither.
+    The printed sentence ends in a common noun that is **also the last word
+    of the creature's own name**, so the scrub turned it into this
+    creature's ref: the row now reads as being its own servant.
+
+    **Re-pointed off `spec.monster_ref()`, which named the wrong cause.**
+    The compendium is not missing a ref; the ETL replaced a word the
+    sentence was about. `sanitise.aliases` splits a creature's printed name
+    into fragments on purpose -- a stat block never prints its own full
+    name, it writes "the <type> shifts 1 square" -- and its own docstring
+    names this cost in as many words: *"a wrong alias is worse than a
+    missing one -- it would swap a word the sentence was about."*
+
+    Measured: neither fragment is a name in its own right. Nothing in the
+    tree is printed with either as its whole name -- no creature, no
+    ability -- so the only entry matching is this creature's own alias
+    list. The positional treatment #506 describes is the fix; no symbol
+    anybody can land will produce the missing word.
+    """
 
 
 # ==========================================================================
