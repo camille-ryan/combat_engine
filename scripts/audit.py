@@ -72,7 +72,7 @@ from combat_engine.engine import (
     get,
     use,
 )
-from combat_engine.engine.dsl import REGISTRY
+from combat_engine.engine.dsl import REGISTRY, entry_defect
 from combat_engine.engine.grid import Square
 from combat_engine.engine.movement import place
 from combat_engine.engine.query import alive, can_act
@@ -3781,12 +3781,24 @@ def main() -> int:
             # as playing. Neither is true of a row nobody intends to write.
             retired.append((ref, (p.declined,), "GONE"))
             continue
-        if p.defect:
+        if p.defect or (dropped := entry_defect(ref)):
             # **The source is missing what the row needs, so no symbol
             # finishes it.** Counted with `todo=` it would report ready the
             # moment some unrelated verb landed; counted done it would read as
             # playing. Its own bucket, like `obsolete=` above. #360.
-            partial.append((ref, (p.defect,), "DEFECT"))
+            #
+            # **`entry_defect` as well as its own `defect=`, and this was
+            # the fourth reader to need it.** Camille's rule of 2026-10-15
+            # drops the whole compendium entry when any part of it is
+            # defective (#600), so a *sibling* of a defective row is refused
+            # in play while carrying no marker of its own. `usable`, both
+            # chargen draws and `loader.defective` were widened and this was
+            # not, so the first wide sweep after it reported **7 rows newly
+            # SILENT** -- m1469a1, m2346a2, m2515a3, m6341a0, m6570a0,
+            # m936a4, m936a5, every one a sibling of one of the ten dropped
+            # stat blocks. They are not silent; they are refused, which is
+            # the whole point of the rule.
+            partial.append((ref, (p.defect or dropped,), "DEFECT"))
             continue
         if p.implemented_in:
             # **Finished, with its clause in another row's body.** Firing it
