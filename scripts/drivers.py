@@ -5794,20 +5794,54 @@ def blank_defence_is_boilerplate(out: Result) -> None:
     import combat_engine.content  # noqa: F401  -- fills the registry
     from combat_engine.engine.dsl import REGISTRY
 
-    marked = [
+    # **The floor became an assertion of zero, and that is the check's
+    # definition changing rather than being loosened.** It read
+    # `len(marked) >= 3` while rows were still on the symbol, so an empty set
+    # could not pass. Retiring the last of them turned it red, correctly --
+    # and the honest replacement is the other direction: the symbol is gone,
+    # and the "declares no attack" claim moves onto a **pinned list** of the
+    # rows that carried it. A live query would answer about nobody, which is
+    # exactly the vacuous pass the floor existed to prevent.
+    retired = (
+        "m1135a1", "m3520a1", "m4717a1", "m2022a1", "m3525a2", "m3547a2",
+        "m784a1", "m817a1", "m857a1", "m1510a1", "m1527a1", "m3543a2",
+        "m3546a4", "m3548a2", "m3559a3", "m3560a1", "m3560a2", "m3562a1",
+        "m977a1", "m1680a1", "m1981a1", "m1522a1",      # the 22 heroic
+        "m947a1", "m1147a1", "m1952a1", "m2085a1",      # four paragon
+    )
+    still = [
         ref for ref, p in REGISTRY.items()
-        if any("attack_defence" in str(w)
+        if any(str(w) == "compendium.attack_defence"
                for w in (getattr(p, "unfinished", None) or ()))
     ]
-    out.that(len(marked) >= 3,
-             "there are still rows on this marker to ask about -- the floor,"
-             " without which the next assertion passes on an empty set",
-             f"{len(marked)} marked")
-    declaring = [r for r in marked if getattr(REGISTRY[r], "attack", None)]
+    out.that(not still,
+             "the symbol is retired -- no row carries it any more",
+             f"{len(still)} still do: {still}")
+    missing = [r for r in retired if r not in REGISTRY]
+    out.that(not missing,
+             "and every row it was retired from is still declared, so the"
+             " list below is asking about rows that exist",
+             f"absent: {missing}")
+    # `m2340a1` is **not** on that list: its pasted line is no loss, but the
+    # printed *Secondary Attack* it grants really has no line of its own,
+    # where this creature's two siblings kept theirs. Re-pointed rather than
+    # retired, and asserted so the distinction cannot quietly collapse.
+    out.that(
+        any("secondary_attack_line" in str(w)
+            for w in (getattr(REGISTRY.get("m2340a1"), "unfinished", None) or ())),
+        "m2340a1 still carries a marker, pointed at the secondary attack"
+        " line rather than at the pasted one -- a different gap one level"
+        " down, and the second row this family does not cover",
+    )
+    declaring = [
+        r for r in retired
+        if r in REGISTRY and getattr(REGISTRY[r], "attack", None)
+    ]
     out.that(not declaring,
-             "and none of them declares a header attack, so the blank line"
-             " was never being used",
-             f"{len(marked)} still marked, {len(declaring)} declare one:"
+             "and none of the 26 declares a header attack, which is what made"
+             " the retirement a no-op in play rather than a change to what"
+             " any row does",
+             f"{len(retired)} retired, {len(declaring)} declare one:"
              f" {declaring}")
 
     # ---- the signature, which is what the retirement actually rests on ---

@@ -234,6 +234,29 @@ _DEFENCES = {"ac": "AC", "armor class": "AC",
 #:
 #: These are not excused, they are **queued**: #358.
 KNOWN = {
+    # **The card prints two damage expressions and the ETL took the first.**
+    # `m2085a1`'s page reads `Grabbed target only; +12 vs ; 2d6+5 damage..
+    # 1d8 + 5 damage.` -- the leading `+12 vs ; 2d6+5 damage..` is a line the
+    # import pastes in front of the real text (#612), so `2d6+5` is the
+    # boilerplate and `1d8+5` is the card. The row declares `1d8+5`; this
+    # check compares against the ETL's reading, which is the pasted number,
+    # so it reports a disagreement that is really the two of them reading
+    # different halves of one line.
+    #
+    # Three things point the same way: `2d6+5` is the single commonest value
+    # in the pasted pool (28 of 109 blank-defence lines, on creatures from
+    # level 7 to 11), `1d8+5` is specific to this card, and the two are
+    # *formatted differently* -- `2d6+5` closed up, `1d8 + 5` spaced -- which
+    # is what one would expect of text from two sources.
+    #
+    # **Waived rather than fixed, and the fix is upstream.** Teaching the ETL
+    # to prefer the expression *after* the paste would move all 109 lines at
+    # once, and that belongs on #612 with a measurement behind it rather than
+    # in a per-row allowance. Camille should confirm the reading before it
+    # becomes an ETL rule: this is the one number in this family's retirement
+    # that changed on inference rather than on a marker.
+    "m2085a1": "the page prints 2d6+5 (pasted) and 1d8+5 (the card); the row"
+               " takes the card's and the ETL takes the pasted one -- #612",
     # **At-will with a cap, which one `usage` value cannot say.** The card prints
     # `At-Will (N/encounter)`; the row writes `usage=ENCOUNTER, uses=N` because
     # `dsl.usable` only consults `uses` when the usage is *not* at-will

@@ -1143,10 +1143,12 @@ def m1952a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=NO_TARGET,
-    dropped=("compendium.attack_defence",),
 )
 def m1952a1(c: Cast) -> None:
-    """The card's own attack line comes out of extraction as "+13 vs ;" with
+    """Two of its own slams, which is the card entire (#612 -- the line
+    above them is pasted in).
+
+    What the old marker described: an attack line extracted as "+13 vs ;" with
     no defence at all, and a damage expression beside it that belongs to no
     sentence. Neither can be declared without inventing a number, so the
     roll is named rather than guessed and what plays is the sentence that

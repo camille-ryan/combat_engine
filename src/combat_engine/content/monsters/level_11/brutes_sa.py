@@ -1111,17 +1111,20 @@ def m2085a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=NO_TARGET,
-    damage=Damage("2d6", 5),
+    damage=Damage("1d8", 5),
     requires=_has_hold,
     requires_text="the m2085 must be grabbing a creature",
-    dropped=("compendium.attack_defence",),
 )
 def m2085a1(c: Cast) -> None:
-    """The card's attack line comes out of extraction as "+12 vs ;" with no
-    defence at all, and its damage printed twice over in two different
-    expressions. Neither can be declared without inventing a number, so the
-    roll is named rather than guessed and what plays is the sentence that
-    survived: it crushes whatever it already has hold of.
+    """It crushes whatever it already has hold of, for `1d8+5` and no roll.
+
+    **The damage was the pasted number.** The page reads `Grabbed target
+    only; +12 vs ; 2d6+5 damage.. 1d8 + 5 damage.` -- two expressions,
+    because the first is importer boilerplate and the second is the card
+    (#612). This row declared `Damage("2d6", 5)`, so it was dealing the
+    boilerplate. `1d8+5` is what the card prints, and the absent attack line
+    was never this power's: automatic damage on something already grabbed is
+    the whole of it.
 
     "A grabbed target only" is narrower than any `Target` can say, so the
     Requirement carries the caster's half and the body picks.
@@ -3625,7 +3628,6 @@ def m947a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
-    dropped=("compendium.attack_defence",),
 )
 def m947a1(c: Cast) -> None:
     """The card's declared attack comes out of extraction as "+12 vs ;" with
