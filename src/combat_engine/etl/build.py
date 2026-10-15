@@ -63,7 +63,8 @@ CREATE TABLE monster (
   ref TEXT PRIMARY KEY, id INTEGER, level INTEGER, role TEXT,
   minion INTEGER, leader INTEGER, elite INTEGER, solo INTEGER,
   size TEXT, origin TEXT, kind TEXT, keywords TEXT, xp INTEGER,
-  hp INTEGER, ac INTEGER, fort INTEGER, ref_def INTEGER, will INTEGER,
+  hp INTEGER, regeneration INTEGER,
+  ac INTEGER, fort INTEGER, ref_def INTEGER, will INTEGER,
   initiative INTEGER, speed INTEGER, modes TEXT, scores TEXT,
   resist TEXT, vulnerable TEXT, immune TEXT, senses TEXT,
   book TEXT, rank TEXT,
@@ -908,12 +909,12 @@ def _monsters(
         report.worst.append((m.ref_id, m.score))
         out.execute(
             "INSERT INTO monster VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 m.ref_id, m.id, m.level, m.role,
                 int(m.minion), int(m.leader), int(m.elite), int(m.solo),
                 m.size, m.origin, m.kind, json.dumps(m.keywords), m.xp,
-                m.hp, m.ac, m.fort, m.ref, m.will,
+                m.hp, m.regeneration, m.ac, m.fort, m.ref, m.will,
                 m.initiative, m.speed, json.dumps(m.modes), json.dumps(m.scores),
                 json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
                 m.senses, m.book, m.rank, m.dialect, m.score,

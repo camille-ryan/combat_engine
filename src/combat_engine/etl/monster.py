@@ -71,6 +71,19 @@ class Monster:
     keywords: tuple[str, ...] = ()
     xp: int = 0
     hp: int = 1
+    #: What the block prints as `Regeneration N`, or 0. On the same header
+    #: lines `hp` and the defences come off, and dropped until now -- so 40
+    #: of the 2,436 heroic blocks that print it lost it at import, and a row
+    #: whose printed clause *suppresses* its own regeneration had nothing to
+    #: suppress. #602.
+    #:
+    #: The amount only. The parenthesised condition every one of them prints
+    #: ("if the troll takes acid or fire damage, regeneration does not
+    #: function until the end of its next turn") stays in the ability text:
+    #: `c.regeneration` already takes `unless_damaged_by=`, so the types are
+    #: a second decision and storing a half-parsed version of them would be
+    #: worse than leaving the prose where a reader can see it.
+    regeneration: int = 0
     ac: int = 10
     fort: int = 10
     ref: int = 10
@@ -499,6 +512,10 @@ def _numbers(m: Monster, blob: str) -> None:
         return int(hit.group(1))
 
     m.hp = grab("HP", m.hp)
+    # Printed between `HP` and `AC`, so it is already in this blob and needs
+    # no reader of its own -- `grab` takes the first integer after the label,
+    # which is the amount, and leaves the parenthesised condition alone.
+    m.regeneration = grab("Regeneration", m.regeneration)
     m.ac = grab("AC", m.ac)
     m.fort = grab("Fortitude", m.fort)
     m.ref = grab("Reflex", m.ref)
