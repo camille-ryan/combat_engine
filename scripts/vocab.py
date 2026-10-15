@@ -4,12 +4,23 @@
     uv run scripts/vocab.py
     uv run scripts/vocab.py --brief        signatures only
     uv run scripts/vocab.py --header       the decorator's arguments
+    uv run scripts/vocab.py --find a b     every symbol whose docstring says
+                                           **all** of those words
 
 This is the briefing handed to whoever is about to write a power, and it is
 generated rather than written, so it cannot drift from what `Cast` actually
 offers. A hand-kept capability document is a document that is wrong by the
 second week -- that is how the first attempt ended up with 546 op shapes and
 a reference nobody trusted.
+
+**Read `docs/symbols/<category>.md` first.** This file prints all 397
+members of `Cast` in one stream, and the whole of it is more than a row
+needs: if you know what *kind* of symbol you want -- a movement verb, a
+condition, a modifier, a ctx gate -- one category file is a tenth the
+reading and names the near-misses in the other files. `scripts/symbols.py`
+generates those from `CATEGORIES` and `check.py` fails when they drift, so
+they are as current as this is. Come here when you do not know the
+category, or want the signature of something you have already found.
 
 If a power needs something that is not in here, the answer is to add a
 method to `Cast`, not to work around its absence. Adding one is a few lines,
@@ -82,6 +93,15 @@ def _find(words: list[str]) -> int:
 
     Matching is on the **docstring and the surrounding note**, not the name.
     A name search is what already failed.
+
+    **Pass separate words, not a quoted phrase.** Every argument is ANDed
+    against the docstring independently, so `--find ignore resistance`
+    finds 36 places and `--find "ignore resistance"` finds none -- the
+    quoted form is one literal argument, and no docstring contains that
+    exact string. Four verbs that exist were marked missing in one session
+    after the quoted form came back empty, and the first conclusion drawn
+    was that this instrument was broken. It was not; it was being asked for
+    a phrase.
     """
     import re as _re
     from pathlib import Path as _Path
@@ -285,6 +305,12 @@ CONTEXT = {
     "augment": "how many power points this use was augmented by, or 0.",
     "granted_by": "who handed this creature the basic attack, or -1.",
     "granted_via": "the ref of the row that handed it over, or empty.",
+    "variant": "which variant of a substituted clause this use is -- `0` is "
+               "the printed one. `c.instead_of` reads it; `Trigger._ask` "
+               "offers them.",
+    "declared_feats": "the feat already picked for each bracketed category "
+                      "this use, so `c.declare` asks once and every later "
+                      "clause honours the same answer.",
     "world": "the world itself. Prefer the methods above; reach for this last.",
 }
 

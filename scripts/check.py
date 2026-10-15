@@ -58,6 +58,24 @@ CHECKS = (
                "signatures mean what the call says, on the files that moved"),
     Instrument("refs", ("uv", "run", "scripts/refs.py"),
                "every ref a row's prose names resolves to something"),
+    # **Beside `refs` because it is the same question about the other
+    # vocabulary.** `refs` asks whether a ref a row names exists; this asks
+    # whether a *symbol* a row looks up exists, in both directions:
+    #
+    # * a `Cast` member in no category file, so `docs/symbols/` cannot go
+    #   stale as `Cast` grows -- Camille's requirement on the plan, and the
+    #   half a hand-written hierarchy cannot keep;
+    # * a `when=lambda ctx: ctx.get("...")` naming a key nothing writes.
+    #   `m5788a0` is the motivating case: a level-10 soldier whose whole card
+    #   is an immunity, reading a `vs` key that no ctx has ever carried, while
+    #   eight rows wanting the same fact read it off the event. The row lays
+    #   its effect, audits green, and does nothing. #591.
+    #
+    # Under a second: one import of `content/` and a regex walk. The expensive
+    # mistake it is aimed at is the one `vocab.py`'s own docstring records --
+    # six verbs that exist marked missing by four agents in one afternoon.
+    Instrument("symbols", ("uv", "run", "scripts/symbols.py"),
+               "docs/symbols/ is current, and no gate reads an unknown key"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
     # **The instrument that says whether the one above means anything**, and it

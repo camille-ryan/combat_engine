@@ -116,9 +116,30 @@ cannot go red or green correctly for either: `c.ability_for(ref)` served
 three, so twelve rows reported ready when a third of it landed. If two rows
 wait on different things, they want different symbols.
 
-**Check the verb does not already exist before marking**:
-`grep -n "def verb" ../engine/cast.py` and `uv run scripts/vocab.py --brief`.
-Most gaps filed here have turned out to exist under another name.
+**Check the verb does not already exist before marking.** Most gaps filed
+here have turned out to exist under another name, and this line used to say
+`grep -n "def verb" ../engine/cast.py` — which asks you to guess the name,
+which is the thing you do not know. **In this order:**
+
+1. **`docs/symbols/<category>.md`** — if you know what *kind* of symbol you
+   want. Ten files, generated from `Cast` and gated by `check.py`, so a verb
+   cannot be missing from them. Each ends with the near-misses that live in
+   another file, because the category is not always where you would look:
+   combat advantage is in `modifiers.md`, not `conditions.md`.
+2. **`uv run scripts/vocab.py --find <word> <word>`** — if you do not.
+   Searches what a symbol *says it does*. **Separate words, not a quoted
+   phrase**: `--find ignore resistance` finds 36 places and
+   `--find "ignore resistance"` finds none, because the arguments are ANDed
+   and no docstring holds that literal string. Four verbs that exist were
+   marked missing in one session over exactly this.
+3. **`uv run scripts/vocab.py --brief`** — for the signature of something
+   you have now found.
+4. **`uv run scripts/blocked.py --group`** — to reuse the symbol other rows
+   are already waiting on, rather than minting a synonym.
+
+`grep` over `cast.py` is the last resort, not the first: 397 members across
+12,017 lines, with `as_basic`/`no_basic`/`counts_as` and
+`instead_of`/`instead_of_now`/`pre_empt` sitting next to each other.
 
 ## Write refs, never names
 
