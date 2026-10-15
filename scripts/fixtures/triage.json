@@ -4459,12 +4459,12 @@
   "why": "f1995 says 'nothing rewrites it for a creature', which is flatly contradicted: _stretched exists because 'the target's reach increases by 1' and 'add your Wisdom modifier to the range of your ranged powers' were stored and never consulted, and a dozen content rows now lay those keys (ardent/level_2_t1 lays both). m6579a1's reach that follows a state is a gate lambda, since a modifier's gate is read at use time."
  },
  "c.reach_of(power=)": {
-  "by": "slice6",
-  "found": "c.bonus(\"reach\"/\"range\"/\"blast_size\", when=) read by dsl._stretched",
-  "refused_rows": 6,
-  "rows": 8,
-  "verdict": "mis-marked",
-  "why": "dsl.area_of calls _stretched with ctx {\"power\": p.ref, \"kind\": r.kind} and Mods.total applies the modifier's own gate to it, so one named row's range line is already rewritable -- powers/sorcerer/level_2_t3.arcane_power gates exactly that way and p12305's docstring says 'c.bonus(\"range\", ...) exists and dsl._stretched reads it with the power in context'. f1817 (a literal inside another row's body) and f3432/f3434 (ranged turned melee) are different gaps."
+  "by": "applied-2026-10-14",
+  "found": "c.reach(ref) reads a range; the three real gaps are c.as_melee(ref=), events.PowerAimed, and nothing at all",
+  "refused_rows": 0,
+  "rows": 6,
+  "verdict": "retired",
+  "why": "The symbol named no verb -- Cast.reach_of has never existed, though dsl._reach_of's docstring still refers to it. Six rows carried it wanting three different facilities, so it could not go green or red correctly for any. The earlier verdict pointed at c.bonus(\"range\", when=), which is the WRITER; what the rows needed was a reader, and c.reach(ref) has answered a ranged row's range throughout. Applied: f1817 needed no facility at all (its clause belongs in p9501, #550); f1028 and its three riders want c.as_melee(ref=); p14125 wants a moment after a range is known and before a power is aimed. Writing f1817 also exposed that p9501's ring included the creature it was centred on, so the row re-attacked the creature it missed and the ring never mattered."
  },
  "c.reanimate(dominated=)": {
   "by": "singleton-sweep",

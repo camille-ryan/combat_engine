@@ -8144,10 +8144,110 @@ def shaman_spirits(out: Result) -> None:
                  f"build {leg!r} also kept {sorted((every - own) & kept)}")
 
 
+def a_feats_clause_in_its_power(out: Result) -> None:
+    """A feat that names one power, written into that power. #550.
+
+    `f1817` widens the ring `p9501` picks its second target out of, from 5
+    squares to 10. The clause lives in `p9501` and reads `c.feat("f1817")`,
+    which is the documented shape for a feat naming a single power -- and
+    `audit` can see none of it: `p9501` is "never usable here" and `f1817`
+    is bucketed as `implemented_in=` and never fired at all. Without this
+    rule the row is marker-free and has no evidence whatsoever.
+
+    **What this proves and what it does not.** It observes *which creature
+    the row asks to swing at*, by recording the `on=` of its
+    `c.grant_attack` call with one candidate placed 7 squares from the
+    creature missed -- outside the printed 5, inside the widened 10. That
+    is exactly the decision the feat changes.
+
+    It does **not** prove the swing resolves. `c.grant_attack` returns
+    False on this board: the harness's caster cannot make a ranged basic
+    attack, which is the same wall that makes `audit` call `p9501` never
+    usable. Asserting the resolution would need a board built around a
+    seeker with a ranged weapon, and that is a bigger fixture than the
+    claim needs.
+
+    Two earlier drafts of this rule were worth less than nothing and are
+    recorded so they are not rewritten:
+
+    * the first computed `10 if c.feat(...) else 5` and asserted that --
+      this driver asserting its own arithmetic, which would pass with the
+      row hard-coding either number;
+    * the second watched for `AttackRolled` and got 0 in **both** arms, so
+      the negative control passed for the wrong reason. A control that
+      holds because nothing happens at all is not a control.
+    """
+    import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.engine.basic import RANGED
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Miss
+    from combat_engine.engine.query import enemies
+
+    for ref in ("p9501", "f1817"):
+        if ref not in REGISTRY:
+            out.skip(f"{ref} is not declared")
+            return
+
+    def asked(with_feat: bool) -> int | None:
+        world, caster, _ = _board("p9501")
+        known = world.get(caster, Powers)
+        foes = sorted(enemies(world, caster))
+        if known is None or len(foes) < 3:
+            return None
+        if with_feat:
+            known.known.append("f1817")
+        missed, candidate = foes[0], foes[1]
+        at = world.get(missed, Position)
+        if at is None:
+            return None
+        x, y = at.square
+        # The one candidate sits in the gap between the two rings; every
+        # other foe goes far enough away that neither ring finds it, so the
+        # answer cannot come from a creature this rule did not place.
+        world.add(candidate, Position(square=(x + 7, y)))
+        for other in foes[2:]:
+            world.add(other, Position(square=(x + 40, y)))
+
+        seen: list[int] = []
+        real = Cast.grant_attack
+
+        def record(self, who, *, on=None, **kw):  # noqa: ANN001, ANN003, ANN202
+            seen.append(on)
+            return real(self, who, on=on, **kw)
+
+        Cast.grant_attack = record  # type: ignore[method-assign]
+        try:
+            c = Cast(world=world, me=caster, ref="p9501",
+                     trigger=Miss(attacker=caster, target=missed, power=RANGED))
+            REGISTRY["p9501"].body(c)
+        finally:
+            Cast.grant_attack = real  # type: ignore[method-assign]
+        return sum(1 for t in seen if t == candidate)
+
+    without, with_it = asked(False), asked(True)
+    if without is None or with_it is None:
+        out.skip("the board posed fewer than three foes")
+    else:
+        out.that(without == 0,
+                 "without f1817, p9501 does not even ask to swing at a foe 7"
+                 " squares from the one it missed -- the printed ring is 5",
+                 f"it asked {without} time(s)")
+        out.that(with_it == 1,
+                 "and with f1817 it does -- the clause is in the power, read"
+                 " off c.feat, not laid from the feat row",
+                 f"it asked {with_it} time(s)")
+
+
 DRIVERS = {
     "shaman_spirits": (
         shaman_spirits,
         "each Companion Spirit keeps its own powers and loses the others'",
+    ),
+    "feats_clause": (
+        a_feats_clause_in_its_power,
+        "a feat naming one power is written into that power (#550)",
     ),
     "mage_schools": (
         mage_school_riders,

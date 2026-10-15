@@ -760,7 +760,7 @@ def p14124(c: Cast) -> None:
     on=Trigger(
         AttackDeclared, by_me, "you use a ranged or area arcane attack power"
     ),
-    todo=("c.reach_of(power=)",),
+    todo=("events.PowerAimed",),
 )
 def p14125(c: Cast) -> None:
     """Targeting is already done by the time this could fire, which is the
@@ -768,12 +768,21 @@ def p14125(c: Cast) -> None:
 
     The *rewriting* half is no longer a gap: `dsl.area_of` hands
     `_stretched` a context carrying the row's ref, so `c.bonus("range", n,
-    when=...)` lengthens one named row. Two things are left. The trigger is
-    `AttackDeclared`, which the engine emits per target already chosen, so
-    a modifier laid there widens the *next* use of that power and not the
-    one that fired this. And "double" is proportional where a modifier is a
-    fixed number, so the base has to be read at the moment of use -- which
-    is the moment this cannot reach."""
+    when=...)` lengthens one named row.
+
+    **One of the two remaining holds is gone, and it is the arithmetic
+    one.** "Double" is proportional where a modifier is a fixed number, so
+    the base had to be read -- and `c.reach(ref)` reads it, answering a
+    ranged row's range because `dsl._reach_of` does. The old marker
+    `c.reach_of(power=)` named no verb at all and sent five other rows
+    hunting for three different things.
+
+    What is left is a **moment**, and it is fatal on its own: the trigger is
+    `AttackDeclared`, which the engine emits per target already chosen, and
+    `PowerUsed` is no earlier -- its own note in `items/implement_b` says
+    "the targets are chosen by then". So a modifier laid here widens the
+    *next* use of that power and not the one that fired this. Nothing
+    announces a power after its range is known and before it is aimed."""
 
 
 @power(

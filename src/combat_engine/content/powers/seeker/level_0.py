@@ -140,6 +140,27 @@ def p9501(c: Cast) -> None:
     missed = getattr(c.trigger, "target", None)
     if missed is None:
         return
-    foes = [f for f in c.within(5, of=missed, side="enemy") if c.can_see(f)]
+    # **`f1817` widens this ring and the clause lives here**, which is #550:
+    # a feat naming one power writes into that power rather than carrying a
+    # rider nothing reads. The five was a literal and the feat sat marked
+    # `todo` because "nothing rewrites the distance one named row measures"
+    # -- true, and the wrong thing to want. The row that measures it can
+    # just ask.
+    ring = 10 if c.feat("f1817") else 5
+    # **`f != missed` is load-bearing and was absent.** `c.within` centres
+    # the circle on `of=` and *includes whoever is standing there*, so the
+    # creature just missed was the first candidate every time -- the row
+    # re-attacked it and the ring it measures never mattered. A card that
+    # bothers to describe a radius around the creature you missed does not
+    # mean "shoot that one again".
+    #
+    # Found by driving `f1817`: widening the ring from 5 to 10 changed
+    # nothing observable, because the answer was never coming from the ring.
+    # `side="other"` excludes the centre but cannot also say "enemy", so the
+    # filter is here.
+    foes = [
+        f for f in c.within(ring, of=missed, side="enemy")
+        if f != missed and c.can_see(f)
+    ]
     if foes:
         c.grant_attack(c.me, on=foes[0], ref=RANGED, reentrant=_repeating(c))

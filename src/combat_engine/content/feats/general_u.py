@@ -29,9 +29,14 @@ augment half is `dropped`.
 
 **The `f1028` riders (`f3432`, `f3434`, `f3435`).** All three read "when
 you hit with an attack made using `f1028`", and `f1028` is itself marked
-`c.reach_of(power=)`: nothing rewrites a power's reach for one use, so
-no attack is ever *made using* it and the trigger can never be true.
-Marked with the same symbol rather than approximated as "any hit".
+`c.as_melee(ref=)`: nothing turns a ranged power into a melee one for a
+single use, so no attack is ever *made using* it and the trigger can never
+be true. Marked with the same symbol rather than approximated as "any hit".
+
+That symbol used to be `c.reach_of(power=)` and was wrong for all four --
+it named no verb at all, and six rows carried it wanting three different
+facilities. Reading a range is `c.reach(ref)` and always existed; one of
+the six, `f1817`, turned out to need no new facility whatsoever.
 
 **The shadow-race run (`f3456`-`f3463`).** `p2482` is the racial power by
 ref, so "replace your racial power with this card" is `c.forbid` plus
@@ -120,7 +125,15 @@ _ASSOCIATED = {"f3427": ("p5919", "p1341"), "f3429": ("p1401", "p501")}
 FORGO = ("c.forgo_damage()",)
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten
 #: for one use, so no attack is ever "made using" it.
-REACH = ("c.reach_of(power=)",)
+#:
+#: **Re-pointed off `c.reach_of(power=)`, which named no verb.** That symbol
+#: was carried by six rows wanting three different things -- reading a range,
+#: changing a range's *kind*, and widening a literal inside another row's
+#: body -- so it could not go green or red correctly for any of them, which
+#: is the "a marker names one gap" rule broken three ways at once. Reading a
+#: range is `c.reach(ref)` and has existed throughout. What `f1028` wants is
+#: to change a range's kind for one use, which is this.
+REACH = ("c.as_melee(ref=)",)
 #: A skill bonus that applies only in a named circumstance.
 CIRCUMSTANCE = ("c.skill_circumstance()",)
 
@@ -372,7 +385,7 @@ def f3432(c: Cast) -> None:
 
     So **one hold is left, and it is fatal on its own**: no attack is ever
     made *using* `f1028`. A power's reach is header data and is never
-    rewritten for one use, which is `c.reach_of(power=)` and is `f1028`'s
+    rewritten for one use, which is `c.as_melee(ref=)` and is `f1028`'s
     own marker. Until an attack can be made through that card there is no
     trigger, whatever the phase says.
 

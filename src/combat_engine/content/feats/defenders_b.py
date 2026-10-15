@@ -617,12 +617,20 @@ def f1816(c: Cast) -> None:
 
 
 @power("f1817", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reach_of(power=)",))
+       reach=PERSONAL, target=SELF, implemented_in=("p9501",))
 def f1817(c: Cast) -> None:
-    """Widens the ring p9501 picks its second target out of. The five
-    squares are a literal inside that row's body -- not header data a
-    modifier could reach -- so nothing rewrites the distance one named
-    row measures."""
+    """Widens the ring p9501 picks its second target out of, from 5 to 10.
+
+    **Written into `p9501`, not laid from here.** The old marker wanted
+    something that could "rewrite the distance one named row measures",
+    which was a true description of a facility that should not exist: the
+    five squares are a literal in that row's body, and the row holding the
+    literal is the one that can ask. `p9501` reads `c.feat("f1817")` and
+    picks its ring. #550, and `p704` is the worked example.
+
+    The row stays declared as a pointer so the feat is drawable and
+    `audit.py` buckets it by `implemented_in=` rather than reporting it
+    silent."""
 
 
 #: The two rows the class-page bond hands over, one per leg. Named here

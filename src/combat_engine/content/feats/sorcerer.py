@@ -131,12 +131,19 @@ def f998(c: Cast) -> None:
 
 
 @power("f1028", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reach_of(power=)",))
+       reach=PERSONAL, target=SELF, todo=("c.as_melee(ref=)",))
 def f1028(c: Cast) -> None:
     """Turns a ranged power into a melee one when cast through a named
     weapon group. A power's reach is header data, read before the body
     runs so the interface can draw it, and nothing rewrites it for one
-    use -- the same gap the wizard's f1134 names from the other side."""
+    use -- the same gap the wizard's f1134 names from the other side.
+
+    **Re-marked off `c.reach_of(power=)`, which named no verb at all.**
+    That symbol was shared by six rows wanting three different things, so
+    it could not go green for any of them. Reading a range is
+    `c.reach(ref)` and has existed all along; what this row wants is to
+    *change the kind* of a range for one use, which is a different verb and
+    now says so."""
 
 
 @power("f1138", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
