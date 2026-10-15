@@ -889,18 +889,39 @@ def m1826a3(c: Cast) -> None:
     level=8,
     usage=ENCOUNTER,
     action=MINOR,
-    reach=CloseBurst(2),
+    reach=CloseBurst(5),
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=11),
-    dropped=("Power.reach_alt",),
 )
 def m1826a4(c: Cast) -> None:
-    """The wider burst while bloodied has nothing to declare it with --
-    `reach` is fixed at the header and targeting runs before this body
-    sees anything -- so the printed burst 2 is what is offered."""
+    """"Close burst 2 (5 while bloodied)" -- the wider burst, narrowed here.
+
+    **The header carries 5 and the body drops anybody past the real
+    radius.** The old note said "`reach` is fixed at the header and
+    targeting runs before this body sees anything", which is true and is
+    the argument for declaring the *permissive* burst rather than the
+    printed 2: the chooser can only offer what the header says, so a
+    burst 2 could never reach 5 squares even while bloodied, and that is
+    the half the card is about. `m6683a0` answers the same sentence the
+    same way for a melee reach, and `m5466a0` is where the reasoning comes
+    from.
+
+    `EACH_ENEMY` dispatches the body once per target, so the narrowing is
+    a distance guard rather than `_restricted_to`'s re-aim -- there is
+    nobody to re-aim at when every enemy in the burst is already being
+    offered in turn.
+
+    `on=c.me`, because "while bloodied" here is the **creature**: a bare
+    `c.bloodied()` reads the target, which is #621's fault in eight other
+    rows.
+    """
+    far = 5 if c.bloodied(on=c.me) else 2
+    victim = c.target
+    if victim is None or c.distance(victim) > far:
+        return
     if c.strike():
-        c.push(c.speed_of(), on=c.target)
+        c.push(c.speed_of(), on=victim)
         c.prone()
 
 

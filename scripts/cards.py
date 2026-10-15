@@ -251,8 +251,15 @@ KNOWN = {
     # stop it catching a row that declares the *wrong* one of the two. #614.
     "m6683a0": "the card prints Melee 2 or 4 while bloodied; the header "
                "carries the permissive 4 and `_restricted_to` narrows it",
+    # And the same sentence about an *area*: "Close burst 2 (5 while
+    # bloodied)". Same answer for the same reason -- 5 at the header, and the
+    # body drops anybody past the real radius. The narrowing is a distance
+    # guard rather than `_restricted_to` because `EACH_ENEMY` dispatches the
+    # body once per target, so there is nobody to re-aim at.
+    "m1826a4": "the card prints Close burst 2 (5 while bloodied); the header "
+               "carries the permissive 5 and the body drops anybody past 2",
 
-"m302a2": "the card prints At-Will (3/encounter); the row says "
+    "m302a2": "the card prints At-Will (3/encounter); the row says "
               "`usage=ENCOUNTER, uses=3` so the cap is enforced",
     "m6011a1": "the card prints At-Will (6/encounter); the row says "
                "`usage=ENCOUNTER, uses=6` so the cap is enforced",

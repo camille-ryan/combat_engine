@@ -6095,12 +6095,14 @@ def both_printed_shapes_offered(out: Result) -> None:
     only one action would be a form nobody can pick, which is the shape of
     failure this engine produces: right by inspection, absent in play.
 
-    The control is the other two rows in the family. `m6683a0` prints
-    "Melee 2, or 4 while bloodied" and `m1826a4` "close burst 2 (5 while
-    bloodied)" -- *conditional* on a state where a branch is a choice, and
-    no branch can be gated on hit points. They must still carry a marker;
-    if a later change makes them look finished without one, that is the
-    `alt` mechanism being stretched past what it says.
+    The control is the other two rows in the family, and it has now caught
+    me twice. `m6683a0` prints "Melee 2, or 4 while bloodied" and
+    `m1826a4` "close burst 2 (5 while bloodied)" -- *conditional* on a
+    state, where `m5193a2`'s branch is a **choice**. Both are written now,
+    and both the **other way**: one reach declared, no `alt`, the body
+    narrowing. So the control asserts the distinction rather than their
+    markers -- if either ever grows an `alt`, the branch mechanism is being
+    stretched to carry a condition, which no branch can be gated on.
     """
     import combat_engine.content  # noqa: F401  -- fills the registry
     from combat_engine.engine import actions as A
@@ -6139,25 +6141,26 @@ def both_printed_shapes_offered(out: Result) -> None:
              " decision rather than a relabelling",
              f"{len(a0)} squares against {len(a1)}")
 
-    # **The control, and it caught me.** It asserted that both conditional
-    # rows stay marked, and then I wrote one of them -- `m6683a0` takes the
-    # permissive reach in its header and narrows it in the body, which is a
-    # different answer from `Range.alt` and the reason the two are not one
-    # gap. So the assertion is now that the conditional pair is *not* this
-    # mechanism: `m1826a4` is still marked, and `m6683a0` is written **the
-    # other way**, with one reach declared rather than two branches.
-    got = REGISTRY.get("m1826a4")
-    out.that(got is not None and bool(got.unfinished),
-             "m1826a4 is still marked -- \"close burst 2 (5 while"
-             " bloodied)\" is conditional on a state, where a branch is a"
-             " choice, and no branch can be gated on hit points",
-             f"{getattr(got, 'unfinished', None)}")
-    other = REGISTRY.get("m6683a0")
-    out.that(other is not None and other.reach.alt is None,
-             "and m6683a0 -- the same conditional shape -- is written with"
-             " ONE reach and no `alt`, which is what keeps the two"
-             " mechanisms distinguishable rather than blurred together",
-             f"alt={getattr(other.reach, 'alt', None)}")
+    # **The control, and it has caught me twice.** First draft: both
+    # conditional rows stay marked -- then I wrote `m6683a0`. Second:
+    # `m1826a4` stays marked -- then I wrote that too. Twice the assertion
+    # was about a marker when the thing worth protecting is the *shape*,
+    # and a marker assertion goes stale the moment the row is written.
+    #
+    # So: neither conditional row carries an `alt`. They declare the
+    # permissive reach and narrow it in the body, which is a different
+    # mechanism from this one and the reason the two are not one gap. If
+    # either grows an `alt`, a branch is being gated on hit points.
+    for ref, shape in (("m6683a0", "Melee 2 or 4 while bloodied"),
+                       ("m1826a4", "close burst 2 (5 while bloodied)")):
+        row = REGISTRY.get(ref)
+        out.that(row is not None and row.reach.alt is None
+                 and row.reach.branches == (0,),
+                 f"{ref} -- \"{shape}\", conditional on a state -- is"
+                 " written with ONE reach and no `alt`, which is what keeps"
+                 " the two mechanisms distinguishable rather than blurred",
+                 f"alt={getattr(row.reach, 'alt', None)}"
+                 f" branches={getattr(row.reach, 'branches', None)}")
 
 
 def reach_that_depends_on_a_state(out: Result) -> None:
@@ -6238,8 +6241,8 @@ def reach_that_depends_on_a_state(out: Result) -> None:
         spot.square = (here.square[0] + at, here.square[1])
         c = Cast(world=world, me=me, ref="m6683a0", targets=[far])
         struck: list[int] = []
-        c.strike = lambda **kw: True
-        c.hit = lambda **kw: struck.append(kw.get("on") or -1)
+        c.strike = lambda **kw: True  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
+        c.hit = lambda **kw: struck.append(kw.get("on") or -1)  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
         REGISTRY["m6683a0"].body(c)
         return (struck[0] if struck else None), far
 
@@ -6256,6 +6259,119 @@ def reach_that_depends_on_a_state(out: Result) -> None:
     got, far = hit_whom(False, 2)
     out.that(got == far,
              "and unhurt it still reaches 2, which is its ordinary state",
+             f"hit {got}, wanted {far}")
+
+
+def area_that_depends_on_a_state(out: Result) -> None:
+    """"Close burst 2 (5 while bloodied)" -- the same sentence about an area.
+
+    `reach_that_depends_on_a_state` is this card's melee twin and the
+    reasoning carries over unchanged: the header declares the **permissive**
+    radius, because the chooser can only offer what the header says, and a
+    burst 2 could never reach 5 squares even while bloodied -- the half the
+    card is about. The body drops anybody past the real radius.
+
+    **Two layers, because the area version can fail in a way the melee one
+    cannot.** A burst both *offers* a target set and *resolves* one, so:
+
+    * the chooser must hand the body the creature 4 squares off at all --
+      that is what declaring 5 buys, and it is the assertion that would have
+      gone red under the old `CloseBurst(2)` header;
+    * and the body must refuse it when the creature is unhurt -- the
+      control, without which the row would simply be a burst 5 that always
+      reaches.
+
+    **No `_restricted_to` here, and that is the difference worth recording.**
+    `EACH_ENEMY` dispatches the body once per target (`dsl.use` sets
+    `cast.target` and calls the body in a loop), so the narrowing is a
+    distance guard; there is nobody to re-aim at when every enemy in the
+    burst is already being offered in turn. The melee row needs the re-aim
+    precisely because its chooser picked **one** creature.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as A
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY, area_of
+    from combat_engine.engine.query import enemies
+
+    p = REGISTRY["m1826a4"]
+    out.that(p.reach.kind == "close_burst" and p.reach.size == 5,
+             "the header declares the permissive radius, 5 -- the one the"
+             " chooser has to be able to offer",
+             f"{p.reach.kind} {p.reach.size}")
+    out.that(not p.unfinished, "and carries no marker", f"{p.unfinished}")
+
+    def posed(bloodied: bool, at: int):  # noqa: ANN202
+        """The creature, one enemy `at` squares off, everybody else parked."""
+        world, me, _ = _board("m1826a4", 1)
+        body = world.get(me, Health)
+        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
+        here = world.get(me, Position)
+        foes = sorted(enemies(world, me))
+        far = foes[0]
+        for i, other in enumerate(foes[1:], start=1):
+            spot = world.get(other, Position)
+            if spot is not None:
+                spot.square = (here.square[0] + 30 + i, here.square[1])
+        world.get(far, Position).square = (here.square[0] + at, here.square[1])
+        return world, me, far
+
+    # The offered area is the header's, both ways -- the menu is one number
+    # and the narrowing is the body's job. Said plainly rather than left to
+    # be inferred, because a reader's first guess is that the burst shrinks.
+    sizes = []
+    for hurt in (False, True):
+        world, me, _ = posed(hurt, 4)
+        sizes.append(len(area_of(world, me, p, None, 0)))
+    out.that(sizes[0] == sizes[1],
+             "the *offered* burst is the same either way -- the header is one"
+             " number, so the narrowing cannot be the menu's doing",
+             f"{sizes[0]} squares unhurt, {sizes[1]} bloodied")
+
+    # Layer one: the chooser hands the body the far creature at all. This is
+    # the assertion the old `CloseBurst(2)` header failed.
+    world, me, far = posed(True, 4)
+    offered = A._aimings(world, me, "m1826a4")
+    reached = {t for a in offered for t in a.targets}
+    out.that(far in reached,
+             "the creature 4 squares off is OFFERED -- past the printed 2 and"
+             " inside the bloodied 5, which is the whole reason the header"
+             " carries the permissive radius",
+             f"{len(offered)} action(s), {len(reached)} target(s) offered")
+
+    # Layer two: the body, per target, exactly as `dsl.use` runs it.
+    #
+    # **Recorded off `c.push`, not `c.hit`.** The first version stubbed
+    # `c.hit` -- the verb the melee twin's body calls -- and reported
+    # nothing hit in every case, including the one the control needs to
+    # fail. This card's effect is a push and a knockdown, so `c.hit` is
+    # never reached and the probe was measuring a verb the row does not
+    # use. A probe that reads the same in all three cases is measuring the
+    # wrong thing, not finding a dead row.
+    def hit_at(bloodied: bool, at: int) -> tuple[int | None, int]:
+        world, me, far = posed(bloodied, at)
+        c = Cast(world=world, me=me, ref="m1826a4", targets=[far])
+        c.target = far
+        struck: list[int] = []
+        c.strike = lambda **kw: True  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
+        c.push = lambda *a, **kw: struck.append(kw.get("on") or far)  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
+        c.prone = lambda **kw: None  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
+        p.body(c)
+        return (struck[0] if struck else None), far
+
+    got, far = hit_at(True, 4)
+    out.that(got == far,
+             "bloodied, that creature is hit -- the clause the old marker"
+             " dropped", f"hit {got}, wanted {far}")
+    got, far = hit_at(False, 4)
+    out.that(got is None,
+             "unhurt, it is NOT hit -- the control, and the whole reason the"
+             " header cannot simply declare 5 and stop",
+             f"hit {got}, the far creature is {far}")
+    got, far = hit_at(False, 2)
+    out.that(got == far,
+             "and unhurt it still reaches 2, which is its printed radius",
              f"hit {got}, wanted {far}")
 
 
@@ -10412,6 +10528,9 @@ DRIVERS = {
     "reach_that_depends_on_a_state": (reach_that_depends_on_a_state,
                                       "\"Melee 2, or 4 while bloodied\": the"
                                       " header carries the permissive one"),
+    "area_that_depends_on_a_state": (area_that_depends_on_a_state,
+                                     "\"close burst 2 (5 while bloodied)\":"
+                                     " offered at 5, narrowed in the body"),
     "both_printed_shapes_offered": (both_printed_shapes_offered,
                                     "a printed \"or\" between two shapes"
                                     " offers both, and the conditional pair"
