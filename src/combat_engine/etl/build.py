@@ -578,6 +578,9 @@ class Report:
     seconds: int = 0
     crossed: int = 0
     companions: int = 0
+    #: Stat blocks printed inside an item's own entry, imported by
+    #: `_conjured` with an `m<item id>c<n>` ref. #601.
+    conjured: int = 0
     traps: int = 0
     diseases: int = 0
     links_found: int = 0
@@ -632,6 +635,8 @@ class Report:
             f"terrain       {self.terrain:6d}  (121 prose features, 24 with mechanics; #458)",
             f"features      {self.features:6d}  (class features, new)",
             f"second cards  {self.seconds:6d}  (a card printed inside another entry)",
+            f"conjured      {self.conjured:6d}  "
+            f"(a stat block printed inside an item's entry; #601)",
             f"cross-refs    {self.crossed:6d}  (specs naming another power, now by ref)",
             f"companions    {self.companions:6d}  (familiars and beasts, new)",
             f"traps         {self.traps:6d}  (with a printed Perception DC where one is given)",
@@ -743,6 +748,8 @@ def build() -> Report:
     # Items before feats for the same reason, one step further out.
     item.races(source, out, report, names)
     item.items(source, out, report, names)
+    # After both, because it mints monster refs and needs the creature index.
+    report.conjured = _conjured(source, out, report, names)
     feat.feats(source, out, report, names)
     # After both, because a feat's Special line names items and
     # a set's benefit names feats. Neither index exists earlier.
@@ -800,7 +807,13 @@ CORRECTED: dict[str, dict[str, int]] = {
 #: names anything new on the run that imports it. The same arrangement
 #: `loader.UNUSABLE` and `CORRECTED` use, and for the same reason: a known-bad
 #: row is a fact to record, not a reason to stop.
-KNOWN_BLANK = ("m5452",)
+KNOWN_BLANK = (
+    "m5452",
+    # Not a parse failure: the card prints "HP 0; Bloodied 0; your bloodied
+    # value", "Initiative as conjurer" and an attack bonus written as an
+    # ability score. There are no numbers on the page to read. #601.
+    "m509c0",
+)
 
 
 def _read_nothing(m) -> bool:  # noqa: ANN001
@@ -902,50 +915,151 @@ def _monsters(
             printed_role=row["Role"] or "",
         )
         _correct(m, m.ref_id)
-        if _read_nothing(m):
-            report.blank_stats.append(m.ref_id)
         scores.append(m.score)
         report.monsters += 1
         report.worst.append((m.ref_id, m.score))
-        out.execute(
-            "INSERT INTO monster VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                m.ref_id, m.id, m.level, m.role,
-                int(m.minion), int(m.leader), int(m.elite), int(m.solo),
-                m.size, m.origin, m.kind, json.dumps(m.keywords), m.xp,
-                m.hp, m.regeneration, m.ac, m.fort, m.ref, m.will,
-                m.initiative, m.speed, json.dumps(m.modes), json.dumps(m.scores),
-                json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
-                m.senses, m.book, m.rank, m.dialect, m.score,
-                int(m.conjuration),
-            ),
-        )
-        names[m.ref_id] = {"name": m.name, "description": m.description}
-        for a in m.abilities:
-            ref = f"{m.ref_id}a{a.index}"
-            out.execute(
-                "INSERT INTO monster_power VALUES (?,?,?,?,?,?,?,?,?)",
-                (
-                    ref, m.ref_id, a.index, a.section, a.usage, a.action,
-                    a.recharge, json.dumps(a.keywords), a.spec,
-                ),
-            )
-            # The printed lines, names left in. `a.spec` is the same text with
-            # this creature's name swapped for its ref, so the two are one
-            # extraction and cannot hold different rules. #349.
-            names[ref] = {"name": a.name, "rules_text": a.rules_text}
-            # **And each choice this ability offers, by its own ref.** These
-            # names were reaching nobody's index: not a row, so `scrub` had
-            # nothing to swap them for, and not an entry, so `leaks.py` could
-            # not report them either -- invisible to both halves of the
-            # arrangement, which is the state `_other_names` exists to prevent.
-            # The same fix a race's "choose one" family got in #277. #353.
-            for label, option_ref in a.sub_options.items():
-                names.setdefault(option_ref, {"name": label})
-            report.abilities += 1
+        _write_monster(out, m, names, report)
     report.scores["monster"] = sum(scores) / max(1, len(scores))
     report.worst = sorted(report.worst, key=lambda p: p[1])[:10]
+
+
+def _write_monster(
+    out: sqlite3.Connection, m: monster_parser.Monster,
+    names: dict[str, dict[str, str]], report: Report,
+) -> None:
+    """One stat block and its abilities, into `monster` and `monster_power`.
+
+    Lifted out of `_monsters` when a second caller arrived (#601, the blocks
+    printed inside an item's own entry). The 32-column tuple wants exactly
+    one copy: it had just been widened for `regeneration` (#602), and a
+    second hand-written copy is how the next column goes into one site and
+    not the other.
+
+    `_read_nothing` moved in here with it, from `_monsters`. A conjured
+    block that parses to nothing fails the same way and was invisible:
+    #238's whole point is that a silently-zero stat line is reported on the
+    run that imports it, and a check sitting in one of two callers does not
+    do that.
+    """
+    if _read_nothing(m):
+        report.blank_stats.append(m.ref_id)
+    out.execute(
+        "INSERT INTO monster VALUES "
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            m.ref_id, m.id, m.level, m.role,
+            int(m.minion), int(m.leader), int(m.elite), int(m.solo),
+            m.size, m.origin, m.kind, json.dumps(m.keywords), m.xp,
+            m.hp, m.regeneration, m.ac, m.fort, m.ref, m.will,
+            m.initiative, m.speed, json.dumps(m.modes), json.dumps(m.scores),
+            json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
+            m.senses, m.book, m.rank, m.dialect, m.score,
+            int(m.conjuration),
+        ),
+    )
+    names[m.ref_id] = {"name": m.name, "description": m.description}
+    for a in m.abilities:
+        ref = f"{m.ref_id}a{a.index}"
+        out.execute(
+            "INSERT INTO monster_power VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                ref, m.ref_id, a.index, a.section, a.usage, a.action,
+                a.recharge, json.dumps(a.keywords), a.spec,
+            ),
+        )
+        # The printed lines, names left in. `a.spec` is the same text with
+        # this creature's name swapped for its ref, so the two are one
+        # extraction and cannot hold different rules. #349.
+        names[ref] = {"name": a.name, "rules_text": a.rules_text}
+        # **And each choice this ability offers, by its own ref.** These
+        # names were reaching nobody's index: not a row, so `scrub` had
+        # nothing to swap them for, and not an entry, so `leaks.py` could
+        # not report them either -- invisible to both halves of the
+        # arrangement, which is the state `_other_names` exists to prevent.
+        # The same fix a race's "choose one" family got in #277. #353.
+        for label, option_ref in a.sub_options.items():
+            names.setdefault(option_ref, {"name": label})
+        report.abilities += 1
+
+
+def _conjured(
+    source: sqlite3.Connection, out: sqlite3.Connection, report: Report,
+    names: dict[str, dict[str, str]],
+) -> int:
+    """Stat blocks printed **inside** an item's own entry.
+
+    An item that conjures a servant prints the servant's block after a
+    second `<h1>` on its own page. `item._own_page` cuts there and is right
+    to -- the block is not the item -- and nothing then imported the cut
+    half, so the creature's printed numbers existed in the compendium and
+    nowhere else. 13 content rows had no ref to name and no numbers to
+    load. #601.
+
+    Run **after** `_monsters`, for two reasons: the `m<item id>c<n>` refs
+    have to be minted into a table whose real `m<id>` rows already exist so
+    a collision raises rather than overwrites, and `names` must already
+    hold the creature index those rows' specs are scrubbed against.
+
+    **Telling a conjured block from an item set's member page.** The same
+    second `<h1>` carries both, so the shape is tested rather than assumed:
+    a stat block prints at least four of `HP`, `AC`, `Initiative`, `Speed`
+    and a level line. The threshold has a two-mark margin, which is why it
+    is four -- over every second-or-later `<h1>` tail in the heroic range
+    the scores are 2x 0/5, 53x 1/5, 15x 2/5, **nothing at 3/5**, then 10x
+    4/5 and 2x 5/5. So 12 blocks, not the 11 this docstring first claimed:
+    the earlier count was of the 4/5 and 5/5 groups read off a sample and
+    was one short.
+
+    **One of the 12 prints no numbers of its own.** `m509c0`'s card states
+    its hit points, its defences and its attack bonus as expressions in the
+    conjurer's values, so the compendium stores zeroes -- which is exactly
+    `_read_nothing`'s shape and it is reported as such. It is in
+    `KNOWN_BLANK` with that reason rather than excluded, because a future
+    block with genuinely unparsed numbers must still go red.
+
+    **Level and role are not substituted where the block prints neither**,
+    which is 10 of the 12 -- they print "Initiative as conjurer" and no
+    level line. The item's own level would be the tempting guess and is
+    refused: "parse, or store nothing", and a conjuration is never drawn by
+    level anyway because `conjuration=1` keeps it out of `pick`. Those rows
+    therefore hold `Monster.level`'s own default of **1 and a null role**,
+    not a null level -- read the column that way rather than expecting an
+    absence. The two that do print one come out level 6 skirmisher and
+    level 10 minion.
+    """
+    from .html import detail
+
+    written = 0
+    for row in source.execute(
+        "SELECT ID, Txt FROM Item WHERE LevelSort BETWEEN 1 AND ? ORDER BY ID",
+        (item.MAX_ITEM_LEVEL,),
+    ):
+        body = detail(row["Txt"] or "")
+        cuts = [c.start() for c in re.finditer(r"<h1\b", body)]
+        if len(cuts) < 2:
+            continue
+        for n, start in enumerate(cuts[1:]):
+            stop = cuts[n + 2] if n + 2 < len(cuts) else len(body)
+            tail = body[start:stop]
+            if not _is_stat_block(tail):
+                continue
+            m = monster_parser.parse(row["ID"], tail, "", others=None)
+            m.suffix = f"c{n}"
+            m.conjuration = True
+            _write_monster(out, m, names, report)
+            written += 1
+    return written
+
+
+#: The labels a stat block prints and an item set's member page does not.
+#: Four of the five is the test; see `_conjured`.
+_BLOCK_MARKS = (r"\bHP\b", r"\bAC\b", r"\bInitiative\b", r"\bSpeed\b",
+                r"\bLevel \d+")
+
+
+def _is_stat_block(tail: str) -> bool:
+    flat = " ".join(re.sub(r"<[^>]+>", " ", tail).split())
+    return sum(bool(re.search(p, flat, re.I)) for p in _BLOCK_MARKS) >= 4
 
 
 def _creature_names(rows: list) -> dict[str, str]:

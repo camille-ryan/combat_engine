@@ -554,8 +554,12 @@ def _render(db, ref: str, declared: set[str], include_all: bool) -> str | None: 
         # and find it by eye. The stat block comes with it, because the
         # numbers are most of what the row needs.
         only = ""
-        if re.fullmatch(r"m\d+a\d+", ref):
-            only, ref = ref, ref.split("a")[0]
+        # The `c<n>` is a conjuration's suffix (#601): a stat block printed
+        # inside an item's own entry is `m<item id>c<n>`, so its abilities
+        # are `m1932c0a0` and the old `m\d+a\d+` missed every one of them
+        # -- 27 abilities readable only by asking for the whole creature.
+        if re.fullmatch(r"m\d+(?:c\d+)?a\d+", ref):
+            only, ref = ref, ref.rsplit("a", 1)[0]
         row = db.execute("SELECT * FROM monster WHERE ref = ?", (ref,)).fetchone()
         if row is None:
             return None

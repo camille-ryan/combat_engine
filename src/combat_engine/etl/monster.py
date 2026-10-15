@@ -61,6 +61,23 @@ class Monster:
     #: mount, a summoned servant. 222 stat blocks say so and nearly all of
     #: them come out of `Adventurer's Vault`.
     conjuration: bool = False
+    #: Set on a stat block **printed inside another entry** -- an item that
+    #: conjures a servant prints the servant's block after its own second
+    #: `<h1>`, and the compendium gives it no id of its own. Exactly the
+    #: shape `Power.suffix` carries for a second power card, and here for
+    #: the same reason: a row that must *name* the creature had nothing to
+    #: point at.
+    #:
+    #: **It cannot be the bare item id.** Monster ids and item ids share a
+    #: numeric space and 6 of the 11 such items collide with a real monster
+    #: -- `m1171`, `m1179`, `m1804`, `m1932`, `m2022`, `m3111` all exist as
+    #: encounter monsters at other levels. And it must still *start* with
+    #: `m`, because `query.py:536` and `story/__init__.py:623` both branch on
+    #: that prefix. So `m<item id>c<n>`: prefixed like a monster, suffixed so
+    #: it cannot collide, and `c` already means "a card printed inside
+    #: another entry" in the `cf:<class>-fNcM` scheme where `a` is a
+    #: creature's own abilities. #601.
+    suffix: str = ""
     minion: bool = False
     leader: bool = False
     elite: bool = False
@@ -113,7 +130,7 @@ class Monster:
 
     @property
     def ref_id(self) -> str:
-        return f"m{self.id}"
+        return f"m{self.id}{self.suffix}"
 
     @property
     def score(self) -> float:
