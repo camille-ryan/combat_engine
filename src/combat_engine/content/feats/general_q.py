@@ -1131,9 +1131,16 @@ def f3215(c: Cast) -> None:
     trade: an approximation that plays is worse than a marker, because
     nothing ever comes back to it.
 
-    The general group is still real -- fifteen rows want to intercept
-    the extra damage *before* it is paid, or to count its dice -- but
-    this row only needed the moment, and the moment is announced.
+    The general group is still real but it is not one group, and it is
+    smaller than the fifteen rows this note used to claim: seven as of
+    2026-10-15, split three ways. Four `p8278` feats read a rider's
+    *amount* and cannot, because `p8278` lays a `c.bonus("damage", ...)`
+    folded into somebody else's roll rather than a `c.damage` call with a
+    `detail` -- which is exactly why they are not this. One changes who a
+    rider pays out to. Two raise an ongoing amount, and their dice are
+    countable through `c.dice_for`. #619.
+
+    This row only needed the moment, and the moment is announced.
 
     The 3-at-11th and 4-at-21st steps are paragon and epic; the project
     stops at 10, so the heroic 2 is the whole number."""

@@ -98,7 +98,6 @@ ABILITY = ("c.rolls_with(ref, ability)",)
 #: actually want; `f807` and `f1232` wanted the once-a-round **latch**,
 #: which was private and is `Powers.latched` now. `f1722` is the last
 #: row here that needs it, and wants the payout as well as the latch.
-EXTRA = ("c.on_extra_damage()",)
 
 #: The conditions f2367 narrows its save penalty to.
 _STUNNING = ("dazed", "stunned")

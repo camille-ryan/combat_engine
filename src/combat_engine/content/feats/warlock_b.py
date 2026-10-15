@@ -440,18 +440,25 @@ def f2764(c: Cast) -> None:
 
 
 @power("f2766", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF, todo=("c.raise_ongoing(by)",))
 def f2766(c: Cast) -> None:
     """Raises ongoing damage by one per curse die rolled. Word for word
     the rogue's f763 with the other striker feature in it.
 
     The *announcement* is not the gap: `extra_damage` pays through
     `c.damage(..., detail=label)`, so the payout arrives as a
-    `DamageRolled`/`DamageApplied` carrying `cf:warlock-f4`, and it is
-    ordinary to watch. What is missing is the **count of dice**, which
-    the multiplier is per: the die string is a literal closed over inside
-    `extra_damage` and nothing publishes how many were rolled, so
-    "1 point per die" has no number to multiply."""
+    `DamageRolled`/`DamageApplied` carrying `cf:warlock-f4`.
+
+    **And the count is not the gap either, which this docstring used to
+    say it was.** It read "the die string is a literal closed over inside
+    `extra_damage` and nothing publishes how many were rolled" -- true when
+    it was written and not since. `pay_extra` asks
+    `c.dice_for(label, dice, ...)` for the string (#569 moved it there so a
+    feat raising d6s to d8s would be read), and a feat can ask the same
+    question and count the dice off the answer.
+
+    What is actually left is raising an **ongoing** amount after it has been
+    set, keyed on a payout in the same blow. #619."""
 
 
 # -- the curse as a target, which is ordinary -------------------------------

@@ -738,11 +738,16 @@ def f717(c: Cast) -> None:
 
 
 @power("f1114", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF, todo=("c.rider_targets()",))
 def f1114(c: Cast) -> None:
     """Spreads `p6189`'s extra damage over every target of an area power.
-    The power is a ref; what is missing is that nothing announces a
-    rider paying out, so there is no amount to copy onto the others."""
+
+    **Re-pointed: this is not the same gap as the four `p8278` feats.**
+    Those read a rider's *amount*; this one changes who it pays out to,
+    which is a write and not a read. The power is a ref and the rider is a
+    `c.bonus("damage", once=True)`, so what is wanted is "pay this rider
+    on every target hit rather than the first", which nothing expresses.
+    #619."""
 
 
 @power("f997", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

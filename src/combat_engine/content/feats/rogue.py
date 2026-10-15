@@ -138,10 +138,16 @@ def f751(c: Cast) -> None:
 
 
 @power("f763", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_extra_damage()",))
+       reach=PERSONAL, target=SELF, todo=("c.raise_ongoing(by)",))
 def f763(c: Cast) -> None:
     """Raises ongoing damage by one per die of the class's extra damage.
-    Needs both the announcement and the count of dice rolled."""
+
+    **Re-pointed, and the old marker named two things that both exist.**
+    The announcement is `c.damage(..., detail=label)` in `pay_extra`, and
+    the count is `c.dice_for(label, default)` -- the same question
+    `pay_extra` itself asks. `f2766` in `warlock_b.py` is this card word
+    for word with the other striker feature in it, and carries the longer
+    note. What is left is raising an ongoing amount already set. #619."""
 
 
 @power("f185", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

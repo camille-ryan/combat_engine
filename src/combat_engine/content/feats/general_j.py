@@ -133,7 +133,19 @@ RIDER_RETYPE = ("c.bonus(retype=)",)
 #: moment it is paid. Four rows in the r47 run read "the additional
 #: necrotic damage from `p8278`" and the blow's parts are not on the
 #: event either.
-EXTRA = ("c.on_extra_damage()",)
+#: The four `p8278` feats. **One gap, and it is not an announcement.**
+#: `p8278` lays `c.bonus("damage", ..., once=True, dtype=NECROTIC)` -- a
+#: rider on somebody else's blow -- and `Mods.total` sums the modifiers to
+#: `"damage"` without saying which row laid which part. So "the extra
+#: necrotic damage dealt" is a component of a roll that cannot be picked out
+#: of it, which is what all four docstrings below say in their own words.
+#:
+#: `label=` would make the modifier identifiable (`Mod.label` exists and
+#: `c.bonus` takes it), and a per-label breakdown of a total is the read
+#: that is missing. The trap to design around: `once=True` means the rider
+#: is spent when it is read, so an attribution pass must not consume it.
+#: #619.
+EXTRA = ("c.rider_from(ref)",)
 #: Which implements or weapons a character may pick up is settled when it
 #: is built, not on a board with the gear already in hand.
 PROFICIENCY = ("chargen.proficiency()",)
