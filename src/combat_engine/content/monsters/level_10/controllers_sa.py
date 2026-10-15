@@ -2431,7 +2431,7 @@ def m3788a5(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(3),
     target=NO_TARGET,
-    dropped=("c.summon(after=)", "c.shares_space(with_=)"),
+    dropped=("c.shares_space(with_=)",),
 )
 def m3788a6(c: Cast) -> None:
     """**The ref is on the card.** The old `etl.monster.summon_ref()` marker
@@ -2446,16 +2446,22 @@ def m3788a6(c: Cast) -> None:
     condition -- and the watch is one-shot per pair, so the next use arms
     its own.
 
-    Two clauses are dropped and both are a *narrowing* of a verb that
-    exists. `Encounter.join` splices a summon in on its own rolled
-    initiative, so "acts immediately after her" is not sayable --
-    `c.extra_turn(at=)` takes a count but there is no way to hand `summon`
-    one. And standing in a swarm's own square is `c.shares_space`, which is
-    the occupant's permission to be entered by **anyone** rather than by one
-    named creature; laid here it would open both swarms to the whole board.
-    The concealment that clause pays out hangs off it and goes with it."""
+    **"Acts immediately after her" is written now.** This row's old marker
+    said `Encounter.join` splices a summon in on its own rolled initiative
+    with no way to hand it a count, and that was true: `c.summon(after=)`
+    is the narrowing, built for the 10 conjured blocks printing "Initiative
+    as conjurer" and wanted here from the other end. An equal count lands
+    after the caster for free, because `_splice` inserts before the first
+    slot holding a strictly *lower* one.
+
+    One clause is still dropped. Standing in a swarm's own square is
+    `c.shares_space`, which is the occupant's permission to be entered by
+    **anyone** rather than by one named creature; laid here it would open
+    both swarms to the whole board. The concealment that clause pays out
+    hangs off it and goes with it."""
     me = c.me
-    born = [eid for eid in (c.summon("m3789"), c.summon("m3789")) if eid]
+    born = [eid for eid in (c.summon("m3789", after=me),
+                            c.summon("m3789", after=me)) if eid]
     if not born:
         return
     left = set(born)
