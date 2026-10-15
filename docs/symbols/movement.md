@@ -87,6 +87,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
 
 ## modes and mounts
 
+- `c.lose_mode(self, name: 'str', *, until: 'When' = <When.EOTNT: "end of target's next turn">, on: 'int | None' = None) -> 'Effect | None'`
+  - Take a way of moving away for a while, and give it back.
 - `c.mode(self, name: 'str', speed: 'int', *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None) -> 'Effect | None'`
   - Grant a way of moving -- fly, swim, climb -- for a while.
 - `c.mount(self) -> 'int | None'`

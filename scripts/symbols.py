@@ -138,7 +138,7 @@ CATEGORIES: dict[str, dict] = {
                 "resist_forced", "shares_space", "speed_of", "squares_for",
             ]),
             ("modes and mounts", [
-                "mode", "mount", "move_companion",
+                "lose_mode", "mode", "mount", "move_companion",
             ]),
         ],
     },

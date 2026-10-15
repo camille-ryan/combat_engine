@@ -4663,6 +4663,61 @@ class Cast:
             by=self.ref,
         )
 
+    def lose_mode(
+        self, name: str, *, until: When = When.EOTNT, on: int | None = None
+    ) -> Effect | None:
+        """Take a way of moving away for a while, and give it back.
+
+        The exact mirror of `c.mode` above, including its `undo`: the
+        printed sentence is "**loses** its fly speed until the end of its
+        next turn", said by a creature paying for a finishing move with the
+        thing that was keeping it out of reach.
+
+        **Popped rather than set to 0, and the first draft had it the other
+        way round.** 0 looks like the right spelling -- `dsl.Summon.modes`
+        records "speed 0, fly 6" as a shape three blocks print, so the
+        engine does use 0 to mean present-and-useless, and every other
+        reader asks `modes.get(name)` for a truthy value.
+
+        **`query.phasing` is the exception and it decides this.** It tests
+        `"phasing" in mv.modes` -- membership, not the value -- so a
+        phasing creature set to 0 would still be phasing and `m1032a1`'s
+        clause would do nothing while reading as written. Making that
+        reader consistent is the tidier change and it is **not** safe:
+        `c.phasing` lays `mode("phasing", speed_of(...))`, which is 0 for
+        an immobilised creature, so a creature that is phasing *and*
+        immobilised would stop phasing. Popping needs no reader to change.
+
+        The cost is that `c.mode(name, 2)` during the loss grants the mode
+        outright rather than being capped by it, and `undo` then puts the
+        original back over that grant. Two live effects on one mode is
+        already ambiguous in `c.mode` and this does not make it worse; no
+        card in the tree does it.
+
+        `When.EOTNT` by default, because that is what the cards print.
+        Returns `None` when the creature never had the mode, which is not a
+        fault: "loses its fly speed" said by a grounded creature is a
+        sentence about nothing.
+        """
+        from .components import Movement
+
+        who = on if on is not None else self.me
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        had = moves.modes.get(name)
+        if had is None:
+            return None
+        moves.modes.pop(name, None)
+
+        def undo() -> None:
+            moves.modes[name] = had
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} lost {name}", on_end=[undo],
+            by=self.ref,
+        )
+
     def form(
         self,
         *,

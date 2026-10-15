@@ -1740,7 +1740,6 @@ def m4157a6(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.lose_mode()",),
 )
 def m4157a7(c: Cast) -> None:
     """A form with five clauses, a way out, and a payout for taking it.
@@ -1754,8 +1753,11 @@ def m4157a7(c: Cast) -> None:
     Squeezing through a Tiny aperture needs nothing: the narrowest gap the
     grid has is one square, which this creature already fits.
 
-    "Can't fly" is the dropped clause. Nothing takes a movement mode away --
-    `c.mode` only grants them -- so the flight stays.
+    **"Can't fly" is written now** and was the one dropped clause.
+    `c.lose_mode` is the mirror of `c.mode` the old note said did not
+    exist, and the loss is tied to the shape's own hold alongside the other
+    three bans -- which is the point that note makes about all of them: if
+    they are not, the bans outlive the form.
     """
     me = c.me
     c.shift(4)
@@ -1769,6 +1771,7 @@ def m4157a7(c: Cast) -> None:
         c.cannot_attack(on=me, until=When.SUSTAIN),
         c.ignores_difficult(on=me, until=When.SUSTAIN),
         c.no_provoke(on=me, until=When.SUSTAIN),
+        c.lose_mode("fly", until=When.SUSTAIN, on=me),
     ):
         if hold is not None:
             shape.on_end.append(lambda h=hold: c.world.effects.end(h, "it is itself again"))

@@ -253,13 +253,30 @@ def m1032a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("Defences.insubstantial", "c.lose_mode()"),
+    dropped=("Defences.insubstantial", "events.PowerRecharged"),
 )
 def m1032a1(c: Cast) -> None:
-    """The attack half works. "Loses phasing, insubstantial, and the ability
-    to fly until it recharges" has nothing to take away or set aside --
-    `Defences` carries no insubstantial column and `c.mode` only ever raises
-    a speed -- the same pair `m3437a2` and `m3440a4` already name."""
+    """The attack, and two of the three things it costs.
+
+    **Phasing and flight are both written now.** `c.lose_mode` takes a
+    movement mode away and puts it back, and phasing *is* a mode --
+    `c.phasing` lays it as one -- so the same verb says both halves.
+
+    **The clock is the dropped part and it is not a `When`.** The card says
+    "until it recharges this ability", and there is no
+    `PowerRecharged` event to end the loss on: `triggers.py` says so in as
+    many words, names `m6180a3` as the row that wants it, and records that
+    it has to be minted on both paths at once. Filed as #605. `When.ENCOUNTER` is written
+    here instead, which is the *longer* of the two readings -- a recharge-6
+    power comes back in about six rounds and a fight is five to eight, so
+    the loss will usually outlast what the card says by a round or two
+    rather than being absent. Named rather than silent.
+
+    Still dropped as well: `Defences` carries no insubstantial column, the
+    same half `m3437a2` and `m3440a4` name.
+    """
+    c.lose_mode("fly", until=When.ENCOUNTER)
+    c.lose_mode("phasing", until=When.ENCOUNTER)
     if c.strike():
         c.hit()
 
@@ -4122,9 +4139,6 @@ def m6481a6(c: Cast) -> None:
         c.condition(Condition.DOMINATED, until=When.SAVE_ENDS)
 
 
-_M6481_WINGED: set[int] = set()
-
-
 @power(
     "m6481a7",
     level=10,
@@ -4134,18 +4148,37 @@ _M6481_WINGED: set[int] = set()
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.lose_mode()",),
 )
 def m6481a7(c: Cast) -> None:
-    """Taking winged form grants the fly speed `c.mode` is for; reverting
-    cannot take it back -- `c.mode` only ever raises a speed, the same gap
-    `m3437a2` and `m3440a4` already name."""
+    """Winged form, and the way back out of it.
+
+    **This row was marked for `c.lose_mode()` and does not want it.** The
+    card *grants* a fly speed and the way back is "uses this power to
+    revert", which is ending the form -- so `c.mode` plus a form hold says
+    the whole thing, and the fly grant goes with the form because its
+    `Effect` is ended on the form's end. Mis-marked rather than blocked.
+
+    **The module-level `_M6481_WINGED` set it used instead is deleted, and
+    it was a real bug.** A `set[int]` at module scope outlives the world:
+    entity ids are per-`World` and start low, so a creature that happened
+    to get the same id in a later fight began that fight already winged,
+    with no fly speed to match. Nothing in a log would say so. The state
+    the question is actually about is on the board -- `c.form(name=)`
+    records it and `c.in_form` reads it, which is what #477 built that pair
+    for.
+    """
     me = c.me
-    if me in _M6481_WINGED:
-        _M6481_WINGED.discard(me)
-    else:
-        _M6481_WINGED.add(me)
-        c.mode("fly", 8, until=When.ENCOUNTER, on=me)
+    if c.in_form("winged"):
+        for held in list(c.world.effects.of(me)):
+            if held.label.startswith(c.ref):
+                c.world.effects.end(held, "it reverts to normal form")
+        return
+    shape = c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref, name="winged")
+    wings = c.mode("fly", 8, until=When.ENCOUNTER, on=me)
+    if wings is not None:
+        shape.on_end.append(
+            lambda: c.world.effects.end(wings, "it is on the ground again")
+        )
 
 
 def _attacked_on_my_turn(world: World, me: int, ev: AttackDeclared) -> bool:

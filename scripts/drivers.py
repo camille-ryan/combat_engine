@@ -5647,6 +5647,81 @@ def sealed_space(out: Result) -> None:
              f"ally {ally} into {mate}'s square {seat}")
 
 
+def lost_mode(out: Result) -> None:
+    """"It loses its fly speed until the end of its next turn", and gets it back.
+
+    Five rows print a clause of this shape and `c.mode` only ever *raises* a
+    speed, so there was no way to say any of them. The mirror is small; what
+    is worth driving is the two things that are easy to get wrong in it.
+
+    **Popped, not zeroed, and `query.phasing` is why.** Every other reader
+    asks `modes.get(name)` for a truthy value, so 0 would have been the
+    tidier spelling -- `dsl.Summon.modes` records "speed 0, fly 6" as a
+    real printed shape. But `query.phasing` tests `"phasing" in mv.modes`,
+    membership rather than value, so a phasing creature set to 0 would
+    still be phasing and `m1032a1`'s clause would read as written and do
+    nothing. Changing that reader instead is **not** safe: `c.phasing` lays
+    `mode("phasing", speed_of(...))`, which is 0 for an immobilised
+    creature, so a creature phasing *and* immobilised would stop phasing.
+
+    **And it restores what was there, not what is there now.** A loss that
+    popped the key and then put back whatever it found would hand the mode
+    to a creature that never had it, or drop a longer grant laid underneath.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import mode_of, phasing
+
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:lose")
+    moves = world.get(caster, Movement) or world.add(caster, Movement())
+
+    # ---- a flier loses its flight and gets it back --------------------
+    c.mode("fly", 8, until=When.ENCOUNTER)
+    out.that(mode_of(world, caster, None) == "fly",
+             "a creature with a fly speed flies, which is what `mode_of` is")
+    held = c.lose_mode("fly", until=When.EONT)
+    out.that(held is not None, "`c.lose_mode` lays a hold when there is a mode")
+    out.that("fly" not in moves.modes,
+             "the mode is POPPED rather than set to 0 -- see the docstring"
+             " for why `query.phasing` decides that",
+             f"modes {dict(moves.modes)}")
+    out.that(mode_of(world, caster, None) == "walk",
+             "so it walks while the loss stands")
+    world.effects.end(held, "driver")
+    out.that(moves.modes.get("fly") == 8,
+             "and the printed 8 comes back when the loss ends -- the value it"
+             " had, not a 0 and not an absence",
+             f"modes {dict(moves.modes)}")
+
+    # ---- phasing is a mode, and the membership reader is the point ----
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:lose")
+    c.phasing(until=When.ENCOUNTER)
+    out.that(phasing(world, caster), "a phasing creature is phasing")
+    held = c.lose_mode("phasing", until=When.EONT)
+    out.that(not phasing(world, caster),
+             "and stops being phasing when it loses the mode -- the assertion"
+             " a 0 would have failed, because `query.phasing` asks whether"
+             " the key is THERE and not what it is")
+    world.effects.end(held, "driver")
+    out.that(phasing(world, caster), "and is phasing again afterwards")
+
+    # ---- the negative control: a mode it never had --------------------
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:lose")
+    moves = world.get(caster, Movement) or world.add(caster, Movement())
+    before = dict(moves.modes)
+    out.that(c.lose_mode("burrow", until=When.EONT) is None,
+             "losing a mode the creature never had lays nothing -- \"loses"
+             " its fly speed\" said by a grounded creature is a sentence"
+             " about nothing, not a fault")
+    out.that(dict(moves.modes) == before,
+             "and changes no other mode while failing to find that one",
+             f"{before} -> {dict(moves.modes)}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -8974,6 +9049,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "lost_mode": (lost_mode,
+                  "a creature loses a way of moving, and gets it back"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
     "printed_regeneration": (printed_regeneration,

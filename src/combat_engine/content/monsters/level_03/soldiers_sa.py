@@ -1890,22 +1890,25 @@ def m3437a1(c: Cast) -> None:
         label="targets a helpless or unconscious creature",
         conditions=frozenset(_SENSELESS),
     ),
-    dropped=("Defences.insubstantial", "c.lose_mode()"),
+    dropped=("Defences.insubstantial",),
 )
 def m3437a2(c: Cast) -> None:
-    """The finisher works; the price it pays for it does not.
+    """The finisher works, and so does half the price it pays for it now.
 
-    `Defences` carries no insubstantial flag at all -- the database column
-    does not exist -- so "it loses insubstantial" has nothing to take away,
-    and writing `c.end_effect(carrying=INSUBSTANTIAL)` would have been a line
-    that is false in every fight. Losing the fly speed is the second gap:
-    `c.mode` only ever raises a speed (`max(speed, had)`), so there is no way
-    to set one aside and put it back.
+    **The fly speed is written**: `c.lose_mode` is the mirror of `c.mode`
+    that this row's old marker said did not exist. `When.EONT` because the
+    loser is the caster and the card says "until the end of its next turn".
+
+    Still dropped: `Defences` carries no insubstantial flag at all -- the
+    database column does not exist -- so "it loses insubstantial" has
+    nothing to take away, and writing `c.end_effect(carrying=INSUBSTANTIAL)`
+    would be a line that is false in every fight.
 
     `c.coup_de_grace` is the auto-critical rule itself and checks the
     helplessness again, which is why the kill is read off the body afterwards
     rather than from the method's answer."""
     victim = c.target
+    c.lose_mode("fly", until=When.EONT)
     c.coup_de_grace()
     theirs = c.world.get(victim, Health)
     if theirs is None or theirs.hp <= 0:
