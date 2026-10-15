@@ -18,7 +18,8 @@ from combat_engine.engine import Cast, Gear, World
 def has_shield(world: World, eid: int) -> bool:
     """"Requirement: You must be using a shield"."""
     gear = world.get(eid, Gear)
-    return gear is not None and gear.shield
+    # `Gear.shield` is a count, so the bare `and` came out `int`. #618.
+    return bool(gear is not None and gear.shield)
 
 
 def two_melee(world: World, eid: int) -> bool:

@@ -113,10 +113,52 @@ def main() -> int:
 
     _, text = _run(targets)
     if args.bless:
+        # **Merged, and only ever downward.** This wrote `_per_file(text)`
+        # straight over the file, so blessing after a narrow run kept the
+        # files it had just checked and **deleted every other entry** -- one
+        # invocation took the baseline from 317 files to 7 and 1,993 errors
+        # to 58. Nothing was loosened by that, which is why it would not
+        # have shown up as a red run: a missing entry reads as 0 and makes
+        # the file stricter. It just silently threw away the record.
+        #
+        # So: start from what is there, lower an entry that improved, and
+        # refuse to raise one. A count that got worse is a thing to fix or
+        # to argue for, never to bless -- `scripts/CLAUDE.md`'s first rule.
+        #
+        # **And `ty`'s per-file counts move with the file set it is given**,
+        # so only the files actually checked in this run are touched:
+        # `cast.py` reports 44 alone and 45 across the whole scope, and
+        # recording the narrower figure makes `--all` red for no reason.
+        base = _baseline()
+        now = _per_file(text)
+        lowered = {f: (base[f], n) for f, n in now.items()
+                   if f in base and n < base[f]}
+        risen = {f: (base[f], n) for f, n in now.items()
+                 if f in base and n > base[f]}
+        # **A file arriving with errors is refused too.** The first draft let
+        # one in as a "fresh" entry, and a plant proved it: a file with no
+        # baseline has an implied 0, so recording its count is a loosening
+        # wearing a different word. Only a clean newcomer is recorded, which
+        # is what keeps a file from entering the record already in debt.
+        fresh = {f: n for f, n in now.items() if f not in base and not n}
+        arriving = {f: n for f, n in now.items() if f not in base and n}
+        base.update({f: n for f, (_was, n) in lowered.items()})
+        base.update(fresh)
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
-        BASELINE.write_text(json.dumps(_per_file(text), indent=2, sort_keys=True) + "\n")
-        print(f"blessed {len(_per_file(text))} file(s) at their current counts")
-        return 0
+        BASELINE.write_text(json.dumps(base, indent=2, sort_keys=True) + "\n")
+        for f, (was, n) in sorted(lowered.items()):
+            print(f"  tightened {f}: {was} -> {n}")
+        for f, n in sorted(fresh.items()):
+            print(f"  recorded  {f}: {n} (was not in the baseline)")
+        for f, (was, n) in sorted(risen.items()):
+            print(f"  LEFT ALONE {f}: {was} -> {n} is worse; fix it or argue"
+                  f" for it, do not bless it")
+        for f, n in sorted(arriving.items()):
+            print(f"  LEFT ALONE {f}: arriving with {n} error(s) and no"
+                  f" baseline; an implied 0 is the stricter record")
+        print(f"blessed {len(lowered) + len(fresh)} file(s);"
+              f" {len(risen) + len(arriving)} refused; {len(base)} entries total")
+        return 1 if (risen or arriving) else 0
 
     base = _baseline()
     now = _per_file(text)

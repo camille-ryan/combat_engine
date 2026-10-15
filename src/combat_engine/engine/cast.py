@@ -1894,7 +1894,12 @@ class Cast:
         if gear is None:
             return False
         if prop == "shield":
-            return gear.shield
+            # **A count, not a flag.** `Gear.shield` is 0/1/2 -- none, light,
+            # heavy -- because the number *is* the printed AC and Reflex
+            # bonus. Returned bare it made this `-> bool` hand back an int,
+            # and seven content copies of the same helper repeat the mistake
+            # one for one. #618.
+            return bool(gear.shield)
         if prop in ("two-weapon", "two melee weapons"):
             return gear.two_weapon
         weapon = gear.main

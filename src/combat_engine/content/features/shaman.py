@@ -17,7 +17,7 @@ plays for the warlord's leader feature.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
 
 from combat_engine.content.powers.shaman._spirit import beside_spirit, friends
 from combat_engine.engine import (
@@ -32,16 +32,36 @@ from combat_engine.engine import (
     Cast,
     Healed,
     Keyword,
+    Target,
+    Usage,
     When,
     Window,
     power,
 )
+from combat_engine.engine.dsl import Range
 
 PRIMAL = [Keyword.PRIMAL]
 
 #: A trait's header. Every row here is standing text rather than an action,
 #: and they all take the same one.
-TRAIT = {
+#:
+#: **A `TypedDict` rather than a plain one, and that is not decoration.** A
+#: plain dict's value type is the union of everything in it, so `@power(
+#: **TRAIT, ...)` handed `int | str | Range | Target | list[Keyword]` to every
+#: parameter it filled -- one type error per parameter per call site, 245 of
+#: them across eight uses, all of it noise from one idiom. `types.py` carried
+#: 201 of those as a baseline and the number grew with every row added. #618.
+class _Trait(TypedDict):
+    level: int
+    cls: str
+    usage: Usage
+    action: ActionType
+    reach: Range
+    target: Target
+    keywords: list[Keyword]
+
+
+TRAIT: _Trait = {
     "level": 0,
     "cls": "shaman",
     "usage": ENCOUNTER,

@@ -156,7 +156,8 @@ def _is_climbing(world: World, eid: int) -> bool:
 
 def _has_shield(world: World, eid: int) -> bool:
     gear = world.get(eid, Gear)
-    return gear is not None and gear.shield
+    # `Gear.shield` is a count, so the bare `and` came out `int`. #618.
+    return bool(gear is not None and gear.shield)
 
 
 def _crit_line(c: Cast, dice: str, bonus: int) -> None:

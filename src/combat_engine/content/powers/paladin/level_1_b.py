@@ -69,7 +69,8 @@ def _str_or_cha(c: Cast) -> tuple[int, int]:
 def _has_shield(world: World, eid: int) -> bool:
     """"Requirement: you must be using a shield"."""
     gear = world.get(eid, Gear)
-    return gear is not None and gear.shield
+    # `Gear.shield` is a count, so the bare `and` came out `int`. #618.
+    return bool(gear is not None and gear.shield)
 
 
 @power(
