@@ -88,6 +88,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.dsl import Range
 from combat_engine.engine.events import (
     AttackDeclared,
     AttackRolled,
@@ -1478,16 +1479,31 @@ def m5193a1(c: Cast) -> None:
     usage=Usage.RECHARGE,
     recharge=0,
     action=STANDARD,
-    reach=CloseBlast(3),
+    reach=Range("close_blast", 3, alt=AreaBurst(3, 10)),
     target=EACH_OTHER,
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("3d6", 9, kind=LIMITED),
-    dropped=("Power.reach_alt",),
 )
 def m5193a2(c: Cast) -> None:
-    """The printed "or area burst 3 within 10" alternative has nowhere to
-    sit: `reach_alt` is a numeric alternative, not a second reach kind, so
-    this is written as the close blast and the area form is left off."""
+    """"Close blast 3 **or** area burst 3 within 10" -- both forms, offered.
+
+    **The marker said this had nowhere to sit and it had.** It read
+    "`reach_alt` is a numeric alternative, not a second reach kind" --
+    there is no `Power.reach_alt` field at all, and the thing that does the
+    job is `Range.alt`, which holds a whole `Range` rather than a number.
+    So a blast with a burst in its `alt` is exactly this card, and
+    `Range.branches` makes both reachable: `actions._aimings` offers one
+    action per open branch, so the choice is the player's and the policy
+    scores each.
+
+    Written with `Range(...)` rather than `CloseBlast(3, alt=...)` because
+    the three shape helpers do not expose `alt`; 137 declared rows reach
+    `alt` the same way.
+
+    **Not the same gap as the family's other two.** `m6683a0` prints
+    "Melee 2, or 4 while bloodied" and `m1826a4` "close burst 2 (5 while
+    bloodied)" -- those are *conditional* on a state, where a branch is a
+    choice, and no branch can be gated on hit points. #614."""
     _recharge_when_bloodied(c)
     if c.strike():
         c.hit()

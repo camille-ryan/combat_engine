@@ -6081,6 +6081,75 @@ def shield_penalty_waived(out: Result) -> None:
              f"{pl_bare} -> {pl_feat}, plate still costs {plate}")
 
 
+def both_printed_shapes_offered(out: Result) -> None:
+    """"Close blast 3 **or** area burst 3 within 10" -- both, reachable. #614.
+
+    `m5193a2` carried `dropped=("Power.reach_alt",)` with a note saying the
+    alternative "has nowhere to sit: `reach_alt` is a numeric alternative,
+    not a second reach kind". **There is no `Power.reach_alt` field at
+    all**, and the thing that does the job -- `Range.alt` -- holds a whole
+    `Range`, so a blast with a burst in its `alt` is the card exactly.
+
+    **The assertion is that both are reachable, not that the header parses.**
+    A `reach_of(1)` that answered correctly while `actions._aimings` offered
+    only one action would be a form nobody can pick, which is the shape of
+    failure this engine produces: right by inspection, absent in play.
+
+    The control is the other two rows in the family. `m6683a0` prints
+    "Melee 2, or 4 while bloodied" and `m1826a4` "close burst 2 (5 while
+    bloodied)" -- *conditional* on a state where a branch is a choice, and
+    no branch can be gated on hit points. They must still carry a marker;
+    if a later change makes them look finished without one, that is the
+    `alt` mechanism being stretched past what it says.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as A
+    from combat_engine.engine.dsl import REGISTRY, area_of
+
+    p = REGISTRY["m5193a2"]
+    out.that(p.reach.branches == (0, 1),
+             "the row declares two branches, which is what a printed `or`"
+             " between two shapes means",
+             f"{p.reach.branches}")
+    kinds = (p.reach_of(0).kind, p.reach_of(1).kind)
+    out.that(kinds == ("close_blast", "area_burst"),
+             "and they are the two printed kinds, not one twice",
+             f"{kinds}")
+    out.that(not p.unfinished,
+             "the row carries no marker now", f"{p.unfinished}")
+
+    # **The board's own caster, not a second one spawned beside it.** The
+    # first draft called `loader.spawn` for an `m5193` and asked about that
+    # -- it offered zero actions, because a creature dropped onto the board
+    # mid-probe has no action budget, and `_board(ref)` already poses the
+    # row's own creature as the caster. The probe was posing its subject
+    # twice and blaming the row for the one that could not act.
+    world, who, _ = _board("m5193a2", 1)
+    offered = A._aimings(world, who, "m5193a2")
+    branches = sorted({a.branch for a in offered})
+    out.that(branches == [0, 1],
+             "and BOTH are offered in the action menu -- the half that makes"
+             " the choice the player's rather than a form nobody can pick",
+             f"{len(offered)} action(s), branches {branches}")
+
+    a0 = area_of(world, who, p, None, 0)
+    a1 = area_of(world, who, p, None, 1)
+    out.that(a0 and a1 and a0 != a1,
+             "the two cover different squares, so picking one is a real"
+             " decision rather than a relabelling",
+             f"{len(a0)} squares against {len(a1)}")
+
+    # the control: the family's conditional pair must still be marked
+    for ref, what in (("m6683a0", "Melee 2, or 4 while bloodied"),
+                      ("m1826a4", "close burst 2 (5 while bloodied)")):
+        got = REGISTRY.get(ref)
+        out.that(got is not None and bool(got.unfinished),
+                 f"{ref} is still marked -- \"{what}\" is conditional on a"
+                 f" state, and a branch is a choice; no branch can be gated"
+                 f" on hit points",
+                 f"{getattr(got, 'unfinished', None)}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -10231,6 +10300,10 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
+    "both_printed_shapes_offered": (both_printed_shapes_offered,
+                                    "a printed \"or\" between two shapes"
+                                    " offers both, and the conditional pair"
+                                    " is not the same gap"),
     "shield_penalty_waived": (shield_penalty_waived,
                               "f3779 gives back a heavy shield's check"
                               " penalty, and only that"),
