@@ -5181,6 +5181,85 @@ def summoned(out: Result) -> None:
              "and it is in the initiative order rather than standing there")
 
 
+def conjurer_count(out: Result) -> None:
+    """"Initiative as conjurer": the servant acts on its summoner's count.
+
+    10 of the 12 stat blocks printed inside an item's own entry say this
+    outright (#601), and it is a printed rule rather than a tidying: a
+    servant on its conjurer's count acts in the same part of every round,
+    and one that rolls its own does not. Before `summon(after=)` there was
+    no way to say it -- `Encounter.join` always rolled -- so every one of
+    those creatures would have arrived somewhere random in the order.
+
+    **The negative control is the whole of the evidence here**, because the
+    positive one passes by luck. `join` rolls a d20 plus a level term, so an
+    unforced roll lands on the conjurer's count about one time in twenty and
+    an assertion that only checked `after=` could not tell "copied" from
+    "rolled and got lucky". So `rng.loaded` fixes the die at a value whose
+    resulting count is **not** the conjurer's, and the two summons differ in
+    nothing but the keyword.
+
+    The third case is the fallback: a `beside` that is not in the order
+    rolls, rather than raising or landing at a count of zero. A conjurer can
+    leave the fight between a row being written and it firing, and a
+    creature with no slot at all never acts -- which is the failure this
+    whole family exists to avoid.
+    """
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Initiative
+
+    world, me, _ = _board()
+    if world.encounter is None:
+        out.skip("the board has no initiative order to join")
+        return
+
+    # Positive: handed the conjurer, it copies the count. The die is fixed
+    # so the only difference between this run and the negative one below is
+    # the keyword.
+    world.rng.loaded = 3
+    c = Cast(world=world, me=me, ref="drivers:conjurer")
+    made = c.summon("m1932c0", after=me)
+    mine = world.get(me, Initiative)
+    theirs = world.get(made, Initiative)
+    out.that(made != 0, "a conjured block reaches the board at all")
+    out.that(mine is not None and theirs is not None
+             and theirs.rolled == mine.rolled,
+             "`after=` puts the servant on its conjurer's own count",
+             f"conjurer {mine.rolled if mine else '?'},"
+             f" servant {theirs.rolled if theirs else '?'}")
+    order = list(world.encounter.order)
+    out.that(made in order, "and it is in the order rather than standing there")
+    if me in order and made in order:
+        out.that(order.index(made) > order.index(me),
+                 "on the same count it acts AFTER the conjurer, which is what"
+                 " `_splice` inserting before a strictly lower count gives")
+
+    # negative: the same board, the same fixed die, no `after=`
+    world2, me2, _ = _board()
+    world2.rng.loaded = 3
+    made2 = Cast(world=world2, me=me2, ref="drivers:conjurer").summon("m1932c0")
+    mine2 = world2.get(me2, Initiative)
+    theirs2 = world2.get(made2, Initiative)
+    out.that(mine2 is not None and theirs2 is not None
+             and theirs2.rolled != mine2.rolled,
+             "without it the servant rolls its own and does NOT match -- the"
+             " negative control, and the one a copy-always change passes",
+             f"conjurer {mine2.rolled if mine2 else '?'},"
+             f" servant {theirs2.rolled if theirs2 else '?'}")
+
+    # the fallback: a `beside` nobody is standing as
+    world3, me3, _ = _board()
+    world3.rng.loaded = 3
+    made3 = Cast(world=world3, me=me3, ref="drivers:conjurer").summon(
+        "m1932c0", after=99999)
+    theirs3 = world3.get(made3, Initiative)
+    out.that(made3 != 0 and theirs3 is not None and theirs3.rolled != 0,
+             "a `beside` that is in no order falls back to rolling rather than"
+             " leaving the servant at a count of zero",
+             f"servant {theirs3.rolled if theirs3 else '?'}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -8506,6 +8585,9 @@ DRIVERS = {
     "forms": (forms, "which shape a creature is in, and two at once"),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
+    "conjurer_count": (conjurer_count,
+                       "\"Initiative as conjurer\": the servant acts on the"
+                       " summoner's count"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,

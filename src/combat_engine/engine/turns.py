@@ -320,13 +320,27 @@ class Encounter:
         self._splice(eid, init.rolled)
         return init.rolled
 
-    def join(self, eid: int) -> int:
+    def join(self, eid: int, *, beside: int | None = None) -> int:
         """Put a creature that was not here at the start into the order.
 
         Rolls its initiative and splices it in by that, so it acts where it
         belongs rather than wherever it happened to arrive. Anything spawned
         mid-fight was simply absent from the order before this, which meant
         it never got a turn at all.
+
+        `beside` is **"Initiative as conjurer"**, which 10 of the 12 stat
+        blocks printed inside an item's own entry say outright (#601), and
+        it is a printed rule rather than a convenience: a creature summoned
+        onto its summoner's count acts in the same part of the round every
+        time, and one that rolls its own does not. Given it, nothing is
+        rolled -- the count is copied -- and `_splice` then lands it
+        **after** that creature, because the loop inserts before the first
+        slot holding a *lower* count and an equal one is not lower.
+
+        A `beside` that is not in the order falls back to rolling. That is
+        the honest answer rather than a raise: the conjurer can have left
+        the fight between the summon being written and it happening, and a
+        creature with no slot at all is the one outcome worth avoiding.
 
         Returns the slot it landed in.
         """
@@ -335,11 +349,15 @@ class Encounter:
         if eid in self.order:
             return self.order.index(eid)
         init = self.world.get(eid, Initiative) or self.world.add(eid, Initiative())
-        init.rolled = (
-            self.world.rng.d20().total
-            + init.bonus
-            + level_term(self.world, eid, init.scale)
-        )
+        theirs = self.world.get(beside, Initiative) if beside is not None else None
+        if theirs is not None and beside in self.order:
+            init.rolled = theirs.rolled
+        else:
+            init.rolled = (
+                self.world.rng.d20().total
+                + init.bonus
+                + level_term(self.world, eid, init.scale)
+            )
         where = self._splice(eid, init.rolled)
         self.arm_traits_of(eid)
         return where

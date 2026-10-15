@@ -5870,12 +5870,24 @@ class Cast:
             to = self.world.decide(self.me, "overrun", ranked, "trample to")
         return trample(self.world, self.me, to)
 
-    def summon(self, ref: str, at: Square | None = None, *, team: Team | None = None) -> int:
+    def summon(
+        self, ref: str, at: Square | None = None, *, team: Team | None = None,
+        after: int | None = None,
+    ) -> int:
         """Put a creature on the board mid-fight and give it a turn.
 
         The two halves are equally necessary: `loader.spawn` alone makes an
         entity that is not in the initiative order, so it stands there and
         never acts. "Splits into two" and every summoner print this.
+
+        `after` is the printed line **"Initiative as conjurer"** -- the
+        creature takes its turn on that creature's count rather than
+        rolling one of its own. Pass `after=c.me` for the common case,
+        which is an item conjuring a servant; 10 of the 12 blocks printed
+        inside an item's own entry say it (#601), and `m3788a6` wanted the
+        same thing from the other end. Without it the servant rolls, and
+        a servant that acts in a different part of the round each fight is
+        a different creature from the one the card describes.
         """
         from combat_engine.content import loader
 
@@ -5900,7 +5912,7 @@ class Cast:
                 team=team or side_of(self.world, self.me) or Team.ENEMY,
             )
         if self.world.encounter is not None:
-            self.world.encounter.join(made)
+            self.world.encounter.join(made, beside=after)
         # `Summoned` was added because a row whose whole Effect is "you
         # summon X" left no trace in the log -- and then only the two
         # inline paths emitted it, never this one, which is the path every

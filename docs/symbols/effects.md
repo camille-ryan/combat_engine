@@ -71,7 +71,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Put your companion on the board, moving the one you have if any.
 - `c.dismiss_companion(self) -> 'bool'`
   - "Your spirit companion disappears." An Effect line on ~20 rows.
-- `c.summon(self, ref: 'str', at: 'Square | None' = None, *, team: 'Team | None' = None) -> 'int'`
+- `c.summon(self, ref: 'str', at: 'Square | None' = None, *, team: 'Team | None' = None, after: 'int | None' = None) -> 'int'`
   - Put a creature on the board mid-fight and give it a turn.
 - `c.summon_inline(self, spec: 'Any', at: 'Square | None' = None) -> 'int'`
   - Put a creature the *power itself* defines on the board.
