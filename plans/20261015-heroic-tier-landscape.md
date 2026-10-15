@@ -223,3 +223,38 @@ ones. Which means the cheap wins from re-pointing are largely spent, and what
 is left is building: `c.race_option()` and the two `chargen.*` nines are a
 chargen block (#125 on the task list), and `c.reshape_area()` is #614's three
 mechanisms.
+
+
+## What writing two rows turned up, which is the argument for writing rows
+
+Two of #614's 25 came off, and the second one found a fault that no amount of
+triage would have.
+
+* **`m5193a2`** -- "Close blast 3 **or** area burst 3 within 10". Its marker
+  named `Power.reach_alt`, a field that does not exist; `Range.alt` holds a
+  whole `Range` and 137 rows already use it. Both forms are offered in the
+  menu now.
+* **`m6683a0`** -- "Melee 2, or 4 while bloodied". Not the same gap: the
+  header carries the permissive reach and the body narrows it with
+  `_restricted_to`, which is `m5466a0`'s answer and the route ~160 rows take.
+  A *choice* wants `Range.alt`; a *condition* wants the body. Those two rows
+  are the proof that the five symbols are one mechanism and the conditional
+  pair is not part of it.
+
+**And then the fault.** `c.bloodied()` with no argument asks about the
+**target** -- `_who(None)` returns `self.target` -- and **eight monster rows**
+used it where the card means the creature. `m6683a0`'s slide half had it and
+had been written that way for a while: a healthy creature slid a bloodied
+target 4 squares, a bloodied one slid a healthy target 2. It surfaced only
+because the reach and the slide are the same number on that card, so getting
+the second clause right made the first visibly wrong. #621.
+
+Checked the whole family and it does not repeat: `size_of`, `kinds_of`,
+`is_minion`, `is_quarry` all appear where the card says "target", and
+`c.wounded()` has no bare monster calls. **"While bloodied" is the one phrase
+a monster card routinely uses about itself** -- which is why the
+target-default is right for the family and wrong for exactly one phrase.
+
+The lesson for the plan: triage finds mis-marked rows, and *writing* rows
+finds wrong ones. The two are different yields and the second is the one the
+instruments cannot reach.
