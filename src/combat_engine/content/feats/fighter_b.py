@@ -883,7 +883,7 @@ def f2180(c: Cast) -> None:
 
 @power("f795", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.deals(when=)",))
+       todo=("c.deals(chosen=)",))
 def f795(c: Cast) -> None:
     """**Re-aimed twice, and down to one symbol.** The granted swing is
     readable -- it carries `granted_via`, and `f1732` beside it gates on

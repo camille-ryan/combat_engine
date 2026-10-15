@@ -1570,12 +1570,18 @@ def i3146p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(when=)",),
+    dropped=("c.deals(untyped_only=)",),
 )
 def i3147x1(c: Cast) -> None:
-    """The retyping is real; the "only on ranged attacks, only for untyped
-    damage" half is not, because `c.deals` takes no gate. A melee swing
-    with this weapon therefore also comes out typed."""
+    """The retyping is real; "only untyped damage, only on ranged attacks"
+    is not.
+
+    **`c.deals` used to do the untyped-only half and it was a bug**: `_typed`
+    recoloured a blow only where the card had named no type, so "all damage"
+    quietly meant "the untyped part". The fix was right for the cards saying
+    "all", and this card says the other thing -- so the narrow behaviour has
+    to come back as an option. That, not a gate, is what the marker names
+    now. #613. The ranged scope is the smaller half and waits with it."""
     c.deals(DamageType.LIGHTNING, on=c.me, until=When.ENCOUNTER)
 
 
@@ -2063,12 +2069,17 @@ def i1174x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.deals(when=)",),
+    todo=("c.deals(per_target=)",),
 )
 def i1231x1(c: Cast) -> None:
     """The damage is one type against a creature vulnerable to it and
-    another against everyone else. `c.deals` retypes every swing and takes
-    no gate, so an ungated one would be wrong for every other target."""
+    another against everyone else.
+
+    So this is **not a standing effect on the wielder at all** -- the same
+    blow is one type against one creature and another against the next, and
+    the recolour is decided by the target. `c.deals` retypes every swing
+    from the attacker's side, which no gate on the attacker can fix. #613.
+    """
 
 
 @power(
@@ -2478,12 +2489,13 @@ def i2409p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(when=)",),
+    dropped=("c.deals(untyped_only=)",),
 )
 def i2418x1(c: Cast) -> None:
-    """"An attack power that doesn't have a damage type" is a gate
-    `c.deals` cannot take, so every swing comes out typed. The deafening
-    half is exact."""
+    """"An attack power that doesn't have a damage type" is the
+    untyped-only override, which `c.deals` deliberately stopped doing --
+    see `i3147x1` for why, and #613. So every swing comes out typed for
+    now. The deafening half is exact."""
     c.deals(DamageType.THUNDER, on=c.me, until=When.ENCOUNTER)
 
     def on_hit(ev: Hit) -> None:

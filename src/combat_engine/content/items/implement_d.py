@@ -2091,13 +2091,16 @@ def i2467p2(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ACID],
-    dropped=("c.deals(when=)",),
+    dropped=("c.recolour(from_, to)",),
 )
 def i2595p1(c: Cast) -> None:
-    """`c.deals` converts every blow rather than only the fire ones. "A
-    free action returns the damage to normal" is `c.endable`, which is
-    the same sentence seen from the other side: the effect is the
-    caster's, so the drop is offered to the caster for a free action."""
+    """`c.deals` converts every blow rather than only the fire ones, and an
+    override has no `from` to name -- which is why the marker is a swap and
+    not a gate now. #613.
+
+    "A free action returns the damage to normal" is `c.endable`, the same
+    sentence seen from the other side: the effect is the caster's, so the
+    drop is offered to the caster for a free action."""
     c.endable(
         c.deals(DamageType.ACID, until=When.ENCOUNTER, on=c.me, implement=True),
         FREE,
@@ -2113,7 +2116,7 @@ def i2595p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    dropped=("c.deals(when=)",),
+    dropped=("c.recolour(from_, to)",),
 )
 def i2595p2(c: Cast) -> None:
     c.endable(
@@ -2676,14 +2679,17 @@ def i3554p3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(when=)", "c.treat_as_enemy()"),
+    dropped=("c.deals(chosen=)", "c.treat_as_enemy()"),
 )
 def i509x1(c: Cast) -> None:
     """The necrotic half is written and over-applies: `c.deals` converts
     every blow rather than the ones the wielder chooses, and it cannot add
-    the keyword to the spell it converts. The drawback -- treating your own
-    allies as enemies -- has no verb: nothing moves a creature between
-    sides for the length of a turn."""
+    the keyword to the spell it converts. Both of those are the one missing
+    facility -- an opt-in recolour that also writes a keyword -- rather than
+    the gate the old symbol named. #613.
+
+    The drawback -- treating your own allies as enemies -- has no verb:
+    nothing moves a creature between sides for the length of a turn."""
     c.deals(DamageType.NECROTIC, until=When.ENCOUNTER, on=c.me, implement=True)
 
 
