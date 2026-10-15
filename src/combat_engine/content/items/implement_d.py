@@ -2698,23 +2698,44 @@ def i509x1(c: Cast) -> None:
     keywords=[Keyword.SUMMONING],
     trigger="you drop a Small or Medium enemy with an implement attack",
     on=Trigger(Dropped, _my_small_kill, "you drop a small or medium enemy"),
-    todo=("etl.monster.derived_block()",),
+    defect="the summoned block's defences are zeroes and the entry prints "
+           "no derivation for them anywhere",
 )
 def i509p1(c: Cast) -> None:
     """The trigger is declarable -- `Dropped` carries the killer and
-    `Position` carries the victim's footprint -- but the creature is not.
+    `Position` carries the victim's footprint -- but the creature is not,
+    and it never will be from this source.
 
-    **The marker was `etl.item.inline_block()` and that gap is closed.**
-    The block is imported now, as `m509c0`, and this row still cannot use
-    it: alone of the twelve, its card states every number as an expression
-    in the conjurer's -- "HP your bloodied value", "your defenses",
-    "+Intelligence +2 vs AC" -- so the compendium truthfully stores
-    zeroes. `loader.spawn` reads that row and would field a creature with
-    one hit point and AC 0, which is worse than not fielding it. That
-    makes it the 89th member of the family `spawn_associate` exists for:
-    a block that is a *rule for deriving* a stat line rather than a stat
-    line. It belongs in the associate table with an `x10_` ref, which is
-    a different gap in a different pass. #603.
+    **Two markers were wrong before this one, and the second was mine.**
+    `etl.item.inline_block()` was right until that gap closed (#601): the
+    block *is* imported now, as `m509c0`. I then re-pointed it at
+    `etl.monster.derived_block()` on the reasoning that this block states
+    its numbers as expressions in the conjurer's, so it belongs in the
+    associate table -- the 89th member of the family `spawn_associate`
+    exists for. #603.
+
+    **That was a guess about the text and the text disagrees.** The
+    associate table's shape does fit, and its readers find nothing to put
+    in it: run over this entry, `_AS_HP` yields `0`, `_AS_ABS` yields
+    `(0, 0, 0, 0)`, and `_AS_REL` -- the one that reads "Defenses your
+    defenses + 2" -- finds **nothing**. Searched both `Txt` and
+    `PlainTxt` for the phrase outright:
+
+        'your bloodied value'  PRESENT
+        'as conjurer'          PRESENT
+        'your defenses'        absent
+        'your defences'        absent
+        'equal to yours'       absent
+
+    So the hit points *are* recoverable and the defences are not printed at
+    all. That is `defect=` in its exact sense -- the compendium is missing
+    what the row would be written from -- and no table can hold a
+    derivation the source does not state.
+
+    **This drops the whole item**, which is Camille's rule of 2026-10-15
+    and worth saying out loud: a level-10 rare tome leaves the game over a
+    summoned creature's defences. `i509x1`, its other block, was already
+    unfinished on two verbs of its own.
     """
 
 

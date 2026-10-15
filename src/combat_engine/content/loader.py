@@ -520,7 +520,13 @@ UNUSABLE: dict[str, str] = {
     # **This entry is documentation, not a gate**: `usable` is read by
     # `pick` and `loader.spawn` does not check it, so what actually keeps
     # this creature off a board is `i509p1` declining to summon it.
-    "m509c0": "every number is an expression in the conjurer's; see #603",
+    #: **Resolved as a source defect, not a table choice.** #603 proposed
+    #: moving this to the associate table; its readers find nothing to put
+    #: there -- the entry prints "your bloodied value" and "as conjurer"
+    #: and the phrase for the defences **nowhere**. So `i509p1` carries
+    #: `defect=`, which drops the whole item, and this entry stays only to
+    #: keep the creature out of `pick` if anything ever draws it directly.
+    "m509c0": "its defences are zeroes and the entry prints no derivation; #603",
 }
 
 
