@@ -48,8 +48,12 @@ Points off and points back on, and the dice behind them.
   - "The target regains half the normal hit points from healing."
 - `c.heal(self, amount: 'int', *, on: 'int | None' = None) -> 'int'`
   - Put hit points back. The row's own ref rides along on `Healed`.
+- `c.regen_suppressed(self, *, on: 'int | None' = None) -> 'bool'`
+  - Is this creature's regeneration switched off right now?
 - `c.regeneration(self, amount: 'int', *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, while_bloodied: 'bool' = False, unless: 'Callable[[], bool] | None' = None, unless_struck_by: 'str' = '', unless_damaged_by: 'tuple[DamageType, ...]' = ()) -> 'Effect'`
   - Heal this much at the start of each of that creature's turns.
+- `c.resume_regeneration(self, *, on: 'int | None' = None) -> 'bool'`
+  - "Its regeneration immediately reactivates." Switch it back on.
 - `c.temp_hp(self, amount: 'int', *, on: 'int | None' = None) -> 'None'`
   - Grant temporary hit points. The row's ref rides on `TempHP`.
 

@@ -680,6 +680,17 @@ KNOWN_SILENT = {
     # #366's family: the target must be wearing or wielding an item, and
     # `loader.spawn` gives every stat block an empty `Gear()`.
     "m3448a1": "targets a creature wielding a magic item; no monster carries gear",
+    # **Named with the driver that proves it, not with an argument.** This
+    # is the one excuse in here whose row is *fully written* and whose
+    # silence is purely the board's: it wants a second creature of its own
+    # kind, within 10 squares, **whose regeneration is currently off**, and
+    # the harness fires each row once on a fresh board. `m5625a0` is why
+    # this entry carries a pointer rather than a case -- that excuse argued
+    # the clause was already true of every creature by collision, which was
+    # wrong, and it sat here for months being wrong. #602.
+    "m2068a3": "switches an ally's suppressed regeneration back on; the "
+               "board has one of its kind and nothing suppressed. Proved by "
+               "`drivers.regeneration_resumed`, with both controls",
     # The remaining four, each its own shape.
     "m5948a6": "raises a dead ally; nobody here is dead",
     "m3288a6": "rerolls an attack roll; fired alone there is none behind it",

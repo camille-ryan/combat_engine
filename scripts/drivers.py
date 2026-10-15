@@ -5917,6 +5917,94 @@ def recharge_announced(out: Result) -> None:
                  f"heard {heard}")
 
 
+def regeneration_resumed(out: Result) -> None:
+    """"Its regeneration immediately reactivates" -- the other side of the clause.
+
+    `c.regeneration`'s suppression lived in a local `{"skip": False}`, so
+    nothing outside could ask whether a creature's regeneration was off,
+    let alone switch it back on. That is the state `c.latched`'s docstring
+    describes for the striker latch, fixed there in #569 for the same
+    reason: **two rows are the same question from two sides.** Here the
+    second side is `m2068a3`, which has been re-marked three times -- twice
+    at a `Cast` verb and once, by me, at the ETL -- while the gap was that
+    the flag was unreachable. #602.
+
+    Driven because `audit` cannot pose it: the row wants a *second*
+    creature of its own kind, within 10 squares, whose regeneration is
+    currently off, and the harness fires each row once on a fresh board.
+    So this is the only evidence it works, and the `KNOWN_SILENT` entry
+    points here rather than arguing.
+
+    The negative control is the row's own guard: with nobody suppressed it
+    must produce **nothing**, because the card says "one creature whose
+    regeneration is currently inactive" and a minor action spent on an
+    empty set is a minor action the creature did not have to spend.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content import loader
+    from combat_engine.content.monsters.level_10 import soldiers_sa
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = _board()
+    first = loader.spawn(world, "m2068", (10, 10))
+    second = loader.spawn(world, "m2068", (11, 10))
+    asking = Cast(world=world, me=second, ref="drivers:regen")
+    out.that(not asking.regen_suppressed(),
+             "a creature the loader just put down regenerates -- nothing is"
+             " suppressed before anything suppresses it")
+
+    Cast(world=world, me=me, ref="drivers:regen").damage(
+        1, dtype=DamageType.FIRE, on=second)
+    out.that(asking.regen_suppressed(),
+             "fire -- which this block's card names -- switches it off, and"
+             " the switch is now ASKABLE from outside the closure that used"
+             " to hold it")
+
+    mark = len(world.bus.log)
+    soldiers_sa.m2068a3(Cast(world=world, me=first, ref="m2068a3"))
+    out.that(not asking.regen_suppressed(),
+             "and its own kind spends a minor to switch it back on, which is"
+             " what the card says and what three markers were looking for"
+             " somewhere else")
+    out.that(len(world.bus.log) > mark,
+             "the resume leaves a trace, so it is not a silent state poke",
+             f"{len(world.bus.log) - mark} event(s)")
+
+    # The negative control: nobody to help.
+    #
+    # **It asks about the prompt as well as the log, and the first draft
+    # asked only about the log -- which a plant proved too weak.** Dropping
+    # the `c.regen_suppressed` filter from the row's own body left this
+    # green: the body then offered a choice among every ally in range,
+    # `c.resume_regeneration` found nothing to end, and no event was
+    # emitted. A decision is not an event, so the log cannot see one. The
+    # card says "one creature **whose regeneration is currently
+    # inactive**", so offering a choice at all when there is none is the
+    # fault, and that is what is asserted now.
+    world, _me, _ = _board()
+    alone = loader.spawn(world, "m2068", (10, 10))
+    loader.spawn(world, "m2068", (11, 10))
+    asked: list[str] = []
+    first_decide = world.decide
+
+    def watching(who: int, kind: str, pool: list, what: str = ""):  # noqa: ANN202
+        asked.append(kind)
+        return first_decide(who, kind, pool, what)
+
+    world.decide = watching
+    mark = len(world.bus.log)
+    soldiers_sa.m2068a3(Cast(world=world, me=alone, ref="m2068a3"))
+    out.that(len(world.bus.log) == mark,
+             "with nobody's regeneration off the row emits nothing",
+             f"{len(world.bus.log) - mark} event(s)")
+    out.that(not asked,
+             "and offers no choice either -- the control that bites when a"
+             " body picks among every ally in range and only then discovers"
+             " there was nothing to do",
+             f"decisions asked: {asked}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -9250,6 +9338,8 @@ DRIVERS = {
                   "a creature loses a way of moving, and gets it back"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
+    "regeneration_resumed": (regeneration_resumed,
+                             "a suppressed regeneration switched back on"),
     "printed_regeneration": (printed_regeneration,
                              "a stat block's Regeneration heals it, and its"
                              " printed clause stops it"),

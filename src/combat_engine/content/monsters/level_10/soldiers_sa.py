@@ -118,6 +118,7 @@ from combat_engine.engine import (
     DamageType,
     Effect,
     Health,
+    Ident,
     Initiative,
     Keyword,
     Melee,
@@ -1380,34 +1381,50 @@ def m2068a2(c: Cast) -> None:
     once_per_round=True,
     reach=Ranged(10),
     target=NO_TARGET,
-    todo=("etl.monster.regeneration",),
 )
 def m2068a3(c: Cast) -> None:
-    """Nothing can be said here at all, so the row is refused rather than
-    half-written.
+    """One of its own within 10 squares gets its regeneration back.
 
-    **Re-marked twice and the second reading was also wrong.** It was
-    `c.regeneration(suppressed_by=)`, which is one of four spellings the
-    verb deliberately collapsed into `unless_damaged_by=`. Then it became
-    `c.undouse()`, on the reading that this stat block files no
-    regeneration at all -- and the compendium page says otherwise:
+    **The old docstring had the clause backwards**, which is worth saying
+    first because it is why this row was re-marked three times. It said
+    "the creature has regeneration and this clause switches it off". The
+    card switches it **on**: "one <creature> within 10 squares whose
+    regeneration is currently inactive (as a result of taking acid or fire
+    damage) immediately reactivates the regeneration."
 
-        Regeneration 10 (if the troll takes acid or fire damage,
-        regeneration does not function until the end of its next turn)
+    The markers followed the misreading. `c.regeneration(suppressed_by=)`
+    was one of four spellings the verb had already collapsed into
+    `unless_damaged_by=`; `c.undouse()` was filed on the reading that the
+    block files no regeneration at all, which its page refutes; and
+    `etl.monster.regeneration` -- mine -- was right that nothing recorded
+    the amount, and wrong that the amount was the gap.
 
-    printed in the stat-block header, not as a numbered power. So the
-    creature has regeneration and this clause switches it off; what is
-    missing is that **nothing records it**. `game.db`'s `monster` table
-    holds `hp ac fort ref_def will initiative speed modes scores resist
-    vulnerable immune senses ...` and no regeneration column, so 40 of the
-    2,436 heroic blocks that print the line lose it at import. See #602.
+    **The gap was that the suppression lived in a closure.**
+    `c.regeneration` kept it in a local `{"skip": False}`, so nothing
+    outside could ask whether a creature's regeneration was off, let alone
+    switch it back on. That is the state `c.latched`'s docstring describes
+    for the striker latch and #569 fixed there for the same reason: two
+    rows are the same question from two sides. The hold is an `Effect`
+    labelled with the laying ref now, `c.regen_suppressed` asks and
+    `c.resume_regeneration` answers.
 
-    That makes it an ETL gap rather than a `Cast` one, which matters
-    because a verb would not help: there would be nothing for it to
-    suppress. A number the page prints is not ours to invent either --
-    "numbers load from the database and are never hand-written" is this
-    directory's first rule."""
-
+    Picks by the state rather than by proximity alone, because the card
+    says "whose regeneration is currently inactive" -- so a minor action is
+    not spent when there is nobody to spend it on.
+    """
+    kin = [
+        other
+        for other in c.within(10, side="team")
+        if other != c.me
+        and (who := c.world.get(other, Ident)) is not None
+        and who.ref == "m2068"
+        and c.regen_suppressed(on=other)
+    ]
+    if not kin:
+        return
+    pick = c.choose(sorted(kin), "whose regeneration comes back")
+    if pick is not None:
+        c.resume_regeneration(on=pick)
 
 _M2068_KILLS = (DamageType.ACID, DamageType.FIRE)
 

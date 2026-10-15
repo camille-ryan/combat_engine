@@ -8595,6 +8595,59 @@ class Cast:
             return
         self.world.add(who, Undying(by=frozenset(types)))
 
+    def _regen_suppressed(self, who: int, flag: str = "") -> Any:
+        """A live "regeneration suppressed" hold on that creature, if any.
+
+        `flag` names one regeneration's own hold; empty finds any of them,
+        which is what `c.resume_regeneration` wants -- a card saying "its
+        regeneration reactivates" does not name which clause switched it
+        off.
+        """
+        for held in self.world.effects.of(who):
+            if held.label == flag or (
+                not flag and held.label.endswith(" regen suppressed")
+            ):
+                return held
+        return None
+
+    def regen_suppressed(self, *, on: int | None = None) -> bool:
+        """Is this creature's regeneration switched off right now?
+
+        The selector half, and the row printing it needs exactly this:
+        `m2068a3` targets "one creature within 10 squares **whose
+        regeneration is currently inactive**", so the body has to pick by
+        the state rather than offer every ally and hope.
+        """
+        who = self._who(on) if on is not None else self.me
+        return who is not None and self._regen_suppressed(who) is not None
+
+    def resume_regeneration(self, *, on: int | None = None) -> bool:
+        """"Its regeneration immediately reactivates." Switch it back on.
+
+        The other side of `c.regeneration`'s `unless_damaged_by=` and
+        `unless_struck_by=`: those lay a hold that the next tick consumes,
+        and this ends it early so the next tick pays out instead.
+
+        **Answers whether there was anything to resume**, which the one row
+        printing this needs: `m2068a3` targets "one creature within 10
+        squares **whose regeneration is currently inactive**", so a row
+        that found nobody must not spend its minor action pretending
+        otherwise.
+
+        Ends every such hold on the creature rather than one, because a
+        creature carrying two regenerations -- a printed line and a granted
+        one -- has both switched off by the same blow, and the card says
+        the regeneration reactivates rather than naming a clause.
+        """
+        who = self._who(on) if on is not None else self.me
+        if who is None:
+            return False
+        found = False
+        while (held := self._regen_suppressed(who)) is not None:
+            self.world.effects.end(held, "its regeneration reactivates")
+            found = True
+        return found
+
     def regeneration(
         self,
         amount: int,
@@ -8663,7 +8716,36 @@ class Cast:
         # off different events at different moments, and a single argument
         # whose type decides which would be the one-symbol-several-gaps
         # trap pointed at a signature.
-        struck = {"skip": False}
+        # **The flag lives on the creature, not in this closure, and that
+        # is the #569 move again.** `c.latched`'s own docstring records why:
+        # `features.extra_damage` kept its latch in a local dict, "so
+        # nothing outside could ask whether the striker had already paid --
+        # and two rows are exactly that question from two sides".
+        #
+        # Here the two sides are a clause that switches the regeneration off
+        # and `m2068a3`, which **switches it back on**: "one <troll> within
+        # 10 squares whose regeneration is currently inactive (as a result
+        # of taking acid or fire damage) immediately reactivates the
+        # regeneration". With the flag in a closure there was nothing to
+        # reach, and that row has been re-marked three times looking for
+        # the gap elsewhere -- twice at a `Cast` verb and once, by me, at
+        # the ETL. #602.
+        #
+        # An `Effect` labelled with the laying ref rather than a `Mods` key:
+        # the tree's idiom is that a hold carries the ref that laid it, so
+        # `c.resume_regeneration` can find exactly this one and leave a
+        # second regeneration on the same creature alone. Still **consumed
+        # by the tick it suppresses and not cleared on a clock** --
+        # `When.ENCOUNTER` with the tick ending it -- which is the shape
+        # `m5798a1` settled.
+        flag = f"{self.ref} regen suppressed"
+
+        def mark() -> None:
+            if not self._regen_suppressed(who, flag):
+                self.world.effects.apply(
+                    who, self.me, When.ENCOUNTER, label=flag, by=self.ref
+                )
+
         if unless_struck_by:
             from .events import Hit
 
@@ -8671,7 +8753,7 @@ class Cast:
                 if ev.target == who and self.struck_by_property(
                     unless_struck_by, ev
                 ):
-                    struck["skip"] = True
+                    mark()
 
             self.watch(
                 Hit, took, until=until, on=who,
@@ -8687,7 +8769,7 @@ class Cast:
                 # types at once is read as only the first -- #420's lesson,
                 # and "acid or fire" is exactly the shape that trips on it.
                 if ev.target == who and wanted & set(ev.types()):
-                    struck["skip"] = True
+                    mark()
 
             self.watch(
                 DamageApplied, burned, until=until, on=who,
@@ -8695,9 +8777,10 @@ class Cast:
             )
 
         def suppressed() -> bool:
-            if not struck["skip"]:
+            held = self._regen_suppressed(who, flag)
+            if held is None:
                 return False
-            struck["skip"] = False
+            self.world.effects.end(held, "the suppressed tick is spent")
             return True
 
         def tick(ev: Any) -> None:

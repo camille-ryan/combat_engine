@@ -95,7 +95,8 @@ CATEGORIES: dict[str, dict] = {
                 "sneak_damage", "w",
             ]),
             ("undoing it", [
-                "half_healing", "heal", "regeneration", "temp_hp",
+                "half_healing", "heal", "regen_suppressed",
+                "regeneration", "resume_regeneration", "temp_hp",
             ]),
         ],
     },
