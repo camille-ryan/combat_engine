@@ -1546,26 +1546,43 @@ def f2150(c: Cast) -> None:
 
 
 @power("f2256", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+       reach=PERSONAL, target=SELF, todo=("events.FamiliarMode",))
 def f2256(c: Cast) -> None:
-    """Rides on the familiar changing mode. `c.familiar_mode` sets one
-    and announces nothing, so there is no moment to ride."""
+    """Rides on the familiar changing mode.
+
+    **The mode exists; the moment does not.** `Companion.passive` is the
+    state and `c.familiar_mode` is the writer -- it lifts the familiar off
+    the grid and drops its `Position` going passive, and places it again
+    coming back -- but it emits nothing, so there is no moment to ride.
+    One event, which is the shape #611's note and `PowerRecharged` both
+    took. Re-pointed off `c.familiar_state()`, which bundled this with two
+    unrelated gaps. #620."""
 
 
 @power("f2257", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+       reach=PERSONAL, target=SELF, todo=("c.familiar_mode(past_death=)",))
 def f2257(c: Cast) -> None:
-    """Holds a destroyed familiar in its active state for a turn. Same
-    gap as f2256, from the other end -- nothing says it was destroyed
-    and nothing holds a mode past it."""
+    """Holds a destroyed familiar in its active state for a turn.
+
+    **Not f2256's gap, which is why it is no longer marked as it.** That
+    one wants the switch announced; this one wants a mode to *survive* the
+    creature, which `c.familiar_mode` cannot express -- it reads
+    `c.familiar(of=)` and answers False when there is nobody to switch.
+    "An echo of its spirit remains" is a familiar that is gone and still
+    active, and nothing holds that. #620."""
 
 
 @power("f2258", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.familiar_state()",))
+       reach=PERSONAL, target=SELF, todo=("actions.familiar_switch",))
 def f2258(c: Cast) -> None:
     """Cheapens the action that switches a familiar's mode.
-    `c.grant_action` understands `shift` and `stand` and silently eats
-    anything else, so writing it that way would look finished."""
+
+    **The third unrelated thing the old symbol held.** Switching is a
+    `Cast` verb, not an entry in the action menu, so it has no declared
+    cost for a feat to cheapen -- "a free action instead of a minor" has
+    nothing to change. `c.grant_action` understands `shift` and `stand`
+    and silently eats anything else, so writing it that way would look
+    finished and do nothing. #620."""
 
 
 # -- riders on a racial power named only in prose ---------------------------

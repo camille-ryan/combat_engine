@@ -1583,15 +1583,20 @@ def f3235(c: Cast) -> None:
 
 @power("f3237", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*PROSE, "c.familiar_state()"))
+       todo=PROSE)
 def f3237(c: Cast) -> None:
     """Pays out when a daily is used *without* a named ability, and the
     beneficiary is picked by standing next to a familiar.
 
     **Re-aimed off `c.class_feature()`**, the same ability as `f3190`
     and `f3244` and the same finding: nothing in the compendium is that
-    row, so there is nothing to give it a ref. The familiar's position
-    is the second absence."""
+    row, so there is nothing to give it a ref.
+
+    **One marker now, not two.** "The familiar's position is the second
+    absence" was true when written and is not: `c.familiar` answers, and a
+    familiar in active mode holds a square -- `c.familiar_mode` places it
+    and only the passive one is off the grid. So adjacency to it is an
+    ordinary read, and what is left is the defiling half alone. #620."""
 
 
 @power("f3239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

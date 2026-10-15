@@ -22,9 +22,14 @@ companions -- a shaman's spirit, a ranger's beast, a familiar -- and this
 is none of them: the creature is granted by the feat itself and its page
 prints no defences, no hit points and no ref, so there is nothing to put
 on the board. `c.elemental_companion()` is that gap and
-`c.familiar_state()` is the mode, and the family is marked rather than
-approximated. The ranger's beast, which these used to share a symbol
-with, exists now.
+`c.companion_mode()` is the mode -- **not** the familiar's
+`c.familiar_state()`, which these four carried until 2026-10-15 and which
+said they were the same question. `Companion.passive` is documented as
+"which only a familiar prints", so whether an elemental carries the flag at
+all is part of the gap rather than settled. `general_c._familiar_in` shows
+what the read looks like once the creature exists. The family is marked
+rather than approximated. The ranger's beast, which these used to share a
+symbol with, exists now. #620.
 
 **Weapon groups are a closed set**: axe, bow, crossbow, heavy blade,
 implement, light blade, mace, spear, staff, unarmed. Sickles, scythes,
@@ -143,7 +148,12 @@ COMPANION = ("c.elemental_companion()",)
 #: together. Nothing pairs two attacks that way.
 COMBINED = ("c.combined_attack()",)
 #: Active and passive mode, which only a familiar has.
-MODE = ("c.familiar_state()",)
+#: **The elemental companion's mode, which is not a familiar's.**
+#: `Companion.passive` is documented as "which only a familiar prints", and
+#: these four rows are an elemental companion -- a different `Companion.kind`
+#: that may or may not carry the flag at all. Pointing them at the familiar's
+#: symbol said they were the same question. #620.
+MODE = ("c.companion_mode()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Lengthening somebody else's printed shift.
