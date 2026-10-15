@@ -5235,7 +5235,7 @@ def conjurer_count(out: Result) -> None:
     creature with no slot at all never acts -- which is the failure this
     whole family exists to avoid.
     """
-    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.content import loader
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Initiative
 
@@ -5288,6 +5288,47 @@ def conjurer_count(out: Result) -> None:
              "a `beside` that is in no order falls back to rolling rather than"
              " leaving the servant at a count of zero",
              f"servant {theirs3.rolled if theirs3 else '?'}")
+
+    # ---- and the row that wanted it from the other end -----------------
+    #
+    # `m5624a4` is "four <minions> appear in its space … these act on the
+    # <creature>'s initiative". It sat on `spec.monster_ref()` with a
+    # docstring saying the four "name a kind with no ref in this tree" --
+    # written when the spec could not resolve it, and the spec names
+    # `m5623` outright. Asserted through the row rather than the verb,
+    # which is this file's rule: a driver that calls the facility survives
+    # the row being reverted and says nothing about it.
+    from combat_engine.content.monsters.level_08 import soldiers_sa
+    from combat_engine.engine.components import Ident
+    from combat_engine.engine.query import creatures
+
+    world, _me, _ = _board()
+    if world.encounter is None:
+        out.skip("no encounter, so nothing can join an order")
+        return
+    bursting = loader.spawn(world, "m5624", (10, 10))
+    world.encounter.join(bursting)
+    soldiers_sa.m5624a4(Cast(world=world, me=bursting, ref="m5624a4"))
+    stood = [
+        e for e in creatures(world)
+        if (who := world.get(e, Ident)) is not None and who.ref == "m5623"
+    ]
+    out.that(len(stood) == 4,
+             "m5624a4 stands four of its own kind up where it fell, which is"
+             " what the card prints",
+             f"{len(stood)} appeared")
+    theirs = world.get(bursting, Initiative)
+    out.that(bool(stood) and theirs is not None and all(
+        (i := world.get(e, Initiative)) is not None and i.rolled == theirs.rolled
+        for e in stood
+    ), "and every one of them on the bursting creature's own count -- without"
+       " `after=` they would each roll and arrive scattered through the round",
+       f"{[getattr(world.get(e, Initiative), 'rolled', None) for e in stood]}"
+       f" against {theirs.rolled if theirs else '?'}")
+    order = list(world.encounter.order)
+    out.that(all(e in order for e in stood),
+             "all four in the initiative order rather than standing there --"
+             " the half `loader.spawn` alone misses")
 
 
 def defective_entry(out: Result) -> None:

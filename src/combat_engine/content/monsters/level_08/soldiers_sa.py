@@ -2449,14 +2449,33 @@ def m5624a3(c: Cast) -> None:
     "m5624a4", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    todo=("spec.monster_ref()",),
 )
 def m5624a4(c: Cast) -> None:
-    """It is already at 0 hit points by the time this fires -- nothing
-    needs saying for "is destroyed", the same reading `level_05/brutes_sa.py`
-    already settled. The four creatures that appear in its place name a
-    kind with no ref in this tree, the same gap `m1042a2` already waits
-    on."""
+    """Four of its own kind stand up where it fell, on its own count.
+
+    It is already at 0 hit points by the time this fires -- nothing needs
+    saying for "is destroyed", the same reading `level_05/brutes_sa.py`
+    already settled.
+
+    **The marker said the four creatures "name a kind with no ref in this
+    tree" and the spec names `m5623` outright**, a declared level-8 minion
+    of the same family. That note was written when the spec could not
+    resolve it; nothing re-reads a docstring when the database changes
+    underneath, which `f1541` and `f3160` demonstrated the same way today.
+
+    **"These act on the <creature>'s initiative" is `after=c.me`**, which
+    landed this session for the twelve conjured blocks printing "Initiative
+    as conjurer" (#601). Without it four minions would each roll their own
+    count and arrive scattered through the round, which is not what a
+    creature bursting apart does.
+
+    Four separate calls rather than a loop with a count: `c.summon` picks
+    its own free square near the caster, so each one lands beside the last
+    and the clump ends up where the creature fell. "Worth no experience
+    points" has no combat meaning.
+    """
+    for _ in range(4):
+        c.summon("m5623", after=c.me)
 
 
 # ==========================================================================
