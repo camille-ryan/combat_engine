@@ -158,6 +158,35 @@ RULES_TERMS = {
     "regeneration", "threatening reach", "all-around vision", "all around vision",
     "insubstantial", "phasing", "tremorsense", "darkvision", "blindsight",
     "truesight", "low-light vision", "ongoing damage", "immunity",
+    # **Body parts, which is the same argument one word further down.** The
+    # list above is mechanics a stat block is named after; these are
+    # *anatomy* a stat block names an attack after, and a rules sentence
+    # uses them as ordinary nouns. Found by the `x_m####` tokens an author
+    # is shown -- 37 across the specs, 8 distinct, and 27 of them these
+    # three:
+    #
+    #     x_m6092a1  x23  "Tentacles"   -> "You conjure two icy tentacles"
+    #     x_m5925a1  x3   "Mandibles"
+    #     x_m461a0   x1   "Hooves"
+    #
+    # `p16263` is the worked case: its printed Effect is "You conjure two
+    # icy tentacles, each in an unoccupied square", and an author was
+    # handed "two icy x_m6092a1" -- a token for *another creature's*
+    # ability, which is the failure `etl.build._creature_names`' own
+    # docstring predicts in as many words ("an author would be handed
+    # mechanics with rules terms swapped for ids").
+    #
+    # The remaining ten tokens are **working as designed**: `x_m2858` (6),
+    # `x_m324`, `x_m3227` and `x_m6561` stand for real printed names, and
+    # `x_` is exactly the "a name was here and you get nothing false to
+    # write against" marker. `x_m856a2`, on `p16465`, is an ability whose
+    # printed name is two words and not ordinary English, so it wants the
+    # card read rather than a seat here.
+    #
+    # **The first draft of this comment named those four creatures and
+    # `leaks.py` reported it as four whole leaks**, which is the gate doing
+    # its job on a comment explaining a name-scrubbing fix. Refs only.
+    "tentacles", "tentacle", "mandibles", "mandible", "hooves", "hoof",
     # Two more weapons, for the reason the list above already gives.
     "fullblade", "repeating crossbow",
     "enhancement bonus", "item bonus", "critical", "property", "consumable",
