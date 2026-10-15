@@ -84,6 +84,39 @@ def _per_file(text: str) -> dict[str, int]:
     return out
 
 
+def _asked_about(reported: dict[str, int], targets: list[str]) -> set[str]:
+    """Of the files `ty` reported on, which did this run actually ask about?
+
+    **`ty` reports diagnostics for files it merely imported**, and their
+    counts are *lower* than the same files' full-scope counts, because a
+    narrower file set resolves fewer types. So the two things a bless must
+    not confuse: a file that got better, and a file that was never asked
+    about and looks better for it.
+
+    This cost a real baseline. Blessing after a three-file run recorded
+    `cast.py` 45 -> 1, `dsl.py` 332 -> 9 and `query.py` 81 -> 7 -- none of
+    them edited, none of them a target, every one of those numbers an
+    artifact of the scope. It passed the "only ever downward" guard above
+    because downward is exactly the direction the artifact points, which is
+    why that guard is not sufficient on its own. The next `--all` would have
+    been red by ~440 for no reason.
+
+    Worse, the comment in `main` already *claimed* this -- "only the files
+    actually checked in this run are touched" -- and nothing did it.
+
+    `targets` is either a list of files or, under `--all`, the `SCOPE`
+    directory prefixes, so both forms have to match.
+    """
+    asked: set[str] = set()
+    for f in reported:
+        for t in targets:
+            t = t.rstrip("/")
+            if f == t or f.startswith(t + "/"):
+                asked.add(f)
+                break
+    return asked
+
+
 def _run(paths: list[str]) -> tuple[int, str]:
     done = subprocess.run(["uvx", "ty", "check", *paths], cwd=ROOT,
                           capture_output=True, text=True, check=False)
@@ -129,8 +162,15 @@ def main() -> int:
         # so only the files actually checked in this run are touched:
         # `cast.py` reports 44 alone and 45 across the whole scope, and
         # recording the narrower figure makes `--all` red for no reason.
+        #
+        # That sentence was here, correct, and **not implemented** -- see
+        # `_asked_about`, which is now what makes it true. Three files were
+        # blessed down by ~440 errors between them on the strength of it.
         base = _baseline()
-        now = _per_file(text)
+        reported = _per_file(text)
+        asked = _asked_about(reported, targets)
+        now = {f: n for f, n in reported.items() if f in asked}
+        swept = {f: n for f, n in reported.items() if f not in asked}
         lowered = {f: (base[f], n) for f, n in now.items()
                    if f in base and n < base[f]}
         risen = {f: (base[f], n) for f, n in now.items()
@@ -156,10 +196,25 @@ def main() -> int:
         for f, n in sorted(arriving.items()):
             print(f"  LEFT ALONE {f}: arriving with {n} error(s) and no"
                   f" baseline; an implied 0 is the stricter record")
+        # Named rather than silently dropped. A reader who watched `ty`
+        # print diagnostics for `dsl.py` and then saw nothing about it here
+        # would reasonably think the bless had missed something.
+        for f, n in sorted(swept.items()):
+            print(f"  not a target {f}: {n} error(s) at this scope, which is"
+                  f" not comparable to a full-scope baseline")
         print(f"blessed {len(lowered) + len(fresh)} file(s);"
-              f" {len(risen) + len(arriving)} refused; {len(base)} entries total")
+              f" {len(risen) + len(arriving)} refused;"
+              f" {len(swept)} swept in but not asked about;"
+              f" {len(base)} entries total")
         return 1 if (risen or arriving) else 0
 
+    # **Not gated by `_asked_about`, deliberately.** A swept-in file's
+    # narrow count is the *lower* one, so comparing it against a full-scope
+    # baseline can only ever let it pass -- gating here would discard a real
+    # finding to tidy up a symmetry. If a swept-in file ever does report
+    # higher than its baseline, that is a question worth being red about,
+    # not a scope artifact to waive. Narrowing a check to match a bless is
+    # how the loosening in `scripts/CLAUDE.md`'s first rule happens.
     base = _baseline()
     now = _per_file(text)
     worse = {f: (n, base.get(f, 0)) for f, n in now.items() if n > base.get(f, 0)}
