@@ -542,14 +542,39 @@ def benefits(ref: str) -> bool:
     bonus, a resistance or a regeneration is helping whoever it names. The
     no-attack-line half matters -- plenty of attacks also lay a bonus on the
     caster, and those are not support.
+
+    **And it did not apply to the healing half, which was the bug.** The
+    `heals(ref)` test returned *before* the attack-line guard below, so the
+    sentence above described an intention rather than the code: measured
+    over the tree, **273 rows with an attack line answered True** -- 157
+    monster abilities, 113 character powers and 3 feats, each a drain, a
+    bloodied-on-kill rider or a monster that feeds on what it hits.
+    `benefits` is read at two sites that decide whether to point a row at a
+    friend, so all 273 were priced as support.
+
+    **The effect was latent, not observed, and that is measured too.**
+    `scorecard.py` run either side of this one line moves **not one of its
+    50 rows**, and `replay verify` is 7 of 7 with no re-record -- so none
+    of the 273 was ever actually pointed at a friend in 24 scored fights
+    or 7 recorded ones. The fix makes the code match its docstring and
+    closes a hole rather than correcting an observed misplay. Said plainly
+    because the opposite claim would be the easy one to make.
+
+    `heals` is a **body grep** by design (its own docstring says so, and
+    `hurts` calls the same approach "over-eager by construction"), so one
+    correct clause in one attack's body was enough to reclassify it. That
+    is the trade, not the bug; the bug was the guard sitting below an early
+    return. Found by writing `f993`'s "forgo dealing damage to instead gain
+    temporary hit points" into `p992` under #550, which put `c.temp_hp(` in
+    an attack's body and made it the 274th. #607.
     """
     if not ref:
         return False
-    if heals(ref):
-        return True
     p = get(ref)
     if p is None or p.attack is not None or p.body is None:
         return False
+    if heals(ref):
+        return True
     got = _HELPS.get(ref)
     if got is None:
         try:
