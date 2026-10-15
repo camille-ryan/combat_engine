@@ -197,10 +197,15 @@ def f1491(c: Cast) -> None:
 
 
 @power("f1239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_melee(ref)",))
+       reach=PERSONAL, target=SELF, todo=("c.as_melee(ref=)",))
 def f1239(c: Cast) -> None:
     """Gives five named at-wills a melee reach **and** lets each be used
     as a melee basic attack. Only the second half is sayable now.
+
+    **Spelled `c.as_melee(ref=)`, with the `=`.** It read `c.as_melee(ref)`
+    and the other four rows on this gap read `c.as_melee(ref=)` -- one
+    character, two symbols, so neither could ever report complete and
+    `blocked.py` showed the family as 4 rows and 1. #614.
 
     Re-aimed rather than half-written: the reach is what makes the
     swap mean anything, and `c.as_basic` on a row that is still ranged

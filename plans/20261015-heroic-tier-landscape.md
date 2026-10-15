@@ -182,10 +182,41 @@ low overlap too. Same failure as the `spec.*`/`etl.*` check withdrawn on
 #608 for flagging 69 of 73 rows.
 
 One thing the attempt did surface before it was withdrawn, and it stands on
-its own because the cards were read: **`c.as_melee(ref=)`'s five rows are
-#614's mechanism**, so that issue is 12 heroic rows rather than 5 — the
-densest real gap in the tier — and three of the twelve trigger on `f1028`,
-which is itself one of the twelve. Build order is not free.
+its own because the cards were read, and it grew when the thread was pulled:
+
+## #614 is 25 heroic rows under five symbols, and that is the finding
+
+**Replace a named power's `Range` for one use, visibly.** Marked five ways,
+which is exactly why it never looked dense enough to build:
+
+```
+ 7 heroic  c.reshape_area()
+ 5 heroic  c.recast(area=)
+ 5 heroic  c.recast(as_ranged=)
+ 5 heroic  c.as_melee(ref=)
+ 3 heroic  Power.reach_alt
+25 heroic rows
+```
+
+`c.recast(area=)`'s cards are the issue word for word -- "you can choose to
+make it an area burst 2 within 10 squares **instead of** a close blast 3".
+And `Power.reach_alt`'s three rows name the fix from the header side, which
+is the **fourth** independent arrival at the same design: *"there is no field
+for an alternate reach the way `attack_alt`/`damage_alt` carry an alternate
+branch"*. `Range.alt` already carries a *numeric* alternative; what is
+missing is one of a different **kind**, and `attack_alt`/`damage_alt` are the
+shape the header already uses for it. Much smaller than the `Form` axis built
+and backed out earlier.
+
+**The five symbols are deliberately not merged** -- they describe different
+printed effects, and merging rows that disagree is the fault this session
+keeps relearning. Five names, one mechanism, recorded on the issue.
+
+Three of the 25 trigger on `f1028`, which is itself one of the 25, so build
+order is not free: `f1028` and `f1239` first, then the riders.
+
+So the next session's answer to "what is worth building" is this, and it is
+not close: 25 rows against a head whose next entry is 9.
 
 The head is now 28 symbols at 5+ rows, and the top of it is the accurate
 ones. Which means the cheap wins from re-pointing are largely spent, and what
