@@ -2413,13 +2413,30 @@ def m5626a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
+    todo=("c.blocks_entry()",),
 )
 def m5626a1(c: Cast) -> None:
-    """ "An enemy cannot enter the m5626's space by any means" restates
-    the base movement rule every destination square is already checked
-    against (`c.world.grid.occupant(sq) is None`, used throughout this
-    tree's own forced-movement and pathing helpers). Nothing is added."""
+    """"An enemy cannot enter its space **by any means**", and a phasing
+    enemy can.
+
+    **This row said the card restated the base rule and was
+    `out_of_combat`. Both were wrong.** `movement._clear` waives occupancy
+    for a phasing or overhead mover -- `not (overhead or ghost)` -- so a
+    ghost passes through where the card says nothing may. Measured on a
+    board:
+
+        _clear(world, foe, {the monster's square})    False
+        ...with "phasing" in the foe's modes          True
+
+    `_can_stop` keeps it from *ending* there (#392), so what is missing is
+    passage rather than occupancy -- still a means of entering, and the card
+    forbids all of them.
+
+    And `out_of_combat=True` was the worse half: it says a row is complete
+    and **inert in a fight**, and a rule about which squares an enemy may
+    move through is the opposite of inert. Eight heroic rows print this
+    card; six carried a marker and `m6406a1` made the same claim this one
+    did."""
     c.note(f"{c.ref}: its space cannot be entered")
 
 
