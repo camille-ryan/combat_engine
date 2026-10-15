@@ -117,3 +117,75 @@ to the whole tree.
   bucket. Affects trust in the measurement, not the content.
 * Paragon and epic rows. 1,339 blocked tree-wide against 1,242 heroic, so
   heroic is 93% of the debt and the tier filter buys little.
+
+---
+
+# What the session actually did, measured
+
+Appended 2026-10-14 at `2177bda`. Every number here was read off the tree,
+not predicted — see the correction at the end for why that distinction
+earned its place.
+
+    heroic rows blocked   1242 -> 1223
+
+## The plan's premise was right and its arithmetic was wrong
+
+Step 2 of the order above estimated 191 rows behind the 103 `mis-marked`
+symbols. The order held up: re-pointing first *was* cheap and *was* how the
+real faults surfaced. The row count did not. Of the symbols opened, the
+pattern was consistent and not what the plan expected:
+
+* **a `mis-marked` verdict reliably means the symbol is wrong and
+  unreliably means the rows are writable.** `c.reach_of(power=)` had six
+  rows and bought one; it named no verb at all, and its recorded
+  replacement was the *writer* where the rows needed a reader.
+* **the already-written row of a twin pair was the wrong one, seven times.**
+  `settle`'s two unmarked callers, `m5625a0` and `m5626a1` and `m6406a1`
+  deciding a card needed no code, `m190a4`'s dead terrain label,
+  `m4382a3`'s missing `share=True`, `m5857a0` calling a combat rule
+  `out_of_combat`.
+
+So the count moves slowly in both directions, and **up is often the honest
+direction**: a row that stops lying about itself raises it.
+
+## What the fan-out bought, which the plan did not anticipate
+
+Four authoring agents over 89 rows in eight disjoint files wrote **20 rows**
+— more than the main session managed alone — and found bugs in rows that
+reported finished, which no instrument looks for because firing and doing
+something is all `audit` asks:
+
+* `m1522a1` dealt 2d6+5 to **its own allies**, at will, every turn;
+* `_worsen` capped five rust penalties at **-1 instead of -5**, for four
+  rows' entire lives — the second instance of a class
+  `drivers.penalties_by_source` was built for and whose docstring predicted
+  the recurrence;
+* three rows printed "fly speed N (hover)" and granted **no fly speed**;
+* `m6654a1` let everybody walk through it instead of the reverse;
+* four feats required a weapon by naming a **monster power** that shares its
+  printed name.
+
+The lesson for the next fan-out: partition by file, verify every claim that
+changes behaviour (agents over-call "already exists" by ~20%), and ask
+explicitly for pre-existing bugs — that last clause is what produced the
+list above.
+
+## Two instruments came out of it
+
+* **`scripts/twins.py`** — blocked rows whose card nearly matches a written
+  one. 44 heroic rows have a twin at >= 0.95, 41 of them identical. It is
+  the search the symbol queue is not sorted by, and it found three of the
+  four clusters worth having. Not a gate, for `triage.py`'s reasons.
+* **`docs/symbols/`** plus its staleness gate, from the earlier plan.
+
+## The correction worth keeping
+
+`b363c8c`'s message says the count went 1221 -> 1222. It went to **1223** —
+that commit added two markers and I counted one. The number in the message
+was a *prediction written in the same breath as the change*, not a reading
+taken after it, and the two diverged immediately.
+
+Found by comparing the marked set at that commit against the tree in a
+throwaway worktree, which took a minute and should have been the habit from
+the first commit. `audit.py`'s own baseline exists because counts drift
+silently; a hand-written count in prose has no such protection.
