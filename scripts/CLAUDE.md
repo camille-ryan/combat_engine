@@ -214,6 +214,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `spec.py` | the sanitised brief handed to an author |
 | `vocab.py` | the generated `Cast` surface — the authority on what exists; `--find` searches docstrings |
 | `triage.py` | for every blocked symbol, does the thing already exist? Ranks candidates; `fixtures/triage.json` holds the verdicts |
+| `twins.py` | for every blocked row, has somebody already written the same card? Ranks pairs by card text; not a gate |
 | `fight.py` | play a whole fight and print the log |
 | `show.py` | one row, printed text beside emitted events |
 | `build.py` | rebuild `data/game.db` |
