@@ -72,7 +72,17 @@ CREATE TABLE monster (
   -- What turns a printed `Regeneration N` off. Stored beside the amount for
   -- the reason `resist`/`vulnerable`/`immune` are: it is a property of the
   -- creature, not a thing a row does. Camille's call, #602.
-  regen_unless_damaged_by TEXT, regen_unless_struck_by TEXT
+  regen_unless_damaged_by TEXT, regen_unless_struck_by TEXT,
+  -- **Why this whole entry is unfit to field, or NULL.** Camille's call,
+  -- 2026-10-15: an attack line printing `+N vs` with no defence is malformed,
+  -- and #600 drops the entire entry for one defective part.
+  --
+  -- Derived here rather than listed in `loader.UNUSABLE`, because 150 entries
+  -- carry one and 67 of them have no row written yet -- so there is nothing to
+  -- hang a `defect=` on, and a hand-kept list of that size is the staleness
+  -- `loader.defective`'s own docstring warns against. The page is read here
+  -- and nowhere else, so this is where the fact belongs.
+  defect TEXT
 );
 CREATE INDEX monster_book ON monster(book, level);
 CREATE INDEX monster_level ON monster(level, role);
@@ -927,6 +937,36 @@ def _monsters(
     report.worst = sorted(report.worst, key=lambda p: p[1])[:10]
 
 
+#: `+N vs` with no defence after it. **The conjunction left behind by a
+#: blanked pair counts as blank** -- these cards read `+8 vs  or  (whichever
+#: is lower)` with *both* names gone, which is not the legitimate
+#: `vs Reflex or Will` that prints two real defences. Camille drew that line
+#: explicitly, and it is the whole difference between a malformed card and a
+#: printed choice.
+_BLANK_DEFENCE = re.compile(r"\+\s*\d+\s+vs\.?\s*(?:or\b|;|$)", re.I | re.M)
+
+
+def _malformed_attack(m: monster_parser.Monster) -> str | None:
+    """Why this stat block cannot be fielded, or None.
+
+    One line of judgement, kept here because this is the only place the
+    compendium's text is read. 150 entries have an attack line whose defence
+    never made it onto the page; 83 have rows written today and 67 do not, so
+    deriving it beats `loader.UNUSABLE` -- there is nothing to hang a row
+    marker on for the 67, and `loader.defective`'s docstring is explicit that
+    a second hand-kept list is how the two go out of step.
+
+    Reports the **first** offending ability by index, so the reason names
+    something an author can look at rather than just asserting the entry is
+    bad.
+    """
+    for a in m.abilities:
+        if a.spec and _BLANK_DEFENCE.search(a.spec):
+            return (f"a{a.index}: the printed attack line names no defence"
+                    f" -- malformed, so the entry drops (#612)")
+    return None
+
+
 def _write_monster(
     out: sqlite3.Connection, m: monster_parser.Monster,
     names: dict[str, dict[str, str]], report: Report,
@@ -949,7 +989,7 @@ def _write_monster(
         report.blank_stats.append(m.ref_id)
     out.execute(
         "INSERT INTO monster VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             m.ref_id, m.id, m.level, m.role,
             int(m.minion), int(m.leader), int(m.elite), int(m.solo),
@@ -961,6 +1001,7 @@ def _write_monster(
             int(m.conjuration),
             json.dumps(list(m.regen_unless_damaged_by)),
             m.regen_unless_struck_by,
+            _malformed_attack(m),
         ),
     )
     names[m.ref_id] = {"name": m.name, "description": m.description}

@@ -559,9 +559,38 @@ def defective(ref: str) -> str:
     return entry_defect(ref)
 
 
+def entry_defect_column(ref: str) -> str:
+    """What the ETL recorded against this whole stat block, or `""`.
+
+    **The third source of "unfit", and the only one that can speak for an
+    entry with no rows written.** `UNUSABLE` is hand-kept and `defective`
+    derives from `defect=` on a row; both need somebody to have looked at the
+    creature. A malformed attack line is visible in the compendium before any
+    row exists, so `etl/build._malformed_attack` writes it at import -- 150
+    entries carry one and 67 of them have no row yet.
+
+    Camille's call, 2026-10-15: drop all of them. *"I can review them later
+    to see if we can bring them back in, but the answer is probably no."*
+    """
+    row = game().execute(
+        "SELECT defect FROM monster WHERE ref = ?", (ref,)
+    ).fetchone()
+    return (row["defect"] or "") if row else ""
+
+
 def usable(ref: str) -> bool:
-    """Is this monster fit to put on a board? See `UNUSABLE` and `defective`."""
-    return ref not in UNUSABLE and not defective(ref)
+    """Is this monster fit to put on a board?
+
+    Three ways to be unfit and they answer different questions: `UNUSABLE` is
+    a stat line somebody judged wrong by hand, `defective` is a row whose own
+    `defect=` says it could never be written, and `entry_defect_column` is
+    what the ETL saw on the page before anybody wrote a row at all.
+    """
+    return (
+        ref not in UNUSABLE
+        and not defective(ref)
+        and not entry_defect_column(ref)
+    )
 
 
 def pick(

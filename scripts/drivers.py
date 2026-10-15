@@ -5799,6 +5799,44 @@ def blank_defence_is_defective(out: Result) -> None:
              " whole creature off the board rather than the one row",
              f"{len(kept)} entries survive: {kept[:8]}")
 
+    # ---- the entries with no row written, which is Camille's "all of them"
+    #
+    # *"Drop all of them for defect. I can review them later to see if we can
+    # bring them back in, but the answer is probably no."* 150 compendium
+    # entries have a blank attack line and only 85 have a row today, so a
+    # row-level marker cannot reach the rest -- `etl.build._malformed_attack`
+    # writes `monster.defect` at import instead, before anybody writes a row.
+    #
+    # **The 65 that are left are not a gap**: they are never imported into
+    # `game.db` at all, so there is nothing to field and nothing to drop. The
+    # assertion is that every *imported* one is marked, which is the whole of
+    # what "all of them" can mean.
+    from combat_engine.db import game
+
+    db = game()
+    page = set()
+    for (mid, txt) in comp.execute("SELECT ID, Txt FROM Monster WHERE Txt IS NOT NULL"):
+        if blank.search(unescape(txt)):
+            page.add(f"m{mid}")
+    imported = {r["ref"] for r in db.execute("SELECT ref FROM monster")}
+    marked = {r["ref"] for r in db.execute(
+        "SELECT ref FROM monster WHERE defect IS NOT NULL")}
+    unmarked = sorted((page & imported) - marked)
+    out.that(len(page & imported) >= 50,
+             "the floor again -- there are imported blank-defence entries to"
+             " ask about",
+             f"{len(page & imported)} imported of {len(page)} on the page")
+    out.that(not unmarked,
+             "every imported entry with a blank attack line carries"
+             " `monster.defect`, including the ones with no row written --"
+             " which a row marker could never have reached",
+             f"{len(unmarked)} unmarked: {unmarked[:8]}")
+    fieldable = [r for r in marked if loader.usable(r)]
+    out.that(not fieldable,
+             "and none of them is fieldable, which is the point of the"
+             " column rather than the record",
+             f"{len(fieldable)} still usable: {fieldable[:8]}")
+
     # ---- why the compendium looks like this, which the ruling does not
     # ---- need but the next reader will want -----------------------------
     line = re.compile(r"\+(\d+)\s+vs\.?\s*([A-Za-z]*)\s*(or)?[^;<]*;\s*([^.<]*?)damage\.")
