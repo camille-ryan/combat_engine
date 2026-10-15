@@ -5559,6 +5559,94 @@ def printed_regeneration(out: Result) -> None:
                  f"healed {spared}")
 
 
+def sealed_space(out: Result) -> None:
+    """"An enemy cannot enter this creature's space by any means."
+
+    Eight stat blocks print that sentence word for word. The clause is
+    **entirely about the waivers**, and that is what makes it worth driving:
+    an occupied square is already closed to ordinary movement, so a row
+    written as `pass` would have audited identically on every board where
+    nobody was phasing. The two things that normally open a square are
+    phasing through the occupant and the occupant having been made
+    shareable, and both have to stop working.
+
+    So the positive control is a **phasing** enemy, not a walking one. A
+    walking enemy is refused by the plain occupancy rule and proves nothing
+    about this verb at all -- it is the assertion that would have passed
+    against an empty body.
+
+    Three negative controls:
+
+    * a phasing **ally** still passes, because the card says enemy;
+    * a phasing enemy still passes a creature **without** the trait, which
+      is what says the refusal comes from the trait and not from the change;
+    * `c.shares_space` laid on a sealed creature does not re-open it, which
+      is the half a `shares_space`-shaped implementation would have got
+      backwards.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.movement import _clear
+    from combat_engine.engine.query import allies, enemies, squares
+
+    world, caster, _ = _board()
+    foe = enemies(world, caster)[0]
+    seat = next(iter(squares(world, foe)))
+    here = Cast(world=world, me=caster, ref="drivers:sealed")
+
+    # Ordinary movement: already refused, and that is the point about it.
+    out.that(not _clear(world, caster, {seat}),
+             "an ordinary creature cannot enter an occupied square anyway --"
+             " which is why this rule is driven through a phasing one")
+
+    # Phasing, with no seal: the waiver works.
+    here.phasing(until=When.ENCOUNTER)
+    out.that(_clear(world, caster, {seat}),
+             "a phasing enemy passes through a creature that does NOT carry"
+             " the trait -- the control that says the refusal below comes"
+             " from the trait and not from the change")
+
+    # Seal it. Same board, same phasing mover.
+    Cast(world=world, me=foe, ref="drivers:sealed").blocks_entry(
+        until=When.ENCOUNTER)
+    out.that(not _clear(world, caster, {seat}),
+             "and is refused once the occupant blocks entry -- \"by any"
+             " means\" beating the phasing waiver, which is the whole of"
+             " what the clause adds")
+
+    # Shareable AND sealed: the seal wins.
+    Cast(world=world, me=foe, ref="drivers:sealed").shares_space(
+        until=When.ENCOUNTER)
+    out.that(not _clear(world, caster, {seat}),
+             "being made shareable does not re-open a sealed square -- the"
+             " other waiver, and the one an implementation copied from"
+             " `c.shares_space` would have got backwards")
+
+    # An ally of the sealer, phasing: the card says enemy.
+    #
+    # **`allies(world, mate)`, not `enemies(world, mate)` minus the
+    # caster.** The first draft asked for the sealer's enemies and took out
+    # the caster, which is the caster's *own* side -- so it tested a
+    # phasing enemy, got the correct refusal, and reported it as a failure.
+    # The probe was backwards, not the verb.
+    world, caster, _ = _board()
+    mate = next((a for a in enemies(world, caster)), None)
+    ally = next((a for a in allies(world, mate)), None) if mate is not None else None
+    if mate is None or ally is None:
+        out.skip("the board has no two creatures on the same side to test"
+                 " the ally half")
+        return
+    Cast(world=world, me=mate, ref="drivers:sealed").blocks_entry(
+        until=When.ENCOUNTER)
+    Cast(world=world, me=ally, ref="drivers:sealed").phasing(
+        until=When.ENCOUNTER)
+    seat = next(iter(squares(world, mate)))
+    out.that(_clear(world, ally, {seat}),
+             "a phasing ALLY of the sealer still passes, because the card"
+             " says enemy and the side is asked rather than assumed",
+             f"ally {ally} into {mate}'s square {seat}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -8886,6 +8974,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "sealed_space": (sealed_space,
+                     "an enemy cannot enter this creature's space by any means"),
     "printed_regeneration": (printed_regeneration,
                              "a stat block's Regeneration heals it, and its"
                              " printed clause stops it"),

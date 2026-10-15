@@ -2253,30 +2253,17 @@ def m5619a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blocks_entry()",),
 )
 def m5625a0(c: Cast) -> None:
-    """"An enemy cannot enter its space **by any means**", and a phasing
-    enemy can.
+    """"An enemy cannot enter this creature's space by any means."
 
-    **This row said the card was already true and was wrong.** It read
-    "a creature's own square is not enterable by anything else on this
-    board, no exception involved", which is right about walking and wrong
-    about the exception the card exists for. `movement._clear` waives
-    occupancy for a phasing or overhead mover -- `not (overhead or ghost)`
-    -- so a ghost passes through. Driven on a board rather than inferred:
-
-        _clear(world, foe, {the monster's square})   False
-        ...with "phasing" in the foe's modes         True
-
-    `_can_stop` keeps it from *ending* there (#392), so what is missing is
-    narrower than the card: passage, not occupancy. Still a means of
-    entering, and the card forbids all of them.
-
-    Five other rows print this identical card and all five were marked --
-    under four different symbol names, which is why this one looked like
-    the odd one out instead of the wrong one. All six say
-    `c.blocks_entry()` now."""
+    `c.blocks_entry()` is the whole clause. An occupied square is already
+    closed to ordinary movement; what "by any means" adds is that the two
+    things which normally open one -- phasing through the creature, and the
+    creature having been made shareable -- do not work here. See
+    `movement.blocks_entry` for what it deliberately does not beat.
+    """
+    c.blocks_entry()
 
 
 @power(

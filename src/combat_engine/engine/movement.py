@@ -294,12 +294,22 @@ def _clear(
         if not world.grid.passable(sq) and not ghost:
             return False
         who = world.grid.occupant(sq)
-        if (
-            who is not None
-            and who != eid
-            and not (overhead or ghost)
-            and not shares_space(world, who)
-        ):
+        if who is None or who == eid:
+            continue
+        # **"Cannot enter by any means" beats the waivers**, which is the
+        # whole of what the clause adds -- see `blocks_entry`.
+        #
+        # **The order is a style choice and not a correctness one, and a
+        # plant proved my first claim about it false.** I had written that
+        # this must be asked *before* `overhead or ghost`; moving it after
+        # left `drivers.sealed_space` green, correctly, because both
+        # branches return independently and a phasing mover simply skips
+        # the second one. Recorded rather than quietly fixed: the plant
+        # that stays green is evidence about something, and here it was
+        # evidence about the comment.
+        if blocks_entry(world, who, eid):
+            return False
+        if not (overhead or ghost) and not shares_space(world, who):
             return False
     return True
 
@@ -406,6 +416,48 @@ def shares_space(world: World, eid: int) -> bool:
 
     mods = world.get(eid, Mods)
     return bool(mods and mods.items and mods.total("shares_space", {}) > 0)
+
+
+def blocks_entry(world: World, eid: int, mover: int) -> bool:
+    """"An enemy cannot enter this creature's space by any means."
+
+    Eight stat blocks print that sentence word for word -- `m5623a1`,
+    `m5624a1`, `m5625a0`, `m5626a1`, `m6403a1`, `m6404a1`, `m6405a1`,
+    `m6406a1` -- and it is the exact opposite of `c.shares_space`, so it is
+    stored the same way and read in the same places.
+
+    **"By any means" is about the waivers, which is the only thing it can
+    be about.** An occupied square is already closed: `_clear` refuses it,
+    `_can_stop` refuses it and `_occupied` reports it. What the clause adds
+    is that the two things which normally open one do not work here --
+    phasing through the creature, and the creature having been made
+    shareable by something else.
+
+    **It does not beat `overhead`, and that is a reading rather than an
+    oversight.** `overhead` is this engine's two-dimensional stand-in for a
+    flyer passing *above* a ground creature, and in the printed rules that
+    is not entering its space at all. Blocking it here would make the
+    clause say something stronger than the card, on the strength of a
+    modelling choice. Teleport needs no handling either: it has no path to
+    check, so only its destination is tested and that goes through
+    `_can_stop`, which the plain occupancy rule already closes.
+
+    **Enemies only**, as printed. `side` is asked of the mover rather than
+    assumed, so an ally walking past is governed by the ordinary rule.
+    """
+    from .components import Mods
+    from .query import team as side_of
+
+    mods = world.get(eid, Mods)
+    if not (mods and mods.items and mods.total("blocks_entry", {}) > 0):
+        return False
+    # **Two `team` reads and not `query.enemies`**, which walks every
+    # creature on the board. This sits inside `_clear`, which runs per
+    # square of every candidate destination -- the same cost argument
+    # `_reachers`' docstring records from the time reach became a modifier
+    # and an audit went from 84 seconds to 331.
+    mine, theirs = side_of(world, eid), side_of(world, mover)
+    return mine is not None and theirs is not None and mine is not theirs
 
 
 def _occupied(world: World, eid: int, target: set[Square] | frozenset[Square]) -> bool:

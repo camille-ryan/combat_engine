@@ -552,12 +552,17 @@ def m5623a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blocks_entry()",),
 )
 def m5623a1(c: Cast) -> None:
-    """Nothing bars a square to one side only -- `c.no_enter` blocks a
-    zone for everyone, not "except its owner", which is what this trait
-    needs and does not get."""
+    """"An enemy cannot enter this creature's space by any means."
+
+    `c.blocks_entry()` is the whole clause. An occupied square is already
+    closed to ordinary movement; what "by any means" adds is that the two
+    things which normally open one -- phasing through the creature, and the
+    creature having been made shareable -- do not work here. See
+    `movement.blocks_entry` for what it deliberately does not beat.
+    """
+    c.blocks_entry()
 
 
 @power(

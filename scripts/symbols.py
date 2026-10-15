@@ -132,10 +132,10 @@ CATEGORIES: dict[str, dict] = {
                 "fall",
             ]),
             ("how far, and what stops it", [
-                "any_size_manoeuvre", "extend_every", "extend_move", "forces",
-                "ignores_difficult", "ignores_difficult_in", "immovable",
-                "no_walk", "phasing", "resist_forced", "shares_space",
-                "speed_of", "squares_for",
+                "any_size_manoeuvre", "blocks_entry", "extend_every",
+                "extend_move", "forces", "ignores_difficult",
+                "ignores_difficult_in", "immovable", "no_walk", "phasing",
+                "resist_forced", "shares_space", "speed_of", "squares_for",
             ]),
             ("modes and mounts", [
                 "mode", "mount", "move_companion",

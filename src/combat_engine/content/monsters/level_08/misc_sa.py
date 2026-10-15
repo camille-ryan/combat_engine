@@ -350,19 +350,17 @@ def m6404a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blocks_entry()",),
 )
 def m6404a1(c: Cast) -> None:
-    """"An enemy cannot enter its space by any means." No verb refuses
-    entry into a specific creature's square.
+    """"An enemy cannot enter this creature's space by any means."
 
-    **The default and the printed line do come apart, and this said they
-    did not.** Ordinary occupancy blocks walking in, but
-    `movement._clear` waives it for a phasing or overhead mover, so a
-    ghost passes through where the card says nothing may. Measured on a
-    board; see `m5625a0`, which is the same card and had been written as
-    needing no code at all on the strength of the reading this docstring
-    used to share."""
+    `c.blocks_entry()` is the whole clause. An occupied square is already
+    closed to ordinary movement; what "by any means" adds is that the two
+    things which normally open one -- phasing through the creature, and the
+    creature having been made shareable -- do not work here. See
+    `movement.blocks_entry` for what it deliberately does not beat.
+    """
+    c.blocks_entry()
 
 
 @power(

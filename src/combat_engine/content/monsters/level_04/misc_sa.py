@@ -318,26 +318,21 @@ def m6403a0(c: Cast) -> None:
 @power(
     "m6403a1",
     level=4,
-    usage=ENCOUNTER,
+    usage=AT_WILL,
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blocks_entry()",),
 )
 def m6403a1(c: Cast) -> None:
-    """An ordinary creature cannot stand in another's square anyway, so the only
-    thing this clause rules out is the exceptions -- a teleport, a phasing
-    creature, a shared space. Those all route through the same question about
-    who may occupy whose square, and nothing can answer it from this side.
+    """"An enemy cannot enter this creature's space by any means."
 
-    **Re-aimed off `c.move_through()`, which this card is the opposite of.**
-    That symbol is the trampling gap, and `movement.overrun` -- reached from
-    content by `monsters.level_11.skirmishers_sc._through_them` -- really does
-    walk a stated distance through whoever is in the way. This card is a
-    *prohibition*, so overrun arriving would not finish it; overrun is one of
-    the things it forbids. What is missing is a per-creature veto that
-    `movement._clear` and `_can_stop` consult, so that the waivers a phase or
-    a teleport grant can themselves be refused."""
+    `c.blocks_entry()` is the whole clause. An occupied square is already
+    closed to ordinary movement; what "by any means" adds is that the two
+    things which normally open one -- phasing through the creature, and the
+    creature having been made shareable -- do not work here. See
+    `movement.blocks_entry` for what it deliberately does not beat.
+    """
+    c.blocks_entry()
 
 
 @power(

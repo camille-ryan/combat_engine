@@ -4586,6 +4586,27 @@ class Cast:
         """
         return self.mode("phasing", self.speed_of(on or self.me), until=until, on=on)
 
+    def blocks_entry(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"An enemy cannot enter this creature's space by any means."
+
+        Eight stat blocks print that sentence word for word and it is the
+        exact opposite of `c.shares_space` below, so it is laid the same
+        way -- a `Mods` key with a duration rather than a movement mode,
+        because being un-enterable is not a way of travelling.
+
+        What it adds over the ordinary occupancy rule is the waivers:
+        phasing through the creature, and the creature having been made
+        shareable by something else. See `movement.blocks_entry` for what
+        it deliberately does **not** beat, and why.
+
+        Yours, so it defaults to the caster: every printed line of this
+        shape is a trait about the creature carrying it.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("blocks_entry", 1, on=who, until=until, kind=self.ref)
+
     def shares_space(
         self,
         *,

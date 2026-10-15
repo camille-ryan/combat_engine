@@ -2409,14 +2409,17 @@ def m5624a0(c: Cast) -> None:
 
 @power(
     "m5624a1", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-    todo=("c.blocks_entry()",),
 )
 def m5624a1(c: Cast) -> None:
-    """Ordinary movement already cannot end inside an occupied square, so
-    the only thing this trait could add is closing the exception phasing
-    and teleportation normally open -- `c.shares_space` is the opposite
-    shape, letting entry happen as difficult terrain, which is not this
-    card. Nothing here plays."""
+    """"An enemy cannot enter this creature's space by any means."
+
+    `c.blocks_entry()` is the whole clause. An occupied square is already
+    closed to ordinary movement; what "by any means" adds is that the two
+    things which normally open one -- phasing through the creature, and the
+    creature having been made shareable -- do not work here. See
+    `movement.blocks_entry` for what it deliberately does not beat.
+    """
+    c.blocks_entry()
 
 
 @power(

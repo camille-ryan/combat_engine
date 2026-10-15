@@ -297,8 +297,17 @@ KNOWN_SILENT = {
     # Deliberately empty, and its docstring predicts this exact line:
     # "it will audit quiet, because there is nothing for a log to see".
     # Nothing in the engine refuses a charge by movement mode, so the
-    # printed permission is already the rule. `m4005a4` and `m5625a0` are
-    # the precedent it names.
+    # printed permission is already the rule. `m4005a4` is the precedent it
+    # names.
+    #
+    # **It used to name `m5625a0` too, and that half is now wrong.** That
+    # row's clause is "an enemy cannot enter its space by any means", and
+    # the excuse argued collision already did it. Collision does not cover
+    # a *phasing* enemy, which is the only case the clause is about, so the
+    # row was silent because it was empty rather than because there was
+    # nothing to do. `c.blocks_entry` is the verb and
+    # `drivers.sealed_space` is the proof. This argument is still sound for
+    # a charge by movement mode; it was not transferable.
     "m5303a0": "a printed permission the engine already allows; finished with an empty body",
     # Gives back the use of one named sibling row, and the harness fires
     # each row once on a fresh board -- so that sibling has never been
@@ -676,9 +685,6 @@ KNOWN_SILENT = {
     "m3288a6": "rerolls an attack roll; fired alone there is none behind it",
     "m5468a3": "cures an ally's condition at the start of its turn; the board's "
                "one ally carries none",
-    "m5625a0": "its printed effect -- an enemy cannot enter its square -- is "
-               "already true of every creature by collision, so there is nothing "
-               "for the row to do and nothing to see it do",
     # **Round 12's fifty-five, over 1,127 rows.** Nineteen are the grab family,
     # which has led every round since `m467a2` and is now unambiguously the
     # board's biggest structural limit -- a row wanting a creature its own sibling

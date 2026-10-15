@@ -2068,16 +2068,17 @@ def m6405a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blocks_entry()",),
 )
 def m6405a1(c: Cast) -> None:
-    """Refused in play: nothing names a creature's own square as
-    unenterable against phasing, insubstantial movement or a shift that
-    shares space -- `c.shares_space` only grants the opposite, letting
-    others in rather than keeping them out. Confirmed absent:
-    `grep -n "def blocks_occupancy" cast.py` and
-    `uv run scripts/vocab.py --brief | grep blocks_occupancy` are both
-    empty."""
+    """"An enemy cannot enter this creature's space by any means."
+
+    `c.blocks_entry()` is the whole clause. An occupied square is already
+    closed to ordinary movement; what "by any means" adds is that the two
+    things which normally open one -- phasing through the creature, and the
+    creature having been made shareable -- do not work here. See
+    `movement.blocks_entry` for what it deliberately does not beat.
+    """
+    c.blocks_entry()
 
 
 @power(
