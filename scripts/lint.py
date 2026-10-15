@@ -1394,7 +1394,19 @@ def _dangling_implementations() -> list[tuple[str, str, str]]:
     out = []
     for ref, row in sorted(REGISTRY.items()):
         hosts = getattr(row, "implemented_in", ()) or ()
-        asked = f'c.feat("{ref}")'
+        # **Two spellings, and the second is the one the convention
+        # prefers.** `c.feat("f993")` is how an *unbracketed* clause is
+        # gated. A feat printing a bracketed category is reached through
+        # `c.declare(category, …)` instead, and `content/CLAUDE.md` is
+        # explicit that the branch then reads `if arena == "f974":` and
+        # **never** `c.feat("f974")`, because `c.feat` is true for every
+        # feat held and cannot say which one is being applied (#554).
+        #
+        # So the check asked for the one spelling the convention forbids
+        # for bracketed feats. It was green only because no bracketed feat
+        # had yet been migrated this way; `f993` into `p992` is the first,
+        # and it went red for doing exactly what the rules say.
+        asked = (f'c.feat("{ref}")', f'"{ref}"')
         for where in hosts:
             if where not in REGISTRY:
                 out.append((ref, where, "names a row that is not declared"))
@@ -1402,10 +1414,29 @@ def _dangling_implementations() -> list[tuple[str, str, str]]:
             # Every named row's own source must ask for this feat. Checked
             # per host rather than "any of them", or a feat naming four
             # powers would pass on one and leave three clauses missing.
-            if not any(f'"{where}"' in t and asked in t for t in sources.values()):
-                out.append((ref, where,
-                            f"that row's source does not contain {asked}"))
+            #
+            # The `c.declare` spelling is recognised by the ref appearing
+            # in a `c.declare(` call in the same source, which is narrower
+            # than a bare ref mention: a docstring naming the feat is not a
+            # branch on it.
+            if any(f'"{where}"' in t and asked[0] in t for t in sources.values()):
+                continue
+            if any(
+                f'"{where}"' in t
+                and any(ref in call for call in _DECLARES.findall(t))
+                for t in sources.values()
+            ):
+                continue
+            out.append((ref, where,
+                        f"that row's source neither asks {asked[0]} nor names"
+                        f" it in a c.declare(…) call"))
     return out
+
+
+#: The arguments of a `c.declare(` call, for `_dangling_implementations`.
+#: Non-greedy to the closing bracket, which is enough: every call in the
+#: tree is one line of literals and a category string.
+_DECLARES = re.compile(r"c\.declare\(([^)]*)\)")
 
 
 #: A ref, for the gate walk below. Matches the shapes the tree mints and
