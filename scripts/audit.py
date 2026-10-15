@@ -275,6 +275,15 @@ KNOWN_SILENT = {
     "f3235": "needs a cursed enemy to fall with the pact leg's use already spent",
     "i1470p1": "hides from blindsight; the board fields no enemy that has it",
     "i744p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    # The same tome card at three other levels, all written to charge the
+    # same printed price. `i744p1` has refused on this board since it was
+    # written; the other three refused only once they started charging, and
+    # a row that declines because the cost cannot be paid is the card
+    # working, not a row doing nothing. The borrowable set is also empty for
+    # the summoning one -- see `i2717p1`'s docstring.
+    "i2717p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    "i2899p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    "i2900p1": "needs an unused wizard attack power to expend; the printed cost refuses",
     "m1526a2": "resets an adjacent sprung trap; the board fields none",
     "m6115a0": "lends its square to siblings of its own stock; the board fields it alone",
     # Sustains. Both narrow to holds whose printed cost is a minor, and the

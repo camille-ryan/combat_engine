@@ -1475,15 +1475,21 @@ def i2900x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
-    dropped=("c.expend_row(among=)",),
 )
 def i2900p1(c: Cast) -> None:
     """The twin of `i2899p1` a tier down and in the other element, and
     written the same way: `c.borrow_row` reads the set the tome would have
     been stocked from off the registry, walking down from the tome's rung,
-    and `uses=1` is "during this encounter". The dropped clause is the same
-    price -- nothing enumerates the bearer's unspent dailies to charge
-    it."""
+    and `uses=1` is "during this encounter".
+
+    The price is charged too, by the helper `i744p1` has used all along --
+    see `i2899p1` for the full note. "Nothing enumerates the bearer's
+    unspent dailies" was the one thing the old marker got wrong:
+    `implement_c._spend_unused` does, off `Powers.all`."""
+    from combat_engine.content.items.implement_c import _spend_unused
+
+    if not _spend_unused(c, cls="wizard", level=2, attacks=True):
+        return
     for lvl in range(2, 0, -1):
         if c.borrow_row(
             cls="wizard", level=lvl, usage=DAILY, keyword=Keyword.FIRE, uses=1
@@ -3834,7 +3840,6 @@ def i2899x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.COLD, Keyword.IMPLEMENT],
-    dropped=("c.expend_row(among=)",),
 )
 def i2899p1(c: Cast) -> None:
     """Written. `c.borrow_row` is the verb for "the card names a set and
@@ -3845,11 +3850,24 @@ def i2899p1(c: Cast) -> None:
     tome's own rung down, because the card says "equal to or lower than that
     of the tome".
 
-    Dropped is the price: "expend an unused daily of an equal or higher
-    level" needs the bearer's own unspent dailies enumerated, and
-    `c.expend_row` takes one ref. Same shape as `i2898p1`, and the set may
-    be empty in the tree today -- that is a content gap and fills itself the
-    day such a power is written."""
+    **The price is charged now, and `i744p1` had it all along.** This card
+    is printed four times; the level-5 one has paid it since it was written.
+    `implement_c._spend_unused` walks the bearer's own `Powers.all`, filters
+    by class, level and whether the row carries an attack line, and hands
+    each candidate to `c.expend_row` -- which is the enumeration the old
+    marker said did not exist. It returns False when there is nothing to
+    charge, and that False **is** the printed Requirement.
+
+    Charged before the loan, as the card prints it and as `i744p1` does: no
+    unused attack power means no borrowed card, not a free one.
+
+    The borrowable set may still be empty in the tree -- that is a content
+    gap in the powers, not in this row, and it fills itself the day such a
+    power is written."""
+    from combat_engine.content.items.implement_c import _spend_unused
+
+    if not _spend_unused(c, cls="wizard", level=3, attacks=True):
+        return
     for lvl in range(3, 0, -1):
         if c.borrow_row(
             cls="wizard", level=lvl, usage=DAILY, keyword=Keyword.COLD, uses=1

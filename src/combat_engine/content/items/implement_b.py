@@ -4160,14 +4160,29 @@ def i2717x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.SUMMONING],
-    dropped=("c.expend_row(among=)",),
 )
 def i2717p1(c: Cast) -> None:
     """Re-aimed and written, as `i2898p1`: `c.borrow_row` enumerates the
-    set the tome would have been stocked from. The price -- an unused
-    daily of equal or higher level -- is the dropped clause. No wizard
-    daily summoning power at or below level 5 is declared yet, so the
-    set is empty and the row is silent until one is."""
+    set the tome would have been stocked from.
+
+    **The price is charged now.** It was the dropped clause, on the reading
+    that nothing enumerates the bearer's unspent powers -- and
+    `implement_c._spend_unused` does, off `Powers.all`, filtering by class,
+    level and attack line and handing each candidate to `c.expend_row`.
+    `i744p1` is this same card at level 5 and has paid it since it was
+    written; see `i2899p1` for the full note.
+
+    No wizard daily summoning power at or below level 5 is declared yet, so
+    the borrowable set is empty and the row is quiet until one lands. That
+    is a gap in the powers rather than in this row, and it is why the price
+    is charged *first*: a bearer with nothing to borrow should not be
+    charged, and `c.borrow_row` returning False leaves the spend already
+    made. Which is the one thing to watch here if such a power ever
+    arrives."""
+    from combat_engine.content.items.implement_c import _spend_unused
+
+    if not _spend_unused(c, cls="wizard", level=5, attacks=True):
+        return
     _tome_power(c, 5, Keyword.SUMMONING)
 
 

@@ -8306,6 +8306,67 @@ def a_coup_de_grace_finisher(out: Result) -> None:
              f"it went from {before2} to {after2}")
 
 
+def a_tome_charges_before_it_lends(out: Result) -> None:
+    """The tome card, printed four times: pay an unused attack power, borrow
+    a card from the tome.
+
+    **No row of this card fires on the audit board and all four are
+    `quiet`** -- the bearer holds no unused wizard attack power, so the
+    printed cost refuses and the row correctly declines. That is the card
+    working and it is also zero evidence, so the claim is made here instead.
+
+    `i744p1` has charged the price since it was written; `i2717p1`,
+    `i2899p1` and `i2900p1` carried `dropped=("c.expend_row(among=)",)` on
+    the reading that nothing enumerates the bearer's unspent powers.
+    `implement_c._spend_unused` does, off `Powers.all`.
+
+    Both directions, because the ordering is the whole of the clause: the
+    price is charged **first**, so a bearer with nothing to spend gets no
+    card -- and a bearer who pays loses the power it paid with.
+    """
+    import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.content.items.implement_c import _spend_unused
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+
+    ref = "i744p1"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+
+    # A real wizard daily attack power at or above the tome's rung, taken
+    # from the registry rather than named, so this does not rot when the
+    # tree's wizard dailies move around.
+    payable = [
+        r for r, p in REGISTRY.items()
+        if p.cls == "wizard" and p.level >= 5 and p.attack is not None
+        and str(getattr(p.usage, "value", p.usage)) == "daily"
+    ]
+    if not payable:
+        out.skip("no wizard daily attack power at level 5 or above is declared")
+        return
+    card = sorted(payable)[0]
+
+    world, caster, _ = _board(ref)
+    c = Cast(world=world, me=caster, ref=ref)
+    out.that(_spend_unused(c, cls="wizard", level=5, attacks=True) is False,
+             f"{ref} refuses when the bearer holds no unused wizard attack"
+             f" power -- the printed cost is a Requirement",
+             "it charged something it should not have")
+
+    known = world.need(caster, Powers)
+    known.known.append(card)
+    before = dict(known.used)
+    paid = _spend_unused(c, cls="wizard", level=5, attacks=True)
+    out.that(paid is True,
+             "and charges one when the bearer has it",
+             f"it returned {paid} with {card} unused in hand")
+    out.that(known.used != before,
+             "and the power it charged is spent, not merely counted",
+             f"used went from {before} to {dict(known.used)}")
+
+
 DRIVERS = {
     "shaman_spirits": (
         shaman_spirits,
@@ -8314,6 +8375,10 @@ DRIVERS = {
     "feats_clause": (
         a_feats_clause_in_its_power,
         "a feat naming one power is written into that power (#550)",
+    ),
+    "tome_price": (
+        a_tome_charges_before_it_lends,
+        "the tome card charges its printed cost before it lends a card",
     ),
     "coup_de_grace": (
         a_coup_de_grace_finisher,
