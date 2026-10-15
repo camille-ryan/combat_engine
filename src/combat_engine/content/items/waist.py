@@ -1073,13 +1073,38 @@ def i876p1(c: Cast) -> None:
 
 
 @power("i3475x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("spec.monster_ref()",))
+       reach=PERSONAL, target=SELF)
 def i3475x1(c: Cast) -> None:
-    """The attack context carries `attacker`, so "against the attacks of
-    constructs" is a gate on all four defences. The daze is dropped rather
-    than over-applied: `Ident.ref` does say which row a creature was built
-    from, but the spec names the creature with an `x_` token, which
-    `etl/build` makes deliberately opaque so that no row can point at it."""
+    """A standing defence bonus, and a daze for one creature in particular.
+
+    The attack context carries `attacker`, so "against the attacks of
+    constructs" is a gate on all four defences.
+
+    **The daze is written now.** It was dropped because "the spec names the
+    creature with an `x_` token, which `etl/build` makes deliberately
+    opaque so that no row can point at it" -- true of the spec, and the
+    creature is `m6273`, a declared level-4 soldier. `build.py` gives a
+    monster name in a non-`monster_power` spec an opaque token because the
+    103 rows that had one were ordinary nouns colliding with an ability
+    name; this is the case the rule costs, and #610 is that. Resolving it
+    needs the `monster` table read by name, which the main session may do
+    and an author may not.
+
+    A trait holding a `c.watch` rather than a declared trigger, which is
+    the exception this file's header names: a property that is a standing
+    modifier **and** answers a printed trigger is one of the two that are
+    both.
+    """
+    me = c.me
+
+    def dazed(ev: Hit) -> None:
+        if ev.target != me:
+            return
+        who = c.world.get(ev.attacker, Ident)
+        if who is not None and who.ref == "m6273":
+            c.condition(Condition.DAZED, until=When.SAVE_ENDS, on=ev.attacker)
+
+    c.watch(Hit, dazed, until=When.ENCOUNTER)
     for d in (AC, FORT, REF, WILL):
         c.bonus(d, 2, on=c.me, until=When.ENCOUNTER, kind="power",
                 when=lambda ctx: c.is_kind("construct", on=ctx.get("attacker")))
@@ -1090,13 +1115,31 @@ def i3475x1(c: Cast) -> None:
        target=Target("enemy", 1, label="one construct",
                      kinds=frozenset({"construct"})),
        attack=Attack(vs=WILL, printed=8),
-       dropped=("spec.monster_ref()",))
+       dropped=("etl.monster.creator()",))
 def i3475p1(c: Cast) -> None:
-    """"One construct" is the target line now. The longer domination is
-    printed for a creature the spec names with an opaque `x_` token, which is
-    a name withheld rather than a ref to point at."""
-    if c.strike():
-        c.condition(Condition.DOMINATED, until=When.EONT)
+    """Domination that lasts longer against one named creature.
+
+    "One construct" is the target line. The longer hold was dropped on "an
+    opaque `x_` token, which is a name withheld rather than a ref" -- the
+    token is opaque and the creature is `m6273`, declared, so the first half
+    of the printed exception is written now. #610 is the token.
+
+    **The marker is re-pointed and narrowed.** What is still missing is the
+    *second* half: "or another of its maker's creations" is a set the
+    compendium defines only in prose, and nothing on a stat block records
+    who made a creature. `c.made_by` is a false friend here -- it answers
+    who put a zone or a conjuration on the board, not who built a creature
+    in the setting. So the row plays the exception for the one creature it
+    can name and the ordinary hold for everything else, which is the printed
+    rule minus one clause rather than the whole clause dropped.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    made = c.world.get(victim, Ident) if victim is not None else None
+    longer = made is not None and made.ref == "m6273"
+    c.condition(Condition.DOMINATED,
+                until=When.SAVE_ENDS if longer else When.EONT)
 
 
 @power("i2208x1", level=7, cls=ITEM, action=ActionType.NONE,

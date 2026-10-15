@@ -5619,6 +5619,88 @@ def named_in_prose(out: Result) -> None:
         "nor when the blow came from its own side, since the card says an"
         " enemy")
 
+    # ---- i3475x1 / i3475p1: the creature behind an opaque spec token ----
+    #
+    # Same cause as the four above and a different mechanism: `build.py`
+    # gives a monster name in a non-`monster_power` spec an opaque `x_`
+    # token, so the author saw `x_m6273` and could not know `m6273` is a
+    # declared level-4 soldier. #610. Both rows print an exception for that
+    # one creature, so **both negative controls are a different creature**,
+    # which is the clause that was missing rather than the one that worked.
+    from combat_engine.engine import When
+    from combat_engine.engine.components import Conditions
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.durations import Effects
+    from combat_engine.engine.types import Condition, Team
+
+    def dominated_when(world, who: int) -> set[When]:  # noqa: ANN001
+        """Which durations a domination on this creature is hung on.
+
+        **`Effect.when`, not `Effect.until`.** The first draft read `until`
+        -- the keyword `c.condition` takes -- and there is no such field, so
+        the comprehension raised inside the matching branch and both cases
+        reported an empty set. A reader that names a field the object does
+        not have is this project's own commonest bug and it does not stop
+        being one in an instrument.
+        """
+        effects: Effects = world.effects
+        return {
+            eff.when
+            for eff in effects.of(who)
+            if Condition.DOMINATED in eff.conditions
+        }
+
+    # Through `use`, not by constructing a `Cast` and poking `.targets`:
+    # the first draft did the second and both cases came back empty,
+    # because nothing had rolled an attack. A rule that goes through the
+    # caller survives the row being rewritten -- **and it is what found the
+    # control below.** `m499` was the first choice, and going through `use`
+    # produced neither a `Hit` nor a `Miss`: the row's target line is
+    # `kinds={"construct"}` and an undead minion is refused before the
+    # exception can matter. So the control has to be a *construct* the
+    # exception does not name, which is `m6272`. Poking `.targets` would
+    # have bypassed the target line and the control would have been
+    # meaningless while looking right.
+    for ref, foe_ref, longer in (("i3475p1", "m6273", True),
+                                 ("i3475p1", "m6272", False)):
+        w, wearer, _ = _board(ref, 1)
+        cw = Cast(world=w, me=wearer, ref="drivers:i3475")
+        mark = cw.summon(foe_ref, team=Team.ENEMY)
+        if mark == 0:
+            out.skip(f"the board would not take a {foe_ref}")
+            continue
+        w.rng.loaded = 20                      # the hold needs the hit
+        use(w, wearer, ref, targets=[mark], spend=False)
+        holds = dominated_when(w, mark)
+        want = When.SAVE_ENDS if longer else When.EONT
+        why = ("the printed exception" if longer else
+               "the control -- another construct, which the exception does"
+               " not name, must get the ordinary hold")
+        out.that(holds == {want},
+                 f"i3475p1 dominates {foe_ref} until"
+                 f" {want.name.lower().replace('_', ' ')}: {why}",
+                 f"{sorted(h.name for h in holds)}")
+
+    # i3475x1's daze, and the control: a creature the card does not name
+    for foe_ref, dazes in (("m6273", True), ("m499", False)):
+        w, wearer, _ = _board("i3475x1", 1)
+        cw = Cast(world=w, me=wearer, ref="drivers:i3475x")
+        striker = cw.summon(foe_ref, team=Team.ENEMY)
+        if striker == 0:
+            out.skip(f"the board would not take a {foe_ref}")
+            continue
+        REGISTRY["i3475x1"].body(Cast(world=w, me=wearer, ref="i3475x1"))
+        w.bus.emit(Hit(attacker=striker, target=wearer,
+                       power=swing, critical=False))
+        held = w.get(striker, Conditions)
+        got = held is not None and held.has(Condition.DAZED)
+        out.that(got is dazes,
+                 f"i3475x1 {'dazes' if dazes else 'does NOT daze'} a"
+                 f" {foe_ref} that hits its wearer"
+                 + ("" if dazes else " -- the control, and the whole of what"
+                                     " the opaque token cost"),
+                 f"dazed={got}")
+
 
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
