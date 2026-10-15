@@ -117,6 +117,7 @@ from combat_engine.engine.events import (
     Escaped,
     Hit,
     Miss,
+    MoveEnd,
     MoveStart,
     RelationSet,
     TurnEnd,
@@ -126,6 +127,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
+    alive,
     allies,
     creatures,
     distance_between,
@@ -196,6 +198,39 @@ def _no_duplicate_family_member(c: Cast) -> set[int]:
     if boss is None:
         boss = c.me
     return {boss, *c.world.relations.targets(Relation.MASTER_OF, boss)}
+
+
+def _copies(c: Cast) -> list[int]:
+    """Every live copy in this creature's family, itself left out.
+
+    A copy is bound to whatever made it, so the set is the maker's servants
+    -- and a copy carries all of its maker's rows, so one holding no
+    servants of its own reads its master's list and finds its siblings. Its
+    own list is preferred where it has one: every creature on the audit board
+    is somebody's servant, and asking the master first answers the wrong
+    question there.
+    """
+    mine = c.world.relations.targets(Relation.MASTER_OF, c.me)
+    owner = c.me if mine else (c.master() or c.me)
+    return sorted(
+        d
+        for d in c.world.relations.targets(Relation.MASTER_OF, owner)
+        if d != c.me and alive(c.world, d)
+    )
+
+
+def _unmake(c: Cast, dup: int, why: str) -> None:
+    """Take a copy off the board.
+
+    `World.despawn` rather than a killing blow: the printed lines say a copy
+    is absorbed or simply stops being, and dealing it enough damage to fell
+    it would announce a death and pay out every rider answering one.
+    Despawning unwinds the effects and relations it held up, and
+    `Encounter.advance` steps over a slot whose creature has left play.
+    """
+    if c.world.get(dup, Health) is not None:
+        c.note(f"{c.ref}: a copy is gone -- {why}")
+        c.world.despawn(dup)
 
 
 # ==========================================================================
@@ -297,16 +332,27 @@ def m115703a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.shift(pulls=)",),
 )
 def m115703a1(c: Cast) -> None:
-    """Effect line uses its own claw and reads the hit off the bus. Hauling
-    the target along with the shift has no verb -- `shift`'s own `share=`
-    only lets a mover land on an occupied square, not drag a second
-    creature with it, the same gap `level_05/brutes.py`'s `m217a3` already
-    found and named. The miss half plays in full."""
-    hit = _struck(c, "m115703a0", 1)
-    c.shift(4 if hit else c.speed_of())
+    """Effect line uses its own claw and reads the victim off the bus.
+
+    Hauling the target along is the shift followed by a pull of the same
+    distance towards the mover, which is what "pulling the target with it"
+    comes to: a pull is measured towards the puller, so after stepping four
+    squares off the victim is drawn back beside it. `_struck` returns *who*
+    was hit rather than a flag, so the row has the creature to pull.
+
+    The marker this replaces named `c.shift(pulls=)` and pointed at
+    `m217a3`'s gap, which is a different one: that row has its victim
+    **grabbed**, and a grabbed creature cannot be stepped into the square its
+    captor just left. Nothing is holding this one.
+    """
+    hits = _struck(c, "m115703a0", 1)
+    if not hits:
+        c.shift(c.speed_of())
+        return
+    if c.shift(4):
+        c.pull(4, on=hits[0])
 
 
 def _near_tree(world: World, eid: int) -> bool:
@@ -708,31 +754,64 @@ def m1742a1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION, Keyword.PSYCHIC],
     requires=lambda world, eid: not _is_bloodied(world, eid),
     requires_text="not usable while bloodied",
-    dropped=("c.unsummon()",),
 )
 def m1742a2(c: Cast) -> None:
-    """Up to four at once, tracked through `MASTER_OF` so `c.servants()`
-    answers the cap and lets the rest of this block find them. Ending one
-    early -- it strays past 10 squares, or the m1742 itself drops -- has no
-    verb; see the report."""
-    if len(c.servants()) >= 4:
-        return
-    sq = _free_square_beside(c, c.me)
-    if sq is None:
-        return
-    health = c.world.get(c.me, Health)
-    if health is None:
+    """Up to four at once, tracked through `MASTER_OF` so the cap is readable
+    and the rest of this block can find them.
+
+    Three corrections against the shape this row carried while it was marked.
+
+    **The quarter is moved by hand, not dealt.** "Loses one-quarter of its
+    current hit points" is not damage, and `c.flat` announced it as damage --
+    which bloodies the creature on its own copy and pays out every rider in
+    the fight. `Health.bloodied` is derived from `hp`, so the line still takes
+    effect; what it no longer does is emit a blow nobody struck.
+
+    **Psychic is written on the packet, not through `c.deals`.** That verb
+    speaks only for `Keyword.WEAPON` rows (or `Keyword.IMPLEMENT`), and this
+    block's basic attack carries neither -- so the override was silently false
+    for the one attack a copy ever makes. `DamageRolled.dtype` is read back,
+    so setting it in the BEFORE window is what changes the type that lands.
+
+    **The three clauses that end a copy are the row's own watches.** A copy
+    cannot copy (`c.forbid` on this very row), one that drifts past ten
+    squares is gone, and so are they all when the m1742 goes down. Taking one
+    off the board is `World.despawn`, not a missing verb -- see `_unmake`.
+    """
+    me = c.me
+    health = c.world.get(me, Health)
+    sq = _free_square_beside(c, me)
+    if health is None or sq is None or len(_copies(c)) >= 4:
         return
     share = max(1, health.hp // 4)
-    c.flat(share, on=c.me)
     dup = c.summon("m1742", at=sq)
-    if dup == 0:
+    if not dup:
         return
-    dup_health = c.world.get(dup, Health)
-    if dup_health is not None:
-        dup_health.hp = share
+    health.hp = max(1, health.hp - share)
+    theirs = c.world.get(dup, Health)
+    if theirs is not None:
+        theirs.hp = share
     c.bind(on=dup)
-    c.deals(DamageType.PSYCHIC, on=dup, until=When.ENCOUNTER)
+    c.forbid("m1742a2", on=dup, until=When.ENCOUNTER)
+
+    def as_psychic(ev: DamageRolled) -> None:
+        if ev.source == dup:
+            ev.dtype = DamageType.PSYCHIC
+
+    def strayed(ev: MoveEnd) -> None:
+        if ev.actor in (me, dup) and distance_between(c.world, me, dup) > 10:
+            _unmake(c, dup, "it strayed out of reach")
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == me:
+            _unmake(c, dup, "its maker went down")
+
+    c.watch(
+        DamageRolled, as_psychic, until=When.ENCOUNTER, window=Window.BEFORE,
+        on=me, label=f"{c.ref} psychic",
+    )
+    c.watch(MoveEnd, strayed, until=When.ENCOUNTER, on=me, label=f"{c.ref} leash")
+    c.watch(Dropped, fell, until=When.ENCOUNTER, on=me, label=f"{c.ref} ends")
 
 
 @power(
@@ -748,15 +827,19 @@ def m1742a2(c: Cast) -> None:
         for s in world.relations.targets(Relation.MASTER_OF, eid)
     ),
     requires_text="it must have a duplicate adjacent to it",
-    dropped=("c.unsummon()",),
 )
 def m1742a3(c: Cast) -> None:
-    """Clears the bond and takes the heal; actually removing the absorbed
-    duplicate from the board has no verb -- see a2 and the report."""
-    dup = next((s for s in c.servants() if c.distance(s) <= 1), None)
+    """It takes a copy back into itself. Only an adjacent one, which is the
+    printed reach, and the thirty is a flat number rather than a surge.
+
+    Taking the copy off the board is `World.despawn`, which also unwinds the
+    bond -- clearing `MASTER_OF` by hand and leaving the body standing was
+    what made this look like it needed a verb nobody has written."""
+    beside = [d for d in _copies(c) if c.adjacent(d)]
+    dup = c.choose(beside, f"{c.ref}: which copy is absorbed") if beside else None
     if dup is None:
         return
-    c.world.relations.clear(Relation.MASTER_OF, c.me, dup, c.ref)
+    _unmake(c, dup, "it was absorbed")
     c.heal(30, on=c.me)
 
 
@@ -777,6 +860,13 @@ def m1742a4(c: Cast) -> None:
     c.bonus("damage", 0, dice="1d8", on=c.me, until=When.ENCOUNTER, when=when)
 
 
+_M1742_STRUCK = "it is damaged by an attack"
+
+
+def _struck_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
+    return ev.target == me and bool(_copies(Cast(world=world, me=me, ref="m1742a5")))
+
+
 @power(
     "m1742a5",
     level=7,
@@ -785,17 +875,46 @@ def m1742a4(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PSYCHIC],
-    trigger="it is damaged by an attack",
-    on=Trigger(Hit, targets_me, "it is damaged by an attack"),
-    dropped=("c.redirect(dtype=)",),
+    trigger=_M1742_STRUCK,
+    on=Trigger(Hit, when=_struck_with_a_copy_to_hand, text=_M1742_STRUCK),
+    dropped=("c.redirect(riders=)",),
 )
 def m1742a5(c: Cast) -> None:
-    """`c.redirect` moves the blow; it has no way to recolour it, so the
-    duplicate takes whatever type actually rolled rather than psychic --
-    see the report."""
-    dup = c.choose(c.servants(), f"{c.ref}: which duplicate", optional=True)
-    if dup is not None:
-        c.redirect(to=dup)
+    """The copy takes the blow instead, and takes it as psychic.
+
+    `c.redirect` was the wrong lever and its missing `dtype=` was the wrong
+    gap: redirect only moves the event, and the type has to change with it.
+    `DamageRolled` names both its target and its type and both are read back,
+    so this is two assignments in the BEFORE window rather than damage clawed
+    off one creature and dealt to another. The listener is laid as the hit is
+    announced and torn down by the packet it catches, because a reaction to a
+    `Hit` resolves before the damage that hit is about to deal.
+
+    "Any effects or secondary attacks included in the attack are also
+    deflected" is the one half left: nothing moves a rider from one creature
+    to another, and the riders are laid by the attacking row's own body.
+    """
+    me = c.me
+    pack = _copies(c)
+    dup = c.choose(pack, f"{c.ref}: which copy takes it") if pack else None
+    if dup is None:
+        return
+    caught: list[Effect] = []
+
+    def deflect(ev: DamageRolled) -> None:
+        if ev.target != me or not caught:
+            return
+        ev.target = dup
+        ev.dtype = DamageType.PSYCHIC
+        c.world.effects.end(caught[0], "the blow was deflected")
+
+    caught.append(
+        c.watch(
+            DamageRolled, deflect, until=When.EOT, window=Window.BEFORE, on=me,
+            label=f"{c.ref} deflect",
+        )
+    )
+    c.note(f"{c.ref}: the blow is turned onto a copy")
 
 
 # --------------------------------------------------------------------------
@@ -1808,6 +1927,10 @@ def m4364a1(c: Cast) -> None:
     dropped=("c.invisible(reveal=)",),
 )
 def m4364a2(c: Cast) -> None:
+    """Same card as `m2097a4` and written the same way: the concealment half
+    is `c.no_cover`, which says exactly "does not benefit from cover or
+    concealment", and seeing through the target's own invisibility for every
+    attacker rather than only this one has no verb."""
     if c.strike():
         c.grants_advantage(to="team", until=When.EONT)
         c.no_cover(on=c.target, until=When.EONT)
@@ -2939,9 +3062,17 @@ def m6609a1(c: Cast) -> None:
     untouched -- `c.move`'s own compensation hands it back in full -- so the
     printed exception ("only the fly speed") needs the opposite push: the
     fly mode's own number is capped by hand while slowed, and handed back
-    when the condition clears."""
+    when the condition clears.
+
+    **"Only" is both halves, and the second one was missing.** `query.speed`
+    caps the creature's base speed at 2 for any active `speed_cap`, so
+    capping the fly mode alone made the slow hit *both* speeds and the
+    printed exception said nothing at all. `c.waive` turns that one knob of
+    the condition off without lifting the condition, which is what #508
+    built it for. Driven on a board: base speed 2 before, 6 after."""
     me = c.me
     saved: dict[str, int] = {}
+    c.waive(Condition.SLOWED, "speed_cap", on=me, until=When.ENCOUNTER)
 
     def slowed_on(ev: ConditionApplied) -> None:
         if ev.target != me or ev.condition is not Condition.SLOWED or "fly" in saved:

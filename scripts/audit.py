@@ -698,7 +698,6 @@ KNOWN_SILENT = {
     "m5543a4": "its target must carry a condition the board never applies",
     "m5418a3": "its target must carry a condition the board never applies",
     "m5596a2": "its target must carry a condition the board never applies",
-    "m3273a2": "its target must carry a condition the board never applies",
     "m3253a5": "its target must carry a condition the board never applies",
     # **Not board limits -- #375's family.** Each of these changes real state by
     # assigning a field or rolling a number, and emits nothing for a log-based

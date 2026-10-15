@@ -142,9 +142,11 @@ from combat_engine.engine.components import Budget
 from combat_engine.engine.events import (
     AttackDeclared,
     Bloodied,
+    ConditionEnded,
     DamageApplied,
     DamageRolled,
     Dropped,
+    EffectApplied,
     Hit,
     Miss,
     MoveEnd,
@@ -186,6 +188,49 @@ _M5160_ELEMENTS = (
     DamageType.LIGHTNING,
     DamageType.THUNDER,
 )
+
+
+def _landing_on(c: Cast, who: int, ev: EffectApplied) -> Effect | None:
+    """The effect an `EffectApplied` is announcing, before it has bitten.
+
+    `Effects.apply` installs the effect, announces it, and only **then** hands
+    its conditions over -- so this is the one window in which a creature is
+    being knocked prone and is not yet prone. `p4913` is the worked example of
+    the same trick for a stun.
+    """
+    if ev.target != who:
+        return None
+    mine = [
+        e
+        for e in c.world.effects.live.values()
+        if e.owner == who and not e.ended and e.label == ev.label
+    ]
+    return max(mine, key=lambda e: e.id, default=None)
+
+
+def _saves_off_prone(c: Cast, who: int, ev: EffectApplied) -> bool:
+    """"It can roll an immediate saving throw to avoid falling prone."
+
+    **Not `ConditionApplied`, which is what the two rows using this were
+    marked for.** That event is emitted from inside the handover above, so a
+    row answering it is always too late and can only cure a condition that
+    has already landed -- a different sentence, and a visibly different one
+    for a creature whose other rows reward a prone target. `EffectApplied` is
+    a few lines earlier and the condition can still be taken off the tuple.
+
+    `ev.source == who` is left out: standing up and falling over are the
+    creature's own doing and the printed line is about an attack.
+    """
+    landing = _landing_on(c, who, ev)
+    if landing is None or Condition.PRONE not in landing.conditions:
+        return False
+    if ev.source == who:
+        return False
+    if not c.save(on=who, bare=True, against=f"{c.ref} prone"):
+        return False
+    landing.conditions = tuple(x for x in landing.conditions if x is not Condition.PRONE)
+    c.note(f"{c.ref}: {who} saves against being knocked prone")
+    return True
 
 
 def _has_ongoing(c: Cast, who: int, dtype: DamageType) -> bool:
@@ -1335,12 +1380,25 @@ def m2068a2(c: Cast) -> None:
     once_per_round=True,
     reach=Ranged(10),
     target=NO_TARGET,
-    todo=("c.regeneration(suppressed_by=)",),
+    todo=("c.undouse()",),
 )
 def m2068a3(c: Cast) -> None:
-    """ "Reactivates" a different m2068's regeneration -- `c.regeneration`
-    is a bare heal-on-turn-start watch with no notion of being currently
-    off, so there is no flag anywhere for this to flip."""
+    """Nothing can be said here at all, so the row is refused rather than
+    half-written.
+
+    **The marker used to name `c.regeneration(suppressed_by=)` and that was
+    the wrong gap twice over.** `suppressed_by=` is one of four spellings the
+    verb's own comment says were deliberately collapsed into
+    `unless_damaged_by=`, which this card's "as a result of taking acid or
+    fire damage" is exactly; and the suppression it would read is held in a
+    closure, which is the half a new kwarg would have to move.
+
+    What is missing is the regeneration itself: this stat block files five
+    rows and none of them is a regeneration line, so the clause switches on
+    something the creature has not got. That is a question about the card
+    rather than about the engine and has been referred up. m1155a4 two tiers
+    up is the same printed sentence in the same state, and its symbol is the
+    one reused here so the pair move together."""
 
 
 _M2068_KILLS = (DamageType.ACID, DamageType.FIRE)
@@ -1791,7 +1849,18 @@ def m3273a1(c: Cast) -> None:
     dropped=("etl.monster.inline_disease()",),
 )
 def m3273a2(c: Cast) -> None:
-    c.strike()
+    """The Hit is written: `c.contract` records the infection and `c.exposed`
+    is what reads it, and a disease caught in a fight never advances a stage
+    anyway -- there is no extended rest for it to be checked at, which
+    `c.contract`'s own docstring calls the card rather than a gap.
+
+    **The ref handed over is this row's own**, which is the clause still
+    dropped. The stat block prints the disease inline instead of pointing at
+    a page, so the ETL minted no `x5_` row for it and there is nothing else to
+    name -- so two blocks inflicting one disease would record two refs, and a
+    row asking `c.exposed("x5_...")` about it answers no."""
+    if c.strike():
+        c.contract(c.ref)
 
 
 @power("m3273a3", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -2371,23 +2440,32 @@ def m4144a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("ConditionApplied.cancel",),
 )
 def m4144a2(c: Cast) -> None:
-    """The forced-move half -- one square less -- is real. The half that
-    lets it or its rider save against being knocked prone has nothing to
-    interrupt: `ConditionApplied` fires after the condition is already on,
-    the same gap `m1937a3` (a level below) already names."""
+    """Both halves, and the prone half is the one that was marked missing.
+
+    It is taken off the effect as it lands -- see `_saves_off_prone` -- so the
+    creature never falls at all, which is what "to prevent it or its rider
+    from falling prone" says. The rider is asked for live each time rather
+    than closed over, because a mount can be mounted and left mid-fight and
+    the whole trait is gated on who is up there.
+    """
     me = c.me
 
     def qualified(_ctx: dict) -> bool:
-        rider = c.rider()
-        if rider is None:
-            return False
-        stats = c.world.get(rider, Stats)
-        return stats is not None and stats.level >= 10
+        return _qualified_rider(c) is not None
 
     c.resist_forced(1, on=me, until=When.ENCOUNTER, when=qualified)
+
+    def landing(ev: EffectApplied) -> None:
+        rider = _qualified_rider(c)
+        if rider is None:
+            return
+        for who in (me, rider):
+            if _saves_off_prone(c, who, ev):
+                return
+
+    c.watch(EffectApplied, landing, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # ==========================================================================
@@ -3682,13 +3760,23 @@ def m5788a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.shares_space(always=)",),
+    todo=("movement.shares_space(by=)",),
 )
 def m5808a0(c: Cast) -> None:
-    """ "Can enter the spaces of Medium or Small enemies" wants a standing
-    movement permission against any such enemy it ever meets.
-    `c.shares_space` pairs the caster with one named creature for a
-    duration; there is no blanket, always-on form of it."""
+    """"Can enter the spaces of Medium or Small enemies" is a permission that
+    belongs to the **mover**, and the engine only has the other side of it.
+
+    `movement._clear` asks `shares_space(world, occupant)` -- is this creature
+    enterable by anybody -- and takes no account of who is doing the entering.
+    So the nearest thing writable here is `c.shares_space` laid on every
+    Medium-or-smaller enemy, which says something much larger than the card:
+    their squares would open to the whole board, not to this creature. A row
+    stronger than its printed line is worse than an absent one, so it is left
+    out.
+
+    The marker used to read `c.shares_space(always=)`, which names the wrong
+    gap: an always-on form of that verb would still lay the property on the
+    wrong creature."""
 
 
 @power("m5808a1", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
@@ -4305,12 +4393,22 @@ def m6060a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("ConditionApplied.cancel",),
 )
 def m6060a2(c: Cast) -> None:
-    """ "Can make a saving throw to avoid falling prone" has nothing to
-    interrupt: `ConditionApplied` fires only after the prone condition is
-    already on, and there is no other half of this trait to write."""
+    """One saving throw per attempt to knock it down, taken while the effect
+    is landing. See `_saves_off_prone` for why that window and not
+    `ConditionApplied`, which is what this row was marked for.
+
+    It matters in play on this stat block in particular: m6060a0 pays extra
+    damage to a prone target and m6060a5 answers one standing up, so a trait
+    that let the prone land and then cured it would hand the creature both of
+    its own riders against itself."""
+    me = c.me
+
+    def landing(ev: EffectApplied) -> None:
+        _saves_off_prone(c, me, ev)
+
+    c.watch(EffectApplied, landing, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -4346,6 +4444,33 @@ def m6060a4(c: Cast) -> None:
         c.prone()
 
 
+_M6060_STANDS = "an adjacent enemy stands up"
+
+#: What `actions.legal` writes when the stand action ends a prone hold. The
+#: word is the whole distinguisher, so it is a constant rather than a literal
+#: in the predicate.
+_STOOD_UP = "stood up"
+
+
+def _adjacent_enemy_stood(world: World, me: int, ev: ConditionEnded) -> bool:
+    """Standing up is announced, and not by `ActionSpent`.
+
+    `actions.legal` ends every prone hold with the reason `"stood up"` and
+    `Effects._lift` passes that reason straight into `ConditionEnded`, so the
+    printed trigger is a prone condition ending for that one reason. Prone
+    expiring any other way -- the effect cleared, the creature killed -- comes
+    through with a different `why` and is not this sentence.
+    """
+    if ev.condition is not Condition.PRONE or ev.why != _STOOD_UP:
+        return False
+    # `team` directly rather than `query.enemies`, which filters the dead and
+    # is the wrong question about a creature that has just got up.
+    mine, theirs = team(world, me), team(world, ev.target)
+    if ev.target == me or theirs is None or theirs == mine:
+        return False
+    return distance_between(world, me, ev.target) <= 1
+
+
 @power(
     "m6060a5",
     level=10,
@@ -4356,15 +4481,23 @@ def m6060a4(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d10", 8),
-    todo=("ActionSpent.word",),
+    trigger=_M6060_STANDS,
+    on=Trigger(ConditionEnded, when=_adjacent_enemy_stood, text=_M6060_STANDS),
 )
 def m6060a5(c: Cast) -> None:
-    """ "Trigger: an adjacent enemy stands up." `ActionSpent` carries only
-    `actor` and `cost` (an `ActionType`) -- `.kind` resolves, but it is
-    `Event`'s own serialisation property and answers "ActionSpent" for
-    every row of this type, not the legal word that paid for it. There is
-    no field saying *which* word (`stand`, `shift`, ...) was spent, so
-    standing up cannot be told apart from any other move-costed action."""
+    """Declared on `ConditionEnded`, not on `ActionSpent`, which is what this
+    row was marked for: `ActionSpent` carries only `actor` and an
+    `ActionType`, so a stand cannot be told from any other move-costed
+    action. The condition ending says which action it was, in `why`.
+
+    A reaction, so it resolves after the creature is up -- which is the
+    printed order and also the only order in which a fresh m6060a4 or this
+    row's own prone rider means anything."""
+    foe = getattr(c.trigger, "target", None)
+    if foe is None or not c.strike(on=foe):
+        return
+    c.hit(on=foe)
+    c.prone(on=foe)
 
 
 # ==========================================================================

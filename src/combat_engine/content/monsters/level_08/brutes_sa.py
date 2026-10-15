@@ -47,8 +47,11 @@ from combat_engine.content.monsters.forms import _not_in, _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
+from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
+from combat_engine.content.monsters.level_06.skirmishers import _in_heavy_armour
 from combat_engine.content.monsters.level_07.brutes_sa import _ridden_by_seventh_level
+from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_08.brutes import (
     _aura,
     _crowded,
@@ -85,6 +88,8 @@ from combat_engine.engine import (
     Condition,
     Damage,
     DamageType,
+    Defense,
+    Gear,
     Ident,
     Keyword,
     Melee,
@@ -97,6 +102,7 @@ from combat_engine.engine import (
     Usage,
     When,
     World,
+    get,
     power,
 )
 from combat_engine.engine.components import Budget, Initiative
@@ -109,6 +115,7 @@ from combat_engine.engine.events import (
     Dropped,
     Escaped,
     Hit,
+    Miss,
     Moved,
     TurnStart,
 )
@@ -519,6 +526,50 @@ def m115865a3(c: Cast) -> None:
 # ==========================================================================
 
 
+#: Where a point of rust is counted. Two tallies, because the card caps the
+#: weapon penalty and the armour penalty at -5 **each**, and the cap is on the
+#: item rather than on whoever is swinging it -- so it is read back off the
+#: live effects and a second creature of this kind goes on worsening the same
+#: blade. m115879a3 adds to both.
+_M115879_WEAPON_RUST = "m115879 weapon rust"
+_M115879_ARMOUR_RUST = "m115879 armour rust"
+
+#: The printed floor, as a count of one-point holds.
+_M115879_FLOOR = 5
+
+
+def _rust(c: Cast, who: int, what: str | Defense, tally: str) -> None:
+    """Stack one more point of a penalty the printed line caps at five.
+
+    **Each point carries its own `label=`, and that is the whole of why this
+    is written here rather than imported.** `Mods.total` buckets *penalties*
+    by `Mod.label` and takes the worse of a bucket -- two from the same source
+    do not add -- and `c.penalty` defaults that label to the laying row's ref.
+    Five one-point holds laid without one therefore come to **-1**, not -5.
+    `level_06`'s `_worsen` is this helper without the label; see the report.
+
+    The `Effect` label is the shared tally, so the count is per item and the
+    `Mod` label is per point, which are two different questions on one call.
+    """
+    carried = [e for e in c.world.effects.of(who) if e.label == tally]
+    if len(carried) >= _M115879_FLOOR:
+        return
+    hold = c.penalty(
+        what, 1, until=When.ENCOUNTER, on=who, label=f"{tally}{len(carried)}"
+    )
+    if hold is not None:
+        hold.label = tally
+
+
+def _rusting(c: Cast, who: int) -> bool:
+    """"Wearing or wielding a rusting item" -- the printed target line of
+    m115879a2, which is the only row that asks."""
+    return any(
+        e.label in (_M115879_WEAPON_RUST, _M115879_ARMOUR_RUST)
+        for e in c.world.effects.of(who)
+    )
+
+
 @power(
     "m115879a0",
     level=8,
@@ -526,13 +577,30 @@ def m115865a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.decay(magic=False)",),
 )
 def m115879a0(c: Cast) -> None:
-    """`c.decay` only ever touches an item's enhancement bonus, so a
-    mundane weapon -- which every attacker here starts as -- has nothing
-    for it to take away, and the stacking -1 this card prints has no other
-    hook in the engine."""
+    """Every weapon that bites it comes away a point worse, five times over.
+
+    **Not `c.decay`, which this row was marked for and which is the wrong
+    verb.** `c.decay` takes an item's enhancement bonus down; the printed
+    clause is a flat -1 to attack rolls that has nothing to do with the
+    enhancement, and it applies to a mundane weapon exactly as it does to a
+    magic one. m3062a0 one block over already writes the same sentence this
+    way.
+
+    "Metal" is not a fact `Gear` holds -- a weapon there is its numbers and
+    nothing else -- so the printed line is read as any weapon attack, which
+    is what the sentence is for. A creature's own claws are not one.
+    """
+    me = c.me
+
+    def bit(ev: Hit) -> None:
+        row = get(ev.power) if ev.target == me else None
+        if row is None or Keyword.WEAPON not in row.keywords:
+            return
+        _rust(c, ev.attacker, "attack", _M115879_WEAPON_RUST)
+
+    c.watch(Hit, bit, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -544,11 +612,16 @@ def m115879a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("3d10", 3),
-    dropped=("c.decay(magic=False)",),
 )
 def m115879a1(c: Cast) -> None:
+    """Heavy armour is chain, scale or plate -- `chargen.LIGHT` names the
+    other three, and `Gear.armour` is the only place a creature says which it
+    wears."""
+    victim = c.target
     if c.strike():
         c.hit()
+        if victim is not None and _in_heavy_armour(c, victim):
+            _rust(c, victim, AC, _M115879_ARMOUR_RUST)
 
 
 @power(
@@ -560,28 +633,31 @@ def m115879a1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=11),
-    dropped=("c.decay(magic=False)",),
+    dropped=("c.destroy(armour=)",),
 )
 def m115879a2(c: Cast) -> None:
-    """Recharges on a miss rather than a roll -- `_recharge_when_bloodied`'s
-    sibling shape, just armed off `Miss` instead of `Bloodied`. The target
-    line and the destroy both depend on an item already being tracked as
-    rusting, which is the same gap `m115879a0/a1/a3` carry -- nothing here
-    is ever marked rusting, so `c.destroy` never has anything to take."""
-    me = c.me
-    label = "m115879a2 recharge"
-    if not any(e.label == label for e in c.world.effects.of(me)):
-        def back(ev: Any) -> None:
-            if getattr(ev, "attacker", None) == me and getattr(ev, "power", None) == c.ref:
-                known = c.world.get(me, Powers)
-                if known is not None:
-                    known.restore(c.ref)
+    """The printed "Recharge if the power misses" sits on top of the 6+ the
+    database files, the way `_recharge_on` puts every other printed recharge
+    sentence.
 
-        from combat_engine.engine.events import Miss
+    The target line is restricted here rather than in the header: rust is a
+    tally of holds and no `Target` field reads one.
 
-        c.watch(Miss, back, until=When.ENCOUNTER, on=me, label=label)
-    if c.strike():
-        c.destroy(on=c.target)
+    **The armour half is dropped.** "The rusting item is destroyed" is
+    whichever item the rust is on, and `c.destroy` only removes a `Weapon`
+    from `Gear.weapons` -- there is no way to take a suit of armour off a
+    creature, so a target whose rust is on its armour keeps it. The weapon is
+    named outright rather than left to `c.destroy`'s default, which picks a
+    *magic* item and no chassis in `chargen` carries one.
+    """
+    me, ref = c.me, c.ref
+    _recharge_on(c, Miss, lambda ev: ev.attacker == me and ev.power == ref)
+    victim = _restricted_to(c, 1, lambda f: _rusting(c, f))
+    if victim is None:
+        return
+    if c.strike(on=victim):
+        gear = c.world.get(victim, Gear)
+        c.destroy(on=victim, weapon=gear.main if gear else None)
 
 
 @power(
@@ -592,12 +668,27 @@ def m115879a2(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=13),
-    damage=Damage("4d10", 8, kind=LIMITED),
-    dropped=("c.decay(magic=False)",),
+    damage=Damage("4d10", 8, kind=LIMITED, half_on_miss=True),
 )
 def m115879a3(c: Cast) -> None:
-    if c.strike():
-        c.hit()
+    """Both tallies at once, and the Miss line written out: the header's
+    `half_on_miss` is card data that no line of the engine reads.
+
+    A weapon counts as wielded when `Gear.main` is one, which is the only
+    question `Gear` can answer about what is in a hand.
+    """
+    victim = c.target
+    if not c.strike():
+        c.hit(half=True)
+        return
+    c.hit()
+    if victim is None:
+        return
+    if _in_heavy_armour(c, victim):
+        _rust(c, victim, AC, _M115879_ARMOUR_RUST)
+    gear = c.world.get(victim, Gear)
+    if gear is not None and gear.main is not None:
+        _rust(c, victim, "attack", _M115879_WEAPON_RUST)
 
 
 # ==========================================================================
@@ -1220,20 +1311,34 @@ def _m2303_mod(c: Cast) -> Any:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.reroll_initiative(keep=)",),
 )
 def m3228a0(c: Cast) -> None:
-    """The Perception half plays. "Rolls initiative twice, uses the
-    higher" is a different distribution from `c.reroll_initiative`, which
-    replaces the roll outright rather than keeping the better of two, so
-    it is not substituted here.
+    """"Rolls initiative twice and uses the higher result", written as a
+    reroll plus a correction rather than as a `keep=` the verb has not got.
 
-    The three other d20 rerolls take `keep=` and this one does not, and the
-    gap is exactly that kwarg: `turns.reroll_initiative` lifts the creature
-    out of the order, rolls, and splices it back, so keeping the higher of
-    two cannot be done from outside without re-splicing by hand."""
+    `c.initiative(n)` moves a creature in the order by a number already
+    rolled -- that is what it exists for -- so the second roll is taken and
+    put back when it is the worse of the two. The distribution is the printed
+    one: max of two d20s, with the same bonus on both.
+
+    **It happens at arming time and that is the only moment it can.**
+    `Encounter.start` rolls initiative and *then* calls `_arm_traits`, so a
+    trait cannot hear the opening `InitiativeRolled` -- but its body runs
+    with the order just built and before round 1 begins, which is exactly
+    where a second initiative check belongs. A rider mounting later gets the
+    Perception half and not this one, because by then there is no initiative
+    check to take twice.
+    """
     me = c.me
     given: set[int] = set()
+
+    first = c.rider()
+    if first is not None and _ridden_by(c.world, me, 8):
+        count = c.world.get(first, Initiative)
+        was = count.rolled if count is not None else 0
+        again = c.reroll_initiative(on=first)
+        if again < was:
+            c.initiative(was - again, on=first)
 
     def check(ev: TurnStart) -> None:
         if ev.ghost or ev.actor != me:
@@ -1795,11 +1900,26 @@ def m5388a3(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("4d6", 6),
-    dropped=("Power.reach_alt",),
 )
 def m5466a0(c: Cast) -> None:
-    if c.strike():
-        c.hit()
+    """"Melee 2, or melee 1 while it has a creature grabbed." The header
+    carries the longer reach, because that is the one the chooser must offer,
+    and the shorter one is enforced here -- the same answer `_restricted_to`
+    gives every other printed target line the header cannot say, and the
+    reason it redirects rather than returns: a creature the card does allow
+    should not lose the attack because the chooser picked one it does not.
+
+    Narrowing the header instead would be the opposite error -- the row would
+    never reach 2 squares, which is its ordinary state.
+    """
+    far = 1 if c.grabbing() else 2
+    # The reach *is* the whole restriction here, and `_restricted_to` applies
+    # it itself -- so the test it takes has nothing left to ask.
+    victim = _restricted_to(c, far, lambda _f: True)
+    if victim is None:
+        return
+    if c.strike(on=victim):
+        c.hit(on=victim)
 
 
 @power(

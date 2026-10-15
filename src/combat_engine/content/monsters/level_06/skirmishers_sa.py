@@ -164,6 +164,20 @@ _ELEMENTS = (
 # --------------------------------------------------------------------------
 
 
+def _aura_radius(world: World, eid: int, label: str) -> int:
+    """How wide that creature's own aura is now, or 0 if it has none.
+
+    `Power.recharge_while` is handed `(world, eid)` and no `Cast`, so the
+    `c.my_aura` route is not open to it -- but the radius is one live field
+    on the zone and `Zones.refresh` re-cuts the footprint from it every
+    tick, which is why widening one is a field write in the first place.
+    """
+    for _zid, zone in world.zones.all():
+        if zone.owner == eid and zone.label == label and zone.aura:
+            return zone.aura
+    return 0
+
+
 def _melee_ca_rider(c: Cast, *, dice: str = "", flat: int = 0) -> None:
     """Extra damage on a melee hit against a target granting combat advantage.
 
@@ -3126,6 +3140,14 @@ def m6655a1(c: Cast) -> None:
     occupied square. `m4306a1` in this file prints the stated move and is
     written with `c.overrun`; this one is not that sentence.
 
+    **`c.shares_space` is the mirror of this card and not this card.** Its
+    own docstring is "anyone may stand in *this* creature's square", and
+    `movement._clear` reads it off the **occupant** of the square being
+    entered -- so laying it here would let everybody walk through this
+    creature and still refuse this creature a step through anybody. The one
+    mover-side form is `c.shift(share=True)`, an argument to a single move;
+    nothing on `Movement` holds the standing permission this trait is.
+
     Everything that leans on it below still reads "adjacent" for "in its
     square"."""
 
@@ -3168,6 +3190,14 @@ def m6655a4(c: Cast) -> None:
     _bite_or_claws(c, ("m6655a3", "m6655a2"), "m6655a2")
 
 
+def _ring_still_narrow(world: World, eid: int) -> bool:
+    return 0 < _aura_radius(world, eid, "m6655a0") < 5
+
+
+def _ring_fully_wide(world: World, eid: int) -> bool:
+    return _aura_radius(world, eid, "m6655a0") >= 5
+
+
 @power(
     "m6655a5",
     level=6,
@@ -3176,7 +3206,7 @@ def m6655a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_ring_still_narrow,
 )
 def m6655a5(c: Cast) -> None:
     """Widens the standing aura in place, to the printed ceiling of 5.
@@ -3184,7 +3214,17 @@ def m6655a5(c: Cast) -> None:
     `c.resize_aura` since #375 -- it mutates *and* emits `ZoneResized`, so the
     row is credited for what it does. Written by hand here before the verb
     existed, which is why this row sat in `audit.KNOWN_SILENT`: correct, and
-    invisible."""
+    invisible.
+
+    **The recharge is a state, not a moment, so it is `recharge_while`.**
+    The printed condition is "it starts its turn and the aura is smaller than
+    5", which is precisely what `actions.recharge` re-asks at the start of
+    every turn beside the die -- and `recharge=0` is the honest die, because
+    the card prints none. The old `dropped=("Usage.RECHARGE(when=)",)` was
+    aimed at a gap #489 had already closed, and left the row able to be spent
+    once and never come back. The twin `m6609a5` arms a `TurnStart` watcher
+    from its body instead, which works and cannot be read without running the
+    row -- header is data."""
     c.resize_aura("m6655a0", plus=2, cap=5)
 
 
@@ -3197,9 +3237,18 @@ def m6655a5(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.FIRE],
-    dropped=("Usage.RECHARGE(when=)",),
+    recharge_while=_ring_fully_wide,
 )
 def m6655a6(c: Cast) -> None:
+    """The printed recharge is "it starts its turn and the aura is at 5",
+    which is a state and so is `recharge_while` -- re-asked at the start of
+    every turn by `actions.recharge`, beside a die the card does not print.
+    It was `dropped=("Usage.RECHARGE(when=)",)`, which #489 had closed, and
+    with `recharge=0` and no state the row could be spent once and was then
+    gone for the fight.
+
+    Entering an enemy's space still reads as adjacency, for the reason
+    `m6655a1` gives."""
     c.cure(Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.SLOWED, on=c.me)
     struck: set[int] = set()
     for _ in range(c.speed_of()):

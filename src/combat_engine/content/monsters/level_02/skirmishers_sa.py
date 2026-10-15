@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_01.skirmishers import _level_of
 from combat_engine.content.monsters.level_01.skirmishers_sa import (
     _adjacent_foes,
     _armed,
@@ -89,12 +90,14 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     CloseBurst,
+    Condition,
     Damage,
     DamageType,
     Effect,
     Ident,
     Keyword,
     Melee,
+    Movement,
     Ranged,
     Relation,
     Stats,
@@ -110,6 +113,8 @@ from combat_engine.engine.events import (
     AttackDeclared,
     AttackRolled,
     Bloodied,
+    ConditionApplied,
+    ConditionEnded,
     DamageApplied,
     DamageRolled,
     Dropped,
@@ -1746,20 +1751,30 @@ def m4495a4(c: Cast) -> None:
     "m4617a0",
     level=2,
     usage=AT_WILL,
-    action=ActionType.NONE,
+    action=ActionType.MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.shift(swap=)",),
 )
 def m4617a0(c: Cast) -> None:
-    """The whole of this row is a narrowing of what a shift may end on.
+    """A shift that may end in an ally's square, the ally taking the one left.
 
-    `c.swap` trades two creatures' squares and `c.shift(share=True)` lets a
-    step pass through an occupied one, but neither is this: the printed line
-    changes the *destination rule* for every shift the creature makes, and
-    there is nothing to hang that on. Doing it from here -- swapping on the
-    spot -- would be a move nobody chose, at a moment nothing is shifting.
+    Written as the shift rather than as a rule about shifting -- `m237a3` is
+    the same card at level 1 and settled it. Nothing can reach into a shift's
+    choice of destination, and the generic shift action will not end on an
+    occupied square, so this row is the only way the permission can ever be
+    used; the marker it carried asked for a `swap=` on `c.shift` that neither
+    row needs. With no ally to trade with it is an ordinary shift, which is
+    what the trait modifies. `c.swap` is both halves of the printed line --
+    the ally ends up in the square just vacated.
     """
+    mates = sorted(
+        a for a in c.allies() if c.adjacent(a) and _level_of(c, a) <= c.level
+    )
+    mate = c.choose(mates, f"{c.ref}: swap places with which ally")
+    if mate is None:
+        c.shift(1)
+    else:
+        c.swap(mate)
 
 
 @power(
@@ -3003,16 +3018,45 @@ def m6608a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.slowed(mode=)",),
 )
 def m6608a1(c: Cast) -> None:
-    """The whole of this row is a condition that lands on one mode only.
+    """The whole of this row narrows a condition to one way of moving, and it
+    is written by hand rather than waiting on a per-mode `c.slowed`.
 
-    Slowed caps a creature's speed, and the engine applies it to the creature
-    rather than to a way of moving; `c.ignore_condition(Condition.SLOWED)`
-    would waive it outright, which is a creature immune to being slowed rather
-    than one whose feet still work.
+    The engine's own slow formula already leaves a flyer's fly speed untouched
+    -- `c.move` hands it back in full -- so the printed exception ("only the
+    fly speed") needs the opposite push: the fly mode's own number is capped
+    while slowed and handed back when the condition clears. `m6609a1`, the
+    same card seven levels up, settled this shape; this row was marked for a
+    verb that neither of them needs.
+
+    **"Only" is both halves.** `query.speed` caps the creature's base speed
+    at 2 for any active `speed_cap`, so capping the fly mode alone made the
+    slow hit both and the printed exception say nothing. `c.waive` switches
+    that one knob of the condition off without lifting the condition itself,
+    which is what #508 built it for.
     """
+    me = c.me
+    saved: dict[str, int] = {}
+    c.waive(Condition.SLOWED, "speed_cap", on=me, until=When.ENCOUNTER)
+
+    def slowed_on(ev: ConditionApplied) -> None:
+        if ev.target != me or ev.condition is not Condition.SLOWED or "fly" in saved:
+            return
+        moves = c.world.get(me, Movement)
+        if moves is not None and "fly" in moves.modes:
+            saved["fly"] = moves.modes["fly"]
+            moves.modes["fly"] = min(moves.modes["fly"], 2)
+
+    def slowed_off(ev: ConditionEnded) -> None:
+        if ev.target != me or ev.condition is not Condition.SLOWED or "fly" not in saved:
+            return
+        moves = c.world.get(me, Movement)
+        if moves is not None:
+            moves.modes["fly"] = saved.pop("fly")
+
+    c.watch(ConditionApplied, slowed_on, until=When.ENCOUNTER, on=me, label=f"{c.ref} on")
+    c.watch(ConditionEnded, slowed_off, until=When.ENCOUNTER, on=me, label=f"{c.ref} off")
 
 
 @power(

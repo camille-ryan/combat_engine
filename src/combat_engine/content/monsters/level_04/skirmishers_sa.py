@@ -951,12 +951,21 @@ def m1525a1(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.spring_trap()",),
+    dropped=("c.ignores_traps()",),
 )
 def m1525a2(c: Cast) -> None:
     """The move is the whole row and it works. Walking past a trap without
-    setting it off is the clause with nothing to say it: nothing arms, trips
-    or exempts a trap from a creature's step."""
+    setting it off is the clause with nothing to say it.
+
+    **Re-aimed off `c.spring_trap()`.** That symbol is `m1523a3`'s gap -- a
+    verb that makes a trap go off on purpose -- and it would not finish this
+    row if it landed: this clause is the opposite, an *exemption* from a
+    trap's trigger for one creature's step, which is the shape `c.no_provoke`
+    has for opportunity attacks and nothing has for traps. One symbol was
+    standing for two different needs. (Both bottom out in the same place for
+    now: `components.py` says a trap "attacks like anything else" and nothing
+    on a board is one yet.)
+    """
     c.move(c.speed_of())
 
 

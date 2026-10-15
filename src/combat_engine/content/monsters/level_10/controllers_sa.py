@@ -27,23 +27,27 @@ Conventions, inherited from `level_09/controllers_sa.py` and this level's own
 * "save ends both" is one `Effects.apply` call carrying every clause under
   one saving throw, never a condition plus a separately-timed penalty.
 
-Three gaps confirmed absent from `scripts/vocab.py`, each named once and
-reused by every row that needs it:
+Three gaps this file used to claim, **all three wrong**, and each cost a
+row that could have been written:
 
-* **No primitive removes a creature from play and returns it later.**
-  `m6109a3` is `todo=("c.remove_from_play()",)` for exactly the shape
-  `level_09/controllers_sa.py` named for `m6092a2`.
-* **`c.conceal_in` landed (#500)** and `m1089a3` and `m964a2` are written.
-  `m2507a3` is not: its aura conceals "she and any other shadow creatures
-  within it", which narrows by what kind of creature you are rather than by
-  side, and `side=` takes `team`/`ally`/`enemy`/`any` and nothing else. It
-  is `dropped=("c.conceal_in(kind=)",)` now, which says the shape of what is
-  left rather than naming a verb that exists.
-* **Nothing tracks how far a creature moved on its own turn.**
-  `c.distance_moved()` would answer "moves more than half its speed" and
-  "doesn't move at least 2 squares"; `m1780a1` and `m2507a3` both wait on
-  it. Whether a creature moved *at all* is answerable (`Moved` fires or
-  does not), and `m2546a4` uses exactly that instead of a distance.
+* **"No primitive removes a creature from play and returns it later."** It
+  is `Condition.REMOVED` -- on the board, out of the fight -- and the way
+  back is hung on that hold's ending. Five class rows and
+  `level_09/brutes.py`'s `m412a2` say so. `m6109a3` is written; what is
+  dropped there is the swallowed creature still being able to act.
+* **"`c.conceal_in` cannot narrow by kind."** True of that verb, and
+  `c.conceal(when=)` is handed the attack context, so "she and any other
+  shadow creature standing in the aura" is one gate asking
+  `c.in_my_aura` and `c.is_kind`. `m2507a3` is written.
+* **"Nothing tracks how far a creature moved on its own turn."**
+  `movement.step` emits one `Moved` per square and `walk` steps a path a
+  square at a time, so the count between a creature's own `TurnStart` and
+  `TurnEnd` *is* the distance -- `level_07/controllers.py`'s `m406a2` has
+  counted it that way since it was written. `_FORCED` is what keeps a shove
+  out of it. `m1780a1` and `m2507a3` are both written.
+
+  A `c.distance_moved()` verb would still be worth having: three rows now
+  hand-roll the same two watches.
 
 Two printed names leaked through the extraction and are kept out of this
 file entirely -- not quoted, not pointed at by a comment beyond this
@@ -62,6 +66,7 @@ from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
+from combat_engine.content.monsters.level_09.brutes import _put_beside
 from combat_engine.content.monsters.level_10.controllers import (
     EVERY_DEFENCE,
     _my_implement_hit,
@@ -114,12 +119,13 @@ from combat_engine.engine import (
     spread,
     would_hit_me,
 )
-from combat_engine.engine.components import Health, Ident, Position, Powers
+from combat_engine.engine.components import Health, Ident, Movement, Position, Powers
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackDeclared,
     DamageApplied,
     Dropped,
+    EffectApplied,
     Hit,
     Miss,
     Moved,
@@ -147,6 +153,16 @@ from combat_engine.engine.zones import Zone
 # --------------------------------------------------------------------------
 # Shared shapes
 # --------------------------------------------------------------------------
+
+
+#: `Moved.kind_` for a shove rather than a step the creature chose. "Must
+#: move at least 2 squares during its turn" and "moves more than half its
+#: speed" are both about the creature's own movement, and being slid is not
+#: it. `movement.forced` passes `kind=how.value`, which is one of these three.
+_FORCED = ("push", "pull", "slide")
+
+#: The two conditions `m5907a1` trades for a daze.
+_HEAVY_HANDED = (Condition.DOMINATED, Condition.STUNNED)
 
 
 def _sunlit(c: Cast, amount: int) -> None:
@@ -391,11 +407,43 @@ def m1062a3(c: Cast) -> None:
     dropped=("c.phasing(through=)",),
 )
 def m1062a4(c: Cast) -> None:
-    """Insubstantial and hovering are both exact. Passing through a
+    """Insubstantial and the fly speed are exact. Passing through a
     "porous obstacle" is narrower than `c.phasing`, which passes through
-    anything solid -- nothing scopes it down to just doors and windows."""
-    c.insubstantial(on=c.me, until=When.SUSTAIN)
-    c.hover(8, on=c.me, until=When.SUSTAIN, sustain=STANDARD)
+    anything solid -- nothing scopes it down to just doors and windows.
+
+    **Two corrections, both of which looked finished.** The hold is built
+    through `Effects.apply` because `c.insubstantial` takes no `sustain=`:
+    a `When.SUSTAIN` effect with no cost on it is what
+    `durations._warn_sustainless` is about, and it lapses after one round
+    rather than being sustained. And the fly speed is a `Movement.modes`
+    entry, not `c.hover(8)` -- that verb's first argument is a **height**
+    (`c.rise`), so the old line lifted the creature eight squares into the
+    air and left it with no speed to fly at. The twin `m2245a4` is this
+    shape. "(Hover)" itself is the half nothing in the engine enforces,
+    which is the reading three blocks two levels down already take.
+
+    The block's own speed line is already `fly 8`, so on this creature the
+    grant changes no number -- it is written because the printed form is
+    what grants it, and the hold is what hands back whatever was there.
+    """
+    me = c.me
+    hold = c.world.effects.apply(
+        me, me, When.SUSTAIN, label=c.ref, sustain_cost=STANDARD,
+        conditions=[Condition.INSUBSTANTIAL], by=c.ref,
+    )
+    moves = c.world.get(me, Movement)
+    if hold is None or moves is None:
+        return
+    had_fly = moves.modes.get("fly")
+    moves.modes["fly"] = 8
+
+    def grounded() -> None:
+        if had_fly is None:
+            moves.modes.pop("fly", None)
+        else:
+            moves.modes["fly"] = had_fly
+
+    hold.on_end.append(grounded)
 
 
 # ==========================================================================
@@ -1087,17 +1135,54 @@ def m1780a0(c: Cast) -> None:
     keywords=[Keyword.CHARM, Keyword.PSYCHIC, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=13),
     damage=Damage("1d8", 5, dtype=DamageType.PSYCHIC),
-    dropped=("c.distance_moved()",),
 )
 def m1780a1(c: Cast) -> None:
-    """The hit lands in full. Nothing tracks how far a creature moved on
-    its own turn, so the "takes 2d6 if it didn't move 2 squares" clause
-    cannot be asked -- see the module docstring."""
+    """The compulsion is a save-ends hold and the burn is its enforcement.
+
+    **Squares moved are countable, and the old marker said they were not.**
+    `movement.step` emits one `Moved` per square and `walk` steps a path
+    one square at a time, so counting them between the victim's own
+    `TurnStart` and `TurnEnd` is the distance it covered -- the arrangement
+    `level_07/controllers.py`'s `m406a2` already uses for "more than half
+    its speed". Forced movement is left out by `kind_`: being slid two
+    squares is not the target moving.
+
+    The toll is read on `TurnEnd` at the ordinary window, which is before
+    `Effects._on_turn_end` -- registered `late=True` -- rolls the saving
+    throw. That is the printed "before it makes any saving throws", and it
+    is the one ordering the clause turns on."""
     victim = c.target
-    if c.strike():
-        c.hit()
-        if victim is not None:
-            c.effect(c.ref, until=When.SAVE_ENDS, on=victim)
+    if not c.strike():
+        return
+    c.hit()
+    if victim is None:
+        return
+    hold = c.effect(c.ref, until=When.SAVE_ENDS, on=victim)
+    if hold is None:
+        return
+    walked = {"squares": 0}
+
+    def stepped(ev: Moved) -> None:
+        if ev.actor != victim or c.world.turn != victim:
+            return
+        if getattr(ev, "kind_", "walk") in _FORCED:
+            return
+        walked["squares"] += 1
+
+    def fresh(ev: TurnStart) -> None:
+        if ev.actor == victim and not ev.ghost:
+            walked["squares"] = 0
+
+    def toll(ev: TurnEnd) -> None:
+        if ev.ghost or ev.actor != victim or hold.ended:
+            return
+        if walked["squares"] < 2:
+            c.flat(c.roll("2d6"), dtype=DamageType.PSYCHIC, on=victim)
+        walked["squares"] = 0
+
+    hold.subs.append(c.world.bus.on(Moved, stepped, owner=c.me))
+    hold.subs.append(c.world.bus.on(TurnStart, fresh, owner=c.me))
+    hold.subs.append(c.world.bus.on(TurnEnd, toll, owner=c.me))
 
 
 @power(
@@ -1330,13 +1415,25 @@ def m2507a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC],
-    dropped=("c.conceal_in(kind=)", "c.distance_moved()"),
 )
 def m2507a3(c: Cast) -> None:
-    """The aura, its damage tick and ending it when m2507 uses `m2507a6`
-    are all written. Its concealment has no zone-bound primitive, and
-    nothing tracks how far she moves this turn -- see the module
-    docstring for both."""
+    """Every printed clause, and two of them were marked unsayable.
+
+    **Concealment is `c.conceal(when=)` and not `c.conceal_in`.** The
+    zone-bound verb narrows by `side=`, which cannot say "and any other
+    shadow creature", and that is what the old `c.conceal_in(kind=)` marker
+    was about -- but `c.conceal` is handed the attack context, so the gate
+    asks both halves per swing: is this creature standing in the aura, and
+    is it this creature or a shadow one. It is laid on the concealed
+    creature, under `kind="concealment"`, so two sources take the larger and
+    cover does not add to it -- which is the thing `level_07/controllers.py`'s
+    `m406a2` gets wrong by hand-rolling a -2 attack penalty on each enemy
+    instead.
+
+    **How far she has walked is countable.** `movement.step` emits one
+    `Moved` per square, so "more than half her speed" is counted between her
+    own turn starts, with `kind_` leaving out shoves. `m406a2` has done this
+    since it was written; the module docstring claimed nothing could."""
     me = c.me
     zone = c.aura(2, label=c.ref, on=me, until=When.SUSTAIN, sustain=MINOR)
     zc = c.world.get(zone, Zone)
@@ -1344,6 +1441,41 @@ def m2507a3(c: Cast) -> None:
         zc.difficult = c.ref
     for friend in {me, *c.allies()}:
         c.ignores_difficult(c.ref, on=friend, until=When.ENCOUNTER)
+    hold = zc.effect if zc is not None else None
+
+    def shrouded(ctx: dict[str, Any]) -> bool:
+        who = ctx.get("target")
+        if who is None or not c.in_my_aura(who, label=c.ref):
+            return False
+        return who == me or c.is_kind("shadow", on=who)
+
+    for who in {me, *c.allies(), *c.enemies()}:
+        if who != me and not c.is_kind("shadow", on=who):
+            continue
+        veil = c.conceal(on=who, until=When.ENCOUNTER, when=shrouded)
+        if veil is not None and hold is not None:
+            hold.on_end.append(
+                lambda v=veil: c.world.effects.end(v, "the shadows lifted")
+            )
+
+    walked = {"squares": 0}
+
+    def stepped(ev: Moved) -> None:
+        if ev.actor != me or c.world.turn != me or hold is None or hold.ended:
+            return
+        if getattr(ev, "kind_", "walk") in _FORCED:
+            return
+        walked["squares"] += 1
+        if walked["squares"] > c.speed_of(who=me) // 2:
+            c.world.effects.end(hold, "she walked out of her own shadows")
+
+    def fresh(ev: TurnStart) -> None:
+        if ev.actor == me and not ev.ghost:
+            walked["squares"] = 0
+
+    if hold is not None:
+        hold.subs.append(c.world.bus.on(Moved, stepped, owner=me))
+        hold.subs.append(c.world.bus.on(TurnStart, fresh, owner=me))
 
     def tick(ev: Any) -> None:
         if ev.actor == me or ev.actor not in c.enemies() or not c.in_my_aura(ev.actor, label=c.ref):
@@ -2276,11 +2408,49 @@ def m3788a5(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(3),
     target=NO_TARGET,
-    todo=("etl.monster.summon_ref()",),
+    dropped=("c.summon(after=)", "c.shares_space(with_=)"),
 )
 def m3788a6(c: Cast) -> None:
-    """No ref names the songbird swarms this summons -- the same gap
-    `level_09/controllers_sa.py` named for `m5626a6`."""
+    """**The ref is on the card.** The old `etl.monster.summon_ref()` marker
+    said nothing named what this puts on the board, and the printed text
+    names `m3789` itself a sentence later -- it is a level 6 skirmisher in
+    `game.db` with its own numbers, so `c.summon` has everything it needs
+    and the extraction dropped nothing.
+
+    The pair, and the printed recharge: `c.summon` both spawns and joins the
+    initiative order, and the row comes back when the second of the two is
+    dropped. `recharge=0` because the card prints no die, only that
+    condition -- and the watch is one-shot per pair, so the next use arms
+    its own.
+
+    Two clauses are dropped and both are a *narrowing* of a verb that
+    exists. `Encounter.join` splices a summon in on its own rolled
+    initiative, so "acts immediately after her" is not sayable --
+    `c.extra_turn(at=)` takes a count but there is no way to hand `summon`
+    one. And standing in a swarm's own square is `c.shares_space`, which is
+    the occupant's permission to be entered by **anyone** rather than by one
+    named creature; laid here it would open both swarms to the whole board.
+    The concealment that clause pays out hangs off it and goes with it."""
+    me = c.me
+    born = [eid for eid in (c.summon("m3789"), c.summon("m3789")) if eid]
+    if not born:
+        return
+    left = set(born)
+
+    def fell(ev: Dropped) -> None:
+        if not left:
+            return
+        left.discard(ev.actor)
+        if left:
+            return
+        known = c.world.get(me, Powers)
+        if known is not None:
+            known.restore(c.ref)
+
+    c.watch(
+        Dropped, fell, until=When.ENCOUNTER, on=me,
+        label=f"{c.ref} pair {c.world.round}",
+    )
 
 
 # ==========================================================================
@@ -2342,7 +2512,12 @@ def m4008a1(c: Cast) -> None:
     dropped=("etl.monster.summon_ref()",),
 )
 def m4008a2(c: Cast) -> None:
-    """The damage lands. No ref names the viper swarm it spills."""
+    """The damage lands. What the Effect line puts on the board is printed
+    as "see below" and carries no ref, so `c.summon` has nothing to name --
+    and the two words the card uses instead are a creature's printed name,
+    which is why they are not written here either. Referred up: the block
+    whose ref follows this one is a swarm of the right type at a plausible
+    level, and only the compendium can say whether it is this one."""
     if c.strike():
         c.hit()
 
@@ -3532,13 +3707,54 @@ def m5907a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.substitute_condition()",),
 )
 def m5907a1(c: Cast) -> None:
-    """Nothing intercepts an incoming condition and replaces it with a
-    different one -- only immunity exists, which would refuse the
-    daze too. Nothing else on `Cast` has anywhere to put this row's
-    whole printed Effect, so it is refused rather than half-written."""
+    """The swap happens on `EffectApplied`, which is the one window where a
+    creature is being stunned and is not yet stunned: `Effects.apply`
+    announces the effect, *then* hands its conditions over. So the heavy
+    condition comes off the hold before it ever lands and the daze goes on
+    in its place, which keeps the printed "for the same duration" for free
+    -- it is the same effect wearing a lighter condition. `p4913` is the
+    same lever from an interrupt; `ConditionApplied` is too late and is what
+    `m5997a2` had to be moved off.
+
+    **Dominating arrives two ways and both are caught.** `c.dominate` files
+    a `Relation.DOMINATED_BY` and mirrors the condition in, where
+    `c.condition(Condition.DOMINATED, ...)` puts it in `eff.conditions`;
+    `relations.clear` is what unwinds the first, count and all. A stun added
+    to a hold that is already standing goes through `durations.worsen` and
+    announces no `EffectApplied`, so that one route is not intercepted."""
+    me = c.me
+
+    def lighten(ev: EffectApplied) -> None:
+        if ev.target != me:
+            return
+        landing = max(
+            (
+                e
+                for e in c.world.effects.live.values()
+                if e.owner == me and not e.ended and e.label == ev.label
+            ),
+            key=lambda e: e.id,
+            default=None,
+        )
+        if landing is None:
+            return
+        caught = any(k in _HEAVY_HANDED for k in landing.conditions)
+        for kind, source, target in list(landing.relations):
+            if kind is Relation.DOMINATED_BY and target == me:
+                landing.relations.remove((kind, source, target))
+                c.world.relations.clear(kind, source, target, c.ref)
+                caught = True
+        if not caught:
+            return
+        left = [k for k in landing.conditions if k not in _HEAVY_HANDED]
+        if Condition.DAZED not in left:
+            left.append(Condition.DAZED)
+        landing.conditions = tuple(left)
+        c.note(f"{c.ref}: dazed instead")
+
+    c.watch(EffectApplied, lighten, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
@@ -3977,29 +4193,32 @@ def m6070a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=13),
-    dropped=("Condition.weakened(unless=)",),
+    recharge_when=Trigger(
+        Miss,
+        lambda world, me, ev: ev.attacker == me and ev.power == "m6070a3",
+        "it misses with this power",
+    ),
+    todo=("query.deals_half(ctx=)",),
 )
 def m6070a3(c: Cast) -> None:
-    """The chosen ally's duration bookkeeping is exact. Weakened cannot be
-    scoped to "against anyone but the chosen ally" -- the condition
-    applies or it does not, with no per-target gate."""
-    victim = c.target
-    _recharge_on(c, Miss, lambda ev: ev.attacker == c.me and ev.power == c.ref)
-    if not c.strike():
-        return
-    pool = [a for a in c.allies() if not c.is_kind("elite", on=a) and not c.is_kind("solo", on=a)]
-    chosen = c.choose(pool, f"{c.ref}: which ally") if pool else None
-    if victim is None or chosen is None:
-        return
-    hold = c.weakened(until=When.ENCOUNTER, on=victim)
-    if hold is None:
-        return
+    """**Refused, where it used to be offered a clause stronger than its
+    card.** The whole printed Hit is a weakened that applies to every attack
+    *except* one against the chosen ally, and the row laid a plain
+    `c.weakened` -- so the one creature the card exempts was halved along
+    with everybody else, which is the opposite of what the power is for. No
+    damage line sits beside it, so with that clause taken out there is
+    nothing left for the row to do and `todo=` is the honest state.
 
-    def ends_if_ally_drops(ev: Dropped) -> None:
-        if not hold.ended and ev.actor == chosen:
-            c.world.effects.end(hold, "the chosen ally dropped")
+    `query.deals_half` is the read and it takes `(world, eid)` and no
+    context, so it cannot ask who is being hit; the symbol is the one
+    `themes/batch_h.py`'s `p14140` already waits on for the same sentence,
+    rather than a second name for one gap. `c.weakened` and `c.condition`
+    take no `when=` either -- weakened is a condition, and
+    `resolve.deal_damage` asks for it off the attacker alone.
 
-    hold.subs.append(c.world.bus.on(Dropped, ends_if_ally_drops, owner=c.me))
+    The printed "Recharge if the power misses" moves to `recharge_when`,
+    where it is data the wire and the policy can read rather than a watcher
+    the body arms -- the body of a `todo=` row never runs."""
 
 
 @power(
@@ -4161,15 +4380,43 @@ def m6109a2(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=13),
-    todo=("c.remove_from_play()",),
+    dropped=("c.waive(cannot_act)", "Effect.drop_cost(by=)"),
 )
 def m6109a3(c: Cast) -> None:
-    """The whole printed Effect is removing the target from play --
-    nothing on `Cast` takes a creature off the board and schedules its
-    return, see the module docstring."""
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is not None:
-        c.strike(on=victim)
+    """**Removed from play already has a spelling.** It is
+    `Condition.REMOVED` -- on the board, out of the fight -- and the way
+    back is hung on that hold's own ending, which is `level_09/brutes.py`'s
+    `m412a2` in full. The old `c.remove_from_play()` marker would have had
+    somebody build a second one. The burn rides on the same hold, so it
+    stops when the hold does.
+
+    Two clauses are dropped, and the first is the one that matters in play:
+    the card lets the swallowed creature act and hit this creature back,
+    where `Condition.REMOVED` is `cannot_act` and `cannot_move`. `c.waive`
+    is the verb that relaxes part of what a condition costs and it takes
+    four words -- `attack`, `halve_speed`, `grants_ca`, `speed_cap` --
+    raising a `KeyError` on anything else, deliberately. And "the m6109 can
+    end the effect as a free action" is not `drop_cost`: `actions._dropping`
+    offers a droppable effect to the creature it is **on**, which here is
+    the victim, so declaring it would hand the prisoner its own release."""
+    me = c.me
+    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=me))
+    if victim is None or not c.strike(on=victim):
+        return
+    inside = c.world.effects.apply(
+        victim, me, When.ENCOUNTER, label=c.ref,
+        conditions=(Condition.REMOVED,),
+        ongoing=(10, DamageType.UNTYPED), by=c.ref,
+    )
+    if inside is None:
+        return
+
+    def let_go(ev: Dropped) -> None:
+        if ev.actor == me and not inside.ended:
+            c.world.effects.end(inside, "it dropped")
+
+    inside.subs.append(c.world.bus.on(Dropped, let_go, owner=me))
+    inside.on_end.append(lambda: _put_beside(c, victim, me))
 
 
 @power(
@@ -4413,8 +4660,18 @@ def m6180a2(c: Cast) -> None:
     dropped=("events.PowerRecharged",),
 )
 def m6180a3(c: Cast) -> None:
-    """Recharges on its own die; nothing fires when a *different* row
-    recharges, so the printed link to `m6180a2` is not kept in step."""
+    """The blow and the prone are exact. The printed recharge is "when
+    `m6180a2` recharges", and **nothing announces a recharge**:
+    `actions.recharge` calls `Powers.restore` and emits no event, so neither
+    `recharge_when` -- which wants one to subscribe to -- nor a body watcher
+    can hear it. `recharge_while` is the other half of that field and reads
+    a *state*: "is `m6180a2` available" is true of a row that was never
+    spent at all, which would hand this one back on a turn the card does
+    not.
+
+    So with `recharge=0`, which is the honest die for a card that prints
+    none, this row is spent once and does not come back. That is the
+    dropped clause, not a die that is quietly doing the job."""
     if c.strike():
         c.hit()
         c.prone()

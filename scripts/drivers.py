@@ -5936,6 +5936,18 @@ def penalties_by_source(out: Result) -> None:
     * and a **bonus** is unaffected, because bonuses bucket by `kind` --
       the control that stops `label=` being reached for as a stacking
       knob in general.
+
+    **It recurred, as predicted above, and the fifth assertion is that
+    case.** `monsters/level_06/skirmishers._worsen` stacks a rust penalty
+    the card caps at five and laid every step under the laying row's ref,
+    so all five collapsed to **-1**. It looked right because it *did* set a
+    label -- on the `Effect`, which is what its own cap counts, and never on
+    the `Mod`s the effect carries. Four rows were capped at -1 for their
+    whole lives: `m3062a0`, `m3062a1`, `m3063a1`, `m3063a3`.
+
+    Found by a Bin C authoring agent writing the same card one block over,
+    and reproduced here before the fix: five holds, delta -1, one distinct
+    `Mod` label.
     """
     from combat_engine import story
     from combat_engine.engine import query
@@ -5993,6 +6005,32 @@ def penalties_by_source(out: Result) -> None:
              "and two untyped BONUSES add whatever their labels, because"
              " bonuses bucket by kind -- the control that stops `label=`"
              f" being read as a general stacking knob ({ac() - before})")
+
+    # ---- the recurrence: a capped stack of one-point penalties ----------
+    #
+    # `_worsen` lays up to five, and laid them all under the row's own ref
+    # until this was found -- so the card's -5 was -1. The `Effect` label it
+    # does set is the one its cap counts, which is exactly why the fault
+    # looked like working code.
+    from combat_engine.content.monsters.level_06.skirmishers import _worsen
+
+    world2, caster2, _ = _board("m3062a0")
+    victim = sorted(query.enemies(world2, caster2))[0]
+    mods2 = world2.need(victim, Mods)
+    start = mods2.total("attack", {})
+    rust = Cast(world=world2, me=caster2, ref="m3062a0")
+    for _ in range(7):                       # past the printed cap of five
+        _worsen(rust, victim, "attack", "m3062 rust")
+    got = mods2.total("attack", {}) - start
+    out.that(got == -5,
+             "five one-point rust penalties come to -5, not -1: each step"
+             " carries its own Mod label",
+             f"seven calls moved the attack roll by {got}")
+    held = sum(1 for e in world2.effects.of(victim) if e.label == "m3062 rust")
+    out.that(held == 5,
+             "and the stack stops at the five the card prints, counted off"
+             " the shared Effect label",
+             f"{held} holds standing after seven calls")
 
 
 def feat_clause_exclusivity(out: Result) -> None:

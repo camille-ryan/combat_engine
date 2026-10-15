@@ -265,11 +265,34 @@ def _worsen(c: Cast, who: int, what: str | Defense, label: str) -> None:
     Read back off the live effects rather than counted in a closure: the row
     is used again by a second creature of the same kind, and the cap is on
     the item rather than on the attacker.
+
+    **Every step needs its own `label=` and without one this came to -1.**
+    `Mods.total` buckets *penalties* by `Mod.label` and takes the worse of a
+    bucket -- 4e's "two from the same source do not add" -- and `c.bonus`
+    defaults that label to the laying row's ref. So five one-point holds all
+    carried the label `m3062a0` and collapsed into a single -1. Measured on
+    a board: five holds, attack delta **-1**, one distinct `Mod` label.
+
+    Setting `hold.label` afterwards does not help, which is the trap: that
+    renames the **`Effect`** -- which is what the cap above counts, and what
+    made this look right -- and never touches the `Mod`s the effect carries.
+
+    So the step number goes into the `Mod` label through `c.bonus(label=)`,
+    the parameter that exists for exactly this and nothing else, while the
+    `Effect` label stays the shared one the cap reads.
+
+    This is the second instance of this bug class. `m238a3` was the first,
+    "silently -2 instead of -4 for its whole life", and
+    `drivers.penalties_by_source` was built for it and says in its own
+    docstring that **it will recur**. It did, in four rows:
+    `m3062a0`, `m3062a1`, `m3063a1`, `m3063a3`.
     """
     carried = [e for e in c.world.effects.of(who) if e.label == label]
-    if len(carried) >= abs(_RUST_FLOOR):
+    step = len(carried)
+    if step >= abs(_RUST_FLOOR):
         return
-    hold = c.penalty(what, 1, until=When.ENCOUNTER, on=who)
+    hold = c.penalty(what, 1, until=When.ENCOUNTER, on=who,
+                     label=f"{label} step {step}")
     if hold is not None:
         hold.label = label
 
