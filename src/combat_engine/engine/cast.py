@@ -6590,7 +6590,11 @@ class Cast:
         enc = self.world.encounter
         if enc is None:
             return 0
-        before = getattr(self.world.get(who, Initiative), "roll", 0) or 0
+        # `rolled`, not `roll`. `Initiative` carries `bonus`, `rolled` and
+        # `scale`, so the old spelling fell through the `getattr` default and
+        # every announced initiative reroll reported a "before" of 0 -- the
+        # log half of this verb has never once said what the creature had.
+        before = getattr(self.world.get(who, Initiative), "rolled", 0) or 0
         rolled = enc.reroll_initiative(who)
         self._announce_reroll("initiative", before, rolled, actor=who)
         return rolled

@@ -247,11 +247,21 @@ def holding(world: World, eid: int, what: str = "") -> list[Any]:
         # slugified name. The ref is the compendium id now (#339) and the name
         # has its own field, so the question is asked of the field that answers
         # it. It would not have raised -- it would have matched nothing.
+        # **A ref matches too, and content needs that one.** A card saying
+        # "you must be wielding <one named weapon>" has no group to ask for,
+        # and the only other handle was the slug -- which *is* the printed
+        # name, and a printed name may not enter a tracked file. So a row
+        # obeying the naming rule had nothing to pass, and `general_q`'s
+        # four `_wielding(...)` sites show what that costs: somebody
+        # resolved the name to a ref and got `m5466a0`, a **monster power**
+        # that happens to share the weapon's printed name. The Requirement
+        # was false for every creature in the game and the docstring
+        # rationalised it as a chargen limitation.
         named = what.replace(" ", "-")
         return [
             w for w in out
             if what in w.properties or w.group == what or w.category == what
-            or w.slug == named
+            or w.slug == named or w.ref == what
         ]
     return out
 

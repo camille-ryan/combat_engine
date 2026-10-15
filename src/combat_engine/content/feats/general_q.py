@@ -202,10 +202,21 @@ WALKED = ("walk", "shift", "run")
 
 
 def _wielding(what: str):  # noqa: ANN202
-    """A printed Requirement naming one weapon, as `exotic.py` writes it.
+    """A printed Requirement naming one weapon, by **ref**.
 
-    False for every character `chargen` can build today, which is why the
-    cards below report UNUSED rather than SILENT."""
+    **It was `m5466a0` on all four rows, which is a monster power.** That
+    ref shares the weapon's printed name, so a name-to-ref resolution found
+    the wrong table -- and `holding` matches a group, a property, a category
+    or the weapon's slug, none of which a monster power ref can ever be. The
+    Requirement was false for every creature in the game, and the line this
+    docstring used to carry ("False for every character `chargen` can build
+    today") read that as a chargen limitation rather than a wrong argument.
+
+    `w3711` is the weapon. `query.holding` matches a ref as of this change,
+    which is what lets a row name one weapon without writing the printed
+    name into a tracked file -- the reason the wrong ref was reached for.
+    `w3712` is the same weapon's second end and is not what "wielding" asks
+    about."""
 
     def gate(world, eid: int) -> bool:  # noqa: ANN001
         return bool(holding(world, eid, what))
@@ -497,7 +508,7 @@ _swap("f3184", "f3184b", Swap(6, utility=True))
 
 @power("f3184b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
        reach=Melee(1), target=ONE_CREATURE, keywords=MARTIAL,
-       requires=_wielding("m5466a0"),
+       requires=_wielding("w3711"),
        requires_text="wielding the weapon this chain names")
 def f3184b(c: Cast) -> None:
     """The target comes along, which is a pull of however far the move
@@ -519,7 +530,7 @@ _swap("f3185", "f3185b", Swap(3, Usage.ENCOUNTER))
 
 @power("f3185b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
-       attack=Attack(STR, vs=AC), requires=_wielding("m5466a0"),
+       attack=Attack(STR, vs=AC), requires=_wielding("w3711"),
        requires_text="wielding the weapon this chain names")
 def f3185b(c: Cast) -> None:
     """"You can use f3185c against the target" is a row handed over for
@@ -532,7 +543,7 @@ def f3185b(c: Cast) -> None:
 
 @power("f3185c", level=1, cls="", usage=ENCOUNTER, action=OPPORTUNITY,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
-       attack=Attack(STR, vs=AC), requires=_wielding("m5466a0"),
+       attack=Attack(STR, vs=AC), requires=_wielding("w3711"),
        requires_text="wielding the weapon this chain names",
        trigger="the target willingly enters a square not adjacent to you",
        on=Trigger(MoveStart, lambda w, me, ev: (
@@ -557,7 +568,7 @@ _swap("f3186", "f3186b", Swap(9, Usage.DAILY))
 @power("f3186b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Ranged(10), target=ONE_CREATURE,
        keywords=[Keyword.MARTIAL, Keyword.RELIABLE, Keyword.WEAPON],
-       attack=Attack(STR, vs=REF), requires=_wielding("m5466a0"),
+       attack=Attack(STR, vs=REF), requires=_wielding("w3711"),
        requires_text="wielding the weapon this chain names")
 def f3186b(c: Cast) -> None:
     """Both ends of the weapon land on one roll, so the off-hand dice are
