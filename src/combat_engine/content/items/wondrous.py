@@ -2770,16 +2770,39 @@ def i3441p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.immune_keyword()",),
+    dropped=("Defences.immune_keywords", "c.instinctive(fn=)"),
     requires_text="you must have used a summoning power near the tapestry",
 )
 def i3538p1(c: Cast) -> None:
-    """`c.immune` takes conditions, and charm and fear are keywords: there
-    is no way to say "immune to charm effects". The self-command half is
-    `c.instinctive`, which is exactly "if you give it no order it acts"."""
-    for made in c.companions():
-        c.resist(5, on=made, until=When.ENCOUNTER)
-        c.instinctive(made)
+    """"The summoned creature" is one creature, so this is the newest
+    companion and not every one standing: `c.companions` arrives in order,
+    and the Requirement puts this row's use immediately after the summoning
+    one. Resist with no type is resist all damage, which is the printed
+    line. Paragon numbers are out of scope.
+
+    Re-aimed off `c.immune_keyword()`: `c.immune` takes a `Condition` and
+    charm and fear are `Keyword`s with no condition standing for either, so
+    the missing thing is immunity to a keyword recorded on `Defences` --
+    which is the gap `f2884` and `f3736` already wait on from the asking
+    side, under `Defences.immune_keywords`. One gap, one symbol.
+
+    The self-command half was `c.instinctive(made)` and that is the wrong
+    verb twice over. It **fires the block's own** Instinctive Effect, found
+    through `Companion.ref`, so it answers False for exactly the creatures
+    this clause is about -- the ones that "normally do nothing" print none.
+    And `turns._uncommanded` already runs that effect at the end of the
+    owner's turn for free, so where it did fire it fired a second time and
+    at the wrong moment, the instant the tapestry was activated.
+
+    What the card wants is to **lend** an instinctive effect to a block that
+    prints none, which is `c.instinctive(fn=)`. Writing it here instead
+    would mean rebinding the cast to `Companion.ref` by hand, because
+    `c.command` reads `summon=` off the paying row's header and marks the
+    creature commanded as a side effect -- engine plumbing that
+    `c.instinctive` exists to hold."""
+    mine = c.companions()
+    if mine:
+        c.resist(5, on=mine[-1], until=When.ENCOUNTER)
 
 
 @power(
@@ -3138,12 +3161,17 @@ def i2400x1(c: Cast) -> None:
     keywords=[Keyword.RADIANT],
     trigger="you attack with the weapon most recently sheathed",
     on=Trigger(AttackDeclared, by_me, "you attack"),
-    dropped=("c.deals(once=)",),
+    dropped=("c.deals(once=)", "c.sheathed()"),
 )
 def i2400p1(c: Cast) -> None:
     """`c.deals` changes every swing for a duration and has no spend, so
-    "the next attack" is served by the shortest duration there is. Which
-    weapon was last sheathed is not recorded, as in i2361p1."""
+    "the next attack" is served by the shortest duration there is.
+
+    Two clauses are missing, not one, and only the first was named: which
+    weapon was last sheathed is not recorded either -- `Gear.stowed` is an
+    unordered `set[str]` and no extended rest is modelled -- so the recolour
+    reaches whatever is in hand, as in i2361p1. `c.sheathed()` is the symbol
+    that row already waits on."""
     c.deals(DamageType.RADIANT, on=c.me, until=When.EONT)
 
 

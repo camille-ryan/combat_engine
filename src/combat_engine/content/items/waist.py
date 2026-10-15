@@ -404,12 +404,23 @@ def i654x1(c: Cast) -> None:
 
 
 @power("i3523x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.class_feature()",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.CLASSES.vampire",))
 def i3523x1(c: Cast) -> None:
-    """The regeneration this raises belongs to a class feature the card
-    names in prose, of a class the importer never brought in -- no `cf:`
-    ref in the card and no row behind one. Even given both, `c.regeneration`
-    lays a second, separate heal rather than adding to the feature's."""
+    """The regeneration this raises belongs to a feature of a class this
+    project does not build.
+
+    **Re-pointed off `c.class_feature()`.** This row's own docstring already
+    said "a class the importer never brought in", which is right and is not
+    a `Cast` gap: `chargen.CLASSES` holds 25 classes where the compendium
+    holds 77, and `build._class_features` skips any class outside that set.
+    The parser handles the page fine -- it finds the sections and the
+    headings -- so nothing is broken; the class is simply out of scope, and
+    whether it should be is a decision rather than a verb.
+
+    The second obstacle stands either way and is worth keeping written
+    down: even given the ref, `c.regeneration` lays a second, separate heal
+    rather than adding to an existing feature's number."""
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,

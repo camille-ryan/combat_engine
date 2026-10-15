@@ -115,7 +115,23 @@ R33 = (
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
 #: A class feature named in prose, and another class's feature likewise.
-FEATURE = ("c.class_feature()",)
+#: **Split off `c.class_feature()`, which was three gaps in one name.** That
+#: symbol collected eleven rows tree-wide and no two of these four wanted
+#: the same thing, so it could not go green or red correctly for any:
+#:
+#: * `f3621` and `f3626` name a feature of a class this project does not
+#:   build. `chargen.CLASSES` holds 25 and the compendium holds 77; the ETL
+#:   skips any class not in that set (`build._class_features`' own
+#:   `wanted` gate), so the feature has no row, no ref and no printed name
+#:   in the localisation. The parser is not at fault -- it finds 19
+#:   sections and both headings on that page. Whether the class is in scope
+#:   is a decision, not a verb, which is why this names the decision.
+#: * `f3645` and `f3647` name `cf:barbarian-berserker-f0`, of a class that
+#:   *is* in scope and whose feature row simply is not declared yet. Naming
+#:   the ref is the tree's own convention for that -- `items/waist.i640x1`
+#:   does it one line from a row that had this same wrong symbol.
+UNBUILT_CLASS = ("chargen.CLASSES.vampire",)
+BERSERKER_FORM = ("cf:barbarian-berserker-f0",)
 #: A feature **option** the card names by name and the brief prints in
 #: prose -- a school of magic, a divine domain, a weapon specialisation.
 #: Handing a declared feature over is `c.grant_row` now and picking one
@@ -1453,7 +1469,7 @@ def f3620(c: Cast) -> None:
 
 @power("f3621", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       dropped=FEATURE)
+       dropped=UNBUILT_CLASS)
 def f3621(c: Cast) -> None:
     """Both surge halves play. What is left is the third clause, which
     unwinds a class feature named in prose -- there is nothing to unwind.
@@ -1601,7 +1617,7 @@ def f3625(c: Cast) -> None:
 
 
 @power("f3626", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE,
+       reach=PERSONAL, target=SELF, todo=UNBUILT_CLASS,
        proficiency=("w:holy-symbol", "w:ki-focus"))
 def f3626(c: Cast) -> None:
     """Three class features named in prose, with the surge pool they cost
@@ -1819,7 +1835,7 @@ def f3644(c: Cast) -> None:
 
 
 @power("f3645", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BERSERKER_FORM)
 def f3645(c: Cast) -> None:
     """Berserker Fury is a class feature named in prose, and the benefit
     is nothing but that feature with a day's limit on it."""
@@ -1874,7 +1890,7 @@ def f3646b(c: Cast) -> None:
 
 
 @power("f3647", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=FEATURE)
+       reach=PERSONAL, target=SELF, todo=BERSERKER_FORM)
 def f3647(c: Cast) -> None:
     """"When you enter your Berserker Fury" is a moment a class feature
     named in prose would have to announce."""
