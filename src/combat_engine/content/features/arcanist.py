@@ -575,17 +575,30 @@ def shair_cantrips(c: Cast) -> None:
 # --------------------------------------------------------------------------
 
 
-def _expert(ref: str, first: str, second: str):  # noqa: ANN202
+def _expert(ref: str, first: str, second: str, level: int):  # noqa: ANN202
     """Two skills, +2 each -- the whole of one middle-tier benefit.
 
     The one helper the global rule allows, for a run of rows that genuinely
     share a shape. It takes the two skill names rather than deriving them,
     so each row below still says its own pair out loud.
+
+    **`level` is a parameter because it was a bug as a constant.** This read
+    `level=4` on all six rows, and the page prints `Level 5:` nine
+    characters before the heading these come under. The 4 was the feature's
+    `ord` -- its index among the class's features -- which is exactly the
+    "never derive a number the page prints" rule: `cf:wizard-mage-f4` is the
+    fifth feature, not a fifth-level one, and the two agree nowhere else
+    either -- `cf:wizard-mage-f0` is level 1 and `cf:wizard-mage-f6` is
+    level 10.
+
+    The same tier is printed twice, at two levels, for the first and second
+    school a character took -- `f4sN` at 5 and `f5sN` at 8 -- so the level
+    cannot be a property of the shape at all.
     """
 
     @power(
         ref,
-        level=4,
+        level=level,
         cls="wizard",
         usage=ENCOUNTER,
         action=ActionType.NONE,
@@ -597,9 +610,14 @@ def _expert(ref: str, first: str, second: str):  # noqa: ANN202
         c.bonus(f"skill:{first}", 2, until=When.ENCOUNTER, on=c.me)
         c.bonus(f"skill:{second}", 2, until=When.ENCOUNTER, on=c.me)
 
-    row.__name__ = "mage_expert_" + ref.rsplit("-", 1)[-1]
+    slot = ref.rsplit("-", 1)[-1]
+    row.__name__ = "mage_expert_" + slot
+    # Which parent feature chose the school this benefit belongs to. `f4sN`
+    # is the first school a character took, `f5sN` the second -- same six
+    # benefits, same shape, a different choice and a different level.
+    chose = "cf:wizard-mage-f0" if slot.startswith("f4") else "cf:wizard-mage-f3"
     row.__doc__ = (
-        f"The middle tier of the school chosen for `cf:wizard-mage-f0`: "
+        f"The middle tier of the school chosen for `{chose}`: "
         f"+2 to {first} and +2 to {second}.\n\n"
         f"    A skill bonus is a `skill:<name>` modifier, which is what the\n"
         f"    50 content files that lay one already write and what\n"
@@ -608,12 +626,27 @@ def _expert(ref: str, first: str, second: str):  # noqa: ANN202
     return row
 
 
-mage_expert_s0 = _expert("cf:wizard-mage-f4s0", "bluff", "diplomacy")
-mage_expert_s1 = _expert("cf:wizard-mage-f4s1", "endurance", "intimidate")
-mage_expert_s2 = _expert("cf:wizard-mage-f4s2", "bluff", "stealth")
-mage_expert_s3 = _expert("cf:wizard-mage-f4s3", "athletics", "endurance")
-mage_expert_s4 = _expert("cf:wizard-mage-f4s4", "intimidate", "stealth")
-mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate")
+mage_expert_s0 = _expert("cf:wizard-mage-f4s0", "bluff", "diplomacy", 5)
+mage_expert_s1 = _expert("cf:wizard-mage-f4s1", "endurance", "intimidate", 5)
+mage_expert_s2 = _expert("cf:wizard-mage-f4s2", "bluff", "stealth", 5)
+mage_expert_s3 = _expert("cf:wizard-mage-f4s3", "athletics", "endurance", 5)
+mage_expert_s4 = _expert("cf:wizard-mage-f4s4", "intimidate", "stealth", 5)
+mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate", 5)
+
+# **The same tier again, for the second school, at level 8.** Three refs and
+# not six: the compendium carries `f5s0`, `f5s1` and `f5s2` and no more,
+# which matches `f3` -- the second-school Apprentice tier -- carrying three
+# as well. So the pattern is the *page's*, not a truncation here, and the
+# three it prints are the three written. If `f5s3`-`f5s5` ever appear in a
+# rebuilt database, `symbols.py` will not notice and nothing else will
+# either; `coverage.py` is what would.
+#
+# Each pays the identical benefit to its `f4sN` twin, because the card is the
+# same card -- the only difference is which of the character's two schools it
+# reads, and that choice is chargen's, not this row's.
+mage_expert2_s0 = _expert("cf:wizard-mage-f5s0", "bluff", "diplomacy", 8)
+mage_expert2_s1 = _expert("cf:wizard-mage-f5s1", "endurance", "intimidate", 8)
+mage_expert2_s2 = _expert("cf:wizard-mage-f5s2", "bluff", "stealth", 8)
 
 
 # --------------------------------------------------------------------------
@@ -652,19 +685,42 @@ def _my_school_hit(word: Keyword):  # noqa: ANN202
     return landed
 
 
-@power(
-    "cf:wizard-mage-f0s2",
-    level=1,
-    cls="wizard",
-    usage=AT_WILL,
-    action=ActionType.FREE,
-    reach=PERSONAL,
-    target=NO_TARGET,
-    keywords=[Keyword.ARCANE],
-    trigger=_ILLUSION_HIT,
-    on=Trigger(Hit, _my_school_hit(Keyword.ILLUSION), _ILLUSION_HIT),
-)
-def mage_apprentice_s2(c: Cast) -> None:
+def _apprentice_illusion(ref: str, level: int):  # noqa: ANN202
+    """One card, two refs: the illusion benefit at both levels it prints.
+
+    `f0s2` is the school chosen at 1st level and `f3s2` the one chosen at
+    4th, and the compendium prints the **same benefit text** under both --
+    six of the mage's eighteen sub-options are printed twice this way. So
+    this is the `_expert` arrangement rather than a copy: a second
+    registration of one body, with the level the page gives each.
+
+    A character cannot hold both, because `cf:wizard-mage-f3` prints
+    "different from the one you chose at 1st level". Nothing here enforces
+    that -- it is chargen's, and chargen does not model the second school
+    at all yet, which is the half of #581 that is not content work.
+    """
+
+    @power(
+        ref,
+        level=level,
+        cls="wizard",
+        usage=AT_WILL,
+        action=ActionType.FREE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+        trigger=_ILLUSION_HIT,
+        on=Trigger(Hit, _my_school_hit(Keyword.ILLUSION), _ILLUSION_HIT),
+    )
+    def row(c: Cast) -> None:
+        _illusion_penalty(c)
+
+    row.__name__ = "mage_apprentice_" + ref.rsplit("-", 1)[-1]
+    row.__doc__ = _illusion_penalty.__doc__
+    return row
+
+
+def _illusion_penalty(c: Cast) -> None:
     """A -2 on the next swing the target takes **at the caster**, not on its
     next swing at anybody.
 
@@ -688,6 +744,10 @@ def mage_apprentice_s2(c: Cast) -> None:
     me = c.me
     c.penalty("attack", 2, on=victim, until=When.EONT, once=True,
               when=lambda ctx: ctx.get("target") == me)
+
+
+mage_apprentice_s2 = _apprentice_illusion("cf:wizard-mage-f0s2", 1)
+mage_apprentice_f3s2 = _apprentice_illusion("cf:wizard-mage-f3s2", 4)
 
 
 @power(
@@ -810,17 +870,32 @@ def mage_apprentice_s5(c: Cast) -> None:
     c.ignore_resistance(dtype=DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
 
 
-@power(
-    "cf:wizard-mage-f0s0",
-    level=1,
-    cls="wizard",
-    usage=ENCOUNTER,
-    action=ActionType.NONE,
-    reach=PERSONAL,
-    target=NO_TARGET,
-    keywords=[Keyword.ARCANE],
-)
-def mage_apprentice_s0(c: Cast) -> None:
+def _apprentice_forced(ref: str, level: int):  # noqa: ANN202
+    """One card, two refs -- see `_apprentice_illusion` for why.
+
+    The enchantment benefit, printed at 1st level for the first school and
+    at 4th for the second.
+    """
+
+    @power(
+        ref,
+        level=level,
+        cls="wizard",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+    )
+    def row(c: Cast) -> None:
+        _forced_squares(c)
+
+    row.__name__ = "mage_apprentice_" + ref.rsplit("-", 1)[-1]
+    row.__doc__ = _forced_squares.__doc__
+    return row
+
+
+def _forced_squares(c: Cast) -> None:
     """Two more squares of forced movement, on this caster's own powers.
 
     `c.extend_every` already lengthened every move of a *kind*; `c.shift`
@@ -849,6 +924,10 @@ def mage_apprentice_s0(c: Cast) -> None:
     for kind in ("push", "pull", "slide"):
         c.extend_every(kind, 2, on=c.me, until=When.ENCOUNTER,
                        when=arcane_enchantment)
+
+
+mage_apprentice_s0 = _apprentice_forced("cf:wizard-mage-f0s0", 1)
+mage_apprentice_f3s0 = _apprentice_forced("cf:wizard-mage-f3s0", 4)
 
 
 # --------------------------------------------------------------------------

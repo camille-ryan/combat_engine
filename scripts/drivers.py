@@ -7749,10 +7749,18 @@ def mage_school_riders(out: Result) -> None:
     ENCHANTMENT = "p451"
 
     # ---- the illusion tier: a -2 on the next swing AT THE CASTER --------
-    ref = "cf:wizard-mage-f0s2"
-    if ref not in REGISTRY:
-        out.skip(f"{ref} is not declared")
-    else:
+    #
+    # **Both refs, because the card is printed twice.** `f0s2` is the school
+    # chosen at 1st level and `f3s2` the one chosen at 4th, and the
+    # compendium prints the same benefit under both. They are one body
+    # registered twice in `content/features/arcanist.py`, so this asserts
+    # the twin pays the same thing rather than trusting that it must --
+    # `audit` reports `f3s2` UNUSED exactly as it does `f0s2`, for the same
+    # reason this rule exists at all.
+    for ref in ("cf:wizard-mage-f0s2", "cf:wizard-mage-f3s2"):
+        if ref not in REGISTRY:
+            out.skip(f"{ref} is not declared")
+            continue
         world, caster, _ = _board(ref)
         foe = sorted(enemies(world, caster))[0]
 
@@ -7765,13 +7773,14 @@ def mage_school_riders(out: Result) -> None:
         world.bus.emit(Hit(attacker=caster, target=foe, power=NEITHER,
                            critical=False))
         out.that(held() == 0,
-                 "and nothing after a wizard power with neither school keyword"
-                 " -- the negative control",
+                 f"{ref}: nothing after a wizard power with neither school"
+                 f" keyword -- the negative control",
                  f"a hit with {NEITHER} laid {held()} modifier(s)")
         world.bus.emit(Hit(attacker=caster, target=foe, power=ILLUSION,
                            critical=False))
         out.that(held() == 1,
-                 "a hit with an illusion power lays the penalty on the target",
+                 f"{ref}: a hit with an illusion power lays the penalty on"
+                 f" the target",
                  f"it laid {held()}")
 
         # **The difference, not the total.** `audit:setup` lays its own
@@ -7784,8 +7793,8 @@ def mage_school_riders(out: Result) -> None:
         at_caster = mods.total("attack", {"target": caster})
         at_other = mods.total("attack", {"target": foe})
         out.that(at_caster - at_other == -2,
-                 "the penalty is worth exactly 2 against the caster and"
-                 " nothing against anybody else",
+                 f"{ref}: the penalty is worth exactly 2 against the caster"
+                 f" and nothing against anybody else",
                  f"against the caster {at_caster}, against another"
                  f" {at_other}, difference {at_caster - at_other}")
 
