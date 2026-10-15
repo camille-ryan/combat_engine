@@ -201,10 +201,18 @@ def _category(document: str, name: str) -> str:
     Verified rather than assumed -- the first version of this note claimed
     three feats needed the guard, and the real figure is zero.
 
-    Returned raw. One feat is tagged `Familiar, Vistani Bloodline` -- two
-    categories in one bracket -- and splitting here would commit every
-    reader to one way of reading that; `prereq`'s `unparsed` column makes
-    the same choice for the same reason.
+    Returned raw, and that is the right call for a reason the old note
+    understated. **Two feats carry more than one category in one bracket**,
+    comma-separated -- `f2025` has two and `f3389` has three -- so
+    splitting on the comma here would commit every reader to one way of
+    reading them; `prereq`'s `unparsed` column makes the same choice for
+    the same reason.
+
+    The old note said "one feat" and named the pair. Both halves of that
+    were wrong: the count is two, and one of the categories is an invented
+    proper noun rather than a mechanic, so it may not sit in a tracked file
+    at all. Named by ref, and counted from the column rather than from
+    memory -- `select ref, category from feat where category like '%,%'`.
     """
     found = _TITLE.search(document)
     if not found:
