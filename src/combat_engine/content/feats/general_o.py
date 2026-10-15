@@ -91,6 +91,7 @@ from combat_engine.engine import (
     Usage,
     When,
     Window,
+    World,
     about_me,
     get,
     power,
@@ -1986,10 +1987,21 @@ def f3159(c: Cast) -> None:
     c.lend_augment("p1450", 1, clause, on=c.me, until=When.ENCOUNTER)
 
 
+def _used_p6188(world: World, me: int, ev: PowerUsed) -> bool:
+    """The racial power this feat answers, by ref.
+
+    Spelled out rather than taken from a shared helper: the ref is the
+    whole of what was missing here, and a reader looking for why this row
+    was blocked should find it in one place.
+    """
+    return ev.actor == me and ev.power == "p6188"
+
+
 @power("f3160", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       trigger="you use the racial power the spec could not resolve",
-       todo=("spec.monster_ref()",))
+       trigger="you use p6188 while you have at least 1 power point",
+       on=Trigger(PowerUsed, _used_p6188,
+                  "you use p6188 while you have at least 1 power point"))
 def f3160(c: Cast) -> None:
     """The Athletics substitution is a check rather than a fight; the
     Will bonus is the combat half, and it is gated on still holding a
@@ -2007,7 +2019,13 @@ def f3160(c: Cast) -> None:
     something unrelated, and leaving the trigger armed would have had the row
     waiting on a creature nobody playing it will ever be. One spelling for two
     unrelated needs. `f1541` carried the same mis-aimed marker and has the
-    same correction."""
+    same correction.
+
+    **Armed again, because the ref resolves now.** The spec printed
+    `x_m5139a3` when that note was written; it reads `p6188` today -- a
+    `r37` racial power, in the `power` table and declared -- so the
+    trigger has something real to watch and the body below was already
+    whole. `c.points()` is the power-point read the card gates on."""
     if c.points() >= 1:
         c.bonus(WILL, 2, on=c.me, until=When.EONT)
 

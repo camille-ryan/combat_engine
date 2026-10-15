@@ -6005,6 +6005,88 @@ def regeneration_resumed(out: Result) -> None:
              f"decisions asked: {asked}")
 
 
+def racial_power_riders(out: Result) -> None:
+    """Two feats that answer one racial power, and the ref resolves now.
+
+    `f1541` and `f3160` both sat on `spec.monster_ref()` with docstrings
+    saying the spec printed `x_m5139a3` -- the ETL's mark for a ref it
+    could not resolve -- so there was "no power to ask whether it is
+    active, and nothing to mirror". The spec reads `p6188` today: a
+    declared `r37` racial power. **The marker outlived its reason**, which
+    is why both are driven here rather than trusted.
+
+    The history is worth one line: that marker was once spelled
+    `m5139a3`, a bare monster ref, so `todo.py` watched for it -- and a
+    level-13 wave declared an `m5139a3` that is a demon brute's temporary
+    hit points, nothing to do with either feat. One spelling, two
+    unrelated needs.
+
+    **Both controls are the point.** `f1541` mirrors "the same resistance
+    that the power grants you", read rather than restated, so with nothing
+    standing there is nothing to mirror and it must lay no aura at all.
+    `f3160`'s Will bonus is gated on still holding a power point when the
+    racial power goes off, so at zero points it must pay nothing.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content.feats import general_j, general_o
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, PowerPoints, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import PowerUsed
+    from combat_engine.engine.types import Defense
+
+    out.that("p6188" in REGISTRY,
+             "p6188 is declared, which is what both markers said it was not")
+
+    def armed(ref: str):  # noqa: ANN202
+        world, me, _ = _board()
+        known = world.need(me, Powers)
+        for r in (ref, "p6188"):
+            if r not in known.known:
+                known.known.append(r)
+        return world, me, Cast(world=world, me=me, ref=ref)
+
+    def auras(world) -> int:  # noqa: ANN001
+        return len([z for _i, z in world.zones.all() if z.aura])
+
+    # ---- f1541: mirror the racial resistance onto adjacent allies ----
+    world, me, c = armed("f1541")
+    general_j.f1541(c)
+    Cast(world=world, me=me, ref="p6188").resist(5)
+    before = auras(world)
+    world.bus.emit(PowerUsed(actor=me, power="p6188", targets=[]))
+    out.that(auras(world) == before + 1,
+             "f1541 lays an aura when the racial power goes off, and an aura"
+             " rather than a modifier because adjacency changes as people"
+             " walk -- `f1542` beside it is the same shape",
+             f"{before} -> {auras(world)}")
+
+    world, me, c = armed("f1541")
+    general_j.f1541(c)
+    before = auras(world)
+    world.bus.emit(PowerUsed(actor=me, power="p6188", targets=[]))
+    out.that(auras(world) == before,
+             "and lays NOTHING when there is no resistance standing to"
+             " mirror -- the control, and the one a row that restated the"
+             " printed 5 instead of reading it would fail",
+             f"{before} -> {auras(world)}")
+
+    # ---- f3160: the Will bonus, gated on a power point ---------------
+    for points, want in ((1, 2), (0, 0)):
+        world, me, c = armed("f3160")
+        pool = world.get(me, PowerPoints) or world.add(me, PowerPoints())
+        pool.points = points
+        c.trigger = PowerUsed(actor=me, power="p6188", targets=[])
+        general_o.f3160(c)
+        mods = world.get(me, Mods)
+        got = mods.total(Defense.WILL, {}) if mods else 0
+        out.that(got == want,
+                 f"f3160 pays {want} to Will on {points} power point(s)"
+                 + ("" if points else " -- the control: the card gates the"
+                                      " bonus on still holding one"),
+                 f"Will modifier {got}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -9338,6 +9420,9 @@ DRIVERS = {
                   "a creature loses a way of moving, and gets it back"),
     "sealed_space": (sealed_space,
                      "an enemy cannot enter this creature's space by any means"),
+    "racial_power_riders": (racial_power_riders,
+                            "two feats answering one racial power, whose ref"
+                            " resolves now"),
     "regeneration_resumed": (regeneration_resumed,
                              "a suppressed regeneration switched back on"),
     "printed_regeneration": (printed_regeneration,

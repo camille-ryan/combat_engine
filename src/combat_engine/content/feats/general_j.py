@@ -1142,26 +1142,49 @@ def f1537(c: Cast) -> None:
 
 
 @power("f1541", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("spec.monster_ref()",))
+       reach=PERSONAL, target=SELF)
 def f1541(c: Cast) -> None:
     """Mirrors onto adjacent allies "the same resistance that the power
     grants you", while that power is active.
 
-    Reading the amount back is not the binding problem: `c.resistances(on=me)`
-    returns what is standing, by type. What the row names is `x_m5139a3`,
-    which the ETL could not resolve and which is declared nowhere -- the same
-    missing row `f2415` and `f3160` wait on. There is no power to ask whether
-    it is active, and nothing to mirror.
+    **The marker is gone because the ref now resolves.** This row's old
+    note said the spec printed `x_m5139a3` -- the ETL's mark for a ref it
+    could not resolve -- and that nothing could be asked. The spec reads
+    `p6188` today: a `r37` racial power, in the `power` table and declared.
+    So there *is* a power to ask about, and the row is writable with what
+    was already here.
 
-    **The marker used to be spelled `m5139a3`, and that was a trap that
-    sprang.** A bare monster ref is a real symbol, so `todo.py` watched for
-    that row to arrive -- and a level-13 wave declared an `m5139a3` that is a
-    demon brute's "gains 40 temporary hit points when first bloodied",
-    nothing whatever to do with this feat. The check went red and reported the
-    row finishable. One spelling served two unrelated needs, which is the
-    fault this repo keeps paying for. `spec.monster_ref()` is what this
-    actually waits on: a spec naming a row by a ref the ETL could not
-    resolve, which is the group thirteen other rows already sit in."""
+    The marker's history is worth keeping, because it is the fault this
+    repo keeps paying for. It was once spelled `m5139a3`, a bare monster
+    ref -- a real symbol, so `todo.py` watched for that row and a level-13
+    wave duly declared an `m5139a3` that is a demon brute's "gains 40
+    temporary hit points when first bloodied". The check went red and
+    called this row finishable. One spelling, two unrelated needs.
+
+    **An aura of 1, not a modifier on whoever is beside you now** --
+    `f1542` directly below is the same shape for the same reason, and
+    adjacency changes as people walk. `until=When.EONT` is the racial
+    power's own clock ("until the end of your next turn"), so the mirror
+    ends when the thing it mirrors does.
+
+    The amount is **read rather than restated**: `c.resistances` returns
+    what is standing by type, so the two cannot disagree when the racial
+    power's own scaling changes at 11th and 21st level -- which it does.
+    """
+    me = c.me
+
+    def mirror(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p6188":
+            return
+        standing = c.resistances(on=me)
+        if not standing:
+            return
+        ring = c.aura(1, label=c.ref, until=When.EONT, on=me)
+        for dtype, amount in sorted(standing.items(), key=lambda kv: kv[0].value):
+            if amount > 0:
+                c.resist_in(ring, amount, dtype, side="ally")
+
+    c.watch(PowerUsed, mirror, on=me, until=When.ENCOUNTER, label=c.ref)
 
 
 @power("f1542", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
