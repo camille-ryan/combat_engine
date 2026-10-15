@@ -265,3 +265,105 @@ shape Requirement.
   the driver is the only evidence. Its positive assertion passes by luck one
   time in twenty — `join` rolls a d20 — so `rng.loaded` fixes the die and
   the negative control carries the claim.
+
+---
+
+# The overnight session, 2026-10-15
+
+Sixteen commits from `3bc12d5` to `a9cb878`, certified by one wide sweep:
+**all 20 instruments clean at `f4d86c2`**. Heroic blocked rows 1,318 →
+1,314, which is the least interesting number here.
+
+## What the session was actually worth
+
+The plan above put "build, densest symbol first" fifth and the ETL at 50
+rows — a rounding error. That ordering was right about the counts and
+wrong about the **kind** of thing a small symbol holds up. Opening three
+of them turned up **nine faults in rows and instruments that reported
+clean**:
+
+| | |
+|---|---|
+| `i1663p1` summoned `m324` — **six times the printed hit points** (82 against 13) plus a rider the card does not grant | content |
+| `i1663p2` searched for the wrong ref *and* filtered the wrong usage; it could not fire either way | content |
+| `i3263p1`'s docstring had its card backwards: it said a summon takes no turn, the card says it takes one on your count | content |
+| `p14193`'s marker named an *item* gap on a *theme* row, and its stated reason was false — `p14193b` existed with no content row | content |
+| `p14193` laid its form with `label` and no `name=`, so `query.in_form` could never see it — the #477 state, still in the tree | content |
+| `m6481a7` tracked its form in a **module-level `set[int]`** that outlives the world, so a creature drawing the same id later began winged with no fly speed | content |
+| six ref patterns in `scripts/` could not match `m<id>c<n>a<n>`, so `audit` graded 23 rows **on a fighter** and `cards.py` refused them outright | instruments |
+| `audit` called a sibling of a defective row *silent* when it is *refused* | instruments |
+| the nightly skipped with **nothing running**: `pgrep -f "scripts/check\.py"` matched a shell that merely mentioned the path | instruments |
+
+The last three are the ones to take forward. **Three of this session's
+nine findings were in the instruments, not the content** — and each had
+been quietly wrong for as long as the thing it measures existed.
+
+## Four things I got wrong, and how each was caught
+
+Worth more than the fixes, because the catching is repeatable and the
+mistakes are the kind that recur.
+
+1. **A green verdict from a blind instrument.** `audit` said *21 of 21
+   rows fire and do something* before and after the regex fix. The
+   sentence did not move, which is exactly why it was worth nothing
+   before: it was grading a fighter. Caught because an authoring agent
+   read the regex rather than the verdict.
+
+2. **A probe that waits for the outcome it is testing for.** The first
+   `printed_regeneration` driver advanced the clock "until hit points
+   move" and reported the engine broken. Hit points always move — one
+   round later, because the clause suppresses exactly one tick. Rewritten
+   to read per own-turn.
+
+3. **A convention inferred from one directory.** Two commit messages
+   assert that `AT_WILL` is the convention for a NONE-action trait
+   "without exception". **2,326 rows** use `ENCOUNTER`. Corrected in
+   `content/CLAUDE.md`, where a reader will find it, rather than only in a
+   commit nobody re-reads.
+
+4. **A probe that missed a duplicate.** Chains written into `p992` for
+   `f3188`, `f2356` and `f2714` all passed — because the probe put the
+   feat in `Powers.known` without *arming* it, so the feat's own rider
+   never ran. All three are already written as riders, so the chains paid
+   every clause twice; `f2714` would have given a critical on 18-20.
+   Reverted before committing.
+
+And one plant that **stayed green**, which is a finding too: I had claimed
+`blocks_entry` must be asked before the `overhead or ghost` waivers.
+Moving it after left the driver green, correctly, because both branches
+return independently. The comment now says the order is a style choice.
+
+## The verdict on markers, sharpened
+
+The earlier appendix said a `mis-marked` verdict reliably means the symbol
+is wrong and unreliably means the rows are writable. Three more cases, and
+the pattern is narrower than that:
+
+* **`c.blocks_entry()`** — real, 8 rows, all 8 written. The clause is
+  *entirely about the waivers*: an occupied square is already closed, so
+  a row written as `pass` would have audited identically. `m5625a0` had a
+  hand-written `KNOWN_SILENT` excuse arguing exactly that, and it was
+  wrong — collision does not cover a phasing enemy.
+* **`c.lose_mode()`** — real, 5 rows, 2 finished and 3 left with one
+  honest clause each. One of the five was *mis-marked in the opposite
+  direction*: it wanted `c.mode`, which exists.
+* **`c.forgo_damage()`** — **not a verb at all**, and one symbol over two
+  gaps. Split 3/3 (#606), and reading the four adjacent `forgo` symbols
+  showed **8 of 10 rows in that family name a specific power** and are
+  #550 work with nothing missing.
+
+So: before building a verb for a dense symbol, read every card it carries
+*and* the symbols next to it. Two of the three I opened did not want a
+verb.
+
+## Still owed
+
+* **#607** blocks `f993`'s clause: `doctrine.benefits`' `heals()`
+  shortcut skips the no-attack-line guard, so **274 attack rows read as
+  support**. The content is written and driven; it is reverted because
+  landing it means re-recording four fixtures for the wrong reason.
+* **#605** `PowerRecharged` on both paths — `m1032a1` and `m6180a3` want
+  it, and it costs a 7-fixture re-record, so it is its own commit.
+* **#603** `m509c0` belongs in the associate table, not `monster`.
+* **#602** needs nothing further for play; a reader for the stored
+  suppression outside `_lay_regeneration` is the open half.
