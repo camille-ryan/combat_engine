@@ -92,6 +92,7 @@ from combat_engine.engine import (
     SavingThrow,
     SecondWind,
     Size,
+    SkillCheck,
     SurgeSpent,
     Swap,
     Trigger,
@@ -1990,12 +1991,52 @@ def f3778(c: Cast) -> None:
 
 
 @power("f3779", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("chargen.armor_proficiency()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("chargen.armor_proficiency()",))
 def f3779(c: Cast) -> None:
-    """Shield proficiency and the check penalty for wearing one are both
-    settled when the character is built, and a shield is a different
-    column from a weapon: `ClassLine.shield` is a number, so there is
-    nowhere for a shield a character merely *may* carry to be written."""
+    """The check penalty is waived; the proficiency half is not.
+
+    **Half of this was marked unwritable and is not.** The old note said
+    the penalty "is settled when the character is built", and it is not:
+    `skills._armour_penalty` computes it per check off `Gear.armour` and
+    `Gear.shield` -- #452 gave it a reader, and before that "hide,
+    chainmail, plate and a heavy shield were all free". So the shield's
+    share is a live number, and a live number can be given back.
+
+    Given back rather than suppressed, because `_armour_penalty` consults
+    no modifier and adding a waiver key there would be an engine change for
+    one feat. `SkillCheck` is announced **before** its modifiers are
+    totalled -- `skills.check` says so outright, "a row firing in that
+    window is heard before the number is settled" -- so `Window.BEFORE`
+    plus `ev.bonus` is the printed sentence exactly. `artificer_b.f3034`
+    is the same shape on the same event.
+
+    Only a **heavy** shield costs anything: `SHIELD_CHECK` is `-2` for
+    heavy and `0` for light, so a light shield waives to no change, which
+    is right rather than a special case.
+
+    What stays dropped is proficiency itself. A shield is a different
+    column from a weapon -- `ClassLine.shield` is a number -- so there is
+    nowhere for a shield a character merely *may* carry to be written.
+    """
+    from combat_engine.chargen import SHIELD_CHECK
+    from combat_engine.engine.skills import ENCUMBERED
+
+    me = c.me
+
+    def waive(ev: SkillCheck) -> None:
+        if ev.actor != me or ev.skill.lower() not in ENCUMBERED:
+            return
+        gear = c.world.get(me, Gear)
+        if gear is None or not gear.shield:
+            return
+        # The table is negative and `skills.modifier` adds it, so giving
+        # it back is a subtraction.
+        ev.bonus -= SHIELD_CHECK.get(
+            "heavy" if gear.shield == 2 else "light", 0)
+
+    c.watch(SkillCheck, waive, until=When.ENCOUNTER, on=me, label=c.ref,
+            window=Window.BEFORE)
 
 
 @power("f3780", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

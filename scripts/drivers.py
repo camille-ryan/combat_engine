@@ -6004,6 +6004,83 @@ def band_stays_in_tier(out: Result) -> None:
              f"levels {solo}")
 
 
+def shield_penalty_waived(out: Result) -> None:
+    """"You ignore the check penalty for wearing a shield." `f3779`.
+
+    Half of this feat was marked unwritable on the grounds that the
+    penalty "is settled when the character is built". It is not:
+    `skills._armour_penalty` computes it per check, and #452 is the commit
+    that gave it a reader -- before which "hide, chainmail, plate and a
+    heavy shield were all free". So the shield's share is a live number
+    and can be handed back on the way past.
+
+    **Three controls, and each one is a different way to get this wrong.**
+    A *light* shield costs nothing (`SHIELD_CHECK` is 0 for light, -2 for
+    heavy), so waiving it must change nothing -- a feat that added a flat
+    2 would pass the heavy case and fail here. An *unencumbered* skill is
+    never penalised, so the waiver must not reach it; `ENCUMBERED` is four
+    skills and Diplomacy is not one. And the armour's own share must
+    survive: the card waives the shield and says nothing about plate.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.chargen import ARMOUR_CHECK, SHIELD_CHECK
+    from combat_engine.engine import skills
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+
+    def armed(armour: str, shield: int, *, feat: bool):  # noqa: ANN202
+        world, me, _ = _board()
+        gear = world.get(me, Gear) or world.add(me, Gear())
+        gear.armour, gear.shield = armour, shield
+        if feat:
+            REGISTRY["f3779"].body(Cast(world=world, me=me, ref="f3779"))
+        return world, me
+
+    def rolled(world, me, skill: str) -> int:  # noqa: ANN001
+        world.rng.loaded = 10
+        return skills.check(world, me, skill).bonus
+
+    # The number the waiver is about, read off the table rather than typed.
+    heavy = SHIELD_CHECK.get("heavy", 0)
+    out.that(heavy < 0,
+             "a heavy shield carries a check penalty at all -- the premise,"
+             " and 0 here would make every assertion below vacuous",
+             f"SHIELD_CHECK heavy = {heavy}")
+
+    bare = rolled(*armed("cloth", 2, feat=False), "stealth")
+    with_feat = rolled(*armed("cloth", 2, feat=True), "stealth")
+    out.that(with_feat - bare == -heavy,
+             "the feat gives back exactly the heavy shield's penalty on an"
+             " encumbered skill",
+             f"{bare} -> {with_feat}, expected +{-heavy}")
+
+    # control: a light shield costs nothing, so there is nothing to waive
+    light_bare = rolled(*armed("cloth", 1, feat=False), "stealth")
+    light_feat = rolled(*armed("cloth", 1, feat=True), "stealth")
+    out.that(light_feat == light_bare,
+             "a LIGHT shield waives to no change -- the control a flat +2"
+             " would fail, since the table prices light at 0",
+             f"{light_bare} -> {light_feat}")
+
+    # control: an unencumbered skill was never penalised
+    dip_bare = rolled(*armed("cloth", 2, feat=False), "diplomacy")
+    dip_feat = rolled(*armed("cloth", 2, feat=True), "diplomacy")
+    out.that(dip_feat == dip_bare,
+             "and an unencumbered skill is untouched -- Diplomacy is not"
+             " harder in a shield and the waiver must not reach it",
+             f"{dip_bare} -> {dip_feat}")
+
+    # control: the armour's own share survives the shield's waiver
+    plate = ARMOUR_CHECK.get("plate", 0)
+    pl_bare = rolled(*armed("plate", 2, feat=False), "stealth")
+    pl_feat = rolled(*armed("plate", 2, feat=True), "stealth")
+    out.that(plate < 0 and pl_feat - pl_bare == -heavy,
+             "in plate AND a heavy shield only the shield is given back --"
+             " the card waives one of the two and says nothing about armour",
+             f"{pl_bare} -> {pl_feat}, plate still costs {plate}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -10154,6 +10231,9 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
+    "shield_penalty_waived": (shield_penalty_waived,
+                              "f3779 gives back a heavy shield's check"
+                              " penalty, and only that"),
     "band_stays_in_tier": (band_stays_in_tier,
                            "the three-level band does not cross a tier"
                            " boundary -- Camille, 2026-10-15"),
