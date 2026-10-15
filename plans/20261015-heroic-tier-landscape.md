@@ -7,11 +7,17 @@ is the previous session's and its appendices still hold.
 ## The number
 
 ```
-1,276 unfinished of 23,059 declared  (5.5%)
-1,095 of them heroic, across 704 symbols
-478 of those symbols are singletons
-33 symbols have 5 or more rows; the densest has 9
+1,273 unfinished of 23,059 declared  (5.5%)
+1,093 of them heroic, across 707 symbols
+479 of those symbols are singletons
+30 symbols have 5 or more rows; the densest has 9
 ```
+
+**Heroic now means levels 1-10 and nothing above.** Camille's call,
+2026-10-15: a step change at the tier boundary makes level+3 monsters right
+*within* heroic and wrong across into paragon, so a heroic fight never fields
+a paragon creature. `loader.pick` clamps the band to the tier, and every
+paragon row defers wholesale rather than counting as near-term work.
 
 **That shape is the finding.** It is not a handful of blocked families
 waiting on a few verbs — it is a tail. Any plan that reads "drain the dense
@@ -98,3 +104,37 @@ defence" was 28 rows describing text the importer *added*.
 * **Never `git checkout <file>` to revert a plant.** Done once this session
   and it threw away a rewritten check along with the plant. Copy the file
   aside first. There is a memory about exactly this and I still did it.
+
+
+## Added at the end of the same session
+
+Four more things landed after the first draft, and two of them reverse things
+written above.
+
+* **`compendium.attack_defence` is not a retirement, it is a drop.** Camille:
+  *"If an attack says '+X vs. BLANK' it's malformed."* The 26 rows I had
+  retired as already-finished are `defect=` instead, 86 rows across 83
+  entries, and `etl/build._malformed_attack` writes `monster.defect` so the
+  67 entries with no row written are caught too. 150 on the page, 85
+  imported, all 85 marked. **The retirement was mine and it was wrong**:
+  knowing *why* a line is junk does not make the row writable.
+* **#616 landed** — one `AREA_OR_CLOSE` set, and four of the five copies were
+  missing `"wall"`.
+* **#614 is three mechanisms, not one, and nothing is built.** Two designs
+  built and backed out; see the issue and the
+  `read-every-card-before-building-a-verb` memory. The split is by *when* the
+  alteration lands — standing option, one-shot before use, triggered on a use
+  already in flight — and the last of those cannot be a modifier at all,
+  because targeting precedes the body.
+* **`types.py` was two bugs, not a backlog.** The "48 errors in `content/`"
+  figure in an earlier note was an artifact of a subset invocation nothing
+  else runs. `shaman.py` really was 201 and is now 0 (a `TypedDict` for its
+  `**TRAIT` splat). `--bless` was deleting every baseline entry outside the
+  run; fixed. #618.
+
+**One honest note for whoever reads this next.** The last third of this
+session produced four self-inflicted errors — a baseline wiped, a count
+measured off a filtered report, and two speculative designs built before the
+cards were read. All four were caught, none shipped, but the rate was
+climbing and that is the signal to stop rather than the thing to push
+through. The commits are small and separately verified for that reason.
