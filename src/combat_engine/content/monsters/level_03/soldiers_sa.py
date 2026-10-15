@@ -1969,13 +1969,14 @@ _M3525_FELLED = "it drops to 0 hit points"
     target=NO_TARGET,
     trigger=_M3525_FELLED,
     on=Trigger(Dropped, about_me, _M3525_FELLED),
-    dropped=("compendium.attack_defence",),
 )
 def m3525a2(c: Cast) -> None:
-    """The bite on the way down is the whole of what plays. Its attack line
-    extracted as a bonus against no defence at all -- "+8 vs or (whichever is
-    lower)" -- which is a compendium defect and not a defence to invent, so
-    the swing is the creature's own basic attack instead. #360."""
+    """The bite on the way down is the whole of the card.
+
+    Using the creature's own basic attack was right, and for a better reason
+    than the old marker gave: the "+8 vs  or  (whichever is lower)" above it
+    is pasted in rather than a defence the extraction lost (#612), so there
+    was never a line of this card's own to roll."""
     _death_throe(c)
 
 
@@ -3843,14 +3844,15 @@ def m857a0(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=Target(side="other_ally", everyone=True),
-    dropped=("compendium.attack_defence",),
 )
 def m857a1(c: Cast) -> None:
-    """The rally plays and the attack half does not. Its line extracted as
-    "+8 vs ;" -- a bonus against no defence at all, which is a compendium
-    defect and not a defence to invent, and the 2d10+3 has nothing to be
-    rolled against. #360. What is left is the printed Effect, and it is the
-    reason this is filed as a minor action."""
+    """A minor action that shifts the allies in a burst, and nothing else.
+
+    There is no attack half. The old marker read "+8 vs ; 2d10+3" as a lost
+    defence, and its own last sentence had the answer -- a minor action that
+    rallies allies does not roll 2d10+3 at them. The line is pasted (#612),
+    and `m1522a1` in `level_10/controllers_sa.py` is what taking one of these
+    seriously costs: it damaged its own side at will."""
     mate = c.target
     if mate is not None:
         c.shift(3, who=mate)

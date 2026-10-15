@@ -751,13 +751,13 @@ def m1510a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger="it is first bloodied",
-    dropped=("compendium.attack_defence",),
 )
 def m1510a1(c: Cast) -> None:
-    """The swing is the whole of what the card does; the attack line above it
-    extracted as a bonus against no defence at all, which is a compendium
-    defect and not a defence to invent. Both modifiers belong to the handed-over
-    blow and are taken back when it is over."""
+    """The swing is the whole of what the card does, and the two modifiers
+    belong to the handed-over blow and are taken back when it is over.
+
+    The bonus-against-nothing line above it is pasted rather than mangled
+    (#612), so the marker has gone."""
     near = _press(c)
     if not near:
         return
@@ -813,12 +813,13 @@ def m1527a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("compendium.attack_defence",),
 )
 def m1527a1(c: Cast) -> None:
-    """Two swings, which plays. The attack line printed above them came out of
-    the compendium with a bonus and no defence, so it cannot be declared and
-    the row leans on what the creature is already armed with."""
+    """Two swings, leaning on what the creature is already armed with --
+    which is what "makes two claw attacks" means, and the whole card.
+
+    The bonus-and-no-defence line above them is pasted (#612). Nothing was
+    ever missing here."""
     _two_basics(c, separate=False)
 
 

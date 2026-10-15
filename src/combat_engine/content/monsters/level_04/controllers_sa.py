@@ -1227,7 +1227,6 @@ def m3546a3(c: Cast) -> None:
     reach=CloseBurst(5),
     target=Target("ally", 1, label="the creature or one of its allies"),
     keywords=[Keyword.HEALING],
-    dropped=("compendium.attack_defence",),
 )
 def m3546a4(c: Cast) -> None:
     """The compendium prints an attack line with no defence behind it (#360),
@@ -1470,13 +1469,15 @@ _M3559_ALLY_SLIPPED = "an ally uses m3559a4"
     target=NO_TARGET,
     trigger=_M3559_ALLY_SLIPPED,
     on=Trigger(PowerUsed, _ally_used("m3559a4"), _M3559_ALLY_SLIPPED),
-    dropped=("compendium.attack_defence",),
 )
 def m3559a3(c: Cast) -> None:
-    """The compendium prints an attack line with no defence behind it (#360);
-    the Effect is what the card pays out and it is paid. The ally is read off
-    the triggering event rather than off `ev.targets`, which on a `NO_TARGET`
-    reaction names nobody."""
+    """The Effect is what the card pays out and it is paid -- all of it.
+
+    A reaction that lets an ally shift and swing has no attack of its own,
+    and the line the compendium prints above it is pasted in rather than
+    missing a defence (#612), so the marker has gone. The ally is read off
+    the triggering event rather than off `ev.targets`, which on a
+    `NO_TARGET` reaction names nobody."""
     mate = _triggering_enemy(c)
     if mate is not None and mate in c.allies():
         _let_it_swing(c, mate, step=2)

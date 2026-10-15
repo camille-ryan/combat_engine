@@ -1444,7 +1444,6 @@ def m1680a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
-    dropped=("compendium.attack_defence",),
 )
 def m1680a1(c: Cast) -> None:
     """A flyby: half its speed either side of **one melee basic attack**.

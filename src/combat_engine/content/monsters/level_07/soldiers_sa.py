@@ -811,15 +811,15 @@ def m1981a0(c: Cast) -> None:
         side="enemy", count=1, label="creature grabbed by it",
         relation=Relation.GRABBED_BY,
     ),
-    dropped=("compendium.attack_defence",),
 )
 def m1981a1(c: Cast) -> None:
-    """The printed line is two damage fragments the extraction never
-    resolved; the clear half of it -- automatic damage, no attack roll --
-    is what is written. The other half extracted as "+12 vs" and no defence
-    at all, which is a defence to fix upstream rather than invent here -- the
-    same defect `m3525a2` names. It had no marker of its own while the target
-    line was carrying one."""
+    """Automatic damage against what it is holding, no attack roll -- and the
+    card says so in those words.
+
+    So the "+12 vs " line could never have been this card's: you cannot have
+    both an attack roll and "no attack roll required" on one power. It is
+    pasted (#612), which settles what the old marker called two unresolved
+    fragments."""
     c.flat(c.roll("2d6") + 4)
 
 

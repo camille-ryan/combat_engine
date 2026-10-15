@@ -5702,6 +5702,162 @@ def named_in_prose(out: Result) -> None:
                  f"dazed={got}")
 
 
+def blank_defence_is_boilerplate(out: Result) -> None:
+    """An attack line with no defence is a **pasted** line, not a lost word.
+
+    28 rows carried `compendium.attack_defence`, each saying the attack line
+    above its effect "extracted against no defence, which is a compendium
+    defect rather than a number to guess". The defence really is absent from
+    the page -- no word and no `<img>` standing in for one -- so that much
+    was right. What was wrong is calling it the row's own attack.
+
+    **This is the measurement the retirement rests on**, and it is here
+    rather than only on #612 so that it is checked on every run. A real
+    card's damage varies with its creature; these draw from a pool of
+    nineteen expressions, `2d6+5` alone covering 28 of them on creatures
+    from level 7 to level 11. Named-defence lines across the same corpus use
+    over a thousand distinct expressions.
+
+    So the thresholds below are deliberately loose -- the real gap is a
+    factor of five, and asserting the exact figures would make this rule a
+    tripwire for every compendium copy rather than for the property. What
+    must stay true is that blank-defence damage is drawn from a small pool
+    and named-defence damage is not.
+
+    **It goes red if somebody "fixes" the ETL by inventing defences**, which
+    is the failure this is pointed at: the 28 rows would then declare attacks
+    nobody printed, and the pool would stop being small.
+
+    The compendium is not committed, so this skips -- loudly -- without it.
+    """
+    import re
+    import sqlite3
+    from collections import Counter
+    from html import unescape
+
+    from combat_engine.db import SOURCE
+
+    if not SOURCE.exists():
+        out.skip("compendium.sqlite is not on this machine, and it is never"
+                 " committed; nothing to measure")
+        return
+
+    comp = sqlite3.connect(f"file:{SOURCE}?mode=ro", uri=True)
+    line = re.compile(r"\+(\d+)\s+vs\.?\s*([A-Za-z]*)\s*(or)?[^;<]*;\s*([^.<]*?)damage\.")
+    blank: Counter[str] = Counter()
+    named: Counter[str] = Counter()
+    for (txt,) in comp.execute("SELECT Txt FROM Monster WHERE Txt IS NOT NULL"):
+        for m in line.finditer(unescape(txt)):
+            dice = re.sub(r"\s+", "", m.group(4))
+            # `or` is the leftover of "vs <blank> or <blank> (whichever is
+            # lower)" -- both words gone, the conjunction left behind. It is
+            # a blank, not a defence named "or".
+            (blank if m.group(2) in ("", "or") else named)[dice] += 1
+
+    n_blank, n_named = sum(blank.values()), sum(named.values())
+    if n_blank < 20 or n_named < 200:
+        out.skip(f"too few attack lines to measure a distribution"
+                 f" ({n_blank} blank, {n_named} named)")
+        return
+
+    def top_share(c: Counter[str], total: int) -> float:
+        return sum(n for _, n in c.most_common(8)) / total
+
+    blank_share, named_share = top_share(blank, n_blank), top_share(named, n_named)
+    out.that(len(blank) < len(named) / 10,
+             "blank-defence lines use far fewer distinct damage expressions"
+             " than named ones, which a real card cannot do",
+             f"{len(blank)} distinct over {n_blank} lines against"
+             f" {len(named)} over {n_named}")
+    out.that(blank_share > 0.6,
+             "most blank-defence lines share a handful of expressions --"
+             " the pasted pool",
+             f"top 8 cover {blank_share:.0%}")
+    out.that(named_share < 0.3,
+             "and named-defence lines do NOT -- the control, without which"
+             " the figure above could just be how all 4e damage looks",
+             f"top 8 cover {named_share:.0%}")
+    out.that(blank_share > named_share * 2,
+             "the two distributions are different in kind, not degree",
+             f"{blank_share:.0%} against {named_share:.0%}")
+
+    # And the rows that were marked: none of them declares an attack, which
+    # is what makes retiring the marker a no-op in play rather than a change
+    # to what any row does.
+    # **`import combat_engine.content` or `REGISTRY` is empty here.** It was,
+    # and the assertion below passed on nothing: `not declaring` is true of an
+    # empty list, so a planted `attack=` on a still-marked row stayed green.
+    # Found by the plant, which is the only thing that could have found it --
+    # the sentence reads identically either way. `scripts/CLAUDE.md` calls
+    # this a check that cannot fail, and the floor on `marked` is what stops
+    # it coming back.
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.dsl import REGISTRY
+
+    marked = [
+        ref for ref, p in REGISTRY.items()
+        if any("attack_defence" in str(w)
+               for w in (getattr(p, "unfinished", None) or ()))
+    ]
+    out.that(len(marked) >= 3,
+             "there are still rows on this marker to ask about -- the floor,"
+             " without which the next assertion passes on an empty set",
+             f"{len(marked)} marked")
+    declaring = [r for r in marked if getattr(REGISTRY[r], "attack", None)]
+    out.that(not declaring,
+             "and none of them declares a header attack, so the blank line"
+             " was never being used",
+             f"{len(marked)} still marked, {len(declaring)} declare one:"
+             f" {declaring}")
+
+    # ---- the signature, which is what the retirement actually rests on ---
+    #
+    # The distribution above says the *population* is pasted. This says which
+    # line is, one row at a time, and it is the stronger claim: a pasted line
+    # leaves its damage slot **empty**, so the text reads `... vs ; . Effect`
+    # or `... damage.. Effect` -- a semicolon followed by a bare full stop, or
+    # a doubled one. A genuinely mangled line has its damage intact and the
+    # rider continues the same sentence.
+    #
+    # **`m4244a2` is the control and it is the reason this is not a blanket
+    # rule.** Its line is `Close burst 1; +12 vs  or  (whichever is lower);
+    # 1d8+5 damage, and the target is dazed and slowed (save ends both)` --
+    # damage present, rider attached, no bare period. That one really did
+    # lose two defence names, so it keeps its `defect=` and its entry drops
+    # under #600. Without this assertion, the retirement would have taken it
+    # too, and a creature would have been deleted on the strength of a
+    # statistic about everybody else.
+    from combat_engine.db import localisation
+
+    loc = localisation()
+    sig = re.compile(r";\s*\.\s|damage\.\.")
+
+    def line_of(ref: str) -> str:
+        name = (loc.get(ref) or {}).get("name") or ""
+        mid = re.match(r"m(\d+)a\d+", ref)
+        if not name or not mid:
+            return ""
+        got = comp.execute("SELECT Txt FROM Monster WHERE id=?",
+                           (mid.group(1),)).fetchone()
+        if not got:
+            return ""
+        found = re.search(
+            r"<b>\s*" + re.escape(name) + r"\s*</b>(.*?)</p>\s*<p[^>]*>(.*?)</p>",
+            unescape(got[0]), re.S | re.I)
+        return (re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", found.group(2))).strip()
+                if found else "")
+
+    kept = line_of("m4244a2")
+    out.that(bool(kept) and not sig.search(kept),
+             "m4244a2 -- the one row whose defence really was lost -- does"
+             " NOT carry the paste signature, which is why it keeps"
+             " `defect=` while 22 others lost their marker",
+             kept[:90])
+    out.that(bool(kept) and "1d8+5 damage, and the target is dazed" in kept,
+             "and its damage and rider are intact on the same sentence, which"
+             " is what a mangled line looks like next to a pasted one")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -9849,6 +10005,9 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
+    "blank_defence_is_boilerplate": (blank_defence_is_boilerplate,
+                                     "an attack line with no defence is a"
+                                     " pasted line, not a lost word"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,

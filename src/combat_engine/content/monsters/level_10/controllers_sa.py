@@ -889,7 +889,6 @@ def m1522a0(c: Cast) -> None:
     reach=Ranged(10),
     target=UpTo(2, side="ally"),
     keywords=[Keyword.TELEPORTATION, Keyword.RANGED],
-    dropped=("compendium.attack_defence",),
 )
 def m1522a1(c: Cast) -> None:
     """A teleport swap between two allies. **It was damaging them.**
@@ -4303,8 +4302,11 @@ def m6070a5(c: Cast) -> None:
     trigger="an attack hits it while it is bloodied",
     on=Trigger(
         Hit,
+        # One lookup, narrowed -- the `is not None` guard and the read were
+        # two separate `world.get` calls, so nothing tied them together.
         lambda world, me, ev: (
-            ev.target == me and world.get(me, Health) is not None and world.get(me, Health).bloodied
+            ev.target == me
+            and bool((hurt := world.get(me, Health)) and hurt.bloodied)
         ),
         "an attack hits it while it is bloodied",
     ),

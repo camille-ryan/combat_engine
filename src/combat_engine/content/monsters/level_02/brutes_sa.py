@@ -485,14 +485,15 @@ def m4717a0(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     no_provoke=True,
-    dropped=("compendium.attack_defence",),
 )
 def m4717a1(c: Cast) -> None:
-    """The row's own printed attack line has **no defence** -- "+3 vs or
-    (whichever is lower)" -- which is a defect in the compendium rather than
-    anything to invent a defence for (#360). The content of the power is the
-    two rays below, and each of those prints its own defence, so the row plays
-    and only the garbled header line is missing.
+    """The content of the power is the two rays below, each printing its own
+    defence -- and that is the whole of it.
+
+    The "+3 vs or (whichever is lower)" above them was marked as a compendium
+    defect (#360). It is a **pasted** line rather than a lost word, which
+    #612 measures; the leftover "or" is the conjunction of a pair whose two
+    defence names were never there. Nothing is missing.
 
     Two branches with two defences, which is what `attack_alt` holds, except
     that the choice is a die rather than the user's -- so it is rolled here.
