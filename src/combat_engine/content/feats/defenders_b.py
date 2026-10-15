@@ -405,7 +405,7 @@ def _used_my_flurry(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
 
 @power("f3171", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.forgo_damage()",))
+       todo=("c.pre_empt(damage_of=)",))
 def f3171(c: Cast) -> None:
     """The feature is `FLURRY` and no longer the hold, and stripping the
     target's necrotic resistance is writable now -- `c.resistances` reads

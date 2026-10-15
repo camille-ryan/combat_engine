@@ -123,7 +123,7 @@ _riders("f990", {"p971": _shift_after, "p2105": _shift_after,
 
 _riders("f993", {"p4541": _temp_hp("con_mod"), "p2248": _intimidating},
         used={"p4369": _companion_steps},
-        dropped=("c.forgo_damage()",))
+        dropped=("c.pre_empt(damage_of=)",))
 
 _riders("f991", {}, missed={"p917": _second_shot},
         used={"p970": _no_long_range})

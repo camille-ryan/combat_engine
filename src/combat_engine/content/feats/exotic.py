@@ -99,7 +99,7 @@ def _swap(ref: str, card: str):  # noqa: ANN202
 
 
 @power("f959", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.forgo_damage()",),
+       reach=PERSONAL, target=SELF, todo=("c.pre_empt(damage_of=)",),
        proficiency=("w3661",))
 def f959(c: Cast) -> None:
     """The weapon exists now and `chargen` deals it. What is left is the

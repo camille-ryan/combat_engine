@@ -81,11 +81,25 @@ from combat_engine.engine.query import squares
 
 from .styles import martial_encounter_or_daily, used_one_of
 
-#: "Forgo one die of that damage". The payout **is** announced -- the
-#: rider pays through `c.damage(detail="cf:ranger-f1")` and `DamageRolled`
-#: is a `Decision` carrying that detail -- but it arrives as one number
-#: with the rider's modifiers folded into it, so one die has no price.
-FORGO = ("c.forgo_damage()",)
+#: "Forgo one die of that damage", and **this symbol used to be
+#: `c.forgo_damage()`, which was one symbol over two unrelated gaps.** #606.
+#:
+#: The old note said the payout arrives as one number with the rider's
+#: modifiers folded in, so one die has no price. That is true of the
+#: *event* and not of the payment: `features.pay_extra` asks
+#: `c.dice_for(label, dice, {"target": on})` **before** rolling, and its own
+#: docstring says the die is a parameter "precisely so that a feat raising
+#: it is read by whoever pays" -- four feats raise d6s to d8s through it. A
+#: feat lowering it by one die is the same hook from the other side, and
+#: `c.may()` is the "you can".
+#:
+#: So nothing is missing from `Cast`; what is missing is the hook in
+#: `pay_extra` plus a ruling on **which** feat gets the one die when a
+#: character holds two of these. These are unbracketed, where the printed
+#: rule is "any number apply", and there is only ever one die -- so the
+#: `c.declare(category, ...)` machinery #554 built does not cover it. See
+#: #606.
+FORGO = ("features.pay_extra(forgo=)",)
 
 
 def _holding(c: Cast, *groups: str, prop: str = "") -> bool:
