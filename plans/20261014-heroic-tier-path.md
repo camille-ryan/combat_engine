@@ -37,6 +37,26 @@ Another 229 sit on `probable`, and at the repo's own measured rate another
 Call it **~420 of 1,242 rows (34%) plausibly unblocked without writing any
 new engine code.**
 
+> **Revised after the first symbol, 2026-10-14 (`6dfe37c`).** That estimate
+> is too high and the correction belongs here rather than in a commit nobody
+> re-reads. `c.reach_of(power=)` was `mis-marked` with 6 rows behind it and
+> yielded **1**: the symbol named no verb at all, its recorded replacement
+> was the *writer* where the rows needed a reader, and the six wanted three
+> different facilities. Five were re-marked to their real gaps rather than
+> written.
+>
+> So treat the per-symbol row count as an **upper bound on rows, not a
+> forecast**. A `mis-marked` verdict says "this symbol is wrong", which is
+> not the same as "these rows can be written". If the 1-of-6 rate holds the
+> pass is worth tens of rows rather than hundreds.
+>
+> It is still the right first step, for three reasons that survive the
+> revision: it is cheap, it replaces markers that can **never** go green
+> with ones that can, and it is how `p9501`'s live bug surfaced — a ring
+> that had always included the creature it was centred on, so the row
+> re-attacked whatever it had just missed. That bug was invisible to every
+> sweep and only showed up because a driver would not go green.
+
 Two honest qualifications:
 
 * `probable` is not `exists`. `scripts/CLAUDE.md` records that triage's
