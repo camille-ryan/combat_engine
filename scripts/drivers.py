@@ -5722,6 +5722,201 @@ def lost_mode(out: Result) -> None:
              f"{before} -> {dict(moves.modes)}")
 
 
+def recharge_announced(out: Result) -> None:
+    """A spent row coming back says so, on both of the two paths. #605.
+
+    `triggers.py` carried the argument for this in a comment: there was no
+    `PowerRecharged` event, `m6180a3` wanted one, and *"it wants adding on
+    both paths at once"* -- a recharge happens either by the printed die at
+    the start of a turn (`actions.recharge`) or by a printed condition that
+    is an event (`Triggers`). Minting it on one path is how a row written
+    against it is right in half the game and silently wrong in the other.
+
+    **`rolled` carries which path, and the first draft got it wrong.** The
+    die is rolled *before* the condition is asked, and deliberately: this
+    module's contract is that every draw lands in `Rng.rolls` in order, so
+    short-circuiting on a state would drop a draw a fixture has recorded.
+    So a row printing **both** rolls the die even when the condition is
+    what brings it back -- and reporting that die as the reason announces a
+    roll that **missed** as the roll that succeeded.
+
+    The invariant is therefore the assertion worth making: every announced
+    `rolled` is either **0** -- the condition did it -- or **at least the
+    printed recharge**. Never a number below it.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content import loader
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import PowerRecharged
+    from combat_engine.engine.types import Usage
+
+    rows = [
+        (ref, p) for ref, p in sorted(REGISTRY.items())
+        if p.usage is Usage.RECHARGE and p.recharge > 0 and ref.startswith("m")
+        and loader.usable(ref.split("a")[0])
+    ]
+    if not rows:
+        out.skip("no usable monster row prints a recharge die")
+        return
+
+    def rolls(ref: str, stock: str, boards: int = 40) -> tuple[int, list[int]]:
+        """How many times it came back, and what each event announced."""
+        restored, announced = 0, []
+        for seed in range(1, boards + 1):
+            world, _me, _ = _board("m145a0", seed)
+            eid = loader.spawn(world, stock, (12, 12))
+            known = world.need(eid, Powers)
+            if ref not in known.known:
+                known.known.append(ref)
+            known.note_use(ref, 1)
+            world.bus.on(PowerRecharged, lambda ev: announced.append(ev.rolled))
+            actions.recharge(world, eid)
+            restored += ref not in known.spent
+        return restored, announced
+
+    ref, power = rows[0]
+    restored, announced = rolls(ref, ref.split("a")[0])
+    out.that(restored > 0, f"{ref} comes back at least once over 40 boards",
+             f"{restored} restores")
+    out.that(len(announced) == restored,
+             "and every single restore announces a PowerRecharged -- one"
+             " each, no more and no fewer",
+             f"{restored} restores, {len(announced)} events")
+    out.that(all(r == 0 or r >= power.recharge for r in announced),
+             f"every announced `rolled` is 0 or at least the printed"
+             f" {power.recharge} -- never a die that missed",
+             f"saw {sorted(set(announced))}, printed recharge"
+             f" {power.recharge}")
+
+    # **The negative control: a row that stays spent says nothing.** Without
+    # it "every restore announces one" passes against a verb that announces
+    # on every attempt.
+    quiet = 0
+    for seed in range(1, 41):
+        world, _me, _ = _board("m145a0", seed)
+        eid = loader.spawn(world, ref.split("a")[0], (12, 12))
+        known = world.need(eid, Powers)
+        if ref not in known.known:
+            known.known.append(ref)
+        known.note_use(ref, 1)
+        heard: list[int] = []
+        world.bus.on(
+            PowerRecharged,
+            lambda ev, into=heard: into.append(ev.rolled),
+        )
+        actions.recharge(world, eid)
+        if ref in known.spent and heard:
+            quiet += 1
+    out.that(quiet == 0,
+             "and a row that is still spent afterwards announced nothing --"
+             " the control that says this fires on the restore and not on"
+             " the attempt",
+             f"{quiet} boards announced a recharge that did not happen")
+
+    # The condition path, forced: the one row printing both a die and a
+    # condition, with the condition made true, must announce `rolled=0`.
+    both = [
+        (r, p) for r, p in sorted(REGISTRY.items())
+        if p.usage is Usage.RECHARGE and p.recharge > 0
+        and p.recharge_while is not None and loader.usable(r.split("a")[0])
+    ]
+    if not both:
+        out.skip("no usable row prints both a recharge die and a condition")
+        return
+    ref, power = both[0]
+    was = power.recharge_while
+    try:
+        # Forced rather than waited for: the printed state does not arise on
+        # a bare probe board, and the point being asserted is which number
+        # the event carries, not whether that state can happen.
+        object.__setattr__(power, "recharge_while", lambda _w, _e: True)
+        seen: list[int] = []
+        for seed in range(1, 13):
+            world, _me, _ = _board("m145a0", seed)
+            eid = loader.spawn(world, ref.split("a")[0], (12, 12))
+            known = world.need(eid, Powers)
+            if ref not in known.known:
+                known.known.append(ref)
+            known.note_use(ref, 1)
+            world.bus.on(PowerRecharged, lambda ev: seen.append(ev.rolled))
+            actions.recharge(world, eid)
+    finally:
+        object.__setattr__(power, "recharge_while", was)
+    out.that(bool(seen) and all(r == 0 or r >= power.recharge for r in seen),
+             f"{ref} prints a die AND a condition: with the condition true,"
+             f" every announced `rolled` is 0 or a die that actually made"
+             f" the printed {power.recharge} -- the assertion a `back`"
+             f" instead of a `by_die` fails",
+             f"saw {sorted(set(seen))} over {len(seen)} restores")
+
+    # ---- the SECOND path, which the first draft of this driver missed ----
+    #
+    # Dropping the emit from `triggers._recharge` and leaving
+    # `actions.recharge` alone left every assertion above green. The whole
+    # argument for this commit is "both paths at once", so a driver that
+    # covers one of them is the shape of mistake it exists to prevent.
+    #
+    # 184 usable monster rows declare a recharge *trigger* -- "Recharge when
+    # first bloodied" -- and those never go through the die at all.
+    triggered = [
+        (r, p) for r, p in sorted(REGISTRY.items())
+        if getattr(p, "recharges", ()) and r.startswith("m")
+        and loader.usable(r.split("a")[0])
+    ]
+    if not triggered:
+        out.skip("no usable monster row declares a recharge trigger")
+        return
+    # **Tried until one fires, not the first one.** Most of these printed
+    # conditions want a board -- "when an adjacent creature becomes
+    # bloodied" needs somebody adjacent -- and taking `triggered[0]` left
+    # this half a `skip`, which is the same hole as not writing it.
+    fired = ()
+    for ref, power in triggered[:40]:
+        for trig in power.recharges:
+            world, _me, _ = _board("m145a0", 1)
+            if world.encounter is None:
+                continue
+            holder = loader.spawn(world, ref.split("a")[0], (12, 12))
+            world.encounter.join(holder)
+            known = world.need(holder, Powers)
+            if ref not in known.known:
+                known.known.append(ref)
+            known.note_use(ref, 1)
+            heard: list[int] = []
+            world.bus.on(
+                PowerRecharged, lambda ev, into=heard: into.append(ev.rolled)
+            )
+            # Handed straight to the handler rather than fabricated onto the
+            # bus: what is asserted is that a restore announces, not how the
+            # bus routes to it.
+            fields = getattr(trig.event, "__dataclass_fields__", {})
+            try:
+                made = trig.event(actor=holder) if "actor" in fields else trig.event()
+                world.encounter.triggers._recharge(made)
+            except Exception:
+                # This event class wants more state than a bare build gives.
+                continue
+            if ref not in known.spent:
+                fired = (ref, trig.event.__name__, list(heard))
+                break
+        if fired:
+            break
+    if not fired:
+        out.skip("no recharge condition in the first 40 rows is met by a"
+                 " bare event, so this path cannot be posed on this board")
+    else:
+        got_ref, event_name, heard = fired
+        out.that(len(heard) == 1 and heard[0] == 0,
+                 f"the condition path announces too, with `rolled` 0 --"
+                 f" {got_ref} came back on a {event_name} and no die was"
+                 f" rolled. **This is the assertion that was missing**: a"
+                 f" plant dropping the emit from `triggers._recharge` alone"
+                 f" left every other rule here green",
+                 f"heard {heard}")
+
+
 def once_spent(out: Result) -> None:
     """A `once=` hold is spent by a handler that only rewrites its event.
 
@@ -9049,6 +9244,8 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "recharge_announced": (recharge_announced,
+                           "a spent row coming back says so, on both paths"),
     "lost_mode": (lost_mode,
                   "a creature loses a way of moving, and gets it back"),
     "sealed_space": (sealed_space,

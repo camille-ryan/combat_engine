@@ -104,6 +104,7 @@ from combat_engine.engine import (
     Health,
     Keyword,
     Melee,
+    PowerRecharged,
     Ranged,
     Relation,
     Size,
@@ -253,7 +254,7 @@ def m1032a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("Defences.insubstantial", "events.PowerRecharged"),
+    dropped=("Defences.insubstantial",),
 )
 def m1032a1(c: Cast) -> None:
     """The attack, and two of the three things it costs.
@@ -262,21 +263,33 @@ def m1032a1(c: Cast) -> None:
     movement mode away and puts it back, and phasing *is* a mode --
     `c.phasing` lays it as one -- so the same verb says both halves.
 
-    **The clock is the dropped part and it is not a `When`.** The card says
-    "until it recharges this ability", and there is no
-    `PowerRecharged` event to end the loss on: `triggers.py` says so in as
-    many words, names `m6180a3` as the row that wants it, and records that
-    it has to be minted on both paths at once. Filed as #605. `When.ENCOUNTER` is written
-    here instead, which is the *longer* of the two readings -- a recharge-6
-    power comes back in about six rounds and a fight is five to eight, so
-    the loss will usually outlast what the card says by a round or two
-    rather than being absent. Named rather than silent.
+    **The clock is exact now and used to be an approximation.** The card
+    says "until it recharges this ability"; there was no moment to end on,
+    so `When.ENCOUNTER` stood in as the longer of two wrong readings and
+    the marker said so. #605 minted `PowerRecharged` on both recharge
+    paths, so the losses are laid for the encounter and **ended by the
+    event**, which is what the sentence says.
 
-    Still dropped as well: `Defences` carries no insubstantial column, the
-    same half `m3437a2` and `m3440a4` name.
+    Gated on the actor *and* the ref: the event is global, and two of this
+    creature on one board is an ordinary encounter.
+
+    Still dropped: `Defences` carries no insubstantial column, the same
+    half `m3437a2` and `m3440a4` name.
     """
-    c.lose_mode("fly", until=When.ENCOUNTER)
-    c.lose_mode("phasing", until=When.ENCOUNTER)
+    me = c.me
+    lost = [
+        c.lose_mode("fly", until=When.ENCOUNTER),
+        c.lose_mode("phasing", until=When.ENCOUNTER),
+    ]
+
+    def recharged(ev: PowerRecharged) -> None:
+        if ev.actor != me or ev.ref != c.ref:
+            return
+        for held in lost:
+            if held is not None:
+                c.world.effects.end(held, "it recharged")
+
+    c.watch(PowerRecharged, recharged, until=When.ENCOUNTER, on=me, label=c.ref)
     if c.strike():
         c.hit()
 

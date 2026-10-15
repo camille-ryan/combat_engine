@@ -106,6 +106,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Mod,
+    PowerRecharged,
     Ranged,
     Relation,
     SkillCheck,
@@ -4686,21 +4687,28 @@ def m6180a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON, Keyword.MELEE],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("1d4", 3),
-    dropped=("events.PowerRecharged",),
+    recharge_when=Trigger(
+        PowerRecharged,
+        lambda world, me, ev: ev.actor == me and ev.ref == "m6180a2",
+        "when m6180a2 recharges",
+    ),
 )
 def m6180a3(c: Cast) -> None:
-    """The blow and the prone are exact. The printed recharge is "when
-    `m6180a2` recharges", and **nothing announces a recharge**:
-    `actions.recharge` calls `Powers.restore` and emits no event, so neither
-    `recharge_when` -- which wants one to subscribe to -- nor a body watcher
-    can hear it. `recharge_while` is the other half of that field and reads
-    a *state*: "is `m6180a2` available" is true of a row that was never
-    spent at all, which would hand this one back on a turn the card does
-    not.
+    """The blow, the prone, and now the printed recharge.
 
-    So with `recharge=0`, which is the honest die for a card that prints
-    none, this row is spent once and does not come back. That is the
-    dropped clause, not a die that is quietly doing the job."""
+    **This is the row `triggers.py` named as wanting a `PowerRecharged`
+    event, and it has one.** The old note here was right about why it could
+    not be written: `actions.recharge` called `Powers.restore` and announced
+    nothing, so `recharge_when` -- which needs an event to subscribe to --
+    had none, and `recharge_while` is the wrong half of the field because it
+    reads a *state*. "Is `m6180a2` available" is true of a row that was
+    never spent at all, which would hand this one back on a turn the card
+    does not. #605.
+
+    Gated on **both** the actor and the ref: the event is global, so
+    `ev.ref == "m6180a2"` alone would hand this row back when a *different*
+    creature's copy of that ability recharged, and two of these are a
+    perfectly ordinary encounter."""
     if c.strike():
         c.hit()
         c.prone()

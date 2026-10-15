@@ -666,6 +666,34 @@ class Bloodied(Event):
 
 
 @dataclass
+class PowerRecharged(Event):
+    """A spent row came back, on its die or on its printed condition.
+
+    **Nothing announced it, and `triggers.py` said so in its own comment**:
+    "there is no `PowerRecharged` event yet -- `m6180a3` wants one and
+    carries the marker for it -- and minting one here would put a new event
+    in every fixture's stream for a reason unrelated to this change. It
+    wants adding on both paths at once, which is its own commit." This is
+    that commit. #605.
+
+    **Both paths, and they had to move together.** A recharge happens two
+    ways -- `actions.recharge` rolls the printed die at the start of a turn,
+    and `triggers.Triggers` restores a row whose printed condition is an
+    event rather than a die. Minting this on one and not the other is how a
+    row written against it would be right in one half of the game and
+    silently wrong in the other.
+
+    `rolled` is the die that brought it back, or 0 when the printed
+    condition did -- which is also how a reader tells the two apart without
+    a second field for it.
+    """
+
+    actor: int
+    ref: str
+    rolled: int = 0
+
+
+@dataclass
 class Summoned(Event):
     """A creature arrived on the board because a power put it there.
 

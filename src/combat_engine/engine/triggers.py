@@ -222,13 +222,17 @@ class Triggers:
                     continue
                 for trig in p.recharges:
                     if isinstance(ev, trig.event) and trig.when(self.world, eid, ev):
-                        # **Silently, as `actions.recharge` does.** There is no
-                        # `PowerRecharged` event yet -- `m6180a3` wants one and
-                        # carries the marker for it -- and minting one here
-                        # would put a new event in every fixture's stream for a
-                        # reason unrelated to this change. It wants adding on
-                        # both paths at once, which is its own commit.
+                        # **Announced now, and on both paths at once**, which
+                        # is what the comment here used to say this wanted.
+                        # `rolled=0` because no die brought it back -- the
+                        # printed condition did, and that zero is how a
+                        # reader tells the two paths apart. #605.
                         known.restore(ref)
+                        from .events import PowerRecharged
+
+                        self.world.bus.emit(
+                            PowerRecharged(actor=eid, ref=ref, rolled=0)
+                        )
                         break
 
     def disarm(self) -> None:

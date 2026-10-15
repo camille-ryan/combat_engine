@@ -1547,8 +1547,26 @@ def recharge(world: World, actor: int) -> None:
         # order, so short-circuiting on a state that happens to be true would
         # drop a draw a fixture has already recorded. Asking the state first
         # would have re-recorded every replay fixture holding a recharge row.
-        back = p.recharge > 0 and world.rng.roll("1d6").total >= p.recharge
+        rolled = world.rng.roll("1d6").total if p.recharge > 0 else 0
+        by_die = p.recharge > 0 and rolled >= p.recharge
+        back = by_die
         if not back and p.recharge_while is not None:
             back = p.recharge_while(world, actor)
         if back:
             known.restore(ref)
+            # **Announced, on both paths.** A row whose printed clause ends
+            # "until it recharges this ability" had no moment to end on --
+            # `m1032a1` is the case and there is no `When` for it. #605.
+            #
+            # **`by_die` and not `back`**, which the first draft had: a row
+            # printing both a die and a condition rolls the die either way
+            # (the ordering above is deliberate, so a fixture's recorded
+            # draws stay in order), so reporting `rolled` whenever anything
+            # restored the row announced a die that had **missed** as the
+            # reason it came back. Driven over 59 boards: the field showed
+            # 3, 4, 5 and 6 for a row that needs a 6.
+            from .events import PowerRecharged
+
+            world.bus.emit(
+                PowerRecharged(actor=actor, ref=ref, rolled=rolled if by_die else 0)
+            )

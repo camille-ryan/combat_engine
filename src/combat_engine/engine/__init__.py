@@ -106,6 +106,7 @@ from .events import (
     MoveStart,
     Note,
     OpportunityWindow,
+    PowerRecharged,
     PowerResolved,
     PowerUsed,
     RelationCleared,
