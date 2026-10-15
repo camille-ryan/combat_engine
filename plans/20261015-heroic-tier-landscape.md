@@ -171,6 +171,22 @@ other first.** If three rows on one symbol give three different reasons, the
 symbol is the bug. If they give the same reason and name different adjacent
 facilities, the marker is right and the gap is real.
 
+**It does not automate, and I checked.** Built it as a `triage.py
+--agreement` mode scoring vocabulary overlap between a symbol's docstrings,
+and withdrew it: two of the three symbols confirmed accurate by hand scored
+**0.000**, the same as the flattened ones, and the one that scored 0.673 did
+so because its eight docstrings come from a single `_leash` helper. The
+reason it cannot work is the reason the judgement is worth making — an
+accurate symbol's rows each name a *different* adjacent facility, which is
+low overlap too. Same failure as the `spec.*`/`etl.*` check withdrawn on
+#608 for flagging 69 of 73 rows.
+
+One thing the attempt did surface before it was withdrawn, and it stands on
+its own because the cards were read: **`c.as_melee(ref=)`'s five rows are
+#614's mechanism**, so that issue is 12 heroic rows rather than 5 — the
+densest real gap in the tier — and three of the twelve trigger on `f1028`,
+which is itself one of the twelve. Build order is not free.
+
 The head is now 28 symbols at 5+ rows, and the top of it is the accurate
 ones. Which means the cheap wins from re-pointing are largely spent, and what
 is left is building: `c.race_option()` and the two `chargen.*` nines are a
