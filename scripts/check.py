@@ -23,6 +23,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -214,7 +215,25 @@ def main() -> int:
         ]
     if args.only:
         keep = {n.strip() for n in args.only.split(",")}
+        # **A name that matches nothing is a typo, said so.** `--only lint`
+        # -- the instrument is called `ruff` -- left `wanted` empty and the
+        # run died on `max() iterable argument is empty` eight lines below,
+        # which reads like a crash in the suite rather than a mistyped
+        # argument. Every name is checked against `CHECKS`, not against
+        # `wanted`, so asking for a paused or slow check by name says
+        # "excluded by this invocation" instead of "no such thing".
+        unknown = sorted(keep - {c.name for c in CHECKS})
+        if unknown:
+            known = ", ".join(sorted(c.name for c in CHECKS))
+            print(f"no instrument named {', '.join(unknown)}. "
+                  f"Known: {known}", file=sys.stderr)
+            return 2
         wanted = [c for c in wanted if c.name in keep]
+        if not wanted:
+            excluded = ", ".join(sorted(keep))
+            print(f"{excluded}: known, but excluded by this invocation"
+                  f" -- paused, or filtered out by --fast", file=sys.stderr)
+            return 2
     if args.list:
         for c in wanted:
             print(f"  {c.name:9} {'(slow) ' if c.heavy else '       '}{c.catches}")
