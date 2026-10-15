@@ -1121,7 +1121,6 @@ def m3438a1(c: Cast) -> None:
         conditions=frozenset({Condition.HELPLESS, Condition.UNCONSCIOUS}),
     ),
     keywords=[Keyword.HEALING],
-    dropped=("c.coup_de_grace(ref=)",),
 )
 def m3438a2(c: Cast) -> None:
     """The two costs it pays are exact and so is the reward; the finisher is

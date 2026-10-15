@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.engine import Cast, Condition, Movement, When
+from combat_engine.engine import Cast, Condition, Health, Movement, When
 
 
 def aquatic_edge(c: Cast) -> None:
@@ -46,19 +46,53 @@ def aquatic_edge(c: Cast) -> None:
 
 
 def settle(c: Cast) -> None:
-    """Drop insubstantial and flight until the end of the caster's next turn.
+    """The whole of one card, printed five times: ground yourself, finish
+    something helpless, and feed if it dies.
 
-    The price a pair of these creatures pay to finish something off. Neither
-    half is a condition carried by default: insubstantial is ended if
-    something granted it, and flight is a movement mode, so it is lifted out
-    of `Movement.modes` and put back when the hold runs out.
+    Neither cost is a condition carried by default: insubstantial is ended
+    if something granted it, and flight is a movement mode, so it is lifted
+    out of `Movement.modes` and put back when the hold runs out.
+
+    **The finisher used to be missing and this helper paid only the price.**
+    Four callers said so with `dropped=("c.coup_de_grace(ref=)",)` and
+    **two did not** -- `m2939a2` and `m2940a3` carried no marker at all, so
+    two rows reported finished while missing the same clause the other four
+    admitted to. Every one of the five cards ends in the same sentence:
+    "...makes a coup de grace against the target. If it kills the target, it
+    regains all of its hit points."
+
+    `c.coup_de_grace` is the wrong symbol for it and `m3435a3` -- the sixth
+    row of this card, written and unmarked throughout -- says why in its own
+    docstring: that verb refuses a row declaring no attack line, which was
+    Camille's call on #250 rather than inventing damage, and none of these
+    cards print one. So the swing is the creature's **own basic attack**, and
+    the automatic critical comes from `c.maximise(critical=True)`, which sets
+    `critical` on the live `Hit` rather than faking a number -- so crit
+    riders on the swing are paid too.
+
+    This follows `m3435a3` line for line rather than inventing a second
+    answer to one question.
     """
+    victim = c.target
     for effect in list(c.world.effects.of(c.me)):
         if Condition.INSUBSTANTIAL in effect.conditions:
             c.world.effects.end(effect, c.ref)
     hold = c.effect(f"{c.ref} grounded", until=When.EONT, on=c.me)
     movement = c.world.get(c.me, Movement)
-    if hold is None or movement is None or "fly" not in movement.modes:
+    if hold is not None and movement is not None and "fly" in movement.modes:
+        speed = movement.modes.pop("fly")
+        hold.on_end.append(lambda: movement.modes.setdefault("fly", speed))
+
+    # The price is paid above whether or not there is anything to finish,
+    # which is what the cards print -- the grounding is not conditional on
+    # the kill.
+    if victim is None:
         return
-    speed = movement.modes.pop("fly")
-    hold.on_end.append(lambda: movement.modes.setdefault("fly", speed))
+    c.maximise(on=c.me, until=When.EOT, critical=True)
+    c.basic(on=victim)
+    hurt = c.world.get(victim, Health)
+    if hurt is None or hurt.hp > 0:
+        return
+    mine = c.world.get(c.me, Health)
+    if mine is not None:
+        c.heal(mine.max_hp, on=c.me)

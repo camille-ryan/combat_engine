@@ -745,7 +745,6 @@ def m3441a3(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     requires=_any_enemy_suffering(Condition.HELPLESS, Condition.UNCONSCIOUS),
     requires_text="something must be helpless or unconscious",
-    dropped=("c.coup_de_grace(ref=)",),
 )
 def m3441a4(c: Cast) -> None:
     """The printed target restriction lives in the `Target` label and in the

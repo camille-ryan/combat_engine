@@ -8240,6 +8240,72 @@ def a_feats_clause_in_its_power(out: Result) -> None:
                  f"it asked {with_it} time(s)")
 
 
+def a_coup_de_grace_finisher(out: Result) -> None:
+    """One card printed six times: ground yourself, finish the helpless, feed.
+
+    `audit` cannot reach any of it. Three of the six rows carry a Requirement
+    the board cannot meet -- there is nothing helpless on it -- so they report
+    "never usable here", and the shared `settle` helper is where the clause
+    lives, which no sweep exercises.
+
+    **Two of the six carried no marker while missing the finisher.**
+    `m2939a2` and `m2940a3` paid the two printed costs and never swung or
+    healed, reporting finished; the other four said so with
+    `dropped=("c.coup_de_grace(ref=)",)`. That verb is the wrong symbol --
+    it refuses a row declaring no attack line (#250) and none of these cards
+    print one -- so the swing is the creature's own basic attack and the
+    automatic critical is `c.maximise(critical=True)`.
+
+    The negative control is a victim that **survives**: the heal is printed
+    "if it kills the target", so a row that healed on any swing would be
+    strictly better than the card and this is what catches it.
+    """
+    import combat_engine.content  # noqa: F401  -- populates REGISTRY
+    from combat_engine.content.monsters.level_01 import settle
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    ref = "m2939a2"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+        return
+
+    def finish(lethal: bool) -> tuple[int, bool, int, int]:
+        world, caster, _ = _board(ref)
+        victim = sorted(enemies(world, caster))[0]
+        hurt = world.need(victim, Health)
+        hurt.hp = 1 if lethal else hurt.max_hp
+        mine = world.need(caster, Health)
+        mine.hp = max(1, mine.max_hp // 4)
+        before = mine.hp
+        c = Cast(world=world, me=caster, ref=ref, target=victim,
+                 targets=[victim])
+        c.condition(Condition.HELPLESS, on=victim)
+        crits: list[bool] = []
+        world.bus.on(AttackRolled, lambda ev: crits.append(
+            ev.natural == 20 or ev.total >= ev.defence))
+        settle(c)
+        return len(crits), bool(crits), before, world.need(caster, Health).hp
+
+    swings, _any, before, after = finish(lethal=True)
+    out.that(swings == 1,
+             f"{ref} makes exactly one swing at the helpless target",
+             f"it swung {swings} time(s)")
+    out.that(after > before,
+             "and regains hit points when that kills the target",
+             f"it went from {before} to {after}")
+
+    _s2, _a2, before2, after2 = finish(lethal=False)
+    out.that(after2 == before2,
+             "and regains none when the target survives -- the negative"
+             " control, since the heal is printed 'if it kills the target'",
+             f"it went from {before2} to {after2}")
+
+
 DRIVERS = {
     "shaman_spirits": (
         shaman_spirits,
@@ -8248,6 +8314,10 @@ DRIVERS = {
     "feats_clause": (
         a_feats_clause_in_its_power,
         "a feat naming one power is written into that power (#550)",
+    ),
+    "coup_de_grace": (
+        a_coup_de_grace_finisher,
+        "the helpless-finisher card, printed six times and short a clause",
     ),
     "mage_schools": (
         mage_school_riders,
