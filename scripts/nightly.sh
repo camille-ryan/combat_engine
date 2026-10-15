@@ -57,8 +57,21 @@ LOG="logs/nightly-${STAMP}.log"
 # processes, so both crawl and neither number means anything -- the measured
 # cost of that confusion was a sweep projected at 84 minutes that was really
 # contention.
-if pgrep -f "scripts/check\.py" >/dev/null 2>&1; then
-    echo "SKIPPED $(date '+%F %T') -- a check.py is already running" | tee "$LOG"
+# **A pid and `kill -0`, not a `pgrep` pattern.** This was
+# `pgrep -f "scripts/check\.py"`, which is a substring match over every
+# command line on the machine -- so a session that merely *grepped* for
+# check.py during this window matched it. On 2026-10-15 at 03:07 one did,
+# and the sweep skipped with nothing running: the log said "a check.py is
+# already running" while `pgrep -af` found none. A whole night's net lost
+# to a false positive, and silently, because a skip is not a failure.
+#
+# `check.py` writes its own pid to `logs/check.pid` and removes it on the
+# way out. A stale file -- a sweep that was killed -- reads as not running,
+# which is the safe direction: the worst case is two sweeps contending,
+# which is loud, against a skip that looks like a clean night.
+LOCKFILE="logs/check.pid"
+if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; then
+    echo "SKIPPED $(date '+%F %T') -- a check.py is already running (pid $(cat "$LOCKFILE"))" | tee "$LOG"
     cp "$LOG" logs/nightly-latest.log
     exit 0
 fi

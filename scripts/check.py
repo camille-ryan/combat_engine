@@ -577,5 +577,38 @@ def _summary(text: str) -> str:
     return ""
 
 
+#: Written while a run is in progress and removed on the way out, so
+#: `nightly.sh` can tell "a sweep is running" from "a shell mentioned this
+#: file". **It could not**, and that cost a night's sweep: its guard was
+#: `pgrep -f "scripts/check\.py"`, a substring match over every command
+#: line on the machine, so a session that merely *grepped* for check.py
+#: inside the nightly's window matched -- and on 2026-10-15 at 03:07 one
+#: did, leaving `SKIPPED ... a check.py is already running` with nothing
+#: running at all.
+#:
+#: A pid and `kill -0` instead of a pattern, which is the rule this repo
+#: already learned from the other side: a `pgrep` waiter matched its own
+#: command line and stranded three of them.
+LOCK = ROOT / "logs" / "check.pid"
+
+
+def _hold_lock() -> None:
+    """Record this run's pid, and leave no lock behind on the way out."""
+    import atexit
+    import os
+
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    LOCK.write_text(f"{os.getpid()}\n")
+
+    def release() -> None:
+        # Only our own: a crash elsewhere must not let this run delete a
+        # live sweep's lock.
+        if LOCK.exists() and LOCK.read_text().strip() == str(os.getpid()):
+            LOCK.unlink()
+
+    atexit.register(release)
+
+
 if __name__ == "__main__":
+    _hold_lock()
     raise SystemExit(main())
