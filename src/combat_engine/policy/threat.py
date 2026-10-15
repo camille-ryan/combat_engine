@@ -319,6 +319,34 @@ def scrub(w: Any, me: int, foe: int) -> None:
     place(w, foe, HOME[1])
 
 
+
+#: Refs that reach these two readers and name no row with a body. Measured
+#: rather than guessed: instrumenting all four `except Exception` sites here
+#: and running the seven `replay` fixtures absorbed **125 exceptions, every
+#: one of them `ValueError: <ref> has no body to run`** --
+#:
+#:     96x  standard / move / minor   -- action KINDS, not refs
+#:     29x  w3629, w3660, w:wand, …   -- weapon refs
+#:
+#: An `Action.ref` is not always a row: an action whose kind is its own name
+#: carries that word, and a basic attack carries the weapon it swings. Both
+#: are perfectly legal and neither has a body. Each one was costing a
+#: scratch-board rebuild and an exception to arrive at the answer "this row
+#: leaves nothing", which is **the same answer a row that really leaves
+#: nothing gives** -- so the cost was invisible and so was the category
+#: error.
+#:
+#: Asked before the board is built now. The `except` clauses stay: a row
+#: *with* a body can still raise, and that case is a floor rather than a
+#: measurement, which the module docstring already says.
+def _runnable(ref: str) -> bool:
+    """Does this ref name a declared row with a body to run?"""
+    from combat_engine.engine.dsl import get
+
+    p = get(ref) if ref else None
+    return p is not None and getattr(p, "body", None) is not None
+
+
 def row_damage(world: Any, eid: int, ref: str) -> float:
     """What one row of `eid`'s would deal to the baseline opponent, in hp.
 
@@ -332,6 +360,9 @@ def row_damage(world: Any, eid: int, ref: str) -> float:
     got = _ROWS.get(key)
     if got is not None:
         return got
+    if not _runnable(ref):
+        _ROWS[key] = 0.0
+        return 0.0
     made = _BOARDS.get((id(world), eid))
     if made is None:
         made = board(world, eid)
@@ -420,6 +451,9 @@ def row_effects(world: Any, eid: int, ref: str) -> tuple[Laid, ...]:
     got = _EFFECTS.get(key)
     if got is not None:
         return got
+    if not _runnable(ref):
+        _EFFECTS[key] = ()
+        return ()
     made = _BOARDS.get((id(world), eid))
     if made is None:
         made = board(world, eid)
