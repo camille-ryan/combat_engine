@@ -484,15 +484,28 @@ def m3219a4(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.dead_allies()",),
 )
 def m3219a5(c: Cast) -> None:
-    """The shift is exact. Finding "one destroyed undead minion" to raise
-    again has no query -- the board has no way to name a corpse -- so that
-    half is dropped."""
+    """The shift is exact, and the raise is written now.
+
+    "The board has no way to name a corpse" was wrong: `_die` keeps the body
+    and its square and only lifts it off the grid, so the corpses were always
+    there -- it was `c.within` and every other finder ending in `alive` that
+    could not hand one over. `c.fallen` is that read.
+
+    One hit point is the printed number, which is what `c.reanimate` already
+    defaults to, and "stands as a free action" needs nothing: coming back
+    from below zero clears what dropping it imposed, prone included.
+    """
     for mate in c.allies():
         if c.is_kind("undead", on=mate) and distance_between(c.world, c.me, mate) <= 10:
             c.shift(2, who=mate)
+    risen = sorted(
+        a for a in c.fallen(10, side="ally", kind="undead") if c.is_minion(on=a)
+    )
+    who = c.choose(risen, "which destroyed minion rises again") if risen else None
+    if who is not None:
+        c.reanimate(on=who, hp=1)
 
 
 @power(

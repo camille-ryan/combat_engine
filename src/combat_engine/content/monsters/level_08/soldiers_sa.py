@@ -2446,12 +2446,20 @@ def m5624a3(c: Cast) -> None:
 
 
 @power(
-    "m5624a4", level=8, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
+    "m5624a4", level=8, usage=ENCOUNTER, action=ActionType.NONE, reach=PERSONAL,
+    target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
 )
 def m5624a4(c: Cast) -> None:
     """Four of its own kind stand up where it fell, on its own count.
+
+    **`ENCOUNTER`, because the card prints the word.** This went in as
+    `AT_WILL` one commit after `content/CLAUDE.md` was corrected for saying
+    `AT_WILL` is the convention for a no-action trait "without exception" --
+    2,326 rows use `ENCOUNTER`. `cards.py` caught it, which is what that
+    instrument is for; the difference is small in play, since a creature
+    drops once, and the card is still the authority.
 
     It is already at 0 hit points by the time this fires -- nothing needs
     saying for "is destroyed", the same reading `level_05/brutes_sa.py`

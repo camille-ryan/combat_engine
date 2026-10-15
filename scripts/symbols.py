@@ -272,13 +272,26 @@ CATEGORIES: dict[str, dict] = {
             "body is one of them does nothing."
         ),
         "sections": [
+            # **`c.fallen` belongs beside `c.within` and not under a
+            # category of its own**, which is the point of putting it here:
+            # it is the one reader in this section that answers about the
+            # dead, and three rows were marked unwritable because the
+            # author looked at the live finders, found them all ending in
+            # `alive(...)`, and concluded the board could not name a
+            # corpse. A reader nobody can find is the failure this file
+            # exists to stop.
+            #
+            # `c.level_of` is here rather than under "the caster's own
+            # numbers" because it reads *somebody else's* level, which is
+            # the same split `c.size_of` already sits on -- `c.level` is
+            # the caster's and is in that section.
             ("who and where", [
                 "adjacent", "adjacent_to", "allies", "beast", "can_flank",
                 "can_see", "carrying", "companion", "companions",
-                "conjurations", "distance", "enemies", "familiar",
+                "conjurations", "distance", "enemies", "fallen", "familiar",
                 "familiar_mode", "first", "height", "held", "here",
-                "in_my_aura", "in_squares", "last", "living", "master",
-                "my_aura", "my_weapon", "my_zones", "servants",
+                "in_my_aura", "in_squares", "last", "level_of", "living",
+                "master", "my_aura", "my_weapon", "my_zones", "servants",
                 "size_of", "there", "threatens", "within",
             ]),
             ("the caster's own numbers", [

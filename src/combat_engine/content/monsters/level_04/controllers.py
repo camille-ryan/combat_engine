@@ -178,15 +178,17 @@ def m135a3(c: Cast) -> None:
     Nothing is done about "it can stand up as a free action": healing from
     below zero clears what dropping it imposed, and prone is one of those
     three, so it is already up.
+
+    The corpse-finding this used to spell out by hand is `c.fallen` now --
+    this row is where that verb came from, three others having been dropped
+    on "the board has no way to name a corpse" while this one quietly did
+    it. The two printed restrictions stay here, because a level ceiling and
+    a minion test are the row's business and not the board's.
     """
     fallen = sorted(
         a
-        for a in allies(c.world, c.me)
-        if not alive(c.world, a)
-        and c.is_kind("undead", on=a)
-        and _level_of(c.world, a) <= 6
-        and _nonminion(c.world, a)
-        and c.distance(to=a) <= 10
+        for a in c.fallen(10, side="ally", kind="undead")
+        if _level_of(c.world, a) <= 6 and _nonminion(c.world, a)
     )
     who = c.choose(fallen, "which of the fallen rises") if fallen else None
     if who is not None:

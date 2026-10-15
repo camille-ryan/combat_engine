@@ -31,6 +31,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - (no docstring)
 - `c.enemies(self) -> 'list[int]'`
   - (no docstring)
+- `c.fallen(self, radius: 'int' = 99, *, side: 'str' = 'any', kind: 'str' = '') -> 'list[int]'`
+  - The corpses within `radius`. `c.within` can never return one.
 - `c.familiar(self, *, of: 'int | None' = None) -> 'int | None'`
   - The familiar this creature keeps, whichever mode it is in.
 - `c.familiar_mode(self, mode: 'str', *, of: 'int | None' = None) -> 'bool'`
@@ -49,6 +51,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Whoever stands in these squares. `side` reads as it does on
 - `c.last`
   - (no docstring)
+- `c.level_of(self, who: 'int | None' = None) -> 'int'`
+  - Somebody else's level, for a printed "of level 6 or lower".
 - `c.living(self, on: 'int | None' = None) -> 'bool'`
   - Is this a living creature? `query.living`, defaulting to the target.
 - `c.master(self) -> 'int | None'`

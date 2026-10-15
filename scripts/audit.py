@@ -410,6 +410,18 @@ KNOWN_SILENT = {
     # dependency rather than inferred from the verdict.
     "m5602a4": "commands a conjuration; m5602a3 is what conjures one",
     "m3219a5": "reanimates a dead ally; the board's one ally is at full health",
+    # **The corpse-raisers, and the board has no corpse.** Four rows read
+    # `c.fallen` -- the verb added because `c.within` and every other finder
+    # ends in `alive` and so can never hand one over -- and the harness fields
+    # a live ally at full health, which is the right board for the thousands
+    # of rows that mean a living target and the wrong one for these. Not a row
+    # fault and not fixable by widening the board the way `m4736a4`'s entry
+    # describes: a corpse on the standing board would change what every
+    # creature-counting row is tested against. The evidence is
+    # `drivers.raises_the_fallen`, which kills the ally first and then watches
+    # all four. `m135a3` carries the same reason further up this table.
+    "m1042a2": "raises destroyed undead as new creatures; the board has no corpse",
+    "m3499a3": "heals a destroyed undead ally; the board has no corpse",
     # The two that are not a sibling dependency, and each is a different gap.
     # `m3291a4` rerolls an attack roll, so fired alone there is no roll behind
     # it to reroll -- the row is correct and the harness offers it nothing.

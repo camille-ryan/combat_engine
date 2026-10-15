@@ -73,6 +73,7 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Effect,
+    Ident,
     Keyword,
     Melee,
     Position,
@@ -90,6 +91,7 @@ from combat_engine.engine.events import (
     AttackRolled,
     Bloodied,
     DamageApplied,
+    Died,
     Dropped,
     Escaped,
     Hit,
@@ -1462,6 +1464,33 @@ def m5581a2(c: Cast) -> None:
             _one_save_two_mods(c, victim, 10, DamageType.PSYCHIC)
 
 
+_ECHOES = ("m5579", "m5580")
+
+
+def _is_echo(world: World, eid: int) -> bool:
+    ident = world.get(eid, Ident)
+    return ident is not None and ident.ref in _ECHOES
+
+
+def _last_echo_fell(world: World, me: int, ev: Died) -> bool:
+    """"Recharge when all echoes are destroyed."
+
+    A state read at a moment, which is the shape `recharge_when` already
+    takes. `_die` emits `Died` *after* the hit points are spent, so the
+    creature that just fell is already not `alive` and the last of them
+    satisfies this on its own death rather than one death late.
+
+    Vacuously true before any echo is summoned, which costs nothing: a
+    recharge power starts available and recharging an available power is a
+    no-op. Once it fires there is at least one echo, 1d4 having no zero.
+    """
+    from combat_engine.engine.query import alive, allies
+
+    if not _is_echo(world, getattr(ev, "actor", -1)):
+        return False
+    return not any(_is_echo(world, mate) for mate in allies(world, me) if alive(world, mate))
+
+
 @power(
     "m5581a3",
     level=8,
@@ -1470,16 +1499,30 @@ def m5581a2(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("spec.monster_ref()",),
+    recharge_when=Trigger(Died, _last_echo_fell, "when all the echoes are destroyed"),
 )
 def m5581a3(c: Cast) -> None:
-    """Refused in play: the whole printed Effect is summoning "echoes of
-    despair" and "echoes of madness," and nothing here has a ref for
-    either -- only the printed names, which this row must not use. Same
-    shape as `m3546a1`'s weapon Requirement, where the only handle on the
-    thing is its printed word. "Recharge when all echoes are destroyed"
-    waits on the same missing refs and is dropped with it; the die in the
-    header still fires on its own."""
+    """1d4 echoes, in any mix of the two kinds.
+
+    "Nothing here has a ref for either -- only the printed names" was the
+    marker, and it was false: both are declared, `m5579` and `m5580`, two
+    level-7 minions. The names were never needed; the refs were there to be
+    looked up. The old comment reached for `m3546a1`'s shape -- a thing whose
+    only handle is a printed word -- and these are not that.
+
+    The mix is a real choice rather than a roll, because the card says "any
+    combination" and the summoner is the one choosing, so each of the 1d4
+    goes through `c.choose`.
+
+    "Anywhere within the house" is not a range this board can hold -- there
+    is no house -- so `c.summon` places them near the summoner. Nothing is
+    lost that a range would have constrained: the printed line is wider than
+    any burst, not narrower.
+    """
+    for _ in range(c.roll("1d4")):
+        which = c.choose(list(_ECHOES), "which echo answers")
+        if which is not None:
+            c.summon(which)
 
 
 def _has_twisted(world: World, eid: int) -> bool:

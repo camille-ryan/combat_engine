@@ -2216,18 +2216,31 @@ def m3499a2(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=Target(side="ally", count=1, label="destroyed undead creature"),
+    target=NO_TARGET,
     keywords=[Keyword.HEALING],
-    dropped=("query.dead_allies()",),
 )
 def m3499a3(c: Cast) -> None:
-    """Finding a destroyed ally to raise has no query -- the same gap
-    `level_05/controllers_sa.py`'s `m3219a5` already names. If the board
-    still exposes a fallen ally as a target, `c.reanimate` pays out."""
-    victim = c.target
-    if victim is None:
-        return
-    c.reanimate(on=victim, hp=15)
+    """The fallen ally is found here rather than declared.
+
+    "If the board still exposes a fallen ally as a target" -- it does not,
+    and that was the whole of the old gap. The dispatcher offers live
+    creatures, so a declared `side="ally"` target was a row that could run
+    and never had anybody to run on. `c.fallen` is the read that was
+    missing; the declaration goes, because a row that picks its own subject
+    must not also claim one.
+
+    The level ceiling is the creature's own level, read off the board rather
+    than off the header, so a creature levelled up by an encounter template
+    raises what its card says it raises.
+    """
+    risen = sorted(
+        a
+        for a in c.fallen(10, side="ally", kind="undead")
+        if c.level_of(a) <= c.level
+    )
+    who = c.choose(risen, "which of the fallen rises") if risen else None
+    if who is not None:
+        c.reanimate(on=who, hp=15)
 
 
 # ==========================================================================

@@ -515,6 +515,40 @@ class Cast:
         pool = self._side(side, self.me)
         return [c for c in pool if squares(self.world, c) & space and alive(self.world, c)]
 
+    def fallen(
+        self, radius: int = 99, *, side: str = "any", kind: str = ""
+    ) -> list[int]:
+        """The corpses within `radius`. `c.within` can never return one.
+
+        Every creature-finding verb here ends in `alive(...)`, which is
+        right for the hundreds of rows that mean a living target and wrong
+        for the four that print "one destroyed undead creature". So those
+        four read "the board has no way to name a corpse" and three of them
+        were marked `query.dead_allies()` and dropped -- while the fourth,
+        `m135a3`, hand-rolled the same comprehension and worked. The gap was
+        never in the board; `_die` keeps the body an entity and its
+        `Position`, and only lifts it off the grid. It was in the vocabulary.
+
+        **`side="enemy"` cannot see a corpse**, and that is `query.enemies`
+        filtering the dead where `query.allies` does not. No printed card
+        asks for one -- a raiser raises its own side, or says nothing about
+        sides at all, which is `"any"` -- so this is documented rather than
+        papered over. Changing `enemies` to match would move hundreds of
+        live rows for the sake of none.
+
+        The printed restrictions a card puts *on top* of this -- "of level 6
+        or lower", "minion" -- stay in the row, which is where every other
+        level and minion test in the tree already lives.
+        """
+        pool = self._side(side, self.me)
+        return [
+            e
+            for e in pool
+            if not alive(self.world, e)
+            and distance_between(self.world, self.me, e) <= radius
+            and (not kind or self.is_kind(kind, on=e))
+        ]
+
     def distance(self, to: int | None = None) -> int:
         other = self._who(to)
         return 99 if other is None else distance_between(self.world, self.me, other)
@@ -1582,6 +1616,20 @@ class Cast:
     @property
     def level(self) -> int:
         return self.stats.level
+
+    def level_of(self, who: int | None = None) -> int:
+        """Somebody else's level, for a printed "of level 6 or lower".
+
+        `c.level` is the caster's and there was nothing for anyone else, so
+        four content modules each wrote a private `_level_of` and one of
+        them is imported across two directories. Same body in all four,
+        including the 99 -- a creature with no stat block is out of reach of
+        a sentence about levels, never under it, so the ceiling must fail
+        closed rather than treat an absent level as zero.
+        """
+        other = self._who(who)
+        stats = self.world.get(other, Stats) if other is not None else None
+        return 99 if stats is None else stats.level
 
     def w(self, count: int = 1, *, hand: str = "main", ranged: bool | None = None) -> str:
         """`count`[W]: the wielded weapon's damage dice, that many times.

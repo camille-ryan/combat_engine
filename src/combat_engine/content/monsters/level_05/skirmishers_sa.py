@@ -1432,12 +1432,21 @@ def m4418a2(c: Cast) -> None:
     action=STANDARD,
     reach=Ranged(10),
     target=NO_TARGET,
-    todo=("spec.monster_ref()",),
 )
 def m4418a3(c: Cast) -> None:
-    """The brief names what appears in prose and gives it no ref, so there is
-    nothing to hand `c.summon` -- which exists, and was the wrong thing to mark.
-    Three other rows wait on the same gap under this symbol."""
+    """Four creatures appear in unoccupied squares within range.
+
+    "The brief names what appears in prose and gives it no ref" was the
+    marker, and the ref existed: `m1923`, a declared level-3 minion. Nothing
+    was missing but the lookup -- `c.summon` was right all along, which the
+    old comment half-admitted.
+
+    No `after=`: this card prints no initiative line, so the four roll their
+    own, unlike the conjurations that say "as conjurer". `c.summon` picks the
+    unoccupied squares, which is the printed placement.
+    """
+    for _ in range(4):
+        c.summon("m1923")
 
 
 @power(

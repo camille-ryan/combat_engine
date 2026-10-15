@@ -1023,6 +1023,13 @@ def two_types(out: Result) -> None:
     world, caster, _ = _posed(ref, 1)
     foe = enemies(world, caster)[0]
     hurt = world.get(foe, Health)
+    if hurt is None:
+        # Seven reads below go through this, and a board creature always has
+        # it -- so this is a skip and not a guard. Reported as one because
+        # this file's rule is that a check which runs on half its runs is
+        # not a check.
+        out.skip("the board's enemy has no hit points to take damage off")
+        return
     mine = Cast(world=world, me=caster, ref=ref)
     declared = REGISTRY[ref]
     out.that(declared.damage is not None
@@ -5331,6 +5338,288 @@ def conjurer_count(out: Result) -> None:
              " the half `loader.spawn` alone misses")
 
 
+def raises_the_fallen(out: Result) -> None:
+    """A corpse can be named now, and three rows dropped on saying it cannot.
+
+    `m3219a5` and `m3499a3` carried `dropped=("query.dead_allies()",)` with
+    docstrings saying "the board has no way to name a corpse" -- and the
+    board always had. `_die` keeps the body an entity *and its `Position`*
+    and only lifts it off the grid, so the corpses were sitting there. What
+    could not hand one over was the vocabulary: `c.within`, `c.in_squares`
+    and every other finder ends in `alive(...)`, which is right for the
+    thousands of rows that mean a living target. `m135a3` is the proof the
+    gap was never in the board -- it hand-rolled the same comprehension at
+    level 4 and worked, while three others were marked unwritable.
+
+    **The asymmetry is the whole assertion**, and it is checked in both
+    directions on one board: while the minion lives `c.within` sees it and
+    `c.fallen` must not; once it is killed `c.fallen` sees it and `c.within`
+    must not. Asserting only the second would pass for a `c.fallen` that
+    ignored `alive` altogether and returned everybody.
+
+    `side="enemy"` is asserted *blind* -- it cannot see an enemy corpse,
+    because `query.enemies` filters the dead where `query.allies` does not.
+    That is a documented limitation rather than a bug: no printed card asks
+    for an enemy corpse, and changing `enemies` to match would move hundreds
+    of live rows for the sake of none. It is asserted so the docstring
+    saying so is checked rather than believed.
+
+    The rows are then driven through `REGISTRY`, not re-implemented, so this
+    survives either row being reverted and says nothing about it.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content import loader
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Ident, Initiative, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import alive, creatures, distance_between
+
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:fallen")
+
+    # An undead minion on the caster's own side, which is what all four
+    # cards ask for. Summoned rather than posed, so it is a real stat block.
+    minion = c.summon("m499")
+    if minion == 0:
+        out.skip("the board would not take a summon")
+        return
+    out.that(c.is_kind("undead", on=minion),
+             "the summoned ally is undead, which every one of these cards"
+             " restricts itself to")
+
+    # ---- alive: within sees it, fallen does not ------------------------
+    out.that(minion in c.within(20),
+             "while it lives the ordinary finder sees it")
+    out.that(minion not in c.fallen(20),
+             "and `c.fallen` does NOT -- the control a `c.fallen` that"
+             " ignored `alive` and returned everybody would fail")
+
+    c.kill(on=minion)
+    out.that(not alive(world, minion), "the minion is destroyed")
+
+    # ---- dead: fallen sees it, within does not -------------------------
+    out.that(minion in c.fallen(20),
+             "once destroyed `c.fallen` names the corpse, which is the read"
+             " three rows were marked unwritable for wanting")
+    out.that(minion not in c.within(20),
+             "and the ordinary finder has stopped seeing it, so the two"
+             " never both answer for one creature")
+    out.that(minion in c.fallen(20, side="ally", kind="undead"),
+             "`side=` and `kind=` both pass it, which is the exact call the"
+             " three rows make")
+    # The radius, on the boundary rather than at a guessed number. The first
+    # draft asserted `c.fallen(1)` excluded it and went red, which was the
+    # assertion being wrong and not the verb: `c.summon` places the ally
+    # adjacent, so a radius of 1 includes it correctly. Measure the distance
+    # and test either side of it.
+    far = distance_between(world, me, minion)
+    out.that(minion in c.fallen(far, side="ally", kind="undead"),
+             "a radius exactly reaching the corpse offers it",
+             f"{far} squares off")
+    out.that(minion not in c.fallen(far - 1, side="ally", kind="undead"),
+             "and one square short does not -- the radius is read, not"
+             " decoration",
+             f"{far - 1} did not reach it")
+    out.that(minion not in c.fallen(20, side="ally", kind="dragon"),
+             "a kind it is not excludes it")
+    out.that(c.fallen(20, side="enemy") == [],
+             "`side=\"enemy\"` can never see a corpse, because `query.enemies`"
+             " filters the dead -- documented, and asserted so the note"
+             " saying so is checked")
+
+    # ---- m3219a5: the minion half it was dropped on --------------------
+    raiser = loader.spawn(world, "m3219", (12, 12))
+    REGISTRY["m3219a5"].body(Cast(world=world, me=raiser, ref="m3219a5"))
+    body = world.get(minion, Health)
+    out.that(alive(world, minion) and body is not None and body.hp == 1,
+             "m3219a5 stands the destroyed minion back up at the printed one"
+             " hit point",
+             f"hp {body.hp if body else '?'}")
+
+    # ---- m3499a3: the same gap at level 6, and a declared target that
+    # ---- could never be a corpse ---------------------------------------
+    #
+    # Its own board: the row above raised the only corpse this one has. The
+    # header used to declare `Target(side="ally", ...)` and the dispatcher
+    # only offers live creatures, so it was a row that could run and never
+    # have a subject -- which is why the level ceiling is asserted too. 15
+    # is the printed number.
+    world3, me3, _ = _board()
+    c3 = Cast(world=world3, me=me3, ref="drivers:fallen3")
+    corpse = c3.summon("m499")
+    c3.kill(on=corpse)
+    healer = loader.spawn(world3, "m3499", (12, 12))
+    REGISTRY["m3499a3"].body(Cast(world=world3, me=healer, ref="m3499a3"))
+    raised = world3.get(corpse, Health)
+    out.that(alive(world3, corpse) and raised is not None and raised.hp == 15,
+             "m3499a3 raises the destroyed ally at the printed 15 hit points,"
+             " having found it rather than been handed it",
+             f"hp {raised.hp if raised else '?'}")
+
+    # ---- m1042a2: four corpses become a different creature -------------
+    #
+    # A fresh board, because the row above raised the only corpse. Two
+    # corpses rather than four, so "up to" is tested on the short side: a
+    # row that stood four up regardless would fail here.
+    world2, me2, _ = _board()
+    c2 = Cast(world=world2, me=me2, ref="drivers:fallen2")
+    dead = [c2.summon("m499"), c2.summon("m499")]
+    for e in dead:
+        c2.kill(on=e)
+    caster = loader.spawn(world2, "m1042", (14, 14))
+    if world2.encounter is not None:
+        world2.encounter.join(caster)
+    before = {
+        e for e in creatures(world2)
+        if (i := world2.get(e, Ident)) is not None and i.ref == "m499"
+    }
+    REGISTRY["m1042a2"].body(Cast(world=world2, me=caster, ref="m1042a2"))
+    risen = {
+        e for e in creatures(world2)
+        if (i := world2.get(e, Ident)) is not None and i.ref == "m499"
+    } - before
+    out.that(len(risen) == 2,
+             "m1042a2 raises one new creature per corpse and no more -- 'up"
+             " to 4' with two on the board is two",
+             f"{len(risen)} rose from {len(dead)} corpses")
+    theirs = world2.get(caster, Initiative)
+    out.that(bool(risen) and theirs is not None and all(
+        (i := world2.get(e, Initiative)) is not None and i.rolled == theirs.rolled
+        for e in risen
+    ), "and each on the raiser's own count, which is the printed 'act after"
+       " the <creature> in the initiative order'")
+    out.that(all(
+        world2.grid.occupant(sq) == e
+        for e in risen
+        if (p := world2.get(e, Position)) is not None
+        for sq in (p.square,)
+    ), "each one standing in a square of its own, so the corpse's square was"
+       " free to be taken -- `_die` lifts the body off the grid")
+
+
+def named_in_prose(out: Result) -> None:
+    """Three rows marked unwritable because a card names a creature in prose.
+
+    All three carried `spec.monster_ref()` or `todo=` saying the creature the
+    card names "has no ref in this tree" and that only its printed name was
+    available. **All three refs existed and were declared.** Nothing was
+    missing but a lookup against the `monster` table, which an authoring
+    agent cannot do and the main session can -- so the marker recorded the
+    author's reach, not the tree's state, and sat there.
+
+    What each needed, and why each is asserted differently:
+
+    * `m4418a3` summons four of one block. The row was already one
+      `c.summon` away; the comment half-admitted it ("`c.summon` ... was the
+      wrong thing to mark").
+    * `m5581a3` summons 1d4 in any mix of two blocks, and recharges when all
+      of them are destroyed. The mix and the recharge condition are separate
+      assertions, and the recharge's **negative control is the point**: one
+      echo falling must not give the row back.
+    * `m5790a1` guards one named ally. Asserted on the predicate rather than
+      the body, because the predicate is the clause that changed -- and the
+      negative control is a different ally being struck, which the old
+      fallback answered True for. That fallback was a strictly *stronger*
+      power than the card: the shield followed the attack instead of the
+      creature.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content import loader
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Ident, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import creatures, enemies
+
+    def standing(world, ref: str) -> list[int]:  # noqa: ANN001
+        return [
+            e for e in creatures(world)
+            if (i := world.get(e, Ident)) is not None and i.ref == ref
+        ]
+
+    # ---- m4418a3: four of one block ------------------------------------
+    world, _me, _ = _board()
+    caller = loader.spawn(world, "m4418", (12, 12))
+    REGISTRY["m4418a3"].body(Cast(world=world, me=caller, ref="m4418a3"))
+    four = standing(world, "m1923")
+    out.that(len(four) == 4,
+             "m4418a3 stands four of the block its card names, whose ref the"
+             " marker said did not exist",
+             f"{len(four)} appeared")
+    spots = {
+        p.square for e in four
+        if (p := world.get(e, Position)) is not None
+    }
+    out.that(len(spots) == 4,
+             "each in a space of its own, which is the printed 'four"
+             " unoccupied spaces'",
+             f"{len(spots)} distinct squares")
+
+    # ---- m5581a3: 1d4 in any mix, and the recharge condition -----------
+    ref = "m5581a3"
+    row = get(ref)
+    out.that(row is not None and bool(row.recharges),
+             "m5581a3 declares a printed recharge condition")
+    out.that(row is not None and row.recharge == 0,
+             "and no die, because its card prints a condition instead")
+
+    world2, summoner, _ = _board(ref, 1)
+    REGISTRY[ref].body(Cast(world=world2, me=summoner, ref=ref))
+    echoes = standing(world2, "m5579") + standing(world2, "m5580")
+    out.that(1 <= len(echoes) <= 4,
+             "between one and four echoes answer, which is what 1d4 rolls --"
+             " and both of the card's two blocks are reachable refs",
+             f"{len(echoes)} appeared")
+
+    known = world2.need(summoner, Powers)
+    known.note_use(ref, world2.round)
+    out.that(ref in known.spent, "the row is spent after being used")
+
+    c2 = Cast(world=world2, me=summoner, ref="drivers:echoes")
+    if len(echoes) > 1:
+        c2.kill(on=echoes[0])
+        out.that(ref in known.spent,
+                 "one echo falling does NOT give the row back -- the negative"
+                 " control, and the one a predicate reading 'any echo died'"
+                 " would fail")
+    for e in echoes[1:]:
+        c2.kill(on=e)
+    out.that(ref not in known.spent,
+             "the last of them falling does, which is the printed 'recharge"
+             " when all the echoes are destroyed'")
+
+    # ---- m5790a1: the one named ally it guards --------------------------
+    from combat_engine.content.monsters.level_05.brutes_sa import (
+        _ally_struck_within_six,
+    )
+
+    world3, _me3, _ = _board()
+    guard = loader.spawn(world3, "m5790", (12, 12))
+    c3 = Cast(world=world3, me=guard, ref="drivers:guard")
+    guarded = c3.summon("m5787")
+    other = c3.summon("m499")
+    foe = sorted(enemies(world3, guard))[0]
+    out.that(guarded != 0 and other != 0,
+             "the named ally and a second ally both reach the board")
+
+    # A real melee row, because the predicate's last clause reads the reach
+    # kind off the row that struck rather than guessing it. `power=""` makes
+    # that clause False and the whole assertion vacuous.
+    swing = "m145a0"
+    hit_named = Hit(attacker=foe, target=guarded, power=swing, critical=False)
+    hit_other = Hit(attacker=foe, target=other, power=swing, critical=False)
+    out.that(_ally_struck_within_six(world3, guard, hit_named),
+             "the guard answers when the ally its card names is struck")
+    out.that(not _ally_struck_within_six(world3, guard, hit_other),
+             "and does NOT when a different ally is -- the negative control,"
+             " and exactly what the old fallback got wrong: it shielded"
+             " whoever was hit, a strictly stronger power than the card")
+    out.that(not _ally_struck_within_six(world3, guard, Hit(
+        attacker=guard, target=guarded, power=swing, critical=False)),
+        "nor when the blow came from its own side, since the card says an"
+        " enemy")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -9472,6 +9761,12 @@ DRIVERS = {
     "conjurer_count": (conjurer_count,
                        "\"Initiative as conjurer\": the servant acts on the"
                        " summoner's count"),
+    "raises_the_fallen": (raises_the_fallen,
+                          "a corpse can be named now, and the rows dropped"
+                          " on saying it cannot"),
+    "named_in_prose": (named_in_prose,
+                       "three creatures a card names in prose, whose refs"
+                       " were declared all along"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,

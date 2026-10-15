@@ -91,6 +91,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Mod,
+    Position,
     Powers,
     Ranged,
     Relation,
@@ -322,11 +323,32 @@ def m1042a1(c: Cast) -> None:
 @power(
     "m1042a2", level=7, usage=Usage.RECHARGE, recharge=5, action=MINOR,
     reach=Ranged(20), target=NO_TARGET, keywords=[Keyword.NECROTIC],
-    todo=("spec.monster_ref()",),
 )
 def m1042a2(c: Cast) -> None:
-    """Raising destroyed undead as new creatures names a creature with no
-    ref in this tree -- the gap `spec.monster_ref()` already waits on."""
+    """Up to four corpses stand up as somebody else's creature.
+
+    Both halves of the old marker were wrong. The creature the card names is
+    `m499` and it is declared -- a level-3 minion brute, usable -- so the ref
+    was there to be looked up. And finding the corpses was `c.fallen`, which
+    this change adds.
+
+    Not `c.reanimate`: that puts *this* body back, and the card replaces it
+    with a different stat block. So the rotter is summoned into the square
+    the corpse fell in, on this creature's side, `after=c.me` for the printed
+    "act after the m1042 in the initiative order".
+
+    The corpse is left where it lies rather than cleared, because a corpse is
+    already out of play -- off the grid, holding no square, `alive` false and
+    so invisible to every finder but this one. "Until the end of the
+    encounter or for 5 minutes" is the same clock here; nothing outlives an
+    encounter.
+    """
+    graves = sorted(c.fallen(20, kind="undead"))[:4]
+    for body in graves:
+        spot = c.world.get(body, Position)
+        if spot is None:
+            continue
+        c.summon("m499", spot.square, after=c.me)
 
 
 # ==========================================================================

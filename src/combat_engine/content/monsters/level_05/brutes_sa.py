@@ -312,10 +312,19 @@ def _ally_struck_within_six(world: World, me: int, ev: Any) -> bool:
     whoever swung has to be on the other.
     """
     from combat_engine.engine import get
+    from combat_engine.engine.components import Ident
 
     victim = getattr(ev, "target", None)
     attacker = getattr(ev, "attacker", None)
     if victim is None or attacker is None or victim == me:
+        return False
+    # **The ally it shields is one named creature, not any ally.** `m5787` is
+    # the ref the card's name resolves to; without this the row fired for
+    # whoever happened to be struck, which is a different and much better
+    # power. It is the only clause the old `spec.monster_ref()` marker was
+    # about.
+    guarded = world.get(victim, Ident)
+    if guarded is None or guarded.ref != "m5787":
         return False
     if team(world, victim) is not team(world, me):
         return False
@@ -2098,14 +2107,20 @@ def m5790a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger="an enemy hits the ally it shields while that ally is within 6 squares",
     on=Trigger(Hit, _ally_struck_within_six, "the ally it shields is hit"),
-    dropped=("spec.monster_ref()",),
 )
 def m5790a1(c: Cast) -> None:
-    """The card names **which** ally by name, and a name has no ref in the spec,
-    so the row takes the one it is set to guard and falls back to whichever ally
-    was struck -- the marker names the missing half. Everything else is exact:
-    an interrupt, so the swap happens before the blow lands, and `c.redirect`
-    moves the live result rather than rolling again."""
+    """A bodyguard taking the blow meant for the one creature it guards.
+
+    "A name has no ref in the spec" was the marker and the lookup settles it:
+    the named ally is `m5787`, declared, and the predicate names it now. The
+    fallback this used to take -- whichever ally was struck -- was a strictly
+    stronger power than the card, since the shield followed the attack rather
+    than the creature.
+
+    Everything else was already exact: an interrupt, so the swap happens
+    before the blow lands, and `c.redirect` moves the live result rather than
+    rolling again.
+    """
     ally = getattr(c.trigger, "target", None)
     if ally is None:
         return
