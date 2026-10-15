@@ -1380,25 +1380,33 @@ def m2068a2(c: Cast) -> None:
     once_per_round=True,
     reach=Ranged(10),
     target=NO_TARGET,
-    todo=("c.undouse()",),
+    todo=("etl.monster.regeneration",),
 )
 def m2068a3(c: Cast) -> None:
     """Nothing can be said here at all, so the row is refused rather than
     half-written.
 
-    **The marker used to name `c.regeneration(suppressed_by=)` and that was
-    the wrong gap twice over.** `suppressed_by=` is one of four spellings the
-    verb's own comment says were deliberately collapsed into
-    `unless_damaged_by=`, which this card's "as a result of taking acid or
-    fire damage" is exactly; and the suppression it would read is held in a
-    closure, which is the half a new kwarg would have to move.
+    **Re-marked twice and the second reading was also wrong.** It was
+    `c.regeneration(suppressed_by=)`, which is one of four spellings the
+    verb deliberately collapsed into `unless_damaged_by=`. Then it became
+    `c.undouse()`, on the reading that this stat block files no
+    regeneration at all -- and the compendium page says otherwise:
 
-    What is missing is the regeneration itself: this stat block files five
-    rows and none of them is a regeneration line, so the clause switches on
-    something the creature has not got. That is a question about the card
-    rather than about the engine and has been referred up. m1155a4 two tiers
-    up is the same printed sentence in the same state, and its symbol is the
-    one reused here so the pair move together."""
+        Regeneration 10 (if the troll takes acid or fire damage,
+        regeneration does not function until the end of its next turn)
+
+    printed in the stat-block header, not as a numbered power. So the
+    creature has regeneration and this clause switches it off; what is
+    missing is that **nothing records it**. `game.db`'s `monster` table
+    holds `hp ac fort ref_def will initiative speed modes scores resist
+    vulnerable immune senses ...` and no regeneration column, so 40 of the
+    2,436 heroic blocks that print the line lose it at import. See #602.
+
+    That makes it an ETL gap rather than a `Cast` one, which matters
+    because a verb would not help: there would be nothing for it to
+    suppress. A number the page prints is not ours to invent either --
+    "numbers load from the database and are never hand-written" is this
+    directory's first rule."""
 
 
 _M2068_KILLS = (DamageType.ACID, DamageType.FIRE)

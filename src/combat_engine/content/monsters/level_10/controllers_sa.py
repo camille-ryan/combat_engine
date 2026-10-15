@@ -888,17 +888,40 @@ def m1522a0(c: Cast) -> None:
     reach=Ranged(10),
     target=UpTo(2, side="ally"),
     keywords=[Keyword.TELEPORTATION, Keyword.RANGED],
-    damage=Damage("2d6", 5),
-    dropped=("etl.monster.attack_line()",),
+    dropped=("compendium.attack_defence",),
 )
 def m1522a1(c: Cast) -> None:
-    """No defence survived extraction for this one -- the damage is laid
-    outright, the same defect `level_08/controllers_sa.py` names for
-    `m2245a0`. "The m1522 and one ally" is read off the target count: when
-    only one ally is in range, m1522 itself swaps with it."""
-    c.hit()
-    if not c.last:
-        return
+    """A teleport swap between two allies. **It was damaging them.**
+
+    The row laid `c.hit()` for 2d6+5 against `target=UpTo(2, side="ally")`,
+    at will, every turn -- so the creature spent its standard action
+    nuking its own side. Nothing reported it: the row fires and does
+    something, which is all `audit` asks.
+
+    **The compendium page is garbled and I read it to be sure.** It prints
+
+        Ranged 10; targets two allies within range, or the portal drake and
+        one ally within range; +14 vs ; 2d6+5 damage.. the targets swap
+        places.
+
+    -- a defence that is simply absent, a doubled full stop, and a damage
+    expression wedged between them. The power immediately after it on the
+    same block prints `+14 vs Reflex`, so the number belongs to a line that
+    kept its defence and this one did not.
+
+    An attack roll against an **ally's** defence to swap places with it is
+    not a sentence 4e writes, so the damage is extraction noise rather than
+    a clause this row is missing. `m977a1` is the settled precedent for
+    this shape: the swing cannot be made and **none is invented**. So the
+    `damage=` header is gone with it -- it was card data nothing could roll.
+
+    Re-marked off `etl.monster.attack_line()`, which blames this parser.
+    The defence is missing **in the source**, which is
+    `compendium.attack_defence` and what six rows in
+    `level_04/skirmishers_sa.py` already carry.
+
+    "The m1522 and one ally" is read off the target count: with one ally in
+    range, m1522 swaps with it itself."""
     pair = list(c.targets)
     if len(pair) >= 2:
         c.swap(pair[1], who=pair[0])
