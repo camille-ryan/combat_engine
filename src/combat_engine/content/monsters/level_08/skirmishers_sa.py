@@ -1215,6 +1215,7 @@ def m3183a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d6", 5),
     requires_text="it must be mounted",
+    defect="the printed attack line names no defence",
 )
 def m3183a1(c: Cast) -> None:
     """Whichever of AC or Reflex is lower, read off the board at the

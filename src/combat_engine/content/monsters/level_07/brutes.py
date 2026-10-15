@@ -306,6 +306,7 @@ _M105_BLED = "the m105 is first bloodied"
     damage=Damage("2d8", dtype=DamageType.ACID, kind=LIMITED),
     trigger=_M105_BLED,
     on=Trigger(Bloodied, when=about_me, text=_M105_BLED),
+    defect="the printed attack line names no defence",
 )
 def m105a2(c: Cast) -> None:
     """A splash that hits automatically, so no attack is declared.

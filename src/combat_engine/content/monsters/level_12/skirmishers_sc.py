@@ -1598,6 +1598,7 @@ def m2341a0(c: Cast) -> None:
     reach=Melee(1),
     target=NO_TARGET,
     keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m2341a1(c: Cast) -> None:
     """The brief prints an attack line with no defence at all in front of the
@@ -1742,6 +1743,7 @@ def m2349a0(c: Cast) -> None:
     reach=Melee(1),
     target=NO_TARGET,
     keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m2349a1(c: Cast) -> None:
     """Same malformed shape as m2341a1: an attack line with no defence in

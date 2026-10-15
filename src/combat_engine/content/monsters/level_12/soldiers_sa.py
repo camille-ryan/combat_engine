@@ -604,10 +604,10 @@ _M1147_BLOODIED = "the m1147 is first bloodied"
     keywords=[Keyword.HEALING, Keyword.NECROTIC],
     trigger=_M1147_BLOODIED,
     on=Trigger(Bloodied, when=about_me, text=_M1147_BLOODIED),
+    defect="the printed attack line names no defence",
 )
 def m1147a1(c: Cast) -> None:
-    """The two sentences that survived intact -- and the third was never
-    there to survive, being the pasted line #612 measures.
+    """The two sentences that survived intact, and the one that did not.
 
     The card's attack line reads "+17 vs ; 4d8+5" -- the defence is gone, so
     that half cannot be declared and is named rather than guessed. What
@@ -2151,6 +2151,7 @@ def m2338a0(c: Cast) -> None:
     reach=Melee(1),
     target=UpTo(2),
     keywords=[Keyword.POISON],
+    defect="the printed attack line names no defence",
 )
 def m2338a1(c: Cast) -> None:
     """Two claws, and the sting if both land on one creature.
@@ -2246,18 +2247,13 @@ def m2340a0(c: Cast) -> None:
     reach=Melee(1),
     target=UpTo(2),
     keywords=[Keyword.POISON],
-    dropped=("compendium.secondary_attack_line",),
+    defect="the printed attack line names no defence",
 )
 def m2340a1(c: Cast) -> None:
-    """The two claws play; the sting that follows them lands without a roll.
-
-    **Re-pointed, because this is not #612's gap.** The `+17 vs ; 2d6+5`
-    above the effect *is* a pasted line and is no loss. What is genuinely
-    missing is one level down: the printed **Secondary Attack** -- the sting
-    the card grants when both claws hit one target -- has no attack line of
-    its own on the page, where this creature's two siblings kept theirs. So
-    the sting is applied rather than rolled, which is more than the card
-    grants, and the marker now names the line that is actually absent."""
+    """The two claws play. This card's Secondary Attack line lost its whole
+    attack -- bonus and defence both, where its two siblings kept theirs --
+    so the sting lands without a roll, which is more than the card grants,
+    and the missing line is named rather than borrowed from a sibling."""
     victim = c.target
     if victim is not None and _volley(c, "m2340a0", victim):
         c.immobilized(until=When.SAVE_ENDS, on=victim)
@@ -2308,6 +2304,7 @@ def m2351a0(c: Cast) -> None:
     reach=Melee(1),
     target=UpTo(2),
     keywords=[Keyword.POISON],
+    defect="the printed attack line names no defence",
 )
 def m2351a1(c: Cast) -> None:
     """The claws are this creature's own, whatever ref the brief's prose
@@ -2399,6 +2396,7 @@ def m2530a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
+    defect="the printed attack line names no defence",
 )
 def m2530a1(c: Cast) -> None:
     """"The only melee attack it can make is a single claw against the

@@ -325,6 +325,7 @@ def m3094a0(c: Cast) -> None:
     keywords=[Keyword.IMPLEMENT],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("1d8", 4),
+    defect="the printed attack line names no defence",
 )
 def m3094a1(c: Cast) -> None:
     """"AC or Fortitude, whichever is lower" is the header's defence moved at

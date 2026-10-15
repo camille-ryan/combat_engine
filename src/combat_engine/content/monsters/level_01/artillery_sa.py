@@ -338,16 +338,13 @@ def m1135a0(c: Cast) -> None:
     keywords=[Keyword.HEALING, Keyword.WEAPON],
     requires=_is_bloodied,
     requires_text="usable only while bloodied",
+    defect="the printed attack line names no defence",
 )
 def m1135a1(c: Cast) -> None:
-    """A melee basic attack and six hit points back, which is the whole card.
-
-    It used to carry a marker for the "+6 vs ; 2d10+3" line above the effect,
-    read as a defence the extraction had lost. **That line is not this
-    card's** -- the import pastes one in front of the real text, and `2d10+3`
-    is one of nineteen expressions it draws from. #612 is the measurement.
-    So there was never a second half to declare.
-    """
+    """The card carries a second attack line -- "+6 vs ; 2d10+3" -- whose
+    defence the extraction lost, so that half cannot be declared at all and
+    is named rather than guessed. What plays is the sentence that survived
+    intact: a melee basic attack and six hit points back."""
     c.basic()
     if c.first:
         c.heal(6, on=c.me)

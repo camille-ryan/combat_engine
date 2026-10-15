@@ -1070,6 +1070,7 @@ def m2091a0(c: Cast) -> None:
     ],
     attack=Attack(vs=AC, printed=16),
     damage=Damage("4d8", 5, kind=LIMITED),
+    defect="the printed attack line names no defence",
 )
 def m2091a1(c: Cast) -> None:
     """The printed Effect is two at-will blows, so that is what the body does

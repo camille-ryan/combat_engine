@@ -710,6 +710,7 @@ def m1503a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    defect="the printed attack line names no defence",
 )
 def m1503a1(c: Cast) -> None:
     """m1503a0 through the row that prints it, twice, so its damage line
@@ -798,6 +799,7 @@ def m1929a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC],
+    defect="the printed attack line names no defence",
 )
 def m1929a1(c: Cast) -> None:
     """No attack roll at all -- the whole of the printed line is automatic
@@ -859,6 +861,7 @@ _M1958_STOOD = "an adjacent enemy stands up"
     keywords=[Keyword.NECROTIC],
     trigger=_M1958_STOOD,
     on=Trigger(ConditionEnded, _stood_up_adjacent, _M1958_STOOD),
+    defect="the printed attack line names no defence",
 )
 def m1958a1(c: Cast) -> None:
     who = getattr(c.trigger, "target", None)

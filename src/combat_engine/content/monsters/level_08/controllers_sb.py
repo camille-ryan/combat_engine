@@ -2953,6 +2953,7 @@ def m959a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
+    defect="the printed attack line names no defence",
 )
 def m959a1(c: Cast) -> None:
     _twice(c, "m959a0")

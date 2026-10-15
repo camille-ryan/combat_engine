@@ -1202,6 +1202,7 @@ def m1487a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(3),
     target=ONE_CREATURE,
+    defect="the printed attack line names no defence",
 )
 def m1487a1(c: Cast) -> None:
     """Three swings of the reach line, so the numbers live there and this row
@@ -2646,6 +2647,7 @@ def m4600a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
+    defect="the printed attack line names no defence",
 )
 def m4600a2(c: Cast) -> None:
     """Two swings of the reach line, so its numbers stay there -- this row's

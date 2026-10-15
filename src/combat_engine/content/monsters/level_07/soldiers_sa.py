@@ -405,6 +405,7 @@ def m1078a0(c: Cast) -> None:
     "m1078a1", level=7, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=UpTo(2), keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=12), damage=Damage("2d6", 5),
+    defect="the printed attack line names no defence",
 )
 def m1078a1(c: Cast) -> None:
     if c.strike():
@@ -811,15 +812,15 @@ def m1981a0(c: Cast) -> None:
         side="enemy", count=1, label="creature grabbed by it",
         relation=Relation.GRABBED_BY,
     ),
+    defect="the printed attack line names no defence",
 )
 def m1981a1(c: Cast) -> None:
-    """Automatic damage against what it is holding, no attack roll -- and the
-    card says so in those words.
-
-    So the "+12 vs " line could never have been this card's: you cannot have
-    both an attack roll and "no attack roll required" on one power. It is
-    pasted (#612), which settles what the old marker called two unresolved
-    fragments."""
+    """The printed line is two damage fragments the extraction never
+    resolved; the clear half of it -- automatic damage, no attack roll --
+    is what is written. The other half extracted as "+12 vs" and no defence
+    at all, which is a defence to fix upstream rather than invent here -- the
+    same defect `m3525a2` names. It had no marker of its own while the target
+    line was carrying one."""
     c.flat(c.roll("2d6") + 4)
 
 
@@ -1018,6 +1019,7 @@ def m2050a0(c: Cast) -> None:
     attack=Attack(vs=AC, printed=12), damage=Damage("2d6", 5),
     trigger="a creature marked by it moves or shifts",
     on=Trigger(MoveStart, _marked_shifts, "a creature marked by it moves or shifts"),
+    defect="the printed attack line names no defence",
 )
 def m2050a1(c: Cast) -> None:
     foe = _triggering_enemy(c)
@@ -2805,6 +2807,7 @@ def m884a0(c: Cast) -> None:
 @power(
     "m884a1", level=7, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(2), target=ONE_CREATURE, damage=Damage("3d10", 5, kind=LIMITED),
+    defect="the printed attack line names no defence",
 )
 def m884a1(c: Cast) -> None:
     me = c.me
@@ -3064,7 +3067,15 @@ def m992a0(c: Cast) -> None:
         c.push(1)
 
 
-@power("m992a1", level=7, usage=ENCOUNTER, action=STANDARD, reach=Melee(1), target=UpTo(2))
+@power(
+    "m992a1",
+    level=7,
+    usage=ENCOUNTER,
+    action=STANDARD,
+    reach=Melee(1),
+    target=UpTo(2),
+    defect="the printed attack line names no defence",
+)
 def m992a1(c: Cast) -> None:
     """Two basic attacks: at one target twice, or at two targets once each --
     `c.targets` says which, the same choice `UpTo(2)` offers elsewhere."""

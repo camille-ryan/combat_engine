@@ -898,6 +898,7 @@ def m2326a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d6", 5),
+    defect="the printed attack line names no defence",
 )
 def m2326a1(c: Cast) -> None:
     """A second head's own pair of swings -- no defence word printed, read

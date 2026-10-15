@@ -357,6 +357,7 @@ def m1194a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
+    defect="the printed attack line names no defence",
 )
 def m1194a1(c: Cast) -> None:
     """Two swings against two different targets, each through the row that
@@ -1443,6 +1444,7 @@ def m2531a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
+    defect="the printed attack line names no defence",
 )
 def m2531a1(c: Cast) -> None:
     """Two swings through the row that prints the numbers; the spec's own

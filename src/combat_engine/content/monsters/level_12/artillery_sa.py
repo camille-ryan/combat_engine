@@ -616,6 +616,7 @@ def m1091a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=NO_TARGET,
+    defect="the printed attack line names no defence",
 )
 def m1091a1(c: Cast) -> None:
     """"Make two m1091a0 attacks", which is the row above and its reach.

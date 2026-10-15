@@ -386,6 +386,7 @@ def _has_an_opening(world: World, eid: int) -> bool:
     damage=Damage("2d6", 5),
     requires=_has_an_opening,
     requires_text="it must have combat advantage against a target",
+    defect="the printed attack line names no defence",
 )
 def m1496a1(c: Cast) -> None:
     victim = c.target

@@ -5702,40 +5702,39 @@ def named_in_prose(out: Result) -> None:
                  f"dazed={got}")
 
 
-def blank_defence_is_boilerplate(out: Result) -> None:
-    """An attack line with no defence is a **pasted** line, not a lost word.
+def blank_defence_is_defective(out: Result) -> None:
+    """"+X vs <blank>" is malformed, and the whole entry drops. Camille, #612.
 
-    28 rows carried `compendium.attack_defence`, each saying the attack line
-    above its effect "extracted against no defence, which is a compendium
-    defect rather than a number to guess". The defence really is absent from
-    the page -- no word and no `<img>` standing in for one -- so that much
-    was right. What was wrong is calling it the row's own attack.
+    **The ruling, 2026-10-15:** *"If an attack says '+X vs. BLANK' it's
+    malformed... To be clear, this is different than something like '+X vs
+    reflex or will, whichever is lower.'"* With #600 -- a defective part
+    drops the entire compendium entry -- that makes every one of these a
+    `defect=` and takes its creature off the board.
 
-    **This is the measurement the retirement rests on**, and it is here
-    rather than only on #612 so that it is checked on every run. A real
-    card's damage varies with its creature; these draw from a pool of
-    nineteen expressions, `2d6+5` alone covering 28 of them on creatures
-    from level 7 to level 11. Named-defence lines across the same corpus use
-    over a thousand distinct expressions.
+    **I had this wrong and the correction is worth keeping.** I read the
+    blank line as importer boilerplate pasted in front of the real text,
+    retired the marker on 26 rows and called them finished. The measurement
+    behind that reading was sound and is still asserted below -- blank-defence
+    lines draw their damage from a pool of nineteen expressions where named
+    ones use over a thousand -- but the conclusion was mine to get wrong:
+    knowing *why* a line is junk does not make the row writable. The rows'
+    original docstrings said "a compendium defect rather than a number to
+    guess", which was right, and are restored.
 
-    So the thresholds below are deliberately loose -- the real gap is a
-    factor of five, and asserting the exact figures would make this rule a
-    tripwire for every compendium copy rather than for the property. What
-    must stay true is that blank-defence damage is drawn from a small pool
-    and named-defence damage is not.
-
-    **It goes red if somebody "fixes" the ETL by inventing defences**, which
-    is the failure this is pointed at: the 28 rows would then declare attacks
-    nobody printed, and the pool would stop being small.
-
-    The compendium is not committed, so this skips -- loudly -- without it.
+    The distinction the ruling draws matters and the corpus hides it: these
+    cards read `+N vs  or  (whichever is lower)` with **both** defence names
+    absent, which is the blank form with a conjunction left over -- not the
+    legitimate `vs Reflex or Will` that prints two real defences.
     """
     import re
     import sqlite3
     from collections import Counter
     from html import unescape
 
-    from combat_engine.db import SOURCE
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content import loader
+    from combat_engine.db import SOURCE, localisation
+    from combat_engine.engine.dsl import REGISTRY
 
     if not SOURCE.exists():
         out.skip("compendium.sqlite is not on this machine, and it is never"
@@ -5743,128 +5742,10 @@ def blank_defence_is_boilerplate(out: Result) -> None:
         return
 
     comp = sqlite3.connect(f"file:{SOURCE}?mode=ro", uri=True)
-    line = re.compile(r"\+(\d+)\s+vs\.?\s*([A-Za-z]*)\s*(or)?[^;<]*;\s*([^.<]*?)damage\.")
-    blank: Counter[str] = Counter()
-    named: Counter[str] = Counter()
-    for (txt,) in comp.execute("SELECT Txt FROM Monster WHERE Txt IS NOT NULL"):
-        for m in line.finditer(unescape(txt)):
-            dice = re.sub(r"\s+", "", m.group(4))
-            # `or` is the leftover of "vs <blank> or <blank> (whichever is
-            # lower)" -- both words gone, the conjunction left behind. It is
-            # a blank, not a defence named "or".
-            (blank if m.group(2) in ("", "or") else named)[dice] += 1
-
-    n_blank, n_named = sum(blank.values()), sum(named.values())
-    if n_blank < 20 or n_named < 200:
-        out.skip(f"too few attack lines to measure a distribution"
-                 f" ({n_blank} blank, {n_named} named)")
-        return
-
-    def top_share(c: Counter[str], total: int) -> float:
-        return sum(n for _, n in c.most_common(8)) / total
-
-    blank_share, named_share = top_share(blank, n_blank), top_share(named, n_named)
-    out.that(len(blank) < len(named) / 10,
-             "blank-defence lines use far fewer distinct damage expressions"
-             " than named ones, which a real card cannot do",
-             f"{len(blank)} distinct over {n_blank} lines against"
-             f" {len(named)} over {n_named}")
-    out.that(blank_share > 0.6,
-             "most blank-defence lines share a handful of expressions --"
-             " the pasted pool",
-             f"top 8 cover {blank_share:.0%}")
-    out.that(named_share < 0.3,
-             "and named-defence lines do NOT -- the control, without which"
-             " the figure above could just be how all 4e damage looks",
-             f"top 8 cover {named_share:.0%}")
-    out.that(blank_share > named_share * 2,
-             "the two distributions are different in kind, not degree",
-             f"{blank_share:.0%} against {named_share:.0%}")
-
-    # And the rows that were marked: none of them declares an attack, which
-    # is what makes retiring the marker a no-op in play rather than a change
-    # to what any row does.
-    # **`import combat_engine.content` or `REGISTRY` is empty here.** It was,
-    # and the assertion below passed on nothing: `not declaring` is true of an
-    # empty list, so a planted `attack=` on a still-marked row stayed green.
-    # Found by the plant, which is the only thing that could have found it --
-    # the sentence reads identically either way. `scripts/CLAUDE.md` calls
-    # this a check that cannot fail, and the floor on `marked` is what stops
-    # it coming back.
-    import combat_engine.content  # noqa: F401  -- fills the registry
-    from combat_engine.engine.dsl import REGISTRY
-
-    # **The floor became an assertion of zero, and that is the check's
-    # definition changing rather than being loosened.** It read
-    # `len(marked) >= 3` while rows were still on the symbol, so an empty set
-    # could not pass. Retiring the last of them turned it red, correctly --
-    # and the honest replacement is the other direction: the symbol is gone,
-    # and the "declares no attack" claim moves onto a **pinned list** of the
-    # rows that carried it. A live query would answer about nobody, which is
-    # exactly the vacuous pass the floor existed to prevent.
-    retired = (
-        "m1135a1", "m3520a1", "m4717a1", "m2022a1", "m3525a2", "m3547a2",
-        "m784a1", "m817a1", "m857a1", "m1510a1", "m1527a1", "m3543a2",
-        "m3546a4", "m3548a2", "m3559a3", "m3560a1", "m3560a2", "m3562a1",
-        "m977a1", "m1680a1", "m1981a1", "m1522a1",      # the 22 heroic
-        "m947a1", "m1147a1", "m1952a1", "m2085a1",      # four paragon
-    )
-    still = [
-        ref for ref, p in REGISTRY.items()
-        if any(str(w) == "compendium.attack_defence"
-               for w in (getattr(p, "unfinished", None) or ()))
-    ]
-    out.that(not still,
-             "the symbol is retired -- no row carries it any more",
-             f"{len(still)} still do: {still}")
-    missing = [r for r in retired if r not in REGISTRY]
-    out.that(not missing,
-             "and every row it was retired from is still declared, so the"
-             " list below is asking about rows that exist",
-             f"absent: {missing}")
-    # `m2340a1` is **not** on that list: its pasted line is no loss, but the
-    # printed *Secondary Attack* it grants really has no line of its own,
-    # where this creature's two siblings kept theirs. Re-pointed rather than
-    # retired, and asserted so the distinction cannot quietly collapse.
-    out.that(
-        any("secondary_attack_line" in str(w)
-            for w in (getattr(REGISTRY.get("m2340a1"), "unfinished", None) or ())),
-        "m2340a1 still carries a marker, pointed at the secondary attack"
-        " line rather than at the pasted one -- a different gap one level"
-        " down, and the second row this family does not cover",
-    )
-    declaring = [
-        r for r in retired
-        if r in REGISTRY and getattr(REGISTRY[r], "attack", None)
-    ]
-    out.that(not declaring,
-             "and none of the 26 declares a header attack, which is what made"
-             " the retirement a no-op in play rather than a change to what"
-             " any row does",
-             f"{len(retired)} retired, {len(declaring)} declare one:"
-             f" {declaring}")
-
-    # ---- the signature, which is what the retirement actually rests on ---
-    #
-    # The distribution above says the *population* is pasted. This says which
-    # line is, one row at a time, and it is the stronger claim: a pasted line
-    # leaves its damage slot **empty**, so the text reads `... vs ; . Effect`
-    # or `... damage.. Effect` -- a semicolon followed by a bare full stop, or
-    # a doubled one. A genuinely mangled line has its damage intact and the
-    # rider continues the same sentence.
-    #
-    # **`m4244a2` is the control and it is the reason this is not a blanket
-    # rule.** Its line is `Close burst 1; +12 vs  or  (whichever is lower);
-    # 1d8+5 damage, and the target is dazed and slowed (save ends both)` --
-    # damage present, rider attached, no bare period. That one really did
-    # lose two defence names, so it keeps its `defect=` and its entry drops
-    # under #600. Without this assertion, the retirement would have taken it
-    # too, and a creature would have been deleted on the strength of a
-    # statistic about everybody else.
-    from combat_engine.db import localisation
-
     loc = localisation()
-    sig = re.compile(r";\s*\.\s|damage\.\.")
+    # "+N vs" with no defence word. The `or` left behind by a blanked pair
+    # counts as blank -- that is the whole of the ruling's second sentence.
+    blank = re.compile(r"\+\s*\d+\s+vs\.?\s*(?:or\b|;|<|$)", re.I)
 
     def line_of(ref: str) -> str:
         name = (loc.get(ref) or {}).get("name") or ""
@@ -5881,15 +5762,62 @@ def blank_defence_is_boilerplate(out: Result) -> None:
         return (re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", found.group(2))).strip()
                 if found else "")
 
-    kept = line_of("m4244a2")
-    out.that(bool(kept) and not sig.search(kept),
-             "m4244a2 -- the one row whose defence really was lost -- does"
-             " NOT carry the paste signature, which is why it keeps"
-             " `defect=` while 22 others lost their marker",
-             kept[:90])
-    out.that(bool(kept) and "1d8+5 damage, and the target is dazed" in kept,
-             "and its damage and rider are intact on the same sentence, which"
-             " is what a mangled line looks like next to a pasted one")
+    malformed = [
+        ref for ref in REGISTRY
+        if re.match(r"^m\d+a\d+$", ref) and blank.search(line_of(ref))
+    ]
+    out.that(len(malformed) >= 50,
+             "the corpus still holds the rows this ruling is about -- the"
+             " floor, so the two assertions below cannot pass on an empty set",
+             f"{len(malformed)} rows")
+
+    # **Both blank shapes have to stay in scope, counted separately.** A
+    # floor on the total does not do it: narrowing the pattern to drop the
+    # blanked *pair* -- "vs  or  (whichever is lower)" -- left 50+ of the
+    # single-blank form behind and the rule stayed green while quietly
+    # stopping checking half its subject. A plant found that. The pair form
+    # is the one the ruling's second sentence is about, so it is the one most
+    # worth pinning.
+    pair = [r for r in malformed if re.search(r"vs\.?\s*or\b", line_of(r), re.I)]
+    lone = [r for r in malformed if r not in pair]
+    out.that(len(pair) >= 15 and len(lone) >= 15,
+             "and both blank shapes are in scope -- the bare `vs ;` and the"
+             " blanked pair `vs  or  (whichever is lower)`, which is the one"
+             " the ruling distinguishes from a real two-defence line",
+             f"{len(lone)} bare, {len(pair)} blanked pairs")
+
+    undeclared = [r for r in malformed if not getattr(REGISTRY[r], "defect", "")]
+    out.that(not undeclared,
+             "every row whose printed attack line names no defence carries"
+             " `defect=`, which is the ruling applied",
+             f"{len(undeclared)} do not: {undeclared[:8]}")
+
+    kept = [s for s in {r.split("a")[0] for r in malformed}
+            if not loader.defective(s)]
+    out.that(not kept,
+             "and every entry holding one is defective, so #600 takes the"
+             " whole creature off the board rather than the one row",
+             f"{len(kept)} entries survive: {kept[:8]}")
+
+    # ---- why the compendium looks like this, which the ruling does not
+    # ---- need but the next reader will want -----------------------------
+    line = re.compile(r"\+(\d+)\s+vs\.?\s*([A-Za-z]*)\s*(or)?[^;<]*;\s*([^.<]*?)damage\.")
+    pool: Counter[str] = Counter()
+    named: Counter[str] = Counter()
+    for (txt,) in comp.execute("SELECT Txt FROM Monster WHERE Txt IS NOT NULL"):
+        for m in line.finditer(unescape(txt)):
+            dice = re.sub(r"\s+", "", m.group(4))
+            (pool if m.group(2) in ("", "or") else named)[dice] += 1
+    if sum(pool.values()) < 20 or sum(named.values()) < 200:
+        out.skip("too few attack lines to measure a distribution")
+        return
+    out.that(len(pool) < len(named) / 10,
+             "a blank-defence line's damage comes from a tiny pool where a"
+             " named one's does not -- which is how the malformation got into"
+             " the source, and is why it is not a row fault to fix",
+             f"{len(pool)} distinct over {sum(pool.values())} lines against"
+             f" {len(named)} over {sum(named.values())}")
+
 
 
 def area_or_close_is_one_set(out: Result) -> None:
@@ -10117,9 +10045,9 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
-    "blank_defence_is_boilerplate": (blank_defence_is_boilerplate,
-                                     "an attack line with no defence is a"
-                                     " pasted line, not a lost word"),
+    "blank_defence_is_defective": (blank_defence_is_defective,
+                                   "\"+X vs <blank>\" is malformed and the"
+                                   " whole entry drops -- Camille, #612"),
     "manoeuvres": (manoeuvres,
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,

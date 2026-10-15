@@ -1679,13 +1679,13 @@ def m3548a1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
+    defect="the printed attack line names no defence",
 )
 def m3548a2(c: Cast) -> None:
-    """The movement and the swing are the whole of what this does.
-
-    The "+7 vs  or  (whichever is lower)" above them has both names gone
-    because the line is pasted in, not because they were lost (#612) -- so
-    there is nothing to declare rather than nothing declarable."""
+    """The movement and the swing are the whole of what this does and both
+    work. The attack line the extraction left behind reads "+7 vs <one> or
+    <other> (whichever is lower)" with both names gone, so there is no defence
+    to declare and none is invented."""
     _shift_and_swing(c, 3)
 
 
@@ -1899,11 +1899,12 @@ def m3560a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
+    defect="the printed attack line names no defence",
 )
 def m3560a1(c: Cast) -> None:
-    """The move and the basic attack it carries are the printed Effect, and
-    they are all of it. The "pair to compare" the old marker wanted was never
-    this card's -- that line is pasted (#612)."""
+    """Both defences this attack names were lost in extraction, so there is no
+    pair to compare and none is guessed. The move and the basic attack it
+    carries are the printed Effect and they work."""
     _mobile_attack(c, max(1, c.speed_of() // 2))
 
 
@@ -1915,6 +1916,7 @@ def m3560a1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m3560a2(c: Cast) -> None:
     """A burst that swings the creature's own basic attack at everything
@@ -1991,6 +1993,7 @@ def m3562a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     charges=True,
+    defect="the printed attack line names no defence",
 )
 def m3562a1(c: Cast) -> None:
     """`charges=True` or the engine measures a sword's reach before the run
@@ -3591,13 +3594,13 @@ def m977a0(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.NECROTIC],
+    defect="the printed attack line names no defence",
 )
 def m977a1(c: Cast) -> None:
-    """Fly half its speed, swing the basic attack on the way, give the victim
-    no opening on the way out. That is the printed Effect and there is no
-    other half: the line above it is pasted (#612), which `m1680a1` -- the
-    identical card -- reached by a different route when its invented attack
-    was removed."""
+    """The extraction lost the defence this attack rolls against, so the
+    row's own swing cannot be made and none is invented. What is left is the
+    printed Effect -- fly half its speed, swing the basic attack on the way,
+    and give the victim no opening on the way out -- and that works."""
     _mobile_attack(c, max(1, c.speed_of() // 2))
 
 

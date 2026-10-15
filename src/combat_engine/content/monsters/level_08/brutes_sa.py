@@ -722,6 +722,7 @@ def m1453a0(c: Cast) -> None:
     target=Target(side="enemy", count=2, label="two different targets"),
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
+    defect="the printed attack line names no defence",
 )
 def m1453a1(c: Cast) -> None:
     if c.strike():
@@ -807,6 +808,7 @@ def m1521a0(c: Cast) -> None:
     damage=Damage("3d10", 5),
     recharge_when=Trigger(Bloodied, about_me,
         "when first bloodied"),
+    defect="the printed attack line names no defence",
 )
 def m1521a1(c: Cast) -> None:
     """Two bites at one target, each at the -2 the card prints -- read as
@@ -3194,6 +3196,7 @@ def m920a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
+    defect="the printed attack line names no defence",
 )
 def m920a1(c: Cast) -> None:
     victim = c.target

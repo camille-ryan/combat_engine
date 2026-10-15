@@ -1451,6 +1451,7 @@ def m3571a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=NO_TARGET,
+    defect="the printed attack line names no defence",
 )
 def m3571a2(c: Cast) -> None:
     _one_then_two(c, "m3571a0", "m3571a1")
@@ -1495,6 +1496,7 @@ _M3571_BLOODIED = "it is first bloodied"
     keywords=[Keyword.LIGHTNING],
     trigger=_M3571_BLOODIED,
     on=Trigger(Bloodied, about_me, _M3571_BLOODIED),
+    defect="the printed attack line names no defence",
 )
 def m3571a4(c: Cast) -> None:
     _recharge_and_fire(c, "m3571a3")

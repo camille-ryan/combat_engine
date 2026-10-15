@@ -445,6 +445,7 @@ def m2503a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger=_M2503_MISSED,
     on=Trigger(Miss, both(targets_me, by_melee), _M2503_MISSED),
+    defect="the printed attack line names no defence",
 )
 def m2503a1(c: Cast) -> None:
     """The card says it makes a melee basic attack, so its own at-will is run

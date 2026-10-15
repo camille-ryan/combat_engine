@@ -1147,7 +1147,7 @@ def m3639a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops"),
-    dropped=("etl.monster.ability_text()",),
+    defect="the printed attack line names no defence",
 )
 def m3639a1(c: Cast) -> None:
     """Half of this card did not survive extraction: the attack line lost its
@@ -2596,6 +2596,7 @@ def m917a0(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it is first bloodied",
     on=Trigger(Bloodied, about_me, "it is first bloodied"),
+    defect="the printed attack line names no defence",
 )
 def m917a1(c: Cast) -> None:
     """The card's own attack line did not survive extraction -- "+6 vs ;" with

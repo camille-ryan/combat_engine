@@ -851,6 +851,7 @@ def m2003a0(c: Cast) -> None:
 @power(
     "m2003a1", level=9, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=ONE_CREATURE, keywords=[Keyword.PSYCHIC],
+    defect="the printed attack line names no defence",
 )
 def m2003a1(c: Cast) -> None:
     """The printed attack line is garbled (a blank defence) and the real

@@ -624,6 +624,7 @@ def m1162a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=NO_TARGET,
+    defect="the printed attack line names no defence",
 )
 def m1162a1(c: Cast) -> None:
     """Both swings, each picking its own target.
@@ -1046,6 +1047,7 @@ def m2096a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.POISON, Keyword.WEAPON],
     requires_text="the m2096 must be wielding a longsword",
+    defect="the printed attack line names no defence",
 )
 def m2096a1(c: Cast) -> None:
     """The brief prints an orphan attack line with no defence in front of the

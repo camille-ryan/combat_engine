@@ -302,6 +302,7 @@ def m1017a0(c: Cast) -> None:
     "m1017a1", level=8, usage=Usage.RECHARGE, recharge=5, action=STANDARD,
     reach=Melee(1), target=UpTo(2), attack=Attack(vs=AC, printed=13),
     damage=Damage("3d10", 5, kind=LIMITED),
+    defect="the printed attack line names no defence",
 )
 def m1017a1(c: Cast) -> None:
     """Two claw attacks against up to two targets, settled together: the
@@ -399,6 +400,7 @@ def m1061a0(c: Cast) -> None:
 @power(
     "m1061a1", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=UpTo(2), keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m1061a1(c: Cast) -> None:
     _katar_flurry(c)
@@ -699,6 +701,7 @@ def m1506a0(c: Cast) -> None:
 @power(
     "m1506a1", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=UpTo(2), keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m1506a1(c: Cast) -> None:
     _katar_flurry(c)
@@ -873,6 +876,7 @@ def m1779a0(c: Cast) -> None:
     "m1779a1", level=8, usage=Usage.RECHARGE, recharge=4, action=STANDARD,
     reach=CloseBurst(1), target=EACH_OTHER, keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13), damage=Damage("3d10", 5, kind=LIMITED),
+    defect="the printed attack line names no defence",
 )
 def m1779a1(c: Cast) -> None:
     """The shift afterwards covers the whole burst, so it is counted and
@@ -1037,6 +1041,7 @@ def m2505a0(c: Cast) -> None:
 @power(
     "m2505a1", level=8, usage=AT_WILL, action=STANDARD, reach=Melee(1),
     target=UpTo(2), keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m2505a1(c: Cast) -> None:
     _katar_flurry(c)

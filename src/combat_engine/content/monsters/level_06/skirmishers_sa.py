@@ -864,6 +864,7 @@ def m1807a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d10", 4),
+    defect="the printed attack line names no defence",
 )
 def m1807a1(c: Cast) -> None:
     c.shift(1)
@@ -1084,6 +1085,7 @@ def m2504a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.NECROTIC, Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m2504a1(c: Cast) -> None:
     """Three basic swings spent across a 6-square shift, no foe struck twice."""
@@ -1523,7 +1525,15 @@ def m3642a0(c: Cast) -> None:
         c.flat(c.roll("1d6"), dtype=DamageType.FIRE)
 
 
-@power("m3642a1", level=6, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET)
+@power(
+    "m3642a1",
+    level=6,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    defect="the printed attack line names no defence",
+)
 def m3642a1(c: Cast) -> None:
     """It, not a named thing -- see the module docstring. Attacks whichever
     of AC or Reflex is lower on the chosen foe, same weapon damage as its

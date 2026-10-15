@@ -206,7 +206,11 @@ def _landing_on(c: Cast, who: int, ev: EffectApplied) -> Effect | None:
         for e in c.world.effects.live.values()
         if e.owner == who and not e.ended and e.label == ev.label
     ]
-    return max(mine, key=lambda e: e.id, default=None)
+    # Guarded rather than `default=None`: that form makes the key's argument
+    # `Effect | None` to a reader, and `e.id` is then an attribute on None.
+    if not mine:
+        return None
+    return max(mine, key=lambda e: e.id)
 
 
 def _saves_off_prone(c: Cast, who: int, ev: EffectApplied) -> bool:
@@ -653,7 +657,15 @@ def m1092a0(c: Cast) -> None:
         c.hit()
 
 
-@power("m1092a1", level=10, usage=AT_WILL, action=STANDARD, reach=Melee(2), target=NO_TARGET)
+@power(
+    "m1092a1",
+    level=10,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(2),
+    target=NO_TARGET,
+    defect="the printed attack line names no defence",
+)
 def m1092a1(c: Cast) -> None:
     """Up to four claws, no target more than twice. `Target` only ever
     offers distinct creatures, so the four swings are picked by hand."""
@@ -1165,6 +1177,7 @@ def _looked_away_in_reach(radius: int):  # noqa: ANN202
     on=Trigger(
         PowerUsed, when=_looked_away_in_reach(2), text="an enemy within reach attacks without it"
     ),
+    defect="the printed attack line names no defence",
 )
 def m2052a1(c: Cast) -> None:
     foe = getattr(c.trigger, "actor", None)
@@ -1501,6 +1514,7 @@ def m2087a0(c: Cast) -> None:
     reach=Melee(1),
     target=UpTo(2),
     keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m2087a1(c: Cast) -> None:
     if not c.first:
@@ -1626,7 +1640,15 @@ def m2092a0(c: Cast) -> None:
         c.grab()
 
 
-@power("m2092a1", level=10, usage=AT_WILL, action=STANDARD, reach=Melee(3), target=UpTo(2))
+@power(
+    "m2092a1",
+    level=10,
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(3),
+    target=UpTo(2),
+    defect="the printed attack line names no defence",
+)
 def m2092a1(c: Cast) -> None:
     if not c.first:
         return

@@ -327,6 +327,7 @@ _M2230_DOWN = "the m2230 drops to 0 hit points"
     damage=Damage("4d8", 5),
     trigger=_M2230_DOWN,
     on=Trigger(Dropped, about_me, _M2230_DOWN),
+    defect="the printed attack line names no defence",
 )
 def m2230a1(c: Cast) -> None:
     """The extraction lost the defence word on this one -- "+13 vs ;" --

@@ -839,11 +839,12 @@ def m3547a1(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it scores a critical hit",
     on=Trigger(Hit, _my_crit, "it scores a critical hit"),
+    defect="the printed attack line names no defence",
 )
 def m3547a2(c: Cast) -> None:
-    """The swing is the whole of what the card does -- and now that is said
-    without a marker. The bonus-against-nothing line above it is one the
-    import pastes in, not a defence this card lost. #612."""
+    """The swing is the whole of what the card does. The attack line above it
+    extracted as a bonus against no defence at all -- a compendium defect, not
+    a defence to invent."""
     near = _press(c)
     if near:
         c.basic(on=near[0])
@@ -2374,15 +2375,14 @@ def m784a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
-    dropped=("query.moved_this_turn(world, eid)",),
+    defect="the printed attack line names no defence",
 )
 def m784a1(c: Cast) -> None:
-    """Two basic attacks against two adjacent creatures, which plays.
-
-    One marker, not two, now. The Requirement -- that it did not move this
-    turn -- genuinely cannot be asked and is what is left. The attack line
-    above the effect is a pasted one (#612), so it was never a second gap.
-    """
+    """Two basic attacks against two adjacent creatures, which plays. The
+    Requirement -- that it did not move this turn -- cannot be asked: nothing
+    records what a creature has already done with its turn. The attack line
+    above it extracted against no defence at all, which is a compendium defect
+    and not a defence to invent."""
     c.basic(on=c.target)
 
 
@@ -2518,14 +2518,12 @@ def m817a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=UpTo(2),
+    defect="the printed attack line names no defence",
 )
 def m817a1(c: Cast) -> None:
-    """Two basic attacks, spread or doubled up as the chooser likes.
-
-    "Make two basic melee attacks" is the entire printed effect, and a basic
-    attack rolls the creature's own line -- so the "+1 vs  or  " above it had
-    nothing to contribute even before #612 showed it was pasted in.
-    """
+    """Two basic attacks, spread or doubled up as the chooser likes. The attack
+    line above them extracted against no defence, which is a compendium defect
+    rather than a number to guess."""
     c.basic(on=c.target)
     if c.last and len(c.targets) < 2:
         c.basic(on=c.target)

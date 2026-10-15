@@ -843,6 +843,7 @@ def m2043a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
+    defect="the printed attack line names no defence",
 )
 def m2043a1(c: Cast) -> None:
     """The printed Requirement naming its own longsword is not a gate
@@ -1104,6 +1105,7 @@ def m3539a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
+    defect="the printed attack line names no defence",
 )
 def m3539a3(c: Cast) -> None:
     """The printed defence is garbled past reading in the spec. Kept as

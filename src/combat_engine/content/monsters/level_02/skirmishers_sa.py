@@ -1523,16 +1523,17 @@ def m3520a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.FIRE],
+    defect="the printed attack line names no defence",
 )
 def m3520a1(c: Cast) -> None:
-    """The run is the card, and the slam is the at-will's.
+    """The run plays; the attack line the card also prints cannot be declared.
 
-    A marker here used to name the "+5 vs  or  (whichever is lower)" line as
-    an extraction defect (#360). Both defence names and the damage are absent
-    because **the line is pasted in front of the real text**, not because
-    anything was lost -- #612. Borrowing the slam from the at-will was
-    already right for the better reason: the printed sentence says it makes
-    that attack.
+    That line reads "+5 vs <one> or <other> (whichever is lower)" with both
+    defence names and the whole damage expression gone -- a defect in the
+    extraction (#360), not a row. Picking a defence would be an invented
+    number in a header the policy reads as printed, so it is named instead and
+    the slam is borrowed from the at-will, which is the attack the printed
+    sentence actually says it makes.
 
     The toll on anybody who swings at it during the run is a watch that lives
     for the turn and no longer: "during this movement" is the window, and a

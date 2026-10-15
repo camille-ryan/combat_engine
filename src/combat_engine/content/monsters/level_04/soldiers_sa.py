@@ -934,13 +934,13 @@ def m3543a1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=ONE_ALLY,
+    defect="the printed attack line names no defence",
 )
 def m3543a2(c: Cast) -> None:
-    """Ten temporary hit points to an ally within 5 squares -- all of it.
-
-    A minor action that buffs an ally does not roll "+9 vs  or  (whichever is
-    lower)" at them, and it never did: the line is pasted in front of the
-    real text (#612). Counted among #360's 98 before that was measured."""
+    """The compendium prints this row's attack line with no defence at all --
+    "+9 vs or (whichever is lower)" -- which is the 98-row extraction defect in
+    #360. One is not invented here; the temporary hit points are the half that
+    can be said."""
     c.temp_hp(10)
 
 

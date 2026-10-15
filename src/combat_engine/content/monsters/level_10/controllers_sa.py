@@ -889,6 +889,7 @@ def m1522a0(c: Cast) -> None:
     reach=Ranged(10),
     target=UpTo(2, side="ally"),
     keywords=[Keyword.TELEPORTATION, Keyword.RANGED],
+    defect="the printed attack line names no defence",
 )
 def m1522a1(c: Cast) -> None:
     """A teleport swap between two allies. **It was damaging them.**

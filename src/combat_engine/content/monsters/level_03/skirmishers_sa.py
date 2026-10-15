@@ -1497,14 +1497,16 @@ def m2022a0(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=NO_TARGET,
+    defect="the printed attack line names no defence",
 )
 def m2022a1(c: Cast) -> None:
     """A mobile attack, written as the movement it is printed as.
 
-    Half a move, one melee basic attack on the way, no opening for the
-    creature it swung at -- and that is the card entire. The "+6 vs ; 1d10+3"
-    it also appeared to carry is a pasted line (#612), so the marker that
-    called it a lost defence has gone.
+    The card also carries "+6 vs ; 1d10+3" -- an attack line whose defence
+    the extraction lost -- so that half cannot be declared at all and is
+    named rather than guessed. What plays is the sentence that survived
+    intact: half a move, one melee basic attack on the way, and no opening
+    for the creature it swung at.
     """
     _mobile_attack(c, max(1, c.speed_of(c.me) // 2))
 

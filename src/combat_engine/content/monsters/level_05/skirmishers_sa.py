@@ -953,6 +953,7 @@ def m3532a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
+    defect="the printed attack line names no defence",
 )
 def m3532a1(c: Cast) -> None:
     """"Two different targets" is what `UpTo(2)` already enforces. The
@@ -1047,6 +1048,7 @@ def m3544a0(c: Cast) -> None:
     charges=True,
     recharge_when=Trigger(Hit, hit_with("m3544a2"),
                           "when it hits with m3544a2"),
+    defect="the printed attack line names no defence",
 )
 def m3544a1(c: Cast) -> None:
     """The attack line lost both its defence and its damage in extraction --
@@ -1070,6 +1072,7 @@ def m3544a1(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=UpTo(2),
+    defect="the printed attack line names no defence",
 )
 def m3544a2(c: Cast) -> None:
     """One swing of the printed basic attack per target.

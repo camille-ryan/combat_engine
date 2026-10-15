@@ -1156,6 +1156,7 @@ def m2613a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(2),
     target=ONE_CREATURE,
+    defect="the printed attack line names no defence",
 )
 def m2613a1(c: Cast) -> None:
     victim = c.target

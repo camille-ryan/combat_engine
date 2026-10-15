@@ -578,6 +578,7 @@ def m1172a0(c: Cast) -> None:
     damage=Damage("2d6", 5),
     requires=_free_to_run,
     requires_text="the m1172 must not be immobilized or slowed",
+    defect="the printed attack line names no defence",
 )
 def m1172a1(c: Cast) -> None:
     """Two swings with a run between, the shape `m380a1` settled nine levels
@@ -1240,6 +1241,7 @@ _M1996_GRABBED: set[int] = set()
     target=NO_TARGET,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("4d8", 5, kind=LIMITED),
+    defect="the printed attack line names no defence",
 )
 def m1996a1(c: Cast) -> None:
     """`c.overrun` walks the line and reports whose square was entered, in
