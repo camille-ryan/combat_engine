@@ -189,3 +189,79 @@ Found by comparing the marked set at that commit against the tree in a
 throwaway worktree, which took a minute and should have been the habit from
 the first commit. `audit.py`'s own baseline exists because counts drift
 silently; a hand-written count in prose has no such protection.
+
+---
+
+# The second session, and what the ETL route bought
+
+Appended 2026-10-14 at `5d498f0`. Read the correction at the end of the
+previous section first: every number below was taken off the tree after the
+change, not written in the same breath as it.
+
+## Step 5 of the recommended order was not where the value was
+
+The order above put "build, densest symbol first" fifth and the ETL at 50
+rows — a rounding error beside the 868 waiting on a `Cast` verb. That
+reading was right about the counts and wrong about the **kind** of row an
+ETL gap holds up.
+
+`etl.item.inline_block()` had 13 rows behind it, which by the plan's own
+arithmetic is nothing. Opening it found **four live bugs in rows that
+reported finished**, which is a higher yield per row than any verb family
+this session has opened:
+
+* **`i1663p1` summoned `m324` and had for its whole life.** The item's own
+  entry prints a reduced block — HP 13 against `m324`'s 82 — so the row put
+  a level-7 soldier with **six times the printed hit points** on the board,
+  with a mark rider the card does not grant. Found by comparing the two
+  blocks, not by any instrument.
+* **`i1663p2` could not fire either way**: it searched for `m324` and
+  filtered `c.expended` to `Usage.RECHARGE` where the block prints
+  "encounter".
+* **`i3263p1`'s docstring had its card backwards.** It said a summon has no
+  initiative slot; the card says the creature "takes its turn on your
+  initiative count".
+* **`p14193`'s marker named an item gap on a theme row**, and its stated
+  reason — "that block has no ref of its own" — was false. `p14193b` exists
+  and has for 154 powers' worth of precedent; it simply had no content row.
+  Writing it then exposed a fifth: `p14193` laid its form with a `label`
+  and no `name=`, so `query.in_form` could not see it at all. The #477
+  state, two years of commits later.
+
+**The lesson for the remaining order**: a symbol's row count predicts how
+many markers come off, and predicts nothing about how many *wrong* rows are
+sitting beside them. The ETL groups are small and dense in both.
+
+## A reader that is right in one place and a trap in another
+
+`query.in_form` is **permissive when nothing has been recorded**, documented
+and reasoned: a monster that has not changed shape is in whatever shape it
+was found in, its block does not say which, so a Requirement must not rule
+an attack out.
+
+`p14193b`'s first draft used it as its `requires=` gate and the gate
+answered **yes before the form had ever been taken** — a character starts
+humanoid, always. `audit` reported the row fine, because the harness waives
+a Requirement to exercise a row.
+
+The fix is to ask the answerable question: does a hold that row laid still
+stand. The distinction is pinned in `drivers.forms` rather than only in the
+content file, because the mistake is available to all 58 rows printing a
+shape Requirement.
+
+## Three measurements worth keeping
+
+* **The inline-block threshold is not a guess.** Over every second-or-later
+  `<h1>` tail in the heroic range: 2× 0/5 marks, 53× 1/5, 15× 2/5,
+  **nothing at 3/5**, then 10× 4/5 and 2× 5/5. Four marks has a two-mark
+  margin on both sides. The issue's own first comment said eleven blocks;
+  it is twelve, and that comment was a sample read rather than a sweep.
+* **`_read_nothing` in one of two callers reports nothing.** Moving it into
+  the extracted `_write_monster` found `m509c0` on the first run — a block
+  whose every number is an expression in its conjurer's, which
+  `loader.spawn` would field with 1 hit point and AC 0. #603.
+* **A verb with no caller still needs both controls.** `c.summon(after=)`
+  has zero callers until the content lands, so `audit --calls` is 0 rows and
+  the driver is the only evidence. Its positive assertion passes by luck one
+  time in twenty — `join` rolls a d20 — so `rng.loaded` fixes the die and
+  the negative control carries the claim.

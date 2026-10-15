@@ -2698,16 +2698,24 @@ def i509x1(c: Cast) -> None:
     keywords=[Keyword.SUMMONING],
     trigger="you drop a Small or Medium enemy with an implement attack",
     on=Trigger(Dropped, _my_small_kill, "you drop a small or medium enemy"),
-    todo=("etl.item.inline_block()",),
+    todo=("etl.monster.derived_block()",),
 )
 def i509p1(c: Cast) -> None:
     """The trigger is declarable -- `Dropped` carries the killer and
     `Position` carries the victim's footprint -- but the creature is not.
-    `dsl.Summon` and `c.summon_inline` are complete; what is missing is
-    the block itself: `etl/item.py` truncates an item's text at its
-    second `<h1>`, which on this page is the summoned creature's stat
-    block, so no number of it reaches the spec and writing one would be
-    inventing it."""
+
+    **The marker was `etl.item.inline_block()` and that gap is closed.**
+    The block is imported now, as `m509c0`, and this row still cannot use
+    it: alone of the twelve, its card states every number as an expression
+    in the conjurer's -- "HP your bloodied value", "your defenses",
+    "+Intelligence +2 vs AC" -- so the compendium truthfully stores
+    zeroes. `loader.spawn` reads that row and would field a creature with
+    one hit point and AC 0, which is worse than not fielding it. That
+    makes it the 89th member of the family `spawn_associate` exists for:
+    a block that is a *rule for deriving* a stat line rather than a stat
+    line. It belongs in the associate table with an `x10_` ref, which is
+    a different gap in a different pass. #603.
+    """
 
 
 @power(

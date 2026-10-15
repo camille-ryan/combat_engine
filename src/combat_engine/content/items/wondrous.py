@@ -339,9 +339,67 @@ def _steam(c: Cast, dice: str) -> None:
 
 
 def _figurine(c: Cast, **kw: Any) -> int:
-    """The shared body of a figurine: a beast, and the optional surge."""
+    """The shared body of a figurine whose entry prints **no** stat block.
+
+    `dsl.Summon`'s numbers come off the summoner -- its `defences` field is
+    an offset, not an absolute -- so this is only honest where the page
+    gives no numbers to be wrong about. Where it does, use `_conjured`.
+    """
     made = c.summon_inline(Summon(**kw))
     if made and c.may("spend a healing surge"):
+        c.spend_surge(on=c.me)
+        c.temp_hp(c.surge_value(), on=made)
+    return made
+
+
+def _beside_my_beast(world: World, me: int, ev: Any) -> bool:
+    """"An enemy adjacent to the beast attacks you" -- both halves.
+
+    `triggers.targets_me` is only the second half, and a trigger that
+    fires on any attack would lend the beast a free swing whenever
+    anything hit the wielder, anywhere on the board. The beast is found
+    through the `MASTER_OF` relation `_conjured` sets rather than by
+    walking allies for a ref, so somebody else's identical conjuration is
+    not mistaken for this item's.
+    """
+    from combat_engine.engine.components import Ident as _Ident
+    from combat_engine.engine.query import adjacent
+    from combat_engine.engine.relations import Relation
+
+    if getattr(ev, "target", None) != me:
+        return False
+    attacker = getattr(ev, "attacker", None)
+    if attacker is None:
+        return False
+    for mine in world.relations.targets(Relation.MASTER_OF, me):
+        who = world.get(mine, _Ident)
+        if who is not None and who.ref == "m1932c0" and adjacent(world, mine, attacker):
+            return True
+    return False
+
+
+def _conjured(c: Cast, ref: str, *, surge: bool = True) -> int:
+    """A figurine whose entry prints the beast's whole stat block. #601.
+
+    The block was unimportable until the ETL learned to cut past an item's
+    second `<h1>`, so these rows had no ref to name and used `_figurine` --
+    which hands `dsl.Summon` a hand-picked size and mode list and takes the
+    rest from the summoner. Now the numbers are a real `monster` row and
+    `loader.spawn` reads them, level term and all.
+
+    **`after=c.me` is the printed line.** Ten of the twelve blocks say
+    "Initiative as conjurer" outright, which is a turn on the summoner's
+    count rather than a rolled one.
+
+    Bound, because every one of these cards says the creature obeys you and
+    `c.servants()` is how a second row on the same item finds it again --
+    `i1932p2` is the case, and before this there was nothing to find.
+    """
+    made = c.summon(ref, after=c.me)
+    if not made:
+        return 0
+    c.bind(on=made)
+    if surge and c.may("spend a healing surge"):
         c.spend_surge(on=c.me)
         c.temp_hp(c.surge_value(), on=made)
     return made
@@ -1012,10 +1070,9 @@ def i1291x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("etl.item.inline_block()",),
 )
 def i1932p1(c: Cast) -> None:
-    _figurine(c)
+    _conjured(c, "m1932c0")
 
 
 @power(
@@ -1027,13 +1084,32 @@ def i1932p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="an enemy adjacent to the beast attacks you",
-    on=Trigger(AttackDeclared, targets_me, "an enemy attacks you"),
-    todo=("etl.item.inline_block()",),
+    on=Trigger(AttackDeclared, _beside_my_beast, "an enemy beside it attacks you"),
 )
 def i1932p2(c: Cast) -> None:
-    """The whole Effect is the beast's bite, and the bite line is printed in
-    the stat block the brief does not carry -- so there is nothing for
-    `c.command` to roll."""
+    """The bite is `m1932c0a0` now, and it has a ref.
+
+    The old docstring said the bite line was printed in a stat block the
+    brief does not carry, and that was true until the block was importable
+    (#601). It is a real `monster_power` row, so the swing is lent to the
+    beast rather than rolled by the wielder -- `c.grant_attack(who,
+    on=victim, ref=...)` rolls the creature's own numbers from the
+    creature's own square, where `c.strike` would have rolled the
+    character's.
+
+    **The trigger was half the printed sentence.** `targets_me` alone is
+    "an enemy attacks you"; the card is "an enemy **adjacent to the
+    beast** attacks you", which cannot fire at all until there is a beast,
+    and `_beside_my_beast` is both halves. `c.servants()` is what finds
+    it, since `_conjured` binds what it summons.
+    """
+    beast = next((a for a in c.servants()
+                  if (who := c.world.get(a, Ident)) is not None
+                  and who.ref == "m1932c0"), None)
+    foe = getattr(c.trigger, "attacker", None)
+    if beast is None or foe is None:
+        return
+    c.grant_attack(beast, on=foe, ref="m1932c0a0")
 
 
 @power("i2507x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -1199,10 +1275,9 @@ def i1876x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("etl.item.inline_block()",),
 )
 def i1925p1(c: Cast) -> None:
-    _figurine(c, size="large")
+    _conjured(c, "m1925c0")
 
 
 @power("i2086x1", level=5, cls=ITEM, action=ActionType.NONE,
@@ -1416,10 +1491,9 @@ def i1325p1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     requires=_aquatic,
     requires_text="there must be a body of water adjacent to you",
-    dropped=("etl.item.inline_block()",),
 )
 def i1933p1(c: Cast) -> None:
-    _figurine(c, modes={"swim": 8})
+    _conjured(c, "m1933c0")
 
 
 @power("i2063x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -2135,12 +2209,21 @@ def i1662p1(c: Cast) -> None:
 @power("i1663p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET, keywords=[Keyword.CONJURATION])
 def i1663p1(c: Cast) -> None:
-    """This is the one figurine whose creature the page names by id, so it
-    is a real `c.summon` rather than an inline block."""
-    made = c.summon("m324")
-    if made and c.may("spend a healing surge"):
-        c.spend_surge(on=c.me)
-        c.temp_hp(c.surge_value(), on=made)
+    """**It is not `m324`, and it was, for this row's whole life.**
+
+    The entry's second `<h1>` prints a reduced block of its own and it is
+    the one that governs: HP 13 against `m324`'s 82, no level or role at
+    all, Reflex 20 and Will 19 against 18 and 18, and the first attack
+    without the mark clause `m324a0` carries. So this row put a level-7
+    soldier with **six times the printed hit points** on the board, with a
+    rider the card does not grant, and reported finished -- invisible to
+    every sweep, because firing and doing something is all `audit` asks.
+
+    Found by comparing the two blocks while re-pointing the family: the
+    row said "the page names by id", and the page does, immediately above
+    a different block. #601.
+    """
+    _conjured(c, "m1663c0")
 
 
 @power(
@@ -2153,31 +2236,28 @@ def i1663p1(c: Cast) -> None:
     target=NO_TARGET,
 )
 def i1663p2(c: Cast) -> None:
-    """The row being handed back is named only in prose, which this
-    project does not read -- but it does not have to be named: the beast
-    is the one creature `i1663p1` put on the board by ref, and the row
-    wanted is the recharge power it has spent. `c.expended` asks the
-    board that question and `c.restore_use` answers it."""
-    beast = next(
-        (
-            a
-            for a in c.allies()
-            if (who := c.world.get(a, Ident)) is not None and who.ref == "m324"
-        ),
-        None,
-    )
+    """The card names the power it hands back, and now there is a ref for
+    it: the beast's second row, `m1663c0a1`.
+
+    **Two things here were wrong and both followed from `i1663p1`'s ref.**
+    It searched for `m324`, which is not what the page prints, so on a
+    board holding the right creature this found nobody and returned. And
+    it filtered `c.expended` to `Usage.RECHARGE` -- the block prints
+    "(standard, encounter)", so even the wrong creature's spent power
+    would not have matched. A row that could not fire either way.
+
+    `c.servants()` rather than a walk over `c.allies()` reading `Ident`:
+    `_conjured` binds what it summons, which is the relation this question
+    is actually about, and an ally with the same ref somebody else
+    summoned is not this item's beast.
+    """
+    beast = next((a for a in c.servants()
+                  if (who := c.world.get(a, Ident)) is not None
+                  and who.ref == "m1663c0"), None)
     if beast is None:
         return
-    spent = [
-        ref
-        for ref in c.expended(on=beast)
-        if (row := get(ref)) is not None and row.usage is Usage.RECHARGE
-    ]
-    if not spent:
-        return
-    pick = c.choose(spent, "which of the beast's powers recharges")
-    if pick is not None:
-        c.restore_use(pick, on=beast)
+    if "m1663c0a1" in c.expended(on=beast):
+        c.restore_use("m1663c0a1", on=beast)
 
 
 @power("i1750p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -2294,18 +2374,39 @@ def i3068p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("etl.item.inline_block()",),
+    dropped=("i3111p1.hit_rider",),
 )
 def i3111p1(c: Cast) -> None:
-    """A minion's one hit point is printed, and so are the eight riders;
-    the base line the riders modify is not. The rider that changes what a
-    hit does -- prone, poison, ongoing -- needs the attack the block does
-    not carry, so only the ones about the creature itself land."""
+    """The d8 table modifies a base creature, and the base is `m3111c0`.
+
+    Before the block was importable this hand-built a 1-hit-point Tiny
+    `Summon` and the printed AC 18, the three non-AC defences and the
+    `+6 vs AC` attack were simply absent -- so five of the eight faces had
+    nothing to modify. Now the creature is a real row and the faces that
+    are **properties of the creature** all land: a fly speed, darkvision,
+    not provoking, a flat attack bonus, a climb speed.
+
+    Still dropped, and it is now one clause rather than five: faces 3, 5
+    and 8 change what the creature's *hit* does -- prone, extra poison,
+    ongoing poison -- which is a rider on somebody else's attack row
+    (`m3111c0a0`), and nothing scopes a hit rider onto another creature's
+    row. That is a different gap from the missing block and gets its own
+    symbol, per "one marker names one gap".
+    """
     roll = c.roll("1d8")
-    modes = {"fly": 6} if roll == 1 else {"climb": 6} if roll == 7 else None
-    made = c.summon_inline(Summon(hp=1, size="tiny", modes=modes))
-    if made and roll == 4:
+    made = _conjured(c, "m3111c0", surge=False)
+    if not made:
+        return
+    if roll == 1:
+        c.mode("fly", 6, on=made, until=When.ENCOUNTER)
+    elif roll == 2:
+        c.darkvision(on=made, until=When.ENCOUNTER)
+    elif roll == 4:
         c.no_provoke(on=made, until=When.ENCOUNTER)
+    elif roll == 6:
+        c.bonus("attack", 1, on=made, until=When.ENCOUNTER, kind="untyped")
+    elif roll == 7:
+        c.mode("climb", 6, on=made, until=When.ENCOUNTER)
 
 
 @power(
@@ -2526,10 +2627,12 @@ def i1109x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("etl.item.inline_block()",),
 )
 def i1171p1(c: Cast) -> None:
-    _figurine(c, size="large", modes={"fly": 8})
+    """The printed fly speed is 10, not the 8 this row guessed before the
+    block was importable -- which is why a hand-picked mode list is not a
+    substitute for the page."""
+    _conjured(c, "m1171c0")
 
 
 @power("i1208p1", level=9, cls=ITEM, usage=AT_WILL, action=STANDARD,
@@ -2612,11 +2715,10 @@ def i1854p1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     requires=_aquatic,
     requires_text="there must be a body of water adjacent to you",
-    dropped=("etl.item.inline_block()",),
 )
 def i2022p1(c: Cast) -> None:
     """The water is a printed requirement, not a flavour line."""
-    _figurine(c, size="large", modes={"swim": 10})
+    _conjured(c, "m2022c0")
 
 
 @power("i2084p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
@@ -3013,10 +3115,13 @@ def i1154x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("etl.item.inline_block()",),
 )
 def i1179p1(c: Cast) -> None:
-    _figurine(c, modes={"fly": 10})
+    """One of the two blocks printing a real level and role, so this is a
+    level-6 creature with 70 hit points rather than the surge-value beast
+    `_figurine` made of it. Its printed speed is 2 with a fly 6 -- the row
+    guessed a flat fly 10, five squares out and in the wrong field."""
+    _conjured(c, "m1179c0")
 
 
 @power("i1228x1", level=10, cls=ITEM, action=ActionType.NONE,
@@ -3075,10 +3180,9 @@ def i1659p1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     requires=_aquatic,
     requires_text="there must be a body of water adjacent to you",
-    dropped=("etl.item.inline_block()",),
 )
 def i1664p1(c: Cast) -> None:
-    _figurine(c, size="huge", modes={"swim": 10})
+    _conjured(c, "m1664c0")
 
 
 @power("i1717p1", level=10, cls=ITEM, usage=ENCOUNTER, action=MINOR,
@@ -3096,10 +3200,9 @@ def i1717p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("etl.item.inline_block()",),
 )
 def i1804p1(c: Cast) -> None:
-    _figurine(c, size="huge")
+    _conjured(c, "m1804c0")
 
 
 @power("i2037x1", level=10, cls=ITEM, action=ActionType.NONE,
@@ -3333,12 +3436,18 @@ def i3106p1(c: Cast) -> None:
     action=MINOR,
     reach=Melee(1),
     target=NO_TARGET,
-    dropped=("etl.item.inline_block()",),
 )
 def i3263p1(c: Cast) -> None:
-    """"If you don't command it, it takes no actions" is what a summon
-    already is -- it has no initiative slot of its own."""
-    c.summon_inline(Summon())
+    """**The old docstring had the card backwards.** It said a summon has
+    no initiative slot of its own, and this card says the opposite in so
+    many words: the creature "takes its turn on your initiative count
+    according to commands you give to it". So it is in the order, on the
+    caster's count, which is `after=c.me` -- and it was a bare `Summon()`
+    with the summoner's defences standing in for a printed AC 24.
+
+    No surge: this card grants none, unlike the figurines.
+    """
+    _conjured(c, "m3263c0", surge=False)
 
 
 @power("i3353p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

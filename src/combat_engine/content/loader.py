@@ -455,6 +455,16 @@ UNUSABLE: dict[str, str] = {
     # paragon maths twelve above where level 4 sits. Unlike `m3561` the page
     # does not print these, so something read the wrong block.
     "m3640": "defences are twelve above its level and the page does not say so",
+    # A conjured block (#601) whose card states every number as an
+    # expression in its conjurer's -- "HP your bloodied value", "your
+    # defenses", "+Intelligence +2 vs AC". So the zeroes are truthful and
+    # the block is a *rule for deriving* a stat line, which is what
+    # `spawn_associate` is for and what `spawn` cannot do. #603.
+    #
+    # **This entry is documentation, not a gate**: `usable` is read by
+    # `pick` and `loader.spawn` does not check it, so what actually keeps
+    # this creature off a board is `i509p1` declining to summon it.
+    "m509c0": "every number is an expression in the conjurer's; see #603",
 }
 
 

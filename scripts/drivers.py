@@ -1302,6 +1302,36 @@ def forms(out: Result) -> None:
     out.that(in_form(world, caster, "beast"),
              "and a Requirement is permissive once more")
 
+    # **Where the permissive half is the WRONG reader**, which cost a row.
+    #
+    # The reasoning above is about a creature whose block does not say what
+    # shape it was found in. A character is not that case: it starts
+    # humanoid, always, and only its own row puts it in another form. So a
+    # Requirement of the form "that row must be active" asked through
+    # `in_form` answers **yes before the row has ever been used** --
+    # `p14193b`'s first draft did exactly that and `audit` exercised it on
+    # a board where nobody had transformed.
+    #
+    # The answerable question is whether a hold that row laid still stands,
+    # since every effect carries the laying ref. Asserted here and not only
+    # in the content file because the mistake is available to all 58 rows
+    # printing a shape Requirement, not to that one.
+    world, caster, _ = _board()
+    c = Cast(world=world, me=caster, ref="drivers:forms")
+
+    def laid_by(ref: str) -> bool:
+        return any(e.label.startswith(ref) for e in world.effects.of(caster))
+
+    out.that(in_form(world, caster, "hybrid"),
+             "the permissive reader says yes before any form is taken --"
+             " correct for a monster, and the trap for a character's row")
+    out.that(not laid_by("drivers:forms"),
+             "the effect-label read says no, which is the negative control"
+             " and the whole point of the distinction")
+    c.form(until=When.ENCOUNTER, name="hybrid", label=c.ref)
+    out.that(laid_by("drivers:forms"),
+             "and yes once the row has actually laid the form")
+
     # Suspension, because a form is side state like a terrain exemption.
     world, caster, _ = _board()
     c = Cast(world=world, me=caster, ref="drivers:forms")

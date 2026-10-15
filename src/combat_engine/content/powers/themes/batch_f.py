@@ -23,6 +23,7 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
+    DEX,
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -84,6 +85,7 @@ from combat_engine.engine import (
     TurnStart,
     When,
     Window,
+    World,
     ZoneEntered,
     about_me,
     both,
@@ -735,13 +737,95 @@ def p14192(c: Cast) -> None:
     target=SELF,
     keywords=PRIMAL_POLYMORPH,
     once_per_round=True,
-    dropped=("etl.item.inline_block()",),
 )
 def p14193(c: Cast) -> None:
-    """Hybrid form keeps every statistic, so the form itself lays nothing at
-    all. What the card grants is the attack printed under it, and that block
-    has no ref of its own -- there is nothing to decorate."""
-    c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref)
+    """Hybrid form keeps every statistic, so the form itself lays nothing
+    but the shape and the way out.
+
+    **Two things here were false and this is a theme row, not an item.**
+
+    The marker was `etl.item.inline_block()`, which is an item's page
+    being cut at its second `<h1>` (#601) -- nothing to do with a theme
+    card, and it put this row in a group of thirteen it shares no gap
+    with. And the reason given, "that block has no ref of its own", is
+    wrong: the ETL mints a `b` ref for a second card printed inside
+    another entry and has for 154 powers. `p14193b` exists, with the full
+    secondary attack in its spec, and simply had no content row. It does
+    now, below.
+
+    `name="hybrid"` is the other half. The form was laid with a `label`
+    only, so `Shapes` stayed empty and `query.in_form` could not see it --
+    the exact state #477 was built to end, and `p14193b`'s printed
+    Requirement is the thing that asks.
+    """
+    c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref, name="hybrid")
+
+
+def _in_hybrid(world: World, eid: int) -> bool:
+    """The printed Requirement: `p14193` must be active.
+
+    **Not `query.in_form`, and the first draft of this used it.** That
+    reader is *permissive when nothing has been recorded*, deliberately
+    and with its reasoning stated: a monster that has not changed shape is
+    in whatever shape it was found in, its block does not say which, so a
+    Requirement must not rule an attack out. Correct there and wrong here
+    -- a character starts in humanoid form, always, and only `p14193` puts
+    it in hybrid. Asked that way the gate answered **yes before the form
+    was ever taken**, which is the silently-false shape this tree is
+    organised against; `audit` happily exercised the row on a board where
+    nobody had transformed.
+
+    So it asks the question that *is* answerable: does a hold `p14193`
+    laid still stand on this creature. Every effect carries the ref of
+    the row that laid it, so the live list is the register --
+    `feats.assassin_c._in_form` is the same read, kept local rather than
+    imported across content files. A `requires=` gate gets
+    `(world, eid)` and no `Cast`, so it reads `world.effects` directly.
+
+    `p14193` still lays `name="hybrid"` as well, because that is what
+    makes the form answerable to anything asking the *categorical*
+    question, and that half was simply missing.
+    """
+    return any(eff.label.startswith("p14193")
+               for eff in world.effects.of(eid))
+
+
+@power(
+    "p14193b",
+    level=0,
+    cls="x7_868",
+    usage=AT_WILL,
+    action=STANDARD,
+    reach=Melee(1),
+    target=ONE_CREATURE,
+    keywords=[Keyword.PRIMAL],
+    attack=Attack(ability=(STR, DEX), vs=AC, plus=4),
+    requires=_in_hybrid,
+    requires_text="you must be in hybrid form",
+)
+def p14193b(c: Cast) -> None:
+    """The secondary attack printed under `p14193`, which had no row.
+
+    The `+4` is in the header as `plus=`, because the card prints it as
+    part of the attack line rather than as a bonus somebody grants -- so a
+    policy can forecast the hit chance without running the row.
+
+    **The damage is in the body and that is deliberate.** The card prints
+    "Strength modifier or Dexterity modifier", the same choice as the
+    attack line, and a header `Damage(bonus=)` takes one ability name --
+    `_bonus_of` resolves exactly one. Writing either alone is the mistake
+    `Attack.ability`'s own docstring records as worth up to four points on
+    the wrong character. So the modifier is taken the way the attack takes
+    it, as the better of the two, and this row is not rescalable. That is
+    the honest limit `dsl.Damage` names for a body that computes.
+
+    The `Level 21:` lines raising the bonus to +6 and the dice to 2d8 are
+    out of scope here, as every paragon and epic step is.
+    """
+    if not c.strike():
+        return
+    c.damage("1d8", max(c.stats.mod(STR), c.stats.mod(DEX)))
+    c.ongoing(5)
 
 
 def _my_crit(world: Any, me: int, ev: Any) -> bool:
