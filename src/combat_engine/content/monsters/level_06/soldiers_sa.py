@@ -1772,12 +1772,26 @@ def _current_quarry_w(world: World, me: int) -> int | None:
 
 @power(
     "m5857a0", level=6, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET,
-    out_of_combat=True,
+    todo=("c.act_after_charge()",),
 )
 def m5857a0(c: Cast) -> None:
-    """Nothing in the engine restricts a creature to free actions after a
-    charge -- there is no rule here to lift, so this is complete and inert
-    in a fight."""
+    """"It can take only free actions after it charges", and the engine
+    enforces exactly that -- which is the rule this row said did not exist.
+
+    `actions.perform` zeroes the whole budget once a charge resolves:
+
+        budget.standard = budget.move = budget.minor = 0   # actions.py:1311
+
+    with no event afterwards, so nothing on the board can lift it. This row
+    read that as "there is no rule here to lift" and carried
+    `out_of_combat=True`, which says a row is complete and **inert in a
+    fight** -- so a creature whose printed restriction is a combat
+    restriction was counted finished and excluded from every unfinished
+    count.
+
+    `m5854a0` is the same card and has carried `c.act_after_charge()`
+    throughout; this is the pair agreeing at last. Found by the Bin D
+    authoring agent, which checked the code rather than the docstring."""
 
 
 @power("m5857a1", level=6, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)

@@ -1444,18 +1444,35 @@ def m1680a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
-    attack=Attack(vs=AC, printed=12),
-    damage=Damage("1d6", 4, dtype=DamageType.NECROTIC),
+    dropped=("compendium.attack_defence",),
 )
 def m1680a1(c: Cast) -> None:
-    """A flyby attack: half its speed spent either side of the swing. The
-    self-reference is read plainly -- the block names itself "m977" and
+    """A flyby: half its speed either side of **one melee basic attack**.
+
+    **The attack line here was invented and is gone.** The card prints no
+    attack of its own -- "while flying, it can move up to half its speed and
+    make one melee basic attack at any point during that movement" -- and
+    this row declared `Attack(vs=AC, printed=12)` with
+    `Damage("1d6", 4, NECROTIC)` copied off `m1680a0`. Two things were wrong
+    with the copy: the swing is not this card's to make, and `m1680a0`'s own
+    damage is "1d6+4 damage **plus** 1d4 necrotic", so the typed total was
+    not even a faithful copy -- it dealt 1d6+4 *necrotic* where the basic
+    attack deals 1d6+4 untyped.
+
+    `m977a1` is the identical card and gets it right: no header attack, the
+    printed Effect written, and `dropped=("compendium.attack_defence",)` for
+    the line the extraction mangled. This follows it. `c.basic` is the
+    printed swing and reads the creature's own basic attack, so no number is
+    guessed anywhere.
+
+    The self-reference is read plainly -- the block names itself "m977" and
     "m1680-m1680's m1680" throughout, both garbled copies of "it"."""
-    c.no_provoke(on=c.me, until=When.EOT)
     half = max(1, c.speed_of() // 2)
     c.move(half, at="fly")
-    if c.strike():
-        c.hit()
+    foe = next((f for f in c.within(1, side="enemy") if c.can_see(f)), None)
+    if foe is not None:
+        c.no_provoke(from_=foe, on=c.me, until=When.EOT)
+        c.basic(on=foe)
     c.move(half, at="fly")
 
 

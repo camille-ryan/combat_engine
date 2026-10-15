@@ -1252,6 +1252,7 @@ def _hit_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger=_M82_STRUCK,
     on=Trigger(Hit, when=_hit_with_a_copy_to_hand, text=_M82_STRUCK),
+    dropped=("c.redirect(riders=)",),
 )
 def m82a5(c: Cast) -> None:
     """The copy takes it instead.
@@ -1265,7 +1266,18 @@ def m82a5(c: Cast) -> None:
 
     "Any effects or secondary attacks are also deflected" is not written:
     nothing on `Cast` can move a rider from one creature to another, and the
-    riders are applied by the attacking row's own body. See the report.
+    riders are applied by the attacking row's own body.
+
+    **That clause now has a marker and for a while it did not.** The
+    paragraph above has always admitted the gap and the header named
+    nothing, so `blocked.py` counted this row finished and `todo.py` could
+    never report it ready. `c.redirect(riders=)` is the symbol, shared with
+    `m1742a5` -- the same card one level down, which was marked
+    `c.redirect(dtype=)` until the Bin D authoring agent wrote it and found
+    this half left over.
+
+    A docstring that confesses a missing clause the marker tuple does not
+    list is a shape worth watching for: no instrument reads prose.
     """
     me = c.me
     pack = _duplicates(c)
