@@ -138,3 +138,41 @@ measured off a filtered report, and two speculative designs built before the
 cards were read. All four were caught, none shipped, but the rate was
 climbing and that is the signal to stop rather than the thing to push
 through. The commits are small and separately verified for that reason.
+
+
+## The dense head, worked through
+
+Nine of the densest heroic symbols opened by reading **every** card in each.
+The result is the useful number: **the mis-marking rate collapses once the
+flattened symbols are past.**
+
+| symbol | rows | verdict |
+|---|---|---|
+| `compendium.attack_defence` | 22 | **dropped** on Camille's ruling; `monster.defect` catches the rest |
+| `c.familiar_state()` | 8 | **five** questions; the mode was never missing. #620 |
+| `c.on_extra_damage()` | 7 | **three**; the announcement and the die count both exist. #619 |
+| `c.deals(when=)` | 7 | **four** mechanisms. #613 |
+| `c.reshape_area()` | 7 | **three**; nothing built, two designs backed out. #614 |
+| `c.milestone()` | 6 | structural -- needs an adventuring day. #615 |
+| `c.race_option()` | 9 | **accurate.** The build choice is recorded nowhere; one gap, right component |
+| `chargen.armor_proficiency()` | 9 | **accurate**, and `f3779`'s penalty half was writable and is written |
+| `c.beast_independent()` | 8 | **accurate.** `+2` saves written; the independent mode genuinely absent |
+
+**Six were wrong, three were right, and the three right ones are the three
+that were never bundled.** Each of those carries a shared constant with a
+note explaining the one gap -- `RACE_OPTION`, `PROFICIENCY`, `LEASH` -- and
+each row's docstring names what *does* exist beside it. That is what an
+accurate marker looks like, and it is distinguishable from a flattened one
+before you read the cards: a flattened symbol's rows disagree with each other
+about what is missing.
+
+So the heuristic for the next pass: **read the rows' docstrings against each
+other first.** If three rows on one symbol give three different reasons, the
+symbol is the bug. If they give the same reason and name different adjacent
+facilities, the marker is right and the gap is real.
+
+The head is now 28 symbols at 5+ rows, and the top of it is the accurate
+ones. Which means the cheap wins from re-pointing are largely spent, and what
+is left is building: `c.race_option()` and the two `chargen.*` nines are a
+chargen block (#125 on the task list), and `c.reshape_area()` is #614's three
+mechanisms.
