@@ -940,10 +940,22 @@ def f1105(c: Cast) -> None:
 def f1105b(c: Cast) -> None:
     """Three holds at `When.SUSTAIN`, with the flight carrying the minor
     action that keeps them: only `c.hover` takes a `sustain=`, and the
-    printed line sustains the whole shape at once."""
+    printed line sustains the whole shape at once.
+
+    **`c.hover`'s first argument is a HEIGHT, not a fly speed.** Its body is
+    `if squares_: self.rise(squares_)` and then `mv.using = "hover"`, so
+    `c.hover(8)` lifted this creature 8 squares and granted it nothing to
+    fly at. The printed speed needs `c.mode("fly", 8)`, which is the verb
+    for "grant a way of moving ... for a while", and the hover state needs
+    `c.hover()` with no height at all -- no card here prints an ascent.
+
+    Found by following a Bin B agent's fix of `m1062a4`, which had the same
+    fault; three other rows shared it.
+    """
     c.insubstantial(on=c.me, until=When.SUSTAIN)
     c.cannot_attack(on=c.me, until=When.SUSTAIN)
-    c.hover(8, on=c.me, until=When.SUSTAIN, sustain=ActionType.MINOR)
+    c.mode("fly", 8, on=c.me, until=When.SUSTAIN)
+    c.hover(on=c.me, until=When.SUSTAIN, sustain=ActionType.MINOR)
 
 
 @power("f1111", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

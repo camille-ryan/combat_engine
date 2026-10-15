@@ -1469,10 +1469,17 @@ def p16115(c: Cast) -> None:
     keywords=[Keyword.ELEMENTAL],
 )
 def p16116(c: Cast) -> None:
-    """`c.hover` is the "and can hover" half: it lifts the creature and puts
-    it in an airborne movement state, which is what stops the fall."""
+    """`c.hover` is the "and can hover" half: it puts the creature in an
+    airborne movement state, which is what stops the fall.
+
+    **No height.** `c.hover`'s first argument goes to `c.rise`, and this
+    card prints no ascent -- only a fly speed, the hovering, and "when this
+    flight ends, you descend", which `c.hover`'s own `land()` does safely.
+    `c.hover(8)` was lifting the caster eight squares on top of the speed.
+    Three other rows had the worse half of this and granted no speed at
+    all."""
     c.mode("fly", 8, until=When.EONT, on=c.me)
-    c.hover(8, on=c.me, until=When.EONT)
+    c.hover(on=c.me, until=When.EONT)
 
 
 # ---------------------------------------------------------------- x7_983

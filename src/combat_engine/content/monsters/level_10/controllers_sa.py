@@ -4911,9 +4911,22 @@ def m6422a5(c: Cast) -> None:
     keywords=[Keyword.POLYMORPH],
 )
 def m6422a6(c: Cast) -> None:
+    """Insubstantial, flying 12 and hovering, and unable to attack.
+
+    **`c.hover`'s first argument is a HEIGHT, not a fly speed.** Its body is
+    `if squares_: self.rise(squares_)` and then `mv.using = "hover"`, so
+    `c.hover(12)` lifted this creature 12 squares and granted it nothing to
+    fly at. The printed speed needs `c.mode("fly", 12)`, which is the verb
+    for "grant a way of moving ... for a while", and the hover state needs
+    `c.hover()` with no height at all -- no card here prints an ascent.
+
+    Found by following a Bin B agent's fix of `m1062a4`, which had the same
+    fault; three other rows shared it.
+    """
     me = c.me
     c.insubstantial(on=me, until=When.ENCOUNTER)
-    hold = c.hover(12, on=me, until=When.ENCOUNTER)
+    c.mode("fly", 12, on=me, until=When.ENCOUNTER)
+    hold = c.hover(on=me, until=When.ENCOUNTER)
     attack_lock = c.cannot_attack(on=me, against=me, until=When.ENCOUNTER)
     if hold is not None:
         c.endable(hold, cost=MINOR)

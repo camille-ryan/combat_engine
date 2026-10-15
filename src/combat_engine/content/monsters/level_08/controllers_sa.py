@@ -1386,6 +1386,7 @@ def m2245a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
+    dropped=("c.phasing(through=)",),
 )
 def m2245a4(c: Cast) -> None:
     """Sustain Standard, which `c.insubstantial` cannot carry -- applied

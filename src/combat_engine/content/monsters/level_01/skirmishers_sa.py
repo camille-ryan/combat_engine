@@ -2609,12 +2609,32 @@ def m6654a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
+    todo=("Movement.through_creatures",),
 )
 def m6654a1(c: Cast) -> None:
-    """It walks through whoever is in the way. `c.shares_space` is the standing
-    permission `movement` reads; without it an occupied square is refused
-    outright and the printed line changes nothing."""
-    c.shares_space(on=c.me, until=When.ENCOUNTER, difficult=False)
+    """"The m6654 can enter enemies' spaces during its movement" -- and this
+    row granted the opposite.
+
+    **`c.shares_space` is read off the *occupant*, not the mover.** Its own
+    docstring is "anyone may stand in **this** creature's square", and
+    `movement._clear` asks `shares_space(world, who)` where `who` is
+    whoever is standing there. So `c.shares_space(on=c.me)` opened this
+    creature's square to the whole board -- which the card does not print --
+    and left it as unable to step through anybody as before. Driven:
+
+        shares_space(me)                    True
+        I enter the foe's square            False   <- the printed clause
+        the foe enters my square            True    <- printed nowhere
+
+    Nothing on the mover's side grants this. `_clear` waives occupancy for
+    exactly two things, `overhead` and `phasing`, and neither is a creature
+    walking between enemies at ground level. `m6655a1` is the same card and
+    has carried `Movement.through_creatures` throughout; this is the pair
+    agreeing, and its marker was the correct one of the two.
+
+    One note for whoever drives this next: `_board(ref)` **arms the row**,
+    so a probe that reads `shares_space` "before" is already reading it
+    armed. I misread my own first probe that way."""
 
 
 @power(

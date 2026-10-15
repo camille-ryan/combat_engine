@@ -920,10 +920,22 @@ def m3782a4(c: Cast) -> None:
     """Entering a porous obstacle a solid one would block is the clause
     with nowhere to go -- `c.phasing` passes through creatures and solid
     terrain alike and has no narrower "only the porous kind" of its own.
-    The insubstantial form, the hover and the sustain are exact."""
+    The insubstantial form and the sustain are exact.
+
+    **`c.hover`'s first argument is a HEIGHT, not a fly speed.** Its body is
+    `if squares_: self.rise(squares_)` and then `mv.using = "hover"`, so
+    `c.hover(8)` lifted this creature 8 squares and granted it nothing to
+    fly at. The printed speed needs `c.mode("fly", 8)`, which is the verb
+    for "grant a way of moving ... for a while", and the hover state needs
+    `c.hover()` with no height at all -- no card here prints an ascent.
+
+    Found by following a Bin B agent's fix of `m1062a4`, which had the same
+    fault; three other rows shared it.
+    """
     me = c.me
     held = c.insubstantial(on=me, until=When.SUSTAIN)
-    c.hover(8, on=me, until=When.SUSTAIN, sustain=STANDARD)
+    c.mode("fly", 8, on=me, until=When.SUSTAIN)
+    c.hover(on=me, until=When.SUSTAIN, sustain=STANDARD)
     phase = c.phasing(on=me, until=When.SUSTAIN)
     if held is not None:
         c.on_sustain(held, lambda: None)
