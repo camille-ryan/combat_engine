@@ -448,7 +448,10 @@ def m115769a0(c: Cast) -> None:
     damage=Damage("2d6", 7),
 )
 def m115769a1(c: Cast) -> None:
-    plus = 2 if c.bloodied() else 0
+    # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+    # `c.bloodied()` asks about the target -- `_who(None)` returns
+    # `self.target`. #621.
+    plus = 2 if c.bloodied(on=c.me) else 0
     if c.strike():
         c.hit()
         c.flat(plus)
@@ -735,7 +738,10 @@ def m1808a1(c: Cast) -> None:
     damage=Damage("1d12", 7),
 )
 def m1813a0(c: Cast) -> None:
-    bonus = 9 if c.bloodied() else 7
+    # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+    # `c.bloodied()` asks about the target -- `_who(None)` returns
+    # `self.target`. #621.
+    bonus = 9 if c.bloodied(on=c.me) else 7
     if c.strike():
         if c.crit:
             c.flat(c.roll("1d12") + bonus + 12)
@@ -757,7 +763,10 @@ def m1813a0(c: Cast) -> None:
 def m1813a1(c: Cast) -> None:
     """The printed Requirement naming its own greatsword is not a gate
     (#366)."""
-    bonus = 9 if c.bloodied() else 7
+    # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+    # `c.bloodied()` asks about the target -- `_who(None)` returns
+    # `self.target`. #621.
+    bonus = 9 if c.bloodied(on=c.me) else 7
     if c.strike():
         if c.crit:
             c.flat(c.roll("1d12") + bonus + 12)

@@ -3614,7 +3614,10 @@ def m5950a3(c: Cast) -> None:
     victim = c.choose(foes, f"{c.ref}: who to chase") if foes else None
     if victim is None:
         return
-    times = 3 if c.bloodied() else 2
+    # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+    # `c.bloodied()` asks about the target -- `_who(None)` returns
+    # `self.target`. #621.
+    times = 3 if c.bloodied(on=c.me) else 2
     hits = 0
     for _ in range(times):
         c.teleport(5, toward=victim)

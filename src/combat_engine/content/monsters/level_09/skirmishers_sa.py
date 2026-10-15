@@ -815,7 +815,10 @@ def m1809a9(c: Cast) -> None:
 def m1811a0(c: Cast) -> None:
     if c.strike():
         c.hit()
-        if c.bloodied():
+        # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+        # `c.bloodied()` asks about the target -- `_who(None)` returns
+        # `self.target`. #621.
+        if c.bloodied(on=c.me):
             c.flat(2)
         c.ongoing(5)
 
@@ -834,7 +837,10 @@ def m1811a0(c: Cast) -> None:
 def m1811a1(c: Cast) -> None:
     if c.strike():
         c.hit()
-        if c.bloodied():
+        # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+        # `c.bloodied()` asks about the target -- `_who(None)` returns
+        # `self.target`. #621.
+        if c.bloodied(on=c.me):
             c.flat(2)
         c.ongoing(10)
 
@@ -854,7 +860,10 @@ def m1811a1(c: Cast) -> None:
 def m1811a2(c: Cast) -> None:
     if c.strike():
         c.hit()
-        if c.bloodied():
+        # `on=c.me`: the card's "while bloodied" is the **creature**, and a bare
+        # `c.bloodied()` asks about the target -- `_who(None)` returns
+        # `self.target`. #621.
+        if c.bloodied(on=c.me):
             c.flat(2)
         c.slide(3)
 
@@ -3504,19 +3513,48 @@ def m6439a4(c: Cast) -> None:
     level=9,
     usage=AT_WILL,
     action=STANDARD,
-    reach=Melee(2),
+    reach=Melee(4),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d8", 8),
-    dropped=("Power.reach_alt",),
 )
 def m6683a0(c: Cast) -> None:
-    """"Melee 2, or 4 while bloodied." There is no field for an alternate
-    reach the way `attack_alt`/`damage_alt` carry an alternate branch; the
-    slide half, which does vary, is the body's to write."""
-    if c.strike():
-        c.hit()
-        c.slide(4 if c.bloodied() else 2)
+    """"Melee 2, or 4 while bloodied" -- both reaches, and the slide to match.
+
+    **The header carries the longer one and the body narrows it**, which is
+    `m5466a0`'s answer to the same sentence and its reasoning applies
+    unchanged: the permissive reach is the one the chooser must offer, and
+    declaring the short one would mean the row could never reach 4 squares
+    even while bloodied. `_restricted_to` then enforces the real distance,
+    and it re-aims rather than throwing the attack away when the chooser
+    picked somebody out of range -- about 160 rows take that route.
+
+    So the marker goes. It said "there is no field for an alternate reach
+    the way `attack_alt`/`damage_alt` carry an alternate branch", which is
+    true of the header and beside the point: this is not a *choice* between
+    two reaches, it is one reach that depends on a state, and a state is the
+    body's to read. `m5193a2`, which prints a genuine "or", is the one that
+    wanted a header field -- and `Range.alt` turned out to be it.
+
+    `cards.py` reads "Melee 2" as the printed range and will disagree with
+    the declared 4; that waiver is argued in `cards.KNOWN` rather than here.
+
+    **`on=c.me`, and the half that was already written had this wrong.** The
+    card says "while the <creature> is bloodied" in both clauses, and
+    `c.bloodied()` with no argument asks about the **target** -- `_who(None)`
+    returns `self.target`, which is the default across almost all of `Cast`
+    and is right for almost every card. So the slide read the victim's hit
+    points: a healthy creature slid a bloodied target 4 squares, and a
+    bloodied one slid a healthy target 2. Found by writing the reach half
+    against the same condition, which is the only reason it surfaced.
+    """
+    far = 4 if c.bloodied(on=c.me) else 2
+    victim = _restricted_to(c, far, lambda _f: True)
+    if victim is None:
+        return
+    if c.strike(on=victim):
+        c.hit(on=victim)
+        c.slide(far, on=victim)
 
 
 @power(

@@ -234,6 +234,24 @@ _DEFENCES = {"ac": "AC", "armor class": "AC",
 #:
 #: These are not excused, they are **queued**: #358.
 KNOWN = {
+    # **A reach that depends on a state, where the header must carry the
+    # permissive one.** The card prints "Melee 2, or 4 while the creature is
+    # bloodied", so this check reads 2 and the row declares 4 -- deliberately.
+    #
+    # The header is what the chooser offers from, so declaring the short reach
+    # would mean the row could never reach 4 squares even while bloodied,
+    # which is the half the card is *about*. The body narrows it back with
+    # `_restricted_to`, the route about 160 rows take. `m5466a0` is the same
+    # sentence the other way up -- "Melee 2, or Melee 1 while grabbing" -- and
+    # its header carries 2 for the same reason, which is why it needs no
+    # waiver: there the permissive reach and the first printed number agree.
+    #
+    # Not fixable by reading the card better: both numbers are printed and
+    # only one can be declared. Teaching this check to accept either would
+    # stop it catching a row that declares the *wrong* one of the two. #614.
+    "m6683a0": "the card prints Melee 2 or 4 while bloodied; the header "
+               "carries the permissive 4 and `_restricted_to` narrows it",
+
 "m302a2": "the card prints At-Will (3/encounter); the row says "
               "`usage=ENCOUNTER, uses=3` so the cap is enforced",
     "m6011a1": "the card prints At-Will (6/encounter); the row says "

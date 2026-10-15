@@ -6139,15 +6139,124 @@ def both_printed_shapes_offered(out: Result) -> None:
              " decision rather than a relabelling",
              f"{len(a0)} squares against {len(a1)}")
 
-    # the control: the family's conditional pair must still be marked
-    for ref, what in (("m6683a0", "Melee 2, or 4 while bloodied"),
-                      ("m1826a4", "close burst 2 (5 while bloodied)")):
-        got = REGISTRY.get(ref)
-        out.that(got is not None and bool(got.unfinished),
-                 f"{ref} is still marked -- \"{what}\" is conditional on a"
-                 f" state, and a branch is a choice; no branch can be gated"
-                 f" on hit points",
-                 f"{getattr(got, 'unfinished', None)}")
+    # **The control, and it caught me.** It asserted that both conditional
+    # rows stay marked, and then I wrote one of them -- `m6683a0` takes the
+    # permissive reach in its header and narrows it in the body, which is a
+    # different answer from `Range.alt` and the reason the two are not one
+    # gap. So the assertion is now that the conditional pair is *not* this
+    # mechanism: `m1826a4` is still marked, and `m6683a0` is written **the
+    # other way**, with one reach declared rather than two branches.
+    got = REGISTRY.get("m1826a4")
+    out.that(got is not None and bool(got.unfinished),
+             "m1826a4 is still marked -- \"close burst 2 (5 while"
+             " bloodied)\" is conditional on a state, where a branch is a"
+             " choice, and no branch can be gated on hit points",
+             f"{getattr(got, 'unfinished', None)}")
+    other = REGISTRY.get("m6683a0")
+    out.that(other is not None and other.reach.alt is None,
+             "and m6683a0 -- the same conditional shape -- is written with"
+             " ONE reach and no `alt`, which is what keeps the two"
+             " mechanisms distinguishable rather than blurred together",
+             f"alt={getattr(other.reach, 'alt', None)}")
+
+
+def reach_that_depends_on_a_state(out: Result) -> None:
+    """"Melee 2, or 4 while bloodied" -- both, and the slide to match. #614.
+
+    The header carries the **permissive** reach and the body narrows it,
+    which is `m5466a0`'s answer to the same sentence. Its reasoning is the
+    assertion here: the chooser offers from the header, so declaring the
+    short reach would mean the row could never reach 4 squares even while
+    bloodied -- the half the card is about.
+
+    **Both halves move together and that is worth asserting separately.**
+    The reach and the slide are the same number on this card, and a row that
+    narrowed one and not the other would look right in a log: the attack
+    lands, something slides, and only the distance is wrong.
+
+    Asserted on the *offered action*, not just the header, for the reason
+    `m5193a2`'s rule gives -- a reach that reads correctly while the menu
+    offers something else is a form nobody can use.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine import actions as A
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, area_of
+
+    p = REGISTRY["m6683a0"]
+    out.that(p.reach.size == 4,
+             "the header declares the permissive reach, 4 -- the one the"
+             " chooser has to be able to offer",
+             f"Melee {p.reach.size}")
+    out.that(not p.unfinished, "and carries no marker", f"{p.unfinished}")
+
+    def squares_at(bloodied: bool) -> int:
+        world, me, _ = _board("m6683a0", 1)
+        body = world.get(me, Health)
+        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
+        return len(area_of(world, me, p, None, 0))
+
+    whole, hurt = squares_at(False), squares_at(True)
+    out.that(whole == hurt,
+             "the *offered* area is the same either way, because the header"
+             " is one number -- the narrowing is the body's job and this"
+             " says so rather than pretending the menu changes",
+             f"{whole} squares unhurt, {hurt} bloodied")
+
+    world, me, _ = _board("m6683a0", 1)
+    offered = A._aimings(world, me, "m6683a0")
+    out.that(offered, "the row is reachable in the action menu at all",
+             f"{len(offered)} action(s)")
+
+    # The narrowing itself, which is the clause that was dropped.
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import enemies
+
+    # **Who was hit, not whether anything was.** The first version of this
+    # asked "did the attack land" and the control passed when it should not
+    # have: `_restricted_to` **re-aims** to another enemy within reach rather
+    # than throwing the attack away -- that is its documented job and about
+    # 160 rows rely on it -- so something was always hit, just not the far
+    # creature. The printed rule is about distance, so the distance is what
+    # the assertion has to name.
+    def hit_whom(bloodied: bool, at: int) -> tuple[int | None, int]:
+        from combat_engine.engine.components import Position
+
+        world, me, _ = _board("m6683a0", 1)
+        body = world.get(me, Health)
+        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
+        here = world.get(me, Position)
+        foes = sorted(enemies(world, me))
+        far = foes[0]
+        # Everybody else out of the way, so a re-aim has nowhere to go but
+        # the one creature this is about.
+        for i, other in enumerate(foes[1:], start=1):
+            spot = world.get(other, Position)
+            if spot is not None:
+                spot.square = (here.square[0] + 20 + i, here.square[1])
+        spot = world.get(far, Position)
+        spot.square = (here.square[0] + at, here.square[1])
+        c = Cast(world=world, me=me, ref="m6683a0", targets=[far])
+        struck: list[int] = []
+        c.strike = lambda **kw: True
+        c.hit = lambda **kw: struck.append(kw.get("on") or -1)
+        REGISTRY["m6683a0"].body(c)
+        return (struck[0] if struck else None), far
+
+    got, far = hit_whom(True, 4)
+    out.that(got == far,
+             "bloodied, the creature 4 squares off is the one hit -- the"
+             " clause the old marker dropped",
+             f"hit {got}, wanted {far}")
+    got, far = hit_whom(False, 4)
+    out.that(got != far,
+             "unhurt, that creature is NOT hit -- the control, and the whole"
+             " reason the header cannot simply declare 4 and stop",
+             f"hit {got}, the far creature is {far}")
+    got, far = hit_whom(False, 2)
+    out.that(got == far,
+             "and unhurt it still reaches 2, which is its ordinary state",
+             f"hit {got}, wanted {far}")
 
 
 def defective_entry(out: Result) -> None:
@@ -10300,6 +10409,9 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
+    "reach_that_depends_on_a_state": (reach_that_depends_on_a_state,
+                                      "\"Melee 2, or 4 while bloodied\": the"
+                                      " header carries the permissive one"),
     "both_printed_shapes_offered": (both_printed_shapes_offered,
                                     "a printed \"or\" between two shapes"
                                     " offers both, and the conditional pair"
