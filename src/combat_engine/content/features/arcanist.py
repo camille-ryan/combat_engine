@@ -35,6 +35,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
+from combat_engine.engine.cast import MANOEUVRE_GRANTED_ATTACK
 from combat_engine.engine.components import Companion, Weapon
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import AttackDeclared, Hit, Miss, Summoned
@@ -720,6 +721,30 @@ def _apprentice_illusion(ref: str, level: int):  # noqa: ANN202
     return row
 
 
+def _my_school(word: Keyword):  # noqa: ANN202
+    """A `when=` gate: is the row doing this one of my school's powers?
+
+    Four rows had written this out by hand and the fifth would have been a
+    fifth copy. The keyword comes off `get(ctx["power"])` -- the REGISTRY
+    row -- and not off the database, which is `f1836`'s lesson: a gate
+    cannot see the database.
+
+    `ctx["power"]` is "the ref of the row doing this", the commonest gate
+    key in the tree, so this needs no key of its own. The trigger-side
+    counterpart is `_my_school_hit`, which asks the same question of an
+    event rather than of a context.
+    """
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power", "")))
+        if rolled is None:
+            return False
+        held = rolled.keywords or ()
+        return Keyword.ARCANE in held and word in held
+
+    return gate
+
+
 def _illusion_penalty(c: Cast) -> None:
     """A -2 on the next swing the target takes **at the caster**, not on its
     next swing at anybody.
@@ -859,12 +884,7 @@ def mage_apprentice_s5(c: Cast) -> None:
     The +2 at 11th level and +3 at 21st are paragon and epic, so they are
     out of scope rather than missing.
     """
-    def arcane_fire(ctx: dict[str, Any]) -> bool:
-        rolled = get(str(ctx.get("power", "")))
-        if rolled is None:
-            return False
-        held = rolled.keywords or ()
-        return Keyword.ARCANE in held and Keyword.FIRE in held
+    arcane_fire = _my_school(Keyword.FIRE)
 
     c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER, when=arcane_fire)
     c.ignore_resistance(dtype=DamageType.FIRE, on=c.me, until=When.ENCOUNTER)
@@ -914,12 +934,7 @@ def _forced_squares(c: Cast) -> None:
     creature may end up, so one symbol over all three would be the kind of
     collapse `MANOEUVRE_BULL_RUSH_FOLLOW` exists to avoid.
     """
-    def arcane_enchantment(ctx: dict[str, Any]) -> bool:
-        rolled = get(str(ctx.get("power", "")))
-        if rolled is None:
-            return False
-        held = rolled.keywords or ()
-        return Keyword.ARCANE in held and Keyword.ENCHANTMENT in held
+    arcane_enchantment = _my_school(Keyword.ENCHANTMENT)
 
     for kind in ("push", "pull", "slide"):
         c.extend_every(kind, 2, on=c.me, until=When.ENCOUNTER,
@@ -930,14 +945,116 @@ mage_apprentice_s0 = _apprentice_forced("cf:wizard-mage-f0s0", 1)
 mage_apprentice_f3s0 = _apprentice_forced("cf:wizard-mage-f3s0", 4)
 
 
+def _apprentice_reroll(ref: str, level: int):  # noqa: ANN202
+    """One card, two refs -- see `_apprentice_illusion` for why.
+
+    The evocation benefit, printed at 1st level for the first school and at
+    4th for the second.
+    """
+
+    @power(
+        ref,
+        level=level,
+        cls="wizard",
+        usage=ENCOUNTER,
+        action=ActionType.NONE,
+        reach=PERSONAL,
+        target=NO_TARGET,
+        keywords=[Keyword.ARCANE],
+    )
+    def row(c: Cast) -> None:
+        _reroll_one_one(c)
+
+    row.__name__ = "mage_apprentice_" + ref.rsplit("-", 1)[-1]
+    row.__doc__ = _reroll_one_one.__doc__
+    return row
+
+
+def _reroll_one_one(c: Cast) -> None:
+    """**One** damage die showing a 1, rerolled **once**, on this school.
+
+    `pick=1` and not the bare verb, and the difference is the whole reason
+    the parameter exists. `c.reroll_ones()` is "reroll each die that shows a
+    1 **until it shows a different number**" -- every low die, and never a 1
+    afterwards. This card is "if any of the dice come up with a result of 1,
+    **pick one of them**, reroll it, and use the new result": one die, and
+    the new face stands even if it is another 1.
+
+    Writing it with the bare verb would have shipped a strictly better
+    feature than the page prints, on both counts at once, which is the
+    mistake `f2360` is on record for. That is why this row sat unwritten
+    rather than taking the nearest verb.
+
+    `keyword=` rather than a `when=` gate because the verb already narrows
+    that way and the card names exactly one school's keyword.
+    """
+    c.reroll_ones(
+        pick=1, keyword=Keyword.EVOCATION, on=c.me, until=When.ENCOUNTER,
+    )
+
+
+mage_apprentice_s1 = _apprentice_reroll("cf:wizard-mage-f0s1", 1)
+mage_apprentice_f3s1 = _apprentice_reroll("cf:wizard-mage-f3s1", 4)
+
+
 # --------------------------------------------------------------------------
 # The mage's top school tier, `cf:wizard-mage-f6sN`
 #
-# Three of the six. The other three want readers that do not exist: "forces
-# a creature to make an attack" as a moment (`f6s0`), concealment asked of a
-# third party as a *state* rather than as the penalty it confers (`f6s4`),
-# and turning an attack's area into a zone after the fact (`f6s5`).
+# Four of the six. The two left want readers that do not exist: concealment
+# asked of a third party as a *state* rather than as the penalty it confers
+# (`f6s4`), and turning an attack's area into a zone after the fact
+# (`f6s5`).
+#
+# **`f6s0` wanted neither of the things this comment used to claim.** It said
+# "forces a creature to make an attack" needed a *moment* and that nothing
+# announced it. Both halves were wrong, and reading `docs/symbols/` rather
+# than guessing is what showed it: `PowerUsed` has carried `granted_by` and
+# `granted_via` since the provenance work, `triggers.granted_by_me` and
+# `triggers.granted_via()` are built on them, and `c.grant_attack` already
+# had an `attack_bonus` channel. What was missing was one line -- the verb
+# consulting a rider the granter carries, the same gap `c.extend_every` had
+# for push, pull and slide. #581.
 # --------------------------------------------------------------------------
+
+
+@power(
+    "cf:wizard-mage-f6s0",
+    level=10,
+    cls="wizard",
+    usage=ENCOUNTER,
+    action=ActionType.NONE,
+    reach=PERSONAL,
+    target=NO_TARGET,
+    keywords=[Keyword.ARCANE],
+)
+def mage_master_s0(c: Cast) -> None:
+    """A +2 to the attack roll of a swing this caster's own school forced.
+
+    A **rider on the granter**, not a clause in each forcing power. The card
+    names a class of powers -- "one of your arcane enchantment powers" --
+    which `content/CLAUDE.md` names as the one case that does not get
+    written into the power it mentions, because there is no finite list of
+    bodies to edit.
+
+    So `c.grant_attack` reads `MANOEUVRE_GRANTED_ATTACK` off whoever is
+    granting, and this lays it. The gate is `ctx["power"]` -- the row doing
+    the forcing -- which is the commonest gate key in the tree and needed no
+    addition.
+
+    **The bonus is the granter's, read off the granter.** `c.grant_attack`
+    deliberately asks `self.me` rather than the creature swinging: reading
+    the swinger would let a creature improve the attacks it is *forced* to
+    make, which is the mirror of the mistake `_extra_every` records for
+    pushes and the reason `cf:wizard-mage-f0s0`'s squares belong to the
+    pusher.
+
+    `kind="power"` is not written here because `c.grant_attack` lays the
+    modifier and already types it that way, which is what the card prints.
+    """
+    c.change_amount(
+        MANOEUVRE_GRANTED_ATTACK, 2, on=c.me, until=When.ENCOUNTER,
+        when=_my_school(Keyword.ENCHANTMENT),
+    )
 
 
 @power(
@@ -963,12 +1080,7 @@ def mage_master_s1(c: Cast) -> None:
     "You do not ignore any immunities" is `immunity=False`, which is the
     default and is stated here because it is the half a reader would check.
     """
-    def arcane_evocation(ctx: dict[str, Any]) -> bool:
-        rolled = get(str(ctx.get("power", "")))
-        if rolled is None:
-            return False
-        held = rolled.keywords or ()
-        return Keyword.ARCANE in held and Keyword.EVOCATION in held
+    arcane_evocation = _my_school(Keyword.EVOCATION)
 
     c.ignore_resistance(
         on=c.me, until=When.ENCOUNTER, immunity=False, when=arcane_evocation
@@ -1026,12 +1138,7 @@ def mage_master_s2(c: Cast) -> None:
 )
 def mage_master_s3(c: Cast) -> None:
     """One damage type, named, on one school's attack powers."""
-    def arcane_necromancy(ctx: dict[str, Any]) -> bool:
-        rolled = get(str(ctx.get("power", "")))
-        if rolled is None:
-            return False
-        held = rolled.keywords or ()
-        return Keyword.ARCANE in held and Keyword.NECROMANCY in held
+    arcane_necromancy = _my_school(Keyword.NECROMANCY)
 
     c.ignore_resistance(
         dtype=DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER,

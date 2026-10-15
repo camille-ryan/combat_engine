@@ -578,7 +578,11 @@ def suspension(out: Result) -> None:
     world.effects.end(one, "driver")
     out.that(takes_half(world, caster),
              "and expiring it does not lift the refcount a second time")
-    out.that(not two.ended, "the second effect never ended")
+    # `two` is the second effect laid a dozen lines up and cannot be None
+    # here; asserted rather than asserted-around so a future change that
+    # makes the lay fail says so instead of raising on the attribute.
+    out.that(two is not None and not two.ended,
+             "the second effect never ended")
 
     world.effects.end(two, "driver")
     out.that(not takes_half(world, caster), "the last source ending does clear it")
@@ -657,7 +661,8 @@ def suspension(out: Result) -> None:
 
     burn(DamageType.FIRE)
     out.that(not takes_half(world, caster), "the named type does")
-    out.that(not thin.ended, "and still without ending the trait")
+    out.that(thin is not None and not thin.ended,
+             "and still without ending the trait")
 
     world.bus.emit(TurnStart(actor=caster, round=world.round))
     out.that(takes_half(world, caster),
@@ -1020,7 +1025,8 @@ def two_types(out: Result) -> None:
     hurt = world.get(foe, Health)
     mine = Cast(world=world, me=caster, ref=ref)
     declared = REGISTRY[ref]
-    out.that(len(declared.damage.dtypes) == 5,
+    out.that(declared.damage is not None
+             and len(declared.damage.dtypes) == 5,
              f"{ref} declares five types in its header")
 
     held = world.get(foe, Defences) or world.add(foe, Defences())
@@ -7747,6 +7753,10 @@ def mage_school_riders(out: Result) -> None:
     ILLUSION, NECROMANCY, NEITHER = "p1217", "p416", "p1225"
     NETHERMANCY, FIRE_ARCANE = "p13971", "p10191"
     ENCHANTMENT = "p451"
+    # An arcane evocation row, for the reroll tier. Its keywords are what
+    # `_reroll_pick` asks about, so the ref has to carry both words -- 74
+    # rows do and this is one.
+    EVOCATION_POWER = "p1166"
 
     # ---- the illusion tier: a -2 on the next swing AT THE CASTER --------
     #
@@ -7876,6 +7886,118 @@ def mage_school_riders(out: Result) -> None:
         out.that(mods.total("damage", {"power": NEITHER}) == 0,
                  "and none on a power that is neither -- the negative control",
                  f"it gave {mods.total('damage', {'power': NEITHER})}")
+
+    # ---- the evocation tier: ONE die, rerolled ONCE ---------------------
+    #
+    # The point of the row is that it is **weaker** than the verb's default,
+    # so the assertions are about what it does *not* do. A sweep cannot see
+    # any of this: the holds are laid by a standing trait that fires, and
+    # whether the number they produce is the card's number only shows up
+    # inside a damage roll.
+    ref = "cf:wizard-mage-f0s1"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        world, caster, _ = _board(ref)
+        mods = world.need(caster, Mods)
+        floor = mods.total("reroll_damage_pick:evocation")
+        count = mods.total("reroll_damage_pick:evocation#n")
+        out.that(floor == 2 and count == 1,
+                 f"{ref} lays a pick-one hold: floor 2, one die",
+                 f"floor {floor}, count {count}")
+        # **The design claim, asserted.** A pick-card must not lay the loop
+        # card's hold, or `_damage_roll` would take the loop branch and the
+        # row would reroll every 1 until it was not a 1 -- strictly better
+        # than the page.
+        out.that(mods.total("reroll_damage_below") == 0
+                 and mods.total("reroll_damage_below:evocation") == 0,
+                 "and lays none of the loop card's hold -- the shapes are"
+                 " separate so they cannot blend",
+                 f"loop hold read {mods.total('reroll_damage_below')}"
+                 f"/{mods.total('reroll_damage_below:evocation')}")
+
+        # Now drive a real damage roll with the dice forced, which is the
+        # only way to tell the two shapes apart.
+        #
+        # **The scripted sequence is [1, 1, 1, 6] and that matters.** The
+        # first draft used [1, 1, 6]: 2d6 comes up snake eyes and the single
+        # reroll immediately gives a 6 -- which is *also* what the loop
+        # does, since the loop stops as soon as the die is not low. Both
+        # assertions passed under a planted loop, so neither was telling the
+        # shapes apart and the evidence was worth nothing.
+        #
+        # With a third 1 the two diverge: this row rerolls once and keeps
+        # the 1 it got, for 1 + 1 = 2 and three dice rolled; the loop would
+        # roll again for 1 + 6 = 7 and four. Found by planting the loop and
+        # watching the driver stay green.
+        faces_seen: list[int] = []
+        script = [1, 1, 1, 6]
+
+        def scripted(faces: int, _seen=faces_seen) -> int:  # noqa: ANN001
+            _seen.append(faces)
+            n = len(_seen) - 1
+            return script[n] if n < len(script) else 6
+
+        c = Cast(world=world, me=caster, ref=EVOCATION_POWER)
+        world.rng.die = scripted  # type: ignore[method-assign]
+        got = c._roll_damage("2d6")
+        out.that(got == 2,
+                 "2d6 of [1, 1], one die rerolled once into another 1, comes"
+                 " to 2 -- the new result stands even when it is a 1",
+                 f"it came to {got} after rolling {faces_seen}")
+        out.that(len(faces_seen) == 3,
+                 "and exactly three dice were rolled: two for the expression"
+                 " and one reroll, not a loop",
+                 f"{len(faces_seen)} dice rolled")
+
+    # ---- the enchantment master tier: +2 on a swing it forced -----------
+    ref = "cf:wizard-mage-f6s0"
+    if ref not in REGISTRY:
+        out.skip(f"{ref} is not declared")
+    else:
+        # **Driven through `c.grant_attack`, not through `c.amount_for`.**
+        # The first draft asked `amount_for` directly and so asserted only
+        # that the row lays its rider -- planting `grant_attack` to read the
+        # *swinger's* store instead of the granter's left it green, because
+        # the assertion never went through the verb being changed. That is
+        # the "assert through the caller, not the helper" rule, and this is
+        # what finding it the hard way looks like.
+        # **Read off the roll, not off the modifier afterwards.** The second
+        # draft looked for the Mod on the swinger once `grant_attack`
+        # returned and found 0 every time -- correctly, because the verb's
+        # `finally` ends every effect it granted with "the granted attack is
+        # over". The bonus exists only for the duration of that one swing,
+        # which is exactly right and means the only honest place to observe
+        # it is the attack roll it changes.
+        #
+        # `rng.loaded` fixes the d20, so two runs on the same seed differ in
+        # the granting row and nothing else, and the difference between the
+        # announced totals is the whole of the claim.
+        from combat_engine.engine.events import AttackRolled
+
+        def swing(granting: str) -> int | None:
+            w, me, _ = _board(ref)
+            foes = sorted(enemies(w, me))
+            if len(foes) < 2:
+                return None
+            w.rng.loaded = 10
+            seen: list[int] = []
+            w.bus.on(AttackRolled, lambda ev: seen.append(ev.total))
+            Cast(world=w, me=me, ref=granting).grant_attack(
+                foes[0], on=foes[1])
+            return seen[0] if seen else None
+
+        with_it = swing(ENCHANTMENT)
+        without = swing(NEITHER)
+        if with_it is None or without is None:
+            out.skip(f"{ref}: the board posed no granted attack roll")
+        else:
+            out.that(with_it - without == 2,
+                     f"{ref}: a swing forced by an arcane enchantment power"
+                     f" rolls 2 higher than one forced by a power of neither"
+                     f" school -- the negative control is the same swing",
+                     f"enchantment {with_it}, neither {without},"
+                     f" difference {with_it - without}")
 
     # ---- the master tier: a miss counts, and resistance is walked -------
     ref = "cf:wizard-mage-f6s2"

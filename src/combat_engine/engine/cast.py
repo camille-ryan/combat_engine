@@ -127,6 +127,19 @@ MANOEUVRE_BULL_RUSH = "manoeuvre:bull_rush"
 #: shift, while p14383 lengthens both. One symbol serving the two made the
 #: belt walk the attacker three squares for free.
 MANOEUVRE_BULL_RUSH_FOLLOW = "manoeuvre:bull_rush-follow"
+#: The attack-roll bonus on a swing **this creature made somebody else
+#: take**. Read off the granter in `c.grant_attack`, never off the swinger:
+#: the card is "when one of *your* powers forces a creature to make an
+#: attack", so the bonus is the granter's to hand out, exactly as the extra
+#: squares of a push belong to the pusher.
+#:
+#: A rider rather than a parameter on every granting row, because the cards
+#: printing it name a **class** of powers -- "one of your arcane enchantment
+#: powers" -- and there is no finite list of bodies to edit. The same
+#: argument `c.extend_every` settled for forced movement, and it is the
+#: documented exception in `content/CLAUDE.md` to writing a clause into the
+#: power it names.
+MANOEUVRE_GRANTED_ATTACK = "manoeuvre:granted-attack"
 
 
 #: **Keys whose one-shot is correctly spent by the attack roll**, because
@@ -1964,6 +1977,18 @@ class Cast:
                     by=self.ref,
                 )
             )
+        # **Plus whatever the granter carries for granted attacks.** Read off
+        # `self.me` and not `who`: the card is "when one of *your* powers
+        # forces a creature to make an attack", so the bonus belongs to the
+        # creature doing the forcing. Reading `who` would let a creature
+        # improve the swings it is forced into, which is the same mistake
+        # `_extra_every` records for pushes from the other side.
+        #
+        # `self.ref` is the granting row by construction, so a card naming a
+        # class of powers gates on `ctx["power"]` and needs no new key.
+        attack_bonus += self.amount_for(
+            MANOEUVRE_GRANTED_ATTACK, 0, {"power": self.ref, "who": who}
+        )
         if attack_bonus:
             granted.append(
                 self.world.effects.apply(
@@ -9606,6 +9631,18 @@ class Cast:
         floor = self._reroll_floor()
         if floor > 1:
             return self._rolled_above(dice, floor)
+        # **After the loop and never beside it.** "Reroll each die that shows
+        # a 1 *until it shows a different number*" is strictly stronger than
+        # "pick one of them, reroll it, and use the new result", so a
+        # creature carrying both gets the loop and this is dead -- which is
+        # the right answer and the reason these are two holds rather than
+        # parameters on one. Three parallel `max()` reads would have mixed
+        # one card's count into the other card's floor and come out *weaker*
+        # than either card alone; `items/weapon_b.py` lays the loop on its
+        # wielder, so a mage holding both is reachable and not theoretical.
+        pick_floor, pick_n = self._reroll_pick()
+        if pick_floor > 1 and pick_n > 0:
+            return self._rolled_pick(dice, pick_floor, pick_n)
         first = self.world.rng.roll(dice).total
         if self.total("damage_twice_lower") > 0:
             return min(first, self.world.rng.roll(dice).total)
@@ -9892,6 +9929,7 @@ class Cast:
         self,
         *,
         below: int = 2,
+        pick: int = 0,
         keyword: Keyword | None = None,
         ref: str = "",
         on: int | None = None,
@@ -9919,13 +9957,36 @@ class Cast:
         `keyword` and `ref` narrow it to what the card names -- the curse
         damage, one racial power, weapon dice only. Unqualified is every
         damage roll the creature makes, which only a couple of cards mean.
+
+        **`pick` is the other printed shape, and it is weaker.** Some cards
+        say "if any of the dice come up with a result of 1, **pick one of
+        them**, reroll it, and use the new result" -- one die, one reroll,
+        and the new face stands even if it is another 1. `pick=1` is that;
+        `pick=0`, the default, is the loop in the first line of this
+        docstring.
+
+        It lays **its own holds** rather than adding a parameter to the
+        loop's, which is the whole design decision here. The holds are read
+        with `total()`, so three parallel reads of floor, count and tries
+        would take the `max` of each independently -- and a creature holding
+        one card of each shape would come out with the loop's floor, the
+        pick's count of 1 and the pick's single try: **weaker than either
+        card alone**. `_damage_roll` reads the loop first and this only if
+        the loop is absent, so holding both gives the loop, which is what
+        both cards together should mean.
         """
         who = on if on is not None else self.me
-        what = "reroll_damage_below"
+        what = "reroll_damage_pick" if pick else "reroll_damage_below"
         if ref:
             what = f"{what}@{ref}"
         elif keyword is not None:
             what = f"{what}:{keyword.value}"
+        if pick:
+            # Two holds, laid together and read together. The count is
+            # keyed off the floor's own `what` so the pair cannot drift
+            # apart, and `below` rides in the floor hold exactly as the
+            # loop's does.
+            self.bonus(f"{what}#n", pick, on=who, until=until, stacks=False)
         # `stacks=False` because the floor is a `max`: a second identical
         # hold changes nothing and would only pile up effects -- a monster
         # whose own attack line prints the reroll lays one per swing
@@ -9953,6 +10014,65 @@ class Cast:
             for k in self.keywords_of(p):
                 best = max(best, self.total(f"reroll_damage_below:{k.value}"))
         return best
+
+    def _reroll_pick(self) -> tuple[int, int]:
+        """The floor and the number of dice for the **pick-one** shape.
+
+        `(0, 0)` for everybody with nothing recorded, which is almost
+        everybody. Same three-key lookup as `_reroll_floor` -- unqualified,
+        `@<the row being rolled>`, and per keyword -- because the cards
+        printing this narrow themselves the same ways.
+
+        Returned as a pair rather than read twice from the caller so the
+        floor and the count cannot be answered by two different holds.
+        """
+        from .dsl import get
+
+        def best(prefix: str) -> int:
+            got = max(self.total(prefix), self.total(f"{prefix}@{self.ref}"))
+            p = get(self.ref)
+            if p is not None:
+                for k in self.keywords_of(p):
+                    got = max(got, self.total(f"{prefix}:{k.value}"))
+            return got
+
+        floor = best("reroll_damage_pick")
+        if floor <= 1:
+            return 0, 0
+        # The count hangs off the same three keys with `#n` on the end, so
+        # whichever qualifier answered the floor answers the count too.
+        got = max(self.total("reroll_damage_pick#n"),
+                  self.total(f"reroll_damage_pick@{self.ref}#n"))
+        p = get(self.ref)
+        if p is not None:
+            for k in self.keywords_of(p):
+                got = max(got, self.total(f"reroll_damage_pick:{k.value}#n"))
+        return floor, got
+
+    def _rolled_pick(self, dice: str | int, floor: int, count: int) -> int:
+        """Reroll at most `count` of the dice under `floor`, **once each**.
+
+        The difference from `_rolled_above` is the whole of the card: that
+        one loops until the die is not low, this one takes the new face as
+        it comes. So there is no termination hazard here and none of the
+        paired guards that one needs -- a single reroll cannot hang.
+
+        Lowest dice first, because "pick one of them" is the player's choice
+        and the player picks the worst one. That is a policy decision living
+        in the kernel, which is normally wrong; it is here because the
+        alternative is asking the AI to choose between dice, and no card
+        makes the choice matter beyond "the lowest is best to replace".
+        """
+        rolled = self.world.rng.roll(dice)
+        faces = _faces_of(dice)
+        if faces <= 1 or floor > faces:
+            return rolled.total
+        low = sorted(
+            (face, i) for i, face in enumerate(rolled.dice) if face < floor
+        )
+        for _face, i in low[:count]:
+            rolled.dice[i] = self.world.rng.die(faces)
+        return rolled.total
 
     def _rolls_twice_higher(self) -> bool:
         """Does this roller take the better of two, for *this* row?
