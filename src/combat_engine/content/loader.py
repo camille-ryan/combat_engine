@@ -39,7 +39,7 @@ from combat_engine.engine import (
     Team,
     World,
 )
-from combat_engine.engine.dsl import REGISTRY
+from combat_engine.engine.dsl import REGISTRY, entry_defect
 from combat_engine.engine.movement import place
 from combat_engine.engine.types import ActionType, DamageType
 
@@ -156,7 +156,63 @@ def spawn(world: World, ref: str, square: tuple[int, int], *, team: Team = Team.
         Gear(),
     )
     place(world, eid, square)
+    _lay_regeneration(world, eid, ref, row)
     return eid
+
+
+def _lay_regeneration(world: World, eid: int, ref: str, row) -> None:  # noqa: ANN001
+    """A printed `Regeneration N`, applied where the stat block prints it.
+
+    **Camille's call, and it corrects an argument I had made against it.**
+    I had proposed a `query.printed_regeneration` each trait row would read,
+    on the grounds that a loader-applied version would double-pay beside
+    rows writing their own. Camille's read was that regeneration is a
+    property of the creature like `resist`, `vulnerable` and `immune`, and
+    belongs stored and applied the same way. Measured afterwards, which is
+    the order it should have been done in:
+
+        69 monsters print a Regeneration
+        62 `c.regeneration(` call sites in content/
+         1 sits on a creature that prints one -- `m2068a3`, which SUPPRESSES it
+         0 rows on those 69 write their own amount
+
+    So there was nothing to double-pay and nothing to migrate, and the state
+    being fixed is worse than the one I was guarding against: **all 69
+    regenerated not at all**, silently, and the row whose clause suppresses
+    its own regeneration had nothing to suppress.
+
+    **One mechanism, not two.** This calls the same `c.regeneration` the 62
+    content rows call rather than growing a parallel component the turn loop
+    would also have to read -- so `while_bloodied`, the `ev.ghost` guard and
+    the suppression flag behave identically whether a stat block printed the
+    line or a power granted it. The ref is synthetic (`<ref>:regen`) because
+    the printed line is a trait with no card of its own, and `drivers.py`
+    builds Casts the same way.
+
+    The suppression comes out of the database beside the amount, which is
+    what makes this honest rather than over-applying: of the 40 that print a
+    clause, 23 name a damage type and 11 a weapon property. The 6 printing
+    "while exposed to direct sunlight" get the unconditional amount and are
+    named in `etl.monster.SUNLIGHT` as a known exception, because nothing on
+    the board models sunlight and every fight this engine runs is indoors.
+    """
+    amount = row["regeneration"] or 0
+    if not amount:
+        return
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+
+    types = tuple(
+        DamageType(t)
+        for t in json.loads(row["regen_unless_damaged_by"] or "[]")
+        if t in DamageType._value2member_map_
+    )
+    Cast(world=world, me=eid, ref=f"{ref}:regen").regeneration(
+        amount,
+        until=When.ENCOUNTER,
+        unless_damaged_by=types,
+        unless_struck_by=row["regen_unless_struck_by"] or "",
+    )
 
 
 def _basic(stock: Stock) -> str:
@@ -487,11 +543,14 @@ def defective(ref: str) -> str:
     somebody can finish the row, so the monster is unfinished rather than wrong,
     and `pick` already declines to offer a stat block whose abilities are not all
     written. #360.
+
+    **Now one line over `dsl.entry_defect`**, which generalised this rule to
+    every kind of entry on Camille's call (#600). The prefix walk this used
+    to do also missed a conjuration: `startswith("m1932c0a")` is right but
+    `startswith("m1932a")` matched nothing for `m1932c0`'s rows, so a
+    defective conjured ability would not have defected its block.
     """
-    for row, p in REGISTRY.items():
-        if row.startswith(f"{ref}a") and getattr(p, "defect", ""):
-            return f"{row}: {p.defect}"
-    return ""
+    return entry_defect(ref)
 
 
 def usable(ref: str) -> bool:

@@ -94,13 +94,29 @@ class Monster:
     #: whose printed clause *suppresses* its own regeneration had nothing to
     #: suppress. #602.
     #:
-    #: The amount only. The parenthesised condition every one of them prints
-    #: ("if the troll takes acid or fire damage, regeneration does not
-    #: function until the end of its next turn") stays in the ability text:
-    #: `c.regeneration` already takes `unless_damaged_by=`, so the types are
-    #: a second decision and storing a half-parsed version of them would be
-    #: worse than leaving the prose where a reader can see it.
+    #: **The condition is stored too, and the first draft of this comment
+    #: said it should not be.** It said storing a half-parsed set of damage
+    #: types would be worse than leaving the prose where a reader can see
+    #: it. That was a guess about the data and the data disagrees. Of the 40
+    #: heroic blocks printing a parenthesised clause:
+    #:
+    #: * **23 name a damage type** -- "if it takes radiant damage,
+    #:   regeneration doesn't function on its next turn";
+    #: * **11 name a weapon property** -- "damage from a silver weapon";
+    #: * **6 are one clause, not six** -- "does not function while exposed
+    #:   to direct sunlight".
+    #:
+    #: So 34 of 40 fall straight into the two parameters `c.regeneration`
+    #: already has, and the remainder is a single idea. That is not a
+    #: half-read set; `_suppression` reads it.
     regeneration: int = 0
+    #: Damage types whose arrival stops the regeneration for a turn, for
+    #: `c.regeneration(unless_damaged_by=)`.
+    regen_unless_damaged_by: tuple[str, ...] = ()
+    #: A weapon property that does the same -- "silver", "cold iron" -- for
+    #: `c.regeneration(unless_struck_by=)`. The mechanism was already folded
+    #: in for 15 rows that each said it by hand.
+    regen_unless_struck_by: str = ""
     ac: int = 10
     fort: int = 10
     ref: int = 10
@@ -517,6 +533,73 @@ def _header(m: Monster, body: str, printed_level: int | None = None) -> None:
             m.xp = int(xp.group(1).replace(",", ""))
 
 
+#: The damage types a regeneration clause may name. Taken off the engine's
+#: own enum rather than listed here, so a type the engine does not model
+#: cannot be stored under a name nothing reads.
+def _damage_words() -> frozenset[str]:
+    from combat_engine.engine.types import DamageType
+
+    return frozenset(t.value for t in DamageType)
+
+
+#: "while exposed to direct sunlight", and it is **six blocks printing one
+#: clause** rather than six clauses. Deliberately not stored and deliberately
+#: not a defect: nothing on the board models sunlight, so there is no state
+#: to gate on -- and in a fight indoors, which is every fight this engine
+#: runs, the unsuppressed amount is the right one. Named here so the six are
+#: a known exception rather than a silent miss. #602.
+SUNLIGHT = re.compile(r"direct sunlight", re.I)
+
+#: **One material, two spellings.** The eleven blocks naming a weapon print
+#: "silver" six times and "silvered" five, and the tree already says it one
+#: way -- `batch_a.py` passes `unless_struck_by="silvered"` and `c.silvered`
+#: is the verb. So the mapping is a vocabulary, not a `.lower()`: stored
+#: raw, five of the eleven would have gated on a property no weapon carries
+#: and audited clean while regenerating through silver.
+#:
+#: A property not in here stores nothing, which is the loud answer -- an
+#: empty `unless_struck_by` makes the regeneration unconditional and the
+#: amount is still right, where a made-up property name would be a gate
+#: that never fires.
+_PROPERTY: dict[str, str] = {"silver": "silvered", "silvered": "silvered"}
+
+
+def _suppression(flat: str) -> tuple[tuple[str, ...], str]:
+    """What turns a printed `Regeneration N` off, from its own parenthesis.
+
+    Two shapes and they do not overlap: a damage type arriving, or a blow
+    from a weapon of a named material. Both are parameters `c.regeneration`
+    already takes, the second folded in for the 15 rows that had each
+    written the silver clause by hand.
+
+    **The damage words come off `DamageType`**, not a list here, so a type
+    the engine does not model cannot be stored under a name nothing reads --
+    which is the half-parsed state this was once argued to avoid, and the
+    way to avoid it is to let the enum be the vocabulary.
+
+    Returns empty for the sunlight six and for a block printing no clause.
+    """
+    hit = re.search(r"Regeneration\s+\d+\s*\(([^)]{0,300})\)", flat, re.I)
+    if not hit:
+        return (), ""
+    body = hit.group(1)
+    weapon = re.search(r"damage from (?:a[n]? )?([a-z ]+?) weapon", body, re.I)
+    if weapon:
+        return (), _PROPERTY.get(weapon.group(1).strip().lower(), "")
+    words = _damage_words()
+    # **The whole list before "damage", not the word next to it.** Nine
+    # blocks print "takes acid or fire damage" and a `(\w+) damage` read
+    # stores only `fire` -- nine creatures regenerating through acid, which
+    # is a wrong number rather than a missing one and would have audited
+    # clean. Found by reading the clauses after the tidy version of this
+    # looked right.
+    types: set[str] = set()
+    for span in re.findall(r"takes\s+([A-Za-z,\s]+?)\s+damage", body, re.I):
+        types |= {w.lower() for w in re.findall(r"[A-Za-z]+", span)
+                  if w.lower() in words}
+    return tuple(sorted(types)), ""
+
+
 def _numbers(m: Monster, blob: str) -> None:
     """Pull the defences and speeds out of a run of `<b>Label</b> value` text."""
     flat = text(blob)
@@ -531,8 +614,10 @@ def _numbers(m: Monster, blob: str) -> None:
     m.hp = grab("HP", m.hp)
     # Printed between `HP` and `AC`, so it is already in this blob and needs
     # no reader of its own -- `grab` takes the first integer after the label,
-    # which is the amount, and leaves the parenthesised condition alone.
+    # which is the amount.
     m.regeneration = grab("Regeneration", m.regeneration)
+    if m.regeneration:
+        m.regen_unless_damaged_by, m.regen_unless_struck_by = _suppression(flat)
     m.ac = grab("AC", m.ac)
     m.fort = grab("Fortitude", m.fort)
     m.ref = grab("Reflex", m.ref)

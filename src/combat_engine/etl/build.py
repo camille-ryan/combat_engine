@@ -68,7 +68,11 @@ CREATE TABLE monster (
   initiative INTEGER, speed INTEGER, modes TEXT, scores TEXT,
   resist TEXT, vulnerable TEXT, immune TEXT, senses TEXT,
   book TEXT, rank TEXT,
-  dialect TEXT, score REAL, conjuration INTEGER
+  dialect TEXT, score REAL, conjuration INTEGER,
+  -- What turns a printed `Regeneration N` off. Stored beside the amount for
+  -- the reason `resist`/`vulnerable`/`immune` are: it is a property of the
+  -- creature, not a thing a row does. Camille's call, #602.
+  regen_unless_damaged_by TEXT, regen_unless_struck_by TEXT
 );
 CREATE INDEX monster_book ON monster(book, level);
 CREATE INDEX monster_level ON monster(level, role);
@@ -930,10 +934,10 @@ def _write_monster(
     """One stat block and its abilities, into `monster` and `monster_power`.
 
     Lifted out of `_monsters` when a second caller arrived (#601, the blocks
-    printed inside an item's own entry). The 32-column tuple wants exactly
-    one copy: it had just been widened for `regeneration` (#602), and a
-    second hand-written copy is how the next column goes into one site and
-    not the other.
+    printed inside an item's own entry). The 34-column tuple wants exactly
+    one copy: it was widened for `regeneration` and then again for that
+    line's two suppression columns, and a second hand-written copy is how
+    the next column goes into one site and not the other.
 
     `_read_nothing` moved in here with it, from `_monsters`. A conjured
     block that parses to nothing fails the same way and was invisible:
@@ -945,7 +949,7 @@ def _write_monster(
         report.blank_stats.append(m.ref_id)
     out.execute(
         "INSERT INTO monster VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             m.ref_id, m.id, m.level, m.role,
             int(m.minion), int(m.leader), int(m.elite), int(m.solo),
@@ -955,6 +959,8 @@ def _write_monster(
             json.dumps(m.resist), json.dumps(m.vulnerable), json.dumps(m.immune),
             m.senses, m.book, m.rank, m.dialect, m.score,
             int(m.conjuration),
+            json.dumps(list(m.regen_unless_damaged_by)),
+            m.regen_unless_struck_by,
         ),
     )
     names[m.ref_id] = {"name": m.name, "description": m.description}
