@@ -35,6 +35,7 @@ from .components import (
 )
 from .dsl import (
     ANY_CREATURE,
+    AREA_OR_CLOSE,
     EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,

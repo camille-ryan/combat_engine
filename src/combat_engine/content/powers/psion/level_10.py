@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AREA_OR_CLOSE,
     DAILY,
     EACH_ALLY,
     ENCOUNTER,
@@ -38,7 +39,9 @@ from combat_engine.engine import (
 
 PSIONIC = [Keyword.PSIONIC]
 
-_SPREAD_OUT = ("close_burst", "close_blast", "area_burst")
+#: Shared now -- see `dsl.AREA_OR_CLOSE`. It adds `"wall"`, which this
+#: tuple omitted, so being caught by a wall attack did not splash. #616.
+_SPREAD_OUT = AREA_OR_CLOSE
 _SEIZED = (Condition.DAZED, Condition.DOMINATED, Condition.STUNNED)
 
 

@@ -28,6 +28,7 @@ from collections.abc import Callable
 
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     DAILY,
     EACH_ALLY,
     EACH_ENEMY,
@@ -77,7 +78,10 @@ HEALING_MARTIAL = [Keyword.HEALING, Keyword.MARTIAL]
 CLASS_HEAL = "p1590"
 
 #: What "an area or a close attack" covers, read off the power's range.
-_AREA_SHAPES = ("close_burst", "close_blast", "area_burst")
+#: "An area or a close attack" -- `dsl.AREA_OR_CLOSE`, which is the shared
+#: reading and includes `"wall"`. This tuple left it out, so an ally's wall
+#: attack did not count. #616.
+_AREA_SHAPES = AREA_OR_CLOSE
 
 _ALLY_CAUGHT = "an ally makes an area or a close attack that targets an ally"
 _ALLY_MISSED = "an ally within 5 squares of you misses with an attack"
@@ -87,7 +91,8 @@ _RANGED_HIT = "an enemy hits you with a ranged attack"
 def _has_shield(world: World, eid: int) -> bool:
     """"Requirement: You must be using a shield"."""
     gear = world.get(eid, Gear)
-    return gear is not None and gear.shield
+    # `Gear.shield` is a count, not a flag, so the `and` came out `int`.
+    return bool(gear is not None and gear.shield)
 
 
 def _mark_by(c: Cast, marker: int, victim: int, until: When = When.EONT) -> None:

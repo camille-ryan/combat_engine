@@ -5892,6 +5892,81 @@ def blank_defence_is_boilerplate(out: Result) -> None:
              " is what a mangled line looks like next to a pasted one")
 
 
+def area_or_close_is_one_set(out: Result) -> None:
+    """"An area or a close attack power" was five tuples and one disagreement.
+
+    `_AREA_SHAPES`, `_SPREAD_OUT`, `BURSTS`, `_SPREAD` and `_SPREADS` --
+    warlord, psion, sorcerer, a sorcerer feat and a level-3 monster file --
+    each wrote out the same answer to the same question, and **four of the
+    five left `"wall"` out**. A wall is an area power, so those four were
+    under-firing: `f1155`'s card prints "area and close attack powers", which
+    covers one.
+
+    `feats/sorcerer._SPREAD` was the one that had it right, which is why
+    `dsl.AREA_OR_CLOSE` takes its reading rather than the majority's. Being
+    outvoted four to one is not evidence here; the card is.
+
+    **The blast radius is one row and that is the point.** `m5784a4` is the
+    only `wall` row in the tree that declares an attack line at all -- 1 of
+    9 -- so the correction is safe as well as right, and asserting the count
+    is what keeps it honest if more wall attacks arrive later.
+
+    Three neighbouring tuples are deliberately *not* folded in, and the rule
+    asserts that too: the provoke set excludes close shapes on purpose, and
+    `_stretched`'s excludes `"wall"` because a wall's size is its length.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content.feats import sorcerer as fs
+    from combat_engine.content.monsters.level_03 import artillery as ar
+    from combat_engine.content.powers.psion import level_10 as ps
+    from combat_engine.content.powers.sorcerer import level_10_sc as so
+    from combat_engine.content.powers.warlord import level_10_b as wl
+    from combat_engine.engine.dsl import AREA_OR_CLOSE, REGISTRY, Power, Range
+
+    named = {
+        "warlord._AREA_SHAPES": wl._AREA_SHAPES,
+        "psion._SPREAD_OUT": ps._SPREAD_OUT,
+        "sorcerer.BURSTS": so.BURSTS,
+        "feats.sorcerer._SPREAD": fs._SPREAD,
+        "monsters.artillery._SPREADS": ar._SPREADS,
+    }
+    for label, got in sorted(named.items()):
+        out.that(got is AREA_OR_CLOSE,
+                 f"{label} is the shared set itself, not a copy of it",
+                 f"{got}")
+    out.that("wall" in AREA_OR_CLOSE,
+             "and the shared set includes `wall`, which four of the five"
+             " omitted -- a wall is an area power and `f1155` prints"
+             " \"area and close attack powers\"")
+
+    # The row the correction actually reaches, and the count that makes it
+    # safe. A second wall attack arriving is not a fault -- it is a prompt to
+    # re-read this -- so the assertion names the number rather than pinning
+    # the ref alone.
+    walls = [
+        ref for ref, p in REGISTRY.items()
+        if getattr(getattr(p, "reach", None), "kind", "") == "wall"
+    ]
+    arms = [r for r in walls if getattr(REGISTRY[r], "attack", None)]
+    out.that(arms == ["m5784a4"],
+             "exactly one wall row declares an attack line, so exactly one"
+             " row changes behaviour -- if this grows, re-read the four"
+             " predicates before trusting them",
+             f"{len(walls)} wall rows, {len(arms)} with an attack: {arms}")
+
+    # ---- the three that must stay separate -----------------------------
+    def provokes(kind: str) -> bool:
+        return Power("drivers:x", lambda c: None, reach=Range(kind=kind)).provokes
+
+    out.that(provokes("wall") and not provokes("close_burst")
+             and not provokes("close_blast"),
+             "the provoke set is NOT this set -- a wall provokes, a close"
+             " burst and a close blast do not, which is exactly why folding"
+             " the two readings together would be wrong",
+             f"wall={provokes('wall')} burst={provokes('close_burst')}"
+             f" blast={provokes('close_blast')}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -10036,6 +10111,9 @@ DRIVERS = {
     "raises_the_fallen": (raises_the_fallen,
                           "a corpse can be named now, and the rows dropped"
                           " on saying it cannot"),
+    "area_or_close_is_one_set": (area_or_close_is_one_set,
+                                 "\"an area or a close attack\" was five"
+                                 " tuples and one disagreement"),
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),

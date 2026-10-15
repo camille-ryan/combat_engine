@@ -26,6 +26,7 @@ from combat_engine.content.monsters.level_01 import aquatic_edge
 from combat_engine.content.monsters.level_01.skirmishers import wary_of_traps
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_CREATURE,
     EACH_OTHER,
@@ -74,7 +75,9 @@ from combat_engine.engine.triggers import Trigger, both, targets_me
 #: "blast or burst" means. Asked off the power in the registry, because a
 #: modifier's context carries the ref and not the range.
 _FROM_AFAR = ("ranged", "area_burst")
-_SPREADS = ("close_blast", "close_burst", "area_burst")
+#: Shared now -- see `dsl.AREA_OR_CLOSE`, which adds the `"wall"` this
+#: tuple omitted. #616.
+_SPREADS = AREA_OR_CLOSE
 
 
 def _reach_of(ref: str) -> str:

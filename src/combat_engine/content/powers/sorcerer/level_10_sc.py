@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AREA_OR_CLOSE,
     DAILY,
     ONE_CREATURE,
     REACTION,
@@ -28,7 +29,10 @@ from combat_engine.engine import (
 )
 
 #: A close or area attack, read off the power the event names.
-BURSTS = ("close_burst", "close_blast", "area_burst")
+#: Shared now -- see `dsl.AREA_OR_CLOSE`. The printed trigger is "you are
+#: hit by an area or a close attack", and a wall attack is one; this tuple
+#: left `"wall"` out. #616.
+BURSTS = AREA_OR_CLOSE
 
 
 def by_burst(world: World, me: int, ev: Any) -> bool:

@@ -59,6 +59,30 @@ Body = Callable[[Cast], None]
 # Range
 # --------------------------------------------------------------------------
 
+#: **"An area or a close attack power."** The question five content files were
+#: each answering with their own tuple -- `_AREA_SHAPES`, `_SPREAD_OUT`,
+#: `BURSTS`, `_SPREAD`, `_SPREADS` -- and four of the five left `"wall"` out.
+#:
+#: A wall **is** an area power, so the four were under-firing: a printed
+#: "area and close attack powers" covers it, and `feats/sorcerer._SPREAD` was
+#: the one that had it right. One row is affected in practice (`m5784a4` is
+#: the only `wall` row in the tree that declares an attack line at all, 1 of
+#: 9), which is what makes consolidating onto the wall-inclusive reading safe
+#: as well as correct. #616.
+#:
+#: **Three neighbouring tuples are deliberately NOT this**, and folding them
+#: in would be the "one symbol serving several needs" mistake:
+#:
+#: * `("ranged", "area_burst", "wall")` at `provokes_on`, `provokes` and
+#:   `_legal_from` is *a line aimed away from you* -- it excludes close
+#:   bursts and blasts precisely because those do not turn your back on
+#:   anybody;
+#: * `("close_burst", "close_blast", "area_burst")` in `_stretched` is the
+#:   set whose size a `blast_size` modifier can grow, and a wall's size is
+#:   its length rather than a radius;
+#: * `MELEE_KINDS` and friends in content are the melee question.
+AREA_OR_CLOSE = ("close_burst", "close_blast", "area_burst", "wall")
+
 
 @dataclass(frozen=True)
 class Range:

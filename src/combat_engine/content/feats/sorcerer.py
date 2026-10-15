@@ -24,6 +24,7 @@ from combat_engine.content.powers.sorcerer.souls import (
     wear_soul,
 )
 from combat_engine.engine import (
+    AREA_OR_CLOSE,
     AT_WILL,
     ENCOUNTER,
     PERSONAL,
@@ -47,7 +48,10 @@ from combat_engine.engine.types import Usage
 #: so both halves of it are in this set either way.
 _HAND = ("melee", "ranged")
 #: "Area and close attack powers", the other half of the same split.
-_SPREAD = ("close_burst", "close_blast", "area_burst", "wall")
+#: Shared now -- see `dsl.AREA_OR_CLOSE`. **This file had it right** and the
+#: other four were missing `"wall"`, which is why the shared constant takes
+#: this reading rather than theirs. #616.
+_SPREAD = AREA_OR_CLOSE
 
 
 def _my_at_will_hit(world, me: int, ev: Any) -> bool:  # noqa: ANN001
