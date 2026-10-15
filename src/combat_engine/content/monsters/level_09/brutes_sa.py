@@ -2253,11 +2253,30 @@ def m5619a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
+    todo=("c.blocks_entry()",),
 )
 def m5625a0(c: Cast) -> None:
-    """Already true without a line of code: a creature's own square is
-    not enterable by anything else on this board, no `c.shares_space` and
-    no exception involved."""
+    """"An enemy cannot enter its space **by any means**", and a phasing
+    enemy can.
+
+    **This row said the card was already true and was wrong.** It read
+    "a creature's own square is not enterable by anything else on this
+    board, no exception involved", which is right about walking and wrong
+    about the exception the card exists for. `movement._clear` waives
+    occupancy for a phasing or overhead mover -- `not (overhead or ghost)`
+    -- so a ghost passes through. Driven on a board rather than inferred:
+
+        _clear(world, foe, {the monster's square})   False
+        ...with "phasing" in the foe's modes         True
+
+    `_can_stop` keeps it from *ending* there (#392), so what is missing is
+    narrower than the card: passage, not occupancy. Still a means of
+    entering, and the card forbids all of them.
+
+    Five other rows print this identical card and all five were marked --
+    under four different symbol names, which is why this one looked like
+    the odd one out instead of the wrong one. All six say
+    `c.blocks_entry()` now."""
 
 
 @power(

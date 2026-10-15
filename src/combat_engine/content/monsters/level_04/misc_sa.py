@@ -322,7 +322,7 @@ def m6403a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.no_entry()",),
+    todo=("c.blocks_entry()",),
 )
 def m6403a1(c: Cast) -> None:
     """An ordinary creature cannot stand in another's square anyway, so the only

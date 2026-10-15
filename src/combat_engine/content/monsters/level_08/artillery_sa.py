@@ -2068,7 +2068,7 @@ def m6405a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.blocks_occupancy()",),
+    todo=("c.blocks_entry()",),
 )
 def m6405a1(c: Cast) -> None:
     """Refused in play: nothing names a creature's own square as

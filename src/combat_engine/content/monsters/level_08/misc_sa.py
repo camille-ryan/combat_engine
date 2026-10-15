@@ -354,10 +354,15 @@ def m6404a0(c: Cast) -> None:
 )
 def m6404a1(c: Cast) -> None:
     """"An enemy cannot enter its space by any means." No verb refuses
-    entry into a specific creature's square -- ordinary occupancy already
-    blocks walking into one, but nothing here distinguishes that default
-    from the printed, absolute line, so there is nothing to demonstrate
-    either way."""
+    entry into a specific creature's square.
+
+    **The default and the printed line do come apart, and this said they
+    did not.** Ordinary occupancy blocks walking in, but
+    `movement._clear` waives it for a phasing or overhead mover, so a
+    ghost passes through where the card says nothing may. Measured on a
+    board; see `m5625a0`, which is the same card and had been written as
+    needing no code at all on the strength of the reading this docstring
+    used to share."""
 
 
 @power(

@@ -552,7 +552,7 @@ def m5623a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.no_enter(zone)",),
+    todo=("c.blocks_entry()",),
 )
 def m5623a1(c: Cast) -> None:
     """Nothing bars a square to one side only -- `c.no_enter` blocks a
