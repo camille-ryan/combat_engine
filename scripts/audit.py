@@ -927,7 +927,14 @@ UNDEAD = "m416"
 #: A monster ability's id. Spelled out rather than `startswith("m")`, which
 #: also matches `mba` -- the engine's own melee basic attack -- and sent the
 #: auditor looking for a monster called "mb".
-MONSTER_ABILITY = re.compile(r"^m\d+a\d+$")
+#:
+#: **The `c<n>` group is load-bearing and was missing.** A conjuration's
+#: block (#601) is `m<item id>c<n>` and its abilities are `m1932c0a0`, which
+#: this did not match -- so all 23 of those rows fell through to the
+#: character branch and were fielded **on a fighter** rather than on their
+#: own stat block. The verdicts came back clean and were evidence about the
+#: wrong creature, which is the one kind of green worth distrusting.
+MONSTER_ABILITY = re.compile(r"^m\d+(?:c\d+)?a\d+$")
 
 #: A magic item block's ref: the item's own ref with a block on the end.
 #: `i601x1` is its first Property, `i601p1` its first Power, and the two

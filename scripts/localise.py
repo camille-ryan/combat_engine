@@ -480,7 +480,7 @@ KNOWN_LABEL_DRIFT = 83
 
 #: A monster ability's own choice. Its name labels a clause, so it belongs in
 #: `_printed_labels` beside the build riders. #353.
-_SUB_REF = re.compile(r"m\d+a\d+s\d+")
+_SUB_REF = re.compile(r"m\d+(?:c\d+)?a\d+s\d+")
 
 
 def _printed_labels() -> frozenset[str]:

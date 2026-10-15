@@ -46,7 +46,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 #: use rather than "a letter and digits": `d20`, `1d6`, `a1` and `w3610` are
 #: all letter-then-digits and only some of them are refs.
 _REF = re.compile(
-    r"`(?:[a-z_]+(?:\.[a-z_]+)*\.)?(?P<ref>(?:m\d+a\d+|m\d+|p\d+(?::augment\d+)?|i\d+[px]\d+|i\d+"
+    r"`(?:[a-z_]+(?:\.[a-z_]+)*\.)?(?P<ref>(?:m\d+(?:c\d+)?a\d+|m\d+c\d+|m\d+"
+    r"|p\d+(?::augment\d+)?|i\d+[px]\d+|i\d+"
     r"|f\d+[b]?|x\d+_\d+|cf:[a-z0-9-]+|rt:[a-z0-9-]+|r\d+|w\d+)"
     r")(?:\(\))?`"
 )

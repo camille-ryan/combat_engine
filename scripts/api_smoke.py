@@ -489,7 +489,7 @@ def check_hosted(check: Checks) -> None:
 #: shape of gap as `leaks.py`'s missing single quote -- a pattern that had
 #: never been asked the question, found by being asked it.
 IS_REF = re.compile(
-    r"^(p\d+|m\d+a\d+|i\d+[px]\d+|cf:[a-z0-9-]+|mba|rba|second-wind)$"
+    r"^(p\d+|m\d+(?:c\d+)?a\d+|i\d+[px]\d+|cf:[a-z0-9-]+|mba|rba|second-wind)$"
 )
 
 

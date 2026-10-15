@@ -1411,7 +1411,7 @@ def _dangling_implementations() -> list[tuple[str, str, str]]:
 #: A ref, for the gate walk below. Matches the shapes the tree mints and
 #: nothing looser -- a bare word would catch every string in `content/`.
 _REF_SHAPE = re.compile(
-    r"p\d+|m\d+a\d+|i\d+[px]\d+|f\d+[a-z]?|cf:[\w-]+|rt:[\w-]+"
+    r"p\d+|m\d+(?:c\d+)?a\d+|i\d+[px]\d+|f\d+[a-z]?|cf:[\w-]+|rt:[\w-]+"
 )
 
 

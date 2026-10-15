@@ -100,7 +100,11 @@ _DEBT_FILE = Path(__file__).resolve().parent / "fixtures" / "recharge_debt.json"
 #: A monster ability's ref. Nothing else is in scope: a character power's card
 #: names an ability rather than a finished total, so `printed` is None there and
 #: there is nothing to compare.
-_ABILITY = re.compile(r"m\d+a\d+")
+#: `c<n>` is a conjuration's suffix (#601). Without it this refused every
+#: one of those refs outright -- "none of the refs given is a declared
+#: monster ability" -- so the one check that compares `printed=`, damage,
+#: range and usage against the card could not see them at all.
+_ABILITY = re.compile(r"m\d+(?:c\d+)?a\d+")
 
 #: `+13 vs. AC`, `+6 vs Reflex`. The defence word is spelled out in full on
 #: both dialects, and `vs.` loses its stop on the earlier one.
