@@ -6216,10 +6216,11 @@
   "why": "f1120 is explicit and has already dropped its other marker: c.rolls_with exists, and what is missing is provenance -- \"'Gained through a multiclass feat' is a provenance Powers.known does not keep: a row is in the list or it is not, and the list does not say how it got there.\" Nothing in chargen records it either."
  },
  "chargen.pact_blade()": {
+  "by": "hand, 2026-10-16",
   "found": "nothing",
   "rows": 15,
   "verdict": "real",
-  "why": "No candidate."
+  "why": "Accurate, and the marker names the right component. Every one of the 15 prints `Requirement: you must use this power with your <named blade>`, and chargen never deals one: of 29 weapon refs named anywhere in chargen/, exactly one is unpriced (a named weapon) and it is not a pact blade. So the Requirement can never be met and no body can run. Fix is in chargen, not on Cast. Second, smaller gap once a blade is dealt: c.wielding takes a group, category or property and cannot name one weapon ref, so a row would read Gear.main.ref directly or c.wielding needs a ref form. Do not re-triage: the blocker is upstream of any verb."
  },
  "chargen.power_choice()": {
   "by": "slice4",
