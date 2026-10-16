@@ -399,11 +399,26 @@ def i526x1(c: Cast) -> None:
     action=STANDARD,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reshape_area()",),
+    todo=("c.move_zone(reshape=)",),
 )
 def i526p1(c: Cast) -> None:
     """`c.move_zone` carries a shape from one place to another; reshaping
-    one around a square that stays put is a different operation."""
+    one around a square that stays put is a different operation.
+
+    **Re-pointed off `c.reshape_area()`, which was one symbol over two
+    mechanisms.** The other six rows on it all change the area a power
+    covers *as it is used* -- the header's shape, computed before the body
+    runs -- and all six say so in the same words. This row is the odd one:
+    it mutates a **wall already standing on the board**, with at least one
+    square pinned. Nothing about a header, and no overlap with the other
+    six beyond the English word "reshape".
+
+    Named on `c.move_zone` rather than as a new verb, because that is the
+    facility this extends and `c.move_zone(with_me=)` already marks a
+    second gap on it. The difference from the existing call is exactly the
+    pinned square: `move_zone` translates and keeps the shape, where this
+    changes the shape and keeps a square. #614.
+    """
 
 
 @power(

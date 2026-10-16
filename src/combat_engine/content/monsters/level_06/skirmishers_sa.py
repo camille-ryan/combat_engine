@@ -3137,7 +3137,7 @@ def m6655a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("Movement.through_creatures",),
+    todo=("movement.may_enter()",),
 )
 def m6655a1(c: Cast) -> None:
     """**Re-aimed, not written.** The old symbol said entering an occupied
@@ -3159,7 +3159,15 @@ def m6655a1(c: Cast) -> None:
     nothing on `Movement` holds the standing permission this trait is.
 
     Everything that leans on it below still reads "adjacent" for "in its
-    square"."""
+    square".
+
+    **Re-pointed again, to share a symbol with `m5808a0`.** The two sat on
+    `Movement.through_creatures` and `movement.shares_space(by=)` -- one gap
+    written twice, so neither symbol could go green for the other row.
+    `m5808a0` prints this same mover-side permission narrowed by the
+    occupant's size and side, which is a predicate rather than a second
+    mechanism. #626.
+    """
 
 
 @power(

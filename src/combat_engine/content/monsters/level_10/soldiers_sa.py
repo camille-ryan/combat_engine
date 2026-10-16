@@ -3807,7 +3807,7 @@ def m5788a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("movement.shares_space(by=)",),
+    todo=("movement.may_enter()",),
 )
 def m5808a0(c: Cast) -> None:
     """"Can enter the spaces of Medium or Small enemies" is a permission that
@@ -3823,7 +3823,12 @@ def m5808a0(c: Cast) -> None:
 
     The marker used to read `c.shares_space(always=)`, which names the wrong
     gap: an always-on form of that verb would still lay the property on the
-    wrong creature."""
+    wrong creature.
+
+    **And now it shares a symbol with `m6655a1`**, which printed the same
+    permission unnarrowed and sat on `Movement.through_creatures`. One gap
+    under two names could not go green for either row. This card is that
+    permission plus a predicate on the occupant's size and side. #626."""
 
 
 @power("m5808a1", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)

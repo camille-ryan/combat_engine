@@ -2609,7 +2609,7 @@ def m6654a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("Movement.through_creatures",),
+    todo=("movement.may_enter()",),
 )
 def m6654a1(c: Cast) -> None:
     """"The m6654 can enter enemies' spaces during its movement" -- and this
@@ -2631,6 +2631,15 @@ def m6654a1(c: Cast) -> None:
     walking between enemies at ground level. `m6655a1` is the same card and
     has carried `Movement.through_creatures` throughout; this is the pair
     agreeing, and its marker was the correct one of the two.
+
+    **Renamed to `movement.may_enter()` all the same, and the pair's
+    judgement above is why it needed an argument.** `m5808a0` prints the
+    same permission narrowed to *Medium or Small* enemies, so the thing
+    missing cannot be a boolean on `Movement`: it is a question `_clear`
+    does not ask. `_clear` reads `shares_space(world, occupant)` and takes
+    no account of who is entering, so the fix is a two-sided
+    `may_enter(world, mover, occupant)` and a predicate is where
+    `m5808a0`'s sizes go. Three rows now share the one symbol. #626.
 
     One note for whoever drives this next: `_board(ref)` **arms the row**,
     so a probe that reads `shares_space` "before" is already reading it
