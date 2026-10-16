@@ -305,12 +305,38 @@ def f3280(c: Cast) -> None:
 
 @power("f3170", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.lend_augment(ref_or_class, clause)",))
+)
 def f3170(c: Cast) -> None:
-    """Hands `p10440` an Augment 1 clause it does not print. An augment is
-    a branch inside the row's own body reading `augment(c)`; a feat cannot
-    add one from outside, which is the gap the five psionic rows printing
-    "you gain the following augmentation" already name."""
+    """"You gain the following augmentation for your p10440 power.
+    Augment 1: each enemy adjacent to the target takes necrotic damage
+    equal to your Constitution modifier."
+
+    **The verb exists and the old note said it could not.** It read "an
+    augment is a branch inside the row's own body reading `augment(c)`; a
+    feat cannot add one from outside" -- `c.lend_augment` does exactly
+    that, and its docstring says it was built for the four feats printing
+    an Augment line on a card that prints none. Three of the four are
+    written in `general_o.py`; this was the leftover.
+
+    What was actually missing is the **reader**: that verb's rule is that
+    the lent-to row has to call `augment.lent(c)` or the lend is a
+    modifier nothing consults, and `p10440` did not. It does now, before
+    its effect, where `augment.lent` says to put the call.
+
+    "Adjacent to the target" excludes the target, which `c.within(1,
+    of=foe)` includes at distance 0 -- so it is taken out by name. `side`
+    is read from the caster rather than from the target, which is what
+    that verb's own note says and what the printed word means here.
+    """
+    def clause(use: Cast) -> None:
+        foe = use.target or getattr(use.trigger, "source", None)
+        if foe is None:
+            return
+        for other in use.within(1, of=foe, side="enemy"):
+            if other != foe:
+                use.flat(use.con_mod, dtype=DamageType.NECROTIC, on=other)
+
+    c.lend_augment("p10440", 1, clause, on=c.me, until=When.ENCOUNTER)
 
 
 # -- battle resilience ------------------------------------------------------

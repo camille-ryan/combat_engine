@@ -2234,6 +2234,135 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_feat_lends_an_augment(out: Result) -> None:
+    """f3170 hands p10440 an Augment 1 clause the card does not print.
+
+    Four feats print an Augment line on a power whose own card prints none,
+    and `c.lend_augment` was built for them -- three are written in
+    `general_o.py`. This was the leftover, and its note said the thing could
+    not be done: *"an augment is a branch inside the row's own body; a feat
+    cannot add one from outside."* That verb does exactly that.
+
+    **What was missing is the reader.** `c.lend_augment`'s own rule is that
+    the lent-to row must call `augment.lent(c)`, or the lend is a modifier
+    nothing consults -- and `p10440` did not ask. Four racial powers already
+    ask the same way, so the pattern was in the tree and this one power was
+    outside it.
+
+    **Asserted by running p10440's body, not by calling `augment.lent`.**
+    The first draft called the helper directly, and when the plant took
+    `lent(c)` back out of the power only the source check went red -- the
+    damage still landed, because the driver was the thing doing the asking.
+    A rule has to go through the row that will really be holding it.
+
+    Posed on `p10440`'s board rather than the feat's, which is what makes
+    the control real: `audit.board("f3170")` arms the feat as part of
+    fielding it, so "without the feat" cannot be said there at all.
+
+    Two further details, each of which cost a wrong reading first:
+
+    * **Both neighbours plain dummies.** The second creature `audit.board`
+      spawns is undead and the lent clause deals necrotic, so the first run
+      showed 40 before and 40 after and looked exactly like a clause that
+      never fires. It was immunity working.
+    * **The control runs first.** `spent_on` reads a module-level record of
+      the last augment paid for, and two boards in one process reuse entity
+      ids -- so asking after the lend pose answered 1 for a creature that had
+      spent nothing.
+    """
+    import inspect
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.powers.augment import spent_on
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import DamageType
+
+    #: What the row's own printed effect deals, so the lent clause's share of
+    #: a creature's losses can be told apart from it.
+    DEALT = 7
+
+    out.that(not REGISTRY["f3170"].unfinished,
+             "f3170 carries no marker now",
+             f"{REGISTRY['f3170'].unfinished}")
+    asks = "lent(c)" in inspect.getsource(REGISTRY["p10440"].body)
+    out.that(asks,
+             "p10440 calls `augment.lent` -- without it the lend is a"
+             " modifier nothing consults, which is that verb's own rule",
+             f"{asks}")
+
+    def pose(*, lend: bool):  # noqa: ANN202
+        world, me, _ = _board("p10440", 1)
+        foes = [e for e in sorted(enemies(world, me)) if world.get(e, Health)]
+        here = world.get(me, Position)
+        # foes[1] is the undead one, and the clause deals necrotic.
+        victim, neighbour = foes[0], foes[2]
+        world.get(victim, Position).square = (here.square[0] + 4, here.square[1])
+        world.get(neighbour, Position).square = (here.square[0] + 5, here.square[1])
+        for spare in (foes[1], *foes[3:]):
+            world.get(spare, Position).square = (here.square[0] + 15, here.square[1])
+        if lend:
+            REGISTRY["f3170"].body(Cast(world=world, me=me, ref="f3170"))
+        # The use as the dispatcher hands it over: this row reads its target
+        # off the trigger event, not off the aim.
+        friend = next(iter(sorted(allies(world, me))), me)
+        use = Cast(world=world, me=me, ref="p10440")
+        use.trigger = DamageApplied(
+            source=victim, target=friend, amount=DEALT,
+            dtype=DamageType.FORCE, absorbed=0,
+            hp=world.get(friend, Health).hp,
+        )
+        return world, me, use, victim, neighbour
+
+    # --- the control, first, for `spent_on`'s reason above ---------------
+    world, me, use, victim, neighbour = pose(lend=False)
+    was = world.get(neighbour, Health).hp
+    stood = world.get(victim, Health).hp
+    REGISTRY["p10440"].body(use)
+    out.that(spent_on(me, "p10440") == 0,
+             "without the feat nothing is lent and nothing is spent -- the"
+             " control, and why this is not p10440 having grown a clause",
+             f"spent {spent_on(me, 'p10440')}")
+    out.that(world.get(neighbour, Health).hp == was,
+             "and the neighbour of the target is untouched",
+             f"{was} -> {world.get(neighbour, Health).hp}")
+    out.that(world.get(victim, Health).hp == stood - DEALT,
+             "while the row's printed effect still lands on the dealer, so"
+             " the control is the feat being absent rather than the power"
+             " being broken",
+             f"{stood} -> {world.get(victim, Health).hp}")
+
+    # --- and with the feat ----------------------------------------------
+    world, me, use, victim, neighbour = pose(lend=True)
+    known = world.get(me, Powers)
+    out.that(bool(getattr(known, "lent_augments", {}).get("p10440")),
+             "the lend is filed against p10440 by ref, which is what"
+             " `augment.lent` reads back",
+             f"{sorted(getattr(known, 'lent_augments', {}))}")
+    before = world.get(neighbour, Health).hp
+    stood = world.get(victim, Health).hp
+    REGISTRY["p10440"].body(use)
+    out.that(spent_on(me, "p10440") == 1,
+             "the lent augment is offered and paid for at its printed cost,"
+             " routed through `augment` so `spent_on` sees it while the use"
+             " is still resolving",
+             f"spent {spent_on(me, 'p10440')}")
+    out.that(world.get(neighbour, Health).hp == before - use.con_mod,
+             "the neighbour of the target takes Constitution modifier"
+             " necrotic damage",
+             f"{before} -> {world.get(neighbour, Health).hp},"
+             f" con_mod {use.con_mod}")
+    out.that(world.get(victim, Health).hp == stood - DEALT,
+             "and the TARGET takes the printed effect and nothing more --"
+             " \"each enemy adjacent to the target\" excludes it, where"
+             " `c.within(1, of=foe)` returns it at distance 0",
+             f"{stood} -> {world.get(victim, Health).hp},"
+             f" printed {DEALT}")
+
+
 def the_invigorating_keyword_pays(out: Result) -> None:
     """A keyword that is only a tag, and the four feats that read it.
 
@@ -11687,6 +11816,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_feat_lends_an_augment": (a_feat_lends_an_augment,
+                                "f3170 lends p10440 an Augment clause"
+                                " its card does not print"),
     "the_invigorating_keyword_pays": (the_invigorating_keyword_pays,
                                       "a tag-only keyword, and the feats\n"
                                       " that read it"),

@@ -8,6 +8,7 @@ watch a move watch `MoveStart`: the printed line asks where the enemy is
 
 from __future__ import annotations
 
+from combat_engine.content.powers.augment import lent
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -141,6 +142,17 @@ def p10440(c: Cast) -> None:
     reads picks up, so the target is taken off the event rather than trusted
     to the default aim. The printed line is force *and* psychic in one
     instance; a damage instance carries one type, so it lands as force."""
+    # **Asks what a feat lent it.** This card prints no Augment line, so
+    # nothing in its header or its body knows the option exists --
+    # `f3170` lends one, and `c.lend_augment`'s own rule is that the
+    # lent-to row has to call this or the lend is a modifier nothing
+    # consults. Four racial powers already ask the same way.
+    #
+    # Before the effect, which is where `augment.lent` says to put it: one
+    # of the lent clauses in this family swaps the defence a row rolls
+    # against, and asking afterwards would be too late for that. This row
+    # rolls nothing, so the placement costs it nothing either.
+    lent(c)
     ev = c.trigger
     foe = getattr(ev, "source", None)
     if foe is None:
