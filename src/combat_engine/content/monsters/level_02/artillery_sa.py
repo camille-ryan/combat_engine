@@ -37,6 +37,7 @@ from combat_engine.content.monsters.level_02.skirmishers import (
 )
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ALLY,
     EACH_CREATURE,
@@ -1183,11 +1184,7 @@ def m5441a6(c: Cast) -> None:
     `c.cancel()` it licenses is not taken. That is `Hit.origin`.
     """
     hitter = get(getattr(c.trigger, "power", ""))
-    if hitter is None or hitter.reach.kind not in (
-        "close_burst",
-        "close_blast",
-        "area_burst",
-    ):
+    if hitter is None or hitter.reach.kind not in AREA_OR_CLOSE:
         return
     # The printed trigger narrows to an attack that caught an ally too.
     caught = set(getattr(c.trigger, "among", ()) or ())

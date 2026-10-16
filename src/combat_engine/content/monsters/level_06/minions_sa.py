@@ -32,6 +32,7 @@ from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_03.skirmishers_sa import _mobile_attack
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     ENCOUNTER,
     FREE,
@@ -229,7 +230,7 @@ def m115898a1(c: Cast) -> None:
     on=Trigger(
         AttackDeclared,
         lambda w, m, ev: (
-            ev.target == m and _row_reach_kind(ev) in ("close_burst", "close_blast", "area_burst")
+            ev.target == m and _row_reach_kind(ev) in AREA_OR_CLOSE
         ),
         "it is targeted by a close or an area attack",
     ),

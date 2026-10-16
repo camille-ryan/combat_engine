@@ -36,6 +36,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ENEMY,
     ENCOUNTER,
@@ -1727,7 +1728,7 @@ def m5439a3(c: Cast) -> None:
 
 _M5439_CAUGHT = "it is hit by a close or area attack that also targets an ally"
 
-_SPREADING = ("close_burst", "close_blast", "area_burst")
+_SPREADING = AREA_OR_CLOSE
 
 
 def _caught_with_an_ally(world: World, me: int, ev: Event) -> bool:

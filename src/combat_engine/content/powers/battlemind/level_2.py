@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from combat_engine.content.powers.augment import spent_on
 from combat_engine.engine import (
+    AREA_OR_CLOSE,
     AT_WILL,
     DAILY,
     EACH_ENEMY,
@@ -38,11 +39,7 @@ def _close_or_area(world: World, me: int, ev: Hit) -> bool:
     p = get(getattr(ev, "power", ""))
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
-        "close_burst",
-        "close_blast",
-        "area_burst",
-    )
+    return p.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
 @power(

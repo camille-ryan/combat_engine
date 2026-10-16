@@ -19,6 +19,7 @@ able to choose *when* in the turn.
 from __future__ import annotations
 
 from combat_engine.engine import (
+    AREA_OR_CLOSE,
     DAILY,
     EACH_ALLY,
     ENCOUNTER,
@@ -172,9 +173,7 @@ def _area_attack_on_me(world: World, me: int, ev: Event) -> bool:
     if getattr(ev, "target", None) != me:
         return False
     p = get(getattr(ev, "power", "") or "")
-    return p is not None and p.reach.kind in (
-        "close_burst", "close_blast", "area_burst",
-    )
+    return p is not None and p.reach.kind in AREA_OR_CLOSE
 
 
 @power(

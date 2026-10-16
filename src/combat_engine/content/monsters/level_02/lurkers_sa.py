@@ -32,6 +32,7 @@ from combat_engine.content.monsters.level_01.artillery_sa import (
 from combat_engine.content.monsters.level_01.skirmishers import _ref_of
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_OTHER,
     ENCOUNTER,
@@ -105,8 +106,9 @@ from combat_engine.engine.triggers import (
 
 # -- what the blocks in this file share -------------------------------------
 
-#: Every reach that makes an attack a close or an area one.
-_SPREADING = ("close_burst", "close_blast", "area_burst")
+#: Every reach that makes an attack a close or an area one. The shared
+#: reading, which adds the `"wall"` this tuple omitted. #616.
+_SPREADING = AREA_OR_CLOSE
 
 
 def _reach_kind(ref: str) -> str:

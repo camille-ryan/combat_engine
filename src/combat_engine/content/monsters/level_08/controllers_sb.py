@@ -66,6 +66,7 @@ from combat_engine.content.monsters.level_07.minions_sa import _has_bell
 from combat_engine.content.monsters.level_07.skirmishers_sa import _grabbed_tries_to_escape
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ALLY,
     EACH_CREATURE,
@@ -2716,7 +2717,7 @@ def m6640a5(c: Cast) -> None:
         Hit,
         when=lambda world, me, ev: getattr(ev, "target", None) == me
         and (lambda p: p is not None and p.reach_of(getattr(ev, "branch", 0)).kind
-             in ("close_burst", "close_blast", "area_burst"))(get(getattr(ev, "power", "") or "")),
+             in AREA_OR_CLOSE)(get(getattr(ev, "power", "") or "")),
         text="it takes damage from a close or area attack",
     ),
     recharge_when=Trigger(Bloodied, about_me,

@@ -38,6 +38,7 @@ from combat_engine.content.monsters.level_02.skirmishers import (
 )
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ENEMY,
     EACH_OTHER,
@@ -340,7 +341,8 @@ def _by_close_or_area(world: World, me: int, ev: Any) -> bool:
     counts a close burst as melee, which is right for its own question and
     wrong for this one, where a sword stroke must not qualify."""
     p = get(getattr(ev, "power", "") or getattr(ev, "detail", "") or "")
-    return p is not None and p.reach.kind in ("close_burst", "close_blast", "area_burst")
+    # `AREA_OR_CLOSE` adds the `"wall"` this omitted. #616.
+    return p is not None and p.reach.kind in AREA_OR_CLOSE
 
 
 def _hit_me_from_a_distance(world: World, me: int, ev: Any) -> bool:

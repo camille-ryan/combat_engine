@@ -2234,6 +2234,75 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def one_reading_of_an_area_or_close_attack(out: Result) -> None:
+    """Thirty sites spelled "an area or a close attack" out, all but one
+    the same way -- and that way was wrong.
+
+    #616 found five files each defining the tuple independently and
+    **four of the five left `"wall"` out**. A wall *is* an area power, so
+    "an area or a close attack" covers it and those four under-fired. The
+    fifth, `feats/sorcerer._SPREAD`, had it right, which is what settled
+    the question: the shared constant takes the wall-inclusive reading.
+
+    Consolidating found **twenty-five more sites**, in orders and layouts no
+    grep I wrote caught -- `("area_burst", "close_burst", "close_blast")`
+    among them -- and every one of the twenty-five omitted `"wall"` too.
+    Twenty-eight files share one constant now.
+
+    **The check is textual and order-insensitive**, because the fault is
+    somebody writing the words out again and every spelling behaves
+    identically until a wall row fires: this is invisible at runtime by
+    construction.
+
+    **The two neighbouring tuples stay apart**, and the test is for exactly
+    three members so it cannot swallow them: `("melee", "close_burst",
+    "close_blast")` is the melee-reach question 23 files ask, and
+    `("ranged", "area_burst", "wall")` is "a line aimed away from you",
+    which excludes close bursts for a reason. Folding either in would be
+    the one-symbol-several-needs mistake this issue exists to avoid.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import AREA_OR_CLOSE
+    from combat_engine.engine.dsl import REGISTRY
+
+    out.that("wall" in AREA_OR_CLOSE,
+             "the shared reading includes `wall`, which four of the five"
+             " original tuples omitted -- a wall is an area power",
+             f"{AREA_OR_CLOSE}")
+    out.that(len(AREA_OR_CLOSE) == 4,
+             "and is exactly the four, so it cannot quietly grow into the"
+             " melee question or the aimed-away-from-you one",
+             f"{sorted(AREA_OR_CLOSE)}")
+
+    walls = sorted(r for r, p in REGISTRY.items()
+                   if getattr(p.reach, "kind", "") == "wall")
+    arming = [r for r in walls if REGISTRY[r].attack is not None]
+    out.that(len(walls) == 9 and arming == ["m5784a4"],
+             "nine wall rows in the tree and one declares an attack line,"
+             " which is the row the omission was costing and the reason"
+             " consolidating onto the wider reading is safe",
+             f"{len(walls)} walls, attacking: {arming}")
+
+    out.that(REGISTRY["m5784a4"].reach.kind in AREA_OR_CLOSE,
+             "m5784a4's wall counts as an area attack now -- the one"
+             " behavioural difference the fold makes")
+
+    #: One of the twenty-eight readers, driven rather than inspected: this
+    #: is a shared constant, so a rule that only read the constant would
+    #: pass with every caller still spelling its own.
+    from combat_engine.content.monsters.level_02.lurkers_sa import _SPREADING
+    out.that("wall" in _SPREADING,
+             "and a content module that had its own tuple reads the shared"
+             " one -- `_SPREADING` was `(close_burst, close_blast,"
+             " area_burst)` and is the constant now",
+             f"{sorted(_SPREADING)}")
+
+    from combat_engine.content.feats.general_n import _AREA, _CLOSE_OR_AREA
+    out.that("wall" in _AREA and _CLOSE_OR_AREA is _AREA,
+             "as does `general_n._AREA`, whose alias still points at it so"
+             " no caller moved")
+
+
 def the_mover_may_have_permission_the_occupant_does_not(out: Result) -> None:
     """`movement._clear` asked only whether the occupant was enterable.
 
@@ -12834,6 +12903,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "one_reading_of_an_area_or_close_attack": (
+        one_reading_of_an_area_or_close_attack,
+        "thirty sites spelled the area-shape tuple out and all but one omitted wall"),
     "the_mover_may_have_permission_the_occupant_does_not": (
         the_mover_may_have_permission_the_occupant_does_not,
         "movement.may_enter is the mover's side of sharing a square"),

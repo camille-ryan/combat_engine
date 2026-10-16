@@ -60,6 +60,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.features.strikers import extra_damage
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     DAILY,
     ENCOUNTER,
     FORT,
@@ -271,7 +272,7 @@ def _immobilising(world: World, me: int, ev: Event) -> bool:
 def _my_area_power(world: World, me: int, ev: Event) -> bool:
     return getattr(ev, "actor", None) == me and _reach_of(
         getattr(ev, "power", "")
-    ) in ("area_burst", "close_blast", "close_burst")
+    ) in AREA_OR_CLOSE
 
 
 def _my_summoning(world: World, me: int, ev: Event) -> bool:
@@ -1061,7 +1062,7 @@ def i2605p1(c: Cast) -> None:
         aimed = get(ev.power or "")
         if aimed is None or aimed.reach is None:
             return
-        if aimed.reach.kind not in ("area_burst", "close_blast", "close_burst"):
+        if aimed.reach.kind not in AREA_OR_CLOSE:
             return
         below = running_below(c)
         covered = area_of(

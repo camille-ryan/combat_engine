@@ -55,6 +55,7 @@ from combat_engine.content.powers.druid.forms import BEAST, in_beast_form
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     CHA,
     DAILY,
@@ -260,9 +261,7 @@ def _area_by_me(world: World, me: int, ev: Any) -> bool:
     p = get(getattr(ev, "power", ""))
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
-        "close_burst", "close_blast", "area_burst",
-    )
+    return p.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
 def _area_at_me(world: World, me: int, ev: Any) -> bool:
@@ -271,9 +270,7 @@ def _area_at_me(world: World, me: int, ev: Any) -> bool:
     p = get(getattr(ev, "power", ""))
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
-        "close_burst", "close_blast", "area_burst",
-    )
+    return p.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
 def _my_cursed_drop(world: World, me: int, ev: Any) -> bool:

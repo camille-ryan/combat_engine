@@ -28,6 +28,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     ENCOUNTER,
     FORT,
     INTERRUPT,
@@ -129,11 +130,7 @@ def _ally_sweeps(world: World, me: int, ev: Event) -> bool:
     p = get(getattr(ev, "power", "") or "")
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
-        "close_burst",
-        "close_blast",
-        "area_burst",
-    )
+    return p.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
 # -- the rows ---------------------------------------------------------------

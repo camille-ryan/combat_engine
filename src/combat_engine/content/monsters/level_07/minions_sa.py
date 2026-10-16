@@ -34,6 +34,7 @@ from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_06.minions_sa import _ref_of
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ENEMY,
     EACH_OTHER,
@@ -317,7 +318,7 @@ def m3475a1(c: Cast) -> None:
     if attacker is None or not c.strike(on=attacker):
         return
     row = get(ev.power or "") if isinstance(ev, AttackDeclared) else None
-    if row is not None and row.reach.kind in ("close_burst", "close_blast", "area_burst"):
+    if row is not None and row.reach.kind in AREA_OR_CLOSE:
         c.add_target(c.me)
     else:
         c.redirect(to=c.me)

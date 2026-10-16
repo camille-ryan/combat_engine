@@ -46,6 +46,7 @@ from combat_engine.content.monsters.forms import _not_in, _shapechange
 from combat_engine.content.monsters.level_06.brutes import DEFENCES, _same_row
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_OTHER,
     ENCOUNTER,
@@ -93,7 +94,7 @@ from combat_engine.engine.query import (
 from combat_engine.engine.triggers import Trigger, both, by_melee, targets_me
 
 #: The three reaches a printed "close or an area attack" covers.
-_SPREAD = ("close_burst", "close_blast", "area_burst")
+_SPREAD = AREA_OR_CLOSE
 
 
 # --------------------------------------------------------------------------

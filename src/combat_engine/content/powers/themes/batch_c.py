@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from combat_engine.content.monsters.level_11.skirmishers_sc import _through_them
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     DAILY,
     DEFENCES,
@@ -1142,9 +1143,7 @@ def _by_close_or_area(world: World, me: int, ev: Any) -> bool:
     p = get(getattr(ev, "power", "") or "")
     if p is None:
         return False
-    return p.reach_of(getattr(ev, "branch", 0)).kind in (
-        "close_burst", "close_blast", "area_burst",
-    )
+    return p.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
 @power("p16457", level=10, cls="x7_991", usage=ENCOUNTER, action=INTERRUPT,

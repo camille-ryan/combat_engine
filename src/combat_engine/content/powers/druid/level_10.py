@@ -23,6 +23,7 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     ANY_CREATURE,
+    AREA_OR_CLOSE,
     DAILY,
     EACH_ALLY,
     ENCOUNTER,
@@ -83,7 +84,9 @@ def _area_or_close(world: World, me: int, ev: Event) -> bool:
     if not targets_me(world, me, ev):
         return False
     p = get(getattr(ev, "power", "") or "")
-    return p is not None and p.reach.kind in ("close_burst", "close_blast", "area_burst")
+    # `AREA_OR_CLOSE`, which adds the `"wall"` this tuple omitted: a
+    # wall IS an area power and the printed sentence covers it. #616.
+    return p is not None and p.reach.kind in AREA_OR_CLOSE
 
 
 def _fly(c: Cast, who: int, squares_: int) -> int:

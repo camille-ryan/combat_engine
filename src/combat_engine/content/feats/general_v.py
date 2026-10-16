@@ -43,6 +43,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     DAILY,
     DEX,
@@ -1343,7 +1344,8 @@ def f3532(c: Cast) -> None:
     def sting(ev: Any) -> None:
         if ev.target != me:
             return
-        if _shape(ev.power) not in ("close_burst", "close_blast", "area_burst"):
+        # `AREA_OR_CLOSE` adds the `"wall"` this omitted. #616.
+        if _shape(ev.power) not in AREA_OR_CLOSE:
             return
         c.flat(c.wis_mod, dtype=DamageType.LIGHTNING, on=ev.attacker)
 

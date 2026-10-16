@@ -43,6 +43,7 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     DAILY,
     ENCOUNTER,
@@ -137,7 +138,9 @@ BORROW = ("c.set_build()",)
 DIVINE = [Keyword.DIVINE]
 WEAPON = [Keyword.WEAPON]
 ALL_DEFENCES = (AC, FORT, REF, WILL)
-_AREA = ("close_burst", "close_blast", "area_burst")
+#: The shared reading, which adds the `"wall"` this tuple omitted --
+#: a wall is an area power and "close or area attack" covers it. #616.
+_AREA = AREA_OR_CLOSE
 _CLOSE_OR_AREA = _AREA
 _MELEE_REACH = ("melee", "close_burst", "close_blast")
 

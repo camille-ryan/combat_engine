@@ -34,6 +34,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_CREATURE,
     EACH_ENEMY,
@@ -77,7 +78,7 @@ from combat_engine.engine.triggers import Trigger, about_me, both, by_me
 
 #: What a printed "close or area attack" covers. Asked off the power in the
 #: registry, because an event carries the ref and not the range.
-_SPREADS = ("close_blast", "close_burst", "area_burst")
+_SPREADS = AREA_OR_CLOSE
 
 
 def _reach_of(ref: str) -> str:

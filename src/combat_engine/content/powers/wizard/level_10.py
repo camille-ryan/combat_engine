@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     DAILY,
     EACH_ALLY,
     EACH_ENEMY,
@@ -148,7 +149,9 @@ def _area_or_close(world: World, me: int, ev: object) -> bool:
     it, and carries no reach of its own.
     """
     p = get(getattr(ev, "detail", ""))
-    return p is not None and p.reach.kind in ("area_burst", "close_burst", "close_blast")
+    # `AREA_OR_CLOSE`: the same three in the shared order, plus the
+    # `"wall"` this spelling omitted. #616.
+    return p is not None and p.reach.kind in AREA_OR_CLOSE
 
 
 @power(

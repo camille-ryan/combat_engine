@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from combat_engine.content.powers.augment import lent
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     CHA,
     CON,
@@ -142,11 +143,7 @@ def _close_or_area(world: World, me: int, ev: Any) -> bool:
     cover part of this shape and neither covers it alone.
     """
     row = get(getattr(ev, "detail", "") or getattr(ev, "power", "") or "")
-    return row is not None and row.reach_of(getattr(ev, "branch", 0)).kind in (
-        "close_burst",
-        "close_blast",
-        "area_burst",
-    )
+    return row is not None and row.reach_of(getattr(ev, "branch", 0)).kind in AREA_OR_CLOSE
 
 
 # -- r1 ---------------------------------------------------------------------
@@ -1100,7 +1097,8 @@ def p7441(c: Cast) -> None:
         return
     row = get(getattr(ev, "power", "") or "")
     shape = getattr(getattr(row, "reach", None), "kind", "")
-    if shape not in ("close_burst", "close_blast", "area_burst"):
+    # `AREA_OR_CLOSE` adds the `"wall"` this omitted. #616.
+    if shape not in AREA_OR_CLOSE:
         return
     # Read rather than written in, so a feat can lengthen it. #502.
     c.teleport(c.squares_for(c.ref, 3))

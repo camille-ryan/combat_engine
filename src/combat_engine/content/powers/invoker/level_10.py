@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.engine import (
+    AREA_OR_CLOSE,
     DAILY,
     ENCOUNTER,
     FREE,
@@ -46,11 +47,7 @@ def _my_area_power(world: Any, me: int, ev: Any) -> bool:
     if getattr(ev, "actor", None) != me:
         return False
     p = get(getattr(ev, "power", ""))
-    return p is not None and p.reach.kind in (
-        "area_burst",
-        "close_burst",
-        "close_blast",
-    )
+    return p is not None and p.reach.kind in AREA_OR_CLOSE
 
 
 @power(

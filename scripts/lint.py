@@ -242,6 +242,14 @@ def main() -> int:
         )
         faults += 1
 
+    for where, why in _reinvented_area_tuple():
+        print(
+            f"{where}: {why}. Import it from `combat_engine.engine`"
+            f" -- seventeen files already do, and four of the first five"
+            f" disagreed. #616."
+        )
+        faults += 1
+
     for label, why in _dead_terrain_labels():
         print(
             f"DIFFICULT_LABELS: {label!r} {why}. A closed vocabulary whose"
@@ -1602,6 +1610,57 @@ def _strings_in(tree: object, call: object) -> set[str]:
                 and isinstance(node.value, str)
             }
     return set()
+
+
+def _reinvented_area_tuple() -> list[tuple[str, str]]:
+    """A file spelling `AREA_OR_CLOSE` out instead of importing it.
+
+    #616 found five files each defining the same tuple of area shapes, and
+    **four of the five left `"wall"` out** -- so "an area or a close attack"
+    under-fired on the one wall row in the tree that declares an attack.
+    Consolidating found twelve more sites, every one of them the same
+    printed sentence and every one missing `"wall"`.
+
+    Seventeen files is too many to keep agreeing by hand, so this is the
+    check that stops the eighteenth. It is a **textual** test, deliberately:
+    the fault is somebody writing the words out again, and that is visible
+    in the source where it is invisible at runtime -- all the spellings
+    behave identically until a wall row fires.
+
+    **Order-insensitive**, because one of the twelve was
+    `("area_burst", "close_burst", "close_blast")` -- the same three in a
+    different order, which a substring match would have missed.
+
+    The neighbouring tuples are **not** this and must stay apart, which is
+    why the test is for exactly these three members and nothing wider:
+    `("melee", "close_burst", "close_blast")` is the melee-reach question a
+    dozen rows ask, and `("ranged", "area_burst", "wall")` is "a line aimed
+    away from you", which excludes close bursts for a reason. Both are
+    listed in `dsl.AREA_OR_CLOSE`'s own note.
+    """
+    import ast as _ast
+
+    want = {"close_burst", "close_blast", "area_burst"}
+    out = []
+    for path in _asked_for():
+        try:
+            tree = _ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, (_ast.Tuple, _ast.List, _ast.Set)):
+                continue
+            words = {
+                e.value for e in node.elts
+                if isinstance(e, _ast.Constant) and isinstance(e.value, str)
+            }
+            if words == want and len(node.elts) == 3:
+                out.append((
+                    f"{path}:{node.lineno}",
+                    "spells AREA_OR_CLOSE out instead of importing it, and"
+                    " so omits `\"wall\"`",
+                ))
+    return out
 
 
 def _dead_terrain_labels() -> list[tuple[str, str]]:

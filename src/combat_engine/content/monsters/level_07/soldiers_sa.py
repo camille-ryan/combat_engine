@@ -58,6 +58,7 @@ from combat_engine.content.monsters.level_07.soldiers import (
 )
 from combat_engine.engine import (
     AC,
+    AREA_OR_CLOSE,
     AT_WILL,
     EACH_ALLY,
     EACH_ENEMY,
@@ -3181,7 +3182,7 @@ def m992a6(c: Cast) -> None:
         if attacker is None:
             return
         p = get(getattr(ev, "power", "") or "")
-        if p is None or p.reach.kind not in ("close_burst", "close_blast", "area_burst"):
+        if p is None or p.reach.kind not in AREA_OR_CLOSE:
             return
         dtype = p.damage.dtype if p.damage is not None else DamageType.UNTYPED
         c.flat(5, dtype=dtype, on=attacker)
