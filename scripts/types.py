@@ -218,6 +218,36 @@ def main() -> int:
     base = _baseline()
     now = _per_file(text)
     worse = {f: (n, base.get(f, 0)) for f, n in now.items() if n > base.get(f, 0)}
+    # **A TARGET can be over its baseline on scope alone, and the paragraph
+    # above does not cover that case.** It argues a swept-in file's narrow
+    # count is the lower one, which is true; a *target* checked with fewer
+    # files than the baseline run can report **more**. Measured: `cast.py`
+    # is 46 alone and 45 across the whole `SCOPE`, and the baseline holds
+    # the full-scope 45 -- so editing one line in it turned the suite red
+    # for a file whose new code has no diagnostics at all.
+    #
+    # The fix is **not** a tolerance. A count is only comparable against a
+    # baseline taken at the same scope, so a file that looks worse is
+    # re-measured at the scope the baseline came from, and only then
+    # believed. One extra `ty` run, on the failing path only, and the
+    # verdict comes out right rather than looser -- the distinction
+    # `scripts/CLAUDE.md`'s first rule turns on. #618.
+    if worse:
+        _, wide = _run(list(SCOPE))
+        at_scope = _per_file(wide)
+        explained = {f: (n, was) for f, (n, was) in worse.items()
+                     if at_scope.get(f, 0) <= base.get(f, 0)}
+        worse = {f: v for f, v in worse.items() if f not in explained}
+        for f, (n, was) in sorted(explained.items()):
+            print(f"  {f}: {n} at this scope but {at_scope.get(f, 0)} across"
+                  f" the whole scope, at or under its baseline of {was}"
+                  f" -- a scope artifact, not a regression")
+        # **Report the number that was compared, not the narrow one.** A
+        # file confirmed worse is worse by its full-scope count, since that
+        # is what the baseline holds; printing the narrow figure beside a
+        # full-scope baseline overstates the regression, which is its own
+        # way of being wrong about a number.
+        worse = {f: (at_scope.get(f, n), was) for f, (n, was) in worse.items()}
     if worse:
         print(text.rstrip())
         print()
