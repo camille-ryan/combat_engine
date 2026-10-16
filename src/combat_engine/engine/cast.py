@@ -1448,6 +1448,24 @@ class Cast:
 
     @property
     def stats(self) -> Stats:
+        """`self.me`'s abilities. **Assumes `me` is a creature**, and that
+        assumption is measured rather than hoped for. #617.
+
+        `world.need` raises for an entity with no `Stats`, and the only
+        kind that lacks them is a `Barrier` -- creatures, characters,
+        companions and conjurations all carry them, including the ones
+        `summon_inline` builds. A barrier is *"subtracted out of
+        `query.combatants`, so it takes no turn"*, and nothing anywhere
+        constructs a `Cast` around one: the ten engine sites pass an
+        `actor`, an `owner` or the escaper in `escape.py`, and the six in
+        `content/` pass the creature holding the row.
+
+        So the throw is reachable only by hand -- `Cast(me=<a wall>)` in a
+        probe -- and the 4,862 content reads through here are all a
+        caster's own modifier. Left raising rather than made to answer 0:
+        a silent zero on a modifier is the shape this repo spends most of
+        its instruments catching, and `need` names the entity.
+        """
         return self.world.need(self.me, Stats)
 
     def mod(self, a: Ability) -> int:
