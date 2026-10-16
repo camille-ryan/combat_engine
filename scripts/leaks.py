@@ -851,6 +851,145 @@ REVIEWED = {
 }
 
 
+#: Every `feat.category` that may appear in a tracked file, and why.
+#:
+#: **The allowed set is written down and the forbidden set is not**, which is
+#: the whole design. A list of names-to-refuse would *be* the leak -- the same
+#: reason `fixtures/localisation.json` holds digests rather than values -- so
+#: this holds only the vocabulary, in plain text, and everything else the
+#: column contains is treated as a name. A category the compendium adds
+#: therefore defaults to **forbidden** and has to be argued onto this list,
+#: which is the strict direction and the one `cards.KNOWN` gets right.
+#:
+#: Camille's ruling, 2026-10-16, on the three two-word descriptive labels that
+#: prompted this: **mechanics.** The argument was consistency -- it would be
+#: odd for a one-word label naming a rules category to be vocabulary and a
+#: two-word one naming a category of the same kind not to be -- and the cost
+#: of the other answer was real: those three are quoted in
+#: `content/CLAUDE.md` and `docs/AUTHORING.md`, the two files that *teach* the
+#: one-feat-per-category rule, which four of the first five migrated rows got
+#: wrong. Scrubbing them would have made the instructions vaguer about exactly
+#: the thing they exist to prevent.
+#:
+#: What is deliberately **not** here: every `<X> Bloodline`. Those resolve to
+#: invented proper nouns and to race names, and a race's printed name in a
+#: tracked file is already a leak -- `races/` holds `r33` and not the word.
+#: One of them was sitting in `etl/feat.py`'s docstring until #622.
+CATEGORY_VOCABULARY = {
+    # Rules categories: a descriptive phrase naming a set of feats, where
+    # the rule being named ("at most one of these per use of a power") is a
+    # game system and not expression.
+    "Arena Fighting": "a rules category; Camille, 2026-10-16",
+    "Lesser Style": "a rules category; Camille, 2026-10-16",
+    "Greater Style": "a rules category; Camille, 2026-10-16",
+    "Lesser Pact": "a rules category, the same shape as the Style pair",
+    "Greater Pact": "a rules category, the same shape as the Style pair",
+    # One ordinary word, and this engine implements the mechanic under that
+    # exact word -- so the word is its vocabulary, not a name it borrowed.
+    "Augment": "the power-augmentation mechanic; `p…:augment1` markers",
+    "Familiar": "`Companion.passive`, `c.familiar_mode`",
+    "Rune": "the runepriest's rune state",
+    "Divinity": "a divine class mechanic",
+    "Domain": "a divine class mechanic",
+    "Multiclass": "the multiclassing rule",
+    "Guild": "an ordinary word; no mechanism of its own here",
+    "Tribal": "an ordinary word; no mechanism of its own here",
+    "Elemental Companion": "descriptive: a companion with an element",
+}
+
+
+def feat_categories() -> int:
+    """Does a tracked file print a feat category that is not vocabulary? #622.
+
+    The bracket after a feat's printed name -- `feat.category` -- is a
+    column the name walks never looked at. `--specs` reads `spec` and
+    nothing else; `columns` tests whole-value equality against the name
+    index, which a category is not; and the tree-wide walk waives a
+    two-word label of ordinary words in running prose, correctly, which is
+    #494's blind spot.
+
+    So this asks the narrow question instead, the way `--cited` does:
+    **every category the compendium prints, minus the hand-kept
+    vocabulary, must appear in no tracked file.** No waiver is applied, and
+    none is needed -- the set being searched for is already known to be
+    names rather than mechanics, because that is what `CATEGORY_VOCABULARY`
+    not listing them means.
+
+    Found by reading `drivers.py` output and asking, not by running
+    anything. 72 categories, 12 reached tracked files, and one was an
+    invented proper noun in `etl/feat.py` -- which every previous run of
+    `leaks.py` and `leaks.py --cited` had called clean.
+    """
+    db = game()
+    try:
+        every = {c for (c,) in db.execute(
+            "SELECT DISTINCT category FROM feat WHERE category != ''")}
+    except sqlite3.OperationalError:
+        print("feat.category has not been built; skipped")
+        return 0
+    if not every:
+        print("feat.category is empty; skipped")
+        return 0
+
+    # **Whole cells, not split on the comma, and that is measured rather
+    # than lazy.** Exactly two cells carry a comma -- `f3389`'s and
+    # `f2025`'s -- and splitting them looked obviously right and was wrong:
+    #
+    # * `f3389` is **one** category naming three classes, joined by commas
+    #   and an "or". Split, its tail becomes two labels that were never
+    #   categories, and one of them is a bare class word this tree uses in
+    #   `cls=` several hundred times -- so the check went red on 21 files
+    #   for nothing on its first run.
+    # * `f2025` is genuinely two categories in one bracket.
+    #
+    # Not splitting loses no coverage, which is what makes it the right
+    # call rather than a retreat: **both** of `f2025`'s halves appear as
+    # standalone categories elsewhere in the column, so each is watched on
+    # its own account. `f3389`'s tail words appear nowhere else, because
+    # they were never labels. Verified with
+    # `select category from feat where category like '%,%'`.
+    labels = set(every)
+    watch = sorted(labels - set(CATEGORY_VOCABULARY))
+    stale = sorted(set(CATEGORY_VOCABULARY) - labels)
+
+    found: list[tuple[str, int]] = []
+    for path in tracked():
+        if path.suffix not in TEXT_SUFFIXES or not path.exists():
+            continue
+        try:
+            text = path.read_text(errors="ignore")
+        except OSError:
+            continue
+        hits = sum(1 for label in watch if label in text)
+        if hits:
+            found.append((str(path), hits))
+
+    for path, hits in found[:40]:
+        one = hits == 1
+        print(f"{path}: prints {hits} feat categor{'y' if one else 'ies'}"
+              f" that {'is' if one else 'are'} not vocabulary")
+    if found:
+        print()
+        print(f"{len(found)} tracked file(s) print a feat category"
+              f" that `CATEGORY_VOCABULARY` does not allow.")
+        print("Either it is a name -- refer to the category by a feat ref "
+              "instead -- or it is a mechanic and belongs on that list "
+              "with a reason beside it.")
+        return 1
+    # The same discipline `SPEC_KNOWN` gets: an entry whose value has left
+    # the column is dead weight and says so, rather than sitting there
+    # looking like a considered allowance.
+    if stale:
+        print("CATEGORY_VOCABULARY entries no longer in feat.category "
+              "-- delete them:")
+        for label in stale:
+            print(f"  {label}: {CATEGORY_VOCABULARY[label]}")
+        return 1
+    print(f"no tracked file prints a feat category outside the "
+          f"{len(CATEGORY_VOCABULARY)} allowed, of {len(labels)} printed")
+    return 0
+
+
 def columns(index: dict[str, list[str]]) -> int:
     """The other place a printed name can sit: a column, not a document.
 
@@ -1023,6 +1162,8 @@ def history() -> int:
 
 
 def main() -> int:
+    if "--categories" in sys.argv:
+        return feat_categories()
     if "--cited" in sys.argv:
         return cited()
     if "--specs" in sys.argv:

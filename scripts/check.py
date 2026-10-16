@@ -113,6 +113,17 @@ CHECKS = (
     # comment and one in a `trigger=` string the page renders.
     Instrument("cited", ("uv", "run", "scripts/leaks.py", "--cited"),
                "no file prints the name of a ref it cites"),
+    # **The same narrow-question shape as `cited`, on the column nothing
+    # read.** `feat.category` is the bracket after a feat's printed name.
+    # `--specs` reads `spec` only; `columns` tests whole-value equality
+    # against the name index, which a category is not; and the tree-wide
+    # walk waives a two-word label of ordinary words in prose, correctly.
+    # So 72 labels went unexamined and one was an invented proper noun in
+    # `etl/feat.py`. Seconds, and it caught its own author's comment on
+    # the first run. #622.
+    Instrument("categories",
+               ("uv", "run", "scripts/leaks.py", "--categories"),
+               "no tracked file prints a feat category that is a name"),
     Instrument("todo", ("uv", "run", "scripts/todo.py"),
                "no `todo=` waits on a symbol that now exists"),
     Instrument("bonuses", ("uv", "run", "scripts/bonuses.py", "--quiet"),
