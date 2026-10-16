@@ -170,6 +170,37 @@ _SPENT_ON_ATTACK = frozenset({
 })
 
 
+#: Every word a fight's place may be described by. **Closed**, and
+#: `c.terrain` refuses anything else -- `c.bonus(once=)`'s discipline,
+#: for the reason #544 records: five keys were silently mis-spent
+#: because nothing checked them.
+#:
+#: It is closed because the vocabulary had already drifted. Re-derived
+#: across 61 calls in 50 rows:
+#:
+#:     24 aquatic   17 sunlight   6 water     3 darkness
+#:      2 dim light  2 ice        2 snow      1 moonlight
+#:      1 starlight  1 icy        1 bright    1 forest
+#:
+#: `water` and `aquatic` are the same question asked two ways, and so
+#: are `ice` and `icy`. Nothing noticed, because `World.terrain` is
+#: empty and **every** one of these gates is False in every fight
+#: (#539) -- so a row asking for a word no board would ever carry read
+#: exactly like a row asking for the right one. Two bugs stacked, and
+#: the outer one hid the inner.
+#:
+#: The light words are **not** merged. `bright`, `dim light` and
+#: `darkness` are the three printed light levels and `sunlight`,
+#: `moonlight` and `starlight` are sources; a creature burned by
+#: daylight is not one hindered by gloom. This set exists to catch a
+#: synonym and a typo, not to re-design the vocabulary.
+TERRAIN_WORDS = frozenset({
+    "aquatic", "ice", "snow", "forest",
+    "bright", "dim light", "darkness",
+    "sunlight", "moonlight", "starlight",
+})
+
+
 @dataclass
 class Cast:
     """One use of one power, aimed at one target."""
@@ -3454,36 +3485,6 @@ class Cast:
         )
         return True
 
-    #: Every word a fight's place may be described by. **Closed**, and
-    #: `c.terrain` refuses anything else -- `c.bonus(once=)`'s discipline,
-    #: for the reason #544 records: five keys were silently mis-spent
-    #: because nothing checked them.
-    #:
-    #: It is closed because the vocabulary had already drifted. Re-derived
-    #: across 61 calls in 50 rows:
-    #:
-    #:     24 aquatic   17 sunlight   6 water     3 darkness
-    #:      2 dim light  2 ice        2 snow      1 moonlight
-    #:      1 starlight  1 icy        1 bright    1 forest
-    #:
-    #: `water` and `aquatic` are the same question asked two ways, and so
-    #: are `ice` and `icy`. Nothing noticed, because `World.terrain` is
-    #: empty and **every** one of these gates is False in every fight
-    #: (#539) -- so a row asking for a word no board would ever carry read
-    #: exactly like a row asking for the right one. Two bugs stacked, and
-    #: the outer one hid the inner.
-    #:
-    #: The light words are **not** merged. `bright`, `dim light` and
-    #: `darkness` are the three printed light levels and `sunlight`,
-    #: `moonlight` and `starlight` are sources; a creature burned by
-    #: daylight is not one hindered by gloom. This set exists to catch a
-    #: synonym and a typo, not to re-design the vocabulary.
-    TERRAIN_WORDS = frozenset({
-        "aquatic", "ice", "snow", "forest",
-        "bright", "dim light", "darkness",
-        "sunlight", "moonlight", "starlight",
-    })
-
     def terrain(self, word: str) -> bool:
         """Is the fight being had in that sort of place? `c.terrain("aquatic")`.
 
@@ -3498,10 +3499,10 @@ class Cast:
         two bugs would land together and the second would survive the first
         being fixed.
         """
-        if word.lower() not in self.TERRAIN_WORDS:
+        if word.lower() not in TERRAIN_WORDS:
             raise ValueError(
                 f"{self.ref}: c.terrain({word!r}) is not a terrain word. "
-                f"Known: {', '.join(sorted(self.TERRAIN_WORDS))}."
+                f"Known: {', '.join(sorted(TERRAIN_WORDS))}."
             )
         return word.lower() in getattr(self.world, "terrain", frozenset())
 

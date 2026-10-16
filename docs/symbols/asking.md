@@ -107,7 +107,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
 - `c.score(self, a: 'Ability') -> 'int'`
   - The raw ability score -- 15, 18 -- not its modifier or bonus.
 - `c.stats`
-  - (no docstring)
+  - `self.me`'s abilities. **Assumes `me` is a creature**, and that
 - `c.str_`
   - (no docstring)
 - `c.str_mod`

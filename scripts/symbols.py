@@ -237,7 +237,7 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("resistance and vulnerability", [
                 "ignore_resistance", "resist", "resist_in", "resistances",
-                "vulnerabilities", "vulnerable",
+                "vulnerabilities", "vulnerable", "vulnerable_in",
             ]),
             # **`expose`/`exposed` were in here and are about disease**, which
             # is how the cross-reference work found them: writing "look in
@@ -438,10 +438,12 @@ CTX_KEYS: dict[str, str] = {
 #: These are not waivers. Each one is a row that does nothing, left named
 #: rather than quietly fixed because the repair is a judgement about the row
 #: and this is a lookup change.
-KNOWN_DEAD: dict[tuple[str, str], str] = {
-    ("m5788a0", "vs"): "#591 -- immunity that never applies; every other row "
-                       "reads `vs` off the event, not a ctx",
-}
+#: **Empty, and that is the point.** It held one entry for the whole of its
+#: life -- `m5788a0`'s immunity, gated on a key nothing writes, so the
+#: immunity never applied once. #591 is closed: the row asks the power the
+#: context *does* name, and the staleness check below is what made the
+#: allowance expire rather than outlive the repair.
+KNOWN_DEAD: dict[tuple[str, str], str] = {}
 
 #: Vocabularies that are not `Cast` members but that a row reaches for in the
 #: same breath, printed at the foot of the category they belong to.
@@ -689,6 +691,37 @@ def _ctx_keys() -> list[str]:
 EXTRA = {"movement": _modes, "gates": _ctx_keys}
 
 
+def _without_prose(text: str) -> str:
+    """The same text with docstrings and comments blanked, length preserved.
+
+    **A row that explains a retired key kept its own allowance alive.**
+    `_gate_reads` is a text scan, so a docstring describing a dead gate
+    counted as a live read of the key it named -- which meant
+    `KNOWN_DEAD`'s staleness check could never fire for the one row it was
+    written for. The repair landed and the entry stayed, reporting a dead
+    gate that was no longer there.
+
+    Same family as `leaks.py`'s quoted-position problem, and the same
+    lesson: a check that reads prose as code is measuring the wrong file.
+
+    Lengths are preserved -- blanks for the removed span rather than a
+    deletion -- because the caller finds the owning `@power` by comparing
+    offsets, and shifting them would mis-attribute every gate after the
+    first docstring.
+    """
+    import re as _re
+
+    def blank(m: _re.Match[str]) -> str:
+        return "".join(ch if ch == "\n" else " " for ch in m.group(0))
+
+    # Triple-quoted strings first, then line comments in what is left, so a
+    # hash inside a docstring is already gone and a triple quote inside a
+    # comment cannot open one.
+    for quote in ('"' * 3, "'" * 3):
+        text = _re.sub(f"(?s){quote}.*?{quote}", blank, text)
+    return _re.sub(r"(?m)#[^\n]*", blank, text)
+
+
 def _gate_reads() -> list[tuple[str, str, str]]:
     """Every `ctx.get("…")` in `content/`, as (ref, key, file).
 
@@ -701,7 +734,7 @@ def _gate_reads() -> list[tuple[str, str, str]]:
     decorator = re.compile(r'@power\(\s*\n?\s*"([A-Za-z0-9_:+-]+)"')
     getter = re.compile(r'ctx\.get\(\s*"([a-z_]+)"')
     for path in sorted((ROOT / "src/combat_engine/content").rglob("*.py")):
-        text = path.read_text(errors="replace")
+        text = _without_prose(path.read_text(errors="replace"))
         marks = [(m.start(), m.group(1)) for m in decorator.finditer(text)]
         for hit in getter.finditer(text):
             owner = ""

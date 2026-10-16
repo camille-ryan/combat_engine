@@ -2234,6 +2234,78 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def immunity_gated_on_the_attacking_power(out: Result) -> None:
+    """m5788a0 ignores a Will attack's effects, and the gate was dead. #591.
+
+    "Takes damage as normal, but ignores all other effects" of a
+    Will-targeted attack. The row laid immunity to every condition gated on
+    `ctx.get("vs")` -- **a key nothing in the engine writes** -- so the
+    immunity never applied once and a level 10 soldier went without a
+    defensive trait in every fight it was ever in.
+
+    Found by applying to the ctx vocabulary the measurement that caught the
+    terrain synonyms: of 34 keys read across 1,886 sites in `content/`,
+    **33 are written somewhere in `engine/` and one is not.** That one is
+    read exactly once, and this is the row.
+
+    The eight rows asking this elsewhere read `ev.vs` off `AttackDeclared`
+    or `AttackRolled`, which carry it -- but those are watchers, and this is
+    a standing `when=` gate. So it asks the **power** instead, and
+    `query.immune_to` genuinely supplies that key: its context is
+    `{"cond", "target", "source", "power"}`, and `power` is documented there
+    as "the row doing the laying".
+
+    **Asserted through `query.immune_to`, not through `Mods`.** That is the
+    function the engine asks before laying a condition, it builds the
+    context itself, and a rule poking the storage would pass while the real
+    reader disagreed -- which is how `ctx.get("vs")` survived in the first
+    place.
+
+    Both directions, because a live gate is not yet a right one: immunity
+    against a power declaring Will, and **no** immunity against one
+    declaring AC. The dead gate passed the second for the wrong reason.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import AC, WILL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, Condition
+    from combat_engine.engine.query import immune_to
+
+    row = REGISTRY["m5788a0"]
+    will_row = next((r for r, p in REGISTRY.items()
+                     if getattr(getattr(p, "attack", None), "vs", None) is WILL), "")
+    ac_row = next((r for r, p in REGISTRY.items()
+                   if getattr(getattr(p, "attack", None), "vs", None) is AC), "")
+    out.that(bool(will_row) and bool(ac_row),
+             "the tree fields a Will attack and an AC attack to ask about",
+             f"{will_row} / {ac_row}")
+
+    world, me, _ = _board("m5788a0", 1)
+    row.body(Cast(world=world, me=me, ref="m5788a0"))
+
+    out.that(immune_to(world, me, Condition.DAZED, power=will_row),
+             "immunity applies when the attacking power targets WILL -- the"
+             " printed condition, and the one the dead key never met",
+             f"{immune_to(world, me, Condition.DAZED, power=will_row)}")
+    out.that(not immune_to(world, me, Condition.DAZED, power=ac_row),
+             "and NOT when it targets AC -- the other direction, which the"
+             " old gate passed only because it refused everything",
+             f"{immune_to(world, me, Condition.DAZED, power=ac_row)}")
+    out.that(not immune_to(world, me, Condition.DAZED),
+             "nor when no power is named -- a condition from a failed save,"
+             " a trap or a zone claims no power's narrowing",
+             f"{immune_to(world, me, Condition.DAZED)}")
+
+    # Every condition the card exempts, not one of them.
+    missed = [c.value for c in Condition
+              if not immune_to(world, me, c, power=will_row)]
+    out.that(not missed,
+             "and it covers EVERY condition, which is what \"ignores all"
+             " other effects\" says -- one `c.immune` call per condition, so"
+             " a partial list would be a quietly narrower card",
+             f"missed {missed[:6]}")
+
+
 def terrain_words_are_a_closed_set(out: Result) -> None:
     """`c.terrain` refuses a word nobody dresses a board with. #539, #544.
 
@@ -2263,15 +2335,15 @@ def terrain_words_are_a_closed_set(out: Result) -> None:
     the words it already has a seed to choose with.
     """
     import combat_engine.content  # noqa: F401
-    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.cast import TERRAIN_WORDS, Cast
 
     world, me, _ = _board("m145a0", 1)
     c = Cast(world=world, me=me, ref="drivers:terrain")
 
-    out.that("aquatic" in Cast.TERRAIN_WORDS and c.terrain("aquatic") is False,
+    out.that("aquatic" in TERRAIN_WORDS and c.terrain("aquatic") is False,
              "a known word is accepted and answers False -- no board carries"
              " one yet, which is #539",
-             f"{sorted(Cast.TERRAIN_WORDS)}")
+             f"{sorted(TERRAIN_WORDS)}")
 
     for gone in ("water", "icy"):
         try:
@@ -11364,6 +11436,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "immunity_gated_on_the_attacking_power":
+        (immunity_gated_on_the_attacking_power,
+         "m5788a0's Will immunity, gated on a key that is written"),
     "terrain_words_are_a_closed_set":
         (terrain_words_are_a_closed_set,
          "c.terrain refuses a word no board is dressed with"),

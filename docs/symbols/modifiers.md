@@ -67,6 +67,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - What the creature takes extra from, by type, right now.
 - `c.vulnerable(self, amount: 'int', dtype: 'DamageType | None' = None, *, until: 'When' = <When.SAVE_ENDS: 'save ends'>, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Takes `amount` extra from every hit, or from one damage type.
+- `c.vulnerable_in(self, zone: 'int', amount: 'int', dtype: 'DamageType | None' = None, *, side: 'str' = 'enemy', when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'None'`
+  - "Each enemy within the zone gains vulnerable N while it is there."
 
 ## advantage, cover and concealment
 

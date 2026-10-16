@@ -3728,14 +3728,41 @@ def m5709a3(c: Cast) -> None:
 @power("m5788a0", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m5788a0(c: Cast) -> None:
     """ "Takes damage as normal, but ignores all other effects" of a
-    Will-targeted attack -- approximated as immunity to every condition
-    while the attack context's `vs` is Will, which is as close as a
-    blanket exemption gets without a dedicated verb."""
+    Will-targeted attack -- immunity to every condition, gated on the
+    attacking power targeting Will.
+
+    **The gate asked the context for a `vs` key and nothing writes one**,
+    so the
+    immunity never applied once and the creature was missing a defensive
+    trait in every fight. #591, and `symbols.py` carries it in
+    `KNOWN_DEAD` so the allowance cannot outlive the repair.
+
+    The eight rows that ask this question elsewhere read `ev.vs` off
+    `AttackDeclared` or `AttackRolled`, which genuinely carry it -- but
+    those are watchers, and this is a standing `when=` gate handed a damage
+    context rather than an event. So it asks the **power** the context does
+    name: `power` is the second-busiest key in the tree at 383 reads, and a
+    row's declared `Attack(vs=...)` is the defence it rolls against.
+
+    **Two rows in the tree declare `Defense.ANY` and this will miss them**,
+    of 10,078 that declare an attack at all and 1,213 that declare Will. A
+    miss leaves the creature without an immunity it should have, which is
+    the direction to err -- `m5808a0`'s rule, a row stronger than its card
+    being worse than one weaker. Granting on `ANY` would hand it immunity
+    against attacks that never targeted Will.
+    """
+    from combat_engine.engine.dsl import get as _get
+
+    def targets_will(ctx: dict[str, object]) -> bool:
+        rolled = _get(str(ctx.get("power") or ""))
+        attack = getattr(rolled, "attack", None) if rolled else None
+        return getattr(attack, "vs", None) is WILL
+
     c.immune(
         *list(Condition),
         on=c.me,
         until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("vs") is WILL,
+        when=targets_will,
     )
 
 
