@@ -2234,6 +2234,152 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def every_manifestation_pays_its_printed_half(out: Result) -> None:
+    """All thirteen of one race's manifestations, each static half asserted.
+
+    **#548 says every character of this race "is permanently missing
+    whichever of these its manifestation prints" -- a defence bonus, a
+    resistance, saves. That is false, and this rule is the measurement that
+    says so.** `rt:r33-t0` forks on which of the thirteen *powers*
+    `Powers.known` holds and lays the printed bonuses for that leg; the
+    thirteen `rt:…-s<N>` refs have no row because the content chose one row
+    with thirteen branches over thirteen rows, not because the halves are
+    missing.
+
+    Nobody had asserted it, which is how the issue stood. A thirteen-way
+    `elif` chain on a key read from a component is exactly the shape that
+    rots silently: one wrong ref and that leg pays nothing, and the row
+    still fires and still audits green off whichever leg the board happens
+    to deal.
+
+    **Driven through `Powers.known`, not by stubbing `_holds`.** The fork
+    reads the component, so the component is what the probe sets -- and
+    `known` is the list; `Powers.all` is a derived view and mutating it
+    does nothing, which cost me a confusing first probe where the board's
+    own leg kept answering.
+
+    Resistances are flat 5 through heroic by the row's own argument -- each
+    block prints a step at 11th and 21st and both are out of scope -- so 5
+    is what is asserted. Breathing underwater and shrugging off ambient
+    temperature are printed on three legs and deliberately unwritten: no
+    fight reaches either, and the row says so.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import FORT, REF, WILL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Mods, Powers
+    from combat_engine.engine.dsl import REGISTRY, DamageType
+
+    D = DamageType
+    #: `(the power that marks this leg, resisted type or None, defence or
+    #: None, does it raise a save)`, read off the thirteen printed blocks.
+    LEGS = (
+        ("p1766", D.FIRE, REF, False),
+        ("p1767", None, FORT, True),
+        ("p1769", D.LIGHTNING, FORT, False),
+        ("p1770", None, None, True),
+        ("p1828", D.COLD, None, False),
+        ("p10043", D.ACID, None, False),
+        ("p10044", D.FIRE, FORT, False),
+        ("p10045", D.POISON, None, True),
+        ("p10046", D.PSYCHIC, WILL, False),
+        ("p14073", None, REF, True),
+        ("p14074", None, FORT, False),
+        ("p14075", None, None, True),
+        ("p14076", None, None, True),
+    )
+    row = REGISTRY["rt:r33-t0"]
+    every = [leg[0] for leg in LEGS]
+
+    def pose(power: str):  # noqa: ANN202
+        """A character of this race holding exactly one manifestation."""
+        world, me, _ = _board("rt:r33-t0", 1)
+        held = world.get(me, Powers)
+        for other in every:
+            while other in held.known:
+                held.known.remove(other)
+        # The board arms traits, so the leg it dealt has already paid.
+        # Cleared, then re-run with the leg this call is about.
+        guard = world.get(me, Defences)
+        if guard is not None:
+            guard.resist.clear()
+        mods = world.get(me, Mods)
+        if mods is not None:
+            mods.items.clear()
+        held.known.append(power)
+        row.body(Cast(world=world, me=me, ref="rt:r33-t0"))
+        return world, me
+
+    out.that(len(LEGS) == 13, "all thirteen legs are asked about, not a"
+             " sample -- the point is that none is a dead branch",
+             f"{len(LEGS)}")
+
+    paid_nothing = []
+    for power, resisted, defence, raises_save in LEGS:
+        world, me = pose(power)
+        guard = world.get(me, Defences)
+        mods = world.get(me, Mods)
+        got_resist = dict(guard.resist) if guard else {}
+        anything = bool(got_resist) or bool(mods and mods.items)
+        if not anything:
+            paid_nothing.append(power)
+            continue
+        if resisted is not None:
+            out.that(got_resist.get(resisted) == 5,
+                     f"the leg marked by {power} resists 5 of its printed"
+                     f" type",
+                     f"{ {k.value: v for k, v in got_resist.items()} }")
+        if defence is not None:
+            c = Cast(world=world, me=me, ref="probe")
+            out.that(c.defence_of(defence, on=me) if hasattr(
+                c, "defence_of") else (mods.total(str(defence), {}) == 1),
+                     f"and raises the one defence {power}'s block prints",
+                     f"{mods.total(str(defence), {})}")
+        if raises_save:
+            out.that(mods is not None and any(
+                "save" in str(k) for k in _mod_keys(mods)),
+                     f"and {power}'s leg raises a saving throw",
+                     f"{sorted(_mod_keys(mods))[:4]}")
+
+    out.that(not paid_nothing,
+             "every leg pays something -- a thirteen-way chain on a ref is"
+             " where one typo makes a branch dead, and the row would still"
+             " fire and still audit green off another leg",
+             f"paid nothing: {paid_nothing}")
+
+    # The negative control: no manifestation, no static half.
+    world, me, _ = _board("rt:r33-t0", 1)
+    held = world.get(me, Powers)
+    for other in every:
+        while other in held.known:
+            held.known.remove(other)
+    guard = world.get(me, Defences)
+    if guard is not None:
+        guard.resist.clear()
+    mods = world.get(me, Mods)
+    if mods is not None:
+        mods.items.clear()
+    row.body(Cast(world=world, me=me, ref="rt:r33-t0"))
+    guard = world.get(me, Defences)
+    out.that(not (guard and guard.resist),
+             "and a character holding NONE of the thirteen gets nothing --"
+             " the control, without which a row laying one leg"
+             " unconditionally would pass every assertion above",
+             f"{ {k.value: v for k, v in (guard.resist if guard else {}).items()} }")
+
+
+def _mod_keys(mods) -> list[str]:  # noqa: ANN001
+    """Every modifier key a creature is carrying, however `Mods` holds them."""
+    out: list[str] = []
+    for item in getattr(mods, "items", ()) or ():
+        key = getattr(item, "what", None) or getattr(item, "key", None)
+        if key is None and isinstance(item, (tuple, list)) and item:
+            key = item[0]
+        if key is not None:
+            out.append(str(key))
+    return out
+
+
 def one_manifestation_not_thirteen(out: Result) -> None:
     """A race's "choose one" traits are alternatives, not a stack. #548.
 
@@ -11036,6 +11182,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "every_manifestation_pays_its_printed_half":
+        (every_manifestation_pays_its_printed_half,
+         "all thirteen manifestations pay their printed static half"),
     "one_manifestation_not_thirteen": (one_manifestation_not_thirteen,
                                        "a race's choose-one traits are\n"
                                        " alternatives, not a stack"),
