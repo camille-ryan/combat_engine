@@ -2235,6 +2235,137 @@ def scoped_vulnerable(out: Result) -> None:
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
 
+
+def a_condition_sticks_to_a_creature_with_no_cache(out: Result) -> None:
+    """A spawned creature had no `Conditions`, and every condition was lost.
+
+    `Effects._install_conditions` read the component and skipped the whole
+    loop when it was absent -- no state, no `ConditionApplied`, no complaint
+    -- while `c.dazed` returned a complete `Effect` carrying
+    `conditions=(DAZED,)`. The caller had every reason to think it worked.
+    `Mods` three lines above has always made its component when missing;
+    conditions did not.
+
+    Three creature-spawning sites lack it, so **no called familiar, spirit or
+    inline summon could be dazed, slowed, immobilised or stunned**, and the
+    engine could not kill one either: `resolve._die` applies `Condition.DEAD`
+    through the same door, so a dead familiar read as alive.
+
+    Driven on a called familiar, which is the real case rather than a
+    hand-built entity -- `cf:wizard-sha-ir-f1` is the one row in the tree
+    that calls `c.call_companion(kind="familiar")`. #635.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import Condition
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Conditions, Health
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import ConditionApplied, Died
+    from combat_engine.engine.query import is_
+
+    ref = "cf:wizard-sha-ir-f1"
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    c.call_companion(kind="familiar")
+    fam = c.familiar()
+    out.that(fam is not None, "the row calls a familiar onto the board")
+    if fam is None:
+        # Narrowed once rather than at each read. The rule is about what the
+        # engine does to a creature, so with no creature there is nothing
+        # left to say and fourteen reads below would be about `None`.
+        return
+
+    # The precondition, stated so the rule still means something if a future
+    # spawn site starts handing the component out: this creature arrives
+    # without one. If that changes, this assertion fails and says so rather
+    # than the rule quietly testing nothing.
+    out.that(world.get(fam, Conditions) is None,
+             "and it arrives with no Conditions component",
+             "it has one now -- this rule is no longer about the gap it names")
+
+    laid = c.dazed(on=fam)
+    out.that(laid is not None, "c.dazed lays an effect on it")
+    out.that(Condition.DAZED in getattr(laid, "conditions", ()),
+             "and the effect carries the condition, which it always did")
+
+    # The two halves that were false. The second is the one a row reads.
+    out.that(world.get(fam, Conditions) is not None,
+             "the component is made rather than the condition dropped")
+    out.that(is_(world, fam, Condition.DAZED),
+             "and `query.is_` says it is dazed -- the read every row uses")
+    out.that(any(isinstance(e, ConditionApplied) and e.target == fam
+                 and e.condition is Condition.DAZED for e in world.bus.log),
+             "`ConditionApplied` is announced, so a row watching can fire")
+
+    # A second condition on the same creature, since the first one is what
+    # creates the component and the bug would have hidden behind that.
+    c.slowed(on=fam)
+    out.that(is_(world, fam, Condition.SLOWED),
+             "a second condition lands too, beside the first")
+    out.that(is_(world, fam, Condition.DAZED),
+             "and does not displace it")
+
+    # -- and the engine's own use of the same door -------------------------
+    #
+    # `resolve._die` applies `Condition.DEAD` through `effects.apply`, so
+    # this was the half that made a corpse read as a living creature.
+    world2, me2, _ = _posed(ref, 1)
+    c2 = Cast(world=world2, me=me2, ref=ref)
+    c2.call_companion(kind="familiar")
+    pet = c2.familiar()
+    out.that(pet is not None, "a second board calls one too")
+    if pet is None:
+        return
+    hp = world2.need(pet, Health)
+    c2.damage(hp.hp + 50, on=pet)
+
+    out.that(any(isinstance(e, Died) and e.actor == pet for e in world2.bus.log),
+             "a blow that overshoots kills the familiar -- `Died` is emitted")
+    out.that(is_(world2, pet, Condition.DEAD),
+             "and asking whether it is dead now answers yes")
+
+    # The companion state is deliberately NOT asserted here. A dead familiar
+    # still reads `Companion.passive is False`, so "is my familiar active"
+    # still answers yes -- that is a separate fault, it is what `f2257`'s
+    # card is about, and conflating the two is how one symbol came to serve
+    # three needs. #620.
+    beast = world2.get(pet, Companion)
+    out.that(beast is not None and not beast.passive,
+             "its Companion row is untouched, which is #620's half and not this one")
+
+    # -- `worsen`, the other door, which had the same skip ----------------
+    #
+    # "First Failed Saving Throw: the target is **also** dazed" comes through
+    # `Effects.worsen`, which read the component and returned False when it
+    # was absent. With `_install_conditions` fixed the component usually
+    # exists by then -- the hold installed it -- so the reachable case is an
+    # effect whose **first** condition arrives on a failed save: one carrying
+    # only mods until then. That is what this poses.
+    world3, me3, _ = _posed(ref, 1)
+    c3 = Cast(world=world3, me=me3, ref=ref)
+    c3.call_companion(kind="familiar")
+    sprite = c3.familiar()
+    out.that(sprite is not None, "a third board calls one as well")
+    if sprite is None:
+        return
+    out.that(world3.get(sprite, Conditions) is None,
+             "a third familiar, also with no Conditions component")
+
+    held = c3.penalty("attack", 2, on=sprite, until=When.SAVE_ENDS)
+    out.that(held is not None, "an effect carrying a modifier and no condition")
+    if held is None:
+        return
+    out.that(world3.get(sprite, Conditions) is None,
+             "which installs no component, there being no condition to cache")
+
+    out.that(world3.effects.worsen(held, Condition.IMMOBILIZED),
+             "`worsen` reports that the failed save added something")
+    out.that(is_(world3, sprite, Condition.IMMOBILIZED),
+             "and the creature is immobilised -- the read a row makes")
+    out.that(Condition.IMMOBILIZED in held.conditions,
+             "with the effect's own tuple carrying it, so teardown clears it")
+
 def a_header_only_clause_is_spent_by_chargen(out: Result) -> None:
     """A row whose whole mechanical clause is `swap=`, and nothing ran it.
 
@@ -13221,6 +13352,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_condition_sticks_to_a_creature_with_no_cache": (
+        a_condition_sticks_to_a_creature_with_no_cache,
+        "a spawned creature had no Conditions and swallowed every condition"),
     "a_header_only_clause_is_spent_by_chargen": (
         a_header_only_clause_is_spent_by_chargen,
         "f3725's whole clause is a swap= header and nothing asserted it"),

@@ -399,8 +399,14 @@ class Effects:
         if cond in eff.conditions:
             return False
         eff.conditions = (*eff.conditions, cond)
+        # Made when missing, for `_install_conditions`'s reason -- and this
+        # site is the worse of the two to leave, because it is the escalation
+        # a *failed save* imposes: the one moment the fiction is at its most
+        # pointed, returning False and saying nothing. #635.
         conds = self.world.get(eff.owner, Conditions)
-        if conds is None or not conds.add(cond):
+        if conds is None:
+            conds = self.world.add(eff.owner, Conditions())
+        if not conds.add(cond):
             return False
         self.world.bus.emit(
             ConditionApplied(
@@ -430,8 +436,35 @@ class Effects:
             self.world.relations.set(kind, s, t)
 
     def _install_conditions(self, eff: Effect, source: int, duration: str) -> None:
-        """Lay the conditions and announce each one that was not already held."""
+        """Lay the conditions and announce each one that was not already held.
+
+        **The component is made when it is missing**, which is what `Mods`
+        three lines above this has always done and what conditions did not.
+        A creature without a `Conditions` component silently swallowed every
+        condition ever laid on it: no state, no `ConditionApplied`, and no
+        complaint -- while `c.dazed` returned a complete `Effect` carrying
+        `conditions=(DAZED,)`, so the caller had every reason to think it
+        worked. The exact silently-false shape this component's own file
+        warns about.
+
+        Three creature-spawning sites lack the component --
+        `Cast.call_companion`'s no-stat-block branch, `Cast.summon_inline`,
+        and the spawn at `cast.py:4610` -- so **no called familiar, spirit or
+        inline summon could be dazed, slowed, immobilised or stunned.** The
+        engine could not even kill one: `resolve._die` applies
+        `Condition.DEAD` through this door, so a dead familiar read as alive
+        and, being a `Companion` with `passive` still False, as *actively
+        standing there*.
+
+        Fixed here rather than at the three sites because fixing those one at
+        a time is what produced this. `call_companion`'s own comments record
+        the same class of bug twice already -- a missing `Ident` that made the
+        renderer raise, a missing `Stats` that blew up four rows -- and both
+        were found at once because they **raised**. This one does not. #635.
+        """
         conds = self.world.get(eff.owner, Conditions)
+        if conds is None and eff.conditions:
+            conds = self.world.add(eff.owner, Conditions())
         for c in eff.conditions:
             if conds is not None and conds.add(c):
                 self.world.bus.emit(
