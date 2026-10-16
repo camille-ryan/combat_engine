@@ -2778,15 +2778,30 @@ def the_invigorating_keyword_pays(out: Result) -> None:
                  and Keyword.WEAPON in (p.keywords or ()))
 
     def paid(ref: str, using: str, *, bloodied: bool = False) -> int:
-        """Temporary hit points a fighter ends up with, via the real path."""
+        """Temporary hit points a fighter ends up with, via the real path.
+
+        **The board arms the feat; this must not arm it again.** It did,
+        and every one of these rows carried its modifier twice. It stayed
+        invisible for as long as the bonuses were typed: two `kind="feat"`
+        modifiers under one label are the same type, so `Mods.total` takes
+        the larger and the duplicate costs nothing. The moment `f755` became
+        untyped -- which is what its card prints, and `bonuses.py` said so --
+        two untyped bonuses added and the pool read 5 where the card says 3.
+
+        So the bonus type was hiding a fault in this harness, and the row
+        that exposed it was correct. `turns.arm_traits` arms an
+        `action=NONE` feat dealt through `chargen.Character(feats=[...])`,
+        which `audit.board` does for every classless `f` ref, so the body
+        has already run by the time this is called.
+        """
         world, me, _ = _board(ref, 1)
         body = world.get(me, Health)
         # **Set both ways.** The control first read whatever the board
         # dealt, and this board's fighter arrives already under half -- so
         # "unhurt" was never posed and `f755` looked like it paid
-        # unconditionally.
+        # unconditionally. Safe to set after arming: `f755` asks
+        # `c.bloodied` from inside its `when=`, which is read per payout.
         body.hp = (body.max_hp // 2) if bloodied else body.max_hp
-        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
         body.temp = 0
         temp_hp(world, me, me, 1, power=using)
         return body.temp
