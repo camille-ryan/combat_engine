@@ -272,6 +272,28 @@ def main() -> int:
                 for line in (done.stdout + done.stderr).splitlines():
                     if "FAIL" in line or "diverged" in line.lower() or "error" in line.lower():
                         print(f"          {line.strip()[:110]}")
+                # **And a traceback whole, because this filter drops the
+                # half of one that says anything.** A traceback's useful
+                # lines are its `File "...", line N, in <name>` frames and
+                # the source line under each, and **not one of them holds
+                # the words `FAIL`, `diverged` or `error`** -- so a raise
+                # came through as its last two lines and nothing else.
+                #
+                # The 2026-10-16 03:15 nightly is the measured cost. `audit`
+                # raised a `tokenize.TokenError` over 42 minutes of wide
+                # sweep and the log kept exactly:
+                #
+                #     raise TokenError(msg, (e.lineno, e.offset)) from None
+                #     tokenize.TokenError: ('unterminated string literal ...
+                #
+                # Neither names the file, the row, or the frame, and `audit`
+                # does not reach that row again for a day. A raise is the one
+                # verdict this project treats as inviolable and it was the one
+                # least possible to act on. #634.
+                for blob in (done.stdout, done.stderr):
+                    frames = _traceback(blob)
+                    if frames:
+                        print("\n".join(f"          {x}" for x in frames))
         if args.verbose:
             print("\n".join(f"          {x}" for x in done.stdout.splitlines()[-25:]))
 
@@ -621,6 +643,40 @@ def history() -> int:
         print(f"  never caught anything in 20+ runs, and not cheap: {', '.join(idle)}"
               f"\n  -- worth asking whether they still earn their seconds")
     return 0
+
+
+#: How much of a traceback to keep. Deep enough for the innermost frames,
+#: which are the ones naming the row, and short enough that a check failing
+#: on twenty of them does not bury the table above it.
+_FRAMES = 14
+
+
+def _traceback(text: str) -> list[str]:
+    """Every traceback in an instrument's output, last `_FRAMES` lines each.
+
+    Returned rather than printed so the caller decides where it goes, and
+    kept **verbatim** -- a frame's indentation is what pairs a source line
+    with the call above it, and stripping it makes a traceback unreadable
+    in exactly the way that cost #634 a day.
+
+    The tail and not the head: `audit.py` runs rows in a pool, so the
+    outermost frames are the same `pool.map` bootstrap every time and the
+    innermost are the ones that name the file being tokenized.
+    """
+    out: list[str] = []
+    lines = text.splitlines()
+    starts = [i for i, ln in enumerate(lines)
+              if ln.lstrip().startswith("Traceback (most recent call last)")]
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(lines)
+        block = [ln for ln in lines[start:end] if ln.strip()]
+        if len(block) > _FRAMES:
+            # Say what was dropped rather than truncating silently, which is
+            # the whole complaint #634 is about.
+            block = [block[0], f"... {len(block) - _FRAMES} frame(s) above",
+                     *block[-(_FRAMES - 2):]]
+        out.extend(block)
+    return out
 
 
 def _summary(text: str) -> str:
