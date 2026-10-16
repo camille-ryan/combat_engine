@@ -352,14 +352,31 @@ def f2366(c: Cast) -> None:
 
 
 @power("f2370", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Keyword.INVIGORATING",),
+       reach=PERSONAL, target=SELF,
        trigger="you hit an enemy with a martial power",
        on=Trigger(Hit, _i_hit_with_martial, "you hit with a martial power"))
 def f2370(c: Cast) -> None:
     """The saving throw's context carries the conditions the effect it is
     against holds, which is what makes "effects that daze or stun" a
     narrowing rather than a blanket penalty -- the same read `f364`
-    makes. The keyword half is the gap four other fighter rows name.
+    makes.
+
+    **The keyword half is written, in the two powers rather than here.**
+    `Keyword.INVIGORATING` reached the enum with the 13 powers that print
+    it, and "the power gains the invigorating keyword" is a grant on *this
+    creature's* copy of a named row -- which a header cannot say, because
+    a row's keywords are one tuple shared by everybody who holds it. So
+    `p622` and `p1428` each ask `c.feat("f2370")` and call
+    `c.counts_as_keyword` on themselves, which is #550's convention and
+    puts the grant at the moment it has to be true: before the roll, where
+    `f758`'s +1 reads it.
+
+    Laid from here it could not have worked at all. This row carries a
+    declared trigger, so its body runs only *after* a hit -- too late for
+    the attack that just happened, and `c.watch` instead would have meant
+    giving up the trigger. The four powers above heroic on the same
+    Associated Powers line are not imported and get nothing, which is
+    `_associated_refs`' own rule about never gating on an absent row.
 
     `AT_WILL`: the card says "whenever" and prints no limit, and a
     triggered row declared `ENCOUNTER` is refused after its first

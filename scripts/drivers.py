@@ -2257,7 +2257,7 @@ def the_invigorating_keyword_pays(out: Result) -> None:
     import combat_engine.content  # noqa: F401
     from combat_engine.engine import Keyword
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Health
+    from combat_engine.engine.components import Health, Powers
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.resolve import temp_hp
 
@@ -2321,6 +2321,42 @@ def the_invigorating_keyword_pays(out: Result) -> None:
              "and nothing for a plain power even while bloodied, so both"
              " halves of its condition are load-bearing",
              f"{paid('f755', plain, bloodied=True)}")
+
+    # **f2370 grants the keyword to a power that does not print it**, and
+    # that is the case a header read would miss. Written into the two
+    # powers rather than laid from the feat (#550) because the feat carries
+    # a declared trigger, so its body runs only after a hit -- too late for
+    # the attack that just happened.
+    from combat_engine.engine.dsl import keywords_of
+
+    def granted(ref: str, *, taken: bool) -> bool:
+        world, me, _ = _board(ref, 1)
+        known = world.need(me, Powers)
+        if taken and "f2370" not in known.known:
+            known.known.append("f2370")
+        while not taken and "f2370" in known.known:
+            known.known.remove("f2370")
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return Keyword.INVIGORATING in keywords_of(world, me, REGISTRY[ref])
+
+    for ref in ("p622", "p1428"):
+        out.that(Keyword.INVIGORATING not in (REGISTRY[ref].keywords or ()),
+                 f"{ref}'s own header does NOT print the keyword, so the"
+                 f" grant is the only way it can have it",
+                 f"{[k.value for k in (REGISTRY[ref].keywords or ())]}")
+        out.that(granted(ref, taken=True),
+                 f"and with f2370 taken, {ref} counts as invigorating --"
+                 f" read through `keywords_of`, which folds the grant in",
+                 f"{granted(ref, taken=True)}")
+        out.that(not granted(ref, taken=False),
+                 f"and without it, {ref} does not -- the gate, and the"
+                 f" reason this is not a header change",
+                 f"{granted(ref, taken=False)}")
+
+    out.that(not REGISTRY["f2370"].unfinished,
+             "f2370 carries no marker now: its own clause works and the"
+             " other lives in the two powers it names",
+             f"{REGISTRY['f2370'].unfinished}")
 
 
 def a_bare_skill_key_is_read_by_nothing(out: Result) -> None:

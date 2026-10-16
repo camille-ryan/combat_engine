@@ -16,6 +16,7 @@ from combat_engine.engine import (
     CloseBurst,
     Keyword,
     Melee,
+    When,
     power,
 )
 from combat_engine.engine.query import hidden_from
@@ -129,6 +130,20 @@ def p291(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p622(c: Cast) -> None:
+    # **`f2370`'s second benefit, written here rather than laid from the
+    # feat.** "When you attack with a power associated with this feat, the
+    # power gains the invigorating keyword" -- and a row's keywords are one
+    # tuple fixed at import and shared by everybody who holds it, so only
+    # this creature's copy can gain one. #550's convention: the row holding
+    # the thing is the row that asks.
+    #
+    # Granted before the attack, because that is when it has to be true:
+    # `f758`'s +1 reads the attacking power's keywords during the roll, and
+    # the weaponmaster's miss clause asks after. `dsl.keywords_of` folds the
+    # grant in; `Power.keywords` would not see it.
+    if c.feat("f2370"):
+        c.counts_as_keyword(c.ref, Keyword.INVIGORATING, on=c.me,
+                            until=When.ENCOUNTER)
     if c.strike():
         heavy = any(c.wielding(group) for group in ("axe", "hammer", "mace"))
         c.damage(c.w(2), c.str_mod + (c.con_mod if heavy else 0))
