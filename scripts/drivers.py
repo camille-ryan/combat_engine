@@ -2276,8 +2276,15 @@ def the_invigorating_keyword_pays(out: Result) -> None:
              "and the 13 powers whose cards print it declare it -- the set"
              " `keywords.py` compares against the database",
              f"{len(tagged)} rows")
+    # **A FIGHTER power without the keyword**, and the class matters. The
+    # first version took any class's weapon power, so the battlerager
+    # leg's `row.cls != "fighter"` guard rejected it and the keyword gate
+    # below was never the thing under test -- a plant removing that gate
+    # stayed green. Both halves of the leg's condition need their own
+    # control.
     plain = next(r for r, p in REGISTRY.items()
                  if r.startswith("p") and (p.level or 0) <= 10
+                 and p.cls == "fighter"
                  and Keyword.INVIGORATING not in (p.keywords or ())
                  and Keyword.WEAPON in (p.keywords or ()))
 
@@ -2357,6 +2364,50 @@ def the_invigorating_keyword_pays(out: Result) -> None:
              "f2370 carries no marker now: its own clause works and the"
              " other lives in the two powers it names",
              f"{REGISTRY['f2370'].unfinished}")
+
+    # **The battlerager's miss clause**, the last row on the keyword.
+    # "Use an invigorating <class> attack power and miss every target" --
+    # asked of `PowerResolved`, the only event carrying every roll a use
+    # made, which is `_missed_everything`'s reason in `items/misc.py`.
+    from combat_engine.engine.components import Health as _H
+    from combat_engine.engine.events import PowerResolved
+
+    LEG = "cf:fighter-weaponmaster-f3s1"
+    out.that(not REGISTRY[LEG].unfinished,
+             "the battlerager leg carries no marker now",
+             f"{REGISTRY[LEG].unfinished}")
+
+    class _Roll:
+        def __init__(self, hit: bool) -> None:
+            self.hit = hit
+
+    def fed(power: str, hits: list[bool]) -> int:
+        """Temporary hit points after a use that rolled like that."""
+        world, me, _ = _board(LEG, 1)
+        REGISTRY[LEG].body(Cast(world=world, me=me, ref=LEG))
+        body = world.get(me, _H)
+        body.temp = 0
+        world.bus.emit(PowerResolved(
+            actor=me, power=power, targets=[],
+            rolls=[_Roll(h) for h in hits]))
+        return body.temp
+
+    invig = tagged[0]
+    out.that(fed(invig, [False, False]) > 0,
+             "missing every target of an invigorating power feeds the pool",
+             f"{fed(invig, [False, False])}")
+    out.that(fed(invig, [False, True]) == 0,
+             "hitting one of them does NOT -- 'miss every target' is the"
+             " printed word, and `Miss` alone could never have said it",
+             f"{fed(invig, [False, True])}")
+    out.that(fed(invig, []) == 0,
+             "and a use that rolled nothing did not miss, it did not"
+             " attack -- the empty-rolls case `all()` gets wrong",
+             f"{fed(invig, [])}")
+    out.that(fed(plain, [False, False]) == 0,
+             "nor does missing with a power that is not invigorating --"
+             " the half that was dropped for want of the keyword",
+             f"{fed(plain, [False, False])}")
 
 
 def a_bare_skill_key_is_read_by_nothing(out: Result) -> None:

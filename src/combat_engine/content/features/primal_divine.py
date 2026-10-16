@@ -74,6 +74,7 @@ from combat_engine.engine import (
     get,
     power,
 )
+from combat_engine.engine.dsl import keywords_of
 from combat_engine.engine.events import Hit, PowerResolved, PowerUsed
 from combat_engine.engine.query import alive, allies, distance_between, team
 
@@ -468,7 +469,6 @@ _BATTLERAGER_GROUPS = ("axe", "hammer", "mace", "pick")
     keywords=[Keyword.MARTIAL],
     requires=on_leg("battlerager"),
     requires_text=_NOT_MY_OPTION,
-    dropped=("Keyword.INVIGORATING",),
 )
 def fighter_talent_battlerager(c: Cast) -> None:
     """The talent that feeds on landing a blow.
@@ -511,10 +511,30 @@ def fighter_talent_battlerager(c: Cast) -> None:
     granting a pool on a *miss* later in the fight. Nothing in the tree
     prints that, and the alternative is a second watch to clear it.
 
-    One clause is dropped. The invigorating keyword does not exist, so "you
-    use an invigorating attack power and miss every target" has no first half
-    to test -- `Keyword.INVIGORATING` is the symbol five feats already wait
-    on.
+    **The miss clause lands now.** It was dropped because the invigorating
+    keyword did not exist, so "you use an invigorating attack power and miss
+    every target" had no first half to test. `Keyword.INVIGORATING` is on
+    the enum and the 13 powers that print it declare it, so the test is
+    real.
+
+    Asked of `PowerResolved`, the only event carrying **every** roll a use
+    made -- `Miss` is announced once per target and knows nothing about the
+    others, which is `_missed_everything`'s reason in `items/misc.py` and
+    the same shape. An empty `rolls` is not missing everything: a power that
+    rolled nothing did not miss, it did not attack.
+
+    **No usage filter, unlike that precedent.** `i1908p1` prints "an
+    encounter or daily power" and so excludes at-wills; this card prints
+    only "an invigorating <class> attack power", so an at-will counts. The
+    class is printed too and is asked.
+
+    Read through `dsl.keywords_of` rather than the header, because `f2370`
+    grants this keyword to two powers that do not print it -- and a
+    battlerager who took that feat should feed on missing with them.
+
+    The pool is laid directly rather than through the `"temp_hp"` term
+    above: that term is gated on `fed_by`, which only a *hit* adds to, so a
+    miss cannot raise itself.
     """
     me, world = c.me, c.world
     fed_by: set[str] = set()
@@ -528,6 +548,20 @@ def fighter_talent_battlerager(c: Cast) -> None:
             c.temp_hp(c.con_mod, on=me)
 
     c.watch(Hit, on_hit, until=When.ENCOUNTER, on=me, label=c.ref)
+
+    def missed_all(ev: PowerResolved) -> None:
+        if ev.actor != me or not ev.rolls:
+            return
+        row = get(ev.power)
+        if row is None or row.cls != "fighter":
+            return
+        if Keyword.INVIGORATING not in keywords_of(world, me, row):
+            return
+        if all(not getattr(roll, "hit", False) for roll in ev.rolls):
+            c.temp_hp(c.con_mod, on=me)
+
+    c.watch(PowerResolved, missed_all, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} miss")
     c.bonus(
         "temp_hp", c.con_mod, on=me, until=When.ENCOUNTER,
         when=lambda ctx: ctx.get("power") in fed_by,
