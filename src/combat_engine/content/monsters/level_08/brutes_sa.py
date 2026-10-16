@@ -1349,7 +1349,8 @@ def m3228a0(c: Cast) -> None:
         if rider is None or rider in given or not _ridden_by(c.world, me, 8):
             return
         given.add(rider)
-        c.bonus("perception", 2, on=rider, until=When.ENCOUNTER, kind="power")
+        c.bonus("skill:perception", 2, on=rider, until=When.ENCOUNTER,
+                kind="power")
 
     c.watch(TurnStart, check, until=When.ENCOUNTER, on=me, label="m3228a0")
 

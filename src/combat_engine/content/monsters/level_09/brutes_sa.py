@@ -751,7 +751,7 @@ def m1828a5(c: Cast) -> None:
     creature it has bitten before has no combat meaning -- nothing on a
     board rolls Perception to track by scent, so there is nowhere for
     the narrowing to go."""
-    c.bonus("perception", 10, on=c.me, until=When.ENCOUNTER)
+    c.bonus("skill:perception", 10, on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

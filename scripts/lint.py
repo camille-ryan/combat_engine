@@ -609,7 +609,36 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
 #: A key belongs here when the engine has a *verb* for the thing and no
 #: reader for the modifier. A key nothing implements at all is a gap and
 #: belongs in a `todo=`, not here.
-UNREAD_MODIFIER_KEYS = {"initiative": "c.initiative(amount, on=)"}
+#: **And every bare skill name.** `skills.check` reads
+#: `f"skill:{name}"` plus the blanket `"skill"`; the *ability* reader two
+#: functions down reads `f"ability:{x}"` plus `"ability_check"`. So a bare
+#: `c.bonus("perception", 2)` lays a key **neither** consults, while
+#: reading exactly like the 37 rows that spell `skill:perception`
+#: correctly.
+#:
+#: Four rows did it -- two on perception, one on stealth, one more on
+#: perception -- and the clearest evidence it was a slip rather than a
+#: convention is `m1828a5`, whose own marker reads
+#: `narrative=("skill:perception",)` while its body laid the bare key. The
+#: row named the right form and used the wrong one.
+#:
+#: Derived from `skills.SKILLS` rather than listed, so a skill added to the
+#: engine cannot arrive with a hole beside it. The *rule* stays
+#: hand-stated, which is what the note above asks for: the engine has a
+#: verb for this (the prefixed key) and no reader for the bare form.
+def _bare_skill_keys() -> dict[str, str]:
+    from combat_engine.engine.skills import SKILLS
+
+    return {
+        name: f'c.bonus("skill:{name}", …) -- the bare key is read by nothing'
+        for name in SKILLS
+    }
+
+
+UNREAD_MODIFIER_KEYS = {
+    "initiative": "c.initiative(amount, on=)",
+    **_bare_skill_keys(),
+}
 
 
 def _unread_modifiers() -> list[tuple[str, str]]:

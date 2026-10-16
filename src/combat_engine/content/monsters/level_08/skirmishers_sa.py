@@ -2788,7 +2788,8 @@ def m6063a0(c: Cast) -> None:
         return who in c.allies() and not c.is_kind("elf", on=who)
 
     def hold(who: int) -> Effect | None:
-        return c.bonus("perception", 2, on=who, kind="racial", until=When.ENCOUNTER)
+        return c.bonus("skill:perception", 2, on=who, kind="racial",
+                       until=When.ENCOUNTER)
 
     _aura(c, 5, eligible, hold)
 

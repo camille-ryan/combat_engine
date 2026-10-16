@@ -2234,6 +2234,81 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_bare_skill_key_is_read_by_nothing(out: Result) -> None:
+    """`c.bonus("perception", 2)` lays a key no reader consults.
+
+    Two readers, two prefixes, and neither takes a bare name.
+    `skills.modifier` totals `f"skill:{name}"` plus the blanket
+    `"skill"`; `skills.ability_check` totals `f"ability:{x}"` plus
+    `"ability_check"`. So a bare skill name sits in `Mods` and no roll
+    ever sees it -- while reading exactly like the 37 rows that spell the
+    prefix correctly.
+
+    **Four rows did it**, and the clearest sign it was a slip rather than
+    a convention is `m1828a5`: its marker reads
+    `narrative=("skill:perception",)` while its body laid the bare key, so
+    the row named the right form and used the wrong one. Its docstring
+    also claims "the Perception bonus plays", which was not true.
+
+    Found by diffing modifier keys **laid** by content against keys
+    **read** by the engine -- the same reads-against-writes diff that
+    found the one dead ctx key an hour earlier. `lint.py` already had an
+    unread-modifier check and missed these, because its list was
+    hand-kept and held exactly one key; it is derived from
+    `skills.SKILLS` now, so a skill added to the engine cannot arrive
+    with a hole beside it.
+
+    Asserted through `skills.modifier`, which is the fixed part of a
+    real roll -- ability, half level and the modifiers.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.skills import SKILLS
+    from combat_engine.engine.skills import modifier as bonus_for
+
+    world, me, _ = _board("m145a0", 1)
+    c = Cast(world=world, me=me, ref="drivers:skillkey")
+    base = bonus_for(world, me, "perception")
+
+    c.bonus("skill:perception", 7, on=me, until=When.ENCOUNTER)
+    out.that(bonus_for(world, me, "perception") == base + 7,
+             "the prefixed key reaches a Perception check",
+             f"{base} -> {bonus_for(world, me, 'perception')}")
+
+    world2, me2, _ = _board("m145a0", 1)
+    c2 = Cast(world=world2, me=me2, ref="drivers:skillkey")
+    base2 = bonus_for(world2, me2, "perception")
+    c2.bonus("perception", 7, on=me2, until=When.ENCOUNTER)
+    out.that(bonus_for(world2, me2, "perception") == base2,
+             "and the BARE key reaches nothing -- laid, and no roll sees"
+             " it, which is what the four rows were doing",
+             f"{base2} -> {bonus_for(world2, me2, 'perception')}")
+
+    out.that("perception" in SKILLS and "thievery" in SKILLS,
+             "the skill set the lint rule derives from is the engine's own,"
+             " so a new skill cannot arrive without the bare form being"
+             " refused too", f"{len(SKILLS)} skills")
+
+    # And the four rows spell it correctly now.
+    import inspect
+
+    wrong = []
+    for ref in ("m2092a3", "m1828a5", "m6063a0"):
+        row = REGISTRY.get(ref)
+        if row is None:
+            continue
+        body = inspect.getsource(row.body)
+        body = body.split('"""')[-1] if body.count('"""') >= 2 else body
+        for name in SKILLS:
+            if f'"{name}"' in body and f'"skill:{name}"' not in body:
+                wrong.append((ref, name))
+    out.that(not wrong,
+             "and none of the repaired rows still lays a bare skill name",
+             f"{wrong}")
+
+
 def immunity_gated_on_the_attacking_power(out: Result) -> None:
     """m5788a0 ignores a Will attack's effects, and the gate was dead. #591.
 
@@ -11436,6 +11511,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_bare_skill_key_is_read_by_nothing":
+        (a_bare_skill_key_is_read_by_nothing,
+         "a bare skill name lays a modifier no roll reads"),
     "immunity_gated_on_the_attacking_power":
         (immunity_gated_on_the_attacking_power,
          "m5788a0's Will immunity, gated on a key that is written"),

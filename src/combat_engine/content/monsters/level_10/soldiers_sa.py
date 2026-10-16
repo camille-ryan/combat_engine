@@ -1683,7 +1683,7 @@ def m2092a2(c: Cast) -> None:
 @power("m2092a3", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m2092a3(c: Cast) -> None:
     me = c.me
-    hold = c.bonus("stealth", 5, on=me, until=When.ENCOUNTER)
+    hold = c.bonus("skill:stealth", 5, on=me, until=When.ENCOUNTER)
 
     def stop(ev: MoveEnd) -> None:
         if ev.actor == me and hold is not None:
