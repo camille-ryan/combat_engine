@@ -258,3 +258,56 @@ target-default is right for the family and wrong for exactly one phrase.
 The lesson for the plan: triage finds mis-marked rows, and *writing* rows
 finds wrong ones. The two are different yields and the second is the one the
 instruments cannot reach.
+
+## #614 read end to end: one flattened symbol of five, and six rows written
+
+Read all 22 remaining cards plus the three `Power.reach_alt` ones. The
+issue's premise -- 25 rows all wanting "replace a named power's `Range` for
+one use, visibly", on the strength of four docstrings converging -- is
+wrong, and **convergence is not evidence**: `reach_alt`'s three rows turned
+out to be three different answers.
+
+Verdict per symbol, after reading the **rows** and not only the cards:
+
+| symbol | rows | verdict |
+|---|---|---|
+| `Power.reach_alt` | 3 | was flattened; **now at zero** |
+| `c.as_melee(ref=)` | 5 | **accurate** -- shared `REACH`, `f1239` blocked by the ETL (#623) |
+| `c.recast(as_ranged=)` | 5 | **accurate** -- shared `AS_RANGED` carrying a real measurement |
+| `c.reshape_area()` | 7 | **accurate for 6**; `i526p1` is a live zone, one split |
+| `c.recast(area=)` | 5 | one split: `f1010` is a condition; `i1836x1` sits elsewhere |
+
+**One of five was flattened. I predicted most of them**, and corrected the
+issue twice in one sitting -- which is the lesson, not the ratio:
+
+> A card tells you what the row must **do**. Only the row tells you whether
+> it already says so, and this corpus's docstrings are routinely ahead of
+> the tracker.
+
+I read 22 cards before reading any row, having written down the day before
+that the order matters. Both bad claims came from that.
+
+### The yield was elsewhere, and it was better
+
+Six rows written, none of them needing the facility this issue is about:
+
+* `m1826a4` -- "close burst 2 (5 while bloodied)". Header permissive, body
+  narrows with a distance guard. `EACH_ENEMY` dispatches per target, so
+  there is nobody to re-aim at -- which is why this is **not** `m6683a0`'s
+  `_restricted_to`, same sentence, different targeting.
+* `f1010` -- the burst grows by Charisma, for one named row, while raging.
+* `p12261` `p15946` `p15951` `p16046` -- `c.vulnerable_in`, four lines over
+  `_while_inside`, collapsing **two** symbols that were one gap.
+
+**The pattern that found five of the six: a note claiming a verb cannot be
+narrowed.** `c.bonus` has always taken a `when=` gate, and a verb exposing
+none is usually one line over it. Three such claims today, two of them
+already false when written (#471), and the tree holds four rows that
+*corrected* the identical note on themselves -- `f2705`, `features.sorcerer`,
+`f593`, `f1720`. **A stale note propagates; its retraction does not.** #625
+is the sweep.
+
+So the direction for the rest of heroic: stop ranking symbols by row count
+and start reading the *rows* of any symbol whose note names a verb's limit.
+That is where the writable rows have been all day, and it is cheap -- a
+signature and a one-line body, not a card.
