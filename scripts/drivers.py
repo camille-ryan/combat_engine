@@ -2234,6 +2234,108 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_recharge_can_name_the_moment_it_waits_for(out: Result) -> None:
+    """Three rows marked for a field 186 others already declared.
+
+    `Power.recharge_when` landed with #489 and takes a `Trigger`. These
+    three print exactly that shape and carried `Usage.RECHARGE(when=)`
+    anyway:
+
+        m115830a2  "Recharge when it hits with m115830a0"
+        m6162a2    "Recharge when it uses m6162a1"
+        m4167a3    "Recharges when one of its m4168 drops to 0 hit points"
+
+    The first two were a one-line header each. The third needed a
+    predicate, which is why it is the one that was really waiting: every
+    existing user of the field asks about a power being used or a hit
+    landing, and none about a creature of its own going down.
+
+    **Which sibling matters, and the glossary is the only thing that says
+    so.** `m115830a2`'s card names the creature's melee weapon; `a0` is
+    that and `a1` is its bow. Both are at-will and both carry
+    `Keyword.WEAPON`, so "its at-will attack" would have recharged this on
+    the wrong swing and nothing in the tree would have objected.
+
+    **`hit_with` on one and `by_power` on the other, and the cards decide.**
+    "When it hits" does not recharge on a miss; "when it uses" does. Those
+    are two factories rather than one with a fallback, for the reason
+    `hit_with`'s own note gives: `Hit` names the swinger `attacker` and
+    `PowerUsed` names it `actor`, so the wrong one is silently false
+    forever.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Companion
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Dropped, Hit, PowerUsed
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.triggers import summon_dropped
+
+    def fires(ref: str, ev: object) -> bool:
+        world, me, _ = _board(ref, 1)
+        trigger = REGISTRY[ref].recharge_when
+        out_of = trigger if isinstance(trigger, tuple) else (trigger,)
+        return any(t.when(world, me, ev) for t in out_of if t is not None)
+
+    for ref in ("m115830a2", "m6162a2", "m4167a3"):
+        out.that(REGISTRY[ref].recharge_when is not None,
+                 f"{ref} declares recharge_when and carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref}'s marker is struck", f"{REGISTRY[ref].unfinished}")
+
+    # -- m115830a2: a HIT with the melee weapon, not the bow -------------
+    world, me, _ = _board("m115830a2", 1)
+    trig = REGISTRY["m115830a2"].recharge_when
+    sword = Hit(attacker=me, target=0, power="m115830a0", critical=False)
+    out.that(trig.when(world, me, sword),
+             "m115830a2 recharges on a hit with m115830a0, the weapon its"
+             " card names")
+    bow = Hit(attacker=me, target=0, power="m115830a1", critical=False)
+    out.that(not trig.when(world, me, bow),
+             "and NOT on a hit with m115830a1 -- the other at-will, also"
+             " weapon-keyword, which only the glossary separates")
+    out.that(not trig.when(world, me, PowerUsed(actor=me, power="m115830a0", targets=())),
+             "and not on merely USING it: `Hit` names the swinger"
+             " `attacker` where `PowerUsed` names it `actor`, so a miss"
+             " recharges nothing")
+
+    # -- m6162a2: a USE, hit or miss -------------------------------------
+    world, me, _ = _board("m6162a2", 1)
+    trig = REGISTRY["m6162a2"].recharge_when
+    out.that(trig.when(world, me, PowerUsed(actor=me, power="m6162a1", targets=())),
+             "m6162a2 recharges when it USES m6162a1 -- its card says uses,"
+             " so a miss counts")
+    out.that(not trig.when(world, me, PowerUsed(actor=me, power="m6162a3", targets=())),
+             "and not on a different row of its own")
+
+    # -- m4167a3: my own summon of that kind, and all three narrowings ----
+    world, me, _ = _board("m4167a3", 1)
+    other = next(iter(sorted(enemies(world, me))), 0)
+    # An existing creature given a `Companion` of the right kind: the
+    # predicate reads that component and the owner, and `c.summon`'s own
+    # path is asserted elsewhere. What is new here is the question, not the
+    # summoning.
+    mine = other
+    world.add(mine, Companion(owner=me, ref="m4168"))
+    check = summon_dropped("m4168")
+    out.that(check(world, me, Dropped(actor=mine, source=me, dead=True)),
+             "m4167a3 recharges when its own m4168 goes down")
+    world.get(mine, Companion).ref = "m9999"
+    out.that(not check(world, me, Dropped(actor=mine, source=me, dead=True)),
+             "and not when a summon of a DIFFERENT kind does -- a creature"
+             " with two sorts of summon is not recharged by the wrong one")
+    world.get(mine, Companion).ref = "m4168"
+    world.get(mine, Companion).owner = me + 999
+    out.that(not check(world, me, Dropped(actor=mine, source=me, dead=True)),
+             "nor when somebody ELSE's does -- an identical creature across"
+             " the board must not recharge this one")
+    world.get(mine, Companion).owner = me
+    out.that(not check(world, me, Dropped(actor=me, source=mine, dead=True)),
+             "and reading `source` instead of `actor` would have recharged"
+             " it whenever the KILLER happened to be a summon of mine,"
+             " which is the field one over from the right answer")
+
+
 def a_whole_usage_category_can_be_barred(out: Result) -> None:
     """"The target can't use encounter powers" -- a category, not a ref.
 
@@ -12515,6 +12617,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_recharge_can_name_the_moment_it_waits_for": (
+        a_recharge_can_name_the_moment_it_waits_for,
+        "three rows marked for recharge_when, which 186 already declared"),
     "a_whole_usage_category_can_be_barred": (
         a_whole_usage_category_can_be_barred,
         "c.forbid(usage=) bars a category, and attacks_only narrows it"),

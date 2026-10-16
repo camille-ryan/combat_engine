@@ -139,7 +139,7 @@ from combat_engine.engine.query import (
     squares,
     team,
 )
-from combat_engine.engine.triggers import Trigger, by_power
+from combat_engine.engine.triggers import Trigger, by_power, hit_with
 
 #: "Large or smaller", which the push and swallow lines here gate on.
 LARGE_OR_SMALLER = (Size.TINY, Size.SMALL, Size.MEDIUM, Size.LARGE)
@@ -879,7 +879,16 @@ _M115830_SWUNG = (
         text=_M115830_SWUNG,
     ),
     damage=Damage("2d6", 3, dtype=[DamageType.POISON, DamageType.PSYCHIC], kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    # **The recharge was marked missing and the field exists**, declared by
+    # 186 other rows. `hit_with` and not `by_power`: a miss does not
+    # recharge it, which is that factory's own distinction.
+    #
+    # `m115830a0` and not `m115830a1`. The card names the melee weapon and
+    # a1 is the ranged one, so reading "its at-will attack" would have
+    # recharged this on the wrong swing -- the two are both at-will and
+    # both weapon-keyword, so nothing but the glossary separates them.
+    recharge_when=Trigger(Hit, hit_with("m115830a0"),
+                          "when it hits with m115830a0"),
 )
 def m115830a2(c: Cast) -> None:
     """Declared with no target and aimed by hand, because the printed line

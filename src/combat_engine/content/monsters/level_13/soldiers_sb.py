@@ -151,7 +151,12 @@ from combat_engine.engine.query import (
     has_combat_advantage,
     team,
 )
-from combat_engine.engine.triggers import Trigger, about_me, about_somebody_adjacent
+from combat_engine.engine.triggers import (
+    Trigger,
+    about_me,
+    about_somebody_adjacent,
+    summon_dropped,
+)
 
 #: "A Large or larger creature", which is what m2032's three weapon rows
 #: raise their critical dice against.
@@ -2260,7 +2265,20 @@ def m4167a2(c: Cast) -> None:
     keywords=[Keyword.ACID],
     attack=Attack(vs=FORT, printed=16),
     damage=Damage("2d8", 4, dtype=DamageType.ACID, kind=LIMITED),
-    dropped=("Usage.RECHARGE(when=)",),
+    # **"Recharges when one of its summons is reduced to 0 hit points."**
+    # Marked as waiting for `Usage.RECHARGE(when=)` while 186 rows already
+    # declared `recharge_when`; what this one needed was a predicate, since
+    # every existing user asks about a power being used or a hit landing and
+    # none about a creature of its own going down.
+    #
+    # `summon_dropped` asks three things and dropping any of them makes it
+    # wrong rather than narrow: that the fallen creature is a `Companion`,
+    # that its ref is this kind of summon, and that its owner is this
+    # dragon -- the body below summons `m4168`, which is what the printed
+    # line is about, and a second dragon's serpent must not recharge this
+    # one's breath.
+    recharge_when=Trigger(Dropped, summon_dropped("m4168"),
+                          "when one of its m4168 goes down"),
 )
 def m4167a3(c: Cast) -> None:
     """The creature it leaves behind arrives once for the whole blast, not

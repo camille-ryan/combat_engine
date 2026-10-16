@@ -154,6 +154,7 @@ from combat_engine.engine.triggers import (
     about_me,
     by_me,
     by_melee,
+    by_power,
     by_ranged,
 )
 from combat_engine.engine.zones import Zone
@@ -2690,7 +2691,11 @@ def m6162a1(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=16),
-    dropped=("Usage.RECHARGE(when=)",),
+    # `by_power` and not `hit_with`: the card says "when it uses", so a
+    # miss recharges it too. #489's field, which this row was marked as
+    # waiting for while 186 rows already declared it.
+    recharge_when=Trigger(PowerUsed, by_power("m6162a1"),
+                          "when it uses m6162a1"),
 )
 def m6162a2(c: Cast) -> None:
     """Hit and miss both leave a hold, and the Effect runs either way.

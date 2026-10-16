@@ -550,6 +550,39 @@ def hit_with(ref: str) -> Callable[[World, int, Any], bool]:
     return check
 
 
+def summon_dropped(ref: str) -> Callable[[World, int, Any], bool]:
+    """One of **my own** summoned creatures of that kind went down.
+
+    *"Recharges when one of the m4167's vaporous spirits is reduced to 0 hit
+    points"* is the printed shape. Three questions in one, and leaving any
+    of them out makes it wrong rather than narrow:
+
+    * the creature that dropped is a `Companion`, not an ordinary monster;
+    * its `ref` is the named kind, so a dragon with two sorts of summon is
+      not recharged by the wrong one;
+    * its `owner` is the creature being asked, so an identical dragon on
+      the other side of the board does not recharge this one's breath.
+
+    Reads `ev.actor`, which on `Dropped` is the creature that fell --
+    `ev.source` is whoever struck the blow, and reading that instead would
+    recharge the row when the *killer* happened to be a summon of mine.
+    `about_me`'s note is the same trap one field over.
+
+    Beside `by_power` and `hit_with` rather than private to `monsters/`, for
+    the reason `by_power`'s own note gives about being written three times.
+    """
+    from .components import Companion
+
+    def check(world: World, me: int, ev: Any) -> bool:
+        who = getattr(ev, "actor", None)
+        if who is None:
+            return False
+        pet = world.get(who, Companion)
+        return pet is not None and pet.ref == ref and pet.owner == me
+
+    return check
+
+
 def about_me(world: World, me: int, ev: Event) -> bool:
     """Reads `ev.actor`, and **only** `ev.actor`.
 
