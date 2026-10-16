@@ -242,6 +242,13 @@ def main() -> int:
         )
         faults += 1
 
+    for where, why in _bloodied_about_itself():
+        print(
+            f"{where}: {why}. Pass `on=c.me`. #621, where eight rows had"
+            f" this and each read as finished."
+        )
+        faults += 1
+
     for where, why in _reinvented_area_tuple():
         print(
             f"{where}: {why}. Import it from `combat_engine.engine`"
@@ -1610,6 +1617,102 @@ def _strings_in(tree: object, call: object) -> set[str]:
                 and isinstance(node.value, str)
             }
     return set()
+
+
+def _bloodied_about_itself() -> list[tuple[str, str]]:
+    """A monster row whose card says "while bloodied" and asks `c.bloodied()`.
+
+    `c.bloodied()` with no argument asks about the **target**, which
+    `Cast._who` makes the default across almost all of `Cast` and which
+    `c.living`'s docstring justifies: "every printed use is about who the
+    power lands on". It is wrong for exactly one phrase, and #621 found
+    **eight** monster rows using it where the card means the creature --
+    each silently reading the wrong creature's hit points and each looking
+    completely finished.
+
+    **Narrow on purpose, and the issue's own measurement is why.** 40 bare
+    `c.bloodied()` calls remain in monster files and 30 of them are right:
+    "a bloodied or slowed target is immobilized instead" means the target.
+    A check that flagged every bare call would flag thirty right answers to
+    catch eight wrong ones. So this asks the card: a monster row whose
+    printed text says "while bloodied" **without naming a target in the
+    same clause** is about the creature.
+
+    #621 sketched exactly this query, measured that it found eight real
+    faults on its first run, and said it was worth having. All eight are
+    fixed, so a green result here is a regression guard rather than a
+    discovery -- which is what the plant is for.
+
+    Checked against the other eight readers that share the target-default
+    and **not** generalised to them, because #621 measured those too:
+    `c.size_of`, `c.kinds_of`, `c.is_minion` and `c.is_quarry` are bare in
+    monster rows and every one is correct, since "a medium target" and
+    "living creatures in the blast" are always about who the power lands
+    on. "While bloodied" is the one phrase a monster card routinely uses
+    about itself.
+    """
+    import ast as _ast
+    import re as _re
+    import sys as _sys
+
+    _sys.argv = _sys.argv[:1]
+    from combat_engine.db import game
+
+    cards: dict[str, str] = {}
+    for ref, spec in game().execute("select ref, spec from monster_power"):
+        cards[ref] = (spec or "").lower()
+
+    #: "while bloodied" with no **target** word between those two words.
+    #:
+    #: The scope is the phrase and not the sentence, and the first draft got
+    #: that wrong: `while(?![^.]*target)[^.]*bloodied` put the lookahead
+    #: across the whole sentence, so any card that mentioned a target
+    #: anywhere in the same breath was excluded. It caught five of #621's
+    #: eight and missed `m1811a2`, `m1813a0` and `m1813a1` for that reason
+    #: alone -- three rows whose phrasing is identical to two it did catch.
+    #:
+    #: "While the target is bloodied" and "a bloodied target" are still
+    #: excluded, which is the whole point: those are the thirty bare calls
+    #: that are right.
+    about_itself = _re.compile(
+        r"while\s+((?!target\b)[\w'\-]+\s+){0,4}?(is\s+)?bloodied\b")
+
+    out = []
+    for path in _asked_for():
+        if "/monsters/" not in str(path):
+            continue
+        try:
+            tree = _ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for fn in _ast.walk(tree):
+            if not isinstance(fn, _ast.FunctionDef):
+                continue
+            ref = ""
+            for dec in fn.decorator_list:
+                if (isinstance(dec, _ast.Call) and dec.args
+                        and isinstance(dec.args[0], _ast.Constant)):
+                    ref = str(dec.args[0].value)
+            text = cards.get(ref, "")
+            if not text or not about_itself.search(text):
+                continue
+            for node in _ast.walk(fn):
+                if not isinstance(node, _ast.Call):
+                    continue
+                f = node.func
+                if not isinstance(f, _ast.Attribute) or f.attr != "bloodied":
+                    continue
+                if not (isinstance(f.value, _ast.Name) and f.value.id == "c"):
+                    continue
+                if node.args or any(k.arg == "on" for k in node.keywords):
+                    continue
+                out.append((
+                    f"{ref} ({path}:{node.lineno})",
+                    'its card says "while bloodied" and names no target, so'
+                    " the phrase is about the creature -- but a bare"
+                    " `c.bloodied()` reads the TARGET's hit points",
+                ))
+    return out
 
 
 def _reinvented_area_tuple() -> list[tuple[str, str]]:
