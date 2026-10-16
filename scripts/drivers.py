@@ -2234,6 +2234,105 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def thrown_is_not_fired(out: Result) -> None:
+    """"A thrown weapon such as a dagger or a javelin" -- `Weapon.thrown`.
+
+    `chargen` splits two columns on purpose and says why: *"a thrown melee
+    weapon is not a ranged one: a dagger has a printed range and is still
+    swung, and `Gear.ranged` picking it up would hand a rogue a ranged basic
+    attack it does not have."* So `ranged` is set only for a weapon that is
+    **fired**, `thrown` only for a melee weapon with a printed range, and
+    they never overlap.
+
+    `feats.general._throws` read `ranged`. That asked for a fireable weapon
+    outside the projectile groups, which is wrong in **both** directions --
+    the assertions below are one per direction, because a gate that is
+    merely too narrow and one that is also too wide want separating:
+
+    * a **dagger** and a **javelin**, the card's own two examples, answered
+      False;
+    * a **blowgun** answered True.
+
+    Measured from the data rather than reasoned: 27 weapons print a range,
+    15 fired and 12 thrown, and the six fired ones outside bow/crossbow/
+    sling were the whole of what the old gate could ever see.
+
+    `_shoots` is the sibling and is **correct** -- it wants a fired weapon
+    in a projectile group, which is what `ranged` means -- so it is asserted
+    here too. A pair where one is right and one is wrong is the case a rule
+    covering only the broken one would leave open to a "fix" that breaks
+    both.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.feats.general import _shoots, _throws
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods, Weapon
+    from combat_engine.engine.dsl import REGISTRY
+
+    DAGGER = Weapon(ref="w3594", group="light blade", thrown=(5, 10))
+    JAVELIN = Weapon(ref="w3595", group="spear", thrown=(10, 20))
+    BLOWGUN = Weapon(ref="w3662", group="blowgun", ranged=(6, 12))
+    LONGBOW = Weapon(ref="w3631", group="bow", ranged=(20, 40))
+    AXE = Weapon(ref="w3612", group="axe")
+
+    def holding(*arms: Weapon):  # noqa: ANN202
+        """Pose a caster holding exactly these.
+
+        `Gear.held` is a **property** -- `weapons` minus `stowed` -- so the
+        two backing fields are what a probe sets. Assigning `held` raises,
+        which is the kind of thing worth saying once rather than
+        rediscovering.
+        """
+        world, me, _ = _board("f140", 1)
+        gear = world.get(me, Gear) or world.add(me, Gear())
+        gear.weapons = list(arms)
+        gear.stowed.clear()
+        return Cast(world=world, me=me, ref="f140"), world, me
+
+    c, _w, _m = holding(DAGGER)
+    out.that(_throws(c), "a DAGGER is a thrown weapon -- the card's own first"
+             " example, and the old gate answered False", f"{_throws(c)}")
+    c, _w, _m = holding(JAVELIN)
+    out.that(_throws(c), "and a JAVELIN -- its second", f"{_throws(c)}")
+    c, _w, _m = holding(BLOWGUN)
+    out.that(not _throws(c),
+             "a BLOWGUN is NOT a thrown weapon -- the other direction, and"
+             " the old gate answered True because it is fired and is not"
+             " filed under bow, crossbow or sling",
+             f"{_throws(c)}")
+    c, _w, _m = holding(AXE)
+    out.that(not _throws(c), "and a plain axe with no printed range is not"
+             " one either -- the control", f"{_throws(c)}")
+
+    # The sibling, which is right and must stay right.
+    c, _w, _m = holding(LONGBOW)
+    out.that(_shoots(c), "a LONGBOW shoots -- `_shoots` wants `ranged` and a"
+             " projectile group, which is exactly what that field means",
+             f"{_shoots(c)}")
+    out.that(not _throws(c),
+             "and a longbow is not thrown, so the two gates do not overlap"
+             " -- which is the whole reason `chargen` keeps two columns",
+             f"{_throws(c)}")
+    c, _w, _m = holding(DAGGER)
+    out.that(not _shoots(c),
+             "nor does a dagger shoot, the same split from the other side",
+             f"{_shoots(c)}")
+
+    # And through the row, not only the helper.
+    def laid(*arms: Weapon) -> int:
+        c, world, me = holding(*arms)
+        REGISTRY["f140"].body(c)
+        mods = world.get(me, Mods)
+        return mods.total("range", {}) if mods else -1
+
+    out.that(laid(DAGGER) == 2,
+             "and f140 lays its printed +2 when a dagger is held -- asserted"
+             " through the row, so this survives the helper being reverted",
+             f"{laid(DAGGER)}")
+    out.that(laid(BLOWGUN) == 0,
+             "and lays nothing for a blowgun", f"{laid(BLOWGUN)}")
+
+
 def every_manifestation_pays_its_printed_half(out: Result) -> None:
     """All thirteen of one race's manifestations, each static half asserted.
 
@@ -11187,6 +11286,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "thrown_is_not_fired": (thrown_is_not_fired,
+                            "a thrown weapon is not a fired one; f140's gate\n"
+                            " read the wrong column"),
     "every_manifestation_pays_its_printed_half":
         (every_manifestation_pays_its_printed_half,
          "all thirteen manifestations pay their printed static half"),

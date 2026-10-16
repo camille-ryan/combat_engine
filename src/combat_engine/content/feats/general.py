@@ -120,10 +120,33 @@ def _shoots(c: Cast) -> bool:
 
 
 def _throws(c: Cast) -> bool:
+    """Is the caster holding a weapon it can **throw**? `Weapon.thrown`.
+
+    **It read `w.ranged` and that is the other field.** `chargen` splits the
+    two columns deliberately and says why: *"a thrown melee weapon is not a
+    ranged one: a dagger has a printed range and is still swung, and
+    `Gear.ranged` picking it up would hand a rogue a ranged basic attack it
+    does not have."* So `ranged` is set only for a weapon that is **fired**
+    and `thrown` only for a melee weapon with a printed range.
+
+    Reading `ranged` therefore asked for a *fireable* weapon outside the
+    projectile groups, which is backwards twice over:
+
+    * **False for a dagger and a javelin** -- the two examples `f140`'s own
+      card prints -- because both are melee, so their range lands in
+      `thrown`;
+    * **True for a blowgun**, and for five other fired oddities filed under
+      `light blade` and `flail`, none of which is a thrown weapon.
+
+    Twelve weapons print a thrown range -- axe, flail, hammer, heavy blade,
+    light blade and spear groups -- and this saw none of them.
+
+    The old note on `f140` said "a thrown weapon is a held one that can be
+    fired and is not of a projectile group", which was the model before #214
+    added `thrown`. The field arrived and the helper did not follow.
+    """
     gear = c.world.get(c.me, Gear)
-    return gear is not None and any(
-        w.ranged and w.group not in _PROJECTILE for w in gear.held
-    )
+    return gear is not None and any(w.thrown for w in gear.held)
 
 
 # -- trigger predicates ------------------------------------------------------
@@ -361,8 +384,16 @@ def f139(c: Cast) -> None:
 @power("f140", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f140(c: Cast) -> None:
-    """As f139: a thrown weapon is a held one that can be fired and is not
-    of a projectile group."""
+    """"A thrown weapon such as a dagger or a javelin", +2 to both ranges.
+
+    As `f139`, and the same half lands: `"range"` stretches what the line
+    may be aimed at and the long-range penalty threshold is read off the
+    weapon's printed range, which is not stretched with it.
+
+    `_throws` is what changed. It asked `w.ranged`, which is set only for a
+    weapon that is **fired**, so this row was False for both of the card's
+    own examples and True for a blowgun. See that helper.
+    """
     if _throws(c):
         c.bonus("range", 2, on=c.me, until=When.ENCOUNTER)
 
