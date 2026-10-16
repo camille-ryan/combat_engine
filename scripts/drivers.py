@@ -2330,11 +2330,16 @@ def every_manifestation_pays_its_printed_half(out: Result) -> None:
                      f" type",
                      f"{ {k.value: v for k, v in got_resist.items()} }")
         if defence is not None:
-            c = Cast(world=world, me=me, ref="probe")
-            out.that(c.defence_of(defence, on=me) if hasattr(
-                c, "defence_of") else (mods.total(str(defence), {}) == 1),
-                     f"and raises the one defence {power}'s block prints",
-                     f"{mods.total(str(defence), {})}")
+            # Read straight off `Mods`, which is where `c.bonus(REF, 1)`
+            # puts it. The first version hedged on a `c.defence_of` that
+            # does not exist, and the hedge was wrong either way: that
+            # would answer a defence *value*, not whether this row raised
+            # it by the printed 1.
+            out.that(mods is not None
+                     and mods.total(str(defence), {}) == 1,
+                     f"and raises the one defence {power}'s block prints,"
+                     f" by the printed 1",
+                     f"{mods.total(str(defence), {}) if mods else None}")
         if raises_save:
             out.that(mods is not None and any(
                 "save" in str(k) for k in _mod_keys(mods)),
