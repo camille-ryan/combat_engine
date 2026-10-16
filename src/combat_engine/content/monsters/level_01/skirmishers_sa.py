@@ -2609,7 +2609,6 @@ def m6654a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("movement.may_enter()",),
 )
 def m6654a1(c: Cast) -> None:
     """"The m6654 can enter enemies' spaces during its movement" -- and this
@@ -2643,7 +2642,15 @@ def m6654a1(c: Cast) -> None:
 
     One note for whoever drives this next: `_board(ref)` **arms the row**,
     so a probe that reads `shares_space` "before" is already reading it
-    armed. I misread my own first probe that way."""
+    armed. I misread my own first probe that way.
+
+    **Written now.** `movement.may_enter` is the mover's side of the
+    question `shares_space` asks of the occupant, consulted by
+    `movement._clear` beside it -- a creature gets through if either says
+    so. #626.
+        """
+    c.may_enter(side="enemy", on=c.me, until=When.ENCOUNTER)
+
 
 
 @power(

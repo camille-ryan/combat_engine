@@ -72,6 +72,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - "You and your allies can ignore difficult terrain in the zone."
 - `c.immovable(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - Cannot be pushed, pulled or slid. The counterpart of `c.no_provoke`.
+- `c.may_enter(self, *, sizes: 'Sequence[Size]' = (), side: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "Can enter enemies' spaces during its movement" -- the mover's
 - `c.no_walk(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - "It cannot use move actions to walk or run." It may still shift.
 - `c.phasing(self, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None) -> 'Effect | None'`

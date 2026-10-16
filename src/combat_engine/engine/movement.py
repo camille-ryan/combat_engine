@@ -309,7 +309,13 @@ def _clear(
         # evidence about the comment.
         if blocks_entry(world, who, eid):
             return False
-        if not (overhead or ghost) and not shares_space(world, who):
+        # **Two questions, not one.** `shares_space` is the occupant's
+        # property and `may_enter` is the mover's; a creature gets through
+        # if either says so. Asked in that order because the occupant's is
+        # the cheaper read and the commoner case. #626.
+        if (not (overhead or ghost)
+                and not shares_space(world, who)
+                and not may_enter(world, eid, who)):
             return False
     return True
 
@@ -416,6 +422,44 @@ def shares_space(world: World, eid: int) -> bool:
 
     mods = world.get(eid, Mods)
     return bool(mods and mods.items and mods.total("shares_space", {}) > 0)
+
+
+def may_enter(world: World, mover: int, occupant: int) -> bool:
+    """Has **this mover** a standing permission to enter that creature's
+    square?
+
+    The mover's side of the question `shares_space` asks of the occupant,
+    and the two are not interchangeable. That one is *"anyone may stand in
+    this creature's square"*, laid on the creature being entered. Three
+    monster traits print the other sentence -- *"the m6654 can enter
+    enemies' spaces during its movement"* -- and `m6654a1`'s docstring has
+    the measurement of what happens if the mirror is used anyway:
+
+        shares_space(me)              True
+        I enter the foe's square      False   <- the printed clause
+        the foe enters my square      True    <- printed nowhere
+
+    So it opened the creature's own square to the whole board and left it as
+    unable to step through anybody as before: a row both weaker and stronger
+    than its card at once. #626.
+
+    **Not `c.overrun`, which is a stated move** -- handed a destination,
+    walks a line, reports who it crossed. These are standing properties that
+    must hold for moves *other* rows and the AI policy take. `m4306a1`
+    prints the stated move and is written with `c.overrun`, so the
+    distinction is already load-bearing in the tree.
+
+    Gated through `Mods`, so the narrowing `m5808a0` prints -- Medium or
+    Small **enemies** only -- is a predicate on one mechanism rather than a
+    second mechanism. The context names the two participants, the
+    convention `query.immune_to` states.
+    """
+    from .components import Mods
+
+    mods = world.get(mover, Mods)
+    if mods is None or not mods.items:
+        return False
+    return mods.total("may_enter", {"mover": mover, "occupant": occupant}) > 0
 
 
 def blocks_entry(world: World, eid: int, mover: int) -> bool:

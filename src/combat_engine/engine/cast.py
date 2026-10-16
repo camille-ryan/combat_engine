@@ -4813,6 +4813,58 @@ class Cast:
         who = on if on is not None else self.me
         return self.bonus("blocks_entry", 1, on=who, until=until, kind=self.ref)
 
+    def may_enter(
+        self,
+        *,
+        sizes: Sequence[Size] = (),
+        side: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Can enter enemies' spaces during its movement" -- the mover's
+        permission, which is **not** `c.shares_space`.
+
+        That verb is the mirror: *"anyone may stand in this creature's
+        square"*, laid on the creature being entered. Laying it here opens
+        the holder's own square to the whole board and still refuses it a
+        step through anybody -- weaker and stronger than the card at once,
+        which `m6654a1` drove and recorded. `movement.may_enter` has the
+        measurement. #626.
+
+        `sizes` and `side` are the narrowing `m5808a0` prints, *"the spaces
+        of Medium or Small enemies"*, and they are **arguments rather than a
+        `when=`** on purpose: the predicate needs the occupant's size and
+        allegiance, which only the world can answer, and a `when=` gate sees
+        the context alone. Built here, the world is in scope and the context
+        carries just the two participants.
+
+        Empty means every creature, which is what the other two cards print.
+        """
+        from .query import enemies
+
+        who = on if on is not None else self.me
+        wanted = tuple(sizes)
+        want_side = side.lower()
+
+        def allowed(ctx: dict[str, Any]) -> bool:
+            them = ctx.get("occupant")
+            if them is None:
+                return False
+            if wanted and self.size_of(them) not in wanted:
+                return False
+            if want_side:
+                # Asked of the holder rather than of the caster: a trait
+                # armed on somebody else is still that creature's
+                # permission, and "enemies" means its enemies.
+                foe = them in enemies(self.world, who)
+                if want_side == "enemy" and not foe:
+                    return False
+                if want_side == "ally" and foe:
+                    return False
+            return True
+
+        return self.bonus("may_enter", 1, on=who, until=until, when=allowed)
+
     def shares_space(
         self,
         *,

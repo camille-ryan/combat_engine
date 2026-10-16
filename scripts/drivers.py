@@ -2234,6 +2234,100 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def the_mover_may_have_permission_the_occupant_does_not(out: Result) -> None:
+    """`movement._clear` asked only whether the occupant was enterable.
+
+    Three monster traits print the mover's side -- *"the m6654 can enter
+    enemies' spaces during its movement"* -- and all three were `todo=`.
+    `c.shares_space` is the mirror and not the thing: its own docstring is
+    "anyone may stand in **this** creature's square", laid on the creature
+    being entered, so using it opened the holder's own square to the whole
+    board and still refused it a step through anybody. #626, and
+    `m6654a1`'s docstring has the measurement.
+
+    **The permission is the mover's, and the control is what proves it.**
+    Both halves are asserted against the same board: the creature holding
+    the trait gets through, and the enemy standing there does not gain
+    anything. A rule that only checked the first would pass on
+    `c.shares_space` laid on every enemy, which is the row that was
+    rejected for being stronger than its card.
+
+    **The two cards differ and that is the second half.** `m5808a0` prints
+    *"Medium or Small enemies"*, so a Large one refuses it where
+    `m6654a1`'s blanket permission does not. Either row alone would pass a
+    narrowing that was simply absent.
+
+    `sizes` and `side` are arguments rather than a `when=` gate because the
+    predicate needs the occupant's size and allegiance, which only the world
+    answers; a gate sees the context alone. #625's rule is the other side of
+    the same coin -- *"cannot be narrowed to X"* is usually a stale note and
+    a gate is the answer, where *"acts on the wrong creature"* is a real
+    gap and no gate moves a property from the occupant to the mover.
+
+    Posed on each row's own board with no re-arming: `audit.board` arms an
+    `action=NONE` trait, so the permission is already in place when the rule
+    looks. The `f755` lesson -- firing the body again lays everything twice.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.movement import _clear, may_enter
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Size
+
+    for ref, blanket in (("m6654a1", True), ("m6655a1", True),
+                         ("m5808a0", False)):
+        world, me, _ = _board(ref, 1)
+        foes = sorted(enemies(world, me))
+        friends = [a for a in sorted(allies(world, me)) if a != me]
+        out.that(len(foes) >= 2 and bool(friends),
+                 f"{ref}'s board offers two enemies and an ally, or the"
+                 f" narrowing cannot be read",
+                 f"{len(foes)} enemies, {len(friends)} allies")
+        if len(foes) < 2 or not friends:
+            continue
+        small, big, friend = foes[0], foes[1], friends[0]
+        world.get(big, Position).size = Size.LARGE
+
+        out.that(may_enter(world, me, small),
+                 f"{ref} may enter a small enemy's space -- the printed"
+                 f" clause, which no verb could say before")
+        why = ("also -- its card names no size" if blanket
+               else "NOT -- its card says Medium or Small")
+        out.that(may_enter(world, me, big) is blanket,
+                 f"{ref} and a LARGE enemy: {why}",
+                 f"{may_enter(world, me, big)}")
+        out.that(not may_enter(world, me, friend),
+                 f"{ref} not an ally's -- every one of these cards says"
+                 f" enemies")
+        out.that(not may_enter(world, small, me),
+                 f"{ref}: and the enemy gains NOTHING. This is the"
+                 f" assertion that rejects `c.shares_space` laid on every"
+                 f" enemy, which would have opened their squares to the"
+                 f" whole board")
+
+        # -- and through `_clear`, which is the door movement goes through -
+        here = world.get(me, Position)
+        if here is None:
+            continue
+        beside = (here.square[0] + 1, here.square[1])
+        world.grid.lift(small)
+        world.get(small, Position).square = beside
+        world.grid.place(small, frozenset({beside}))
+        out.that(_clear(world, me, {beside}),
+                 f"{ref}: `_clear` lets it stand in that square -- the"
+                 f" reader is consulted where movement actually asks")
+        out.that(not _clear(world, small, {here.square}),
+                 f"{ref}: and refuses the enemy the reverse, which is the"
+                 f" same control one layer down")
+
+    out.that(all(not REGISTRY[r].unfinished
+                 for r in ("m6654a1", "m6655a1", "m5808a0")),
+             "all three carry no marker now, where they carried two"
+             " different symbols for one gap",
+             f"{[REGISTRY[r].unfinished for r in ('m6654a1', 'm6655a1', 'm5808a0')]}")
+
+
 def a_terrain_waiver_names_going_something_can_carry(out: Result) -> None:
     """`kind=` took any string and 29 calls named ground no square has.
 
@@ -12737,6 +12831,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "the_mover_may_have_permission_the_occupant_does_not": (
+        the_mover_may_have_permission_the_occupant_does_not,
+        "movement.may_enter is the mover's side of sharing a square"),
     "a_terrain_waiver_names_going_something_can_carry": (
         a_terrain_waiver_names_going_something_can_carry,
         "c.ignores_difficult(kind=) refuses going no square can carry"),

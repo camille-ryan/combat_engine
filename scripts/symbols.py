@@ -136,7 +136,8 @@ CATEGORIES: dict[str, dict] = {
                 "any_size_manoeuvre", "blocks_entry", "extend_every",
                 "extend_move", "forces", "ignores_difficult",
                 "ignores_difficult_in", "immovable", "no_walk", "phasing",
-                "resist_forced", "shares_space", "speed_of", "squares_for",
+                "may_enter", "resist_forced", "shares_space",
+                "speed_of", "squares_for",
             ]),
             ("modes and mounts", [
                 "lose_mode", "mode", "mount", "move_companion",
@@ -420,6 +421,8 @@ CTX_KEYS: dict[str, str] = {
     "kind": "the kind of action or roll. See `Cast.does_not_provoke`.",
     "label": "the label of the effect being asked about.",
     "mode": "the movement mode in use.",
+    "mover": "who is trying to enter a square. `movement.may_enter`.",
+    "occupant": "who is standing in it. The other half of `mover`.",
     "ongoing": "is this ongoing damage rather than a blow.",
     "opportunity": "is this an opportunity attack.",
     "power": "the ref of the row doing this. The commonest gate.",

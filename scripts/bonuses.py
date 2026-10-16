@@ -246,6 +246,14 @@ INTERNAL = {
     # short, not a row being wrong -- `scripts/CLAUDE.md`'s first rule, and
     # the direction it points here is "fix the check".
     "reach", "range", "blast_size",
+    # **Two permissions, not bonuses.** `shares_space` and `may_enter` are
+    # the occupant's and the mover's halves of "may stand where you stand"
+    # (#626). Each is a 1 under a key, because `Mods` with a `when=` gate is
+    # how a scoped property is held -- there is no number on any card to
+    # type. `shares_space` passed before this only incidentally, through the
+    # `not said` branch, which is the same shortfall the note above
+    # describes for `range` and `blast_size`.
+    "shares_space", "may_enter",
 }
 
 

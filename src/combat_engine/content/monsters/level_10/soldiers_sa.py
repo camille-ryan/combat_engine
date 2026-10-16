@@ -3841,7 +3841,6 @@ def m5788a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("movement.may_enter()",),
 )
 def m5808a0(c: Cast) -> None:
     """"Can enter the spaces of Medium or Small enemies" is a permission that
@@ -3862,7 +3861,21 @@ def m5808a0(c: Cast) -> None:
     **And now it shares a symbol with `m6655a1`**, which printed the same
     permission unnarrowed and sat on `Movement.through_creatures`. One gap
     under two names could not go green for either row. This card is that
-    permission plus a predicate on the occupant's size and side. #626."""
+    permission plus a predicate on the occupant's size and side. #626.
+
+    **Written now.** `movement.may_enter` is the mover's side of the
+    question `shares_space` asks of the occupant, consulted by
+    `movement._clear` beside it -- a creature gets through if either says
+    so. #626.
+    
+    `sizes` and `side` are arguments rather than a `when=` gate: the
+    predicate needs the occupant's size and allegiance and only the world
+    answers those, where a gate sees the context alone. The other two cards
+    of this family print no size and pass none.
+        """
+    c.may_enter(sizes=(Size.MEDIUM, Size.SMALL), side="enemy",
+                on=c.me, until=When.ENCOUNTER)
+
 
 
 @power("m5808a1", level=10, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)

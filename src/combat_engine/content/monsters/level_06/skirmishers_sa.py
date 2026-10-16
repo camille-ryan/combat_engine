@@ -3141,7 +3141,6 @@ def m6655a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("movement.may_enter()",),
 )
 def m6655a1(c: Cast) -> None:
     """**Re-aimed, not written.** The old symbol said entering an occupied
@@ -3171,7 +3170,14 @@ def m6655a1(c: Cast) -> None:
     `m5808a0` prints this same mover-side permission narrowed by the
     occupant's size and side, which is a predicate rather than a second
     mechanism. #626.
-    """
+
+    **Written now.** `movement.may_enter` is the mover's side of the
+    question `shares_space` asks of the occupant, consulted by
+    `movement._clear` beside it -- a creature gets through if either says
+    so. #626.
+        """
+    c.may_enter(side="enemy", on=c.me, until=When.ENCOUNTER)
+
 
 
 @power(

@@ -37,6 +37,8 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['kind']` -- the kind of action or roll. See `Cast.does_not_provoke`.
 - `ctx['label']` -- the label of the effect being asked about.
 - `ctx['mode']` -- the movement mode in use.
+- `ctx['mover']` -- who is trying to enter a square. `movement.may_enter`.
+- `ctx['occupant']` -- who is standing in it. The other half of `mover`.
 - `ctx['ongoing']` -- is this ongoing damage rather than a blow.
 - `ctx['opportunity']` -- is this an opportunity attack.
 - `ctx['power']` -- the ref of the row doing this. The commonest gate.
