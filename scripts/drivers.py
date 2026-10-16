@@ -2234,6 +2234,137 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def vulnerability_held_by_a_zone(out: Result) -> None:
+    """"Each enemy within the zone gains vulnerable N while it is there."
+
+    `c.vulnerable_in`, the mirror of `c.resist_in` over the same
+    `_while_inside` helper. Four heroic rows printed the sentence and sat
+    under **two** symbols -- `c.vulnerable_in()` and `c.aura(vulnerable=)`
+    -- which was one gap written twice: an aura is a zone as far as that
+    helper is concerned, so there was never a second mechanism.
+
+    **The assertions that matter are the ones about scope**, because the
+    number landing is the easy half and every one of the four rows differs
+    from the others on a scope:
+
+    * the **geometry** -- it lifts when the creature walks out, which is
+      what `c.vulnerable(until=...)` cannot say: a duration runs on the
+      clock and this runs on where somebody is standing;
+    * the **side** -- `p12261` says "each enemy", `p15946` says
+      "creatures", and the two sat under one symbol differing on exactly
+      that. Hence `side` is a parameter and its default here is `"enemy"`
+      where `c.resist_in`'s is `"team"`: a zone that helps prints "you and
+      your allies" and a zone that hurts prints "each enemy".
+    * the **gate** -- "vulnerable 3 to *weapon* attacks" and "to *your*
+      attacks" are not damage types, and are read off a context carrying
+      `source` and `power`.
+
+    Dealt end to end with `c.flat` rather than against a hand-built
+    context, for the reason `scoped_vulnerable` records: that rule built
+    its own ctx with `attacker`, and two rows written against the wrong
+    key passed it and would never have fired in a fight.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health, Position
+    from combat_engine.engine.dsl import DamageType
+    from combat_engine.engine.query import allies, enemies
+
+    def taken(*, side: str, inside: bool, who: str = "enemy",
+              dtype: DamageType | None = None,
+              deal: DamageType | None = None,
+              gated_to: int | None = None) -> int:
+        """Hit somebody for 10 and report what they actually lost."""
+        world, me, _ = _board()
+        pool = enemies(world, me) if who == "enemy" else [
+            a for a in allies(world, me) if a != me]
+        victim = next((e for e in pool if world.get(e, Health)), None)
+        if victim is None:
+            return -1
+        here = world.get(me, Position)
+        spot = world.get(victim, Position)
+        # Lay the zone on the caster's own square. Standing in it is the
+        # thing being measured, so the victim is put there or kept out.
+        spot.square = here.square if inside else (here.square[0] + 25,
+                                                  here.square[1])
+        c = Cast(world=world, me=me, ref="drivers:vuln_in")
+        zone = c.zone([here.square], label=c.ref, until=When.ENCOUNTER)
+        c.vulnerable_in(
+            zone, 5, dtype, side=side,
+            when=None if gated_to is None
+            else (lambda ctx: ctx.get("source") == gated_to),
+        )
+        hp = world.get(victim, Health)
+        was = hp.hp
+        # **Not `dtype=deal` when `deal` is None.** `c.flat` with an
+        # explicit `None` makes `part_types` `(None,)` and
+        # `_ignored_resist` dies on `t.value` -- a crash rather than
+        # untyped damage, which is what omitting it gives.
+        if deal is None:
+            c.flat(10, on=victim)
+        else:
+            c.flat(10, dtype=deal, on=victim)
+        return was - hp.hp
+
+    out.that(taken(side="enemy", inside=True) == 15,
+             "an enemy standing in the zone takes 10 + the vulnerable 5",
+             f"{taken(side='enemy', inside=True)}")
+    out.that(taken(side="enemy", inside=False) == 10,
+             "and one standing OUTSIDE takes the 10 alone -- the control, and"
+             " the half a plain `c.vulnerable(until=...)` cannot say",
+             f"{taken(side='enemy', inside=False)}")
+
+    # The side split, which is the difference the two old symbols hid.
+    out.that(taken(side="enemy", inside=True, who="ally") == 10,
+             "an ALLY in the same zone is spared under `side=\"enemy\"` --"
+             " `p12261` prints \"each enemy\" and `p15946` prints"
+             " \"creatures\", and they sat under one symbol",
+             f"{taken(side='enemy', inside=True, who='ally')}")
+    out.that(taken(side="any", inside=True, who="ally") == 15,
+             "and `side=\"any\"` reaches that same ally, so the parameter is"
+             " load-bearing rather than decoration",
+             f"{taken(side='any', inside=True, who='ally')}")
+
+    # The damage type.
+    out.that(taken(side="enemy", inside=True,
+                   dtype=DamageType.FIRE, deal=DamageType.FIRE) == 15,
+             "a typed vulnerability counts for its own type",
+             f"{taken(side='enemy', inside=True, dtype=DamageType.FIRE, deal=DamageType.FIRE)}")
+    out.that(taken(side="enemy", inside=True,
+                   dtype=DamageType.FIRE, deal=DamageType.COLD) == 10,
+             "and not for another -- `p12261` is thunder and `p15946` fire,"
+             " so this is what keeps them from each other's blows",
+             f"{taken(side='enemy', inside=True, dtype=DamageType.FIRE, deal=DamageType.COLD)}")
+
+    # The gate, which is `p15951`'s and `p16046`'s half.
+    out.that(taken(side="enemy", inside=True, gated_to=-99) == 10,
+             "a gate naming somebody else takes the 10 alone -- \"vulnerable"
+             " to YOUR attacks\" is a question about the dealer, not a type",
+             f"{taken(side='enemy', inside=True, gated_to=-99)}")
+
+    # And it comes off when the creature leaves, which is the geometry.
+    world, me, _ = _board()
+    victim = next(e for e in enemies(world, me) if world.get(e, Health))
+    here = world.get(me, Position)
+    world.get(victim, Position).square = here.square
+    c = Cast(world=world, me=me, ref="drivers:vuln_in")
+    zone = c.zone([here.square], label=c.ref, until=When.ENCOUNTER)
+    c.vulnerable_in(zone, 5, side="enemy")
+    held = world.get(victim, Defences)
+    out.that(bool(held and held.vulnerable_when) or bool(held and held.vulnerable),
+             "standing inside, the vulnerability is recorded on the creature",
+             f"{getattr(held, 'vulnerable_when', None)}")
+    c.slide(25, on=victim)
+    held = world.get(victim, Defences)
+    gone = not (held and (held.vulnerable_when or held.vulnerable))
+    out.that(gone,
+             "and walking out takes it back -- `_while_inside`'s whole job,"
+             " and the reason this is not a duration",
+             f"{getattr(held, 'vulnerable_when', None)}"
+             f" {getattr(held, 'vulnerable', None)}")
+
+
 def class_form(out: Result) -> None:
     """A class form is a state *and* a keyword, and they are not the same test.
 
@@ -10659,6 +10790,10 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "vulnerability_held_by_a_zone": (vulnerability_held_by_a_zone,
+                                     "a zone or aura confers a"
+                                     " vulnerability on whoever stands in"
+                                     " it"),
     "both_printed_shapes_offered": (both_printed_shapes_offered,
                                     "a printed \"or\" between two shapes"
                                     " offers both, and the conditional pair"

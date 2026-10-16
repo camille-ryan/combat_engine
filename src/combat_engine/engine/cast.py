@@ -9492,6 +9492,52 @@ class Cast:
             side,
         )
 
+    def vulnerable_in(
+        self,
+        zone: int,
+        amount: int,
+        dtype: DamageType | None = None,
+        *,
+        side: str = "enemy",
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> None:
+        """"Each enemy within the zone gains vulnerable N while it is there."
+
+        The mirror of `c.resist_in`, and it exists for the same reason that
+        one does: vulnerability lives on `Defences`, not in `Mods`, so
+        `c.grants_in` cannot carry it -- a modifier named "vulnerable"
+        would install a key nothing reads and look like a working zone.
+
+        **`side` defaults to `"enemy"` here**, where `c.resist_in` and
+        `c.grants_in` default to `"team"`. That is the printed word on
+        both sides of the split: a zone that *helps* says "you and your
+        allies", and a zone that *hurts* says "each enemy within". A
+        default of `"team"` would make the commonest call a vulnerability
+        on the caster, which is the shape `c.bloodied()`'s target default
+        already cost eight rows.
+
+        `when` is handed to `c.vulnerable`, which keeps the entry as a
+        `(dtype, amount, when)` triple on `Defences.vulnerable_when` for
+        `resolve.deal_damage` to read -- #471. So the two scopes the cards
+        print are both sayable and are different questions: a **damage
+        type** is `dtype`, and "vulnerable 3 to **weapon** attacks" or "to
+        **your** attacks" is the gate, read against a context carrying
+        `source` and `power`. `features.sorcerer` is the worked example.
+
+        It replaces two symbols, `c.vulnerable_in()` and
+        `c.aura(vulnerable=)`, which were one gap written twice: an aura
+        is a zone as far as `_while_inside` is concerned -- `c.grants_in`
+        has always been handed `c.my_aura()` -- so there was never a
+        second mechanism to build.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.vulnerable(
+                amount, dtype, on=who, until=When.ENCOUNTER, when=when
+            ),
+            side,
+        )
+
     def _while_inside(
         self, zone: int, give_one: Any, side: str
     ) -> None:

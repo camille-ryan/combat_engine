@@ -284,16 +284,23 @@ def p12260(c: Cast) -> None:
     reach=CloseBurst(3),
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.HEALING, Keyword.ZONE],
-    dropped=("c.vulnerable_in()",),
 )
 def p12261(c: Cast) -> None:
     """"Each ally in the burst" leaves the caster out, so the row is aimed at
     nobody and asks the board instead -- `EACH_ALLY` would have included him
-    and the surge would then ride on there being an ally to target at all."""
+    and the surge would then ride on there being an ally to target at all.
+
+    The zone's vulnerability is written now: `c.vulnerable_in`, the mirror
+    of `c.resist_in`. **`side="enemy"`** is the printed word here where
+    `p15946` says "creatures" -- the two rows sat under one symbol and
+    differ on exactly this, which is why the verb takes it rather than
+    assuming.
+    """
     c.surge(on=c.me)
     for friend in c.within(3, side="ally"):
         c.temp_hp(c.level // 2, on=friend)
-    c.zone(c.area(), label=c.ref, until=When.EONT)
+    zone = c.zone(c.area(), label=c.ref, until=When.EONT)
+    c.vulnerable_in(zone, 5, DamageType.THUNDER, side="enemy")
 
 
 @power(
@@ -1177,7 +1184,6 @@ def p15945(c: Cast) -> None:
     reach=CloseBurst(1),
     target=NO_TARGET,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION, Keyword.ZONE],
-    dropped=("c.vulnerable_in()",),
 )
 def p15946(c: Cast) -> None:
     """**The concealment half was mis-marked and needed no new verb.** The
@@ -1187,8 +1193,17 @@ def p15946(c: Cast) -> None:
     dims sight for everybody rather than sheltering a side. `m6061a3` had
     the same marker for the same reason. #500.
 
-    The vulnerability is the real remainder: nothing hangs one on a zone."""
-    c.zone(c.area(), label=c.ref, until=When.EONT, obscured=Light.DIM)
+    And neither did the vulnerability. "nothing hangs one on a zone" was
+    the remainder and is now `c.vulnerable_in`, a four-line mirror of
+    `c.resist_in` over the same `_while_inside` helper -- held on the
+    geometry, so it comes off when a creature walks out.
+
+    **`side="any"`**, because the card says *creatures* and not *enemies*:
+    this zone is laid under the caster's own feet by a move action, and a
+    fire vulnerability that spared the party would be the wrong card.
+    """
+    zone = c.zone(c.area(), label=c.ref, until=When.EONT, obscured=Light.DIM)
+    c.vulnerable_in(zone, 5, DamageType.FIRE, side="any")
     c.teleport(5)
 
 

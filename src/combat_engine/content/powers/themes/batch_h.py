@@ -1171,14 +1171,34 @@ def p15950(c: Cast) -> None:
             "an attack damages you while you are bloodied",
         ),
     ),
-    dropped=("c.aura(vulnerable=)",),
 )
 def p15951(c: Cast) -> None:
-    """The aura is laid. "Vulnerable 3 to weapon attacks" is not a damage
-    type, and `c.vulnerable` takes one of those or nothing at all -- there is
-    no gate on it, so the clause has nowhere to sit and a blanket
-    vulnerability would be a much larger rule."""
-    c.aura(1, until=When.ENCOUNTER)
+    """"Vulnerable 3 to weapon attacks", on everybody in the aura.
+
+    **The old note said "there is no gate on it", and that predates
+    #471.** `c.vulnerable(when=)` keeps the entry as a
+    `(dtype, amount, when)` triple on `Defences.vulnerable_when`, which
+    `resolve.deal_damage` reads beside immunity and resistance -- and that
+    function's own docstring names *this clause* as one of the eleven it
+    was built for. So the scope was sayable before the note was written.
+
+    `dtype=None` and the gate instead, because "weapon attacks" is not a
+    damage type: it is a question about the row that is swinging, and the
+    context carries `power`. `features.sorcerer` scopes "your elemental
+    attacks" the same way, by keyword rather than by a list of refs.
+
+    `side="any"` -- the card says *creatures* in the aura, and this one
+    triggers off being bloodied, so it is deliberately indiscriminate.
+    """
+    aura = c.aura(1, until=When.ENCOUNTER)
+    if not aura:
+        return
+
+    def by_weapon(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power") or ""))
+        return rolled is not None and Keyword.WEAPON in rolled.keywords
+
+    c.vulnerable_in(aura, 3, side="any", when=by_weapon)
 
 
 @power(
@@ -1848,16 +1868,29 @@ def p16694(c: Cast) -> None:
 @power(
     "p16046", level=0, cls=X7_939, usage=ENCOUNTER, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE, Keyword.PRIMAL],
-    dropped=("c.aura(vulnerable=)",),
 )
 def p16046(c: Cast) -> None:
-    """The resistance half is exact and is held on the geometry, so it comes
-    off when a creature walks out of the aura.
+    """Both halves, on the same chosen damage type, held on the geometry.
 
-    The vulnerability is dropped: it is narrowed to *your* attacks of the
-    chosen type, and `c.vulnerable` reads a damage type and nothing about who
-    is swinging. Applied plainly it would hand every attacker in the fight a
-    +5, which is a much larger card.
+    **"`c.vulnerable` reads a damage type and nothing about who is
+    swinging" was the whole of the hold, and it predates #471.** The
+    context `resolve.deal_damage` reads a scoped entry against carries
+    `source`, so "*your* attacks" is one lambda. The objection the old
+    note raised -- that applied plainly this hands every attacker in the
+    fight a +5 -- was right, and the gate is the answer to it rather than
+    a reason to drop the clause.
+
+    **Two scopes, two mechanisms, and they are not interchangeable.** The
+    chosen damage type goes in `dtype`, where `deal_damage` matches it
+    against what is actually landing; "your attacks" goes in the gate.
+    Folding both into the lambda would work and would hide the type from
+    the one place that knows which types a blow carries.
+
+    `side="enemy"` is printed, and is the opposite of the resistance half
+    two lines above -- the same aura helps the team and hurts the others,
+    which is why the two verbs take the side rather than assuming one.
+
+    Level 11 and 21 raise both numbers and are out of scope.
     """
     pick = c.choose(
         [
@@ -1870,8 +1903,14 @@ def p16046(c: Cast) -> None:
         "which damage type",
     )
     aura = c.aura(2, until=When.EONT)
-    if pick is not None:
-        c.resist_in(aura, 5, pick, side="team")
+    if pick is None or not aura:
+        return
+    c.resist_in(aura, 5, pick, side="team")
+    me = c.me
+    c.vulnerable_in(
+        aura, 5, pick, side="enemy",
+        when=lambda ctx: ctx.get("source") == me,
+    )
 
 
 @power(
