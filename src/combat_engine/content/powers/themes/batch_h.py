@@ -500,16 +500,48 @@ def p12320(c: Cast) -> None:
     reach=CloseBurst(2), target=EACH_ENEMY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC],
     attack=Attack(Pick.PRIMARY, vs=WILL),
-    dropped=("c.reroll_attack(ev=)",),
 )
 def p12321(c: Cast) -> None:
-    """The attack half is written. The payout is not: "rolls twice on any one
-    attack roll and uses either result" has to reach an attack somebody else
-    is making, and `c.reroll_attack` reads `c.trigger` -- which is the
-    dispatcher's event and is None inside a watcher."""
+    """The payout reaches an attack somebody else is making.
+
+    **`ev=` is what was missing and it has arrived.** `c.reroll_attack`
+    read `c.trigger`, which inside a watcher is the dispatcher's event and
+    not the roll in hand -- so "rolls twice on any one attack roll" had no
+    way to name the ally's roll. Now the handler names it.
+
+    Two stages, and the card writes them as two sentences:
+
+    * `_next_ally` beside this is the first, unchanged -- the next ally who
+      **hits and damages** one of the targets, which is why it watches
+      `DamageApplied` rather than `Hit`;
+    * then that ally, and only that ally, gets one roll-twice.
+
+    `keep="best"` is *"using either result"* -- the holder picks, and best
+    is what picking means. Not `"new"`, which is the other printed line and
+    the distinction `c.reroll_attack` exists to keep.
+
+    `When.EOTNT` on the **ally** is "before the end of *his or her* next
+    turn" -- a target-clocked duration, so it runs on the ally's turn
+    order rather than the caster's. The caster's own clock is the first
+    sentence's and is `_next_ally`'s default.
+    """
     if c.strike():
         c.damage("2d8", c.int_mod, dtype=DamageType.PSYCHIC)
         c.prone()
+    if not c.last:
+        return
+    caught = set(c.targets)
+
+    def reward(ally: int) -> None:
+        def twice(ev: Any) -> None:
+            if getattr(ev, "attacker", None) != ally:
+                return
+            c.reroll_attack(ev=ev, keep="best")
+
+        c.watch(AttackRolled, twice, until=When.EOTNT, on=ally,
+                once=True, label=c.ref)
+
+    _next_ally(c, lambda who: who in caught, reward)
 
 
 @power(

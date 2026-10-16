@@ -59,6 +59,7 @@ from combat_engine.engine import (
     DEX,
     EACH_ENEMY,
     EACH_OTHER,
+    ENCOUNTER,
     FORT,
     FREE,
     MINOR,
@@ -794,10 +795,46 @@ def i1658p1(c: Cast) -> None:
 
 
 @power("i2068p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_attack(ev=)",))
+       reach=PERSONAL, target=SELF)
 def i2068p1(c: Cast) -> None:
-    """A reroll banked for later: `c.reroll_attack` rolls the attack being
-    answered, and a one-shot spent out of turn is answering nothing."""
+    """A reroll banked for later, spent on the first roll you dislike.
+
+    **Why it was marked and what the marker was right about.**
+    `c.reroll_attack` rolled the attack *being answered* -- `c.trigger` --
+    and a one-shot drunk on your own turn is answering nothing. The fix is
+    `ev=`: the row arms a `c.watch` and the handler names the roll it was
+    handed, because a watch handler closes over the `Cast` the **row** was
+    built with and `c.trigger` there is still the drink.
+
+    Three conditions off the card, and each one of them excludes something:
+
+    * **mine.** `ev.attacker == c.me`, or an ally's bad roll would spend it.
+    * **an encounter or daily attack power.** `AT_WILL` is the common case
+      on any turn, so without this the potion is spent on the first basic
+      swing and never reaches the roll it was bought for. `row.attack is
+      not None` as well, since the card says *attack* power and a utility
+      with an attack roll is not one.
+    * **level at most the potion's.** The printed restriction, and `ITEM`
+      rows are excluded for `_reagent_gate`'s reason one file over: a potion
+      answering another item's roll has no printed basis.
+
+    `once=True` is "once before the end of the encounter" and `keep="new"`
+    is "you must use the second result" -- not `best`, which is the line a
+    different card prints and the distinction `c.reroll_attack` keeps.
+    """
+    def spend(ev: Any) -> None:
+        if getattr(ev, "attacker", None) != c.me:
+            return
+        row = get(getattr(ev, "power", ""))
+        if row is None or row.cls == ITEM or row.attack is None:
+            return
+        if row.usage not in (ENCOUNTER, DAILY) or row.level > 5:
+            return
+        if c.may("reroll the attack, and keep the second result"):
+            c.reroll_attack(ev=ev, keep="new")
+
+    c.watch(AttackRolled, spend, until=When.ENCOUNTER, on=c.me,
+            once=True, label=c.ref)
 
 
 @power("i2070p1", level=5, cls=ITEM, usage=DAILY, action=MINOR,
@@ -2010,9 +2047,83 @@ def i3063p1(c: Cast) -> None:
 
 
 @power("i3280p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_attack(ev=)",))
+       reach=PERSONAL, target=SELF)
 def i3280p1(c: Cast) -> None:
-    """A reroll banked for later, as i2068p1."""
+    """One reroll banked for whichever of three rolls comes first.
+
+    `i2068p1`'s shape with the net cast wider: the card says *"a failed
+    skill check, attack roll, or saving throw"*, so it is three watches
+    sharing one use rather than three uses. `spent` is that sharing, and
+    without it the elixir pays out three times -- once per kind -- which is
+    the easy way to write this and is wrong.
+
+    **`once=True` cannot do the sharing**, which is why the flag is here:
+    that argument is per `c.watch`, and three watches each hold their own.
+    It is still passed, so each kind also cannot fire twice if the shared
+    flag were ever removed.
+
+    "Failed" is read off each roll rather than assumed, and the three
+    events say it three different ways:
+
+    * an attack that missed -- `result.hit`, recomputed when the roll
+      settles;
+    * a skill check's `success`, **not** `passed`, which is what the first
+      draft of this row guessed and which would have been
+      `getattr(..., True)` for ever -- a clause that never fires, read as a
+      clause that never fails;
+    * a saving throw's `saved`, which its own docstring says exists so
+      "reroll it" has somewhere to go.
+
+    One honest limit on the skill-check half: `SkillCheck` is a `Decision`
+    announced **before its modifiers are totalled**, so `success` is settled
+    for a save and provisional for a check. Nothing on this board rolls a
+    skill check in a fight, so the clause is untested rather than wrong --
+    said here rather than left for the next reader to discover.
+
+    The action point the card also costs is chargen's and not a clause
+    this row is missing -- `c.spend_action_point` is the caster's own
+    resource and the row is drunk on your turn.
+    """
+    spent: list[int] = []
+
+    def ready() -> bool:
+        return not spent
+
+    def take() -> None:
+        spent.append(1)
+
+    def bad_attack(ev: Any) -> None:
+        if not ready() or getattr(ev, "attacker", None) != c.me:
+            return
+        result = getattr(ev, "result", None)
+        if result is None or getattr(result, "hit", True):
+            return
+        if c.may("reroll the attack, and keep the second result"):
+            take()
+            c.reroll_attack(ev=ev, keep="new")
+
+    def bad_check(ev: Any) -> None:
+        if not ready() or getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "success", True):
+            return
+        if c.may("reroll the skill check, and keep the second result"):
+            take()
+            c.reroll_check(ev=ev, keep="new")
+
+    def bad_save(ev: Any) -> None:
+        if not ready() or getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "saved", True):
+            return
+        if c.may("reroll the saving throw, and keep the second result"):
+            take()
+            c.reroll_save(ev=ev, keep="new")
+
+    for event, fn in ((AttackRolled, bad_attack), (SkillCheck, bad_check),
+                      (SavingThrow, bad_save)):
+        c.watch(event, fn, until=When.ENCOUNTER, on=c.me, once=True,
+                label=c.ref)
 
 
 @power("i3286p1", level=10, cls=ITEM, usage=DAILY, action=MINOR,

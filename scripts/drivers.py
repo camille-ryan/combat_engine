@@ -2237,6 +2237,313 @@ def scoped_vulnerable(out: Result) -> None:
 
 
 
+
+
+def each_banked_reroll_names_its_own_roll(out: Result) -> None:
+    """Four rows bank a reroll and each narrows it differently.
+
+    `a_banked_reroll_names_the_roll_it_was_handed` beside this holds
+    `i2068p1` -- the plainest of the five -- and proves the mechanism. This
+    one holds the three whose narrowings are *not* that one's, because
+    "fires and does something" is what `audit` can say and is weaker than
+    "does what the card says":
+
+    * `i1237p1` forces a reroll on **one named enemy's** roll **against
+      me**, and must not touch the same enemy swinging at an ally;
+    * `i3280p1` banks **one** use across an attack, a check and a save, and
+      must not pay out three times -- `once=True` is per `c.watch` and
+      cannot say that;
+    * `p12321` hands the roll-twice to **the ally who hit and damaged a
+      target**, and not to any other ally.
+
+    Each is driven through `REGISTRY[ref].body`, so the assertions are
+    about the rows and not about `c.reroll_attack`.
+    """
+    from typing import Any
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import (
+        AttackRolled,
+        DamageApplied,
+        Rerolled,
+        SavingThrow,
+    )
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.resolve import AttackResult
+    from combat_engine.engine.types import DamageType, Defense
+
+    def roll(face: int = 4) -> AttackResult:
+        return AttackResult(natural=face, total=face + 7, target_defence=15,
+                            rolls=[face])
+
+    def swing(world: Any, attacker: int, target: int,
+              power: str = "p289", face: int = 4) -> AttackResult:
+        result = roll(face)
+        ev = AttackRolled(attacker=attacker, target=target, power=power,
+                          vs=Defense.AC, natural=face, bonus=7,
+                          total=face + 7, defence=15, advantage=False)
+        setattr(ev, "result", result)  # noqa: B010
+        world.bus.emit(ev)
+        return result
+
+    yes = lambda actor, kind, options, prompt: options[0]  # noqa: E731
+
+    # -- i1237p1: that enemy, at me -------------------------------------
+    ref = "i1237p1"
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    foes = sorted(enemies(world, me))
+    mate = next((a for a in sorted(allies(world, me)) if a != me), me)
+    c.target = foes[0]
+    world.decider = yes
+    REGISTRY[ref].body(c)
+
+    out.that(len(swing(world, foes[1], me).rolls) == 1,
+             "i1237p1: a DIFFERENT enemy swinging at me is not rerolled")
+    out.that(len(swing(world, foes[0], mate).rolls) == 1,
+             "nor the named enemy swinging at an ALLY")
+    hit_me = swing(world, foes[0], me)
+    out.that(len(hit_me.rolls) == 2,
+             "but the named enemy swinging at ME is rerolled")
+    out.that(hit_me.natural == hit_me.rolls[1],
+             "and the new result stands, which the card forces")
+    out.that(len(swing(world, foes[0], me).rolls) == 1,
+             "and only once -- \"at any one time\"")
+
+    # -- i3280p1: one use shared across three kinds ---------------------
+    ref = "i3280p1"
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    world.decider = yes
+    REGISTRY[ref].body(c)
+
+    # **Asserted on the announced `Rerolled`, not on a field that moved.**
+    # The first draft read `failed.natural != 3 or failed.saved`, a
+    # disjunction that passes when either half is true for any reason --
+    # including a reroll that landed on 3 again. `c.reroll_save` emits
+    # `Rerolled(roll="save", by=<the row>)` and that is the exact question.
+    def saves_rerolled() -> list[Any]:
+        return [e for e in world.bus.log
+                if isinstance(e, Rerolled) and e.roll == "save"
+                and e.by == "i3280p1"]
+
+    saved = SavingThrow(actor=me, against="dazed", natural=6, bonus=0,
+                        saved=True)
+    world.bus.emit(saved)
+    out.that(not saves_rerolled(),
+             "i3280p1: a save that SUCCEEDED is left alone")
+
+    failed = SavingThrow(actor=me, against="dazed", natural=3, bonus=0,
+                         saved=False)
+    world.bus.emit(failed)
+    out.that(len(saves_rerolled()) == 1,
+             "a save that FAILED is rerolled, once, and says so",
+             f"{saves_rerolled()}")
+    out.that(saves_rerolled()[0].old == 3,
+             "and the reroll names the face it replaced")
+
+    # The use is spent, so the attack half finds nothing left. This is the
+    # assertion `once=True` cannot make: it is per watch, and three watches
+    # hold three of them.
+    out.that(len(swing(world, me, sorted(enemies(world, me))[0]).rolls) == 1,
+             "and the one use is now spent, so the ATTACK half pays nothing"
+             " -- three watches, one elixir")
+
+    # -- p12321: the ally who did it, and no other ----------------------
+    ref = "p12321"
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    world.decider = yes
+    mates = [a for a in sorted(allies(world, me)) if a != me]
+    out.that(len(mates) >= 1, "the board holds an ally to credit")
+    if not mates:
+        return
+    foes = sorted(enemies(world, me))
+
+    # **Through the dispatcher, not the bare body.** The payout closes over
+    # `set(c.targets)` -- "one of the targets" -- and a hand-built `Cast`
+    # has none, so `caught` was empty and the credit could never be given.
+    # `c.last` is not the trap here and looked like it: on a bare `Cast`
+    # `index == max(0, len(targets) - 1)` is 0 == 0, so it is **True**, and
+    # the body runs all the way through to arm a watch that can never fire.
+    use(world, me, ref, targets=[foes[0], foes[1]])
+
+    out.that(len(swing(world, mates[0], foes[0]).rolls) == 1,
+             "p12321: before any ally has damaged a target, nobody rolls twice")
+
+    # Now an ally hits and damages one of the targets. `c.targets` is what
+    # the row caught, so the victim has to be one of those -- damaging a
+    # creature this power never touched credits nobody.
+    caught = foes[0]
+    # `absorbed` and `hp` are required -- a stub missing a field a reader
+    # needs is the probe fault this file keeps relearning.
+    world.bus.emit(DamageApplied(source=mates[0], target=caught, amount=5,
+                                 dtype=DamageType.PSYCHIC, absorbed=0,
+                                 hp=20, detail="p289"))
+
+    # **From a HIGH face, which the first draft did not do.** Starting at 4
+    # a fresh d20 is nearly always better, so `keep="best"` and
+    # `keep="new"` agree -- and the plant swapping one for the other stayed
+    # green through this assertion. From 18 they disagree whenever the
+    # second die is lower, which is most of the time, so the distinction
+    # the card draws is the thing being measured.
+    twice = swing(world, mates[0], foes[0], face=18)
+    out.that(len(twice.rolls) == 2,
+             "the ally who hit and damaged a target then rolls twice",
+             f"rolls={twice.rolls}")
+    out.that(twice.rolls[1] < 18,
+             "the second die is the worse one on this seed, so `best` and"
+             " `new` differ here", f"rolls={twice.rolls}")
+    out.that(twice.natural == max(twice.rolls) == 18,
+             "and the BETTER face is kept -- \"using either result\", not"
+             " the \"must use the second result\" a different card prints",
+             f"rolls={twice.rolls} natural={twice.natural}")
+
+    if len(mates) > 1:
+        out.that(len(swing(world, mates[1], foes[0]).rolls) == 1,
+                 "a DIFFERENT ally does not, which is \"the next ally who"
+                 " hits and damages\" and not \"your allies\"")
+    out.that(len(swing(world, mates[0], foes[0]).rolls) == 1,
+             "and the credited ally gets it once -- \"any one attack roll\"")
+
+def a_banked_reroll_names_the_roll_it_was_handed(out: Result) -> None:
+    """`c.reroll_attack` rolled `c.trigger`, and a banked reroll answers nothing.
+
+    *"Once before the end of the encounter, when you make an attack roll for
+    an encounter or a daily attack power and dislike the result, you can
+    reroll"* fires now and pays out later, so the row arms a `c.watch`. A
+    watch handler is a **closure over the `Cast` the row was built with**, so
+    `c.trigger` inside it is still the drink -- not the roll being watched.
+    That is what `ev=` is for, and it is why `i2068p1` carried
+    `todo=("c.reroll_attack(ev=)",)` rather than being written wrong.
+
+    `AttackRolled` carries `result` at runtime -- attached in `resolve.py`
+    rather than declared, so it does not reach the wire -- which is what
+    makes the handed event usable.
+
+    Driven through the row, and the three narrowings are each asserted
+    *separately*, because the card's conditions each exclude something real
+    and a rule that only tried the happy path would pass with any one of
+    them deleted. #607-adjacent, filed under the reroll family.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import DAILY, ENCOUNTER
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+    from combat_engine.engine.types import Defense
+
+    ref = "i2068p1"
+    row = REGISTRY[ref]
+    out.that(not row.unfinished, "i2068p1 carries no marker",
+             f"{row.unfinished}")
+
+    # **The real `AttackResult`, not a stand-in.** The first draft of this
+    # rule hand-rolled an object with `natural`, `total` and `rolls`, and
+    # `c.reroll_attack` reached straight past them for `target_defence` --
+    # it recomputes whether the blow lands, which a three-field stub cannot
+    # answer. A stub that is missing a field a verb reads is a probe fault
+    # dressed as a verb fault.
+    def fresh_roll() -> AttackResult:
+        return AttackResult(natural=4, total=11, target_defence=15, rolls=[4])
+
+    def drink_then_roll(power: str, attacker_is_me: bool = True) -> AttackResult:
+        world, me, _ = _posed(ref, 1)
+        c = Cast(world=world, me=me, ref=ref)
+        REGISTRY[ref].body(c)          # the ROW, not the verb
+        foe = next(iter(sorted(enemies(world, me))), 0)
+        result = fresh_roll()
+        ev = AttackRolled(
+            attacker=me if attacker_is_me else foe, target=foe, power=power,
+            vs=Defense.AC, natural=result.natural, bonus=7,
+            total=result.total, defence=15, advantage=False,
+        )
+        # `setattr`, because `result` is **deliberately not a field**:
+        # `events.py` says a field would reach the wire and every replay
+        # fixture, "none of which is a change in how a fight resolves". So
+        # `resolve.py` attaches it as a plain attribute and this does the
+        # same -- declaring it to satisfy `ty` would move 7 fixtures for
+        # nothing.
+        setattr(ev, "result", result)  # noqa: B010
+        # `c.may` offers two phrasings and reads the answer back by string;
+        # returning `True` is not one of them and reads as "no".
+        world.decider = lambda actor, kind, options, prompt: options[0]
+        world.bus.emit(ev)
+        return result
+
+    # A level-1 encounter attack power: the card's own case.
+    enc = next(r for r, p in REGISTRY.items()
+               if p.usage is ENCOUNTER and p.attack is not None
+               and p.level <= 5 and p.cls not in ("item",) and r.startswith("p"))
+    got = drink_then_roll(enc)
+    out.that(len(got.rolls) == 2,
+             f"a qualifying encounter power's roll is rerolled ({enc})")
+    # **Not `natural == rolls[-1]`**, which the first draft asserted and
+    # which is trivially true of a roll that was never rerolled -- it
+    # passed in a run where the reroll did not happen at all. The second
+    # face has to be *named*, and it has to have displaced the first.
+    out.that(len(got.rolls) == 2 and got.natural == got.rolls[1]
+             and got.rolls[0] == 4,
+             "and the SECOND result is kept, displacing the first, which is"
+             " the card's \"you must use the second result\"",
+             f"rolls={got.rolls} natural={got.natural}")
+
+    # A daily too -- the card names both, and a rule testing one would pass
+    # with `DAILY` dropped from the tuple.
+    day = next(r for r, p in REGISTRY.items()
+               if p.usage is DAILY and p.attack is not None
+               and p.level <= 5 and p.cls not in ("item",) and r.startswith("p"))
+    out.that(len(drink_then_roll(day).rolls) == 2,
+             f"a qualifying daily is rerolled as well ({day})")
+
+    # -- and now each narrowing, one at a time ---------------------------
+    #
+    # At-will. The commonest roll on any turn, so without this the potion is
+    # spent on the first basic swing and never reaches the roll it was
+    # bought for.
+    will = next(r for r, p in REGISTRY.items()
+                if p.usage.name == "AT_WILL" and p.attack is not None
+                and p.level <= 5 and p.cls not in ("item",) and r.startswith("p"))
+    out.that(len(drink_then_roll(will).rolls) == 1,
+             f"an at-will is NOT rerolled ({will})")
+
+    # Over the potion's level, which is the printed restriction.
+    high = next(r for r, p in REGISTRY.items()
+                if p.usage is ENCOUNTER and p.attack is not None
+                and p.level > 5 and p.cls not in ("item",) and r.startswith("p"))
+    out.that(len(drink_then_roll(high).rolls) == 1,
+             f"a power above the potion's level is NOT rerolled ({high})")
+
+    # Somebody else's roll.
+    out.that(len(drink_then_roll(enc, attacker_is_me=False).rolls) == 1,
+             "and an enemy's roll is not rerolled either")
+
+    # Once. The second qualifying roll finds the watch spent.
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    REGISTRY[ref].body(c)
+    foe = next(iter(sorted(enemies(world, me))), 0)
+    world.decider = lambda actor, kind, options, prompt: options[0]
+    seen = []
+    for _ in range(2):
+        result = fresh_roll()
+        ev = AttackRolled(attacker=me, target=foe, power=enc, vs=Defense.AC,
+                          natural=4, bonus=7, total=11, defence=15,
+                          advantage=False)
+        setattr(ev, "result", result)  # noqa: B010
+        world.bus.emit(ev)
+        seen.append(len(result.rolls))
+    out.that(seen == [2, 1],
+             "the first qualifying roll is rerolled and the second is not --"
+             " `once=True` is the card's \"once before the end of the"
+             " encounter\"", f"{seen}")
+
 def a_dead_familiar_is_not_an_active_one(out: Result) -> None:
     """Six rows asked "is your familiar active" and were one condition short.
 
@@ -13478,6 +13785,12 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "each_banked_reroll_names_its_own_roll": (
+        each_banked_reroll_names_its_own_roll,
+        "four banked rerolls, each narrowed differently by its card"),
+    "a_banked_reroll_names_the_roll_it_was_handed": (
+        a_banked_reroll_names_the_roll_it_was_handed,
+        "c.reroll_attack rolled c.trigger, and a banked reroll answers nothing"),
     "a_dead_familiar_is_not_an_active_one": (
         a_dead_familiar_is_not_an_active_one,
         "six rows read Companion.passive alone, so a corpse was active"),

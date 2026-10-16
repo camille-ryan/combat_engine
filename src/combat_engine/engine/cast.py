@@ -1127,7 +1127,9 @@ class Cast:
         """
         return self.world.effects.worsen(eff, cond, source=self.me)
 
-    def reroll_save(self, *, bonus: int = 0, keep: str = "new") -> bool:
+    def reroll_save(
+        self, *, bonus: int = 0, keep: str = "new", ev: Any = None
+    ) -> bool:
         """Roll the **triggering** saving throw again. Returns the new result.
 
         `SavingThrow` is announced before it is acted on and its `saved` is
@@ -1142,8 +1144,12 @@ class Cast:
         The printed lines differ on this and the difference matters: one
         says "use the new result even if it is worse" and another says
         "use whichever you prefer".
+
+        `ev=` names the throw when it is not the trigger, for
+        `c.reroll_attack`'s reason -- a banked reroll is a `c.watch`, and
+        its handler closes over the row's `Cast` rather than the roll.
         """
-        ev = self.trigger
+        ev = ev if ev is not None else self.trigger
         if ev is None or not hasattr(ev, "saved"):
             return False
         again = self.world.rng.roll("1d20").total
@@ -3424,12 +3430,28 @@ class Cast:
         away = max(sorted(paths), key=lambda sq: _distance(sq, self.here))
         return walk(self.world, who, paths[away])
 
-    def reroll_attack(self, *, keep: str = "new", bonus: int = 0) -> bool:
-        """Make the triggering attack roll again. `keep` is new, best or worst.
+    def reroll_attack(
+        self, *, keep: str = "new", bonus: int = 0, ev: Any = None
+    ) -> bool:
+        """Make an attack roll again. `keep` is new, best or worst.
 
-        Reads the attack off `c.trigger`, so it only means anything inside a
-        row the dispatcher offered. Rerolling is not cancelling: the attack
-        still happens, with a different number.
+        Defaults to the **triggering** attack, which is `c.trigger` and only
+        means anything inside a row the dispatcher offered. Rerolling is not
+        cancelling: the attack still happens, with a different number.
+
+        **`ev=` names the roll when it is not the trigger**, which is every
+        *banked* reroll: *"once before the end of the encounter, when you
+        make an attack roll for an encounter or a daily power and dislike
+        the result, you can reroll"*. A row like that fires now and the
+        reroll happens later, so it is written as a `c.watch` -- and a watch
+        handler is a closure over the `Cast` the **row** was built with, so
+        `c.trigger` there is whatever the row was answering when it armed,
+        not the roll being watched. Without this the reroll silently
+        rerolled the wrong thing or nothing at all.
+
+        `AttackRolled` carries `result` at runtime -- attached in
+        `resolve.py` rather than declared, deliberately, so it does not
+        reach the wire -- which is what makes the handed event usable here.
 
         `bonus` is for "reroll it with a bonus equal to your Strength
         modifier" -- the reroll and the bonus are one printed clause, and a
@@ -3438,7 +3460,7 @@ class Cast:
         """
         from .resolve import _mods
 
-        ev = self.trigger
+        ev = ev if ev is not None else self.trigger
         result = getattr(ev, "result", None) if ev is not None else None
         if result is None:
             return False
@@ -11307,8 +11329,10 @@ class Cast:
         ev.success = ev.dc <= 0 or ev.total >= ev.dc
         return True
 
-    def reroll_check(self, *, keep: str = "new", bonus: int = 0) -> int:
-        """Roll the triggering skill check again. `keep` is new, best or worst.
+    def reroll_check(
+        self, *, keep: str = "new", bonus: int = 0, ev: Any = None
+    ) -> int:
+        """Roll a skill check again. `keep` is new, best or worst.
 
         The skill-check twin of `c.reroll_attack`, and six rows print it.
         Returns the **face of the second die**, or 0 if there was no check to
@@ -11317,10 +11341,15 @@ class Cast:
 
         `bonus` is for "reroll it with a power bonus equal to your Wisdom
         modifier", which is one printed clause with the reroll.
+
+        `ev=` names the check when it is not the trigger, for
+        `c.reroll_attack`'s reason: a banked reroll is armed as a
+        `c.watch`, and a watch handler closes over the row's `Cast`, whose
+        `trigger` is not the roll being watched.
         """
         from .events import SkillCheck
 
-        ev = self.trigger
+        ev = ev if ev is not None else self.trigger
         if not isinstance(ev, SkillCheck):
             return 0
         fresh = self.world.rng.d20().total

@@ -1702,16 +1702,42 @@ def i1122p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    todo=("c.reroll_attack(ev=)",),
 )
 def i1237p1(c: Cast) -> None:
-    """Re-aimed to the exact gap. `c.reroll_attack` reads the roll off
-    `c.trigger` and nothing else, so it means something only inside a row
-    the dispatcher offered for that one roll. This card stores a reroll
-    and spends it later, from a `c.watch` on somebody else's attack, where
-    `c.trigger` is not the roll in hand -- and rerolling by hand off
-    `AttackRolled.result` would be the engine's arithmetic copied into a
-    content file."""
+    """Bank a forced reroll against the creature you just hit.
+
+    **The gap was `ev=` and it has arrived.** `c.reroll_attack` read the
+    roll off `c.trigger` and nothing else, so it meant something only
+    inside a row the dispatcher offered for that one roll. This card stores
+    a reroll and spends it later, from a `c.watch` on somebody else's
+    attack, where `c.trigger` is still the free action that drank it.
+
+    Three narrowings, and the card states each:
+
+    * **that creature.** "The target you hit" -- not any enemy, so the
+      watch closes over `foe` rather than asking who is attacking.
+    * **against you.** `ev.target == c.me`; a roll it makes at an ally is
+      not this.
+    * **at any one time.** `once=True`, and `When.ENCOUNTER` is the card's
+      own span.
+
+    `keep="new"` is "it must use the new result" -- the reroll may be
+    *better* for the enemy and the card accepts that, which is why this is
+    not `worst`. The choice to spend it is the holder's, so `c.may` is
+    asked on the holder's side rather than the victim's.
+    """
+    foe = c.target
+
+    def forced(ev: Any) -> None:
+        if getattr(ev, "attacker", None) != foe:
+            return
+        if getattr(ev, "target", None) != c.me:
+            return
+        if c.may("force that attack to be rolled again"):
+            c.reroll_attack(ev=ev, keep="new")
+
+    c.watch(AttackRolled, forced, until=When.ENCOUNTER, on=c.me,
+            once=True, label=c.ref)
 
 
 @power(

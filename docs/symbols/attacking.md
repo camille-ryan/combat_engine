@@ -73,7 +73,7 @@ Making an attack, and what the attack turns out to be.
 
 - `c.attack_mod` is in [`modifiers.md`](modifiers.md) -- The modifier of whatever ability *this branch* attacks with.
 - `c.ignore_resistance` is in [`modifiers.md`](modifiers.md) -- "Your fire powers ignore the target's fire resistance."
-- `c.reroll_attack` is in [`modifiers.md`](modifiers.md) -- Make the triggering attack roll again. `keep` is new, best or worst.
+- `c.reroll_attack` is in [`modifiers.md`](modifiers.md) -- Make an attack roll again. `keep` is new, best or worst.
 - `c.reroll_damage` is in [`modifiers.md`](modifiers.md) -- "Roll the damage twice and use the higher result."
 - `c.reroll_ones` is in [`modifiers.md`](modifiers.md) -- "Reroll each damage die that shows a 1 until it shows a different
 - `c.resist` is in [`modifiers.md`](modifiers.md) -- Shrugs off `amount` of every hit, or of one damage type.

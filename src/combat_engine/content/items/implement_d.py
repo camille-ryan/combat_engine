@@ -2333,16 +2333,57 @@ def i3018p1(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=SELF,
-    dropped=("c.heal_bonus()", "c.reroll_attack(ev=)"),
+    dropped=("c.heal_bonus()",),
 )
 def i3167p1(c: Cast) -> None:
-    """Of the three printed benefits only the first can be said: nothing
-    maximises a heal, and `c.reroll_attack` answers the attack that
-    triggered the row it is in, which a benefit armed a turn earlier has
-    no way to reach."""
-    c.save(on=c.me)
-    for mate in c.within(5, side="team"):
-        c.save(on=mate)
+    """"Choose one of the following benefits", and two of the three can now
+    be said.
+
+    **It is a choice and was not written as one.** The row used to do the
+    first benefit unconditionally, because it was the only one sayable --
+    which is a reasonable thing to do with one option and the wrong thing
+    to do with two. `c.choose` is the card's own word.
+
+    The reroll arrived with `c.reroll_attack(ev=)`: the benefit is armed a
+    turn earlier and spent on a later roll, so it is a `c.watch`, and a
+    watch handler sees the row's `c.trigger` rather than the roll it was
+    handed. Narrowed exactly as printed -- **a miss**, with **a divine
+    attack power**, **mine**, **once** -- and `When.EONT` is "before the end
+    of your next turn".
+
+    Still `dropped`: nothing maximises a heal. That is `c.heal_bonus()` and
+    it is a different sentence from either of these.
+    """
+    def missed_divine(ev: Any) -> None:
+        if getattr(ev, "attacker", None) != c.me:
+            return
+        row = get(getattr(ev, "power", ""))
+        if row is None or Keyword.DIVINE not in row.keywords:
+            return
+        result = getattr(ev, "result", None)
+        if result is None or getattr(result, "hit", True):
+            return
+        if c.may("reroll the attack, and keep the second result"):
+            c.reroll_attack(ev=ev, keep="new")
+
+    def saves() -> None:
+        c.save(on=c.me)
+        for mate in c.within(5, side="team"):
+            c.save(on=mate)
+
+    def bank_reroll() -> None:
+        c.watch(AttackRolled, missed_divine, until=When.EONT, on=c.me,
+                once=True, label=c.ref)
+
+    picked = c.choose(["a saving throw for you and each ally within 5",
+                       "a reroll of your next miss with a divine power"],
+                      "which benefit")
+    if picked is None or picked.startswith("a saving throw"):
+        # The default is the first benefit, which is what the row did
+        # before there was anything to choose between.
+        saves()
+    else:
+        bank_reroll()
 
 
 @power(
