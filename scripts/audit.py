@@ -3750,6 +3750,22 @@ def main() -> int:
         return 1 if (fresh or healed) else 0
 
     mark = _mark()
+    # **The sha the sweep READ, taken now, not the one it finishes on.** A
+    # full sweep is forty minutes and `git rev-parse HEAD` at the end names
+    # whatever was committed in the meantime -- so the 2026-10-16 nightly
+    # started at `9d79a18` and stamped `a60c4b6`, a commit made while it
+    # ran. A sweep certifies the tree it read; stamping the finishing sha
+    # claims a tree it never looked at, which is the same class of lie as a
+    # narrow run writing a whole-tree baseline.
+    #
+    # It also matters for what the watermark is *for*: `_behind` counts
+    # commits since that sha to decide whether a sweep is owed, so naming a
+    # later commit undercounts the debt. #627.
+    import subprocess as _sub
+
+    _began = _sub.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                      capture_output=True, text=True)
+    STARTED_AT = _began.stdout.strip() if _began.returncode == 0 else ""
     full = not (args.refs or args.calls or args.changed or args.since
                 or args.sample or args.cls or args.level or args.monsters)
     # **Said on every run, the way `scorecard.py` says its baseline age.** #291's
@@ -4162,13 +4178,10 @@ def main() -> int:
     # "did it pass".
     if full:
         import json
-        import subprocess
 
-        got = subprocess.run(["git", "rev-parse", "HEAD"],
-                             cwd=ROOT, capture_output=True, text=True)
-        if got.returncode == 0:
+        if STARTED_AT:
             WATERMARK.write_text(json.dumps({
-                "sha": got.stdout.strip(),
+                "sha": STARTED_AT,
                 "refs": len(chosen),
                 "fired": ok,
                 "silent": len(silent),
@@ -4179,7 +4192,8 @@ def main() -> int:
                 # ten break. Written by a full sweep only, like the rest.
                 "silent_refs": sorted(r.ref for r in silent),
             }, indent=2) + "\n")
-            print(f"\n  watermark written at {got.stdout.strip()[:9]}")
+            print(f"\n  watermark written at {STARTED_AT[:9]}"
+                  f" -- the sha this sweep read")
 
     # `refused` fails the run. An engine that announces a thing and then
     # does it anyway is a worse fault than any single row being wrong, and
