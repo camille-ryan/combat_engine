@@ -182,6 +182,44 @@ PY
 } 2>&1 | tee -a "$LOG"
 
 cp "$LOG" logs/nightly-latest.log
+
+# **A sweep the tree moved under certifies nothing, and that is not RED.**
+# The dirty-tree refusal above is the same argument made before the run, and
+# it stops there because nothing can make commits wait 43 minutes. So HEAD is
+# read again here.
+#
+# This is not hypothetical. The 2026-10-16 log is headed `at 9d79a18` and its
+# `audit` line reports a watermark written at `a60c4b6` -- a commit made five
+# hours later, with four commits in between -- and the check died on
+# `tokenize.TokenError: unterminated string literal`. That is precisely what
+# `audit._source_of`'s own note predicts for a file whose line numbers move
+# under an already-imported module, and all three of its call sites already
+# guard it; the crash was somewhere else and unattributable. A reader
+# following the log would have gone looking for a broken string in the tree.
+# There is none.
+#
+# Reported like SKIPPED rather than like RED, for #543's reason: a
+# non-verdict must never erase a real one, so `logs/NIGHTLY-FAILED` is left
+# exactly as it was and the exit is 0. "Nothing to certify" is the honest
+# answer either way -- the difference is only whether the obstacle arrived
+# before the run or during it.
+AFTER=$(git rev-parse --short HEAD)
+if [ "$AFTER" != "$AT" ]; then
+    MOVED=$(git rev-list --count "${AT}..${AFTER}" 2>/dev/null || echo "?")
+    {
+        echo
+        echo "MOVED $(date '+%F %T') -- the tree moved under this sweep:"
+        echo "      started at ${AT}, ended at ${AFTER}, ${MOVED} commit(s) landed"
+        echo "      A sweep across two trees certifies neither, so this is not"
+        echo "      a verdict and logs/NIGHTLY-FAILED is left untouched."
+        echo "      Any crash above is suspect: audit._source_of's note says"
+        echo "      an already-imported module whose lines have moved raises"
+        echo "      from inside inspect.getblock."
+    } | tee -a "$LOG"
+    cp "$LOG" logs/nightly-latest.log
+    exit 0
+fi
+
 if [ "$VERDICT" -eq 0 ]; then
     rm -f logs/NIGHTLY-FAILED
     echo "clean at ${AT}" | tee -a "$LOG"

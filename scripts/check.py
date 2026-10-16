@@ -357,6 +357,17 @@ def _nightly_state() -> list[str]:
     hours = (datetime.now() - ran).total_seconds() / 3600
     when = f"{ran:%F %H:%M}"
     old = f", {int(hours / 24)}d old" if hours >= 48 else ""
+    if _moved(NIGHTLY_LOG):
+        # **A MOVED attempt is no more a verdict than a SKIPPED one**, so it
+        # is reported the same way and the marker is read with the same
+        # suspicion. The difference is only when the obstacle arrived: a
+        # dirty tree is seen before the run, commits landing are seen after.
+        out = [f"nightly: last attempt {when} MOVED{old} -- commits landed"
+               f" mid-sweep, so it certifies nothing"]
+        if NIGHTLY_RED.exists():
+            out.append(f"         logs/NIGHTLY-FAILED is from BEFORE that"
+                       f" -- {NIGHTLY_RED.read_text().splitlines()[0]}")
+        return [*out, *_stale_net()]
     if head.lstrip().startswith("SKIPPED"):
         why = "a check.py was running" if "already running" in head else "a dirty tree"
         out = [f"nightly: last attempt {when} SKIPPED -- {why}{old}"]
@@ -401,7 +412,7 @@ def _stale_net() -> list[str]:
             head = log.read_text()[:200]
         except OSError:
             continue
-        if head.lstrip().startswith("SKIPPED"):
+        if head.lstrip().startswith("SKIPPED") or _moved(log):
             continue
         stamped = re.search(r"(\d{4}-\d\d-\d\d) (\d\d:\d\d)", head)
         if not stamped:
@@ -414,7 +425,7 @@ def _stale_net() -> list[str]:
             return []
         skipped = sum(
             1 for other in logs
-            if other > log and _skipped(other)
+            if other > log and (_skipped(other) or _moved(other))
         )
         tail = f", {skipped} attempt(s) skipped since" if skipped else ""
         return [f"         the net last reached a verdict {ran:%F %H:%M},"
@@ -423,6 +434,21 @@ def _stale_net() -> list[str]:
         return ["         no attempt on record has reached a verdict --"
                 " every one skipped"]
     return []
+
+
+def _moved(log: Path) -> bool:
+    """Did the tree move under this sweep while it ran?
+
+    **Read from the tail, not the head**, which is the difference from
+    `_skipped`: a skip is decided before the header is written and so is the
+    whole file, while this is decided 43 minutes in and is appended. Reading
+    only the first 400 bytes would have missed it in every case.
+    """
+    try:
+        text = log.read_text()
+    except OSError:
+        return False
+    return any(line.startswith("MOVED ") for line in text.splitlines())
 
 
 def _skipped(log: Path) -> bool:
