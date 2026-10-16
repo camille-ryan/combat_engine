@@ -7936,7 +7936,10 @@ def blank_defence_is_defective(out: Result) -> None:
 
     malformed = [
         ref for ref in REGISTRY
-        if re.match(r"^m\d+a\d+$", ref) and blank.search(line_of(ref))
+        # The conjured shape too -- `m<item>c<n>a<n>` (#601, #604). The
+        # narrow spelling measured a corpus 23 rows smaller than the one
+        # this floor claims to be about.
+        if re.match(r"^m\d+(?:c\d+)?a\d+$", ref) and blank.search(line_of(ref))
     ]
     out.that(len(malformed) >= 50,
              "the corpus still holds the rows this ruling is about -- the"

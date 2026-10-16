@@ -128,7 +128,15 @@ def _glossary(block: str, own: str) -> str:
     # `own` may be an ability ref whose stat block header carries the
     # creature, so both are wanted and only one of them is in the text.
     extra = [own]
-    if re.fullmatch(r"m\d+a\d+", own):
+    # **`m\d+(?:c\d+)?a\d+`, not `m\d+a\d+`.** A stat block printed inside
+    # an item's own entry is `m<item>c<n>` and its abilities are
+    # `m1932c0a0` (#601), so the narrow spelling missed all 23 of them and
+    # the brief's glossary omitted the creature the ability belongs to --
+    # which is the one thing the glossary exists to supply (#531). #604
+    # widened six of these patterns across `scripts/` and this was a
+    # seventh; `split("a")[0]` already gave the right answer once the
+    # match succeeded.
+    if re.fullmatch(r"m\d+(?:c\d+)?a\d+", own):
         extra.append(own.split("a")[0])
     # Own ref first, then its creature, then the rest in the order the block
     # mentions them. Appearance order is the useful one: an author reads down
