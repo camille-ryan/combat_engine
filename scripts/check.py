@@ -269,9 +269,11 @@ def main() -> int:
             failed.append(c.name)
             if not args.verbose:
                 # The failing lines only, which is what is worth reading.
+                said = 0
                 for line in (done.stdout + done.stderr).splitlines():
                     if "FAIL" in line or "diverged" in line.lower() or "error" in line.lower():
                         print(f"          {line.strip()[:110]}")
+                        said += 1
                 # **And a traceback whole, because this filter drops the
                 # half of one that says anything.** A traceback's useful
                 # lines are its `File "...", line N, in <name>` frames and
@@ -290,10 +292,38 @@ def main() -> int:
                 # does not reach that row again for a day. A raise is the one
                 # verdict this project treats as inviolable and it was the one
                 # least possible to act on. #634.
+                raised = 0
                 for blob in (done.stdout, done.stderr):
                     frames = _traceback(blob)
                     if frames:
                         print("\n".join(f"          {x}" for x in frames))
+                        raised += 1
+                # **And the tail when neither of those said anything, which
+                # is the premise and not the coverage.** A keyword filter
+                # cannot know what an instrument prints when it fails: each
+                # has its own vocabulary for its own verdict, and these three
+                # words were chosen before most of them existed.
+                #
+                # `audit` is the case that proved it, in the same run that
+                # argued for `_traceback` above. Its per-ref baseline report
+                # holds no `FAIL`, no `diverged` and no `error`, and there was
+                # no traceback either, so a 2,023-second wide sweep failed and
+                # printed **nothing** underneath -- the row that had gone
+                # silent had to be found by diffing `fixtures/audited.json` by
+                # hand.
+                #
+                # So the rule is now the invariant that was wanted all along:
+                # **a failing check is never detail-free.** Matching lines
+                # when there are some, a traceback when there is one, and
+                # otherwise the tail -- which is what `--verbose` has always
+                # done per check, just applied where it is needed. #634.
+                if not said and not raised:
+                    body = (done.stdout or done.stderr).splitlines()
+                    kept = [x for x in body if x.strip()][-_TAIL:]
+                    if kept:
+                        print(f"          (no line matched; last {len(kept)}"
+                              f" of the output)")
+                        print("\n".join(f"          {x[:110]}" for x in kept))
         if args.verbose:
             print("\n".join(f"          {x}" for x in done.stdout.splitlines()[-25:]))
 
@@ -643,6 +673,12 @@ def history() -> int:
         print(f"  never caught anything in 20+ runs, and not cheap: {', '.join(idle)}"
               f"\n  -- worth asking whether they still earn their seconds")
     return 0
+
+
+#: How much output to keep from a failing check that printed no matching
+#: line and no traceback. The same depth `--verbose` uses, less a little,
+#: because this is the fallback and not the thing somebody asked for.
+_TAIL = 20
 
 
 #: How much of a traceback to keep. Deep enough for the innermost frames,
