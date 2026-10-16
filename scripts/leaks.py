@@ -749,83 +749,50 @@ def specs() -> int:
 #: allowance, which is a judgement made.
 UNSWAPPED_KNOWN: dict[tuple[str, str, str], str] = {}
 
-#: **The leaks standing when this walk was written: 60 spec rows.** A
-#: per-row baseline that may shrink and must not grow -- `cards.KNOWN`'s
-#: contract and `fixtures/audited.json`'s, for the reason `scripts/CLAUDE.md`
-#: gives: a bare count cannot tell whether a run's hits are the known ones,
-#: and cannot see ten healing while ten break.
+#: **60 spec rows when this walk was written; 10 now.** A per-row baseline
+#: that may shrink and must not grow -- `cards.KNOWN`'s contract and
+#: `fixtures/audited.json`'s, for the reason `scripts/CLAUDE.md` gives: a
+#: bare count cannot tell whether a run's hits are the known ones, and
+#: cannot see ten healing while ten break.
 #:
 #: **Safe to write down because every key is a ref.** `(table, row, the ref
 #: whose name the row prints)` names no printed text, which is why this can
 #: be a list at all where a forbidden-name list could not.
 #:
 #: Not an allowance. Each one is the ETL's scrub failing to swap a name in a
-#: spec an author reads, and the fix is in the extraction. The shape is
-#: regular enough to be one bug: a plain Title-Case pair gets swapped and a
-#: name holding a lowercase connective -- "of", "the" -- does not, so a
-#: sibling card two refs along says `w3742` where this one prints three
-#: words. Shrink it by fixing that, not by adding rows.
+#: spec an author reads, and the fix is in the extraction.
+#:
+#: **The 50 that went were one shape, and it was not the one guessed here.**
+#: This used to say the split was "a plain Title-Case pair gets swapped and a
+#: name holding a lowercase connective does not". The connective was a
+#: symptom: `etl.sanitise.identifies` strips function words *before*
+#: measuring and then refuses a phrase of fewer than three **content** words
+#: whose every word is ordinary rules vocabulary, while this walk counts all
+#: the words. So `<rules word> of the <rules word>` was three words to the
+#: gate and two to the scrubber -- flagged by one, never offered to the
+#: other. Measured across the 60: 51 were exactly that, 8 were a
+#: `RULES_TERMS` hit and 1 a `weapon_names()` hit.
+#:
+#: `build._uniquely_owned` is the second door that closed it: a name printed
+#: by exactly one row of twenty-six thousand is believed on its uniqueness
+#: where `identifies` disbelieves it on its words. #628.
+#:
+#: **What is left is the other nine-tenths of the census**, and it is not
+#: the same bug. Eight feats name one class feature whose printed name is
+#: itself in `RULES_TERMS`, so the scrubber reads it as mechanics wherever
+#: it appears -- correct in general and wrong for these eight. Two traps
+#: name a power and a feat. Both want their own look.
 UNSWAPPED_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
-    ("associate", "x10_60", "rt:r61-t2"),
-    ("associate", "x10_77", "m4865a1"),
-    ("class_feature", "cf:invoker-f1s2", "cf:invoker-f1c1"),
-    ("class_feature", "cf:shaman-f2c0", "m4903a6"),
-    ("class_feature", "cf:sorcerer-f0s1", "p12964"),
-    ("class_feature", "cf:warlock-hexblade-f3s0", "w3752"),
-    ("class_feature", "cf:warlock-hexblade-f3s4", "w3741"),
-    ("companion", "comp:107", "i3443"),
-    ("companion", "comp:59", "f1392"),
-    ("companion", "comp:71", "x1_128"),
-    ("companion", "comp:78", "x1_127"),
-    ("companion", "comp:9", "m5811a0"),
-    ("feat", "f1024", "cf:warden-f0"),
     ("feat", "f1355", "cf:cleric-warpriest-f0"),
-    ("feat", "f1415", "w3665"),
     ("feat", "f1432b", "cf:cleric-warpriest-f0"),
     ("feat", "f1557", "cf:cleric-warpriest-f0"),
     ("feat", "f1622", "cf:cleric-warpriest-f0"),
     ("feat", "f1623", "cf:cleric-warpriest-f0"),
-    ("feat", "f1623", "cf:invoker-f1c1"),
     ("feat", "f1624", "cf:cleric-warpriest-f0"),
     ("feat", "f1625", "cf:cleric-warpriest-f0"),
     ("feat", "f1627", "cf:cleric-warpriest-f0"),
-    ("feat", "f3231", "p12258"),
-    ("feat", "f3531", "f3529"),
-    ("feat", "f3532", "f3529"),
-    ("feat", "f3533", "f3529"),
-    ("feat", "f3534", "f3529"),
-    ("item", "i1927", "x1_125"),
-    ("item_block", "i2172p1", "f1398"),
-    ("item_block", "i3201p2", "m6564"),
-    ("monster_power", "m1090a2", "f2247"),
-    ("monster_power", "m5132a3", "f3332"),
-    ("power", "p13680", "w3741"),
-    ("power", "p13681", "w3741"),
-    ("power", "p13682", "w3741"),
-    ("power", "p16258", "w3752"),
-    ("power", "p16259", "w3752"),
-    ("power", "p16260", "w3752"),
-    ("power", "p16660", "m6564"),
-    ("race", "r26", "x1_10"),
-    ("race", "r59", "m6561a3"),
-    ("racial_trait", "rt:r26-t2", "x1_10"),
-    ("racial_trait", "rt:r59-t1", "m6561a3"),
-    ("terrain", "x2_119", "m731a1"),
-    ("terrain", "x2_140", "x2_80"),
-    ("terrain", "x2_151", "x1_10"),
-    ("terrain", "x2_18", "p12615"),
-    ("trap", "t:108", "x1_10"),
-    ("trap", "t:169", "m4310a7"),
-    ("trap", "t:273", "m4310a7"),
     ("trap", "t:30", "p11722"),
-    ("trap", "t:324", "p14177"),
     ("trap", "t:337", "f2247"),
-    ("trap", "t:339", "x1_10"),
-    ("trap", "t:456", "m6564"),
-    ("trap", "t:489", "x1_10"),
-    ("trap", "t:529", "m4903a6"),
-    ("trap", "t:81", "p914"),
-    ("trap", "t:82", "p3699"),
 })
 
 

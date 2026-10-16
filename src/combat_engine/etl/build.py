@@ -3194,6 +3194,48 @@ def _swap_sub_options(
     return swapped
 
 
+def _uniquely_owned(low: str, holders: dict[str, int]) -> bool:
+    """Is this name printed by exactly one row, and long enough to believe?
+
+    **The second door into the swap index, and it exists because the two
+    halves of this arrangement were counting words differently.**
+    `identifies` strips function words before measuring -- "from the shadows"
+    is one idea, not three -- and then refuses a phrase of fewer than three
+    *content* words whose every word is ordinary rules vocabulary, on the
+    sound argument that "two ordinary words in a row is chance".
+
+    `leaks.py --specs` asks a different question: a phrase of more than two
+    words **counting all of them** that resolves to exactly one ref. So a
+    name of the shape *<rules word> of the <rules word>* is three or four
+    words to the gate and two content words to `identifies` -- flagged by
+    one and never offered to the other.
+
+    Measured over `UNSWAPPED_BASELINE`, that disagreement **is** the debt:
+
+        raw  non-stop  every word a rules term   rows
+          3         1                     True      4
+          3         2                     True     41
+          4         2                     True      6
+
+    51 of the 60, one shape. The remaining nine are a `RULES_TERMS` hit (8,
+    all one class feature) and one `weapon_names()` hit.
+
+    **Uniqueness is the evidence `identifies` does not have.** It judges a
+    phrase on its words alone, which is all it can do -- it is handed one
+    name. Here the whole corpus is in hand: a three-word phrase of ordinary
+    words printed by **exactly one** row out of twenty-six thousand is not
+    the coincidence `identifies` is guarding against, and a spec printing it
+    is showing an author a name. Where it *is* a coincidence the cost is a
+    bad pointer, and this file has already settled that trade twice over --
+    "a leak is worse than a bad pointer, it is the thing this project may
+    not do".
+
+    Counted on both apostrophe spellings for the reason the keys are, so a
+    possessive name is not two different owners.
+    """
+    return holders.get(low, 0) == 1 and len(low.split()) > 2
+
+
 def _cross_reference_rest(
     out: sqlite3.Connection, names: dict[str, dict[str, str]]
 ) -> int:
@@ -3269,6 +3311,22 @@ def _cross_reference_rest(
     #: than per row: it is one pass over the index instead of 25,000.
     owns: dict[str, list[str]] = {}
     held: dict[str, list[str]] = {}
+    #: How many refs print each name, so a name that resolves to exactly one
+    #: row can be believed on its uniqueness where `identifies` disbelieves
+    #: it on its words. See `_uniquely_owned` below.
+    holders: dict[str, int] = {}
+    for entry in names.values():
+        low = ((entry.get("name") or "").strip()).lower()
+        if len(low) < 3:
+            continue
+        # **A set, so one name is one holder.** Incrementing both spellings
+        # unconditionally counts a name with no curly apostrophe twice --
+        # the two keys are then the same string -- and `holders == 1` is
+        # never true for anything. Every one of the 60 was refused that
+        # way, which looked exactly like the admission not applying to
+        # them. The main loop below has always used a set for these keys.
+        for key in {low, low.replace("\u2019", "'")}:
+            holders[key] = holders.get(key, 0) + 1
     for ref, entry in names.items():
         name = (entry.get("name") or "").strip()
         low = name.lower()
@@ -3302,7 +3360,9 @@ def _cross_reference_rest(
         if ref.startswith("cf:"):
             for key in keys:
                 held.setdefault(key, []).append(ref)
-        if not identifies(low, [ref], rules):
+        if not identifies(low, [ref], rules) and not _uniquely_owned(
+            low, holders
+        ):
             continue
         words = re.findall(r"[A-Za-z']+", low)
         if words:
