@@ -1563,20 +1563,36 @@ class Cast:
         """`self.me`'s abilities. **Assumes `me` is a creature**, and that
         assumption is measured rather than hoped for. #617.
 
-        `world.need` raises for an entity with no `Stats`, and the only
-        kind that lacks them is a `Barrier` -- creatures, characters,
-        companions and conjurations all carry them, including the ones
-        `summon_inline` builds. A barrier is *"subtracted out of
-        `query.combatants`, so it takes no turn"*, and nothing anywhere
-        constructs a `Cast` around one: the ten engine sites pass an
-        `actor`, an `owner` or the escaper in `escape.py`, and the six in
-        `content/` pass the creature holding the row.
+        `world.need` raises for an entity with no `Stats`, and creatures,
+        characters, companions and conjurations all carry them -- including
+        the ones `summon_inline` builds. What lacks them is everything on
+        the board that is **not a creature**. Counted on one audited board
+        with a wall added, six such entities:
+
+            z:…                 Ident only                 (2 zones, 1 wall)
+            audit:setup object  Ident, Position, Scenery
+            audit:setup fire    Ident, Position, Scenery    (2 hazards)
+
+        **Not "a `Barrier`", which this said for a while and is wrong**:
+        none of the six carries that component, `c.wall(solid=True)`
+        included -- it makes a zone-shaped entity. The right statement is
+        the shape, not the component.
+
+        Nothing anywhere constructs a `Cast` around one. **36 `Cast(...)`
+        sites in `src/`, 23 in `content/` and 13 in `engine/`**, and every
+        `me=` is a creature id: `me` (10), `actor` (10), `eid` (8), `who`
+        (4), `owner` (2), `ev.actor` (1). AST-walked rather than grepped,
+        because this count has already gone stale once -- it was recorded
+        as "ten engine and six content" and both numbers had moved by the
+        time anyone re-read it. Re-measure before relying on the figures;
+        the *conclusion* is what is stable.
 
         So the throw is reachable only by hand -- `Cast(me=<a wall>)` in a
-        probe -- and the 4,862 content reads through here are all a
-        caster's own modifier. Left raising rather than made to answer 0:
-        a silent zero on a modifier is the shape this repo spends most of
-        its instruments catching, and `need` names the entity.
+        probe, which is how it was found -- and the 4,862 content reads
+        through here are all a caster's own modifier. Left raising rather
+        than made to answer 0: a silent zero on a modifier is the shape
+        this repo spends most of its instruments catching, and `need`
+        names the entity.
         """
         return self.world.need(self.me, Stats)
 
