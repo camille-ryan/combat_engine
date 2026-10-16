@@ -2426,6 +2426,17 @@ def usable(
                     return False, (
                         f"needs the {sorted(missing)[0].value} keyword"
                     )
+        # **A whole usage category, which `forbidden` could not say.** Two
+        # monster cards print "cannot use encounter powers" and one narrows
+        # it to attack powers, so the narrowing is its own set: an attack
+        # power is one whose header declares an `Attack`, which is the same
+        # question `blocked.py` and the audit ask of a row.
+        if powers.forbidden_usages or powers.forbidden_attack_usages:
+            if p.usage in powers.forbidden_usages:
+                return False, f"cannot use {p.usage.value} powers"
+            if (p.usage in powers.forbidden_attack_usages
+                    and p.attack is not None):
+                return False, f"cannot use {p.usage.value} attack powers"
         # Checked for every usage, because **every printed "1/round" rider
         # is on an at-will** -- and this lived inside the not-at-will branch,
         # so the guard was unreachable and the header field was decoration.

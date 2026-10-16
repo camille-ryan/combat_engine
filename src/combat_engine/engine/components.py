@@ -22,6 +22,7 @@ from .types import (
     Keyword,
     Size,
     Team,
+    Usage,
     modifier,
 )
 
@@ -808,6 +809,16 @@ class Powers:
     #: sentences coexist on one creature and a single set cannot say which
     #: direction each entry means. #487.
     required_keywords: set[Keyword] = field(default_factory=set)
+    #: Usage categories whose rows cannot be used. *"The target can't use
+    #: encounter powers until the end of its next turn"* -- a whole category
+    #: rather than one ref, which `forbidden` could not say.
+    forbidden_usages: set[Usage] = field(default_factory=set)
+    #: The same, narrowed to **attack** powers: *"the target cannot use
+    #: encounter or daily ATTACK powers"*. Kept as a second set rather than
+    #: a flag beside the first, for the reason `required_keywords` gives
+    #: about its own neighbour -- both sentences can be true of one creature
+    #: at once and a flag could not say which entry each belonged to.
+    forbidden_attack_usages: set[Usage] = field(default_factory=set)
     #: Rows exempt from `required_keywords` because they are only being
     #: *sustained*. Every one of those four cards prints "although you can
     #: sustain such powers", and a refusal written without it cancels every

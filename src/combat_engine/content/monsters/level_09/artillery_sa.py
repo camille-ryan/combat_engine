@@ -1537,12 +1537,21 @@ def m5559a3(c: Cast) -> None:
     reach=CloseBlast(5),
     target=EACH_ENEMY,
     attack=Attack(vs=WILL, printed=12),
-    todo=("Cast.forbid(usage=)",),
 )
 def m5559a4(c: Cast) -> None:
-    """"Cannot use encounter or daily attack powers" names a whole usage
-    category rather than one ref -- `c.forbid` only ever takes a single
-    power's ref, so nothing here can say it."""
+    """"Cannot use encounter or daily attack powers" names two whole usage
+    categories rather than refs, and `attacks_only=` is the narrowing --
+    without it the refusal would reach the target's encounter utilities too,
+    which the card does not touch. An attack power is one whose header
+    declares an `Attack`. #487.
+
+    `EOTNT`: "until the end of **its** next turn", the target's clock and
+    not the creature's, which is the distinction the two `When` members
+    exist for.
+    """
+    if c.strike():
+        c.forbid(usage=(Usage.ENCOUNTER, Usage.DAILY), attacks_only=True,
+                 until=When.EOTNT)
 
 
 _M5559_NEARBY_START = "an enemy starts its turn within 5 squares of it, and it is conscious"

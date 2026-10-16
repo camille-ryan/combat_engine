@@ -2747,13 +2747,16 @@ def m5719a4(c: Cast) -> None:
     keywords=[Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.AREA],
     attack=Attack(vs=WILL, printed=12),
     damage=Damage("1d8", 7, dtype=DamageType.PSYCHIC, half_on_miss=True),
-    dropped=("c.forbid(usage=)",),
 )
 def m5719a5(c: Cast) -> None:
+    """"The target can't use encounter powers until the end of its next
+    turn" -- every encounter power and not only the attacks, which is why
+    this passes no `attacks_only=` where `m5559a4` does. #487."""
     if c.first:
         _hands_the_use_back(c, PowerUsed, lambda ev: ev.actor == c.me and ev.power == "m5719a4")
     if c.strike():
         c.hit()
+        c.forbid(usage=Usage.ENCOUNTER, until=When.EOTNT)
     else:
         c.hit(half=True)
 
@@ -3212,13 +3215,21 @@ def m5948a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.forbid(usage=)",),
+    dropped=("c.forbid(action=)",),
 )
 def m5948a5(c: Cast) -> None:
-    """Insubstantial and phasing are written; "cannot take standard
-    actions" has no action-category ban, the same gap `m5719a5` waits on
-    -- reused rather than re-coined, since it is the identical missing
-    capability."""
+    """Insubstantial and phasing are written; "cannot take standard actions"
+    has no action-category ban.
+
+    **Re-pointed, and the old marker was wrong about which gap.** It said
+    `c.forbid(usage=)` and called this "the identical missing capability" as
+    `m5719a5`. It is not the same axis: that card names which of the
+    target's *rows* it may reach, this one names what the creature may
+    *do*. A creature barred from standard actions may still use a
+    minor-action encounter power, and one barred from encounter powers may
+    still take a standard action. `usage=` landed (#487) and this row is
+    still waiting, which is the proof they were two.
+    """
     me = c.me
     phase = c.phasing(on=me, until=When.ENCOUNTER)
     c.insubstantial(on=me, until=When.ENCOUNTER)

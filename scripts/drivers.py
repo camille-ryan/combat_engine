@@ -2234,6 +2234,158 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_whole_usage_category_can_be_barred(out: Result) -> None:
+    """"The target can't use encounter powers" -- a category, not a ref.
+
+    `c.forbid` took a ref, a keyword, or the absence of a keyword, and no
+    number of refs can say *"the target can't use encounter powers until the
+    end of its next turn"* (`m5719a5`) or *"cannot use encounter or daily
+    attack powers"* (`m5559a4`). `usage=` says it, and `attacks_only=` is
+    the second card's narrowing. #487.
+
+    **The two narrowings are proved against each other**, which is the whole
+    of the rule: with `attacks_only` an encounter *utility* stays usable and
+    a daily *attack* does not; without it every encounter power goes and the
+    daily stays. Either assertion alone would pass on a bar that was simply
+    too wide or too narrow.
+
+    Each control row is chosen by asking `usable` **before** the bar lands.
+    The first draft picked by header alone and drew an at-will whose printed
+    Requirement the board could not meet, so its cell read "needs a shield"
+    on both sides of the question and proved nothing -- and an encounter
+    utility that carried a marker, which reads "not finished yet" the same
+    way.
+
+    **A third card was re-pointed rather than written.** `m5948a5`'s
+    "cannot take standard actions" carried this marker and called it "the
+    identical missing capability". It is a different axis: that card names
+    what the creature may *do*, these name which of its rows it may reach.
+    A creature barred from standard actions may still use a minor-action
+    encounter power. It waits on `c.forbid(action=)`.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Usage
+
+    def kit_for(world, who):  # noqa: ANN001, ANN202
+        """One usable row of each shape, asked of the board rather than
+        assumed: a printed Requirement reads exactly like a refusal."""
+        want = {"encounter attack": (Usage.ENCOUNTER, True),
+                "encounter utility": (Usage.ENCOUNTER, False),
+                "daily attack": (Usage.DAILY, True),
+                "at-will attack": (Usage.AT_WILL, True)}
+        found: dict[str, str] = {}
+        known = world.need(who, Powers)
+        for label, (usage, attacking) in want.items():
+            for ref, p in sorted(REGISTRY.items()):
+                if not ref.startswith("p") or (p.level or 0) > 10:
+                    continue
+                if p.unfinished or p.out_of_combat:
+                    continue
+                if p.usage is not usage or (p.attack is not None) is not attacking:
+                    continue
+                if ref in known.known:
+                    continue
+                known.known.append(ref)
+                if usable(world, who, p)[0]:
+                    found[label] = ref
+                    break
+                known.known.remove(ref)
+        return found
+
+    def reachable(world, who, kit):  # noqa: ANN001, ANN202
+        return {label: usable(world, who, REGISTRY[ref])[0]
+                for label, ref in kit.items()}
+
+    # -- attacks_only: m5559a4's card ------------------------------------
+    world, me, _ = _board("m5559a4", 1)
+    foe = next(iter(sorted(enemies(world, me))), me)
+    kit = kit_for(world, foe)
+    out.that(len(kit) == 4,
+             "the board can offer the target a usable encounter attack, an"
+             " encounter utility, a daily attack and an at-will -- or the"
+             " narrowing cannot be read either way",
+             f"{sorted(kit)}")
+    if len(kit) != 4:
+        return
+    out.that(all(reachable(world, foe, kit).values()),
+             "and all four are reachable before the bar lands, which is what"
+             " makes the four cells below mean something")
+
+    # **Through the row's own body, not by calling `c.forbid` here.** The
+    # first draft laid the bar by hand and a plant proved it worthless:
+    # taking `attacks_only=True` off `m5559a4` left every assertion green,
+    # because the rule was doing the forbidding. Third time in one day that
+    # a rule reached for the verb instead of the row.
+    use = Cast(world=world, me=me, ref="m5559a4", targets=[foe])
+    use.target = foe
+    REGISTRY["m5559a4"].body(use)
+    now = reachable(world, foe, kit)
+    out.that(not now["encounter attack"] and not now["daily attack"],
+             "m5559a4's own body bars BOTH printed categories -- encounter"
+             " and daily attack powers. Both clauses hang off its strike,"
+             " so a seed where the blow misses would read as a dead row;"
+             " seed 1 lands it",
+             f"{now}")
+    out.that(now["encounter utility"],
+             "and leaves an encounter UTILITY alone, which is the whole of"
+             " `attacks_only=`: the card says attack powers", f"{now}")
+    out.that(now["at-will attack"],
+             "and an at-will, which neither category names")
+
+    # -- every encounter power: m5719a5's card ---------------------------
+    world, me, _ = _board("m5719a5", 1)
+    foe = next(iter(sorted(enemies(world, me))), me)
+    kit = kit_for(world, foe)
+    if len(kit) != 4:
+        out.that(False, "the second board can offer the same four",
+                 f"{sorted(kit)}")
+        return
+    use = Cast(world=world, me=me, ref="m5719a5", targets=[foe])
+    use.target = foe
+    REGISTRY["m5719a5"].body(use)
+    now = reachable(world, foe, kit)
+    out.that(not now["encounter attack"] and not now["encounter utility"],
+             "m5719a5 bars every encounter power, attack or not -- which is"
+             " why it passes no `attacks_only=`", f"{now}")
+    out.that(now["daily attack"],
+             "and the daily attack is untouched: the narrowing is by usage,"
+             " so naming one category does not reach the other", f"{now}")
+
+    # -- and the clause is on the Hit line, not the Effect line ----------
+    #
+    # Both cards print the bar under "Hit:", so a missed blow bars nothing.
+    # Without this the rule could not tell the clause being laid above the
+    # strike from it being laid inside -- and on a board where the blow
+    # always lands, the two are indistinguishable. Seed 17 is a miss.
+    world, me, _ = _board("m5559a4", 17)
+    foe = next(iter(sorted(enemies(world, me))), me)
+    kit = kit_for(world, foe)
+    if len(kit) == 4:
+        use = Cast(world=world, me=me, ref="m5559a4", targets=[foe])
+        use.target = foe
+        REGISTRY["m5559a4"].body(use)
+        out.that(all(reachable(world, foe, kit).values()),
+                 "a MISSED blow bars nothing -- the card prints the clause"
+                 " under Hit, and on a board where every blow lands that is"
+                 " indistinguishable from an Effect line",
+                 f"{reachable(world, foe, kit)}")
+
+    out.that(not REGISTRY["m5559a4"].unfinished
+             and not REGISTRY["m5719a5"].unfinished,
+             "both rows carry no marker now",
+             f"{REGISTRY['m5559a4'].unfinished}"
+             f" {REGISTRY['m5719a5'].unfinished}")
+    out.that(REGISTRY["m5948a5"].unfinished == ("c.forbid(action=)",),
+             "and m5948a5 still carries its own, re-pointed at the axis it"
+             " actually wants -- which is the proof the two were never one"
+             " capability",
+             f"{REGISTRY['m5948a5'].unfinished}")
+
+
 def a_retype_can_name_what_it_replaces(out: Result) -> None:
     """`c.deals(from_=)` is a swap; without it, the override every card means.
 
@@ -12363,6 +12515,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_whole_usage_category_can_be_barred": (
+        a_whole_usage_category_can_be_barred,
+        "c.forbid(usage=) bars a category, and attacks_only narrows it"),
     "a_retype_can_name_what_it_replaces": (
         a_retype_can_name_what_it_replaces,
         "c.deals(from_=) is a swap, and unnamed is the override"),

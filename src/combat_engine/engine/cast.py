@@ -7133,6 +7133,8 @@ class Cast:
         *,
         keyword: Keyword | None = None,
         lacking: Keyword | None = None,
+        usage: Usage | Sequence[Usage] | None = None,
+        attacks_only: bool = False,
         on: int | None = None,
         until: When = When.SAVE_ENDS,
     ) -> Effect | None:
@@ -7163,7 +7165,26 @@ class Cast:
         written without that is the half most easily dropped and the one
         that would be most visible in play.
 
-        #487.
+        **A fourth sentence names a whole usage category**, which no amount
+        of refs could say: *"the target can't use encounter powers until the
+        end of its next turn"* (`m5719a5`) and *"the target cannot use
+        encounter or daily attack powers"* (`m5559a4`). `usage=` takes one
+        or several, and `attacks_only=True` is that second card's narrowing
+        -- an attack power being one whose header declares an `Attack`.
+
+        The narrowing is a second set on `Powers` rather than a flag beside
+        the first, the same argument as above: both sentences can be true of
+        one creature at once, and one set with a flag could not say which
+        entry the flag belonged to.
+
+        **Not the same axis as an action category.** `m5948a5`'s "cannot
+        take standard actions" is about what the creature may *do*, not
+        which of its rows it may reach, and its docstring called the two
+        "the identical missing capability". They are not: a creature barred
+        from standard actions may still use a minor-action encounter power.
+        That row keeps its own marker.
+
+        #487, #613.
         """
         from .components import Powers
 
@@ -7173,15 +7194,28 @@ class Cast:
         known = self.world.get(who, Powers)
         if known is None:
             return None
-        if not ref and keyword is None and lacking is None:
+        usages = (
+            () if usage is None else
+            (usage,) if isinstance(usage, Usage) else tuple(usage)
+        )
+        if not ref and keyword is None and lacking is None and not usages:
             return None
 
         undo: list[Callable[[], None]] = []
-        label = f"{self.ref} forbids {ref or keyword or lacking}"
+        label = (f"{self.ref} forbids "
+                 f"{ref or keyword or lacking or usages[0].value}")
         if ref:
             undo.append(lambda: known.forbidden.discard(ref))
         if keyword is not None:
             undo.append(lambda: known.forbidden_keywords.discard(keyword))
+        if usages:
+            barred = (known.forbidden_attack_usages if attacks_only
+                      else known.forbidden_usages)
+            # **Only what this call added.** A second restriction standing
+            # over the first must not take the first's categories away when
+            # it ends, which `discard` of the whole tuple would do.
+            fresh = tuple(u for u in usages if u not in barred)
+            undo.append(lambda: barred.difference_update(fresh))
         standing: set[str] = set()
         if lacking is not None:
             # What is already running is exempt, read **now** rather than when
@@ -7209,6 +7243,9 @@ class Cast:
             known.forbidden.add(ref)
         if keyword is not None:
             known.forbidden_keywords.add(keyword)
+        if usages:
+            (known.forbidden_attack_usages if attacks_only
+             else known.forbidden_usages).update(usages)
         if lacking is not None:
             known.required_keywords.add(lacking)
             known.sustainable |= standing
