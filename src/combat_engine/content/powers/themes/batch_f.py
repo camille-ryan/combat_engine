@@ -2110,7 +2110,9 @@ def p14191(c: Cast) -> None:
 
     for defence in ALL_DEFENCES:
         c.bonus(defence, 4, on=me, until=When.STANCE, kind="power", when=sheltered)
-    c.ignores_difficult(kind="shift", on=me, until=When.STANCE)
+    # "You ignore difficult terrain when shifting" is `when=`: a kind of
+    # move, not a sort of going. #598.
+    c.ignores_difficult(when="shift", on=me, until=When.STANCE)
 
 
 # -- x7_915 -----------------------------------------------------------------

@@ -303,13 +303,27 @@ def m2824a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
+    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m2824a4(c: Cast) -> None:
-    """Two words, because the printed line names two sorts of going and
-    difficult terrain carries a label -- rough ground of any other kind
-    still slows it. The first word is the creature's own, which is written
-    as its id: the map labels those squares the same way."""
-    c.ignores_difficult("m2824", on=c.me)
+    """"Ignores difficult terrain that is m2824 or shallow water."
+
+    **The shallow water half plays and the first half does not.** The old
+    note said "the map labels those squares the same way", and it does not:
+    `Grid.difficult` holds one word per square and the only words anything
+    writes are `forest`, `ice`, `rubble`, `water` and `web`. A creature's
+    own ref was never among them, so the waiver matched nothing. #598.
+
+    What the card narrows by is **what made the ground** -- terrain that is
+    the creature itself, the same provenance question `m4766a4`,
+    `m190a4`, `m3081a2` and `m3080a3` ask about a swarm. Four of those five
+    were making a dead call and one carried the marker.
+
+    `shallow water` is a label in `DIFFICULT_LABELS` and kept apart from
+    `water`, which is the only water the grid has today: aliasing them would
+    make this creature wade through real water on the strength of a word the
+    card did not say, and `m5808a0`'s rule is to err the other way.
+    """
     c.ignores_difficult("shallow water", on=c.me)
 
 

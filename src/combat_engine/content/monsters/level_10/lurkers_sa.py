@@ -865,7 +865,8 @@ def m3315a6(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m3315a7(c: Cast) -> None:
-    c.ignores_difficult(kind="shift", on=c.me, until=When.ENCOUNTER)
+    # `when=`, not `kind=` -- see `m4371a6`, the identical card. #598.
+    c.ignores_difficult(when="shift", on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

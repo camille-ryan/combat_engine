@@ -913,7 +913,11 @@ def m4371a5(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m4371a6(c: Cast) -> None:
-    c.ignores_difficult(kind="shift", on=c.me, until=When.ENCOUNTER)
+    # **`when=`, not `kind=`.** "Ignores difficult terrain when he
+    # shifts" names a kind of MOVE, and as a label it waived a sort of
+    # going called "shift" that no square carries -- so the row read as
+    # finished and waived nothing. #598.
+    c.ignores_difficult(when="shift", on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

@@ -242,6 +242,14 @@ def main() -> int:
         )
         faults += 1
 
+    for label, why in _dead_terrain_labels():
+        print(
+            f"DIFFICULT_LABELS: {label!r} {why}. A closed vocabulary whose"
+            f" entries nobody uses stops being a check -- drop it, or write"
+            f" the row that needs it. #598."
+        )
+        faults += 1
+
     for ref, host, why in _lends_nobody_asks_for():
         print(
             f"{ref}: lends an augment to {host!r} but {why}"
@@ -1572,6 +1580,100 @@ _DECLARES = re.compile(r"c\.declare\(([^)]*)\)")
 _REF_SHAPE = re.compile(
     r"p\d+|m\d+(?:c\d+)?a\d+|i\d+[px]\d+|f\d+[a-z]?|cf:[\w-]+|rt:[\w-]+"
 )
+
+
+def _strings_in(tree: object, call: object) -> set[str]:
+    """Every string constant in the function containing that call.
+
+    For `_dead_terrain_labels`, where a label reaches
+    `c.ignores_difficult` through a loop variable and no literal is in the
+    call itself.
+    """
+    import ast as _ast
+
+    for fn in _ast.walk(tree):  # ty: ignore[invalid-argument-type]
+        if not isinstance(fn, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            continue
+        if any(node is call for node in _ast.walk(fn)):
+            return {
+                node.value.lower()
+                for node in _ast.walk(fn)
+                if isinstance(node, _ast.Constant)
+                and isinstance(node.value, str)
+            }
+    return set()
+
+
+def _dead_terrain_labels() -> list[tuple[str, str]]:
+    """A `DIFFICULT_LABELS` entry that nothing writes and nothing waives.
+
+    The set is closed so `c.ignores_difficult(kind=)` can refuse a word no
+    square carries -- #598, where 29 calls named one and each waived nothing
+    while reading as a finished row. A closed set has its own failure mode:
+    the cheapest way to silence the raise is to add the word, and then the
+    set stops meaning anything.
+
+    So every entry must be **used by somebody**. Two legitimate kinds:
+
+    * written by `c.zone(difficult=...)`, which is the five words any zone
+      lays today -- `forest`, `ice`, `rubble`, `water`, `web`;
+    * waived by `c.ignores_difficult`, which is the words the *cards* print.
+      Those are correct clauses waiting for a map that makes that ground,
+      which is a different thing from a typo and is why both halves belong
+      in the set.
+
+    An entry in neither is dead weight, and this says so by name. It does
+    **not** fault a label that is waived but never written: that is the
+    honest state of a card whose ground nothing creates yet, and faulting it
+    would push an author to delete a correct clause.
+    """
+    import ast as _ast
+
+    from combat_engine.engine.cast import DIFFICULT_LABELS
+
+    written: set[str] = set()
+    waived: set[str] = set()
+    for path in _asked_for():
+        try:
+            tree = _ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+            f = node.func
+            if not isinstance(f, _ast.Attribute):
+                continue
+            if f.attr == "ignores_difficult":
+                word = None
+                if node.args and isinstance(node.args[0], _ast.Constant):
+                    word = node.args[0].value
+                for kw in node.keywords:
+                    if kw.arg == "kind" and isinstance(kw.value, _ast.Constant):
+                        word = kw.value.value
+                if isinstance(word, str):
+                    waived.add(word.lower())
+                else:
+                    # **A word fed through a loop variable, which is how six
+                    # files say a printed line naming three sorts of ground:
+                    # `for kind in ("rubble", "uneven stone", ...)`.** The
+                    # first draft read literal arguments only and reported
+                    # four real labels as used by nobody. Every string in
+                    # the enclosing function is taken rather than tracing
+                    # the variable: this decides whether a vocabulary entry
+                    # is dead, so a few extra words make it quieter and
+                    # never wronger.
+                    waived |= _strings_in(tree, node)
+            elif f.attr in ("zone", "aura", "create"):
+                for kw in node.keywords:
+                    if (kw.arg == "difficult"
+                            and isinstance(kw.value, _ast.Constant)
+                            and isinstance(kw.value.value, str)):
+                        written.add(kw.value.value.lower())
+    return [
+        (label, "in DIFFICULT_LABELS but no zone writes it and no row waives it")
+        for label in sorted(DIFFICULT_LABELS - written - waived)
+    ]
 
 
 def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:

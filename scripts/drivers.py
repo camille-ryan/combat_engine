@@ -2234,6 +2234,126 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_terrain_waiver_names_going_something_can_carry(out: Result) -> None:
+    """`kind=` took any string and 29 calls named ground no square has.
+
+    #598. A square's sort of going lives in `Grid.difficult` and in a
+    zone's `difficult=`, and `kind=` accepted anything -- so `"mud"` eight
+    times, `"blood"` three, `"shift"` six and a `"webs"` typo each waived
+    nothing while reading as a finished row. `DIFFICULT_LABELS` closes the
+    vocabulary and the verb raises outside it, which is #544's discipline
+    for `c.bonus(once=)` applied one argument over.
+
+    **A ref is a label too, and the first draft of this gate refused one.**
+    Twelve rows say "difficult terrain for all creatures except you" as
+    `c.zone(difficult=c.ref)` plus `c.ignores_difficult(c.ref)`: labelling
+    the squares with the row's own ref scopes the exemption to *this* zone,
+    where a word would waive every patch of the same going on the board and
+    `difficult=True` would slow the caster too. A closed set of words would
+    have broken all twelve. The first assertion below is that idiom end to
+    end, and it is the one worth keeping.
+
+    **The words are not a count anybody had.** #598's table lists ten;
+    there are seventeen. Six content files feed them through a tuple in a
+    `for` loop -- `("rubble", "uneven stone", "earthen construction")` is
+    one printed line said three ways -- so no static census saw them. The
+    raise did, which is the argument for a gate over a survey.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import DIFFICULT_LABELS, Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+
+    # -- the per-zone idiom, which is what the gate must not break -------
+    world, me, _ = _board("p15852", 1)
+    here = world.get(me, Position)
+    use = Cast(world=world, me=me, ref="p15852")
+    use.origin = here.square if here is not None else None
+    # **Caught, so a gate that refuses a ref reddens a line instead of
+    # killing the rule.** The first draft let the ValueError out, and the
+    # plant that narrowed `_is_terrain_label` to words took the whole rule
+    # down with a traceback -- loud, but it loses every assertion below it
+    # and says nothing about which one broke.
+    raised = ""
+    try:
+        REGISTRY["p15852"].body(use)
+    except ValueError as why:
+        raised = str(why)
+    out.that(not raised,
+             "p15852 can be used at all: the vocabulary must not refuse what"
+             " content already says, and a ref is what twelve rows pass",
+             raised[:90] or "no raise")
+    mine = [sq for sq, word in world.rough().items() if word == "p15852"]
+    out.that(bool(mine),
+             "p15852's zone labels its squares with the row's own ref, which"
+             " is how the exemption is scoped to this zone and not to every"
+             " patch of the same going",
+             f"{len(mine)} squares")
+    foe = next(iter(sorted(enemies(world, me))), me)
+    if mine:
+        sq = mine[0]
+        out.that(sq in world.difficult(foe, "walk"),
+                 "those squares are rough for an enemy")
+        out.that(sq not in world.difficult(me, "walk"),
+                 "and not for the caster -- \"difficult terrain for all"
+                 " creatures except you\", which a closed set of WORDS"
+                 " would have refused outright")
+
+    # -- the gate itself -------------------------------------------------
+    probe = Cast(world=world, me=me, ref="p15852")
+    out.that(probe.ignores_difficult("mud", on=me) is not None,
+             "a printed sort of going is accepted even though no zone writes"
+             " it yet: a waiver for ground nothing creates is a correct"
+             " clause waiting for a map, not a typo")
+
+    def refused(word: str) -> bool:
+        try:
+            Cast(world=world, me=me, ref="p15852").ignores_difficult(
+                word, on=me)
+        except ValueError:
+            return True
+        return False
+
+    out.that(refused("quicksand"),
+             "a word outside the vocabulary raises -- the one change that"
+             " stops this recurring, since the old argument took anything")
+    out.that(refused("webs"),
+             "including a typo for a live label, which is exactly what one"
+             " row had and what made it read as finished")
+    out.that(refused("shift"),
+             "and a MOVE kind in the label slot, which six rows had:"
+             " \"ignores difficult terrain when it shifts\" is `when=`")
+    out.that(not refused("p9999"),
+             "while a ref-shaped label is accepted, minted per row, which no"
+             " set could list")
+
+    # -- and `when=` still prices the move kind it is given --------------
+    out.that(Cast(world=world, me=me, ref="p15852").ignores_difficult(
+                 when="shift", on=me) is not None,
+             "`when=\"shift\"` is the sentence those six rows meant")
+
+    written = {"forest", "ice", "rubble", "water", "web"}
+    out.that(written <= DIFFICULT_LABELS and len(DIFFICULT_LABELS) == 22,
+             "twenty-two sorts of going: the five any zone writes today,"
+             " plus seventeen the cards print. #598's own table listed ten"
+             " of the seventeen -- the rest arrive through a tuple in a"
+             " `for` loop and only the raise found them",
+             f"{len(DIFFICULT_LABELS)}, written {sorted(written)}")
+
+    for ref in ("m4371a6", "m3315a7", "p14191"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} says it with `when=` now and carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+    for ref in ("m190a4", "m3081a2", "m3080a3", "m4766a4", "m2824a4"):
+        out.that(REGISTRY[ref].unfinished
+                 == ("c.ignores_difficult(made_by=)",),
+                 f"{ref} is marked for provenance instead of making a dead"
+                 f" call -- the square knows its sort of going and not who"
+                 f" made it",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_recharge_can_name_the_moment_it_waits_for(out: Result) -> None:
     """Three rows marked for a field 186 others already declared.
 
@@ -12617,6 +12737,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_terrain_waiver_names_going_something_can_carry": (
+        a_terrain_waiver_names_going_something_can_carry,
+        "c.ignores_difficult(kind=) refuses going no square can carry"),
     "a_recharge_can_name_the_moment_it_waits_for": (
         a_recharge_can_name_the_moment_it_waits_for,
         "three rows marked for recharge_when, which 186 already declared"),

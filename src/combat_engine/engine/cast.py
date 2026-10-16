@@ -17,6 +17,7 @@ line and the unusual case still one line.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
@@ -199,6 +200,66 @@ TERRAIN_WORDS = frozenset({
     "bright", "dim light", "darkness",
     "sunlight", "moonlight", "starlight",
 })
+
+#: What sort of going a square is, which `Grid.difficult` holds one of per
+#: square. A **closed set for the same reason `TERRAIN_WORDS` is**: `kind=`
+#: took any string, and 29 calls across the tree named a word no square ever
+#: carries -- `mud` eight times, `blood` three, `snow` two -- so each waived
+#: nothing while reading exactly like a working row. #598.
+#:
+#: **Five of these are the only words anything writes today**: `forest`,
+#: `ice`, `rubble`, `water` and `web`, all through `c.zone(difficult=)`. The
+#: rest are words the *cards* print, and a waiver naming one is a correct
+#: clause waiting for a map that makes that ground -- which is a different
+#: thing from a typo, and the whole point of listing both. `scripts/lint.py`
+#: reports which are unwritten so the distinction stays visible instead of
+#: becoming a silent allowance.
+#:
+#: `shallow water` is kept apart from `water` deliberately. There is no deep
+#: water label, so aliasing them would make six rows waive the only water the
+#: grid has -- possibly right, and `m5808a0`'s rule says err the other way: a
+#: row stronger than its card is worse than one weaker.
+#:
+#: **A ref is also a label, and that is not a loophole.** Twelve rows do
+#: `c.zone(difficult=c.ref)` and then `c.ignores_difficult(c.ref)`, which is
+#: how "difficult terrain for all creatures except you" is said: labelling
+#: the squares with the row's own ref scopes the exemption to *this* zone,
+#: where a word would waive every patch of the same going on the board and
+#: `difficult=True` would slow the caster too. `p15852`'s docstring states
+#: the idiom. A closed set of words would have refused all twelve, and the
+#: first draft of this one did -- so `_is_terrain_label` accepts a
+#: ref-shaped string as well.
+DIFFICULT_LABELS = frozenset({
+    # written by `c.zone(difficult=)` today
+    "forest", "ice", "rubble", "water", "web",
+    # **Printed by cards, written by nothing yet.** Six content files feed
+    # these through a tuple in a `for` loop rather than one call per word --
+    # `("rubble", "uneven stone", "earthen construction")` is one printed
+    # line said three ways -- which is why no static census found them and
+    # why the raise did. #598's own table listed ten of these; there are
+    # seventeen.
+    "blood", "debris", "dirt", "earth", "earthen construction", "mud",
+    "natural growth", "plants", "sand", "shallow water", "silt", "snow",
+    "stone", "trees", "underbrush", "uneven stone", "vehicle",
+})
+
+#: The shapes a ref takes, for `_is_terrain_label`. The same alternation
+#: `lint._REF_SHAPE` uses, kept here rather than imported because `engine/`
+#: must not reach into `scripts/`.
+_REF_LABEL = re.compile(
+    r"\A(?:p\d+|m\d+(?:c\d+)?a\d+|i\d+[px]\d+|f\d+[a-z]?"
+    r"|cf:[\w-]+|rt:[\w-]+)\Z"
+)
+
+
+def _is_terrain_label(word: str) -> bool:
+    """Could any square carry this label?
+
+    A printed sort of going from `DIFFICULT_LABELS`, or a **ref** -- which
+    is the per-zone idiom described above and is minted per row, so no set
+    could list them.
+    """
+    return word in DIFFICULT_LABELS or bool(_REF_LABEL.match(word))
 
 
 @dataclass
@@ -1420,6 +1481,14 @@ class Cast:
         exemption scoped to one would be a modifier nothing consults, which
         is this component's commonest bug and reads exactly like a working
         row.
+
+        **`kind` raises on a word outside `DIFFICULT_LABELS`**, which is the
+        same discipline `when` above already has and the one change that
+        stops #598 recurring: that argument took any string, and 29 calls
+        named ground no square carries. A new sort of going is one line in
+        that set, and a typo is now a failure instead of a silent waiver --
+        `"webs"` for `"web"` was exactly that, on a row that read as
+        finished.
         """
         from .components import Movement
 
@@ -1428,6 +1497,18 @@ class Cast:
         if moves is None:
             return None
         word = kind.lower() or "*"
+        # **Refused, not accepted silently.** `"*"` is the bare call --
+        # every sort of going -- and anything else must be a label something
+        # can write. #598: 29 calls named ground no square carries, and each
+        # read as a finished row.
+        if word != "*" and not _is_terrain_label(word):
+            raise ValueError(
+                f"{self.ref}: c.ignores_difficult({kind!r}) names no sort of"
+                f" going. Known: {', '.join(sorted(DIFFICULT_LABELS))}, or a"
+                f" ref for the per-zone idiom. A new word is a line in"
+                f" `DIFFICULT_LABELS`; a move kind like 'shift' belongs in"
+                f" `when=`."
+            )
         if when:
             scope = when.lower()
             from .movement import PRICED_KINDS

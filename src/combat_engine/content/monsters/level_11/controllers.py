@@ -540,12 +540,24 @@ def m3080a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
+    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m3080a3(c: Cast) -> None:
-    """Filed as a standard action and plainly a trait. Said twice, once per
-    word, which is how `c.ignores_difficult` takes a printed list."""
+    """Filed as a standard action and plainly a trait. The web half plays.
+
+    **The second half is re-pointed, and the dead call is gone.** It read
+    `c.ignores_difficult("swarm")`, and `"swarm"` is a creature *kind* that
+    `query.kinds_of` answers -- no square ever carries it, so the waiver
+    matched nothing while the row read as finished. #598, and
+    `DIFFICULT_LABELS` refuses the word now rather than accepting it
+    silently.
+
+    What the card narrows by is **what made the ground**, which is provenance
+    and not a label: `Grid.difficult` holds one word per square and nothing
+    records who put it there. `m4766a4` carried this marker all along and its
+    twin made the dead call, which is how the pair was found.
+    """
     c.ignores_difficult(_WEB, until=When.ENCOUNTER)
-    c.ignores_difficult("swarm", until=When.ENCOUNTER)
 
 
 # ==========================================================================
