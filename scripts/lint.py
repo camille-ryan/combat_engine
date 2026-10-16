@@ -1,7 +1,13 @@
 #!/usr/bin/env python
-"""Ruff, plus two structural faults it cannot see.
+"""Ruff, plus the structural faults it cannot see.
 
     uv run scripts/lint.py
+
+**Twenty-two of them now, and this header said "two" until the count was
+checked.** Each is a walk over what the tree declares, looking for a
+statement that is silently false rather than wrong -- the class of fault
+that leaves a row looking finished. The two below are the original pair and
+are still the clearest examples of the shape.
 
 A second `def` of the same name in the same class silently replaces the
 first. Python allows it, and ruff's F811 catches it in a small file but did
@@ -233,6 +239,14 @@ def main() -> int:
             f"{ref}: implemented_in={where!r} but {why}"
             f" -- the row is reported finished and never fired, so this"
             f" pointer is the only thing holding it up. #553."
+        )
+        faults += 1
+
+    for ref, host, why in _lends_nobody_asks_for():
+        print(
+            f"{ref}: lends an augment to {host!r} but {why}"
+            f" -- the feat has a body and audits as firing, the power still"
+            f" works, and nothing counts the gap. That was f3170's state."
         )
         faults += 1
 
@@ -1473,6 +1487,64 @@ _DECLARES = re.compile(r"c\.declare\(([^)]*)\)")
 _REF_SHAPE = re.compile(
     r"p\d+|m\d+(?:c\d+)?a\d+|i\d+[px]\d+|f\d+[a-z]?|cf:[\w-]+|rt:[\w-]+"
 )
+
+
+def _lends_nobody_asks_for() -> list[tuple[str, str, str]]:
+    """`c.lend_augment("pNNN", …)` pointing at a row that never asks.
+
+    The verb hands a power an Augment option its own card does not print,
+    and its docstring states the obligation plainly: the lent-to row must
+    call `augment.lent(c)` or **the lend is a modifier nothing consults**.
+
+    That is a silent failure in every direction. The feat has a real body,
+    so it is not SILENT; `audit.py` fires it alone and sees a modifier laid,
+    so it reports the row firing and doing something; the power still works,
+    because the missing call is an absence; and `blocked.py` counts no owed
+    work. `f3170` sat in exactly that state -- marked for a verb that had
+    existed for weeks, while the thing actually missing was one line in
+    `p10440`.
+
+    Same reasoning as `_dangling_implementations` above and the same scope:
+    both halves of the pair are always content, so the walk is content.
+
+    Read off the registry rather than by grepping file names, because four
+    of the five lent-to powers live in modules whose names do not contain
+    their ref -- a grep for the power would have missed them and the check
+    would have been quietly green.
+    """
+    import inspect
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.dsl import REGISTRY
+
+    out = []
+    for ref, row in sorted(REGISTRY.items()):
+        try:
+            lender = inspect.getsource(row.body)
+        except (OSError, TypeError):
+            continue
+        for host in _LENDS.findall(lender):
+            target = REGISTRY.get(host)
+            if target is None:
+                out.append((ref, host, "names a row that is not declared"))
+                continue
+            try:
+                asked = inspect.getsource(target.body)
+            except (OSError, TypeError):
+                continue
+            # The call, not the import: `general_o.py` imports `lent` once
+            # for a module of rows and all but one of them never call it.
+            if "lent(c)" not in asked:
+                out.append((ref, host,
+                            "that row never calls `augment.lent(c)`, so the"
+                            " lend is a modifier nothing consults"))
+    return out
+
+
+#: The ref a `c.lend_augment(` call lends to. First argument, a literal in
+#: every call in the tree -- a computed one would belong to a different
+#: check, since there would be nothing to resolve at lint time.
+_LENDS = re.compile(r'c\.lend_augment\(\s*"([^"]+)"')
 
 
 def _gates_on_nothing() -> list[tuple[str, str, str]]:
