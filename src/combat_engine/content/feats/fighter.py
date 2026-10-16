@@ -363,8 +363,13 @@ def f755(c: Cast) -> None:
     has to follow it.
     """
     me = c.me
+    # **Untyped, and `bonuses.py` is why.** This card prints "an additional
+    # 2 temporary hit points" and names no bonus type, where `f774` and
+    # `f792` both print "+2 **feat** bonus". It shipped `kind="feat"` and
+    # the nightly caught it: that instrument reads the card and the code
+    # and says which of the two disagrees.
     c.bonus(
-        "temp_hp", 2, on=me, until=When.ENCOUNTER, kind="feat",
+        "temp_hp", 2, on=me, until=When.ENCOUNTER,
         when=lambda ctx: _invigorating(c)(ctx) and c.bloodied(me),
     )
 

@@ -39,7 +39,7 @@ Making an attack, and what the attack turns out to be.
   - Knock a weapon out of a hand. It lands in that creature's square.
 - `c.flurry_of_blows(self, *, on: 'int | None' = None) -> 'str'`
   - Which flurry of blows **this** monk has, as a ref. Empty for anyone else.
-- `c.grant_attack(self, who: 'int', *, on: 'int | None' = None, ref: 'str' = '', damage_bonus: 'int' = 0, attack_bonus: 'int' = 0, trigger: 'Any' = None, reentrant: 'bool' = False) -> 'bool'`
+- `c.grant_attack(self, who: 'int', *, on: 'int | None' = None, ref: 'str' = '', damage_bonus: 'int' = 0, damage_type: 'DamageType | None' = None, attack_bonus: 'int' = 0, trigger: 'Any' = None, reentrant: 'bool' = False) -> 'bool'`
   - Let somebody else make an attack, now, out of turn.
 - `c.hit(self, *, on: 'int | None' = None, half: 'bool' = False) -> 'int'`
   - Deal the damage the header declared.
