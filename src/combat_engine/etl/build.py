@@ -3115,7 +3115,7 @@ def _other_names(
 
 
 
-#: A sub-option's ref: a race's, as `item.sub_options` mints them, and a class
+#: A sub-option's ref: a race's, as `item.sub_option_lines` mints them, and a class
 #: feature's, as `_sub_features` does.
 #:
 #: **Both, because the argument for one is the argument for the other.** This was

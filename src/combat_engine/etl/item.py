@@ -61,8 +61,8 @@ _CHOOSE_ONE = re.compile(r"(?i)choose one")
 _LABELLED = re.compile(r"(?m)^([A-Z][A-Za-z'\-\s]{2,40}?)\s*:\s*(.+)$")
 
 
-def sub_options(spec: str, ref: str) -> dict[str, str]:
-    """A race's "choose one" family, as `{printed label: its own ref}`.
+def sub_option_lines(spec: str, ref: str) -> list[tuple[str, str, str]]:
+    """A race's "choose one" family: `(printed label, its ref, its benefit)`.
 
     Two races print one -- 13 sub-options on one page and 3 on another -- and
     every label was reaching authors verbatim, in the race's own spec and in the
@@ -82,11 +82,17 @@ def sub_options(spec: str, ref: str) -> dict[str, str]:
     Numbered by order of appearance, which is deterministic from the page, and
     spelled the way a class feature's legs are (`f0s0`) because it is the same
     idea: sub-option N of one feature.
+
+    **It used to return `{label: ref}` and drop the benefit on the floor**,
+    which is why none of the 18 had a `racial_trait` row: the rules text had
+    nowhere to go, so the rows were never written and every character of those
+    races was short whichever defence bonus and resistance its manifestation
+    prints. The caller builds the swap map it still needs from this. #548.
     """
     opens = _CHOOSE_ONE.search(spec)
     if opens is None:
-        return {}
-    out: dict[str, str] = {}
+        return []
+    out: list[tuple[str, str, str]] = []
     for found in _LABELLED.finditer(spec[opens.start():]):
         label, benefit = found.group(1).strip(), found.group(2)
         # **Either spelling of "a card", because this runs before the
@@ -96,7 +102,7 @@ def sub_options(spec: str, ref: str) -> dict[str, str]:
         # returned no sub-options anywhere. The word survives both stages.
         if not re.search(r"\bp\d+\b|\bpowers?\b", benefit):
             continue
-        out[label] = f"rt:{ref}-s{len(out)}"
+        out.append((label, f"rt:{ref}-s{len(out)}", benefit))
     return out
 
 
@@ -227,12 +233,17 @@ def races(
         # where it said a printed label -- and registered in `names` so the other
         # tables that name one can be swapped too, and so `leaks.py` can finally
         # see them.
-        options = sub_options(spec, ref)
+        option_lines = sub_option_lines(spec, ref)
+        # `_trait_lines` wants the family's **labels** only -- to skip them,
+        # since a sub-option nests under the trait that offers it rather than
+        # sitting beside it -- and the ref each label maps to is not settled
+        # until `granted` below can say whether it is already a power.
+        option_labels = {label: o_ref for label, o_ref, _r in option_lines}
         # **Each printed trait becomes a row of its own.** They were prose and
         # only prose, so content needing to name one invented a ref out of the
         # printed label -- 94 of them in tracked source, each with nothing a
         # checker could compare it against. #341.
-        traits = _trait_lines(spec, options)
+        traits = _trait_lines(spec, option_labels)
         # **A trait that is already a power keeps the power's ref.** 42 of the
         # 185 are printed twice: once as a line in the traits list and once as a
         # whole card, which the compendium files under the race in its Class
@@ -247,6 +258,28 @@ def races(
             )
         }
         granted.pop("", None)
+        # **A sub-option that is already a power keeps the power's ref**, the
+        # same rule the trait loop below applies and for the same reason.
+        # One race's two "sub-options" are its two racial powers and nothing
+        # else -- "You have the <card> power" -- so the label *is* the
+        # power's printed name. Minting an `rt:` ref for those made one thing
+        # with two identities, and it showed immediately: the early scrub
+        # swapped the power's name for the sub-option's own ref, so the row
+        # read "You have the rt:r1-s0 power" and named itself instead of its
+        # card. #528's fault in a new place.
+        #
+        # The surviving rows are the ones that carry something besides a
+        # card: thirteen manifestations with defence bonuses, resistances
+        # and breathing underwater, which is the gap #548 is about.
+        options = {
+            label: granted.get(label, o_ref)
+            for label, o_ref, _rules in option_lines
+        }
+        option_lines = [
+            (label, o_ref, rules)
+            for label, o_ref, rules in option_lines
+            if label not in granted
+        ]
         trait_refs: dict[str, str] = {}
         rows: list[tuple[str, int, str, str]] = []
         for i, (label, rules) in enumerate(traits):
@@ -271,10 +304,34 @@ def races(
              scrub(spec, {name: ref, **trait_refs, **options})),
         )
         names[ref] = {"name": name, "description": flavour}
-        for label, option_ref in options.items():
-            names.setdefault(option_ref, {"name": label})
+        # **A sub-option gets a row, not only a name.** Its label was
+        # registered here and its *benefit* was dropped on the floor, so all
+        # 18 were refs with nothing behind them -- cited in this race's own
+        # spec and in the feats and powers that name one, resolving to
+        # nothing, and no instrument watching: `refs.py` skips `rt:` as a
+        # placeholder and never reads a spec anyway. A character of these
+        # races is short whichever defence and resistance its manifestation
+        # prints. #548.
+        #
+        # `ord` continues past the plain traits rather than restarting, so
+        # the two families order against each other the way the page does.
+        # The ref itself carries the choice number, which is what
+        # `chargen.RaceLine.manifestations` sorts on.
+        #
+        # **These are alternatives, not additions**, and the thing that
+        # keeps them apart lives in chargen: `traits` excludes a `-s` ref
+        # and `granted` adds back exactly one, paired with the power the
+        # sub-option names. Writing these rows without that guard hands one
+        # race's character all thirteen at once.
+        for n, (label, option_ref, rules) in enumerate(option_lines):
+            out.execute(
+                "INSERT OR REPLACE INTO racial_trait VALUES (?,?,?,?)",
+                (option_ref, ref, len(rows) + n,
+                 scrub(rules, {name: ref, **trait_refs, **options})),
+            )
+            names[option_ref] = {"name": label, "rules_text": rules}
         report.races += 1
-        report.racial_traits += len(rows)
+        report.racial_traits += len(rows) + len(option_lines)
         report.traits_are_powers += len(traits) - len(rows)
 
 

@@ -222,8 +222,30 @@ KIND = re.compile(r"""kind=["']([a-z ]+)["']""")
 #: reported a correct row as wrong, because the row had two `c.bonus`
 #: calls and only the first was the printed bonus.
 INTERNAL = {
-    "crit_range", "forced", "forcing", "reach", "concealment",
+    "crit_range", "forced", "forcing", "concealment",
     "no_advantage", "unflankable", "shift", "initiative",
+    # **`dsl._stretched`'s three keys, and only one of them was here.**
+    # `reach`, `range` and `blast_size` are the melee, ranged and burst
+    # halves of one mechanism -- that function reads exactly these three --
+    # and a *distance* is not a bonus a card types. `reach` was listed and
+    # its two siblings were not, so a row growing a burst or a ranged range
+    # was measured against the card's typed bonuses and asked to label a
+    # radius "power".
+    #
+    # It surfaced on `f1010`, whose card prints one typed bonus ("+2 power
+    # bonus to weapon damage rolls") and one *replacement* ("becomes a close
+    # burst 5 + your Charisma modifier"). The replacement is expressed with
+    # a `blast_size` modifier because that is the mechanism available, and
+    # the check asked for `kind='power'` on it -- which would have mislabeled
+    # a radius as a typed bonus and put it in the same stacking bucket as
+    # the damage one.
+    #
+    # Four rows already used the two missing keys and passed, but only
+    # incidentally: their cards print an untyped bonus somewhere, which the
+    # `not said` branch allows. So this is the check's definition being
+    # short, not a row being wrong -- `scripts/CLAUDE.md`'s first rule, and
+    # the direction it points here is "fix the check".
+    "reach", "range", "blast_size",
 }
 
 

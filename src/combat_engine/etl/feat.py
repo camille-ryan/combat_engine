@@ -332,7 +332,7 @@ def _vocabulary() -> tuple[dict[str, str], frozenset[str], frozenset[str]]:
 #: How an opaque clause is labelled in `prereq_term`. The kind is the only
 #: thing about it that can be said in the open, and it is enough to sort the
 #: work: every `deity` is the same missing feature.
-#: A race sub-option's ref, as `item.sub_options` mints them.
+#: A race sub-option's ref, as `item.sub_option_lines` mints them.
 _SUB_OPTION = re.compile(r"rt:r\d+-s\d+")
 
 _KINDS = (
