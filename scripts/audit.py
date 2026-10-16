@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import inspect
 import re
 import traceback
 from dataclasses import dataclass, field
@@ -1323,6 +1322,49 @@ def _hand_it_the_weapon(world: World, caster: int, declared: object) -> None:
             return
 
 
+#: Rows whose source could not be read, and why. Reported at the end of a
+#: run rather than swallowed -- `scripts/CLAUDE.md`'s rule that an
+#: instrument must not skip itself quietly.
+UNREADABLE: dict[str, str] = {}
+
+
+def _source_of(body: object, ref: str = "") -> str:
+    """`inspect.getsource`, or `""` and a note of why it could not be read.
+
+    **`getsource` raises more than `OSError` and that killed a wide sweep.**
+    Three call sites here guarded `(OSError, TypeError)` only, and
+    `inspect.getblock` tokenises the file from the function's recorded
+    offset -- so a file whose line numbers have moved under an
+    already-imported module raises `tokenize.TokenError` or `SyntaxError`
+    instead, which escaped and failed the whole run with an unterminated
+    string literal nobody could find. It did not reproduce on a stable
+    tree, exactly as this file's own note about editing the tree mid-sweep
+    predicts.
+
+    **Not a swallow.** Every one of these three sites uses the text only to
+    *search* it -- for a needle, for "expended", to build a string of what
+    a row asks for -- so a failed read means "I could not look", which is
+    what the existing `src = ""` branch already meant. What was missing is
+    that nobody was told, and a spurious raise in the one number this
+    project treats as inviolable costs real time while a real one hidden
+    among spurious ones costs more. So the ref is recorded and the count is
+    printed.
+    """
+    import inspect as _inspect
+    import tokenize as _tokenize
+
+    if body is None:
+        return ""
+    try:
+        return _inspect.getsource(body)  # ty: ignore[invalid-argument-type]
+    except (OSError, TypeError):
+        return ""
+    except (_tokenize.TokenError, SyntaxError, IndentationError) as why:
+        if ref:
+            UNREADABLE[ref] = f"{type(why).__name__}: {why}"
+        return ""
+
+
 def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
@@ -1851,10 +1893,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
 
     if declared is None:
         return
-    try:
-        src = inspect.getsource(declared.body) if declared.body else ""
-    except (OSError, TypeError):
-        src = ""
+    src = _source_of(declared.body, getattr(declared, 'ref', ''))
     asking = f"{src} {getattr(declared, 'requires_text', '') or ''} " \
              f"{getattr(declared, 'target', '')}"
     for what, pattern in _WANTS:
@@ -2355,15 +2394,11 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
 
 def _wants_expended(ref: str) -> bool:
     """Does this row read what the caster has already used up?"""
-    import inspect
-
     declared = REGISTRY.get(ref)
     if declared is None:
         return False
-    with contextlib.suppress(OSError, TypeError):
-        body = inspect.getsource(declared.body)
-        return "expended" in body or "restore_use" in body
-    return False
+    body = _source_of(declared.body, ref)
+    return "expended" in body or "restore_use" in body
 
 
 #: The damage keyword a printed trigger names, by the word the author wrote.
@@ -2914,7 +2949,6 @@ def _calls(symbols: list[str]) -> list[str]:
     that nothing else broke. When a change is not purely additive, take
     the wide run and pay for it.
     """
-    import inspect
 
     needles = [s.split("(")[0].strip() for s in symbols]
     needles = [n for n in needles if n]
@@ -2926,9 +2960,8 @@ def _calls(symbols: list[str]) -> list[str]:
         body = getattr(p, "body", None)
         if body is None:
             continue
-        try:
-            source = inspect.getsource(body)
-        except (OSError, TypeError):
+        source = _source_of(body, ref)
+        if not source:
             continue
         if any(n in source for n in needles):
             out.append(ref)
@@ -4108,6 +4141,18 @@ def main() -> int:
         print(f"  {len(refused)} negotiable event(s) ignored a refusal")
     if known_quiet:
         print(f"  {len(known_quiet)} silent for a recorded reason, not counted above")
+    # **Said out loud, not swallowed.** A row whose source could not be
+    # tokenised is a row this run could not fully look at, and it used to
+    # escape as a sweep-wide failure instead. Reported so a reader can tell
+    # "I did not look" from "I looked and it was fine" -- the rule the
+    # browser summary's `(of N asked)` exists for.
+    if UNREADABLE:
+        print(f"  {len(UNREADABLE)} row(s) whose source could not be read, so"
+              f" the text searches above skipped them:")
+        for ref, why in sorted(UNREADABLE.items())[:10]:
+            print(f"      {ref}: {why}")
+        print("  A stable tree reads clean; this is the mid-sweep edit "
+              "hazard in `_changed`'s note.")
     if outgrown:
         print(f"  {len(outgrown)} excuse(s) outlived the thing they excused")
     # **A full sweep leaves its watermark.** Only a full one: a narrowed run
