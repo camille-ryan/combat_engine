@@ -71,6 +71,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    FamiliarMode,
     Gear,
     Healed,
     Hit,
@@ -1549,17 +1550,37 @@ def f2150(c: Cast) -> None:
 
 
 @power("f2256", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.FamiliarMode",))
+       reach=PERSONAL, target=SELF)
 def f2256(c: Cast) -> None:
-    """Rides on the familiar changing mode.
+    """"When you switch your familiar into active mode, you can teleport it
+    up to 5 squares."
 
-    **The mode exists; the moment does not.** `Companion.passive` is the
+    **The mode existed; the moment did not.** `Companion.passive` is the
     state and `c.familiar_mode` is the writer -- it lifts the familiar off
     the grid and drops its `Position` going passive, and places it again
-    coming back -- but it emits nothing, so there is no moment to ride.
-    One event, which is the shape #611's note and `PowerRecharged` both
-    took. Re-pointed off `c.familiar_state()`, which bundled this with two
-    unrelated gaps. #620."""
+    coming back -- but it announced nothing, so there was no moment to
+    ride. `events.FamiliarMode` is that announcement, emitted at **both**
+    ends for `PowerRecharged`'s reason: a row written against one direction
+    would be right in half the game and silently wrong in the other. #620.
+
+    Gated on `mode == "active"`, which is the printed direction. The event
+    carries the word rather than a boolean precisely so this row does not
+    have to read `passive=False` and then work out whether the familiar
+    exists at all.
+
+    `c.may` because the card says "you can", and the teleport is the
+    familiar's own move -- `who=` rather than `on=`, since a movement verb
+    names its mover that way.
+    """
+    me = c.me
+
+    def arrived(ev: FamiliarMode) -> None:
+        if ev.actor != me or ev.mode != "active":
+            return
+        if c.may("teleport the familiar up to 5"):
+            c.teleport(5, who=ev.familiar)
+
+    c.watch(FamiliarMode, arrived, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f2257", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

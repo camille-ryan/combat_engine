@@ -6680,11 +6680,18 @@ class Cast:
         want = mode == "passive"
         if mine.passive == want:
             return False
+        # **Announced at both ends**, for `PowerRecharged`'s reason: a row
+        # written against one direction would be right in half the game and
+        # silently wrong in the other. #620.
+        from .events import FamiliarMode
+
         if want:
             mine.stowed = self.world.get(who, Position)
             self.world.grid.lift(who)
             self.world.drop(who, Position)
             mine.passive = True
+            self.world.bus.emit(
+                FamiliarMode(actor=self.me, familiar=who, mode="passive"))
             return True
         back = mine.stowed or Position(square=self.here)
         anchor = self.world.get(mine.owner or self.me, Position)
@@ -6694,6 +6701,8 @@ class Cast:
         mine.stowed = None
         mine.passive = False
         place(self.world, who, back.square)
+        self.world.bus.emit(
+            FamiliarMode(actor=self.me, familiar=who, mode="active"))
         return True
 
     def can_flank(

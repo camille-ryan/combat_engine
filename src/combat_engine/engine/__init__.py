@@ -95,6 +95,7 @@ from .events import (
     EnterSquare,
     Escaped,
     Event,
+    FamiliarMode,
     Fell,
     ForcedMove,
     Healed,

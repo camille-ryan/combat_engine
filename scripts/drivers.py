@@ -2234,6 +2234,106 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_familiar_changing_mode_is_announced(out: Result) -> None:
+    """`c.familiar_mode` did the work and said nothing.
+
+    *"When you switch your familiar into active mode, you can teleport it
+    up to 5 squares"* had no moment to ride, and `f2256` carried the marker
+    for it. The **state** was never missing: `Companion.passive` holds it,
+    `c.familiar_mode` is the writer, and `feats/general_c._familiar_in`
+    already reads it back. Only the announcement was. #620, which found
+    `c.familiar_state()` was five separate questions and this was one.
+
+    **Both ends, for `PowerRecharged`'s reason**: a row written against one
+    direction would be right in half the game and silently wrong in the
+    other. And **not on a no-op** -- `c.familiar_mode` already returns False
+    for a switch into the mode it is in, and an event there would make "when
+    you switch it" fire on a row that switched nothing.
+
+    `mode` carries the word rather than a boolean, which is the distinction
+    `f2257` turns on: a row reading `passive=False` cannot tell "active"
+    from "no familiar at all".
+
+    Posed on `cf:wizard-sha-ir-f1`, the one row in the tree that calls
+    `c.call_companion(kind="familiar")`. `audit.board("f2256")` deals no
+    familiar at all, so the feat's own board cannot pose its trigger -- the
+    first probe reported None and proved nothing.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import FamiliarMode
+
+    world, me, _ = _board("cf:wizard-sha-ir-f1", 1)
+    fam = Cast(world=world, me=me, ref="f2256").familiar()
+    out.that(fam is not None,
+             "the sha'ir's feature puts a familiar on the board, or none of"
+             " this can be posed", f"{fam}")
+    if fam is None:
+        return
+
+    def switch(mode: str):  # noqa: ANN202
+        mark = len(world.bus.log)
+        changed = Cast(world=world, me=me, ref="f2256").familiar_mode(mode)
+        said = [e.mode for e in world.bus.log[mark:]
+                if isinstance(e, FamiliarMode)]
+        return changed, said
+
+    changed, said = switch("passive")
+    out.that(changed and said == ["passive"],
+             "going passive is announced once, and it is the direction the"
+             " card does not name -- emitted anyway, because a row written"
+             " against one end only would be half right",
+             f"changed={changed} {said}")
+    out.that(world.get(fam, Position) is None,
+             "and the familiar is off the board, which is what passive is"
+             " here rather than a flag on something standing there")
+
+    changed, said = switch("active")
+    out.that(changed and said == ["active"],
+             "coming back is announced once, which is f2256's printed"
+             " moment", f"changed={changed} {said}")
+    out.that(world.get(fam, Position) is not None,
+             "and the familiar is placed again")
+
+    changed, said = switch("active")
+    out.that(not changed and said == [],
+             "switching into the mode it is already in changes nothing and"
+             " announces nothing -- an event on a no-op would fire \"when"
+             " you switch it\" for a row that switched nothing",
+             f"changed={changed} {said}")
+
+    # -- and the row itself, armed against not armed ----------------------
+    #
+    # **The comparison is the assertion.** Coming out of passive mode places
+    # the familiar near its owner, so "it is on the board" is true whether
+    # the teleport happened or not -- a plant that pointed the watch at the
+    # wrong direction stayed green on exactly that. Same board, same seed,
+    # so the placement is identical and any difference is the teleport.
+    def ends_at(armed: bool):  # noqa: ANN202
+        world, me, _ = _board("cf:wizard-sha-ir-f1", 1)
+        fam = Cast(world=world, me=me, ref="f2256").familiar()
+        if armed:
+            REGISTRY["f2256"].body(Cast(world=world, me=me, ref="f2256"))
+        Cast(world=world, me=me, ref="f2256").familiar_mode("passive")
+        Cast(world=world, me=me, ref="f2256").familiar_mode("active")
+        pos = world.get(fam, Position)
+        return pos.square if pos is not None else None
+
+    plain, armed = ends_at(False), ends_at(True)
+    out.that(plain is not None and armed is not None,
+             "the familiar is on the board either way, which is what makes"
+             " the squares comparable", f"{plain} / {armed}")
+    out.that(plain != armed,
+             "and f2256 teleported it: the placement is the same on the"
+             " same seed, so the difference is the printed 5 squares",
+             f"unarmed {plain}, armed {armed}")
+    out.that(not REGISTRY["f2256"].unfinished,
+             "and the row carries no marker now",
+             f"{REGISTRY['f2256'].unfinished}")
+
+
 def one_die_forgone_buys_one_clause(out: Result) -> None:
     """Three feats trade a die of a striker's rider, and only one can.
 
@@ -13016,6 +13116,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_familiar_changing_mode_is_announced": (
+        a_familiar_changing_mode_is_announced,
+        "c.familiar_mode did the work and announced nothing"),
     "one_die_forgone_buys_one_clause": (
         one_die_forgone_buys_one_clause,
         "three feats trade a die of a striker's rider and only one can"),

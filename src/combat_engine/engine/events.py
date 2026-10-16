@@ -694,6 +694,32 @@ class PowerRecharged(Event):
 
 
 @dataclass
+class FamiliarMode(Event):
+    """A familiar went into passive mode, or came back out of it.
+
+    `c.familiar_mode` does the work and announced nothing, so *"when you
+    switch your familiar into active mode"* had no moment to ride --
+    `f2256` carried the marker for it. The state was never missing:
+    `Companion.passive` holds it and `feats/general_c._familiar_in` already
+    reads it back. Only the announcement was. #620.
+
+    **`mode` rather than a boolean**, because the card names both
+    directions and a row reading `passive=False` has to know which of
+    "active" and "no familiar at all" it is looking at -- the distinction
+    `f2257` turns on.
+
+    Emitted only when the mode actually **changes**: `c.familiar_mode`
+    already returns False for a switch into the mode it is in, and an event
+    on a no-op would make "when you switch it" fire on a row that switched
+    nothing.
+    """
+
+    actor: int
+    familiar: int
+    mode: str
+
+
+@dataclass
 class Summoned(Event):
     """A creature arrived on the board because a power put it there.
 
