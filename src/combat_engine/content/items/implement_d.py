@@ -2091,18 +2091,28 @@ def i2467p2(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ACID],
-    dropped=("c.recolour(from_, to)",),
 )
 def i2595p1(c: Cast) -> None:
-    """`c.deals` converts every blow rather than only the fire ones, and an
-    override has no `from` to name -- which is why the marker is a swap and
-    not a gate now. #613.
+    """"All fire damage dealt using this staff as an implement is acid
+    damage" -- a swap, which is `from_=`.
 
-    "A free action returns the damage to normal" is `c.endable`, the same
-    sentence seen from the other side: the effect is the caster's, so the
-    drop is offered to the caster for a free action."""
+    An override has no `from` to name, so this converted every blow rather
+    than only the fire ones. #613 split that out as `c.recolour(from_, to)`
+    and it did not need a second verb: naming the type being replaced is
+    one argument, and leaving it unnamed is the unconditional override every
+    other card of this family prints.
+
+    "A free action returns the damage to normal" needed nothing either. It
+    is `c.endable` over the effect, the same sentence seen from the other
+    side: the effect is the caster's, so the drop is offered to the caster
+    for a free action. `i2595p2` is this card the other way round, and
+    because `c.deals` ends any standing retype before laying a new one,
+    using one of the pair replaces the other -- which is what a staff with
+    two free actions on it means.
+    """
     c.endable(
-        c.deals(DamageType.ACID, until=When.ENCOUNTER, on=c.me, implement=True),
+        c.deals(DamageType.ACID, until=When.ENCOUNTER, on=c.me,
+                implement=True, from_=DamageType.FIRE),
         FREE,
     )
 
@@ -2116,11 +2126,12 @@ def i2595p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    dropped=("c.recolour(from_, to)",),
 )
 def i2595p2(c: Cast) -> None:
+    """The same swap the other way; see `i2595p1`."""
     c.endable(
-        c.deals(DamageType.FIRE, until=When.ENCOUNTER, on=c.me, implement=True),
+        c.deals(DamageType.FIRE, until=When.ENCOUNTER, on=c.me,
+                implement=True, from_=DamageType.ACID),
         FREE,
     )
 

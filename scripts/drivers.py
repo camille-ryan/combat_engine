@@ -2234,6 +2234,178 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_retype_can_name_what_it_replaces(out: Result) -> None:
+    """`c.deals(from_=)` is a swap; without it, the override every card means.
+
+    #613 read seven cards and found `c.deals(when=)` was four mechanisms.
+    Two of the four turned out to be **one**, and this rule is the evidence:
+    naming the type being replaced covers both the swap -- *"all fire damage
+    dealt using this staff as an implement is acid damage"* -- and the narrow
+    *"all **untyped** damage dealt by ranged attacks using this weapon
+    changes to lightning"*. Leaving it unnamed is the unconditional override
+    every other card of the family prints.
+
+    **The first two assertions are the regression, and they matter more than
+    the new ones.** This method once recoloured a blow only where the card
+    had named no type, so "all damage" quietly meant "the untyped part" and
+    every item printing the loud sentence got the small one. Removing that
+    was right. The option must not bring it back as a default.
+
+    Asserted off `DamageApplied.dtype` through `c.damage`, which is where
+    the type is settled -- `_weapon_dtype`'s own note gives the reason it
+    cannot be a listener: `resolve.deal_damage` sums the damage modifiers
+    against the context's type before it emits, so a type set after that
+    emit changes resistance and the log and nothing else.
+
+    `ranged=` is posed with a **ranged row** rather than a flag, because
+    `c.ranged` is derived from the declared reach and has no setter -- which
+    is the honest way to ask it anyway.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType as T
+    from combat_engine.engine.types import Keyword
+
+    def weapon_power(*, ranged: bool) -> str:
+        for ref, p in sorted(REGISTRY.items()):
+            if not ref.startswith("p") or (p.level or 0) > 10:
+                continue
+            if Keyword.WEAPON not in (p.keywords or ()):
+                continue
+            kind = p.reach_of(0).kind
+            if kind in ("ranged", "melee") and (kind == "ranged") is ranged:
+                return ref
+        return ""
+
+    melee, shot = weapon_power(ranged=False), weapon_power(ranged=True)
+    out.that(bool(melee) and bool(shot),
+             "there is a heroic weapon power at melee and one at range, or"
+             " the scope half proves nothing",
+             f"{melee} / {shot}")
+
+    def dealt(ref, lay, printed):  # noqa: ANN001, ANN202
+        world, me, _ = _board(ref, 1)
+        foe = next(iter(sorted(enemies(world, me))), me)
+        lay(Cast(world=world, me=me, ref=ref))
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        mark = len(world.bus.log)
+        use.damage("1d1", 0, dtype=printed, on=foe)
+        hits = [e for e in world.bus.log[mark:]
+                if isinstance(e, DamageApplied)]
+        return hits[-1].dtype if hits else None
+
+    # -- the regression: an unnamed `from_` still beats a printed type -----
+    out.that(dealt(melee, lambda c: c.deals(T.COLD), T.FIRE) is T.COLD,
+             "an unnamed `from_` is still the override: a blow the card"
+             " printed as fire comes out cold, which is what \"ALL damage"
+             " dealt by this weapon is cold\" means")
+    out.that(dealt(melee, lambda c: c.deals(T.COLD), T.UNTYPED) is T.COLD,
+             "and an untyped blow too -- both halves, which is the behaviour"
+             " that replaced an accidental untyped-only one")
+
+    # -- from_=UNTYPED: the narrow sentence, back as an option -------------
+    out.that(dealt(melee, lambda c: c.deals(T.COLD, from_=T.UNTYPED), T.FIRE)
+             is T.FIRE,
+             "`from_=UNTYPED` leaves a blow that named a type alone -- this"
+             " is `i2418x1`'s \"an attack power that doesn't have a damage"
+             " type\"")
+    out.that(dealt(melee, lambda c: c.deals(T.COLD, from_=T.UNTYPED),
+                   T.UNTYPED) is T.COLD,
+             "and recolours the one that did not")
+
+    # -- ranged=: the other half of i3147x1's line ------------------------
+    out.that(dealt(melee, lambda c: c.deals(T.COLD, ranged=True), T.FIRE)
+             is T.FIRE,
+             "`ranged=True` leaves a melee row alone")
+    out.that(dealt(shot, lambda c: c.deals(T.COLD, ranged=True), T.FIRE)
+             is T.COLD,
+             "and speaks for a ranged one -- asked of the declared reach,"
+             " not of the keywords")
+
+    # -- the swap, which is the same argument doing a different job -------
+    out.that(dealt(melee, lambda c: c.deals(T.ACID, from_=T.FIRE), T.FIRE)
+             is T.ACID,
+             "`from_=FIRE, dtype=ACID` is `i2595p1`'s swap: fire becomes"
+             " acid")
+    out.that(dealt(melee, lambda c: c.deals(T.ACID, from_=T.FIRE), T.COLD)
+             is T.COLD,
+             "and every other type is untouched -- the half an override"
+             " could not say, because it has no `from`")
+
+    # -- and through the rows' OWN bodies, which is the half that matters -
+    #
+    # **The first draft of this rule stopped above and a plant proved it
+    # too weak**: taking `from_=` back off `i2595p1` left every assertion
+    # green, because the hand-built `lay=` lambdas exercise the verb and
+    # never the row. The same fault `a_feat_lends_an_augment` had this
+    # morning, repeated within the hour. A rule has to go through the row
+    # that will really be holding it.
+    spell = next(
+        (ref for ref, p in sorted(REGISTRY.items())
+         if ref.startswith("p") and (p.level or 0) <= 10
+         and Keyword.IMPLEMENT in (p.keywords or ())),
+        "",
+    )
+    out.that(bool(spell),
+             "there is a heroic implement power to cast with, or the row"
+             " half proves nothing", f"{spell}")
+
+    def through(row: str, printed):  # noqa: ANN001, ANN202
+        world, me, _ = _board(row, 1)
+        foe = next(iter(sorted(enemies(world, me))), me)
+        REGISTRY[row].body(Cast(world=world, me=me, ref=row))
+        use = Cast(world=world, me=me, ref=spell, targets=[foe])
+        use.target = foe
+        mark = len(world.bus.log)
+        use.damage("1d1", 0, dtype=printed, on=foe)
+        hits = [e for e in world.bus.log[mark:]
+                if isinstance(e, DamageApplied)]
+        return hits[-1].dtype if hits else None
+
+    out.that(through("i2595p1", T.FIRE) is T.ACID,
+             "i2595p1's own body turns a fire implement blow to acid")
+    out.that(through("i2595p1", T.COLD) is T.COLD,
+             "and leaves a cold one alone -- the assertion that catches the"
+             " row being written as a blanket override, which is what it"
+             " was")
+    out.that(through("i2595p2", T.ACID) is T.FIRE,
+             "and i2595p2 is the same card the other way: acid to fire")
+    out.that(through("i2595p2", T.COLD) is T.COLD,
+             "leaving cold alone as well")
+
+    def swinging(row: str, swinger: str, printed):  # noqa: ANN001, ANN202
+        world, me, _ = _board(row, 1)
+        foe = next(iter(sorted(enemies(world, me))), me)
+        REGISTRY[row].body(Cast(world=world, me=me, ref=row))
+        use = Cast(world=world, me=me, ref=swinger, targets=[foe])
+        use.target = foe
+        mark = len(world.bus.log)
+        use.damage("1d1", 0, dtype=printed, on=foe)
+        hits = [e for e in world.bus.log[mark:]
+                if isinstance(e, DamageApplied)]
+        return hits[-1].dtype if hits else None
+
+    out.that(swinging("i3147x1", shot, T.UNTYPED) is T.LIGHTNING,
+             "i3147x1's own body recolours an untyped RANGED blow")
+    out.that(swinging("i3147x1", melee, T.UNTYPED) is T.UNTYPED,
+             "and leaves the melee one untyped -- the scope half of"
+             " \"untyped damage dealt by RANGED attacks\", and the"
+             " assertion that catches it being dropped")
+    out.that(swinging("i3147x1", shot, T.FIRE) is T.FIRE,
+             "and a ranged blow that named a type keeps it -- the other half")
+    out.that(swinging("i2418x1", melee, T.UNTYPED) is T.THUNDER,
+             "i2418x1 prints no scope, so its melee swing recolours too --"
+             " which is why the two cards could not share one argument")
+
+    for ref in ("i3147x1", "i2418x1", "i2595p1", "i2595p2"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker now", f"{REGISTRY[ref].unfinished}")
+
+
 def an_immunity_gated_on_the_attacking_defence(out: Result) -> None:
     """m5788a0 ignores every condition from a Will attack and nothing else.
 
@@ -12191,6 +12363,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_retype_can_name_what_it_replaces": (
+        a_retype_can_name_what_it_replaces,
+        "c.deals(from_=) is a swap, and unnamed is the override"),
     "an_immunity_gated_on_the_attacking_defence": (
         an_immunity_gated_on_the_attacking_defence,
         "m5788a0 ignores conditions from a Will attack and nothing else"),

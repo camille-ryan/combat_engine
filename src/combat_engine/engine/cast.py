@@ -11567,6 +11567,8 @@ class Cast:
         until: When = When.ENCOUNTER,
         on: int | None = None,
         implement: bool = False,
+        from_: DamageType | None = None,
+        ranged: bool = False,
     ) -> Effect | None:
         """This creature's weapon attacks deal that type from now on.
 
@@ -11585,6 +11587,33 @@ class Cast:
         which is what the weapon cards say and is silently false for
         every implement one.
 
+        **`from_` narrows which blows it speaks for, and it turned out to
+        be one mechanism rather than the two #613 split it into.** An
+        unconditional override is `from_=None` and is what every card
+        saying "all damage dealt by this weapon is fire" gets. Name a type
+        and it becomes a *swap*: `from_=FIRE, dtype=ACID` is "all fire
+        damage dealt using this staff as an implement is acid damage",
+        which an override cannot say because it has no `from`. Name
+        `UNTYPED` and it is the narrow behaviour this method used to have
+        by accident -- "all **untyped** damage dealt by ranged attacks
+        using this weapon changes to lightning".
+
+        That history is worth keeping straight. `_typed` once recoloured a
+        blow only where the card had named no type, so "all damage" quietly
+        meant "the untyped part", and every item printing the loud sentence
+        got the small thing. Removing it was right. The two cards that
+        actually print the narrow sentence get it back by asking, which is
+        the difference between a default and an option.
+
+        `ranged=True` is the other half of `i3147x1`'s line and scopes the
+        retype to a ranged attack. Read off `self.ranged`, the same flag
+        `_weapon_dtype` uses to decide which weapon is swinging.
+
+        **Reversibility needs nothing here.** "Another free action returns
+        the damage to normal" is `c.endable` over the effect this returns,
+        which is what `i2595p1` already does -- the drop is offered to the
+        creature holding it, for a free action.
+
         Held as a labelled effect rather than written onto the `Weapon`,
         because the weapon object is the character's and the change is
         usually for a fight. Yours, so it defaults to the caster.
@@ -11594,8 +11623,16 @@ class Cast:
             if eff.label.startswith("deals:"):
                 self.world.effects.end(eff, "deals another type now")
         through = Keyword.IMPLEMENT if implement else Keyword.WEAPON
+        # **A fixed five-field key.** The label was `deals:<to>:<through>`
+        # and nothing outside this file parses it -- the two other mentions
+        # in the tree are docstrings using it as an example of a label that
+        # is not a ref (#580). Fields rather than flags so `_retyped` reads
+        # it by position and an empty one means "does not narrow".
         return self.world.effects.apply(
-            who, self.me, until, label=f"deals:{dtype.value}:{through.value}",
+            who, self.me, until,
+            label=(f"deals:{dtype.value}:{through.value}"
+                   f":{from_.value if from_ is not None else ''}"
+                   f":{'ranged' if ranged else ''}"),
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
@@ -11618,7 +11655,7 @@ class Cast:
         # `None` is a blow with no row behind it -- a hazard, a fall. It
         # has no keywords to fail the gate with, so it is not gated.
         keywords = self.keywords_of(p) if p is not None else None
-        retype = self._retyped(keywords)
+        retype = self._retyped(keywords, dtype)
         if retype is not None:
             return retype
         if dtype is not DamageType.UNTYPED:
@@ -11627,7 +11664,11 @@ class Cast:
             return dtype
         return self._weapon_dtype() or dtype
 
-    def _retyped(self, keywords: Sequence[Keyword] | None) -> DamageType | None:
+    def _retyped(
+        self,
+        keywords: Sequence[Keyword] | None,
+        printed: DamageType = DamageType.UNTYPED,
+    ) -> DamageType | None:
         """The override a `c.deals` laid down, if it covers this row.
 
         Separate from `_weapon_dtype` because the two halves of that
@@ -11640,13 +11681,26 @@ class Cast:
         -- but the day a weapon retype and an implement retype stand at
         once, returning on the first miss would silence whichever the
         effect list happened not to yield first.
+
+        Three things can make a retype not cover a blow, and `printed` is
+        why this takes the type at all: the keyword it speaks through, the
+        type it narrows to (`from_`), and whether it is scoped to a ranged
+        attack. An empty field does not narrow, which is what every card
+        saying "all damage" wants.
         """
         for eff in self.world.effects.of(self.me):
             if not eff.label.startswith("deals:"):
                 continue
-            _, _, rest = eff.label.partition(":")
-            said, _, through = rest.partition(":")
+            # Positional, and padded: a label written before the two
+            # narrowing fields existed has three parts and must keep
+            # meaning exactly what it meant.
+            parts = [*eff.label.split(":"), "", "", "", ""][1:5]
+            said, through, only, scope = parts
             if through and keywords is not None and Keyword(through) not in keywords:
+                continue
+            if only and DamageType(only) is not printed:
+                continue
+            if scope == "ranged" and not self.ranged:
                 continue
             return DamageType(said)
         return None

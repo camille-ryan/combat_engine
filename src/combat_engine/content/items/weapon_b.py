@@ -1570,19 +1570,24 @@ def i3146p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(untyped_only=)",),
 )
 def i3147x1(c: Cast) -> None:
-    """The retyping is real; "only untyped damage, only on ranged attacks"
-    is not.
+    """"All untyped damage dealt by ranged attacks using this weapon changes
+    to lightning" -- both halves of the narrowing, as arguments.
 
-    **`c.deals` used to do the untyped-only half and it was a bug**: `_typed`
-    recoloured a blow only where the card had named no type, so "all damage"
-    quietly meant "the untyped part". The fix was right for the cards saying
-    "all", and this card says the other thing -- so the narrow behaviour has
-    to come back as an option. That, not a gate, is what the marker names
-    now. #613. The ranged scope is the smaller half and waits with it."""
-    c.deals(DamageType.LIGHTNING, on=c.me, until=When.ENCOUNTER)
+    **`c.deals` used to do the untyped-only half by accident and it was a
+    bug**: `_typed` recoloured a blow only where the card had named no type,
+    so "all damage" quietly meant "the untyped part", and every item
+    printing the loud sentence got the small one. Removing it was right.
+    This card prints the narrow sentence, so it asks for it -- `from_=`
+    names the type being replaced and an unnamed one replaces everything,
+    which is the difference between a default and an option. #613.
+
+    `ranged=True` is the other half, read off `self.ranged` -- the same flag
+    that decides which weapon `_weapon_dtype` is talking about.
+    """
+    c.deals(DamageType.LIGHTNING, on=c.me, until=When.ENCOUNTER,
+            from_=DamageType.UNTYPED, ranged=True)
 
 
 @power(
@@ -2489,14 +2494,14 @@ def i2409p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(untyped_only=)",),
 )
 def i2418x1(c: Cast) -> None:
-    """"An attack power that doesn't have a damage type" is the
-    untyped-only override, which `c.deals` deliberately stopped doing --
-    see `i3147x1` for why, and #613. So every swing comes out typed for
-    now. The deafening half is exact."""
-    c.deals(DamageType.THUNDER, on=c.me, until=When.ENCOUNTER)
+    """"An attack power that doesn't have a damage type" is `from_=UNTYPED`
+    -- see `i3147x1` for why that is an argument rather than the default,
+    and #613. Unlike that card this one is not scoped to ranged attacks, so
+    it names no scope. The deafening half was always exact."""
+    c.deals(DamageType.THUNDER, on=c.me, until=When.ENCOUNTER,
+            from_=DamageType.UNTYPED)
 
     def on_hit(ev: Hit) -> None:
         if ev.attacker == c.me:
