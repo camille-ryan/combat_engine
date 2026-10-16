@@ -285,7 +285,6 @@ def f3426(c: Cast) -> None:
 
 @power("f3427", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AUGMENT,
        trigger="you drop an enemy you have cursed to 0 hit points")
 def f3427(c: Cast) -> None:
     """"Each enemy cursed by you" is every live enemy carrying my curse,
@@ -309,6 +308,20 @@ def f3427(c: Cast) -> None:
     the roll is right; a damage line naming its modifier outright belongs to
     the associated row and is not this row's to rewrite. Not claimed as a
     gap here, because this row has said all it can.
+
+    **The augment half is written, in the two powers rather than here.**
+    "You can also expend your fell might to augment any power associated
+    with this feat" is #550's convention: the clause is this feat's and the
+    attack is the power's, so it lives in `p5919` and `p1341` under
+    `shared.augmenting`, which settles the spend above the roll because the
+    pact boon's card requires the decision before any attack roll. The
+    marker it carried, `c.augment_with(resource)`, named nothing missing --
+    `c.spend_charge` on `features.warlock.FELL` is the spend and `p12887`
+    is the worked example. #630.
+
+    Only the two heroic refs the Associated Powers line prints. The card
+    names four more at paragon and epic and this build imports none of
+    them, so gating on those would point at rows that resolve to nothing.
     """
     for ref in _ASSOCIATED["f3427"]:
         c.rolls_with(ref, CHA)

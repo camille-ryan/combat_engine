@@ -2522,14 +2522,30 @@ def f3418(c: Cast) -> None:
 
 @power("f3419", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       trigger=_CURSED_FELL,
-       dropped=AUGMENT)
+       trigger=_CURSED_FELL)
 def f3419(c: Cast) -> None:
-    """The same three clauses as f3417 and the same split: the shove and the
-    ability swap are written, the augment is not.
+    """All three clauses are written now.
 
     Declared trigger turned into a watch for the reason given on `f3417`,
     and the swap is the attack half only on the same reading.
+
+    **The augment half is in `p1401` and `p1462`, not here**, which is
+    #550's convention: the clause is this feat's and the attack is the
+    power's. `shared.unnerve` is the clause, written once because the two
+    powers are in different files, and `shared.augmenting` is the gate --
+    it settles the spend above the roll, because the pact boon's card
+    requires the decision before any attack roll is made.
+
+    `p1401` is named by `f3429` as well. Both print `[Greater Pact]`, so
+    the one-per-use rule applies and the body must ask `c.declare` rather
+    than `c.feat`, which is true for every feat held and cannot say which
+    is applying -- #554. `augmenting` is that call. Until `f3429`'s own
+    clause lands, `p1401` declares this feat alone, so a character holding
+    only the other one is not charged for a clause that is not there yet.
+
+    The marker this row carried, `c.augment_with(resource)`, named nothing
+    missing: `c.spend_charge` on `features.warlock.FELL` is the spend and
+    `p12887` is the worked example. #630.
     """
     me = c.me
     for ref in _ASSOCIATED["f3419"]:
@@ -2604,11 +2620,25 @@ def f3422(c: Cast) -> None:
 @power("f3423", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
-       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
-       dropped=AUGMENT)
+       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL))
 def f3423(c: Cast) -> None:
     """`c.enemies` leaves out the dead, so the creature that has just
-    fallen is not paid twice."""
+    fallen is not paid twice.
+
+    **The augment half is written, in the two powers rather than here.**
+    "You can also expend your fell might to augment any power associated
+    with this feat" is #550's convention: the clause is this feat's and the
+    attack is the power's, so it lives in `p1872` and `p4070` under
+    `shared.augmenting`, which settles the spend above the roll because the
+    pact boon's card requires the decision before any attack roll. The
+    marker it carried, `c.augment_with(resource)`, named nothing missing --
+    `c.spend_charge` on `features.warlock.FELL` is the spend and `p12887`
+    is the worked example. #630.
+
+    Only the two heroic refs the Associated Powers line prints. The card
+    names four more at paragon and epic and this build imports none of
+    them, so gating on those would point at rows that resolve to nothing.
+    """
     if c.int_mod <= 0:
         return
     for foe in c.enemies():

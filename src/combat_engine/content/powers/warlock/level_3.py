@@ -15,6 +15,8 @@ written as one more swing, since `c.reroll_attack` reads the roll off
 
 from __future__ import annotations
 
+from combat_engine.content.powers.warlock.shared import augmenting
+from combat_engine.content.powers.warlock.shared import unnerve as _dismay
 from combat_engine.engine import (
     CHA,
     CON,
@@ -65,9 +67,16 @@ _HIT_BY_MELEE = "an enemy hits you with a melee attack"
     attack=Attack(CON, vs=REF),
 )
 def p1341(c: Cast) -> None:
+    """**Carries `f3427`'s augment**, under #550's convention: the clause is
+    the feat's and the attack is this row's, so it is written here and
+    gated on the feat. `augmenting` settles the spend above the roll, which
+    the pact boon's card requires. #630."""
+    pact = augmenting(c, "f3427")
     if not c.strike():
         return
     c.damage("3d6", c.con_mod, dtype=DamageType.FIRE)
+    if pact:
+        c.prone()
     # The splash is printed as "creatures adjacent to the target", which is
     # everybody standing there, not only enemies -- and not the target, who
     # has already been hit. The Infernal Pact line would add Intelligence
@@ -116,9 +125,12 @@ def p1401(c: Cast) -> None:
     applied once per ally on a single effect instead -- the same shape the
     monster rows that open an enemy up to everybody use.
     """
+    pact = augmenting(c, "f3419")
     if not c.strike():
         return
     c.damage("2d8", c.con_mod, dtype=DamageType.COLD)
+    if pact:
+        _dismay(c)
     victim = c.target
     c.world.effects.apply(
         victim,
@@ -457,14 +469,25 @@ def p4069(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p4070(c: Cast) -> None:
+    """**Carries `f3423`'s augment** -- see `p1341` for the convention.
+
+    Both hit branches pay it, because this card's second shot is a fresh
+    roll after a miss: only one of the two can land, so writing the clause
+    once in each is one payout and not two. #630.
+    """
+    pact = augmenting(c, "f3423")
     if c.strike():
         c.damage("2d12", c.cha_mod, dtype=DamageType.PSYCHIC)
+        if pact:
+            c.insubstantial(until=When.SONT, on=c.me)
         return
     if not c.may("pay for a second shot", who=c.me):
         return
     c.flat(10, dtype=DamageType.PSYCHIC, on=c.me)
     if c.strike():
         c.damage("2d12", c.cha_mod, dtype=DamageType.PSYCHIC)
+        if pact:
+            c.insubstantial(until=When.SONT, on=c.me)
 
 
 @power(

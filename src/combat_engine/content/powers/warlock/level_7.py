@@ -14,6 +14,8 @@ relations go on one effect directly and end together.
 
 from __future__ import annotations
 
+from combat_engine.content.powers.warlock.shared import augmenting
+from combat_engine.content.powers.warlock.shared import unnerve as _dismay
 from combat_engine.engine import (
     CHA,
     CON,
@@ -115,10 +117,13 @@ def p1461(c: Cast) -> None:
 def p1462(c: Cast) -> None:
     """"Held immobilized five feet off the ground" is immobilised: the engine
     has no third dimension for the height to mean anything in."""
+    pact = augmenting(c, "f3419")
     if c.strike():
         bonus = c.int_mod if c.build("infernal") else 0
         c.damage("2d8", c.con_mod + bonus, dtype=DamageType.POISON)
         c.immobilized()
+        if pact:
+            _dismay(c)
 
 
 @power(

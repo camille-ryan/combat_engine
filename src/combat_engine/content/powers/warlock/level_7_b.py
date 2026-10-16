@@ -25,6 +25,7 @@ say so, the way `level_1.py`'s pact prerequisites already do.
 
 from __future__ import annotations
 
+from combat_engine.content.powers.warlock.shared import augmenting
 from combat_engine.engine import (
     CHA,
     CON,
@@ -379,9 +380,12 @@ def p1872(c: Cast) -> None:
     """"An undead target cannot move closer to you" is the clause with no
     method: `c.immovable` is about being shoved and `c.cannot_shift` about
     shifting, and neither forbids walking towards somebody."""
+    pact = augmenting(c, "f3423")
     if c.strike():
         c.damage("1d12", c.cha_mod, dtype=DamageType.NECROTIC)
         c.dazed(until=When.EOTNT)
+        if pact:
+            c.insubstantial(until=When.SONT, on=c.me)
 
 
 @power(
@@ -550,9 +554,16 @@ def p4286(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p5919(c: Cast) -> None:
+    """**Carries `f3427`'s augment** -- see `p1341` for the convention. Two
+    targets, and the spend is settled once for the use rather than per
+    target, which is what `augmenting`'s memo is for: charged twice the
+    second target would get nothing. #630."""
     # The vestige pact rider has no leg to ask for.
+    pact = augmenting(c, "f3427")
     if c.strike():
         c.damage("1d12", c.con_mod, dtype=DamageType.ACID)
+        if pact:
+            c.prone()
 
 
 @power(

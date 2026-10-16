@@ -2234,6 +2234,168 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
+    """Three `[Greater Pact]` feats pay their augment inside the power.
+
+    Six of these cards print *"you can also expend your fell might to
+    augment any power associated with this feat. When you hit an enemy with
+    an associated power augmented by this feat, <effect>"*. The clause is
+    the feat's and the attack is the power's, so #550's convention puts it
+    in the power and gates it; `shared.augmenting` is that gate. #630.
+
+    **The marker they carried named nothing missing.**
+    `c.augment_with(resource)` had been re-aimed twice already --
+    `dsl.use(augment=)`, then `c.lend_augment` -- and the third reading is
+    that there is no verb to wait for: `c.spend_charge` on
+    `features.warlock.FELL` is the spend, `c.may` is the decision,
+    `c.declare` picks which bracketed feat applies, and `p12887` is the
+    worked example eleven lines long in the same mechanic.
+
+    Posed on each power's own board with the feat pushed into
+    `Powers.known`, because `audit.board` fields a classless feat on a
+    fighter or a ranger and these need a warlock holding the row.
+
+    **The negative control is the whole rule**, for the reason #550's own
+    issue gives: a clause written into a power and gated on a feat is
+    invisible to the audit board, which fires the feat alone and the power
+    without it. Nothing else distinguishes "written" from "written and
+    never reachable".
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.features.warlock import FELL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY, keywords_of
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition, Keyword
+
+    def pose(power: str, feat: str, seed: int = 1):  # noqa: ANN202
+        world, me, _ = _board(power, seed)
+        known = world.need(me, Powers)
+        if feat:
+            known.known.append(feat)
+        # `arm_traits` may already have spent the boon before round 1, and
+        # this rule is about the augment rather than about that clock.
+        known.charges.clear()
+        foes = [e for e in sorted(enemies(world, me)) if world.get(e, Health)]
+        here = world.get(me, Position)
+        victim, neighbour = foes[0], foes[2]
+        world.get(victim, Position).square = (here.square[0] + 3, here.square[1])
+        world.get(neighbour, Position).square = (here.square[0] + 4, here.square[1])
+        for spare in (foes[1], *foes[3:]):
+            world.get(spare, Position).square = (here.square[0] + 15, here.square[1])
+        use = Cast(world=world, me=me, ref=power, targets=[victim])
+        use.target = victim
+        return world, me, use, victim, neighbour
+
+    def attack_total(world, who: int) -> int:  # noqa: ANN001
+        mods = world.get(who, Mods)
+        return mods.total("attack", {}) if mods is not None else 0
+
+    # -- f3427: "you also knock the target prone" ------------------------
+    for power in ("p1341", "p5919"):
+        world, me, use, victim, _ = pose(power, "f3427")
+        REGISTRY[power].body(use)
+        out.that(is_(world, victim, Condition.PRONE),
+                 f"f3427 knocks {power}'s target prone", f"{power}")
+        out.that(world.get(me, Powers).charges.get(FELL) == 1,
+                 f"and the boon is spent for it -- `c.spend_charge`'s False"
+                 f" is the printed \"if you spend\" ({power})",
+                 f"{dict(world.get(me, Powers).charges)}")
+
+        world, me, use, victim, _ = pose(power, "")
+        REGISTRY[power].body(use)
+        out.that(not is_(world, victim, Condition.PRONE),
+                 f"without the feat {power}'s target stays standing -- the"
+                 f" control, and the only thing that separates this from"
+                 f" the power having grown a clause",
+                 f"{power}")
+        out.that(not world.get(me, Powers).charges.get(FELL),
+                 f"and nothing is spent ({power})",
+                 f"{dict(world.get(me, Powers).charges)}")
+
+    # -- the memo: one charge for a use, however many targets -----------
+    world, me, use, first, second = pose("p5919", "f3427")
+    use.targets = [first, second]
+    seen = []
+    for victim in (first, second):
+        use.target = victim
+        REGISTRY["p5919"].body(use)
+        seen.append(getattr(use, "greater_pact", None))
+    out.that(seen == ["f3427", "f3427"],
+             "a two-target row settles the spend once and both targets"
+             " honour the same answer -- asked per target the second would"
+             " find the charge gone and silently get nothing",
+             f"{seen}")
+    out.that(world.get(me, Powers).charges.get(FELL) == 1,
+             "and it is one charge, not two",
+             f"{dict(world.get(me, Powers).charges)}")
+
+    # -- f3423: "you gain insubstantial until the start of your next turn"
+    for power in ("p1872", "p4070"):
+        world, me, use, victim, _ = pose(power, "f3423")
+        REGISTRY[power].body(use)
+        out.that(is_(world, me, Condition.INSUBSTANTIAL),
+                 f"f3423 makes the CASTER insubstantial through {power}",
+                 f"{power}")
+        # **This is the assertion that caught a real fault.** Written as a
+        # bare `c.insubstantial(until=...)` the hold goes to `_who(None)`,
+        # which is the *target* -- so the printed "you gain" handed the
+        # enemy a damage halving. The probe read False rather than
+        # backwards only because the bare call has no target to land on
+        # outside a real use.
+        out.that(not is_(world, victim, Condition.INSUBSTANTIAL),
+                 f"and NOT the target -- `on=` defaults to the target, so"
+                 f" \"you gain insubstantial\" written bare is a gift to"
+                 f" the enemy ({power})",
+                 f"{power}")
+
+        world, me, use, _, _ = pose(power, "")
+        REGISTRY[power].body(use)
+        out.that(not is_(world, me, Condition.INSUBSTANTIAL),
+                 f"without the feat nobody goes half-there ({power})",
+                 f"{power}")
+
+    # -- f3419: the bystanders flinch, and the power turns fearful -------
+    for power in ("p1401", "p1462"):
+        world, me, use, victim, neighbour = pose(power, "f3419")
+        was = attack_total(world, neighbour)
+        on_target = attack_total(world, victim)
+        REGISTRY[power].body(use)
+        out.that(attack_total(world, neighbour) == was - 2,
+                 f"f3419 puts -2 on the enemy standing beside {power}'s"
+                 f" target",
+                 f"{was} -> {attack_total(world, neighbour)}")
+        out.that(attack_total(world, victim) == on_target,
+                 f"and nothing extra on the target itself -- \"adjacent to"
+                 f" the target\" excludes it, where `c.within(1, of=foe)`"
+                 f" returns it at distance 0 ({power})",
+                 f"{on_target} -> {attack_total(world, victim)}")
+
+        world, me, use, _, neighbour = pose(power, "")
+        was = attack_total(world, neighbour)
+        REGISTRY[power].body(use)
+        out.that(attack_total(world, neighbour) == was,
+                 f"without the feat the bystander is untouched ({power})",
+                 f"{was} -> {attack_total(world, neighbour)}")
+
+    # The keyword half, read on the power that does **not** print fear.
+    world, me, use, _, _ = pose("p1462", "f3419")
+    out.that(Keyword.FEAR not in keywords_of(world, me, REGISTRY["p1462"]),
+             "p1462 does not print fear, which is what makes it the one to"
+             " read this on -- p1401 prints it and could not show a grant")
+    REGISTRY["p1462"].body(use)
+    out.that(Keyword.FEAR in keywords_of(world, me, REGISTRY["p1462"]),
+             "and f3419 grants it: \"the triggering power gains the fear"
+             " keyword if it doesn't have it already\"")
+    world, me, use, _, _ = pose("p1462", "")
+    REGISTRY["p1462"].body(use)
+    out.that(Keyword.FEAR not in keywords_of(world, me, REGISTRY["p1462"]),
+             "without the feat it stays plain -- and `Power.keywords` could"
+             " never have said this, being one tuple shared by everyone who"
+             " holds the row")
+
+
 def a_feat_lends_an_augment(out: Result) -> None:
     """f3170 hands p10440 an Augment 1 clause the card does not print.
 
@@ -11816,6 +11978,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_pact_feat_augments_the_power_it_names": (
+        a_pact_feat_augments_the_power_it_names,
+        "three [Greater Pact] feats pay their augment inside the power"),
     "a_feat_lends_an_augment": (a_feat_lends_an_augment,
                                 "f3170 lends p10440 an Augment clause"
                                 " its card does not print"),
