@@ -1806,18 +1806,18 @@ def _familiar_is_active(world, eid: int) -> bool:  # noqa: ANN001
     """Does this creature keep a familiar, and is it on the board?
 
     A `requires=` gate gets `(world, eid)` and no `Cast`, so `c.familiar`
-    is out of reach; the component is not. `passive` is the mode word the
-    cards print, and `c.familiar_mode` is what moves it.
-    """
-    from combat_engine.engine.components import Companion
+    is out of reach -- and `query.familiar_active` is the reader built for
+    exactly that, since two of the four sites asking this question are
+    gates of this shape.
 
-    return any(
-        (pet := world.get(who, Companion)) is not None
-        and pet.owner == eid
-        and pet.kind == "familiar"
-        and not pet.passive
-        for who in world.having(Companion)
-    )
+    It replaces a hand-walk of the companions that asked owner, kind and
+    not-passive: three conditions where the card wants four. A destroyed
+    familiar keeps its `Companion` row, so the gate opened for a corpse.
+    #620.
+    """
+    from combat_engine.engine.query import familiar_active
+
+    return familiar_active(world, eid) is not None
 
 
 @power("f1334b", level=1, cls="", usage=DAILY, action=FREE, reach=PERSONAL,

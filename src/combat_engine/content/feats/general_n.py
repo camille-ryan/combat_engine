@@ -115,6 +115,7 @@ from combat_engine.engine.query import (
     squares,
     team,
 )
+from combat_engine.engine.triggers import familiar_dropped
 
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -1583,17 +1584,33 @@ def f2256(c: Cast) -> None:
     c.watch(FamiliarMode, arrived, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f2257", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.familiar_mode(past_death=)",))
+@power("f2257", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your familiar is destroyed",
+       on=Trigger(Dropped, familiar_dropped, "your familiar is destroyed"))
 def f2257(c: Cast) -> None:
     """Holds a destroyed familiar in its active state for a turn.
 
-    **Not f2256's gap, which is why it is no longer marked as it.** That
-    one wants the switch announced; this one wants a mode to *survive* the
-    creature, which `c.familiar_mode` cannot express -- it reads
-    `c.familiar(of=)` and answers False when there is nobody to switch.
-    "An echo of its spirit remains" is a familiar that is gone and still
-    active, and nothing holds that. #620."""
+    **Not f2256's gap, which is why it was never marked as it.** That one
+    wanted the switch announced; this one wants the mode to *survive* the
+    creature.
+
+    What the old marker got right is that `c.familiar_mode` could not say
+    it -- it reads `c.familiar(of=)` and switches a `Companion`, and there
+    is nothing to switch. What it got wrong is that the mode was the thing
+    to change. It is not: **the six rows asking "is your familiar active"
+    were reading one condition short**, off `Companion.passive` alone, and
+    a corpse keeps that field. So they already paid out on a dead familiar,
+    for ever. `query.familiar_active` is the reader that asks the whole
+    question, and this row is the printed waiver on its new half -- a span,
+    on the owner, that an ordinary turn boundary ends. #620.
+
+    The grace is laid whether or not the corpse is still findable, which
+    `c.familiar_mode(past_death=)` is deliberate about: the trigger *is*
+    the familiar being destroyed, so a gate on finding one would make the
+    row do nothing in the one case it exists for.
+    """
+    c.familiar_mode("active", past_death=True, until=When.EONT)
 
 
 @power("f2258", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

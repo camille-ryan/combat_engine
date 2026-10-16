@@ -350,6 +350,75 @@ def active(world: World, eid: int) -> list[Condition]:
     return conds.active if conds else []
 
 
+def familiar_of(world: World, eid: int) -> int | None:
+    """The familiar this creature keeps, whichever mode it is in.
+
+    The selection `Cast.familiar` has always made, moved here because the
+    *other* half -- "and is it active" -- was hand-written in four content
+    files under four different names, and two of them are `requires=` gates
+    that get `(world, eid)` and no `Cast` at all. One of the two shapes had
+    to live somewhere both could reach.
+
+    A familiar is a `Companion` with `kind == "familiar"`, falling back to
+    whatever single companion the creature has when nothing named one. The
+    fallback cannot pick the wrong body: a class that keeps a familiar keeps
+    no spirit and no beast.
+    """
+    mine = [
+        e for e in world.having(Companion)
+        if world.get(e, Companion).owner == eid  # type: ignore[union-attr]
+    ]
+    named = [e for e in mine if world.get(e, Companion).kind == "familiar"]  # type: ignore[union-attr]
+    if named:
+        return named[0]
+    return mine[0] if mine else None
+
+
+def familiar_active(world: World, eid: int) -> int | None:
+    """The familiar, if the printed cards would call it active.
+
+    *"Requirement: your familiar must be in its active state"* is printed on
+    six rows across three files, and each file asked it by hand off
+    `Companion.passive` alone. **That is one condition short.** A destroyed
+    familiar keeps its `Companion` row -- `resolve._die` leaves the body an
+    entity on purpose -- and `passive` is not a field death touches, so a
+    corpse answered "active" for ever and every one of those six rows paid
+    out on it.
+
+    So: owned, a familiar, not passive, **and not dead**.
+
+    The last clause has one waiver, and it is a printed one rather than a
+    convenience: `f2257` is *"when your familiar is destroyed, treat your
+    familiar as in its active state until the end of your next turn"*. That
+    is exactly this test being told to skip its new half, for a span, so it
+    is read here as a modifier on the **owner** -- not on the familiar,
+    whose own effects `_die` tears down, and which would be the one place a
+    waiver about being dead could not survive.
+    """
+    who = familiar_of(world, eid)
+    if who is None:
+        return None
+    pet = world.get(who, Companion)
+    if pet is None or pet.passive:
+        return None
+    if is_(world, who, Condition.DEAD) and not familiar_echoes(world, eid):
+        return None
+    return who
+
+
+def familiar_echoes(world: World, eid: int) -> bool:
+    """Is this creature's familiar held in its active state past death?
+
+    `f2257`'s span. Gated through `Mods` on the owner, the convention
+    `may_enter` and `immune_to` use, so the duration is an ordinary effect
+    that an ordinary turn boundary ends.
+    """
+    mods = world.get(eid, Mods)
+    if mods is None or not mods.items:
+        return False
+    return mods.total("familiar_past_death", {"owner": eid}) > 0
+
+
 def distance_between(world: World, a: int, b: int) -> int:
     return between(squares(world, a), squares(world, b))
 

@@ -2,7 +2,7 @@
   "sha": "8cbaf482b7802c2cf4788bf34e752e4504093021",
   "refs": 21297,
   "fired": 19793,
-  "silent": 258,
+  "silent": 257,
   "never": 1065,
   "silent_refs": [
     "cf:ardent-f0s2",
@@ -43,7 +43,6 @@
     "cf:warlord-marshal-f5",
     "cf:wizard-arcanist-f0s0",
     "cf:wizard-arcanist-f2",
-    "cf:wizard-sha-ir-f1",
     "f1001",
     "f1008",
     "f1016",

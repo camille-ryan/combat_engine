@@ -2236,6 +2236,132 @@ def scoped_vulnerable(out: Result) -> None:
 
 
 
+
+def a_dead_familiar_is_not_an_active_one(out: Result) -> None:
+    """Six rows asked "is your familiar active" and were one condition short.
+
+    *"Requirement: your familiar must be in its active state"* was asked in
+    three content files under three names, each off `Companion.passive`
+    alone. A destroyed familiar keeps its `Companion` row -- `resolve._die`
+    leaves the body an entity on purpose -- and `passive` is not a field
+    death touches, so **a corpse answered "active" for ever** and all six
+    rows paid out on it.
+
+    `query.familiar_active` is the one reader now: owned, a familiar, not
+    passive, and not dead. `f2257` is the printed waiver on that last half
+    -- *"when your familiar is destroyed, treat your familiar as in its
+    active state until the end of your next turn"* -- so the row and the
+    fix are the same question from both sides, which is why they are
+    asserted together. #620.
+
+    Driven on `cf:wizard-sha-ir-f1`, the one row in the tree that calls
+    `c.call_companion(kind="familiar")`.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.feats.general_c import _familiar
+    from combat_engine.content.feats.general_h import _familiar_is_active
+    from combat_engine.content.powers.sorcerer import has_familiar
+    from combat_engine.engine import Condition
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Dropped
+    from combat_engine.engine.query import familiar_active, familiar_echoes, is_
+    from combat_engine.engine.triggers import familiar_dropped
+
+    ref = "cf:wizard-sha-ir-f1"
+
+    def with_familiar() -> tuple:
+        world, me, _ = _posed(ref, 1)
+        c = Cast(world=world, me=me, ref=ref)
+        c.call_companion(kind="familiar")
+        return world, me, c, c.familiar()
+
+    # -- alive: every one of the four readers says active -----------------
+    world, me, c, fam = with_familiar()
+    out.that(fam is not None, "the row calls a familiar onto the board")
+    if fam is None:
+        return
+    out.that(familiar_active(world, me) == fam,
+             "alive and standing, the query answers with it")
+    out.that(c.familiar_active() == fam, "and so does the Cast door")
+    out.that(_familiar(c, passive=False) == fam,
+             "and general_c's helper, which now forwards")
+    out.that(_familiar_is_active(world, me),
+             "and general_h's requires= gate")
+    out.that(has_familiar(world, me), "and the sorcerer's requires= gate")
+
+    # -- passive: all four say no, which they always did ------------------
+    c.familiar_mode("passive")
+    out.that(familiar_active(world, me) is None,
+             "switched to passive, the query answers None")
+    out.that(not _familiar_is_active(world, me), "the gate closes")
+    out.that(not has_familiar(world, me), "and the other gate closes")
+    out.that(_familiar(c, passive=True) == fam,
+             "while the PASSIVE question still answers with it -- the"
+             " asymmetry is deliberate, a corpse is not in passive mode")
+
+    # -- dead: this is the half that was false ----------------------------
+    world2, me2, c2, pet = with_familiar()
+    if pet is None:
+        return
+    hp = world2.need(pet, Health)
+    c2.damage(hp.hp + 50, on=pet)
+    out.that(is_(world2, pet, Condition.DEAD), "a blow kills the familiar")
+
+    from combat_engine.engine.components import Companion
+    beast = world2.get(pet, Companion)
+    out.that(beast is not None and not beast.passive,
+             "and `Companion.passive` is still False, which is why reading"
+             " it alone was wrong rather than merely incomplete")
+
+    out.that(familiar_active(world2, me2) is None,
+             "the query refuses a dead familiar")
+    out.that(not _familiar_is_active(world2, me2),
+             "general_h's gate refuses it")
+    out.that(not has_familiar(world2, me2),
+             "the sorcerer's gate refuses it")
+    out.that(_familiar(c2, passive=False) is None,
+             "general_c's helper refuses it")
+
+    # -- f2257: the printed waiver on exactly that half -------------------
+    world3, me3, c3, ghost = with_familiar()
+    if ghost is None:
+        return
+    hp3 = world3.need(ghost, Health)
+    c3.damage(hp3.hp + 50, on=ghost)
+    out.that(familiar_active(world3, me3) is None,
+             "a third board, familiar dead, nothing active yet")
+    out.that(not familiar_echoes(world3, me3),
+             "and no grace in force")
+
+    # Through the ROW, not through the verb. A rule that called
+    # `c.familiar_mode(past_death=True)` itself would prove the verb and
+    # say nothing about whether f2257 asks for it.
+    REGISTRY["f2257"].body(Cast(world=world3, me=me3, ref="f2257"))
+
+    out.that(familiar_echoes(world3, me3),
+             "f2257's body lays the grace")
+    out.that(familiar_active(world3, me3) == ghost,
+             "and the dead familiar reads ACTIVE again, which is the card")
+    out.that(_familiar_is_active(world3, me3),
+             "so the gate that refused it a moment ago now opens")
+    out.that(has_familiar(world3, me3), "and the other one")
+
+    # The trigger, read off a real event rather than asserted in prose.
+    fell = Dropped(actor=ghost, dead=True, source=me3, power="")
+    out.that(familiar_dropped(world3, me3, fell),
+             "the row's trigger fires on MY familiar falling")
+    out.that(not familiar_dropped(world3, me3,
+                                  Dropped(actor=me3, dead=True, source=me3, power="")),
+             "and not on the owner falling, which is `ev.actor` one field over")
+
+    # The grace is a span, not a permanent state: an ordinary boundary ends
+    # it, which is "at which time the spirit fades away".
+    out.that(REGISTRY["f2257"].on is not None,
+             "and the row declares that trigger rather than standing modifiers")
+
 def a_condition_sticks_to_a_creature_with_no_cache(out: Result) -> None:
     """A spawned creature had no `Conditions`, and every condition was lost.
 
@@ -13352,6 +13478,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_dead_familiar_is_not_an_active_one": (
+        a_dead_familiar_is_not_an_active_one,
+        "six rows read Companion.passive alone, so a corpse was active"),
     "a_condition_sticks_to_a_creature_with_no_cache": (
         a_condition_sticks_to_a_creature_with_no_cache,
         "a spawned creature had no Conditions and swallowed every condition"),

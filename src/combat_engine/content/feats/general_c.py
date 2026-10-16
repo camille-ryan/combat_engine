@@ -67,14 +67,23 @@ STRIKER_DAMAGE = ("cf:rogue-scoundrel-f4", "cf:ranger-f1")
 def _familiar(c: Cast, *, passive: bool) -> int | None:
     """The caster's familiar, if it is in the state the card asks for.
 
-    "Active" and "passive" are one flag -- `Companion.passive`, which
-    `c.familiar_mode` sets and which decides whether the familiar holds a
-    square at all. Nothing on `Cast` reads it back, which is what the
-    `c.familiar_state()` markers on this chain were written against.
+    The **active** half is `c.familiar_active`, which asks the whole
+    printed question. Reading `Companion.passive` by hand was one condition
+    short: a destroyed familiar keeps its `Companion` row and death does not
+    touch `passive`, so "your familiar must be active" was satisfied by a
+    corpse. #620.
+
+    The **passive** half stays a flag read, and the asymmetry is the point.
+    "Your familiar is in passive mode" is a card asking where the creature
+    is -- off the board, holding no square -- and a dead familiar is not in
+    passive mode, it is dead. Only one of the two sentences has anything to
+    say about a corpse.
     """
+    if not passive:
+        return c.familiar_active()
     fam = c.familiar()
     mine = c.world.get(fam, Companion) if fam is not None else None
-    return fam if mine is not None and mine.passive is passive else None
+    return fam if mine is not None and mine.passive else None
 
 
 def _granted(ref: str, card: str):  # noqa: ANN202

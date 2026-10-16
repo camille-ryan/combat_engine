@@ -6334,10 +6334,33 @@ class Cast:
         where = at or self._free_square_near(self.here)
         if where is None:
             return 0
+        # The kind this call will actually produce, which is not always the
+        # kind it was handed: the `comp:` branch below reads a bare
+        # "spirit" as "beast", since that is the default and a beast's page
+        # is what `comp:` refs are. Normalised **here** because the
+        # relocate test needs the same answer the spawn will give, and
+        # comparing against the raw argument would turn "call your beast
+        # again" into a dismiss-and-respawn.
+        want = "beast" if ref.startswith("comp:") and kind == "spirit" else kind
         standing = None if second else self.companion()
         if standing is not None:
             mine = self.world.get(standing, Companion)
-            if mine is not None and mine.ref == ref:
+            # **Both halves, and `ref` alone was not enough.** The comment
+            # below describes this exact fault as fixed, and it was -- for
+            # the case where the two refs *differ*. Two calls that both pass
+            # no ref compare equal on `ref` and slipped straight through to
+            # the relocate, keeping whatever `kind` was already standing.
+            #
+            # `cf:wizard-sha-ir-f1` is the live case. It calls
+            # `c.call_companion(kind="familiar")` and the wizard ended up
+            # owning a **spirit**, because something had already put a
+            # refless companion there and this moved it. So a dozen wizard
+            # rows opening `pet = c.familiar()` only ever found it through
+            # that method's single-companion fallback, and the one row that
+            # asks the question properly -- `f1334b`'s "your familiar must
+            # be in its active state", which reads `kind == "familiar"` --
+            # could never open its gate. #636.
+            if mine is not None and mine.ref == ref and mine.kind == want:
                 from .movement import place
 
                 place(self.world, standing, where)
@@ -6374,7 +6397,9 @@ class Cast:
             )
             block = loader.companion(ref)
             damage = damage or block.damage
-            kind = kind if kind != "spirit" else "beast"
+            # `want` above, computed once so the relocate test and this
+            # spawn cannot disagree about what kind is being made.
+            kind = want
             self.world.add(
                 made,
                 Companion(
@@ -6608,13 +6633,25 @@ class Cast:
         wrong body: a class that keeps a familiar keeps no spirit and no
         beast.
         """
-        from .components import Companion
+        from .query import familiar_of
 
-        mine = self.companions(of=of)
-        named = [e for e in mine if self.world.get(e, Companion).kind == "familiar"]
-        if named:
-            return named[0]
-        return mine[0] if mine else None
+        return familiar_of(self.world, of if of is not None else self.me)
+
+    def familiar_active(self, *, of: int | None = None) -> int | None:
+        """The familiar, if the printed cards would call it active.
+
+        *"Requirement: your familiar must be in its active state"*, which
+        six rows across three files each asked by hand off
+        `Companion.passive` -- one condition short, because a destroyed
+        familiar keeps its `Companion` row and `passive` is not a field
+        death touches. `query.familiar_active` is the one reader now; this
+        is the `Cast` door onto it, for the rows that have a `Cast`. The
+        other two are `requires=` gates that get `(world, eid)` and call
+        the query directly.
+        """
+        from .query import familiar_active
+
+        return familiar_active(self.world, of if of is not None else self.me)
 
     def beast(self, *, of: int | None = None, category: str = "") -> int | None:
         """The beast companion a ranger keeps, if it is on the board.
@@ -6661,7 +6698,14 @@ class Cast:
         )
         return self.call_companion(ref, at, kind="beast") if ref else 0
 
-    def familiar_mode(self, mode: str, *, of: int | None = None) -> bool:
+    def familiar_mode(
+        self,
+        mode: str,
+        *,
+        of: int | None = None,
+        past_death: bool = False,
+        until: When = When.EONT,
+    ) -> bool:
         """"Your familiar enters passive mode", and the way back out of it.
 
         Passive is off the board rather than a flag on something standing
@@ -6669,9 +6713,36 @@ class Cast:
         it and `Range(from_="companion")` measures from its owner instead.
         `Position` is kept rather than rebuilt because the size has to come
         back too.
+
+        **`past_death=True` holds the mode rather than changing it**, which
+        is `f2257`: *"when your familiar is destroyed, treat your familiar
+        as in its active state until the end of your next turn, at which
+        time the spirit fades away."* Nothing is switched -- the creature is
+        a corpse and switching a corpse is the thing this verb cannot do,
+        which is why the row was marked for a parameter here rather than for
+        a verb of its own. What it lays is a span in which
+        `query.familiar_active` skips its deadness test.
+
+        On the **owner**, not the familiar: `resolve._die` tears down the
+        effects a dead creature carries, so a waiver about being dead is the
+        one thing that could not live there. And the span is an ordinary
+        effect, so "the spirit fades away" is an ordinary turn boundary
+        rather than a second mechanism. #620.
         """
         from .components import Companion
         from .movement import place
+
+        if past_death:
+            # Deliberately **not** gated on there being a familiar. The
+            # printed trigger is the familiar being destroyed, and on a
+            # board where the corpse has already been cleared away there is
+            # nobody to find -- the row still granted its turn of grace, and
+            # a gate here would have made it silently do nothing in exactly
+            # the case it is written for.
+            return self.bonus(
+                "familiar_past_death", 1,
+                on=of if of is not None else self.me, until=until,
+            ) is not None
 
         who = self.familiar(of=of)
         if who is None:

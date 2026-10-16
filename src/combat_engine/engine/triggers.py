@@ -583,6 +583,29 @@ def summon_dropped(ref: str) -> Callable[[World, int, Any], bool]:
     return check
 
 
+def familiar_dropped(world: World, me: int, ev: Any) -> bool:
+    """**My** familiar went down.
+
+    `summon_dropped` beside this asks the same question keyed on the
+    creature's `ref`, because its cards name a kind of summon -- "one of the
+    m4167's vaporous spirits". A familiar is named by `Companion.kind`
+    instead and has no ref of its own to match, so the two cannot share.
+
+    Reads `ev.actor`, which on `Dropped` is the creature that fell;
+    `ev.source` is whoever struck the blow, and reading that would fire this
+    whenever the *killer* happened to be my familiar. `summon_dropped`'s own
+    note is the same trap one field over, and it is the mistake this file
+    has made before.
+    """
+    from .components import Companion
+
+    who = getattr(ev, "actor", None)
+    if who is None:
+        return False
+    pet = world.get(who, Companion)
+    return pet is not None and pet.kind == "familiar" and pet.owner == me
+
+
 def about_me(world: World, me: int, ev: Event) -> bool:
     """Reads `ev.actor`, and **only** `ev.actor`.
 

@@ -35,7 +35,9 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The corpses within `radius`. `c.within` can never return one.
 - `c.familiar(self, *, of: 'int | None' = None) -> 'int | None'`
   - The familiar this creature keeps, whichever mode it is in.
-- `c.familiar_mode(self, mode: 'str', *, of: 'int | None' = None) -> 'bool'`
+- `c.familiar_active(self, *, of: 'int | None' = None) -> 'int | None'`
+  - The familiar, if the printed cards would call it active.
+- `c.familiar_mode(self, mode: 'str', *, of: 'int | None' = None, past_death: 'bool' = False, until: 'When' = <When.EONT: "end of source's next turn">) -> 'bool'`
   - "Your familiar enters passive mode", and the way back out of it.
 - `c.first`
   - True on the first target. Where a once-per-power line goes.

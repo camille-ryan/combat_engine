@@ -48,7 +48,6 @@ from combat_engine.engine import (
     ActionType,
     AttackRolled,
     Cast,
-    Companion,
     Condition,
     DamageApplied,
     DamageType,
@@ -114,14 +113,13 @@ def _used_ward(world, me: int, ev: Any) -> bool:  # noqa: ANN001
 def _familiar_active(c: Cast) -> int | None:
     """The familiar, if there is one and it is in its active mode.
 
-    "Requirement: your familiar must be in its active state" is askable:
-    passive is `Companion.passive`, which `c.familiar_mode` sets and
-    nothing on `Cast` reads back. Three rows here were marked as though
-    the state did not exist at all.
+    `c.familiar_active` now, which asks the whole printed question. This
+    read `Companion.passive` by hand and was **one condition short**: a
+    destroyed familiar keeps its `Companion` row, death does not touch
+    `passive`, so the three rows below paid out on a corpse. Kept as a
+    name rather than inlined because the rows read better for it. #620.
     """
-    fam = c.familiar()
-    mine = c.world.get(fam, Companion) if fam is not None else None
-    return fam if mine is not None and not mine.passive else None
+    return c.familiar_active()
 
 
 def _item_dailies(c: Cast, who: int) -> list[str]:
