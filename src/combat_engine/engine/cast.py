@@ -2027,6 +2027,7 @@ class Cast:
         on: int | None = None,
         ref: str = "",
         damage_bonus: int = 0,
+        damage_type: DamageType | None = None,
         attack_bonus: int = 0,
         trigger: Any = None,
         reentrant: bool = False,
@@ -2045,6 +2046,13 @@ class Cast:
         the in-flight guard and the usage limit both have to stand aside for
         it. Nothing else should pass it -- it is what stops two rows handing
         a swing back and forth forever.
+
+        `damage_type` types the `damage_bonus`, which is `Mod.dtype`'s own
+        reason for existing: *"and deals extra thunder damage equal to your
+        Intelligence modifier"* is thunder even when the sword is not, so it
+        meets the target's thunder resistance where the sword's points do
+        not. Left out, the rider joins the blow and is whatever the blow
+        already was, which is right for a plain "+2 damage".
         """
         from .components import Powers
         from .dsl import get, use
@@ -2075,7 +2083,10 @@ class Cast:
                 self.world.effects.apply(
                     who, self.me, When.EOT,
                     label=f"{self.ref} granted damage",
-                    mods=[(who, Mod(what="damage", value=damage_bonus, kind="power"))],
+                    mods=[(who, Mod(
+                        what="damage", value=damage_bonus, kind="power",
+                        dtype=(damage_type,) if damage_type is not None else (),
+                    ))],
                     by=self.ref,
                 )
             )

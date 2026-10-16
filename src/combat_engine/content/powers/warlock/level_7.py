@@ -15,6 +15,8 @@ relations go on one effect directly and end together.
 from __future__ import annotations
 
 from combat_engine.content.powers.warlock.shared import augmenting
+from combat_engine.content.powers.warlock.shared import riposte as _riposte
+from combat_engine.content.powers.warlock.shared import thunderclap as _thunderclap
 from combat_engine.content.powers.warlock.shared import unnerve as _dismay
 from combat_engine.engine import (
     CHA,
@@ -86,9 +88,12 @@ def p1351(c: Cast) -> None:
 def p1461(c: Cast) -> None:
     """"In range" is the row's own ten squares, measured from the warlock."""
     victim = c.target
+    pact = augmenting(c, "f3421")
     if not c.strike():
         return
     c.damage("1d10", c.cha_mod, dtype=DamageType.PSYCHIC)
+    if pact:
+        _riposte(c)
     if victim is None:
         return
     crowd = {c.me, *c.within(10, side="ally")}
@@ -138,6 +143,9 @@ def p1462(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p501(c: Cast) -> None:
+    pact = augmenting(c, "f3429")
     if c.strike():
         c.damage("2d6", c.con_mod, dtype=DamageType.THUNDER)
         c.push(1 + c.int_mod if c.build("infernal") else 2)
+        if pact:
+            _thunderclap(c)

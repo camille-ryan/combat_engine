@@ -26,6 +26,7 @@ say so, the way `level_1.py`'s pact prerequisites already do.
 from __future__ import annotations
 
 from combat_engine.content.powers.warlock.shared import augmenting
+from combat_engine.content.powers.warlock.shared import rally as _rally
 from combat_engine.engine import (
     CHA,
     CON,
@@ -493,9 +494,12 @@ def p4177(c: Cast) -> None:
     the ones on my own side standing next to it. The vestige pact rider
     would heal all of them instead of one."""
     victim = c.target
+    pact = augmenting(c, "f3417")
     if not c.strike() or victim is None:
         return
     c.damage("2d8", c.con_mod)
+    if pact:
+        _rally(c)
     near = sorted(f for f in c.within(1, of=victim, side="ally") if f != c.me)
     friend = c.choose(near, f"{c.ref}: who is mended") if near else None
     if friend is not None:

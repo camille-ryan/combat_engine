@@ -101,18 +101,17 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.durations import keywords_of
 
-#: Nothing augments another row's card from outside it.
-#:
-#: **Re-aimed.** `dsl.use(augment=)` arrived and is not what these want.
-#: It settles a spend of *power points* against a row that declares its
-#: own augments, before targeting. These six spend the warlock's fell
-#: might -- a different currency entirely -- on a power whose card prints
-#: no Augment line at all, which is an offer added to another row from
-#: outside it. Same symbol the psionic aspect dailies name.
-#: The same gap `general_q.AUGMENT` records, re-pointed with it: a
-#: resource spent in place of power points to augment a row. See there
-#: for why `c.lend_augment(ref, clause)` is no longer the name.
-AUGMENT = ("c.augment_with(resource)",)
+#: **Retired. `c.augment_with(resource)` never named a gap**, and this
+#: comment argued for it three times -- first as `dsl.use(augment=)`,
+#: then as `c.lend_augment(ref, clause)`, then as "a resource standing
+#: in for power points". It is not standing in for anything:
+#: `c.spend_charge` on `features.warlock.FELL` is the spend, `c.may` is
+#: the decision, `c.declare` picks which bracketed feat applies, and
+#: `p12887` had been the worked example of the same mechanic the whole
+#: time. Six of the seven rows are written now, with the clause in the
+#: power it names; the seventh waits on an empty column and says so.
+#: #630. Kept as a note rather than deleted because each re-aiming made
+#: these rows read ready the moment the newly named verb landed.
 #: The "Associated Powers" line is a column no row can read.
 ASSOCIATED = ("feat.associated_powers",)
 #: The heroic half of a card's "Associated Powers" line, by the feat naming it.
@@ -250,7 +249,7 @@ def f3424(c: Cast) -> None:
 
 
 @power("f3425", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AUGMENT + ASSOCIATED,
+       reach=PERSONAL, target=SELF, dropped=ASSOCIATED,
        trigger="you drop an enemy you have cursed to 0 hit points",
        on=Trigger(Dropped, both(by_me, cursed_by_me),
                   "you drop an enemy you have cursed"))
@@ -262,7 +261,16 @@ def f3425(c: Cast) -> None:
     This is the one of the three whose page prints **no** Associated
     Powers list at all -- its two siblings print one and it arrived as
     refs -- so `feat.associated_powers` here is permanent rather than
-    pending."""
+    pending.
+
+    **The augment marker is gone from this row too, and it was never its
+    gap.** `c.augment_with(resource)` named nothing missing -- the spend is
+    `c.spend_charge` on `features.warlock.FELL` and the other six of these
+    feats are written (#630) -- so carrying it here said the clause was
+    waiting on a verb when it is waiting on a column. One marker, one gap:
+    with no Associated Powers list there is no power to write the clause
+    into, which `feat.associated_powers` already says.
+    """
     c.shift(3 + c.int_mod)
 
 
@@ -354,7 +362,6 @@ def f3428(c: Cast) -> None:
 
 @power("f3429", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AUGMENT,
        trigger="you drop an enemy you have cursed to 0 hit points")
 def f3429(c: Cast) -> None:
     """The enemy picks, not the warlock, so the choice is put to it with
@@ -362,6 +369,24 @@ def f3429(c: Cast) -> None:
 
     Declared trigger turned into a watch for the same reason as `f3427`
     above, and the swap is the attack half only on the same reading.
+
+    **The augment half is written, in the two powers rather than here.**
+    #550's convention: the clause is this feat's and the attack is the
+    power's, so it lives in `p1401` and `p501` as `shared.thunderclap`, gated by
+    `shared.augmenting` -- which settles the spend above the roll, because
+    the pact boon's card requires the decision before any attack roll. The
+    marker this row carried, `c.augment_with(resource)`, named nothing
+    missing: `c.spend_charge` on `features.warlock.FELL` is the spend and
+    `p12887` is the worked example. #630.
+
+    Only the two heroic refs the Associated Powers line prints. The card
+    names four more at paragon and epic and this build imports none of
+    them.
+
+    `p1401` is named by `f3419` too, and both print `[Greater Pact]` -- so
+    that body asks `c.declare` through `augmenting` and branches on which
+    ref came back, never `c.feat`, which is true for every feat held and
+    cannot say which is applying. #554.
     """
     for ref in _ASSOCIATED["f3429"]:
         c.rolls_with(ref, CHA)

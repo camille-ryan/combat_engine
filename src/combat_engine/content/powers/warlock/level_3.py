@@ -16,6 +16,9 @@ written as one more swing, since `c.reroll_attack` reads the roll off
 from __future__ import annotations
 
 from combat_engine.content.powers.warlock.shared import augmenting
+from combat_engine.content.powers.warlock.shared import rally as _rally
+from combat_engine.content.powers.warlock.shared import riposte as _riposte
+from combat_engine.content.powers.warlock.shared import thunderclap as _thunderclap
 from combat_engine.content.powers.warlock.shared import unnerve as _dismay
 from combat_engine.engine import (
     CHA,
@@ -103,8 +106,13 @@ def p1400(c: Cast) -> None:
     # One attack per target, which is what a body called per target already
     # does. The Fey Pact line would add Intelligence modifier to each damage
     # roll.
+    #
+    # **Carries `f3421`'s augment** -- `shared.riposte`. #630.
+    pact = augmenting(c, "f3421")
     if c.strike():
         c.damage("2d8", c.cha_mod)
+        if pact:
+            _riposte(c)
 
 
 @power(
@@ -125,12 +133,18 @@ def p1401(c: Cast) -> None:
     applied once per ally on a single effect instead -- the same shape the
     monster rows that open an enemy up to everybody use.
     """
-    pact = augmenting(c, "f3419")
+    # Two feats name this row and both print `[Greater Pact]`, so the
+    # body asks `c.declare` through `augmenting` rather than `c.feat`,
+    # which is true for every feat held and cannot say which applies.
+    # #554.
+    pact = augmenting(c, "f3419", "f3429")
     if not c.strike():
         return
     c.damage("2d8", c.con_mod, dtype=DamageType.COLD)
-    if pact:
+    if pact == "f3419":
         _dismay(c)
+    elif pact == "f3429":
+        _thunderclap(c)
     victim = c.target
     c.world.effects.apply(
         victim,
@@ -439,13 +453,19 @@ def p4068(c: Cast) -> None:
     attack=Attack(CON, vs=FORT),
 )
 def p4069(c: Cast) -> None:
-    """Handing an effect on is written as ending yours and laying its
+    """**Carries `f3417`'s augment** -- `shared.rally`, gated through
+    `shared.augmenting`. See `p1341` for the convention. #630.
+
+    Handing an effect on is written as ending yours and laying its
     conditions and its burn on the target for a turn. The hold itself is a
     different object with a different clock, which is what the printed line
     means by "until the end of your next turn" replacing "save ends"."""
+    pact = augmenting(c, "f3417")
     if not c.strike():
         return
     c.damage("2d8", c.con_mod, dtype=DamageType.PSYCHIC)
+    if pact:
+        _rally(c)
     mine = [e for e in c.world.effects.of(c.me) if e.when is When.SAVE_ENDS]
     if not mine:
         return

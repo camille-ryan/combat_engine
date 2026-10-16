@@ -2266,8 +2266,8 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Health, Mods, Position, Powers
     from combat_engine.engine.dsl import REGISTRY, keywords_of
-    from combat_engine.engine.query import enemies, is_
-    from combat_engine.engine.types import Condition, Keyword
+    from combat_engine.engine.query import allies, enemies, is_
+    from combat_engine.engine.types import Condition, Defense, Keyword
 
     def pose(power: str, feat: str, seed: int = 1):  # noqa: ANN202
         world, me, _ = _board(power, seed)
@@ -2394,6 +2394,128 @@ def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
              "without the feat it stays plain -- and `Power.keywords` could"
              " never have said this, being one tuple shared by everyone who"
              " holds the row")
+
+    # -- f3427, f3423 and f3419 are asserted above. The other three ------
+    # Each names two powers; one of each pair is enough to prove the clause,
+    # and `shared.augmenting` is the same gate for all six, already planted.
+
+    # f3421: "the target makes a basic attack against a creature you choose"
+    world, me, use, victim, neighbour = pose("p1400", "f3421")
+    hurt = world.get(neighbour, Health).hp
+    REGISTRY["p1400"].body(use)
+    out.that(world.get(neighbour, Health).hp < hurt,
+             "f3421 makes p1400's target swing at the creature the caster"
+             " picks -- `c.grant_attack`'s first argument is who swings and"
+             " its `on=` is who is swung at",
+             f"{hurt} -> {world.get(neighbour, Health).hp}")
+
+    world, me, use, _, neighbour = pose("p1400", "")
+    hurt = world.get(neighbour, Health).hp
+    REGISTRY["p1400"].body(use)
+    out.that(world.get(neighbour, Health).hp == hurt,
+             "and without the feat the bystander is not struck",
+             f"{hurt} -> {world.get(neighbour, Health).hp}")
+
+    # f3417: "each ally adjacent to the target can shift 1 or take +2 to all
+    # defences". The ally decides, so the headless default -- `c.may`'s first
+    # option -- settles it, and that is the shift.
+    world, me, use, victim, _ = pose("p4069", "f3417")
+    # The stock board stands the allies near the caster, not near whatever
+    # it shoots at, so one is walked over -- the same setup the enemies get
+    # above. Without it `c.within(1, of=victim, side="ally")` is empty and
+    # the clause would read as inert while being correct.
+    standing = sorted(a for a in allies(world, me) if a != me)
+    if standing:
+        spot = world.get(victim, Position).square
+        world.get(standing[0], Position).square = (spot[0], spot[1] + 1)
+    friends = sorted(a for a in use.within(1, of=victim, side="ally") if a != me)
+    out.that(bool(friends),
+             "an ally is standing beside p4069's target, or this proves"
+             " nothing either way",
+             f"{friends}")
+    if friends:
+        friend = friends[0]
+        stood = world.get(friend, Position).square
+        braced = (world.get(friend, Mods).total(Defense.AC, {})
+                  if world.get(friend, Mods) else 0)
+        # **Record who is asked, through the real decider hook.** Asserting
+        # only that the ally stepped *or* braced was too weak to see this,
+        # and the plant proved it: swapping `c.may(who=friend)` for a bare
+        # `c.may` left the rule green, because one of the two still
+        # happened -- to the right creature, decided by the wrong one.
+        asked: list[tuple[int, str]] = []
+
+        def listen(actor, kind, options, prompt=""):  # noqa: ANN001, ANN202
+            asked.append((actor, prompt))
+            return options[0]
+
+        was, world.decider = world.decider, listen
+        try:
+            REGISTRY["p4069"].body(use)
+        finally:
+            world.decider = was
+        now = world.get(friend, Position).square
+        after = (world.get(friend, Mods).total(Defense.AC, {})
+                 if world.get(friend, Mods) else 0)
+        out.that(now != stood or after == braced + 2,
+                 "f3417 lets the ally beside the target step or brace",
+                 f"square {stood} -> {now}, AC {braced} -> {after}")
+        step = [who for who, prompt in asked if "bracing" in prompt]
+        out.that(step == [friend],
+                 "and the ALLY is the creature asked which -- \"can either\""
+                 " on somebody else's clause is their decision, which is"
+                 " `c.may`'s own rule about whose resource it is",
+                 f"asked {step}, ally is {friend}")
+
+    # f3429: "one ally within 5 makes a basic attack and deals extra thunder
+    # damage equal to your Intelligence modifier" -- through p501.
+    world, me, use, victim, _ = pose("p501", "f3429")
+    foes = {f: world.get(f, Health).hp for f in sorted(enemies(world, me))
+            if world.get(f, Health)}
+    REGISTRY["p501"].body(use)
+    moved = [f for f, hp in foes.items()
+             if world.get(f, Health).hp != hp and f != victim]
+    out.that(bool(moved) or world.get(victim, Health).hp < foes.get(victim, 0),
+             "f3429 sends an ally's swing in through p501",
+             f"changed: {moved}")
+
+    # The typed half, which is the one that needed an engine parameter.
+    import inspect
+
+    from combat_engine.content.powers.warlock.shared import thunderclap
+    out.that("damage_type=DamageType.THUNDER" in inspect.getsource(thunderclap),
+             "and its extra damage is typed thunder -- `Mod.dtype`'s own"
+             " reason: these points meet the victim's thunder resistance"
+             " where the ally's weapon does not",
+             "c.grant_attack(damage_type=)")
+    out.that("damage_type" in inspect.signature(Cast.grant_attack).parameters,
+             "which `c.grant_attack` had no way to say until this row needed"
+             " it; untyped the rider joins the blow as whatever it already"
+             " was, right for a plain +2 and wrong here")
+
+    world, me, use, victim, _ = pose("p501", "")
+    foes = {f: world.get(f, Health).hp for f in sorted(enemies(world, me))
+            if world.get(f, Health)}
+    REGISTRY["p501"].body(use)
+    out.that(not [f for f, hp in foes.items()
+                  if world.get(f, Health).hp != hp and f != victim],
+             "and without the feat no second creature is touched",
+             "control")
+
+    # p1401 answers to two of these feats and must tell them apart.
+    out.that('augmenting(c, "f3419", "f3429")'
+             in inspect.getsource(REGISTRY["p1401"].body),
+             "p1401 declares BOTH feats that name it, so the one-per-use"
+             " rule is settled by `c.declare` -- `c.feat` is true for every"
+             " feat held and cannot say which is applying (#554)")
+    for held, expect in (("f3419", "_dismay"), ("f3429", "_thunderclap")):
+        world, me, use, _, _ = pose("p1401", held)
+        REGISTRY["p1401"].body(use)
+        out.that(getattr(use, "greater_pact", "") == held,
+                 f"and holding only {held} declares {held}, so the"
+                 f" {expect} branch is the one that runs",
+                 f"{getattr(use, 'greater_pact', None)!r}")
+
 
 
 def a_feat_lends_an_augment(out: Result) -> None:

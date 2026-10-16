@@ -7,7 +7,13 @@
 from __future__ import annotations
 
 from combat_engine.content.features.warlock import FELL
-from combat_engine.engine import Cast, DamageType, Keyword, When
+from combat_engine.engine import (
+    DEFENCES,
+    Cast,
+    DamageType,
+    Keyword,
+    When,
+)
 
 #: The bracketed category the `cf:warlock-f1s4` feats print. A rules word,
 #: not a printed name -- the same kind of vocabulary as a keyword, and a
@@ -98,3 +104,109 @@ def unnerve(c: Cast) -> None:
             if other != foe:
                 c.penalty("attack", 2, on=other, until=When.EONT)
     c.counts_as_keyword(c.ref, Keyword.FEAR, on=c.me, until=When.ENCOUNTER)
+
+
+def rally(c: Cast) -> None:
+    """`f3417`'s augment: the allies beside the target step or brace.
+
+    *"Each ally adjacent to the target can either shift 1 square as a free
+    action or gain a +2 power bonus to all defenses until the start of your
+    next turn."* Written once here because the feat names two powers in
+    different files.
+
+    **The ally chooses, not the caster**, which is what "can either" means
+    on a clause that benefits somebody else -- so `c.may` is asked of each
+    ally in turn rather than of the warlock. `c.may`'s own note is the
+    reason that distinction is kept: it is asked of the creature it is
+    about, because whose resource it is decides whether it is worth
+    spending, and the same holds for whose turn it interrupts.
+
+    Not the caster even when the caster is standing there: "each ally" is
+    other people, the read `p4177`'s own body already takes two lines
+    further down.
+
+    `side="ally"` is read from the warlock and not from the target, which
+    is `c.within`'s documented behaviour and what the printed word means --
+    an ally of *mine* standing next to that enemy.
+    """
+    foe = c.target
+    if foe is None:
+        return
+    for friend in sorted(c.within(1, of=foe, side="ally")):
+        if friend == c.me:
+            continue
+        if c.may("step instead of bracing", who=friend):
+            # `who=`, not `on=`: a movement verb names its mover that way
+            # and defaults it to the caster, where the modifier verbs
+            # take `on=` and default to the target.
+            c.shift(1, who=friend)
+        else:
+            for defence in DEFENCES:
+                c.bonus(defence, 2, on=friend, until=When.SONT, kind="power")
+
+
+def riposte(c: Cast) -> None:
+    """`f3421`'s augment: the target swings where the warlock points.
+
+    *"The target makes a basic attack against a legal target you choose."*
+    The swing is `c.grant_attack`, whose first argument is who swings and
+    whose `on=` is who is swung at -- a distinction four rows in the tree
+    got wrong by leaving `on=` off, so the grant bailed on its own guard
+    (#631).
+
+    "A legal target" is read as a creature the target can actually reach: a
+    basic attack it cannot deliver is not the clause printed. Chosen by the
+    caster, which is the card's own "you choose", and the target itself is
+    excluded -- it is the one swinging.
+    """
+    foe = c.target
+    if foe is None:
+        return
+    reach = sorted(
+        other for other in c.within(1, of=foe) if other not in (foe, c.me)
+    )
+    victim = c.choose(reach, f"{c.ref}: whom the target strikes") if reach else None
+    if victim is not None:
+        c.grant_attack(foe, on=victim)
+
+
+def thunderclap(c: Cast) -> None:
+    """`f3429`'s augment: an ally nearby swings, and the blow rolls thunder.
+
+    *"One ally within 5 squares of you makes a basic attack as a free action
+    and deals extra thunder damage equal to your Intelligence modifier."*
+
+    **Typed, through `c.grant_attack(damage_type=)`.** That parameter is new
+    and `Mod.dtype`'s own docstring is the argument for it: these points are
+    thunder even when the ally's weapon is not, so they meet the victim's
+    thunder resistance and its thunder vulnerability where the weapon's
+    points do not. Untyped they would have joined the blow as whatever the
+    blow already was.
+
+    The modifier is Intelligence of the **warlock**, not of the ally: it is
+    this feat paying, and `c.int_mod` on this cast is the caster's.
+
+    "At least one enemy" is satisfied by this clause running at all --
+    every row it is written into announces per target, and the clause is
+    guarded to fire once a use by `c.bonus(once=)`'s reason rather than by
+    counting hits: a second payout on a two-target blast would be one swing
+    more than the card.
+    """
+    if getattr(c, "greater_pact_paid", False):
+        return
+    friend = next(
+        iter(sorted(
+            ally for ally in c.within(5, side="ally") if ally != c.me
+        )),
+        None,
+    )
+    if friend is None:
+        return
+    marks = sorted(
+        foe for foe in c.within(1, of=friend, side="enemy") if foe != friend
+    )
+    if not marks:
+        return
+    c.greater_pact_paid = True
+    c.grant_attack(friend, on=marks[0], damage_bonus=c.int_mod,
+                   damage_type=DamageType.THUNDER)

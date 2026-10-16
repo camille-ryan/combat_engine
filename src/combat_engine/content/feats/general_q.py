@@ -159,32 +159,17 @@ NO_IMPORT = ("dsl.powers_of(cls)",)
 #: "You swap one of your level N powers for this one." The card is handed
 #: over; giving a power up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
-#: Augmenting a power from outside its own card.
-#: **Re-aimed.** `dsl.use(augment=)` arrived -- a row declares its
-#: augments in its own header and the spend is settled before targeting --
-#: and none of these is that shape. Every one of them expends the
-#: warlock's fell might on a power whose card prints no Augment line,
-#: which is an offer laid on another row from outside it. Same symbol the
-#: psionic aspect dailies in `docs/blocked.json` already name.
-#: **Expending something other than power points to augment a row.** Six
-#: warlock feats print "you can also expend your fell might to augment any
-#: power associated with this feat", and seven more print "when you augment
-#: p12887, you can forgo the extra damage the augment would deal to instead
-#: <effect>" -- which needs that augment to exist before it can be forgone.
-#:
-#: **Re-pointed from `c.lend_augment(ref, clause)`, which is implemented.**
-#: That verb lends a *clause* and four rows now use it (#507). These
-#: thirteen want a different thing wearing the same name: a **resource**
-#: standing in for power points. The resource itself is built --
-#: `c.spend_charge` on a key the owning row coins, which is what
-#: `c.fell_might()` was standing in for (#529) -- and spending it *on an
-#: augment* is the further step that did not arrive with it. So this symbol
-#: is still the gap and is now the only one.
-#:
-#: The "forgo the extra damage" half is `c.pre_empt`, which exists -- so
-#: naming only this one is correct: it is the earliest gap, and the one
-#: without which the rest says nothing.
-AUGMENT = ("c.augment_with(resource)",)
+#: **Retired. `c.augment_with(resource)` never named a gap**, and this
+#: comment argued for it three times -- first as `dsl.use(augment=)`,
+#: then as `c.lend_augment(ref, clause)`, then as "a resource standing
+#: in for power points". It is not standing in for anything:
+#: `c.spend_charge` on `features.warlock.FELL` is the spend, `c.may` is
+#: the decision, `c.declare` picks which bracketed feat applies, and
+#: `p12887` had been the worked example of the same mechanic the whole
+#: time. Six of the seven rows are written now, with the clause in the
+#: power it names; the seventh waits on an empty column and says so.
+#: #630. Kept as a note rather than deleted because each re-aiming made
+#: these rows read ready the moment the newly named verb landed.
 #: "Choose a power granted by <feature>" -- the features are rows now,
 #: and so are their options, but every option refuses itself off
 #: `c.build` on its first line. Handing one to a character of another
@@ -2427,7 +2412,7 @@ _ASSOCIATED = {"f3417": ("p4069", "p4177"), "f3419": ("p1401", "p1462")}
 @power("f3417", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
-       dropped=AUGMENT)
+       )
 def f3417(c: Cast) -> None:
     """Two of three clauses written; only the augment is still a gap.
 
@@ -2456,6 +2441,19 @@ def f3417(c: Cast) -> None:
     is recorded against the creature and `Attack.ability_for` reads it;
     a damage line naming its own modifier belongs to the associated row and
     is not this row's to rewrite. Not claimed as a gap here.
+
+    **The augment half is written, in the two powers rather than here.**
+    #550's convention: the clause is this feat's and the attack is the
+    power's, so it lives in `p4069` and `p4177` as `shared.rally`, gated by
+    `shared.augmenting` -- which settles the spend above the roll, because
+    the pact boon's card requires the decision before any attack roll. The
+    marker this row carried, `c.augment_with(resource)`, named nothing
+    missing: `c.spend_charge` on `features.warlock.FELL` is the spend and
+    `p12887` is the worked example. #630.
+
+    Only the two heroic refs the Associated Powers line prints. The card
+    names four more at paragon and epic and this build imports none of
+    them.
     """
     me = c.me
     for ref in _ASSOCIATED["f3417"]:
@@ -2588,12 +2586,25 @@ def f3420(c: Cast) -> None:
 @power("f3421", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger=_CURSED_FELL,
-       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL),
-       dropped=AUGMENT)
+       on=Trigger(Dropped, cursed_by_me, _CURSED_FELL))
 def f3421(c: Cast) -> None:
     """"No enemy can be slid more than 1 square by this effect" is what
     the set is for: an adjacent enemy that is also cursed appears in both
-    printed groups and is slid once."""
+    printed groups and is slid once.
+
+    **The augment half is written, in the two powers rather than here.**
+    #550's convention: the clause is this feat's and the attack is the
+    power's, so it lives in `p1400` and `p1461` as `shared.riposte`, gated by
+    `shared.augmenting` -- which settles the spend above the roll, because
+    the pact boon's card requires the decision before any attack roll. The
+    marker this row carried, `c.augment_with(resource)`, named nothing
+    missing: `c.spend_charge` on `features.warlock.FELL` is the spend and
+    `p12887` is the worked example. #630.
+
+    Only the two heroic refs the Associated Powers line prints. The card
+    names four more at paragon and epic and this build imports none of
+    them.
+    """
     shoved = {f for f in c.enemies() if c.adjacent(f) or c.cursed(on=f)}
     for foe in sorted(shoved):
         c.slide(1, on=foe)
