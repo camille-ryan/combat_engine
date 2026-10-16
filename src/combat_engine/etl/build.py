@@ -3439,6 +3439,26 @@ def _cross_reference_rest(
         if not held_by or (len(ref), ref) < (len(held_by), held_by):
             by_feat[name] = ref
 
+    # **Powers keyed by class and name**, for `_cited_members`. `by_name`
+    # keeps one ref per name and so has already collapsed every tie by the
+    # time a citation is read -- but a citation prints the class, which is
+    # the one fact that settles it. Two of `f1239`'s four members resolve to
+    # 11 and 23 refs by name alone and to exactly one with the class.
+    by_class_power: dict[tuple[str, str], str] = {}
+    #
+    # **Lower-cased on both sides, and it was not.** `power.class` is stored
+    # capitalised -- `Invoker` -- and a citation prints it lower -- `invoker`
+    # -- so the first version of this index could never be hit: every lookup
+    # missed and fell through to `by_name`, which happened to answer
+    # correctly for all four of `f1239`'s members because `_rank` prefers a
+    # power. A dead index with a docstring claiming it settles ties is the
+    # silently-false shape this repo is built to catch, and it was found by
+    # checking which branch answered rather than by the output being wrong.
+    for ref, cls in out.execute("SELECT ref, class FROM power"):
+        nm = _low(((names.get(ref) or {}).get("name") or "").strip())
+        if len(nm) >= 3 and cls:
+            by_class_power.setdefault((cls.strip().lower(), nm), ref)
+
     # **The racial traits' own index**, for `_named_traits`. Apart from
     # `by_name` for the reason `by_feat` is: the position proves *which kind* of
     # thing is named, so the index must hold only that kind or the position is
@@ -3701,6 +3721,10 @@ def _cross_reference_rest(
             # unchanged for every feat that already reached it.
             if table == "feat":
                 fixed = _associated_refs(fixed, by_name, imported)
+                # The same list in the other printed form, which carries no
+                # heading for `_ASSOCIATED` to match. After it, so a feat
+                # printing both forms is unaffected.
+                fixed = _cited_members(fixed, by_class_power, by_name)
             # **Last, and for every table.** A labelled clause is a ref by
             # now whichever pass resolved it, and this is the only pass that
             # looks *inside* one. See `_self_named_clauses`.
@@ -4609,6 +4633,79 @@ def _associated_refs(spec: str, by_name: dict[str, str], imported: set[str]) -> 
         return "\n".join(lines)
 
     return _ASSOCIATED.sub(swap, spec)
+
+
+#: `<Name> (<class>, <book>, page <N>)` -- a printed citation, one member per
+#: line, where the list carries no `Associated Powers:` heading for
+#: `_ASSOCIATED` to find. The class is captured because it is the
+#: disambiguator: two of `f1239`'s four members resolve to 11 and 23 refs by
+#: name alone, and the citation names which class's power it means.
+#: **Any head, not only a capitalised one**, and requiring a capital made the
+#: already-resolved branch below dead code: `feat._trimmed` had turned one of
+#: `f1239`'s five members into `p3705` off the page's id, that line starts
+#: lowercase, and so the pattern never saw it -- the member kept its
+#: parenthetical while the other four lost theirs, which is the
+#: half-converted look #623 calls worse than either extreme. Deliberately the
+#: same pattern `leaks._CITATION` uses, so the extraction and the gate cannot
+#: disagree about what a citation is.
+_CITED_MEMBER = re.compile(
+    r"(?m)^([^\n(]*?)\s+\(([a-z][a-z' ]*),[^)]*page\s+\d+\)"
+)
+
+
+def _cited_members(
+    spec: str,
+    by_class_power: dict[tuple[str, str], str],
+    by_name: dict[str, str],
+) -> str:
+    """Resolve an inline citation list to refs. `_associated_refs`' sibling.
+
+    **The same blind spot, in a second function.** `_associated_refs` is
+    driven by the printed `Associated Powers:` heading. `f1239` prints no
+    such heading -- its members are inline, one per line, each a citation
+    followed by that member's own clause -- so no pass reached them and four
+    printed names arrived in `feat.spec`. `_self_named_clauses`' docstring
+    had already named this shape ("its list is not in the `Associated
+    Powers:` shape at all") about a different function; this is the third
+    time the corpus has been read as though the heading were the only form.
+
+    **The position waives `identifies`, exactly as the heading does.** A
+    parenthetical carrying a class, a book and a page number is not prose,
+    and there is no innocent reading in which the Title-Case run before it
+    is a mechanic. That is why two ordinary words resolve here and would not
+    in a sentence -- the same argument `_associated_refs` makes about a list
+    under a heading, and the reason `leaks.py --citations` needs no waiver.
+
+    **The printed class settles a tie that `by_name` cannot.** `by_name`
+    keeps one ref per name by `_rank`, so an ambiguous name has already been
+    collapsed by the time this sees it -- and two of `f1239`'s members
+    resolve to 11 and 23 refs, a power plus a class feature plus nine or
+    twenty-odd monster abilities. `by_class_power` is keyed `(class, name)`,
+    which the citation supplies both halves of.
+
+    **Only a `p`, for `_associated_refs`' reason**: a feat modifies the
+    powers a character has, never a claw. A member that does not resolve is
+    left exactly as printed rather than guessed at -- and that is what
+    `leaks.py --citations` is for, since a citation head that is still prose
+    is a name an author is being shown.
+    """
+
+    def swap(m: re.Match) -> str:
+        head, cls = m.group(1), m.group(2).strip().lower()
+        if _IS_REF.match(head.strip()):
+            # Already resolved, by `feat._trimmed` off the page's own id.
+            # The parenthetical is page provenance and carries no name, but
+            # leaving it on one line of five made the list look
+            # half-converted -- which is the thing #623 called worse than
+            # either extreme.
+            return head.strip()
+        low = _low(head.strip())
+        ref = by_class_power.get((cls, low)) or by_name.get(low)
+        if not ref or ref[:1] != "p":
+            return m.group(0)
+        return ref
+
+    return _CITED_MEMBER.sub(swap, spec)
 
 
 def _self_named_clauses(spec: str, owns: dict[str, list[str]]) -> str:

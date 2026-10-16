@@ -651,6 +651,21 @@ def cited() -> int:
     return 0
 
 
+#: Every table holding a `spec` column, in one place.
+#:
+#: **Three walks had their own copy of this list** and the duplication has
+#: already cost a real miss: `trap` (631 specs) and `racial_trait` (151) were
+#: absent from one of them, so that walk printed "no printed names in any
+#: spec" over 782 specs it had never read -- a check that cannot fail. The
+#: copies happened to agree when this was factored out; one list is what stops
+#: them disagreeing again.
+_SPEC_TABLES = (
+    "power", "monster_power", "class_feature", "companion", "item",
+    "item_block", "feat", "race", "racial_trait", "trap", "disease",
+    "associate", "terrain",
+)
+
+
 def specs() -> int:
     """Every spec column, checked the way a tracked file is.
 
@@ -694,10 +709,7 @@ def specs() -> int:
     # `#492` is that gap, and what would close it: the two lists reconciled
     # against the set of tables that actually have a spec column, with any
     # exclusion named rather than silently allowed.
-    for table in ("power", "monster_power", "class_feature", "companion",
-                  "item", "item_block", "feat", "race",
-                  "trap", "racial_trait",
-                  "disease", "associate", "terrain"):
+    for table in _SPEC_TABLES:
         for ref, spec in db.execute(f"SELECT ref, spec FROM {table}"):
             for line in (spec or "").splitlines():
                 for name, refs in _hits(line, index):
@@ -737,7 +749,76 @@ def specs() -> int:
             print(f"  {table}.{ref}: {why}")
     print("no printed names in any spec")
     bad = _self_named_clauses()
-    return bad or _unswapped_names(index) or columns(index)
+    return (bad or _unresolved_citations() or _unswapped_names(index)
+            or columns(index))
+
+
+#: `<Head> (<class>, <book>, page <N>)` -- the compendium's inline citation,
+#: used where a list of powers carries no `Associated Powers:` heading.
+_CITATION = re.compile(
+    r"(?m)^([^\n(]*?)\s+\(([a-z][a-z' ]*),[^)]*page\s+\d+\)"
+)
+
+#: Refs as this corpus spells them, for the citation walk. A head that is one
+#: has been resolved; a head that is prose has not.
+_CITED_REF = re.compile(r"^(?:[pmifrw]\d+[a-z]*\d*|cf:[\w-]+|rt:[\w:-]+|x\d*_?[\w]+)$")
+
+
+def _unresolved_citations() -> int:
+    """A printed citation whose head is still prose, in any spec.
+
+    **The narrow question, and it needs no waiver at all** -- which is the
+    whole reason it works where the tree-wide walk does not. A parenthetical
+    carrying a class, a book and a page number is not prose, so whatever
+    stands in front of it is a name the compendium is citing. There is no
+    innocent reading in which it is a mechanic, and so nothing here consults
+    `identifies`, `_trusted_vocabulary` or any other judgement about the
+    words: the **position** has already answered.
+
+    That is `--cited`'s shape, and `--cited` is the one that works -- 20 real
+    leaks on its first run where the wide walk had been clean on every run on
+    record, *because* a narrow question inherits none of the waivers' blind
+    spots. `scripts/CLAUDE.md` states the general rule this is an instance
+    of: "nothing tested the **positions** where a waiver does not apply".
+
+    **It asks whether the head is a ref, not whether it resolves.** The
+    earlier draft of this looked the head up in the localisation index and
+    failed when it resolved -- which is strictly weaker, because a citation
+    naming something the index cannot resolve is *still* a printed name in a
+    spec and would have passed. Asking for a ref needs no index and catches
+    both.
+
+    Four hits in one spec when this was written -- `feat.f1239`, whose list
+    prints no heading so `_associated_refs` never ran on it -- and zero after
+    `build._cited_members`, which is why this lands as a gate rather than a
+    baseline. #624, with #623 as the extraction half.
+    """
+    db = game()
+    found: list[tuple[str, str]] = []
+    for table in _SPEC_TABLES:
+        try:
+            rows = db.execute(
+                f"SELECT ref, spec FROM {table} WHERE spec IS NOT NULL"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        for ref, spec in rows:
+            for head, _cls in _CITATION.findall(spec or ""):
+                head = head.strip()
+                if not head or _CITED_REF.match(head):
+                    continue
+                found.append((table, ref))
+
+    for table, ref in sorted(set(found)):
+        print(f"{table}.{ref}: a printed citation's head is still prose,"
+              f" so the name reached the spec")
+    if found:
+        print(f"\n{len(set(found))} spec(s) print an unresolved citation."
+              f" The head of a `(<class>, <book>, page N)` citation is a"
+              f" name by position -- resolve it in the extraction.")
+        return 1
+    print("every printed citation in a spec resolves to a ref")
+    return 0
 
 
 #: A spec that prints a name the scrub should have swapped, and the reason it
@@ -830,9 +911,7 @@ def _unswapped_names(index: dict[str, list[str]]) -> int:
         if len(refs) == 1 and len(phrase.split()) > 2
     }
     found: list[tuple[str, str, str]] = []
-    for table in ("power", "monster_power", "class_feature", "companion",
-                  "item", "item_block", "feat", "race", "racial_trait",
-                  "trap", "disease", "associate", "terrain"):
+    for table in _SPEC_TABLES:
         try:
             rows = db.execute(
                 f"SELECT ref, spec FROM {table} WHERE spec IS NOT NULL"
@@ -925,9 +1004,7 @@ def _self_named_clauses() -> int:
     db = game()
     bad: list[tuple[str, str, str]] = []
     clauses = 0
-    for table in ("power", "monster_power", "class_feature", "companion",
-                  "item", "item_block", "feat", "race",
-                  "trap", "racial_trait", "disease", "associate", "terrain"):
+    for table in _SPEC_TABLES:
         for ref, spec in db.execute(f"SELECT ref, spec FROM {table}"):
             for line in (spec or "").splitlines():
                 m = _CLAUSE.match(line)
