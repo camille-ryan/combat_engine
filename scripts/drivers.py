@@ -2264,11 +2264,12 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
     its own ctx with `attacker`, and two rows written against the wrong
     key passed it and would never have fired in a fight.
     """
+
     import combat_engine.content  # noqa: F401
     from combat_engine.engine import When
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Defences, Health, Position
-    from combat_engine.engine.dsl import DamageType
+    from combat_engine.engine.dsl import REGISTRY, DamageType
     from combat_engine.engine.query import allies, enemies
 
     def taken(*, side: str, inside: bool, who: str = "enemy",
@@ -2363,6 +2364,56 @@ def vulnerability_held_by_a_zone(out: Result) -> None:
              " and the reason this is not a duration",
              f"{getattr(held, 'vulnerable_when', None)}"
              f" {getattr(held, 'vulnerable', None)}")
+
+    # **Through a real row, not only the verb.** `p13747` is what the verb
+    # was built for and it was live and wrong in three ways -- every
+    # attacker's blow, no end on leaving, no end when the aura went -- while
+    # auditing green, because its attack and damage are the parts that fire.
+    # Asserting the verb alone would survive this row being reverted to its
+    # hand-rolled version, which is the whole argument for driving the caller.
+    # **No assertion about the row's source text, and the plant is why.**
+    # The first version read `inspect.getsource(row.body)` for the verb's
+    # name. Planting the old hand-rolled body back and re-running left that
+    # assertion **green** -- `getsource` goes through `linecache` against a
+    # module already imported, so it is reading neither the behaviour nor
+    # reliably the file. Same family as the `startswith("def")` fault that
+    # made an AST walk report zero bare calls tree-wide. The behavioural
+    # assertions below caught the plant; a source grep is not evidence.
+    row = REGISTRY["p13747"]
+
+    world, me, _ = _board("p13747", 1)
+    foe = next(e for e in enemies(world, me) if world.get(e, Health))
+    world.get(foe, Position).square = world.get(me, Position).square
+    c = Cast(world=world, me=me, ref="p13747", targets=[foe])
+    c.target = foe
+    # Only the Effect half is wanted; the attack is asserted elsewhere.
+    c.strike = lambda **kw: False  # ty: ignore[invalid-assignment]
+    # **The flat dict is read before as well as after, and that caught a
+    # wrong assertion.** The first version asserted the creature carries no
+    # flat vulnerability at all, and it failed: this board's monster prints
+    # `vulnerable 5 radiant` in its own stat block, which is data and not
+    # this row's doing. The question is whether the row *touches* the flat
+    # dict -- a widened clause would -- so it is a before-and-after.
+    before_flat = dict(getattr(world.get(foe, Defences), "vulnerable", {}) or {})
+    row.body(c)
+    carried = world.get(foe, Defences)
+    scoped = list(getattr(carried, "vulnerable_when", []) or [])
+    flat = dict(getattr(carried, "vulnerable", {}) or {})
+    out.that(len(scoped) == 1 and flat == before_flat,
+             "standing in p13747's aura, an enemy gains ONE scoped"
+             " vulnerability and the flat dict is untouched -- the flat dict"
+             " is what the widened version used to fill, and what an"
+             " unscoped reader would see",
+             f"{len(scoped)} scoped; flat {before_flat} -> {flat}")
+    if scoped:
+        dtype, amount, gate = scoped[0]
+        out.that(dtype is DamageType.RADIANT and amount == 3,
+                 "and it is the printed 3 radiant", f"{amount} {dtype}")
+        out.that(gate({"source": me}) and not gate({"source": foe}),
+                 "scoped to the CASTER's attacks -- the qualifier the old"
+                 " body dropped, and the one that made the row stronger"
+                 " than its card for every other attacker",
+                 f"mine={gate({'source': me})} theirs={gate({'source': foe})}")
 
 
 def class_form(out: Result) -> None:

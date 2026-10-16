@@ -414,22 +414,42 @@ def p13746(c: Cast) -> None:
     dropped=("chargen.pact_blade()",),
 )
 def p13747(c: Cast) -> None:
-    """"Vulnerable to *your* attacks" is widened to vulnerable outright: a
-    vulnerability is a property of the creature and carries no attacker. It
-    also runs its duration rather than ending when the enemy steps out."""
+    """"While in the aura, your enemies have vulnerable 3 radiant to **your**
+    attacks" -- all three qualifiers now, where the row had none of them.
+
+    **The old note admitted two of the faults and was wrong about both.**
+    It said a vulnerability "carries no attacker", which stopped being true
+    at #471 -- `c.vulnerable(when=)` keeps the entry as a triple on
+    `Defences.vulnerable_when` and `resolve.deal_damage` reads it against a
+    context carrying `source`. And it said the clause "runs its duration
+    rather than ending when the enemy steps out", which was a description
+    of this body rather than of the engine: the hand-rolled version below
+    watched `ZoneEntered` and **never `ZoneExited`**, so nothing could have
+    taken it back.
+
+    So the row was live and wrong in three ways at once -- every attacker's
+    blow, not only the caster's; no end on leaving the aura; and the aura's
+    own end not clearing it either -- and it audited green throughout,
+    because the attack and the damage are the parts that fire.
+
+    `c.vulnerable_in` is the whole of it, and `_while_inside` is what the
+    body was approximating: it gives to whoever is already standing there,
+    takes it back on exit, **and** hangs a `clear_all` on the zone's own
+    effect, so the aura ending lifts it from everybody. Three teardowns
+    where this had none.
+
+    The `pact_blade` marker stays: the Requirement naming one particular
+    weapon is the clause nothing enforces.
+    """
+    me = c.me
     dice = 2 + (c.level >= 13) + (c.level >= 23)
     if c.strike():
         c.damage(c.w(dice), c.cha_mod, dtype=DamageType.RADIANT)
-    ring = c.aura(1, until=When.EONT, on=c.me)
-    for who in c.world.zones.occupants(ring):
-        if who in c.enemies():
-            c.vulnerable(3, DamageType.RADIANT, on=who, until=When.EONT)
-
-    def entered(ev: ZoneEntered) -> None:
-        if ev.zone == ring and ev.actor in c.enemies():
-            c.vulnerable(3, DamageType.RADIANT, on=ev.actor, until=When.EONT)
-
-    c.watch(ZoneEntered, entered, until=When.EONT)
+    ring = c.aura(1, until=When.EONT, on=me)
+    c.vulnerable_in(
+        ring, 3, DamageType.RADIANT, side="enemy",
+        when=lambda ctx: ctx.get("source") == me,
+    )
 
 
 # -- the scourge -------------------------------------------------------------
