@@ -3731,11 +3731,18 @@ def m5788a0(c: Cast) -> None:
     Will-targeted attack -- immunity to every condition, gated on the
     attacking power targeting Will.
 
-    **The gate asked the context for a `vs` key and nothing writes one**,
-    so the
-    immunity never applied once and the creature was missing a defensive
-    trait in every fight. #591, and `symbols.py` carries it in
-    `KNOWN_DEAD` so the allowance cannot outlive the repair.
+    **The gate asked the context for a `vs` key and nothing writes one**, so
+    the immunity never applied once and the creature was missing a defensive
+    trait in every fight it was ever in. It audited green throughout: the row
+    fires and lays a modifier, and only the modifier's question was
+    unanswerable. #591.
+
+    `symbols.py` carried it in `KNOWN_DEAD` while it was broken and that
+    entry is **gone**, which is the mechanism working as designed -- the
+    allowance went red the moment the repair landed rather than outliving it.
+    What holds the repair now is `drivers.an_immunity_gated_on_the_attacking
+    _defence`, which lays a condition through `Effects.apply` from a Will
+    attack, from an AC attack, and from a label naming no row at all.
 
     The eight rows that ask this question elsewhere read `ev.vs` off
     `AttackDeclared` or `AttackRolled`, which genuinely carry it -- but

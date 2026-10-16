@@ -2234,6 +2234,82 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def an_immunity_gated_on_the_attacking_defence(out: Result) -> None:
+    """m5788a0 ignores every condition from a Will attack and nothing else.
+
+    *"Takes damage as normal, but ignores all other effects"* of a
+    Will-targeted attack. The gate asked the context for a `vs` key and
+    **nothing in the engine writes one**, so the immunity never applied once
+    and the creature was missing a defensive trait in every fight it was
+    ever in. It audited green throughout: the row fires, lays a modifier,
+    and only the modifier's question was unanswerable. #591.
+
+    The eight rows that ask this elsewhere read `ev.vs` off `AttackDeclared`
+    or `AttackRolled`, which carry it -- but those are watchers, and this is
+    a standing `when=` gate handed a damage context rather than an event. So
+    it asks the **power** the context does name and reads that row's
+    declared `Attack(vs=...)`.
+
+    Asserted through `Effects.apply`, which is the door every `c.condition`
+    goes through and the one that consults `query.immune_to`. The third case
+    is the one that keeps the gate honest: a label naming no row at all must
+    leave the condition standing, because a gate that cannot tell what
+    attacked has no business refusing anything.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition, Defense
+
+    world, me, _ = _board("m5788a0", 1)
+    REGISTRY["m5788a0"].body(Cast(world=world, me=me, ref="m5788a0"))
+    foe = next(iter(sorted(enemies(world, me))), me)
+
+    #: A heroic power rolling against each defence, read off the header
+    #: rather than named by hand -- the gate's whole question is what the
+    #: attacking row declares.
+    def rolling_against(defence: Defense) -> str:
+        for ref, row in sorted(REGISTRY.items()):
+            if not ref.startswith("p") or (row.level or 0) > 10:
+                continue
+            if getattr(getattr(row, "attack", None), "vs", None) is defence:
+                return ref
+        return ""
+
+    will, armour = rolling_against(Defense.WILL), rolling_against(Defense.AC)
+    out.that(bool(will) and bool(armour),
+             "there is a heroic power rolling against Will and one against"
+             " AC, or this proves nothing",
+             f"{will} / {armour}")
+
+    def lands(label: str) -> bool:
+        world.effects.apply(me, foe, When.EONT, label=label,
+                            conditions=[Condition.DAZED])
+        held = is_(world, me, Condition.DAZED)
+        for effect in list(world.effects.of(me)):
+            if effect.label == label:
+                world.effects.end(effect, "the rule is done with it")
+        return held
+
+    out.that(not lands(will),
+             f"a condition from a Will attack ({will}) is refused -- the"
+             f" immunity applies, which it never did while the gate read a"
+             f" ctx key nothing writes",
+             f"{will}")
+    out.that(lands(armour),
+             f"a condition from an AC attack ({armour}) lands -- the card"
+             f" narrows the immunity to Will and granting it wider would be"
+             f" a row stronger than its page",
+             f"{armour}")
+    out.that(lands("surprised"),
+             "and a label naming no row at all leaves the condition"
+             " standing: the engine labels a few effects with a plain word,"
+             " and a gate that cannot tell what attacked must answer False"
+             " rather than refuse everything")
+
+
 def a_pact_feat_augments_the_power_it_names(out: Result) -> None:
     """Three `[Greater Pact]` feats pay their augment inside the power.
 
@@ -12100,6 +12176,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "an_immunity_gated_on_the_attacking_defence": (
+        an_immunity_gated_on_the_attacking_defence,
+        "m5788a0 ignores conditions from a Will attack and nothing else"),
     "a_pact_feat_augments_the_power_it_names": (
         a_pact_feat_augments_the_power_it_names,
         "three [Greater Pact] feats pay their augment inside the power"),
