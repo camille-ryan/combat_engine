@@ -6262,6 +6262,131 @@ def reach_that_depends_on_a_state(out: Result) -> None:
              f"hit {got}, wanted {far}")
 
 
+def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
+    """f1010: one named power's burst grows by Charisma, while raging. #614.
+
+    **The row's own last blocker was "`c.widen_areas` has no way to name
+    one row", and this is the assertion that it is false.** `widen_areas`
+    exposes no `when=`, but it is one line over
+    `c.bonus("blast_size", ...)` and `c.bonus` has always taken a gate --
+    `dsl._stretched` says the ctx carries the row being measured. So the
+    narrowing is a gate on the modifier, and the interesting question is
+    not whether the number lands but whether it lands on **one** row.
+
+    Hence the two controls that matter here are both about *scope*:
+
+    * **another close burst 5 must not grow** -- without that, this rule
+      would pass on a blanket `c.widen_areas(c.cha_mod)`, which is what
+      the row was told to write and would have been wrong;
+    * **not raging, nothing grows** -- the condition both halves hang on,
+      read per measurement rather than at arming, because a rage can end
+      mid-fight and the menu is redrawn constantly.
+
+    And the premise, asserted rather than assumed: Charisma is worth
+    something on this board. A `+0` would make every other assertion here
+    vacuously true.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.content.powers.barbarian.rage import RAGE, raging
+    from combat_engine.engine import Keyword
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, area_of
+
+    ROAR = "p4932"
+    row = REGISTRY["f1010"]
+    out.that(not row.unfinished, "f1010 carries no marker now",
+             f"{row.unfinished}")
+
+    roar = REGISTRY[ROAR]
+    # Another close burst of the same printed size, so a blanket widening
+    # and a row-scoped one are distinguishable at all.
+    twin = next((r for r, q in REGISTRY.items()
+                 if q.reach and q.reach.kind == "close_burst"
+                 and q.reach.size == roar.reach.size and r != ROAR), None)
+    out.that(twin is not None,
+             "there is a second close burst of the same size to compare"
+             " against -- without one, 'only this row grew' is unprovable",
+             f"{twin}")
+    if twin is None:
+        # The assertion above has already gone red, so returning hides
+        # nothing -- and every assertion below measures the twin.
+        return
+
+    def squares(rage: bool) -> tuple[int, int, int]:
+        world, me, _ = _board("f1010", 1)
+        c = Cast(world=world, me=me, ref="f1010")
+        cha = c.cha_mod
+        if rage:
+            c.stance(on=me, label=f"{ROAR} {RAGE}")
+            assert raging(world, me)
+        REGISTRY["f1010"].body(Cast(world=world, me=me, ref="f1010"))
+        return (len(area_of(world, me, roar, None, 0)),
+                len(area_of(world, me, REGISTRY[twin], None, 0)), cha)
+
+    calm_roar, calm_twin, cha = squares(False)
+    out.that(cha > 0,
+             "Charisma is worth something on this board, so a growth is"
+             " visible at all -- the premise the rest of this rests on",
+             f"cha_mod {cha}")
+    angry_roar, angry_twin, _ = squares(True)
+
+    out.that(angry_roar > calm_roar,
+             "raging, the named row's burst covers more ground -- the half"
+             " three re-point notes had written off as unsayable",
+             f"{calm_roar} squares calm, {angry_roar} raging")
+    out.that(angry_twin == calm_twin,
+             "and ANOTHER close burst of the same size does not grow -- the"
+             " control that separates a gate on one row from the blanket"
+             " `c.widen_areas(c.cha_mod)` the row was told to write",
+             f"{calm_twin} calm, {angry_twin} raging")
+    out.that(calm_roar == calm_twin,
+             "unraging, the named row measures exactly like its twin -- so"
+             " the growth is the rage's doing and not a header difference",
+             f"{calm_roar} against {calm_twin}")
+
+    # The damage half, through the event that arms it.
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.events import PowerUsed
+
+    # **A row with the weapon keyword and one without**, because the bonus
+    # is printed as "+2 to *weapon* damage rolls". The first version of this
+    # probe only ever asked about a weapon row, so deleting the keyword gate
+    # from the row changed nothing it measured -- a plant stayed green and
+    # the finding was a missing assertion, not a bad plant.
+    armed_row = next((r for r, q in REGISTRY.items()
+                      if Keyword.WEAPON in (q.keywords or ())), "")
+    bare_row = next((r for r, q in REGISTRY.items()
+                     if q.keywords and Keyword.WEAPON not in q.keywords), "")
+
+    def paid(rage: bool, used: str, rolling: str = "") -> int:
+        world, me, _ = _board("f1010", 1)
+        c = Cast(world=world, me=me, ref="f1010")
+        if rage:
+            c.stance(on=me, label=f"{ROAR} {RAGE}")
+        REGISTRY["f1010"].body(Cast(world=world, me=me, ref="f1010"))
+        world.bus.emit(PowerUsed(actor=me, power=used, targets=[]))
+        mods = world.get(me, Mods)
+        if mods is None:
+            return 0
+        return mods.total("damage", {"power": rolling or armed_row})
+
+    out.that(paid(True, ROAR) == 2,
+             "using the named row while raging pays +2 to a weapon damage"
+             " roll", f"{paid(True, ROAR)}")
+    out.that(paid(False, ROAR) == 0,
+             "not raging, it pays nothing -- the condition, on the half the"
+             " area assertions cannot see", f"{paid(False, ROAR)}")
+    out.that(paid(True, twin) == 0,
+             "and raging while using a DIFFERENT power pays nothing either"
+             " -- the card names one row for both halves",
+             f"{paid(True, twin)}")
+    out.that(bool(bare_row) and paid(True, ROAR, rolling=bare_row) == 0,
+             "and the +2 reaches a WEAPON row only -- the card says weapon"
+             " damage, and `f454`'s note is that a barbarian's rage rows are"
+             " not all of them",
+             f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
+
+
 def area_that_depends_on_a_state(out: Result) -> None:
     """"Close burst 2 (5 while bloodied)" -- the same sentence about an area.
 
@@ -10528,6 +10653,9 @@ DRIVERS = {
     "reach_that_depends_on_a_state": (reach_that_depends_on_a_state,
                                       "\"Melee 2, or 4 while bloodied\": the"
                                       " header carries the permissive one"),
+    "one_rows_burst_grows_by_a_modifier": (one_rows_burst_grows_by_a_modifier,
+                                          "f1010: one named row's burst"
+                                          " grows by Charisma while raging"),
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),

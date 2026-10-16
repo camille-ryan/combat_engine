@@ -24,6 +24,7 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Hit,
+    PowerUsed,
     SurgeSpent,
     Trigger,
     When,
@@ -158,43 +159,60 @@ def f1009(c: Cast) -> None:
 
 
 @power("f1010", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
+       reach=PERSONAL, target=SELF)
 def f1010(c: Cast) -> None:
-    """Grows a named power's burst and pays a damage bonus, both while
-    raging.
+    """Grows one named power's burst by a modifier, and pays weapon damage,
+    both while raging. Written; the marker named a hold that was not one.
 
-    Growing the burst is no longer the gap. `c.widen_areas` lays a
-    `blast_size` modifier and `dsl._stretched` reads it, so
-    "becomes a close burst 5 + your Charisma modifier instead of a close
-    burst 5" is `c.widen_areas(c.cha_mod)` -- the old note here said the
-    area was header data nothing could rewrite, which stopped being true
-    when that verb landed. The marker followed the note and named
-    `c.widen_area()`, a verb that has never existed under that spelling.
+    **"`c.widen_areas` has no way to name one row" was the last blocker
+    standing here, and it is false.** Three stacked re-point notes had
+    worked the row down to exactly that sentence, and the route it
+    proposed -- lay the modifier on the `PowerUsed` that announces the
+    power, held to the end of that turn -- is more machinery than the
+    card needs.
 
-    What still blocks it is the condition both halves hang on: rage is
-    not a state anything holds, so writing either half would pay out
-    whether the barbarian is raging or not.
+    `c.widen_areas` takes no `when=`, but it is one line over
+    `c.bonus("blast_size", ...)`, and **`c.bonus` has always taken a
+    gate**. `dsl._stretched` says so in its own docstring -- *"`ctx`
+    carries the row being measured, so 'the range of your **arcane**
+    powers' is a gate on the modifier rather than a blanket stretch"* --
+    and measuring it confirms the ctx is `{"power": ..., "kind":
+    "close_burst"}`. So the narrowing to one row is a gate on the
+    modifier, and nothing had to be built. `f2705` is the same move on
+    `c.reroll_ones`, which also exposes no `when=`.
 
-    One caveat for the day rage arrives: `c.widen_areas` is a modifier on
-    the caster with no way to name one row, so the narrowing to `p4932`
-    would have to come from the duration -- laid on the `PowerUsed` that
-    announces it, which fires before the body, and held to the end of
-    that turn.
-    
+    Asked **per read, not at arming**, which is `f593`'s reason and holds
+    here twice over: a rage can end mid-fight, and the burst is measured
+    every time the menu is drawn.
 
-    **Re-pointed: the rage gate was never the hold.** `rage.in_rage()`
-    answers it. What is left is rewriting the named row's burst from 5 to
-    "5 + your Charisma modifier" -- reach is header data the menu reads
-    before anything runs, which is `c.recast(reach=)`, the symbol `f287`
-    and `f601` already carry.
-    
-
-    **Re-pointed off `c.recast(reach=)`, which was one symbol over two
-    mechanisms.** This row rewrites a *named row's area* -- its size or
-    its shape. `c.widen_areas` lays a `blast_size` modifier and
-    `dsl._stretched` reads it, so growing every burst this caster throws
-    is already sayable; what is not is naming **one** row, which is what
-    all of these cards do. The other five rows on the old symbol wanted
-    melee-as-ranged, which is a different rewrite -- see
-    `c.recast(as_ranged=)`.
+    The damage half is `f454`'s shape -- a **weapon** damage bonus is
+    gated on the used power carrying the keyword, because "a barbarian's
+    rage rows are not all of them" -- and it is armed off `PowerUsed`
+    rather than laid standing, since the card gives it once per use and
+    holds it past that power's own resolution.
     """
+    from combat_engine.engine import Keyword
+    from combat_engine.engine.dsl import get
+
+    me = c.me
+
+    #: The one row this feat names. Both halves hang on it.
+    roar = "p4932"
+
+    c.bonus(
+        "blast_size", c.cha_mod, on=me, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == roar and in_rage(c),
+    )
+
+    def paid(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power != roar or not in_rage(c):
+            return
+        c.bonus(
+            "damage", 2, on=me, until=When.EONT, kind="power",
+            when=lambda ctx: (
+                (p := get(ctx.get("power", ""))) is not None
+                and Keyword.WEAPON in p.keywords
+            ),
+        )
+
+    c.watch(PowerUsed, paid, until=When.ENCOUNTER, on=me, label=c.ref)
