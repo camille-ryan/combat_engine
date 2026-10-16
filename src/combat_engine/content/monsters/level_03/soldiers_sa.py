@@ -701,7 +701,7 @@ def m1122a5(c: Cast) -> None:
     attack that triggered the row -- which is the whole of "cancels the
     combat advantage she was about to grant". `c.no_advantage` defaults to the
     caster, which is right here."""
-    c.no_advantage(until=When.EOT)
+    c.no_advantage(until=When.EOT, on=c.me)
 
 
 # --------------------------------------------------------------------------
@@ -1376,7 +1376,7 @@ def m115937a1(c: Cast) -> None:
     the row that shoved. Squeezing through a narrow opening needs nothing --
     the smallest gap the grid has is one square, which this already fits."""
     c.shares_space(difficult=True)
-    c.resist_forced(99, when=_shoved_by_hand)
+    c.resist_forced(99, when=_shoved_by_hand, on=c.me)
 
 
 @power(
@@ -2815,7 +2815,7 @@ def m5321a1(c: Cast) -> None:
 )
 def m5321a2(c: Cast) -> None:
     c.shares_space(difficult=True)
-    c.resist_forced(99, when=_shoved_by_hand)
+    c.resist_forced(99, when=_shoved_by_hand, on=c.me)
 
 
 @power(

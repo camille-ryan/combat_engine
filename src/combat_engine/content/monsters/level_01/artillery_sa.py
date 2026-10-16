@@ -428,7 +428,7 @@ def m115713a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m115713a1(c: Cast) -> None:
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(
@@ -1102,7 +1102,7 @@ def m6624a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6624a1(c: Cast) -> None:
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(

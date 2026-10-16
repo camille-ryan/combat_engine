@@ -2181,7 +2181,7 @@ def m5998a0(c: Cast) -> None:
     needs nothing -- the smallest gap the grid has is one square.
     """
     c.shares_space(difficult=True)
-    c.resist_forced(99, when=_shoved_by_hand)
+    c.resist_forced(99, when=_shoved_by_hand, on=c.me)
 
 
 @power(

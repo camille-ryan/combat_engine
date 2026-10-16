@@ -85,7 +85,7 @@ def m6203a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6203a1(c: Cast) -> None:
-    c.resist_forced(1, until=When.ENCOUNTER)
+    c.resist_forced(1, until=When.ENCOUNTER, on=c.me)
 
 
 @power(

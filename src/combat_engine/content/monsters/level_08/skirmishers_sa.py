@@ -785,7 +785,7 @@ def m1819a3(c: Cast) -> None:
 )
 def m1819a4(c: Cast) -> None:
     c.teleport(3)
-    c.insubstantial(until=When.SONT)
+    c.insubstantial(until=When.SONT, on=c.me)
 
 
 @power(
@@ -2506,7 +2506,7 @@ _M5614_HELD = "m5614 is subjected to an effect that immobilizes, slows, or restr
 )
 def m5614a3(c: Cast) -> None:
     c.cure(c.trigger.condition, on=c.me)  # type: ignore[union-attr]
-    c.insubstantial(until=When.EONT)
+    c.insubstantial(until=When.EONT, on=c.me)
     c.phasing(until=When.EONT)
 
 

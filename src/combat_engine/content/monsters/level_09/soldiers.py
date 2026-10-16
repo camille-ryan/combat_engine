@@ -805,7 +805,7 @@ def m4975a1(c: Cast) -> None:
 )
 def m4975a2(c: Cast) -> None:
     """One square less of every shove, which is exactly `c.resist_forced`."""
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(

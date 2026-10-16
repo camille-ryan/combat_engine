@@ -515,7 +515,6 @@ KNOWN_SILENT = {
     # An ally or a board state the single full-health copy of the caster cannot be.
     "m2785a3": "a bonus while a natural beast ally is near; the board's one ally "
                "is a copy of the caster",
-    "m3467a3": "a bonus against a creature taking ongoing necrotic; none is",
     "m946a3": "its Requirement is no enemy within 3; the board starts them adjacent",
     "m3453a2": "saves against the effect that triggered it; the board lands no "
                "save-ends effect on this creature",

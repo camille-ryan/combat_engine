@@ -480,7 +480,49 @@ def _subjectless_verbs() -> frozenset[str]:
         ):
             continue
         out.add(name)
+
+    # **One hop, because a quarter of this family does not resolve `on` at
+    # all -- it hands it to a verb that does.** `c.insubstantial` is
+    # `self.condition(..., on=on)`; so are `c.dazed`, `c.prone`,
+    # `c.stunned`, `c.slowed`, `c.weakened`, `c.immobilized`, `c.blinded`,
+    # `c.unconscious` and `c.cannot_shift`, and another twenty go through
+    # `c.bonus` the same way. The three tests above all read the verb's own
+    # source, so every one of them was invisible: 92 verbs where there are
+    # 122, and the missing 30 are the whole condition family.
+    #
+    # Found by writing `c.insubstantial(until=When.SONT)` for a card that
+    # says "you gain insubstantial" and watching nothing happen. That is a
+    # fault this check exists to catch and it was not even a candidate.
+    #
+    # Derived, not listed, for the same reason the set above is: `on=on`
+    # forwarded to a method already proved target-defaulting inherits the
+    # proof exactly. A second hop would need the same argument again and no
+    # verb in the tree takes one, so the walk stops here rather than
+    # recursing into a shape that does not exist.
+    for name in dir(Cast):
+        if name.startswith("__") or name in out:
+            continue
+        fn = getattr(Cast, name, None)
+        if not callable(fn):
+            continue
+        try:
+            sig = inspect.signature(fn)
+            src = inspect.getsource(fn)
+        except (TypeError, ValueError, OSError):
+            continue
+        p = sig.parameters.get("on")
+        if p is None or p.default is not None:
+            continue
+        if any(hop in out for hop in re.findall(FORWARDS, src)):
+            out.add(name)
     return frozenset(out)
+
+
+#: A `Cast` verb handing its own `on=` straight to another one, for
+#: `_subjectless_verbs`' second pass. `on=on` and not `on=something_else`:
+#: a verb that computes a subject and passes *that* has made the decision
+#: the check is looking for.
+FORWARDS = re.compile(r"self\.(\w+)\([^)]*\bon=on\b")
 
 
 def _subjectless_calls() -> list[tuple[str, str, str]]:
@@ -540,12 +582,55 @@ def _subjectless_calls() -> list[tuple[str, str, str]]:
                     continue
                 if not (isinstance(f.value, ast.Name) and f.value.id == "c"):
                     continue
-                # An explicit subject -- either spelling -- is the author
-                # saying who, which is all this check wants.
-                if node.args or any(k.arg == "on" for k in node.keywords):
+                # `on=` is the author saying who, which is all this check
+                # wants.
+                if any(k.arg == "on" for k in node.keywords):
+                    continue
+                # **A positional argument is only a subject where `on` can
+                # actually be passed as one, and for 107 of these 122 verbs
+                # it cannot** -- `on` is keyword-only, so the first
+                # positional is an amount, a key, a damage type or a
+                # condition. Skipping every call with any positional hid 35
+                # further sites, including `c.resist_forced(N)` in 19
+                # separate monster traits and `c.vulnerable(5, RADIANT)`
+                # standing two lines from a bare `c.insubstantial` this
+                # check already reported.
+                #
+                # The 15 verbs that *do* take it positionally are the
+                # readers -- `c.bloodied(foe)`, `c.size_of(ally)` -- where
+                # the first argument genuinely is the creature, and there
+                # the old skip was right. Decided off the signature rather
+                # than a list, so a verb that changes shape is reclassified
+                # by the check instead of by somebody remembering.
+                if node.args and f.attr not in _KEYWORD_ONLY_SUBJECT:
                     continue
                 out.append((f"{path}:{node.lineno}", ref, f.attr))
     return out
+
+
+def _keyword_only_subject() -> frozenset[str]:
+    """Of `_subjectless_verbs`, those whose `on` is **keyword-only**.
+
+    For these a positional argument can never be the subject, so a call
+    carrying one is still subjectless. See `_subjectless_calls`.
+    """
+    import inspect
+
+    from combat_engine.engine.cast import Cast
+
+    out = set()
+    for name in _subjectless_verbs():
+        try:
+            p = inspect.signature(getattr(Cast, name)).parameters.get("on")
+        except (TypeError, ValueError):
+            continue
+        if p is not None and p.kind is inspect.Parameter.KEYWORD_ONLY:
+            out.add(name)
+    return frozenset(out)
+
+
+#: Computed once; `_subjectless_calls` asks it per call site.
+_KEYWORD_ONLY_SUBJECT = _keyword_only_subject()
 
 
 def _unknown_context_keys() -> list[tuple[str, str, str]]:

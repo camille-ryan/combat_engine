@@ -1097,7 +1097,12 @@ def m1757a1(c: Cast) -> None:
     usage=Usage.ENCOUNTER,
     action=ActionType.IMMEDIATE_REACTION,
     reach=CloseBurst(2),
-    target=NO_TARGET,
+    # **A burst with no printed target line is read as enemies**, which is
+    # the convention several of these files state in their headers. It was
+    # `NO_TARGET`, and a declared attack with no target rolls against
+    # nobody: `c.strike`, `c.hit` and `c.ongoing` all resolve through
+    # `_who`, so every line of this reaction was inert. #631.
+    target=EACH_ENEMY,
     trigger="it is hit by a melee attack",
     on=Trigger(Hit, both(targets_me, by_melee), "it is hit by a melee attack"),
     attack=Attack(vs=REF, printed=14),

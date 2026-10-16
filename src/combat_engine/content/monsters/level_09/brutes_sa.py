@@ -1434,7 +1434,7 @@ def m3786a1(c: Cast) -> None:
         return
     c.charge_at(foe, "m3786a0")
     if c.landed:
-        c.flat(c.roll("1d10"))
+        c.flat(c.roll("1d10"), on=foe)
         c.mark(on=foe, until=When.EONT)
 
 

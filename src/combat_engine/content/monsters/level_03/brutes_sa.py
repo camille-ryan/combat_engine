@@ -749,7 +749,7 @@ def m3534a1(c: Cast) -> None:
     nothing -- the narrowest gap the grid has is one square.
     """
     c.shares_space(difficult=True)
-    c.resist_forced(99, when=_shoved_by_hand)
+    c.resist_forced(99, when=_shoved_by_hand, on=c.me)
 
 
 @power(

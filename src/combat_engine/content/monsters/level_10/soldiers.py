@@ -992,7 +992,7 @@ def m2962a3(c: Cast) -> None:
     `ConditionApplied` is safe and leaves nothing half-applied behind.
     """
     me = c.me
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
     def stay_up(ev: ConditionApplied) -> None:
         if ev.target != me or ev.condition is not Condition.PRONE:

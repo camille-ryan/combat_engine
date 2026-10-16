@@ -1200,8 +1200,12 @@ def p16397(c: Cast) -> None:
         c.bonus("speed", 2, on=who, until=When.EONT, kind="power")
     elif roll == 4 and victim is not None:
         c.grants_advantage(on=victim, until=When.EONT, to="team")
-    elif roll == 5:
-        c.grant_attack(who)
+    elif roll == 5 and victim is not None:
+        # Guarded on `victim` like the three branches around it, and for a
+        # sharper reason: `c.grant_attack`'s `on=` resolves through `_who`,
+        # so bare it aimed at this row's target and this row has none --
+        # the grant bailed on its own guard and result 5 did nothing. #631.
+        c.grant_attack(who, on=victim)
     elif roll == 6 and victim is not None:
         c.cannot_shift(on=victim, until=When.EONT)
 

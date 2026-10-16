@@ -1708,7 +1708,7 @@ def m5848a4(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m5867a0(c: Cast) -> None:
-    c.resist_forced(3)
+    c.resist_forced(3, on=c.me)
 
 
 @power(

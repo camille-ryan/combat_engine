@@ -1031,7 +1031,7 @@ def m5431a1(c: Cast) -> None:
     through a gap in the terrain. The board has no apertures to fit through,
     so the gap is in the grid and nothing on `Cast` would close it."""
     c.shares_space(difficult=True)
-    c.resist_forced(99, when=_by_hand)
+    c.resist_forced(99, when=_by_hand, on=c.me)
 
 
 @power(

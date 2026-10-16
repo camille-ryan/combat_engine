@@ -428,7 +428,7 @@ def m4797a3(c: Cast) -> None:
 )
 def m4806a0(c: Cast) -> None:
     """Standing on both sides of it buys nothing."""
-    c.cannot_be_flanked()
+    c.cannot_be_flanked(on=c.me)
 
 
 @power(

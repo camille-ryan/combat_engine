@@ -733,9 +733,9 @@ def m3299a5(c: Cast) -> None:
 def m3299a6(c: Cast) -> None:
     """The Stealth bonus is narrative -- nothing on a board rolls a Stealth
     check to notice it, so the circumstance has no combat reading."""
-    c.insubstantial(until=When.EONT)
+    c.insubstantial(until=When.EONT, on=c.me)
     c.phasing(until=When.EONT)
-    c.vulnerable(5, DamageType.RADIANT, until=When.EONT)
+    c.vulnerable(5, DamageType.RADIANT, until=When.EONT, on=c.me)
 
 
 # ==========================================================================
@@ -797,7 +797,7 @@ def m4355a2(c: Cast) -> None:
     causes for a single turn."""
     c.cannot_attack(on=c.me, until=When.ENCOUNTER)
     c.hide(until=When.ENCOUNTER)
-    c.insubstantial(until=When.ENCOUNTER)
+    c.insubstantial(until=When.ENCOUNTER, on=c.me)
 
 
 # ==========================================================================
@@ -883,7 +883,7 @@ def m4371a4(c: Cast) -> None:
     seen = [f for f in c.enemies() if c.can_see(f)][:2]
     for foe in seen:
         c.invisible(to=foe, on=me, until=When.EONT)
-    c.insubstantial(until=When.EONT)
+    c.insubstantial(until=When.EONT, on=c.me)
     c.conceal(on=me, until=When.EONT)
 
 

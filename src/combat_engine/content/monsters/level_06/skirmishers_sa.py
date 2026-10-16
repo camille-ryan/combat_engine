@@ -409,7 +409,11 @@ def m115887a0(c: Cast) -> None:
             speed = moves.modes.pop("fly")
             hold.on_end.append(lambda: moves.modes.setdefault("fly", speed))
         if was_up:
-            c.fall(c.height())
+            # `c.fall` resolves through `_who`, so bare it drops the row's
+            # target -- and this row has none. `c.height` above is the
+            # other default, `on or self.me`, which is why the test read
+            # correctly while the fall itself went nowhere. #631.
+            c.fall(c.height(), on=c.me)
 
     c.watch(DamageApplied, grounded, until=When.ENCOUNTER, on=c.me, label=c.ref)
 

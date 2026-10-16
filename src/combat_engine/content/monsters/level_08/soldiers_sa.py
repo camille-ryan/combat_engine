@@ -3351,7 +3351,7 @@ def _damaged_while_bloodied(world: World, me: int, ev: DamageRolled) -> bool:
     on=Trigger(DamageRolled, _damaged_while_bloodied, "an attack damages it while bloodied"),
 )
 def m6004a4(c: Cast) -> None:
-    c.temp_hp(10)
+    c.temp_hp(10, on=c.me)
 
 
 # ==========================================================================

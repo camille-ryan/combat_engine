@@ -416,7 +416,7 @@ def m2885a2(c: Cast) -> None:
     card measures.
     """
     c.shift(2)
-    c.insubstantial(until=When.EONT)
+    c.insubstantial(until=When.EONT, on=c.me)
     c.phasing(until=When.EONT)
 
 

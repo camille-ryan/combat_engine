@@ -2257,7 +2257,7 @@ def m4735a1(c: Cast) -> None:
     gap the grid has is one square, which this creature already fits.
     """
     c.shares_space(difficult=True)
-    c.resist_forced(99, when=_shoved_by_hand)
+    c.resist_forced(99, when=_shoved_by_hand, on=c.me)
 
 
 @power(
@@ -3076,7 +3076,7 @@ def m6514a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6514a1(c: Cast) -> None:
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(

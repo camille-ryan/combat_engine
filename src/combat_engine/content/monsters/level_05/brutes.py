@@ -1463,7 +1463,7 @@ def m157a3(c: Cast) -> None:
 def m169a0(c: Cast) -> None:
     """A held modifier rather than a watcher, because it applies to shoves
     from anywhere -- `forced` reads it off the target before it steps."""
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(
@@ -2152,7 +2152,7 @@ def m729a0(c: Cast) -> None:
     a rider mounts and falls off mid-fight, and a list taken once would name
     the wrong creature or nobody.
     """
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
     me = c.me
 
     def brace(ev: ConditionApplied) -> None:

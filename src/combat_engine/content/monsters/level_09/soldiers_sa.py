@@ -1126,19 +1126,37 @@ def m3249a4(c: Cast) -> None:
 
 @power(
     "m3249a5", level=9, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET,
-    dropped=("query.charged(world, eid)",),
+    dropped=("query.charged(world, eid)", "c.grant_attack(charge=)"),
 )
 def m3249a5(c: Cast) -> None:
     """"Usable after it charges" cannot be asked from a `requires=` gate --
     nothing persists the fact that this creature's last action was a
-    charge, only the live `c.charge` on the use in flight. The grant itself
-    plays regardless of when it is offered."""
+    charge, only the live `c.charge` on the use in flight.
+
+    **The grant was pointed at `c.command` and could never have fired.**
+    That verb reads `summon=` off the row's own header -- it is for
+    spending an action on a creature you conjured, with that block's
+    attack line -- and this row declares none, so it returned `None` on its
+    second statement. The ally is an ordinary ally, not a summon, so the
+    swing is `c.grant_attack`; and that needs a victim, which was the
+    second half of the same fault. #631.
+
+    **The run-in is the clause still missing**, and it is now named rather
+    than hidden inside the wrong verb: `c.grant_attack` delivers somebody
+    else's swing but has no notion of a charge, so the +1 and the riders
+    that read one do not apply. `c.no_provoke` is the printed "does not
+    provoke opportunity attacks", which is the part of the movement that
+    can be said.
+    """
     near = sorted((a for a in c.allies() if a != c.me and c.distance(a) <= 10), key=c.distance)
     mate = c.choose(near, "m3249a5: which ally charges") if near else None
     if mate is None:
         return
+    marks = sorted(c.within(1, of=mate, side="enemy"))
+    if not marks:
+        return
     c.no_provoke(on=mate, until=When.EOT)
-    c.command(mate, charge=True)
+    c.grant_attack(mate, on=marks[0])
 
 
 # ==========================================================================
@@ -1976,7 +1994,7 @@ def m4475a4(c: Cast) -> None:
 
 @power("m4475a5", level=9, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m4475a5(c: Cast) -> None:
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
     me = c.me
 
     def shrug(ev: ConditionApplied) -> None:

@@ -4186,10 +4186,24 @@ def m6481a7(c: Cast) -> None:
     for.
     """
     me = c.me
-    if c.in_form("winged"):
-        for held in list(c.world.effects.of(me)):
-            if held.label.startswith(c.ref):
-                c.world.effects.end(held, "it reverts to normal form")
+    # **Asks for this row's own hold, not `c.in_form`.** That reader is
+    # deliberately permissive -- `query.in_form`'s note explains why: a
+    # creature with nothing recorded is in whatever shape it was found in,
+    # so no Requirement is refused on the strength of an unprinted starting
+    # form -- which means it answers **True** for a creature that has never
+    # changed at all. So it cannot say "did *I* change shape", and this row
+    # is the only one that needs to.
+    #
+    # It read `c.in_form("winged")` and worked by accident: bare, the reader
+    # asked about the row's target, a NO_TARGET row has none, and False was
+    # the answer this branch wanted. Given the subject the check asked for
+    # it answered True on a fresh creature and the power only ever reverted
+    # a form it had not taken. #631 -- and the one site of the fifty where
+    # the fix the check suggests is the wrong one.
+    mine = [h for h in c.world.effects.of(me) if h.label.startswith(c.ref)]
+    if mine:
+        for held in mine:
+            c.world.effects.end(held, "it reverts to normal form")
         return
     shape = c.form(until=When.ENCOUNTER, revert=MINOR, label=c.ref, name="winged")
     wings = c.mode("fly", 8, until=When.ENCOUNTER, on=me)

@@ -202,7 +202,7 @@ def m168a0(c: Cast) -> None:
 )
 def m168a1(c: Cast) -> None:
     """Gives a square back to every shove, whoever is doing the shoving."""
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(

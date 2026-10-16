@@ -217,7 +217,7 @@ def m1076a4(c: Cast) -> None:
         if ev.attacker != me or ev.target is None:
             return
         if c.is_(Condition.UNCONSCIOUS, on=ev.target) or c.is_(Condition.HELPLESS, on=ev.target):
-            c.flat(c.roll("2d6"))
+            c.flat(c.roll("2d6"), on=ev.target)
             c.ongoing(5, on=ev.target)
 
     c.watch(Hit, rider, until=When.ENCOUNTER, on=me, label=c.ref)
@@ -782,7 +782,7 @@ def m2614a3(c: Cast) -> None:
 )
 def m2614a4(c: Cast) -> None:
     c.teleport(3)
-    c.insubstantial(until=When.SONT)
+    c.insubstantial(until=When.SONT, on=c.me)
 
 
 def _not_bloodied(world: World, eid: int) -> bool:

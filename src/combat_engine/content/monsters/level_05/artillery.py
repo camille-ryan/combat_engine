@@ -207,7 +207,7 @@ def m232a2(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m2817a0(c: Cast) -> None:
-    c.cannot_be_flanked()
+    c.cannot_be_flanked(on=c.me)
 
 
 @power(

@@ -265,7 +265,10 @@ def m1094a1(c: Cast) -> None:
     """A trait, whatever action word the compendium files it under: combat
     advantage against anyone mobbed by the mount's own allies, and a prone
     rider on a hit landed while that advantage is standing."""
-    c.gains_advantage(lambda ctx: _mobbed(c, ctx.get("target"), 1), until=When.ENCOUNTER)
+    c.gains_advantage(
+        lambda ctx: _mobbed(c, ctx.get("target"), 1), on=c.me,
+        until=When.ENCOUNTER,
+    )
 
     def drop(ev: Hit) -> None:
         if ev.attacker == c.me and ev.result is not None and ev.result.advantage:
@@ -1772,7 +1775,8 @@ def m3467a2(c: Cast) -> None:
 @power("m3467a3", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
 def m3467a3(c: Cast) -> None:
     c.gains_advantage(
-        lambda ctx: _burning_with(c, ctx.get("target"), DamageType.NECROTIC), until=When.ENCOUNTER
+        lambda ctx: _burning_with(c, ctx.get("target"), DamageType.NECROTIC),
+        on=c.me, until=When.ENCOUNTER,
     )
 
 
@@ -1908,11 +1912,26 @@ def m4364a0(c: Cast) -> None:
 @power("m4364a1", level=7, usage=AT_WILL, action=STANDARD, reach=PERSONAL, target=NO_TARGET)
 def m4364a1(c: Cast) -> None:
     """Two short sword swings -- rolled here rather than through a0, which
-    carries its own shift and would double it."""
+    carries its own shift and would double it.
+
+    **Each swing picks its own foe, which it was not doing.** `c.attack`
+    and `c.damage` both resolve `on=` through `_who`, so bare they aimed at
+    this row's target -- and the row prints none, because the card names no
+    target line of its own. Both swings rolled against nobody and the whole
+    ability was inert. #631, and `level_13/artillery_sa._two_basics` had
+    already written the same sentence in its own docstring.
+
+    Chosen after the step, which is the printed order and the point of it:
+    "shifting 1 square before each attack" is what brings the next creature
+    into reach.
+    """
     for _ in range(2):
         c.shift(1)
-        if c.attack(12, AC):
-            c.damage("2d6", 4)
+        foe = next(iter(sorted(c.within(1, side="enemy"))), None)
+        if foe is None:
+            continue
+        if c.attack(12, AC, on=foe):
+            c.damage("2d6", 4, on=foe)
     c.shift(1)
 
 

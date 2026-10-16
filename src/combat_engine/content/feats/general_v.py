@@ -1682,8 +1682,27 @@ def f3550b(c: Cast) -> None:
     """The target is the creature going down, so the row reads `c.trigger`
     rather than `c.target`: a burst that picked its own target would filter
     out the dying, which `query.enemies` does. The Special is the group,
-    which is what holds a channel divinity to one a fight."""
-    c.grant_attack(c.trigger.actor)
+    which is what holds a channel divinity to one a fight.
+
+    **"Against a creature you choose" was the half that never arrived.**
+    `c.grant_attack`'s first argument is who *swings*, and its `on=` is who
+    is swung at -- which resolves through `_who`, so bare it meant this
+    row's target. The row declares `NO_TARGET`, so the grant returned False
+    on its own `if target is None` guard and the dying creature never
+    attacked anything. #631.
+
+    Chosen by the caster, which is the card's own word, and from the
+    creatures the dying one can actually reach -- a free basic attack it
+    cannot deliver is not the benefit printed.
+    """
+    dying = c.trigger.actor
+    reach = sorted(
+        foe for foe in c.within(1, of=dying, side="enemy") if foe != dying
+    )
+    victim = c.choose(reach, f"{c.ref}: whom it strikes") if reach else None
+    if victim is None:
+        return
+    c.grant_attack(dying, on=victim)
 
 
 # -- the last of the general run --------------------------------------------

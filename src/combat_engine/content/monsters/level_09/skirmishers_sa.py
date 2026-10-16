@@ -3322,7 +3322,7 @@ def m6080a7(c: Cast) -> None:
 def m6080a8(c: Cast) -> None:
     _recharge_on(c, Bloodied, lambda ev: ev.actor == c.me)
     c.shift(4)
-    c.insubstantial(until=When.EOTNT)
+    c.insubstantial(until=When.EOTNT, on=c.me)
 
 
 # ==========================================================================

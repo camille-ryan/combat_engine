@@ -969,8 +969,8 @@ def m727a1(c: Cast) -> None:
         far = distance(grave, ev.at) > _M727_TETHER
         if far and not held:
             for hold in (
-                c.weakened(until=When.ENCOUNTER),
-                c.forbid("m727a3", until=When.ENCOUNTER),
+                c.weakened(until=When.ENCOUNTER, on=c.me),
+                c.forbid("m727a3", until=When.ENCOUNTER, on=c.me),
             ):
                 if hold is not None:
                     held.append(hold)

@@ -1836,7 +1836,7 @@ def m6270a4(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m6622a0(c: Cast) -> None:
-    c.resist_forced(1)
+    c.resist_forced(1, on=c.me)
 
 
 @power(

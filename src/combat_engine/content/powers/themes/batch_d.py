@@ -391,7 +391,15 @@ def p11811(c: Cast) -> None:
                 continue
             made.remove(elemental)
             c.dispel(elemental)
-            c.grant_attack(near[0])
+            friend = near[0]
+            # Whom the ally swings at. `c.grant_attack`'s `on=` resolves
+            # through `_who`, so bare it meant this row's target -- and a
+            # conjuring row declares none, so the grant bailed on its own
+            # guard and the ally never attacked. #631.
+            marks = sorted(c.within(1, of=friend, side="enemy"))
+            if not marks:
+                return
+            c.grant_attack(friend, on=marks[0])
             return
 
     c.endable(hold, MINOR, then=dismiss)
