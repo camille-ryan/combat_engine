@@ -3355,7 +3355,7 @@ def m6662a2(c: Cast) -> None:
     requires_text="it must be in water and have cover or concealment",
 )
 def m6662a3(c: Cast) -> None:
-    if not c.terrain("water"):
+    if not c.terrain("aquatic"):
         return
     c.hide(until=When.ENCOUNTER)
 
@@ -3373,7 +3373,7 @@ def m6662a3(c: Cast) -> None:
         "when first bloodied"),
 )
 def m6662a4(c: Cast) -> None:
-    if not c.terrain("water"):
+    if not c.terrain("aquatic"):
         return
     zone = c.zone(c.area(), label=c.ref, until=When.SONT)
     for who in c.world.zones.occupants(zone):

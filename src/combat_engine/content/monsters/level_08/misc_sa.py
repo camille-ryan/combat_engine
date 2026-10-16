@@ -161,7 +161,7 @@ def _in_water_vs_landbound(c: Cast) -> Callable[[dict], bool]:
     rider, so the gate is written once. `c.terrain` is the fight's own word
     and the target comes off the attack context.
     """
-    return lambda ctx: c.terrain("water") and _without_swim(c, ctx.get("target"))
+    return lambda ctx: c.terrain("aquatic") and _without_swim(c, ctx.get("target"))
 
 
 @power(

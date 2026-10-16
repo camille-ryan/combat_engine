@@ -2487,7 +2487,7 @@ def m6023a1(c: Cast) -> None:
     mechanic to exempt it from. The attack bonus is the real half."""
     c.bonus(
         "attack", 2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: c.terrain("water") and not c.is_kind("aquatic", on=ctx.get("target")),
+        when=lambda ctx: c.terrain("aquatic") and not c.is_kind("aquatic", on=ctx.get("target")),
     )
 
 

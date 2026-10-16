@@ -230,7 +230,7 @@ def m1071a1(c: Cast) -> None:
             c.bonus(
                 "attack", 2, on=rider, until=When.ENCOUNTER,
                 when=lambda ctx: (
-                    c.terrain("water") and not c.is_kind("aquatic", on=ctx.get("target"))
+                    c.terrain("aquatic") and not c.is_kind("aquatic", on=ctx.get("target"))
                 ),
             )
         )
@@ -245,7 +245,7 @@ def m1071a2(c: Cast) -> None:
     mechanic to exempt it from; the attack bonus is the real half."""
     c.bonus(
         "attack", 2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: c.terrain("water") and not c.is_kind("aquatic", on=ctx.get("target")),
+        when=lambda ctx: c.terrain("aquatic") and not c.is_kind("aquatic", on=ctx.get("target")),
     )
 
 

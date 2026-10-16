@@ -3434,7 +3434,7 @@ def m6011a4(c: Cast) -> None:
 def m6019a0(c: Cast) -> None:
     c.bonus(
         "attack", 2, on=c.me, until=When.ENCOUNTER,
-        when=lambda ctx: c.terrain("water") and not c.is_kind("aquatic", on=ctx.get("target")),
+        when=lambda ctx: c.terrain("aquatic") and not c.is_kind("aquatic", on=ctx.get("target")),
     )
 
 

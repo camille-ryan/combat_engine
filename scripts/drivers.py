@@ -2234,6 +2234,84 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def terrain_words_are_a_closed_set(out: Result) -> None:
+    """`c.terrain` refuses a word nobody dresses a board with. #539, #544.
+
+    **Two bugs were stacked here and the outer one hid the inner.**
+    `World.terrain` is an empty set that nothing ever adds to, so all 61
+    gates across 50 rows are False in every fight -- and *because* they are
+    all False, a gate asking for a word the vocabulary does not have read
+    exactly like a gate asking for the right one. Nothing could tell them
+    apart.
+
+    Re-deriving the histogram found the drift: `water` (6 calls) beside
+    `aquatic` (24), and `icy` (1) beside `ice` (2). The same question asked
+    two ways, and the second spelling would have stayed broken after
+    somebody fixed the first bug.
+
+    So the vocabulary is closed and an unknown word **raises**, which is
+    `c.bonus(once=)`'s discipline and the reason #544 gives for it. The
+    light words are deliberately not merged: `bright`, `dim light` and
+    `darkness` are the three printed levels, `sunlight`, `moonlight` and
+    `starlight` are sources, and a creature burned by daylight is not one
+    hindered by gloom.
+
+    **The last two assertions are the ones that matter for #539.** They
+    show the reader is correct and the *board* is the gap: dress a world
+    with a word and the gate answers True, so nothing is wrong with
+    `c.terrain` and the whole of the fix is `content.terrain.dress` adding
+    the words it already has a seed to choose with.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.cast import Cast
+
+    world, me, _ = _board("m145a0", 1)
+    c = Cast(world=world, me=me, ref="drivers:terrain")
+
+    out.that("aquatic" in Cast.TERRAIN_WORDS and c.terrain("aquatic") is False,
+             "a known word is accepted and answers False -- no board carries"
+             " one yet, which is #539",
+             f"{sorted(Cast.TERRAIN_WORDS)}")
+
+    for gone in ("water", "icy"):
+        try:
+            c.terrain(gone)
+        except ValueError as why:
+            out.that(gone in str(why) and "aquatic" in str(why),
+                     f"the retired synonym {gone!r} raises, and the message"
+                     f" names the word and the vocabulary",
+                     f"{str(why)[:70]}")
+        else:
+            out.that(False, f"{gone!r} should raise -- it is the spelling"
+                     f" that was silently never going to match")
+
+    try:
+        c.terrain("not a place")
+    except ValueError:
+        out.that(True, "and so does a typo, which is the whole point of"
+                 " closing the set")
+    else:
+        out.that(False, "a typo should raise")
+
+    out.that(not getattr(world.terrain, "__len__", lambda: 1)(),
+             "`World.terrain` is still empty after a real encounter has"
+             " started -- the gap #539 names, asserted so it stays proven"
+             " rather than rediscovered",
+             f"{sorted(world.terrain)}")
+
+    # And the reader itself works, which is what says the board is the gap.
+    world.terrain.add("aquatic")
+    c2 = Cast(world=world, me=me, ref="drivers:terrain")
+    out.that(c2.terrain("aquatic"),
+             "dress the world with a word and the gate answers True -- so"
+             " `c.terrain` is correct and the whole of the fix is"
+             " `terrain.dress` adding the words",
+             f"{sorted(world.terrain)}")
+    out.that(not c2.terrain("snow"),
+             "and only that word -- a dressed board does not answer for"
+             " every sort of place at once")
+
+
 def thrown_is_not_fired(out: Result) -> None:
     """"A thrown weapon such as a dagger or a javelin" -- `Weapon.thrown`.
 
@@ -11286,6 +11364,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "terrain_words_are_a_closed_set":
+        (terrain_words_are_a_closed_set,
+         "c.terrain refuses a word no board is dressed with"),
     "thrown_is_not_fired": (thrown_is_not_fired,
                             "a thrown weapon is not a fired one; f140's gate\n"
                             " read the wrong column"),

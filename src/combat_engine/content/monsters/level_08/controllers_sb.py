@@ -3171,6 +3171,6 @@ def m960a4(c: Cast) -> None:
 def m960a5(c: Cast) -> None:
     """"Any square in sight" has no fixed distance; read as 10 squares,
     matching the sight range this engine offers elsewhere by default."""
-    if not c.terrain("icy"):
+    if not c.terrain("ice"):
         return
     c.teleport(10)
