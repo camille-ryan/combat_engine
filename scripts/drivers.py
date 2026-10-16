@@ -2234,6 +2234,121 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def resistance_taken_off_the_target(out: Result) -> None:
+    """"The target loses any resistance or immunity to this damage type."
+
+    Two rows print it -- `i1184p1` and `p16259` -- and `c.resist` has
+    always been able to say the resistance half: a **negative** amount is
+    arithmetic rather than a highest-wins hold, which that verb's own
+    comment calls *"the other printed sentence"*, and `c.resistances`
+    reads the standing number so the delta is exact.
+
+    `p16259`'s note said "nothing on `Cast` takes a resistance away" while
+    `i1184p1`, written, sat one file over doing it.
+
+    **The assertion about the half that is still missing is the point of
+    this rule.** Immunity lives in a separate set, `Defences.immune`, and
+    nothing takes anything out of it, so an immune creature must come
+    through untouched. Asserting that keeps the `Defences.immune` marker
+    *honest*: if somebody later writes the immunity half, this goes red and
+    says the marker is stale, which is the one thing a marker cannot report
+    about itself.
+
+    Exactness matters in both directions here. Taking off **more** than the
+    creature has would turn a resistance into a vulnerability -- `c.resist`
+    is arithmetic, so `-99` really does go to -99 -- and that is a row
+    stronger than its card, which `m5808a0` names as worse than an absent
+    one.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health
+    from combat_engine.engine.dsl import REGISTRY, DamageType
+    from combat_engine.engine.query import enemies
+
+    PICK, OTHER = DamageType.FIRE, DamageType.COLD
+
+    def run(resist: int, *, immune: bool = False, other: int = 0):  # noqa: ANN202
+        world, me, _ = _board("p16259", 1)
+        foe = next(e for e in enemies(world, me) if world.get(e, Health))
+        held = world.get(foe, Defences) or world.add(foe, Defences())
+        held.resist.clear()
+        held.immune.clear()
+        if resist:
+            held.resist[PICK] = resist
+        if other:
+            held.resist[OTHER] = other
+        if immune:
+            held.immune.add(PICK)
+        c = Cast(world=world, me=me, ref="p16259", targets=[foe])
+        c.target = foe
+        c.choose = lambda *a, **k: PICK   # ty: ignore[invalid-assignment]
+        c.strike = lambda **kw: True      # ty: ignore[invalid-assignment]
+        c.damage = lambda *a, **k: None   # ty: ignore[invalid-assignment]
+        REGISTRY["p16259"].body(c)
+        return world, foe, held
+
+    held = run(10)[2]
+    out.that(held.resist.get(PICK, 0) == 0,
+             "a target resisting 10 of the chosen type loses all of it",
+             f"resist {PICK.value} = {held.resist.get(PICK, 0)}")
+
+    held = run(10, other=7)[2]
+    out.that(held.resist.get(OTHER, 0) == 7,
+             "and its resistance to a DIFFERENT type is untouched -- the"
+             " card names one type, the one the power is dealing",
+             f"resist {OTHER.value} = {held.resist.get(OTHER, 0)}")
+
+    held = run(0)[2]
+    out.that(held.resist.get(PICK, 0) == 0,
+             "a target with no such resistance is not pushed NEGATIVE --"
+             " `c.resist` is arithmetic, so a blanket delta would turn no"
+             " resistance into a vulnerability and beat the printed card",
+             f"resist {PICK.value} = {held.resist.get(PICK, 0)}")
+
+    # The dropped half, asserted so the marker can be trusted.
+    held = run(0, immune=True)[2]
+    out.that(PICK in held.immune,
+             "an IMMUNE target keeps its immunity -- the half `Defences."
+             "immune` is marked for, and the assertion that makes that"
+             " marker honest rather than merely old",
+             f"immune={sorted(t.value for t in held.immune)}")
+
+    row = REGISTRY["p16259"]
+    out.that("Defences.immune" in (row.unfinished or ()),
+             "and the row says so, rather than reporting finished",
+             f"{row.unfinished}")
+
+    # **Restored when the hold ends, which is what `c.resist`'s `undo`
+    # exists for.** Ended through the effect the row itself laid rather
+    # than by advancing a clock: `Effects` has no `expire(When)`, and
+    # reaching for the real teardown path is what proves `undo` runs.
+    world, foe, held = run(10)
+    out.that(held.resist.get(PICK, 0) == 0, "stripped while it lasts")
+    mine = [e for e in world.effects.of(foe) if "p16259" in (e.label or "")]
+    out.that(len(mine) == 1,
+             "the strip is ONE labelled effect on the target, so it has"
+             " something to be taken back by",
+             f"{[e.label for e in world.effects.of(foe)]}")
+    # **The duration itself, and a plant is why this is here.** Ending the
+    # effect by hand below proves `undo` runs and says nothing about *when*
+    # it would have run -- so swapping `When.EONT` for `When.ENCOUNTER` in
+    # the row left this rule entirely green. The card says "until the end
+    # of your next turn", so the duration is a printed number and gets its
+    # own assertion rather than being inferred from the teardown working.
+    out.that(bool(mine) and mine[0].when is When.EONT,
+             "and it lasts until the end of the caster's next turn, which is"
+             " what the card prints -- not the encounter",
+             f"{mine[0].when if mine else None}")
+    for e in mine:
+        world.effects.end(e, "driver")
+    out.that(held.resist.get(PICK, 0) == 10,
+             "and the resistance comes BACK when the hold ends -- the card"
+             " says until the end of your next turn, not for good",
+             f"resist {PICK.value} = {held.resist.get(PICK, 0)}")
+
+
 def vulnerability_held_by_a_zone(out: Result) -> None:
     """"Each enemy within the zone gains vulnerable N while it is there."
 
@@ -10841,6 +10956,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "resistance_taken_off_the_target": (resistance_taken_off_the_target,
+                                         "a target loses a resistance to one\n"
+                                         " type; immunity is not"),
     "vulnerability_held_by_a_zone": (vulnerability_held_by_a_zone,
                                      "a zone or aura confers a"
                                      " vulnerability on whoever stands in"

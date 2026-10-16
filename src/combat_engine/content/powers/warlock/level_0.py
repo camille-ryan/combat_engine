@@ -655,16 +655,46 @@ def p16258(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL, Keyword.IMPLEMENT, Keyword.WEAPON],
     attack=Attack(CHA, vs=REF),
-    dropped=("chargen.pact_blade()",),
+    dropped=("chargen.pact_blade()", "Defences.immune"),
 )
 def p16259(c: Cast) -> None:
-    """The Hit clause stripping the target's resistance and immunity to the
-    chosen type is dropped: nothing on `Cast` takes a resistance away. The
-    aura bites everybody, caster included, which is what it says."""
+    """"The target loses any resistance or immunity to this power's damage
+    type until the end of your next turn." The resistance half now goes.
+
+    **"nothing on `Cast` takes a resistance away" was the old note and it
+    is false.** `c.resist` with a **negative** amount is that sentence --
+    its own comment says so, *"the other printed sentence -- 'the target
+    loses resist 10 to fire' -- and stays arithmetic: there is no highest
+    to take"* -- and `c.resistances` reads the standing number, so the
+    delta is exact and the duration puts it back. `i1184p1` prints this
+    same sentence and has been written this way; the pattern was sitting
+    one file over.
+
+    No choice offered here, unlike `i1184p1`: that card says "choose a
+    damage type" as a separate decision, where this one strips the type
+    the power is **already** dealing, picked once in the `Special` line.
+
+    **Immunity stays dropped, and shares `i1184p1`'s symbol.**
+    `Defences.immune` is a separate set and nothing takes anything out of
+    it. `c.ignore_resistance(immunity=)` is the *attacker's* side of that
+    sentence -- it bypasses, where the card says the target loses the
+    property -- and using it here would narrow the clause to the caster
+    while the card lets anybody's blow of that type through.
+
+    Narrower is the safe error and absent is safer still: a creature that
+    is *immune* keeps its immunity, so the row never does more than print.
+    `m5808a0`'s line is the rule -- a row stronger than its printed line
+    is worse than an absent one.
+    """
     dtype = c.choose(list(ELEMENTS), "what this one is made of")
     dice = 2 + (c.level >= 13) + (c.level >= 23)
     if c.strike():
         c.damage(c.w(dice), c.cha_mod, dtype=dtype)
+        if dtype is not None:
+            foe = c.target
+            standing = c.resistances(on=foe).get(dtype, 0)
+            if standing:
+                c.resist(-standing, dtype, on=foe, until=When.EONT)
     ring = c.aura(1, until=When.EONT, on=c.me)
     _bites(c, ring, c.con_mod, dtype, until=When.EONT)
 
