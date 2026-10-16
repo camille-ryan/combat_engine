@@ -4012,6 +4012,18 @@ def main() -> int:
     looked = set(chosen)
     quiet_now = {r.ref for r in silent} | {r.ref for r in known_quiet}
     quiet_now |= {r.ref for r in never} | {r.ref for r in broken}
+    # **A row refused in play has not healed; it has stopped being asked.**
+    # `todo=`, or a sibling of a defective row -- which drops the whole
+    # compendium entry -- is never offered, so it is absent from `silent`
+    # for a reason that says nothing about the clause. Without this it
+    # counted as `healed`, which is red, and the stated argument for that
+    # redness is "a stale entry is a loosening already in place". It is not:
+    # the entry describes a row nobody audits, and deleting it would lose
+    # the record the moment the defect is repaired.
+    #
+    # `m1091a4` is the case. Its sibling `m1091a1` prints an attack line
+    # with no defence, that defects the `m1091` block, and the sweep of
+    # 2026-10-16 reported the row as doing something now.
     healed = sorted((base & looked) - quiet_now) if graded else []
 
     for r in fresh:
@@ -4190,6 +4202,22 @@ def main() -> int:
                 # rows are the known ones, and cannot see ten healing while
                 # ten break. Written by a full sweep only, like the rest.
                 "silent_refs": sorted(r.ref for r in silent),
+                # **Why a ref leaves `silent_refs` matters, and the list
+                # alone cannot say.** A row refused in play -- `todo=`, or a
+                # sibling of a defective one, which drops the whole
+                # compendium entry -- is never offered, so it is not audited
+                # for silence and simply vanishes from the list above.
+                #
+                # `nightly.sh` diffs the two lists and called that "DO
+                # SOMETHING now". On 2026-10-16 it said exactly that about
+                # `m1091a4`, which does nothing of the kind: its sibling
+                # `m1091a1` prints an attack line with no defence, that
+                # defects the whole `m1091` block, and the row stopped being
+                # offered. An improvement and a withdrawal read identically
+                # and only one of them is news.
+                "refused_refs": sorted(
+                    ref for ref, _w, how in partial if how in ("TODO", "DEFECT")
+                ),
             }, indent=2) + "\n")
             print(f"\n  watermark written at {STARTED_AT[:9]}"
                   f" -- the sha this sweep read")

@@ -166,13 +166,32 @@ import pathlib
 before = json.loads(pathlib.Path("/tmp/ce-audited-before.json").read_text())
 after = json.loads(pathlib.Path("scripts/fixtures/audited.json").read_text())
 was, now = set(before.get("silent_refs", [])), set(after.get("silent_refs", []))
-healed, fresh = sorted(was - now), sorted(now - was)
-if not healed and not fresh:
+# **A row can leave the list two ways and only one of them is news.** It
+# starts doing something, or it stops being audited at all -- `todo=`, or a
+# sibling of a defective row, which drops the whole compendium entry. The
+# second is a withdrawal, not an improvement, and the two lists alone cannot
+# tell them apart: the sweep records what it found, and a row nobody offered
+# was not found silent.
+#
+# This said "1 row(s) DO SOMETHING now: m1091a4" on 2026-10-16. That row does
+# nothing of the kind -- `m1091a1` prints an attack line with no defence,
+# which defects the whole `m1091` block, so the row is refused in play. The
+# sweep now records the refused set beside the silent one and the two
+# departures are reported apart.
+refused = set(after.get("refused_refs", []))
+left = was - now
+withdrawn, healed = sorted(left & refused), sorted(left - refused)
+fresh = sorted(now - was)
+if not left and not fresh:
     print("   only the sha moved -- bookkeeping, nothing to read")
 else:
     if healed:
         print(f"   {len(healed)} row(s) DO SOMETHING now, and left the list:")
         print(f"      {' '.join(healed)}")
+    if withdrawn:
+        print(f"   {len(withdrawn)} row(s) left the list by being REFUSED in"
+              f" play, not by working:")
+        print(f"      {' '.join(withdrawn)}")
     if fresh:
         print(f"   {len(fresh)} row(s) went SILENT and were added -- read these:")
         print(f"      {' '.join(fresh)}")
