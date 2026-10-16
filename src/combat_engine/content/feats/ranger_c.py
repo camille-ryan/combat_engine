@@ -99,7 +99,24 @@ from .styles import martial_encounter_or_daily, used_one_of
 #: rule is "any number apply", and there is only ever one die -- so the
 #: `c.declare(category, ...)` machinery #554 built does not cover it. See
 #: #606.
-FORGO = ("features.pay_extra(forgo=)",)
+#: **Retired: the hook is built and the ruling is made.** #606 left this
+#: marker on two questions -- the hook in `pay_extra`, and which feat gets
+#: the one die when a ranger holds both of these. Both are answered:
+#:
+#: * `features.strikers.FORGO_A_DIE` is the table, and `_forgo` takes the
+#:   price off the dice string **before** the roll, which is the window the
+#:   note below correctly identified;
+#: * **one die, so one clause.** The exclusivity is the *resource* and not
+#:   the category: there is one die to forgo per payout, so the first clause
+#:   taken spends it and the rest find it gone. `c.spend_charge`'s shape --
+#:   its False is the printed "if you spend" -- and it needs no
+#:   `c.declare`, which #554 reserves for a printed bracketed category.
+#:
+#: Kept as a note rather than deleted because the reasoning below about the
+#: *event* is correct and still worth reading: `DamageRolled` carries one
+#: number with every modifier folded in, so a listener genuinely cannot
+#: decline a die. Only the payment window can.
+
 
 
 def _holding(c: Cast, *groups: str, prop: str = "") -> bool:
@@ -536,7 +553,8 @@ def f2419(c: Cast) -> None:
 
 
 @power("f2428", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FORGO)
+       reach=PERSONAL, target=SELF,
+       implemented_in=("cf:ranger-f1",))
 def f2428(c: Cast) -> None:
     """Trades one die of the class's extra damage for a slow.
 
@@ -552,7 +570,8 @@ def f2428(c: Cast) -> None:
 
 
 @power("f2467", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=FORGO)
+       reach=PERSONAL, target=SELF,
+       implemented_in=("cf:ranger-f1",))
 def f2467(c: Cast) -> None:
     """The same trade as f2428, bought for a push instead of a slow."""
 

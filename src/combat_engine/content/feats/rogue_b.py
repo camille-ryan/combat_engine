@@ -824,7 +824,8 @@ def f2426(c: Cast) -> None:
 
 
 @power("f952", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("features.pay_extra(forgo=)",))
+       reach=PERSONAL, target=SELF,
+       implemented_in=("cf:rogue-scoundrel-f4",))
 def f952(c: Cast) -> None:
     """Forgoes one die of the extra damage to lay an attack penalty. The
     payout is announced -- `DamageRolled` carries the label and the

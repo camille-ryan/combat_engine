@@ -2234,6 +2234,119 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def one_die_forgone_buys_one_clause(out: Result) -> None:
+    """Three feats trade a die of a striker's rider, and only one can.
+
+    #606 read six cards under `c.forgo_damage()` and found two unrelated
+    gaps. These are the three of shape A, and the issue's own conclusion was
+    that **nothing is missing from `Cast`**: `pay_extra` asks
+    `c.dice_for(label, dice, ...)` before rolling -- deliberately, so a feat
+    *raising* the die is read by whoever pays -- and a feat lowering it by
+    one is the same hook from the other side.
+
+    All three rows had been marked, and all three docstrings gave the same
+    correct reason for it: `DamageRolled` carries one number with the
+    rider's modifier, the enhancement and every damage bonus folded in, so a
+    listener genuinely cannot decline a die. That is true of the **event**
+    and not of the payment window, which is the distinction that makes this
+    writable at all.
+
+    **The ruling this asserts, which #606 filed rather than decide.** Two of
+    the three name the same rider and a ranger may hold both, where the
+    unbracketed-feat rule is "any number apply". The resource settles it
+    rather than the category: there is one die to forgo per payout, so the
+    first clause spends it and the second finds it gone. `c.spend_charge`'s
+    shape, and it needs no `c.declare` -- #554 reserves that for a printed
+    bracketed category.
+
+    The last assertion is that ruling and is the one worth keeping: holding
+    both feats slows and does **not** push, and the damage drops once.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.features.strikers import (
+        _one_die_less,
+        pay_extra,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+
+    out.that(_one_die_less("2d6") == "1d6" and _one_die_less("1d6") == "",
+             "one die less off a rider of two leaves one, and off a rider of"
+             " one leaves no dice at all -- the price is a die, not a share,"
+             " so the flat modifier still pays",
+             f"2d6->{_one_die_less('2d6')!r} 1d6->{_one_die_less('1d6')!r}")
+
+    def pose(rider: str, dice: str, feats: list[str]):  # noqa: ANN202
+        world, me, _ = _board(rider, 1)
+        world.need(me, Powers).known.extend(feats)
+        foe = next(iter(sorted(e for e in enemies(world, me)
+                               if world.get(e, Health))), me)
+        here = world.get(me, Position)
+        if here is not None:
+            beside = (here.square[0] + 1, here.square[1])
+            world.grid.lift(foe)
+            world.get(foe, Position).square = beside
+            world.grid.place(foe, frozenset({beside}))
+        before = world.get(foe, Health).hp
+        stood = world.get(foe, Position).square
+        pay_extra(Cast(world=world, me=me, ref=rider), rider, dice, on=foe)
+        return {
+            "dealt": before - world.get(foe, Health).hp,
+            "slowed": is_(world, foe, Condition.SLOWED),
+            "moved": world.get(foe, Position).square != stood,
+        }
+
+    RIDER, DICE = "cf:ranger-f1", "1d6"
+    plain = pose(RIDER, DICE, [])
+    out.that(plain["dealt"] > 1 and not plain["slowed"] and not plain["moved"],
+             "a ranger with none of these feats rolls the die and nothing"
+             " else happens -- the control",
+             f"{plain}")
+
+    slow = pose(RIDER, DICE, ["f2428"])
+    out.that(slow["slowed"] and slow["dealt"] < plain["dealt"],
+             "f2428 forgoes the die to slow the target, and the damage drops"
+             " by exactly the die",
+             f"{slow} against {plain}")
+
+    push = pose(RIDER, DICE, ["f2467"])
+    out.that(push["moved"] and not push["slowed"],
+             "f2467 buys a push with the same die, and does not slow",
+             f"{push}")
+
+    both = pose(RIDER, DICE, ["f2428", "f2467"])
+    out.that(both["slowed"] and not both["moved"],
+             "**holding both, only the first clause fires.** One die to"
+             " forgo per payout, so the second finds it gone -- the"
+             " exclusivity is the resource and not the category, which is"
+             " the ruling #606 filed rather than make",
+             f"{both}")
+    out.that(both["dealt"] == slow["dealt"],
+             "and the damage drops once, not twice -- a second clause"
+             " charging again would be the fall-through #554 records",
+             f"{both['dealt']} against {slow['dealt']}")
+
+    rogue = pose("cf:rogue-scoundrel-f4", "2d6", ["f952"])
+    plain_rogue = pose("cf:rogue-scoundrel-f4", "2d6", [])
+    out.that(rogue["dealt"] < plain_rogue["dealt"],
+             "f952 pays off a rider of TWO dice, which leaves one -- the"
+             " other half of `_one_die_less`",
+             f"{rogue['dealt']} against {plain_rogue['dealt']}")
+
+    for ref, host in (("f2428", "cf:ranger-f1"), ("f2467", "cf:ranger-f1"),
+                      ("f952", "cf:rogue-scoundrel-f4")):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished and row.implemented_in == (host,),
+                 f"{ref} carries no marker and points at {host}, whose"
+                 f" source `lint._dangling_implementations` requires to ask"
+                 f" `c.feat(\"{ref}\")` -- which is why each clause is named"
+                 f" rather than looped over a table of refs",
+                 f"{row.unfinished} {row.implemented_in}")
+
+
 def one_reading_of_an_area_or_close_attack(out: Result) -> None:
     """Thirty sites spelled "an area or a close attack" out, all but one
     the same way -- and that way was wrong.
@@ -12903,6 +13016,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "one_die_forgone_buys_one_clause": (
+        one_die_forgone_buys_one_clause,
+        "three feats trade a die of a striker's rider and only one can"),
     "one_reading_of_an_area_or_close_attack": (
         one_reading_of_an_area_or_close_attack,
         "thirty sites spelled the area-shape tuple out and all but one omitted wall"),

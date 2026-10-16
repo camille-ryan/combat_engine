@@ -19,6 +19,7 @@ only the two that print a Minor Action are actions anybody takes.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -72,6 +73,110 @@ QUARRY_LABEL = "cf:ranger-f1"
 QUARRY_DICE = "1d6"
 
 
+#: Feats that trade **one die** of a striker's rider for a clause, keyed by
+#: the rider they name. #606, and #550's convention: the clause belongs to
+#: the feat and the payout belongs here, so the clause is written beside
+#: whoever pays it.
+#:
+#: **The price is taken before the roll, which is the whole reason this is
+#: writable.** All three rows were marked, and all three docstrings gave the
+#: same correct reason: `DamageRolled` carries one number with the rider's
+#: modifier, the enhancement and every damage bonus already folded in, so
+#: there is no die left in it to decline. `pay_extra` asks `c.dice_for`
+#: *first* -- deliberately, so a feat raising the die is read by whoever
+#: pays -- and a feat lowering it by one is the same hook from the other
+#: side.
+#:
+#: **One die, so one clause.** Two of these name the same rider and a ranger
+#: may hold both, where the unbracketed-feat rule is "any number apply".
+#: They cannot both apply all the same, and the reason is the *resource*
+#: rather than the category: there is one die to forgo per payout, so the
+#: first clause taken spends it and the rest find it gone. That is
+#: `c.spend_charge`'s shape -- its False *is* the printed "if you spend" --
+#: and it needs no `c.declare`, which #554 reserves for a printed bracketed
+#: category.
+#:
+#: **Asked with `c.may`'s own default, which is "yes" first**, and that is a
+#: policy choice rather than a reading of the card. `c.may`'s note is
+#: explicit that the order *is* the answer for a headless fight, so
+#: `default=False` would make all three clauses dead in every fight nobody
+#: plays -- the rows would audit silent while being correct, which is the
+#: worst of the available states. 478 of the 489 `c.may` calls in the tree
+#: take the default for the same reason. `policy/` is where a ranger learns
+#: when the die is worth more than the slow.
+#:
+#: **One named clause per feat, each asking `c.feat` for itself**, rather
+#: than one loop over a table of refs. Three reasons and the third is the
+#: load-bearing one: each card's price and effect stay legible together;
+#: `c.may` can carry that feat's own words; and
+#: `lint._dangling_implementations` requires the row named by
+#: `implemented_in=` to actually ask `c.feat("<the feat>")` in its own
+#: source, which a variable in a loop does not satisfy. A pointer nobody
+#: reconciles is what that check exists to prevent.
+
+
+def _forgo_f2428(c: Cast, on: int) -> bool:
+    """"Forgo one die of that damage to slow the target."""
+    if not c.feat("f2428") or not c.may(
+            "forgo a die of the rider to slow it"):
+        return False
+    c.slowed(on=on, until=When.EONT)
+    return True
+
+
+def _forgo_f2467(c: Cast, on: int) -> bool:
+    """"Forgo one die of that damage to push that enemy 1 square."""
+    if not c.feat("f2467") or not c.may(
+            "forgo a die of the rider to push it 1"):
+        return False
+    c.push(1, on=on)
+    return True
+
+
+def _forgo_f952(c: Cast, on: int) -> bool:
+    """"Forgo rolling 1 die of that damage to impose a -2 penalty to the
+    target's attack rolls."""
+    if not c.feat("f952") or not c.may(
+            "forgo a die of the rider for -2 to its attacks"):
+        return False
+    c.penalty("attack", 2, on=on, until=When.EONT)
+    return True
+
+
+FORGO_A_DIE: dict[str, tuple[Callable[[Cast, int], bool], ...]] = {
+    "cf:ranger-f1": (_forgo_f2428, _forgo_f2467),
+    "cf:rogue-scoundrel-f4": (_forgo_f952,),
+}
+
+
+def _one_die_less(dice: str) -> str:
+    """`"2d6"` -> `"1d6"`, and `"1d6"` -> no dice at all.
+
+    The printed price is a die, not a share of the damage, so a rider of one
+    die is given up whole -- its flat modifier still pays, which is what
+    "forgo one die of that damage" leaves behind.
+    """
+    found = re.fullmatch(r"(\d+)d(\d+)", dice.strip())
+    if found is None:
+        return dice
+    count = int(found.group(1)) - 1
+    return f"{count}d{found.group(2)}" if count > 0 else ""
+
+
+def _forgo(c: Cast, label: str, dice: str, on: int) -> str:
+    """Offer each held feat its trade, and take at most one.
+
+    Returns the dice actually rolled. Offered in the order the table lists
+    them, which is the order a player is asked.
+    """
+    if not dice:
+        return dice
+    for clause in FORGO_A_DIE.get(label, ()):
+        if clause(c, on):
+            return _one_die_less(dice)
+    return dice
+
+
 def pay_extra(c: Cast, label: str, dice: str, *, on: int,
               per_turn: bool = False) -> bool:
     """Pay a striker's extra damage, if the window has not been spent.
@@ -91,6 +196,9 @@ def pay_extra(c: Cast, label: str, dice: str, *, on: int,
         return False
     c.latch(label, per_turn=per_turn)
     rolled = c.dice_for(label, dice, {"target": on})
+    # **The feats that buy a clause with one of these dice**, taken before
+    # the roll because afterwards the number is already summed. #606.
+    rolled = _forgo(c, label, rolled, on)
     c.damage(rolled, c.total(f"{label} damage"), on=on, detail=label)
     return True
 
