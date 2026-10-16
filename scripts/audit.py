@@ -884,6 +884,39 @@ KNOWN_SILENT = {
     # the book, p10145 comes out of it, and the +1 power bonus applies to
     # p10145 and to nothing else.
     "p7377": "swaps a prepared power for one in the book; the board deals no second one",
+    # Its target line is "an enemy affected by your `p12577`", which
+    # `c.suffering` answers by label. The board never uses `p12577`, so the
+    # pool is empty, `c.choose` returns None and the daze lands on nobody.
+    #
+    # **Driven by hand, both controls**: `c.suffering("p12577")` returns `[]`
+    # on the board as posed, and `[2]` once that creature carries the attack
+    # penalty and the granted advantage `p12577` lays -- at which point the
+    # body dazes it (`Conditions(counts={MARKED: 1, DAZED: 1})`). So the row
+    # works and the board cannot pose it, which is the distinction this
+    # excuse exists to draw. #629's family.
+    "p16380": "dazes an enemy affected by p12577; the board never uses that power",
+    # **The only row in the tree whose whole mechanical clause is a header
+    # field.** Its body is empty by design: the trade is `swap=Swap(2,
+    # utility=True)`, spent by `chargen.power_swap` when the character is
+    # built, and the rest of the card is a bonus to two skills nothing
+    # rolls -- which is what its `narrative=` says. Of the 56 rows carrying
+    # `swap=` this is the one with nothing else in the body, so the case
+    # had never come up and the row went SILENT the day #620 stopped
+    # refusing it.
+    #
+    # Driven by hand, both controls in one run: over a six-power pool of
+    # level-10 utilities, `power_swap(pool, [])` keeps all six and
+    # `power_swap(pool, ["f3725"])` keeps five, taking the lowest
+    # qualifying one. The clause works; it is just spent where no event on
+    # the board can see it.
+    #
+    # **An excuse rather than `out_of_combat=True`, which is the field that
+    # sounds right.** `power()` refuses that beside `narrative=` -- and it
+    # would be the wrong home anyway, because the inert branch below
+    # `continue`s without running the row, so the claim could never go red.
+    # Here the row is still executed every sweep and still has to say
+    # nothing. #633 is the grammar gap.
+    "f3725": "its only board clause is a chargen-time power swap, spent before the fight",
 }
 
 

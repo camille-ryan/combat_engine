@@ -139,22 +139,42 @@ def _furious_on_burn(world, me: int, ev) -> bool:  # noqa: ANN001
 FLURRY = ("c.flurry_of_blows()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: The elemental companion, which is a creature the *feat* grants and the
-#: importer never captured a stat block for: its page prints no defences,
-#: no hit points and no ref, so there is nothing for `c.summon_inline` to
-#: be handed. A ranger's beast is a different creature and now exists.
-COMPANION = ("c.elemental_companion()",)
+#: **Retired: this was never an import gap, so it was never a `c.*` want.**
+#: The note here said "the importer never captured a stat block", which
+#: reads as something the ETL could fix. Checked against the compendium
+#: directly: this feat's own entry carries no stat-block marker at all --
+#: no hit points, no initiative, no defences -- and its plain text is the
+#: prerequisite and the benefit and nothing else.
+#:
+#: The compendium's `Companion` table **is** imported, all 105 rows of it,
+#: and its only elemental creatures are two *familiars* -- which this
+#: chain's printed prerequisite forbids outright.
+#:
+#: So the compendium has nothing to capture, which is `defect=` by its own
+#: definition rather than a verb waiting to be written. #620.
+#:
+#: `MODE` went with it, and for a sharper reason. Splitting these rows off
+#: the familiar's symbol was right -- an elemental companion is a different
+#: `Companion.kind` and may not carry the flag at all -- but naming a
+#: *reader* kept them pointed at a verb that would have unblocked none of
+#: them: the mode of a creature that cannot exist is unreadable whatever
+#: the verb is called.
+#:
+#: And they were not one group. `f3725`'s remaining clause is a bonus to
+#: two **skills**, which this engine does not model, so that row is
+#: `narrative=` and finished -- an answer that does not depend on the
+#: companion at all, and the reason it was worth reading six cards instead
+#: of inheriting one marker.
+NO_COMPANION_CARD = (
+    "the compendium prints no stat block for the companion this feat "
+    "grants: no defences, no hit points, no entry of its own, and the two "
+    "elemental creatures in the Companion table are familiars this chain's "
+    "prerequisite forbids"
+)
 #: The animal companion a different class feature grants, whose printed
 #: line is a *combined* attack -- one the character and the creature make
 #: together. Nothing pairs two attacks that way.
 COMBINED = ("c.combined_attack()",)
-#: Active and passive mode, which only a familiar has.
-#: **The elemental companion's mode, which is not a familiar's.**
-#: `Companion.passive` is documented as "which only a familiar prints", and
-#: these four rows are an elemental companion -- a different `Companion.kind`
-#: that may or may not carry the flag at all. Pointing them at the familiar's
-#: symbol said they were the same question. #620.
-MODE = ("c.companion_mode()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
 #: Lengthening somebody else's printed shift.
@@ -969,47 +989,103 @@ def f3722(c: Cast) -> None:
 
 
 @power("f3724", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*COMPANION, *MODE))
+       reach=PERSONAL, target=SELF, defect=NO_COMPANION_CARD)
 def f3724(c: Cast) -> None:
-    """The companion itself. `c.summon` needs a ref for the creature and
-    the spec gives the feat's own id, which is not one."""
+    """The companion itself, and the companion has no card.
+
+    **Defect, not a verb.** Checked against the compendium rather than
+    inferred: this feat's own entry carries no stat-block marker at all --
+    no hit points, no initiative, no defences -- and the `Companion`
+    table's only elemental creatures are two familiars, which this chain's
+    printed prerequisite forbids. So there is nothing for `c.summon_inline`
+    to be handed and nothing an importer could capture. See
+    `NO_COMPANION_CARD`. #620.
+
+    The per-feat defence bonus is the second half and is unreachable for
+    the same reason: a bonus on a creature that cannot be put on the board.
+    """
 
 
 @power("f3725", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=MODE, swap=Swap(2, utility=True))
+       swap=Swap(2, utility=True),
+       narrative=("skill:insight", "skill:perception"))
 def f3725(c: Cast) -> None:
-    """A utility power traded away at build time, and a skill bonus that
-    depends on the companion's mode."""
+    """A power swap, done, and a bonus to two skills.
+
+    **Finished, and the one of these rows that is not blocked on the
+    companion.** The swap is the header's `Swap(2, utility=True)`, read by
+    `chargen.power_swap` through `getattr(REGISTRY.get(ref), "swap", None)`.
+    The other clause is "+2 power bonus to Insight checks and Perception
+    checks": there are no skill checks on this board, so neither bonus has
+    anything to apply to and the row has no combat meaning left to write.
+    `narrative=` rather than `dropped=`, because nothing is missing from
+    the engine -- a skill bonus is not a clause this engine is merely
+    lacking, it is one with no board state to touch.
+
+    **It reports quiet rather than inert, and the reason is a gap in the
+    marker grammar, not in this row.** Of 56 rows carrying `swap=`, this is
+    the only one whose body is empty -- every other one has a clause that
+    fires -- so the row went SILENT the moment it stopped being refused.
+    `out_of_combat=True` is the field that would answer for that and
+    `power()` refuses it beside `narrative=`; it would also be the wrong
+    home, because `audit.py` `continue`s an inert row without running it,
+    so the claim could never go red. `KNOWN_SILENT` keeps the row
+    *executed* and records why it says nothing. #633.
+
+    Worth stating because inheriting the group's `c.companion_mode()`
+    marker said the opposite. Even with the creature on the board, this
+    clause would still be two skill bonuses. #620.
+    """
 
 
 @power("f3725b", level=1, cls="", usage=DAILY, action=MOVE,
        reach=CloseBurst(10), target=SELF, keywords=[Keyword.TELEPORTATION],
-       todo=COMPANION)
+       defect=NO_COMPANION_CARD)
 def f3725b(c: Cast) -> None:
-    """Swap places with the companion. Printed Daily, but there is no
-    companion on the board to swap with."""
+    """Swap places with the companion, which has no card.
+
+    Blocked on `f3724`'s defect: the teleport is `c.swap_places`-shaped and
+    sayable, but there is no creature to swap with. See
+    `NO_COMPANION_CARD`. #620.
+    """
 
 
 @power("f3726", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*COMPANION, *MODE))
+       reach=PERSONAL, target=SELF, defect=NO_COMPANION_CARD)
 def f3726(c: Cast) -> None:
-    """A surge pays out to everyone standing next to the companion."""
+    """A surge pays out to everyone standing next to the companion.
+
+    Blocked on the same defect as `f3724`: every clause measures from a
+    creature the compendium gives no card for. Both halves are otherwise
+    sayable -- `Healed` carries the surge and `c.within(1, of=)` the ring --
+    so if the companion ever arrives this is a short row. #620.
+    """
 
 
 @power("f3727", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=MODE, swap=Swap(6, utility=True))
+       swap=Swap(6, utility=True),
+       defect=NO_COMPANION_CARD)
 def f3727(c: Cast) -> None:
-    """A power swap and an attack bonus measured from the companion."""
+    """A power swap, done, and an attack bonus measured from the companion.
+
+    **The swap is the header's** `Swap(6, utility=True)`, which chargen
+    honours. What is left -- "+1 to attack rolls against bloodied creatures
+    that are adjacent to it, while it is in active mode" -- measures from
+    the companion, so it is blocked on `f3724`'s defect and not on a
+    reader. A `c.companion_mode()` would have left this row exactly as
+    dead. #620.
+    """
 
 
 @power("f3727b", level=1, cls="", usage=DAILY,
        action=ActionType.IMMEDIATE_REACTION, reach=CloseBurst(1),
-       target=NO_TARGET, todo=COMPANION)
+       target=NO_TARGET, defect=NO_COMPANION_CARD)
 def f3727b(c: Cast) -> None:
-    """Triggered by the companion being destroyed, and centred on the
-    square it last occupied. Both halves are the companion."""
+    """Blocked on `f3724`'s defect: it is about the companion, and the
+    compendium prints no card for it. See `NO_COMPANION_CARD`. #620.
+    """
 
 
 @power("f3729", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

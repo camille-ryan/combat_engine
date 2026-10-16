@@ -2234,6 +2234,89 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+
+def a_header_only_clause_is_spent_by_chargen(out: Result) -> None:
+    """A row whose whole mechanical clause is `swap=`, and nothing ran it.
+
+    `f3725` trades a utility power for the card the feat hands over, and
+    that trade is the **header's** `Swap(2, utility=True)` -- there is no
+    body to run, because the exchange happens when the character is built.
+    `chargen.power_swap` is the one reader, through
+    `getattr(REGISTRY.get(ref), "swap", None)`.
+
+    **Why this rule exists and not an `out_of_combat=True`.** The row went
+    SILENT the day #620 stopped refusing it, and the field that sounds like
+    the answer is refused beside `narrative=` -- rightly, because
+    `audit.py`'s inert branch `continue`s without running the row, so the
+    claim could never go red. The row carries a `KNOWN_SILENT` excuse
+    instead, and an excuse with nothing asserting the clause still works is
+    the shape `m3467a3` had when it was covering a dead call. This is the
+    assertion. #633.
+
+    Read off the row's own header, never a hand-built `Swap`: the plant that
+    matters is deleting `swap=` from `f3725`, and a rule that builds its own
+    would stay green through it.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.chargen import power_swap
+    from combat_engine.engine.dsl import REGISTRY
+
+    trade = getattr(REGISTRY["f3725"], "swap", None)
+    out.that(trade is not None, "f3725 declares a swap in its header")
+    if trade is None:
+        # The plant for this rule is deleting `swap=` from the header, and
+        # a rule that raises there reports one fault as a traceback instead
+        # of as a red line. Stop, having said the useful thing.
+        return
+    out.that(trade.utility and trade.level == 2,
+             "a 2nd-level or higher utility, as the card prints it")
+
+    # Six qualifying utilities, so there is something to take and the pick
+    # is observable. `attack is None` is how `power_swap` tells a utility.
+    utils = [r for r, p in REGISTRY.items()
+             if p.level >= trade.level and p.attack is None and r.startswith("p")][:6]
+    out.that(len(utils) == 6, "the pool holds six qualifying utilities")
+
+    # **An attack power in the pool, at a level below every utility.** The
+    # first draft of this rule held utilities only, and a plant deleting
+    # `(row.attack is None) is trade.utility` from `power_swap` stayed
+    # green through all ten assertions: with nothing but utilities to pick
+    # from, ignoring the utility test changes nothing. The decoy is lower
+    # level than all six, so a reader that stopped checking would take it
+    # first and the pick assertion below would name it.
+    decoy = next(r for r, p in REGISTRY.items()
+                 if p.level >= trade.level and p.attack is not None
+                 and r.startswith("p")
+                 and p.level < min(REGISTRY[u].level for u in utils))
+    out.that(REGISTRY[decoy].level < min(REGISTRY[u].level for u in utils),
+             "and one attack power below all of them, which the trade must not take")
+    pool = [decoy, *utils]
+
+    # The negative control, and it is the half that catches a reader that
+    # trades unconditionally: no feat, no trade.
+    out.that(len(power_swap(list(pool), [])) == 7,
+             "holding no feat costs nothing")
+
+    kept = power_swap(list(pool), ["f3725"])
+    out.that(len(kept) == 6, "holding f3725 costs one of them")
+    gone = set(pool) - set(kept)
+    out.that(len(gone) == 1, "exactly one, never two")
+    lowest = min(utils, key=lambda p: (REGISTRY[p].level, p))
+    out.that(gone == {lowest},
+             "and it is the lowest qualifying UTILITY, not the cheaper attack power")
+
+    # Deterministic, because the dealer must hand the same character twice
+    # for one seed and `power_swap` breaks its tie by ref to promise that.
+    out.that(power_swap(list(pool), ["f3725"]) == kept,
+             "the same pool trades the same card twice")
+
+    # A row with no swap in its header must not be charged for one. f3724
+    # is its sibling in the same family and carries none.
+    out.that(getattr(REGISTRY["f3724"], "swap", None) is None,
+             "its sibling f3724 declares no swap")
+    out.that(len(power_swap(list(pool), ["f3724"])) == 7,
+             "and so costs nothing")
+
 def a_familiar_changing_mode_is_announced(out: Result) -> None:
     """`c.familiar_mode` did the work and said nothing.
 
@@ -2764,13 +2847,35 @@ def a_recharge_can_name_the_moment_it_waits_for(out: Result) -> None:
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import Dropped, Hit, PowerUsed
     from combat_engine.engine.query import enemies
-    from combat_engine.engine.triggers import summon_dropped
+    from combat_engine.engine.triggers import Trigger, summon_dropped
+
+    def triggers_of(ref: str) -> list[Trigger]:
+        """Every `Trigger` on `recharge_when`, as a flat list.
+
+        `recharge_when` is `Trigger | Sequence[Trigger] | None`, and the
+        first draft of this rule reached straight for `.when` on it --
+        sound for the three rows below, which each declare one, and
+        **nine type errors** that `types.py` reported against a stale
+        baseline. Narrowing here rather than at each call site is also
+        what lets `one_trigger` assert the *arity*, which nothing did.
+        """
+        declared = REGISTRY[ref].recharge_when
+        if declared is None:
+            return []
+        if isinstance(declared, Trigger):
+            return [declared]
+        return [t for t in declared if isinstance(t, Trigger)]
+
+    def one_trigger(ref: str) -> Trigger:
+        """The single `Trigger` the row declares, asserted to be single."""
+        got = triggers_of(ref)
+        out.that(len(got) == 1, f"{ref} declares exactly one recharge trigger",
+                 f"declares {len(got)}")
+        return got[0]
 
     def fires(ref: str, ev: object) -> bool:
         world, me, _ = _board(ref, 1)
-        trigger = REGISTRY[ref].recharge_when
-        out_of = trigger if isinstance(trigger, tuple) else (trigger,)
-        return any(t.when(world, me, ev) for t in out_of if t is not None)
+        return any(t.when(world, me, ev) for t in triggers_of(ref))
 
     for ref in ("m115830a2", "m6162a2", "m4167a3"):
         out.that(REGISTRY[ref].recharge_when is not None,
@@ -2781,7 +2886,7 @@ def a_recharge_can_name_the_moment_it_waits_for(out: Result) -> None:
 
     # -- m115830a2: a HIT with the melee weapon, not the bow -------------
     world, me, _ = _board("m115830a2", 1)
-    trig = REGISTRY["m115830a2"].recharge_when
+    trig = one_trigger("m115830a2")
     sword = Hit(attacker=me, target=0, power="m115830a0", critical=False)
     out.that(trig.when(world, me, sword),
              "m115830a2 recharges on a hit with m115830a0, the weapon its"
@@ -2790,18 +2895,18 @@ def a_recharge_can_name_the_moment_it_waits_for(out: Result) -> None:
     out.that(not trig.when(world, me, bow),
              "and NOT on a hit with m115830a1 -- the other at-will, also"
              " weapon-keyword, which only the glossary separates")
-    out.that(not trig.when(world, me, PowerUsed(actor=me, power="m115830a0", targets=())),
+    out.that(not trig.when(world, me, PowerUsed(actor=me, power="m115830a0", targets=[])),
              "and not on merely USING it: `Hit` names the swinger"
              " `attacker` where `PowerUsed` names it `actor`, so a miss"
              " recharges nothing")
 
     # -- m6162a2: a USE, hit or miss -------------------------------------
     world, me, _ = _board("m6162a2", 1)
-    trig = REGISTRY["m6162a2"].recharge_when
-    out.that(trig.when(world, me, PowerUsed(actor=me, power="m6162a1", targets=())),
+    trig = one_trigger("m6162a2")
+    out.that(trig.when(world, me, PowerUsed(actor=me, power="m6162a1", targets=[])),
              "m6162a2 recharges when it USES m6162a1 -- its card says uses,"
              " so a miss counts")
-    out.that(not trig.when(world, me, PowerUsed(actor=me, power="m6162a3", targets=())),
+    out.that(not trig.when(world, me, PowerUsed(actor=me, power="m6162a3", targets=[])),
              "and not on a different row of its own")
 
     # -- m4167a3: my own summon of that kind, and all three narrowings ----
@@ -13116,6 +13221,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_header_only_clause_is_spent_by_chargen": (
+        a_header_only_clause_is_spent_by_chargen,
+        "f3725's whole clause is a swap= header and nothing asserted it"),
     "a_familiar_changing_mode_is_announced": (
         a_familiar_changing_mode_is_announced,
         "c.familiar_mode did the work and announced nothing"),
