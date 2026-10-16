@@ -737,7 +737,185 @@ def specs() -> int:
             print(f"  {table}.{ref}: {why}")
     print("no printed names in any spec")
     bad = _self_named_clauses()
-    return bad or columns(index)
+    return bad or _unswapped_names(index) or columns(index)
+
+
+#: A spec that prints a name the scrub should have swapped, and the reason it
+#: is allowed to. Keyed `(table, ref, the ref the name resolves to)`.
+#:
+#: Empty, deliberately, and it should stay empty: a hit here means a phrase
+#: *coincides* with some row's printed name and means something else. A
+#: genuine leak belongs in the baseline below, which is work owed, not in an
+#: allowance, which is a judgement made.
+UNSWAPPED_KNOWN: dict[tuple[str, str, str], str] = {}
+
+#: **The leaks standing when this walk was written: 60 spec rows.** A
+#: per-row baseline that may shrink and must not grow -- `cards.KNOWN`'s
+#: contract and `fixtures/audited.json`'s, for the reason `scripts/CLAUDE.md`
+#: gives: a bare count cannot tell whether a run's hits are the known ones,
+#: and cannot see ten healing while ten break.
+#:
+#: **Safe to write down because every key is a ref.** `(table, row, the ref
+#: whose name the row prints)` names no printed text, which is why this can
+#: be a list at all where a forbidden-name list could not.
+#:
+#: Not an allowance. Each one is the ETL's scrub failing to swap a name in a
+#: spec an author reads, and the fix is in the extraction. The shape is
+#: regular enough to be one bug: a plain Title-Case pair gets swapped and a
+#: name holding a lowercase connective -- "of", "the" -- does not, so a
+#: sibling card two refs along says `w3742` where this one prints three
+#: words. Shrink it by fixing that, not by adding rows.
+UNSWAPPED_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
+    ("associate", "x10_60", "rt:r61-t2"),
+    ("associate", "x10_77", "m4865a1"),
+    ("class_feature", "cf:invoker-f1s2", "cf:invoker-f1c1"),
+    ("class_feature", "cf:shaman-f2c0", "m4903a6"),
+    ("class_feature", "cf:sorcerer-f0s1", "p12964"),
+    ("class_feature", "cf:warlock-hexblade-f3s0", "w3752"),
+    ("class_feature", "cf:warlock-hexblade-f3s4", "w3741"),
+    ("companion", "comp:107", "i3443"),
+    ("companion", "comp:59", "f1392"),
+    ("companion", "comp:71", "x1_128"),
+    ("companion", "comp:78", "x1_127"),
+    ("companion", "comp:9", "m5811a0"),
+    ("feat", "f1024", "cf:warden-f0"),
+    ("feat", "f1355", "cf:cleric-warpriest-f0"),
+    ("feat", "f1415", "w3665"),
+    ("feat", "f1432b", "cf:cleric-warpriest-f0"),
+    ("feat", "f1557", "cf:cleric-warpriest-f0"),
+    ("feat", "f1622", "cf:cleric-warpriest-f0"),
+    ("feat", "f1623", "cf:cleric-warpriest-f0"),
+    ("feat", "f1623", "cf:invoker-f1c1"),
+    ("feat", "f1624", "cf:cleric-warpriest-f0"),
+    ("feat", "f1625", "cf:cleric-warpriest-f0"),
+    ("feat", "f1627", "cf:cleric-warpriest-f0"),
+    ("feat", "f3231", "p12258"),
+    ("feat", "f3531", "f3529"),
+    ("feat", "f3532", "f3529"),
+    ("feat", "f3533", "f3529"),
+    ("feat", "f3534", "f3529"),
+    ("item", "i1927", "x1_125"),
+    ("item_block", "i2172p1", "f1398"),
+    ("item_block", "i3201p2", "m6564"),
+    ("monster_power", "m1090a2", "f2247"),
+    ("monster_power", "m5132a3", "f3332"),
+    ("power", "p13680", "w3741"),
+    ("power", "p13681", "w3741"),
+    ("power", "p13682", "w3741"),
+    ("power", "p16258", "w3752"),
+    ("power", "p16259", "w3752"),
+    ("power", "p16260", "w3752"),
+    ("power", "p16660", "m6564"),
+    ("race", "r26", "x1_10"),
+    ("race", "r59", "m6561a3"),
+    ("racial_trait", "rt:r26-t2", "x1_10"),
+    ("racial_trait", "rt:r59-t1", "m6561a3"),
+    ("terrain", "x2_119", "m731a1"),
+    ("terrain", "x2_140", "x2_80"),
+    ("terrain", "x2_151", "x1_10"),
+    ("terrain", "x2_18", "p12615"),
+    ("trap", "t:108", "x1_10"),
+    ("trap", "t:169", "m4310a7"),
+    ("trap", "t:273", "m4310a7"),
+    ("trap", "t:30", "p11722"),
+    ("trap", "t:324", "p14177"),
+    ("trap", "t:337", "f2247"),
+    ("trap", "t:339", "x1_10"),
+    ("trap", "t:456", "m6564"),
+    ("trap", "t:489", "x1_10"),
+    ("trap", "t:529", "m4903a6"),
+    ("trap", "t:81", "p914"),
+    ("trap", "t:82", "p3699"),
+})
+
+
+def _unswapped_names(index: dict[str, list[str]]) -> int:
+    """A spec printing a name it never cites. The waiver-free question.
+
+    **The third position where `identifies` must not be consulted**, after
+    `--cited` and `--categories`. The tree-wide walk waives a multi-word name
+    made of ordinary words in running prose -- rightly, and that is #494's
+    blind spot -- so `--specs` reports clean over a `Requirement:` line
+    reading "you must use this power with your <three ordinary words>" where
+    the sibling card two refs along correctly says `w3742`.
+
+    **Uniqueness is the discriminator**, which is the insight `--cited` is
+    built on. A phrase resolving to **one** ref, in a spec that never cites
+    that ref, is not a coincidence worth waiving: the scrub was supposed to
+    swap it and did not. A phrase resolving to *several* refs usually is a
+    coincidence -- a printed monster ability very often is a generic combat
+    phrase -- so those are left to the tree-wide walk and its waivers, the
+    same split `--cited`'s `_trusted_vocabulary` makes.
+
+    Measured when it was written: of 4,171 printed names holding a lowercase
+    connective, 69 appear in a spec that never cites their ref -- and
+    **17 of those resolve uniquely**, across 30 spec rows. Every one was
+    reported clean by `--specs` on every run on record.
+
+    Three or more words, because the two-word case is where coincidence
+    lives and the two-word names are also the ones the scrub gets right:
+    the observed pattern is that a name with a lowercase connective in the
+    middle survives, and a plain Title-Case pair does not.
+    """
+    db = game()
+    unique = {
+        phrase: refs[0] for phrase, refs in index.items()
+        if len(refs) == 1 and len(phrase.split()) > 2
+    }
+    found: list[tuple[str, str, str]] = []
+    for table in ("power", "monster_power", "class_feature", "companion",
+                  "item", "item_block", "feat", "race", "racial_trait",
+                  "trap", "disease", "associate", "terrain"):
+        try:
+            rows = db.execute(
+                f"SELECT ref, spec FROM {table} WHERE spec IS NOT NULL"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        for ref, spec in rows:
+            low = (spec or "").lower()
+            for phrase, owner in unique.items():
+                if phrase not in low:
+                    continue
+                # Its own name is its own business -- `p289b` belongs to
+                # `p289` and may say so -- and a spec that *does* cite the
+                # ref has been swapped and is merely repeating itself.
+                if owner.startswith(ref) or ref.startswith(owner):
+                    continue
+                if owner in (spec or ""):
+                    continue
+                if (table, ref, owner) in UNSWAPPED_KNOWN:
+                    continue
+                found.append((table, ref, owner))
+
+    # The baseline is subtracted *after* the walk, so the report can say
+    # what healed as well as what is new -- a count alone could not.
+    every = sorted(set(found))
+    fresh = [k for k in every if k not in UNSWAPPED_BASELINE]
+    healed = sorted(UNSWAPPED_BASELINE - set(every))
+
+    for table, ref, owner in fresh[:40]:
+        print(f"{table}.{ref}: prints the name of {owner} and never cites it")
+    if fresh:
+        extra = " (showing 40)" if len(fresh) > 40 else ""
+        print()
+        print(f"{len(fresh)} NEW spec(s) print a name the scrub left behind"
+              f"{extra}.")
+        print("Every one is shown to an author verbatim. Fix the extraction "
+              "-- see `_cross_reference` in etl/build.py -- or, if the "
+              "phrase genuinely means something else, name the coincidence "
+              "in `UNSWAPPED_KNOWN`.")
+        return 1
+    if healed:
+        print(f"{len(healed)} baseline entr"
+              f"{'y' if len(healed) == 1 else 'ies'} no longer leak -- take "
+              f"them out of `UNSWAPPED_BASELINE`:")
+        for key in healed[:20]:
+            print(f"  {key[0]}.{key[1]} no longer prints {key[2]}'s name")
+        return 1
+    print(f"no NEW spec prints a uniquely-resolving name it does not cite "
+          f"({len(UNSWAPPED_BASELINE)} known, owed to the extraction)")
+    return 0
 
 
 #: A labelled clause as the ETL leaves one: `<ref> : <sentence>`.
