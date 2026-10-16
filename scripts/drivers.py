@@ -2234,6 +2234,86 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def one_manifestation_not_thirteen(out: Result) -> None:
+    """A race's "choose one" traits are alternatives, not a stack. #548.
+
+    Three races print their traits as a **choice between sub-options**, and
+    the race's own spec gives each one a ref -- `rt:r33-s0` and so on, 18 of
+    them. **None is declared**, so every character of those races is
+    permanently short whichever defence bonus and resistance its
+    manifestation prints.
+
+    The obvious fix is the dangerous one, and this rule is the guard against
+    it. `RaceLine.traits` collects by **prefix**:
+
+        sorted(r for r in REGISTRY if r.startswith(f"rt:{self.ref}-"))
+
+    so declaring the rows without changing anything else would hand an `r33`
+    character all **thirteen** manifestations at once -- +1 Reflex *and* +1
+    Fortitude, resist 5 fire *and* resist 5 lightning, +2 to saves, and
+    breathing underwater. `m5808a0`'s rule at the scale of a whole race.
+
+    **So the probe declares a sub-option that does not exist**, which is the
+    only way to test a guard about rows nobody has written. Registering one
+    and asking what a character would carry is the question; waiting until
+    the 18 land and then asking is how the fault ships.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.chargen import RACES
+    from combat_engine.engine.dsl import REGISTRY
+
+    # `RACES` is a plain `dict[str, RaceLine]` built at import. The first
+    # version hedged with `RACES() if callable(RACES) else RACES`, which
+    # bought nothing and cost two type errors.
+    lines = list(RACES.values())
+    r33 = next((ln for ln in lines if ln.ref == "r33"), None)
+    out.that(r33 is not None, "the thirteen-manifestation race is on the"
+             " board to ask about", f"{[ln.ref for ln in lines][:6]}")
+    if r33 is None:
+        return
+
+    out.that(not r33.manifestations,
+             "none of the 18 sub-options is declared yet, which is #548 and"
+             " is why this guard lands before them rather than after",
+             f"{r33.manifestations}")
+    before = list(r33.granted())
+
+    # Three of them, including a two-digit index so the ordering is tested.
+    planted = ("rt:r33-s0", "rt:r33-s9", "rt:r33-s10")
+    borrowed = REGISTRY["rt:r1-t0"]
+    for ref in planted:
+        REGISTRY[ref] = borrowed
+    try:
+        traits = r33.traits
+        out.that(not any(r in traits for r in planted),
+                 "a declared sub-option does NOT join `traits` -- the whole"
+                 " guard, and what stops thirteen alternatives stacking",
+                 f"{[r for r in traits if '-s' in r]}")
+        mine = r33.manifestations
+        out.that(all(r in mine for r in planted),
+                 "it joins `manifestations` instead, so the rows are"
+                 " reachable rather than merely excluded",
+                 f"{mine}")
+        out.that(mine == ["rt:r33-s0", "rt:r33-s9", "rt:r33-s10"],
+                 "in PRINTED order -- `-s10` after `-s9`, where a plain"
+                 " alphabetical sort puts it between `-s1` and `-s2`",
+                 f"{mine}")
+        after = list(r33.granted())
+        gained = [r for r in after if r not in before]
+        out.that(len(gained) <= 1,
+                 "and a character carries AT MOST ONE of them -- three"
+                 " declared, so a prefix walk would have handed over three",
+                 f"gained {gained}")
+    finally:
+        for ref in planted:
+            REGISTRY.pop(ref, None)
+
+    out.that(not r33.manifestations,
+             "the probe cleans up after itself, so the registry it shares"
+             " with every other rule is as it was",
+             f"{r33.manifestations}")
+
+
 def resistance_taken_off_the_target(out: Result) -> None:
     """"The target loses any resistance or immunity to this damage type."
 
@@ -10956,6 +11036,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "one_manifestation_not_thirteen": (one_manifestation_not_thirteen,
+                                       "a race's choose-one traits are\n"
+                                       " alternatives, not a stack"),
     "resistance_taken_off_the_target": (resistance_taken_off_the_target,
                                          "a target loses a resistance to one\n"
                                          " type; immunity is not"),

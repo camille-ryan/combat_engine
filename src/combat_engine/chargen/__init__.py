@@ -1262,6 +1262,25 @@ def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
 #: `content/loader.py` parses a companion's. Nothing here is transcribed:
 #: a hand-typed +2 is a number nothing can check, and a wrong one leaves
 #: every power working and the character quietly wrong.
+#: A race's "choose one" sub-option row: `rt:<race>-s<N>`, as
+#: `etl.item.sub_options` mints them. Distinct from a plain trait's
+#: `rt:<race>-t<N>`, and the distinction is load-bearing -- see
+#: `RaceLine.manifestations` for what collecting both together would cost.
+_SUB_OPTION = re.compile(r"^rt:[a-z0-9]+-s(\d+)$")
+
+
+def _sub_option_order(ref: str) -> int:
+    """Printed order, from the ref. `-s10` sorts after `-s9`, not before.
+
+    A plain `sorted()` is alphabetical, which puts `-s10` between `-s1` and
+    `-s2`. One race prints thirteen of these, so the wrong order is not
+    hypothetical -- and the number is the page's order, which is the only
+    thing the ref carries.
+    """
+    found = _SUB_OPTION.match(ref)
+    return int(found.group(1)) if found else -1
+
+
 @dataclass(frozen=True)
 class RaceLine:
     ref: str
@@ -1319,7 +1338,35 @@ class RaceLine:
         import combat_engine.content
         from combat_engine.engine.dsl import REGISTRY
 
-        return sorted(r for r in REGISTRY if r.startswith(f"rt:{self.ref}-"))
+        return sorted(
+            r for r in REGISTRY
+            if r.startswith(f"rt:{self.ref}-") and not _SUB_OPTION.match(r)
+        )
+
+    @property
+    def manifestations(self) -> list[str]:
+        """The race's "choose one" trait rows, by ref, in printed order.
+
+        **Kept out of `traits` deliberately, and this is a guard rather
+        than tidiness.** `traits` collects by prefix, so the moment a
+        `rt:<race>-s<N>` row is declared it would be picked up with the
+        rest -- and these are *alternatives*. One race prints thirteen, so
+        a character would carry +1 Reflex **and** +1 Fortitude, resist 5
+        fire **and** resist 5 lightning, and breathe underwater. That is
+        `m5808a0`'s rule at the scale of a whole race: a row stronger than
+        its printed line is worse than an absent one.
+
+        Empty today -- none of the 18 is declared, #548 -- which is why
+        this lands before them rather than after.
+        """
+        import combat_engine.content
+        from combat_engine.engine.dsl import REGISTRY
+
+        return sorted(
+            (r for r in REGISTRY if _SUB_OPTION.match(r)
+             and r.startswith(f"rt:{self.ref}-")),
+            key=_sub_option_order,
+        )
 
     def granted(self) -> list[str]:
         """The rows a character of this race carries into a fight.
@@ -1328,11 +1375,49 @@ class RaceLine:
         block says to choose, which is the difference between a race that
         prints two powers and one that prints thirteen manifestations and
         asks for one.
+
+        **A manifestation is one choice with two halves**, so the chosen
+        sub-option *trait* comes in beside the chosen *power* rather than
+        being picked separately. The pairing is read off the sub-option's
+        own spec, which names its card -- that is what
+        `etl.item.sub_options` identifies the family *by*, "the power each
+        one grants, not a list of headings" -- so there is nothing to
+        record and no second decision to get out of step.
         """
         from combat_engine.engine.dsl import REGISTRY
 
         written = [p for p in self.powers if p in REGISTRY]
-        return [*self.traits, *(written[:1] if self.one_of else written)]
+        if not self.one_of:
+            return [*self.traits, *written]
+        chosen = written[:1]
+        return [*self.traits, *self._manifestation_for(chosen), *chosen]
+
+    def _manifestation_for(self, chosen: list[str]) -> list[str]:
+        """The sub-option trait that goes with the power picked, if any.
+
+        Returns at most one. An unwritten sub-option, or a power no
+        sub-option names, gives nothing -- which is the state today and
+        leaves `granted` exactly as it was.
+        """
+        if not chosen:
+            return []
+        mine = self.manifestations
+        if not mine:
+            return []
+        from combat_engine.db import game
+
+        held = {
+            ref: spec or ""
+            for ref, spec in game().execute(
+                "SELECT ref, spec FROM racial_trait WHERE race = ?",
+                (self.ref,),
+            )
+        }
+        want = chosen[0]
+        for ref in mine:
+            if re.search(rf"\b{re.escape(want)}\b", held.get(ref, "")):
+                return [ref]
+        return []
 
     def taken(self, build: Build) -> list[Ability]:
         """Which abilities actually go up, for a character on this leg.
