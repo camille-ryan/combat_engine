@@ -107,7 +107,7 @@ _MY_MARK_IS_BLOODIED = "an enemy you marked becomes bloodied"
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=AC),
 )
 def p10507(c: Cast) -> None:
@@ -453,7 +453,7 @@ def p2121(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=AC),
 )
 def p2187(c: Cast) -> None:

@@ -2234,6 +2234,95 @@ def scoped_vulnerable(out: Result) -> None:
     world2.effects.resume(sus)
     out.that(_scoped_vuln(world2, other, ALL, {}) == 7, "and comes back")
 
+def the_invigorating_keyword_pays(out: Result) -> None:
+    """A keyword that is only a tag, and the four feats that read it.
+
+    `Keyword.INVIGORATING` was **not on the enum** while 13 fighter powers
+    printed it, so six rows named it as their one gap. Nothing noticed
+    because the keyword does nothing by itself: no power's own text acts
+    on it, and every reader is somebody else's feat.
+
+    **Two gaps were claimed and only one was real.** `f774` and `f792`
+    said a second thing was missing -- *"`resolve.temp_hp` consults `Mods`
+    for nothing, so there is no term to add to"* -- and that function now
+    reads a `"temp_hp"` modifier off the receiver, with a comment saying
+    it was added for these very rows. The note outlived the gap, which is
+    the week's recurring shape.
+
+    Asserted through `resolve.temp_hp`, the real payout, because the whole
+    question is whether a modifier reaches it. Both directions on every
+    row: an invigorating power pays the raised number, a plain one pays
+    the bare one.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine import Keyword
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.resolve import temp_hp
+
+    out.that(hasattr(Keyword, "INVIGORATING"),
+             "the keyword is on the enum at all, which is the gap six rows"
+             " named", f"{hasattr(Keyword, 'INVIGORATING')}")
+
+    # **The header deliberately, not `keywords_of`.** That reader needs a
+    # world and a creature because it folds in `c.counts_as_keyword`
+    # grants; the question here is which cards *print* the keyword, which
+    # is the declared tuple and what `keywords.py` compares to the
+    # database. The grant path is `f2370`'s and is asserted there.
+    tagged = sorted(r for r, p in REGISTRY.items()
+                    if Keyword.INVIGORATING in (p.keywords or ()))
+    out.that(len(tagged) == 13,
+             "and the 13 powers whose cards print it declare it -- the set"
+             " `keywords.py` compares against the database",
+             f"{len(tagged)} rows")
+    plain = next(r for r, p in REGISTRY.items()
+                 if r.startswith("p") and (p.level or 0) <= 10
+                 and Keyword.INVIGORATING not in (p.keywords or ())
+                 and Keyword.WEAPON in (p.keywords or ()))
+
+    def paid(ref: str, using: str, *, bloodied: bool = False) -> int:
+        """Temporary hit points a fighter ends up with, via the real path."""
+        world, me, _ = _board(ref, 1)
+        body = world.get(me, Health)
+        # **Set both ways.** The control first read whatever the board
+        # dealt, and this board's fighter arrives already under half -- so
+        # "unhurt" was never posed and `f755` looked like it paid
+        # unconditionally.
+        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        body.temp = 0
+        temp_hp(world, me, me, 1, power=using)
+        return body.temp
+
+    # f774: +2 at heroic, gated on the paying power.
+    out.that(paid("f774", tagged[0]) == 3,
+             "f774 raises an invigorating power's temporary hit points by"
+             " its printed 2 -- 1 paid plus 2",
+             f"{paid('f774', tagged[0])}")
+    out.that(paid("f774", plain) == 1,
+             "and leaves a power without the keyword alone -- the gate, and"
+             " the reason this is not a flat bonus to every pool",
+             f"{paid('f774', plain)}")
+
+    # f792: the smaller ladder.
+    out.that(paid("f792", tagged[0]) == 2,
+             "f792's printed 1, the same way", f"{paid('f792', tagged[0])}")
+
+    # f755: the same term, gated on bloodied as well.
+    out.that(paid("f755", tagged[0], bloodied=True) == 3,
+             "f755 pays its 2 while bloodied",
+             f"{paid('f755', tagged[0], bloodied=True)}")
+    out.that(paid("f755", tagged[0]) == 1,
+             "and nothing while unhurt -- the control, asked per payout"
+             " rather than at arming because a fight crosses half once",
+             f"{paid('f755', tagged[0])}")
+    out.that(paid("f755", plain, bloodied=True) == 1,
+             "and nothing for a plain power even while bloodied, so both"
+             " halves of its condition are load-bearing",
+             f"{paid('f755', plain, bloodied=True)}")
+
+
 def a_bare_skill_key_is_read_by_nothing(out: Result) -> None:
     """`c.bonus("perception", 2)` lays a key no reader consults.
 
@@ -11511,6 +11600,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "the_invigorating_keyword_pays": (the_invigorating_keyword_pays,
+                                      "a tag-only keyword, and the feats\n"
+                                      " that read it"),
     "a_bare_skill_key_is_read_by_nothing":
         (a_bare_skill_key_is_read_by_nothing,
          "a bare skill name lays a modifier no roll reads"),

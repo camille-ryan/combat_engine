@@ -148,7 +148,7 @@ def p10334(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=FORT),
 )
 def p10488(c: Cast) -> None:
@@ -375,7 +375,7 @@ def p2109(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=FORT),
 )
 def p2131(c: Cast) -> None:

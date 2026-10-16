@@ -50,7 +50,7 @@ _NAMED_KINDS = ("demon", "drow", "orc", "spider")
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=AC),
 )
 def p2099(c: Cast) -> None:
@@ -208,7 +208,7 @@ def p9993(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=FORT),
 )
 def p2102(c: Cast) -> None:
@@ -373,7 +373,7 @@ def p2119(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=AC),
 )
 def p2124(c: Cast) -> None:

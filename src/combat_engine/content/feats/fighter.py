@@ -19,8 +19,10 @@ against.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.feats.general import _tier
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -36,6 +38,7 @@ from combat_engine.engine import (
     Dropped,
     Gear,
     Hit,
+    Keyword,
     SecondWind,
     Size,
     Trigger,
@@ -43,11 +46,14 @@ from combat_engine.engine import (
     about_me,
     power,
 )
-from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.events import PowerResolved, PowerUsed
 from combat_engine.engine.query import enemies, holding, team
 
 #: The conditions a hammer or a mace is printed as making stick.
 _STICKY = ("dazed", "immobilized", "slowed", "stunned")
+
+#: The racial power `f758` keys off. By ref, as every reference here is.
+RACIAL = "p1448"
 
 
 def _i_crit_in_melee(world, me: int, ev: Any) -> bool:  # noqa: ANN001
@@ -311,37 +317,118 @@ def f771(c: Cast) -> None:
     c.bonus("damage", c.wis_mod, on=c.me, until=When.ENCOUNTER, when=gate)
 
 
+def _invigorating(c: Cast) -> Callable[[dict[str, Any]], bool]:
+    """A gate: is the row this context is about an invigorating one?
+
+    The keyword is a **tag and nothing else** -- no power's own text acts on
+    it -- so every row in this family is a gate on somebody else's header.
+    `resolve.temp_hp` hands `{"target", "power"}` and the attack context
+    carries `power` too, so one predicate serves both.
+
+    **Takes the `Cast` and returns the predicate**, rather than being one,
+    because `dsl.keywords_of` needs the world and the creature:
+    `keywords_of(world, actor, p)`. Reading `Power.keywords` instead would
+    have been one argument and wrong -- a row's header is one tuple fixed
+    at import and shared by everybody who holds it, where
+    `c.counts_as_keyword` adds to *this* creature's copy. That is how
+    `f2370` grants the keyword to a power that does not print it, and a
+    header read would miss exactly that case.
+    """
+    from combat_engine.engine.dsl import get, keywords_of
+
+    def gate(ctx: dict[str, Any]) -> bool:
+        rolled = get(str(ctx.get("power") or ""))
+        if rolled is None:
+            return False
+        return Keyword.INVIGORATING in keywords_of(c.world, c.me, rolled)
+
+    return gate
+
+
 @power("f755", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.INVIGORATING",))
+       reach=PERSONAL, target=SELF)
 def f755(c: Cast) -> None:
-    """Turns on a keyword the engine does not have. `Keyword` is read off
-    the enum, so the gap is exact rather than a judgement."""
+    """"An additional 2 temporary hit points" from an invigorating power,
+    while bloodied.
+
+    **The keyword landed.** `Keyword.INVIGORATING` is on the enum and the
+    13 fighter powers that print it declare it, which `keywords.py`
+    checks -- so the gap this row named is closed and the clause is a
+    gate on the paying power.
+
+    `"temp_hp"` is the term, and it already existed: `resolve.temp_hp`
+    reads that key off the **receiver**, which is right here because the
+    card says "you gain". Bloodied is asked **per payout** rather than at
+    arming, `f593`'s reason -- a fight crosses half once and the clause
+    has to follow it.
+    """
+    me = c.me
+    c.bonus(
+        "temp_hp", 2, on=me, until=When.ENCOUNTER, kind="feat",
+        when=lambda ctx: _invigorating(c)(ctx) and c.bloodied(me),
+    )
 
 
 @power("f758", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Keyword.INVIGORATING",))
+       reach=PERSONAL, target=SELF)
 def f758(c: Cast) -> None:
-    """Same keyword, triggered by a racial power."""
+    """A racial power buys +1 to attack with invigorating powers, EONT.
+
+    Armed off `PowerUsed` rather than laid standing, because the card
+    gives it *when you use* the racial power and holds it past that
+    power's own resolution -- `f1010`'s shape.
+
+    The bonus itself is gated on the **attacking** row carrying the
+    keyword, which the attack context names, so one `c.bonus` covers
+    every invigorating power the fighter owns rather than one per card.
+    """
+    me = c.me
+
+    def granted(ev: PowerUsed) -> None:
+        if ev.actor != me or ev.power != RACIAL:
+            return
+        c.bonus("attack", 1, on=me, until=When.EONT,
+                when=_invigorating(c))
+
+    c.watch(PowerUsed, granted, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f774", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Keyword.INVIGORATING",))
+       )
 def f774(c: Cast) -> None:
-    """Same keyword, raising the temporary hit points it pays.
+    """"+2 feat bonus to the temporary hit points you gain from using an
+    invigorating power", 4 at 11th and 6 at 21st.
 
-    **Two symbols, not one.** Even with the keyword this could not be
-    said: `resolve.temp_hp` consults `Mods` for nothing, so "+2 to the
-    number of temporary hit points you gain" has no term to add to.
-    Five rows want that second one.
+    **The second gap this row named is gone, and the note outlived it.**
+    It said `resolve.temp_hp` "consults `Mods` for nothing, so there is no
+    term to add to" -- that function now reads a `"temp_hp"` modifier off
+    the receiver, and its comment says it was added for these rows. So
+    the keyword was the only thing left.
+
+    The tier ladder is the printed one and `_tier` is the shared reader
+    for it. Gated on the paying power rather than laid flat, because a
+    fighter's other temporary hit points are not a feat's business.
     """
+    c.bonus(
+        "temp_hp", _tier(c.level, 2, 4, 6), on=c.me, until=When.ENCOUNTER,
+        kind="feat", when=_invigorating(c),
+    )
 
 
 @power("f792", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Keyword.INVIGORATING",))
+       )
 def f792(c: Cast) -> None:
-    """Same two gaps as f774, a smaller number."""
+    """As `f774`, a smaller ladder: +1, then 2 at 11th and 3 at 21st.
+
+    Both of the gaps the old note named are closed -- see `f774` for the
+    one that quietly stopped being true.
+    """
+    c.bonus(
+        "temp_hp", _tier(c.level, 1, 2, 3), on=c.me, until=When.ENCOUNTER,
+        kind="feat", when=_invigorating(c),
+    )
 
 
 @power("f371", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

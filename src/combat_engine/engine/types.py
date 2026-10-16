@@ -101,6 +101,18 @@ class Keyword(StrEnum):
     # turn. `c.rattling` hands the word to a creature's attacks and
     # `c.rattled` asks it back, which is the whole of what the keyword is.
     RATTLING = "rattling"
+    #: A **tag and nothing more**, which is the whole reason it was missing:
+    #: no power's own text does anything with it, so there was nothing to
+    #: implement and nothing noticed its absence. The feats are what read
+    #: it -- "when you hit with a power that has the invigorating keyword",
+    #: "+2 to the temporary hit points you gain from an invigorating power"
+    #: -- so six rows named `Keyword.INVIGORATING` as their one gap while
+    #: 13 compendium powers printed it.
+    #:
+    #: The term those feats add to already exists: `resolve.temp_hp` reads
+    #: a `"temp_hp"` modifier off the receiver. Two of the six say it does
+    #: not, and that note predates it.
+    INVIGORATING = "invigorating"
     STANCE = "stance"
     #: A wizard subclass's rider on its own melee basic attack. Printed as a
     #: keyword and dropped by the ETL until now, which left `chargen.loadout` with

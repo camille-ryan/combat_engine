@@ -125,7 +125,7 @@ def p10336(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=AC),
 )
 def p10502(c: Cast) -> None:
@@ -328,7 +328,7 @@ def p2111(c: Cast) -> None:
     action=INTERRUPT,
     reach=Melee(1),
     target=ONE_CREATURE,
-    keywords=MARTIAL_WEAPON,
+    keywords=[*MARTIAL_WEAPON, Keyword.INVIGORATING],
     attack=Attack(STR, vs=AC),
     trigger=_HIT_MY_FRIEND,
     on=Trigger(AttackRolled, _hit_my_friend_in_melee, _HIT_MY_FRIEND),
