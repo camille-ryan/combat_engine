@@ -2987,6 +2987,11 @@ class Cast:
         mover = self.me if who is None else who
         if to is not None:
             return shift(self.world, mover, to, share=share)
+        # **The printed distance, before anything lengthens it.** What
+        # `Moved.stretched_` reports is the difference between this and the
+        # square the decider actually picked -- "spent", not "granted",
+        # because `c.extend_every` raises a budget the mover need not use.
+        printed = squares_
         squares_ += self._extra_every(mover, "shift")
         # **Priced as a shift**, which is where "it ignores difficult terrain
         # when it shifts" is actually spent: a one-square shift cannot enter
@@ -2998,7 +3003,8 @@ class Cast:
             return False
         options = self._nearest_first(list(options), toward, away_from, mover)
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
-        return shift(self.world, mover, dest)
+        return shift(self.world, mover, dest,
+                     stretched=self._stretch(mover, printed, dest))
 
     def shift_as(
         self,
@@ -3660,6 +3666,9 @@ class Cast:
         `_nearest_first`.
         """
         mover = self.me if who is None else who
+        # See `c.shift`: the print before anything lengthens it, so the
+        # arrival can say how much of the extra was actually used.
+        printed = squares_
         squares_ += self._extra_every(mover, "teleport")
         origin = squares(self.world, mover)
         # Filtered by the mover's whole footprint, not by the one square.
@@ -3687,8 +3696,14 @@ class Cast:
             # somebody in a dying creature's space needs: `resolve._die`
             # lifts the body *after* `Dropped` is announced, so the square
             # is still taken during the interrupt window.
+            # **Measured even when the row named the square.** A printed
+            # destination is not a choice, but it is still a distance, and a
+            # row that blinks somebody exactly where the extra square put
+            # them has spent it as surely as a decider would have.
             return (
-                teleport(self.world, mover, to, share=share) if to in options else False
+                teleport(self.world, mover, to, share=share,
+                         stretched=self._stretch(mover, printed, to))
+                if to in options else False
             )
         if not options:
             return False
@@ -3698,7 +3713,8 @@ class Cast:
             self._nearest_first(sorted(options), toward, away_from, mover),
             f"{self.ref}: teleport",
         )
-        return teleport(self.world, mover, dest, share=share)
+        return teleport(self.world, mover, dest, share=share,
+                        stretched=self._stretch(mover, printed, dest))
 
     # -- conditions and modifiers -------------------------------------------
 
@@ -8284,6 +8300,34 @@ class Cast:
         return self.extend_move(
             MOVE_KIND + kind, squares_, on=on, until=until, when=when
         )
+
+    def _stretch(self, mover: int, printed: int, dest: Square) -> int:
+        """How far past its printed distance a move is about to carry.
+
+        `c.extend_every` raises a **budget** and the decider need not spend
+        it, so "did the creature take the extra square" is a question only
+        the verb that offered the squares can answer -- it alone holds the
+        print and the destination at the same moment. The answer rides out
+        on `Moved.stretched_`; see that event's note for why it is a plain
+        attribute and `f2459` for the card that wanted it. #572.
+
+        `grid.distance`, which its own docstring calls "the **only** place
+        the engine measures a distance" -- not `grid.between`, which takes
+        two footprints rather than two squares. So this is **distance and
+        not path cost**, which is the right half of the two: a square two
+        away that cost three to enter through difficult terrain is not "one
+        additional square" by any card's reading.
+
+        Clamped at zero. A move shorter than its print spent none of the
+        extra, and a negative number would read as a debt.
+        """
+        from .components import Position as _Pos
+        from .grid import distance as _apart
+
+        here = self.world.get(mover, _Pos)
+        if here is None:
+            return 0
+        return max(0, _apart(here.square, dest) - printed)
 
     def _extra_every(self, mover: int, kind: str) -> int:
         """The kind-wide half of a move's distance, for `mover`.

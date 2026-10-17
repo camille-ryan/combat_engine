@@ -80,6 +80,7 @@ from combat_engine.engine.events import (
     AttackDeclared,
     DamageApplied,
     DamageRolled,
+    Moved,
     PowerResolved,
 )
 from combat_engine.engine.query import allies, has_combat_advantage
@@ -1091,40 +1092,57 @@ def f2429(c: Cast) -> None:
     move it on."""
 
 
-@power("f2459", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.Moved.stretched_",))
+@power("f2459", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2459(c: Cast) -> None:
     """Every shift is a square longer, at the price of combat advantage.
 
-    **The extension is writable now and is deliberately not written.**
-    `c.extend_every("shift", 1)` is one line, and `c.grants_advantage`
-    exists. What is missing is the word **"if"**: the card reads "you
-    *can* shift 1 additional square. **If you do so**, you grant combat
-    advantage until the start of your next turn." The squares go into the
-    shift's *budget*, and the decider need not spend them -- so whether
-    the clause was taken is not observable, and nothing can say when the
-    cost falls due.
+    **The word that was missing was "if".** The card reads "you *can* shift
+    1 additional square. **If you do so**, you grant combat advantage until
+    the start of your next turn." `c.extend_every` adds to the shift's
+    *budget* and `World.decide` need not spend it, so whether the clause was
+    taken was not observable -- and laying the +1 alone would have made this
+    feat strictly better than the one on the page. That is why it kept
+    `todo=` rather than taking `dropped=`: the missing clause was a **cost**,
+    and a row that plays with its cost missing is not incomplete, it is
+    wrong.
 
-    Laying the +1 alone would make this feat **strictly better than the
-    one on the page**: a free square on every shift, no advantage
-    granted. So it keeps `todo=` and stays refused, rather than taking
-    `dropped=`.
+    `Moved.stretched_` is that observation -- how many squares beyond the
+    printed distance were actually **spent**, as a plain attribute the way
+    `kind_` rides, for the reason `kind_` is one: a field would reach the
+    wire and every replay fixture, and this is not a change in how a fight
+    resolves. #572.
 
-    **That is a distinction the marker vocabulary does not draw**, and it
-    is worth stating. `dropped=` means "plays, one named clause missing",
-    and `ranger_b.f2361` was moved from `todo` to `dropped` on exactly
-    that reading -- correctly, because the clause it lost was a
-    *benefit*. Here the missing clause is a *cost*, and a row that plays
-    with its cost missing is not incomplete, it is wrong. Refusing it is
-    the conservative direction.
+    So the cost is charged on the move and not on the grant, which is what
+    the card says: shift your printed distance and nothing happens; take the
+    extra square and the advantage falls due. `kind_` is checked as well as
+    `stretched_`, because a *walk* lengthened by something else is not this
+    clause -- the card says "whenever you shift".
 
-    The fix is an event rather than a harness that reconstructs it:
-    `c.shift` knows both the printed distance and the extra, so `Moved`
-    can carry how many squares beyond the print were spent -- a plain
-    attribute, the way `kind_` rides, for the same reason `kind_` is one:
-    it must not reach the wire or the replay fixtures. `movement.py`
-    builds the event, so the number has to be threaded down to it, which
-    is why this is its own change and not a line here."""
+    `When.SONT` is "until the start of your next turn", printed.
+
+    `AT_WILL`: the card prints no limit, and an `ENCOUNTER` triggered trait
+    is spent by its first firing -- the correction `lint.py` made to `f807`
+    and to `f2257`.
+    """
+    c.extend_every("shift", 1, until=When.ENCOUNTER)
+
+    def paid(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "kind_", "") != "shift":
+            return
+        if getattr(ev, "stretched_", 0) <= 0:
+            return
+        # **`to="enemies"`, and the default would have been wrong.**
+        # `grants_advantage(on=X)` means *X grants it*, and `to=` names who
+        # gains -- defaulting to `"me"`, the caster. On a row the caster
+        # casts on itself that reads as "I grant combat advantage to
+        # myself", which is nothing. The card says the square is paid for
+        # with advantage to everyone swinging at me.
+        c.grants_advantage(on=c.me, to="enemies", until=When.SONT)
+
+    c.watch(Moved, paid, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f2468", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

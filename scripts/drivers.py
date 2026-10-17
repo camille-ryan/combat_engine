@@ -2475,6 +2475,154 @@ def a_feat_may_widen_what_another_rows_trigger_answers(out: Result) -> None:
              "and `p1450` is what announced it -- the use was spent on the"
              " racial power, not duplicated here")
 
+
+def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
+    """`c.extend_every` raises a **budget**, and `f2459` charges for the spend.
+
+    The card reads "you can shift 1 additional square. **If you do so**, you
+    grant combat advantage until the start of your next turn", and the word
+    that was not writable was *if*. `c.extend_every("shift", 1)` adds to what
+    `reachable_squares` will offer and `World.decide` need not take it, so
+    nothing could tell a holder who shifted its printed distance from one who
+    took the extra square -- and laying the benefit without the cost would
+    have made this feat **strictly better** than the one on the page. That is
+    why it kept `todo=` and not `dropped=`: the missing clause was a cost.
+
+    `Moved.stretched_` is the observation, and it is an **event** rather than
+    a harness that reconstructs the number, because `Cast.shift` is the only
+    place that knows both halves: the printed distance and the square the
+    decider picked. A **plain attribute**, the way `kind_` rides, for the
+    reason `kind_` is one -- a field would reach the wire and all seven
+    replay fixtures, and this is not a change in how a fight resolves. #572.
+
+    **Driven by choosing the destination, which is the only control that
+    separates the two cases.** Same board, same row, same printed 1; one run
+    takes the farthest square offered and one takes the nearest. Nothing else
+    differs, so an assertion that passes in both directions is measuring
+    something other than the clause.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Moved
+    from combat_engine.engine.grid import distance
+    from combat_engine.engine.query import enemies, has_combat_advantage
+
+    ref = "f2459"
+    row = REGISTRY[ref]
+    out.that(not row.unfinished, "f2459 carries no marker", f"{row.unfinished}")
+
+    def shifted(*, far: bool):  # noqa: ANN202
+        world, me, _ = _posed(ref, 1)
+        c = Cast(world=world, me=me, ref=ref)
+        start = world.need(me, Position).square
+        # The board arms the trait, which is the path that matters -- calling
+        # the body as well would lay the +1 twice and hand a one-square shift
+        # a number no card prints.
+        pick = max if far else min
+        world.decider = (lambda actor, kind, options, prompt:
+                         pick(list(options), key=lambda s: distance(start, s)))
+        world.turn = me
+        cursor = len(world.bus.since(0))
+        ok = c.shift(1)
+        mine = [e for e in world.bus.since(cursor)
+                if isinstance(e, Moved) and e.actor == me]
+        foe = next(iter(sorted(enemies(world, me))), 0)
+        return ok, mine, distance(start, world.need(me, Position).square), \
+            has_combat_advantage(world, foe, me)
+
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    out.that(c._extra_every(me, "shift") == 1,
+             "the board's arming lengthens every shift of the holder's by one",
+             f"{c._extra_every(me, 'shift')}")
+
+    # -- the extra square taken ------------------------------------------
+    ok, moved, went, adv = shifted(far=True)
+    out.that(ok and len(moved) == 1, "a printed 1-square shift resolves",
+             f"ok={ok} events={len(moved)}")
+    if not moved:
+        return
+    out.that(went == 2, "and reaches two squares, because the feat paid for"
+             " one of them", f"{went}")
+    # `Moved.stretched_` is a plain attribute, not a field -- see that
+    # event's note for why, and why a `ty` suppression is the honest way to
+    # read one rather than a declaration.
+    spent = moved[0].stretched_
+    out.that(spent == 1,
+             "the event says ONE square beyond the print was spent",
+             f"{spent}")
+    out.that(adv, "so the holder grants combat advantage to its enemies --"
+                  " the cost the card charges for that square")
+
+    # -- the printed distance only, same row, same board -----------------
+    ok2, moved2, went2, adv2 = shifted(far=False)
+    out.that(ok2 and went2 == 1, "taking the nearest square instead shifts one",
+             f"ok={ok2} went={went2}")
+    if not moved2:
+        return
+    spent2 = moved2[0].stretched_
+    out.that(spent2 == 0,
+             "nothing beyond the print was spent", f"{spent2}")
+    out.that(not adv2,
+             "and NO advantage is granted -- the card's \"if you do so\","
+             " which is the half that could not be written before")
+
+    # -- a stretched move that is not a SHIFT ----------------------------
+    #
+    # **This control exists because a plant stayed green without it.**
+    # Removing the row's `kind_` gate broke nothing above, since `Cast.shift`
+    # is today the only caller that threads a non-zero and so every stretched
+    # move on the board is already a shift. The gate is still right -- the
+    # card says "whenever you **shift**", `c.extend_every` keys on a move
+    # kind, and the day `Cast.move` carries the number too a walk lengthened
+    # by something else would otherwise pay this feat's cost. So the case is
+    # posed directly rather than left to a caller that cannot yet produce it.
+    world3, me3, _ = _posed(ref, 1)
+    foe3 = next(iter(sorted(enemies(world3, me3))), 0)
+    here = world3.need(me3, Position).square
+    walked = Moved(actor=me3, from_=here, to=here)
+    walked.kind_ = "walk"  # ty: ignore[unresolved-attribute]
+    walked.stretched_ = 1  # ty: ignore[unresolved-attribute]
+    world3.bus.emit(walked)
+    out.that(not has_combat_advantage(world3, foe3, me3),
+             "a WALK stretched a square past its print pays nothing: the"
+             " card's clause is about shifting")
+
+    # -- the other verb the issue named ----------------------------------
+    #
+    # `c.teleport` reads `_extra_every` too, and no row wants the number
+    # there yet -- so it is asserted here rather than left to the first one
+    # that does. Without this the threading would be a second code path
+    # with no evidence behind it, which is how a verb comes to exist and
+    # not work.
+    def blinked(*, far: bool) -> int:
+        world, me, _ = _posed(ref, 1)
+        c = Cast(world=world, me=me, ref="drivers:teleport")
+        c.extend_every("teleport", 1, until=When.ENCOUNTER)
+        start = world.need(me, Position).square
+        pick = max if far else min
+        world.decider = (lambda actor, kind, options, prompt:
+                         pick(list(options), key=lambda s: distance(start, s)))
+        world.turn = me
+        cursor = len(world.bus.since(0))
+        c.teleport(3)
+        blinks = [e for e in world.bus.since(cursor)
+                  if isinstance(e, Moved) and e.actor == me]
+        if not blinks:
+            return -1
+        return blinks[0].stretched_  # ty: ignore[unresolved-attribute]
+
+    out.that(blinked(far=True) == 1,
+             "a printed 3-square teleport that lands 4 away reports one"
+             " square of the extra spent", f"{blinked(far=True)}")
+    out.that(blinked(far=False) == 0,
+             "and one that lands next door reports none",
+             f"{blinked(far=False)}")
+
 def an_area_can_be_reshaped_and_not_only_stretched(out: Result) -> None:
     """`blast_size` grows an area and can never change its kind.
 
@@ -14127,6 +14275,9 @@ DRIVERS = {
     "a_feat_may_widen_what_another_rows_trigger_answers": (
         a_feat_may_widen_what_another_rows_trigger_answers,
         "f2793b spends p1450 on a roll p1450's own trigger never offers"),
+    "a_lengthened_move_says_how_much_of_the_extra_was_spent": (
+        a_lengthened_move_says_how_much_of_the_extra_was_spent,
+        "f2459 charges for the extra square only when it is taken"),
     "an_area_can_be_reshaped_and_not_only_stretched": (
         an_area_can_be_reshaped_and_not_only_stretched,
         "blast_size grows an area and can never change its kind"),

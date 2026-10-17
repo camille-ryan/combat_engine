@@ -98,6 +98,7 @@ def step(
     kind: str = "walk",
     mode: str = "walk",
     through: bool = False,
+    stretched: int = 0,
 ) -> bool:
     """Move one square. Returns False if the square could not be entered.
 
@@ -182,6 +183,12 @@ def step(
     # How the creature got here, as a plain attribute -- see `Moved`. Set on
     # every emission, so `ev.kind_` is never missing.
     moved.kind_ = kind
+    # And how many squares beyond its printed distance were spent getting
+    # here, the same way and for the reason `Moved`'s note gives: a field
+    # would reach the wire and every replay fixture, and this is not a
+    # change in how a fight resolves. `0` unless a caller lengthened the
+    # move *and* the decider spent what it was given. #572.
+    moved.stretched_ = stretched  # ty: ignore[unresolved-attribute]
     world.bus.emit(moved)
 
     # A mount carries its rider. Set after the mount has arrived, so the
@@ -200,6 +207,13 @@ def step(
             del seat
             carried = Moved(actor=passenger, from_=from_, to=to)
             carried.kind_ = kind
+            # **Zero, and not the mount's number.** `stretched_` is "squares
+            # this creature spent beyond what its own card printed", and a
+            # rider spent nothing -- it was carried. Set rather than left off,
+            # because `Moved`'s note promises the attribute is never missing,
+            # and a `getattr(ev, "stretched_", 0)` reader would be reading the
+            # default where there is a real answer.
+            carried.stretched_ = 0  # ty: ignore[unresolved-attribute]
             world.bus.emit(carried)
 
     # Whatever it stepped into, it now stands on the floor of. A square that
@@ -660,7 +674,8 @@ def settle(world: World, eid: int) -> bool:
 
 
 def shift(
-    world: World, eid: int, to: Square, *, mode: str | None = None, share: bool = False
+    world: World, eid: int, to: Square, *, mode: str | None = None,
+    share: bool = False, stretched: int = 0,
 ) -> bool:
     """A shift is a move that does not provoke. One square unless a power says otherwise.
 
@@ -673,19 +688,23 @@ def shift(
         return False
     if world.bus.emit(MoveStart(actor=eid, kind_="shift")).cancelled:
         return False
-    moved = step(world, eid, to, kind="shift", mode=mode_of(world, eid, mode), through=share)
+    moved = step(world, eid, to, kind="shift",
+                 mode=mode_of(world, eid, mode), through=share,
+                 stretched=stretched)
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_="shift"))
     return moved
 
 
-def teleport(world: World, eid: int, to: Square, *, share: bool = False) -> bool:
+def teleport(world: World, eid: int, to: Square, *, share: bool = False,
+             stretched: int = 0) -> bool:
     # Reads the answer, like `walk` and `shift`. A row that stops movement
     # can then decide for itself whether a teleport counts, by looking at
     # `ev.kind_` -- which is a choice it cannot make if this is ignored.
     if world.bus.emit(MoveStart(actor=eid, kind_="teleport")).cancelled:
         return False
-    moved = step(world, eid, to, kind="teleport", mode="walk", through=share)
+    moved = step(world, eid, to, kind="teleport", mode="walk", through=share,
+                 stretched=stretched)
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_="teleport"))
     return moved

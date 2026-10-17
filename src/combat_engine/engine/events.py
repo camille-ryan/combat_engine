@@ -162,6 +162,20 @@ class Moved(Event):
     creature emits four of each for one step -- so neither answers "what did
     this creature just do". This does, and it is what an animation plays.
 
+    **`stretched_` rides the same way**, and is how many squares beyond the
+    printed distance were actually *spent*. `c.extend_every("shift", 1)` adds
+    to a move's **budget** and `World.decide` need not spend it, so "did the
+    creature take the extra square" was not observable -- and `f2459` prints
+    "you can shift 1 additional square. **If you do so**, you grant combat
+    advantage", where the cost falls due only if the square was taken. Laying
+    the benefit without the cost would have made that feat strictly better
+    than the one on the page, which is why it stayed refused rather than
+    taking `dropped=`. #572.
+
+    Spent, not granted: the difference between the square the creature ended
+    on and the distance its card printed. `0` on every ordinary move, which
+    is every move nothing has lengthened.
+
     **`kind_` rides as a plain attribute**, set on every emission: walk,
     shift, teleport, push, pull, slide. `MoveEnd` carries the word and no
     squares, `Moved` carried the squares and no word, so "one ally adjacent
@@ -176,6 +190,21 @@ class Moved(Event):
     actor: int
     from_: Square
     to: Square
+
+    # **Neither is declarable here, and both forms were tried.** A plain
+    # annotation in a dataclass *is* a field, which is the one thing the
+    # docstring above rules out -- `Event.wire` is `asdict`, so it would
+    # reach the page and all seven replay fixtures. A `TYPE_CHECKING` block
+    # does not help: `ty` evaluates the class body statically and then
+    # demands both as constructor arguments. A `ClassVar` is worse again --
+    # it keeps them off `fields`, and then refuses the assignment that sets
+    # them.
+    #
+    # So the reads and writes carry a `ty` suppression for an unresolved
+    # attribute, the same one `drivers.py` uses in five places. Not a
+    # loosening: `types.py --bless` *refuses* to raise a baseline entry on
+    # purpose, so the growth was never blessable, and the alternative was a
+    # field this docstring exists to argue against.
 
 
 @dataclass
