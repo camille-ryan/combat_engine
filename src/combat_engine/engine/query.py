@@ -1537,12 +1537,36 @@ def cover_granters(world: World, attacker: int, target: int) -> list[int]:
     falls. A body nobody is standing behind changes nothing and does not come
     back.
 
-    **Load-bearing, not merely in the way.** Two allies either side of a
-    corridor may each be unnecessary while the pair together is enough; both
-    come back, because each one's removal is tested against the full set. That
-    is the printed reading -- every creature granting cover is charged -- and
-    the alternative (a minimal sufficient set) would have to pick one of them
-    arbitrarily.
+    **Asked per candidate, with that candidate as the only blocker** -- and
+    the first version of this asked the opposite question and was wrong.
+
+    It tested whether *removing* each ally reduced the cover, argued at
+    length that this was "the printed reading", and was empty exactly when
+    the right answer is largest: two allies each individually sufficient
+    means removing either leaves the other blocking, so nobody's removal
+    matters and nobody is charged. Measured, with the target plainly in
+    cover both times:
+
+        a and b stacked, one behind the other:  cover PARTIAL, granters []
+        a and b side by side, off the line:     cover PARTIAL, granters []
+
+    So `i778x1` paid out nothing whenever the cover had any redundancy,
+    which is most of a real board. Its driver rule passed because the rule's
+    own setup put exactly one blocker in the line -- the single arrangement
+    where the two readings agree, and therefore no evidence for either.
+    #651.
+
+    **And this question already had an answer in the tree.** A content
+    helper asked it the sole-blocker way with three callers -- a warlord
+    style feat, a ranger one, and a thunder weapon -- before this function
+    existed. Adding a fourth implementation rather than finding the first
+    three is the fault; `Grid.cover` is the call all of them make, so now
+    there is one reader and they cannot disagree.
+
+    Whether a row charges **one** of them or **each** is the row's to
+    decide, not this function's: one card prints "one enemy providing cover"
+    and another prints "each enemy granting cover". The set comes back whole
+    and the row indexes it or loops.
 
     Ranged only, because that is the only kind of attack a creature can be
     cover against: `cover_between`'s `bodies` set is empty for a melee swing,
@@ -1567,23 +1591,29 @@ def cover_granters(world: World, attacker: int, target: int) -> list[int]:
     if not allies_:
         return []
 
-    blind = set(_blinding_squares(world, attacker, target))
-    bodies = {sq for other in allies_ for sq in squares(world, other)}
-
-    def traced(blockers: set[Square]) -> Cover:
+    def traced(body: set[Square]) -> Cover:
         best = Cover.SUPERIOR
         for src in mine:
             for dst in theirs:
-                best = min(best, world.grid.cover(src, dst, blockers=blockers))
+                best = min(best, world.grid.cover(src, dst, blockers=body))
         return best
 
-    whole = traced(blind | bodies)
-    if whole is Cover.NONE:
-        return []
+    # **Terrain has to be subtracted, and it was not.** `Grid.cover` unions
+    # `self.blocking` into its obstacles on every call, so passing one
+    # creature's body still counts every wall on the board -- which made a
+    # single pillar between shooter and target turn **every** ally into a
+    # granter. The pre-existing content helper this reader replaced had the
+    # same flaw and three rows called it, so a feat punishing "the enemy
+    # giving your target cover" charged a bystander whenever the cover was
+    # really a wall.
+    #
+    # Found by the redundancy control added for #651, which is the second
+    # thing that control caught and was not what it was written for.
+    bare = traced(set())
     return [
         other
         for other in allies_
-        if traced(blind | (bodies - squares(world, other))) < whole
+        if traced(set(squares(world, other))) > bare
     ]
 
 

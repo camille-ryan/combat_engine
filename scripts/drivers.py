@@ -2174,6 +2174,13 @@ def cover_granters(out: Result) -> None:
              "and the helper names exactly that body"
              f" -- {granters(world, foe, me)}")
 
+    # **The arrangement that distinguishes the two readings, and the one
+    # this rule did not have.** The shipped version asked whether *removing*
+    # each ally reduced the cover; the rival -- which three content rows
+    # already used -- asks whether each ally **alone** would give cover.
+    # They agree only when exactly one body is in the line, which is what
+    # `clear()` above arranges, so 13 assertions and 3 plants passed while
+    # the reader returned nobody on any board with redundant cover. #651.
     # Stand it aside: the control, and the whole difference from "every ally".
     world.get(mates[0], Position).square = (here[0] + 5, here[1] + 5)
     out.that(granters(world, foe, me) == [],
@@ -2245,6 +2252,32 @@ def cover_granters(out: Result) -> None:
         before = world.need(blocker, Health).hp
         world.bus.emit(Miss(attacker=me, target=shot_at, power=ref))
         return before - world.need(blocker, Health).hp
+
+    # **The arrangement that distinguishes the two readings.** Posed here,
+    # on the enemy side, because that is the direction `i778x1` looks and
+    # because `_board` deals this caster only one ally -- the first version
+    # of this control sat on the ally side and silently did not run, which
+    # reads exactly like a control that passed.
+    #
+    # The shipped reader asked whether *removing* each creature reduced the
+    # cover; the rival -- which three content rows already used -- asks
+    # whether each **alone** would give cover. They agree only when exactly
+    # one body is in the line, which is every other arrangement in this
+    # rule, so 13 assertions and 3 plants passed while the reader returned
+    # nobody on any board with redundant cover. #651.
+    if len(foes) >= 3:
+        world.get(foes[2], Position).square = (here[0] - 3, here[1])
+        both = granters(world, me, shot_at)
+        out.that(cover_between(world, me, shot_at, ranged=True) is not Cover.NONE,
+                 "two bodies in the line is still cover")
+        out.that(set(both) == {blocker, foes[2]},
+                 "and BOTH are named -- each would shelter the target by"
+                 " itself, so each is granting it. A by-removal reading"
+                 f" returns nobody here, which was the bug ({both})")
+        world.get(foes[2], Position).square = (here[0] + 7, here[1] - 6)
+    else:
+        out.skip("the board deals fewer than three enemies, so the"
+                 " redundancy arrangement could not be posed")
 
     untouched = world.need(shot_at, Health).hp
     took = miss_with(ranged_daily)

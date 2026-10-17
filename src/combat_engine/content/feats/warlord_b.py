@@ -74,7 +74,6 @@ from combat_engine.engine.query import (
     squares,
     team,
 )
-from combat_engine.engine.types import Cover
 
 from .styles import among
 
@@ -172,29 +171,24 @@ def _versatile(c: Cast, *groups: str) -> bool:
 
 
 def _covering(c: Cast, foe: int) -> list[int]:
-    """Which other enemies are giving `foe` cover from me, right now.
+    """Which other creatures on `foe`'s side are giving it cover from me.
 
-    Cover is stored nowhere -- `query.cover_between` traces it corner to
-    corner at the moment of the attack -- so "which creature is giving
-    it" is asked the same way, by tracing the line again with one
-    candidate as the only blocker. `Grid.cover` is the call
-    `cover_between` itself makes, so the two cannot disagree.
+    **Now a thin call on `query.cover_granters`**, which is the same walk
+    this used to do inline. It was the original and the shared reader was
+    written later and differently -- by *removal* rather than by sole
+    blocker -- which made it empty whenever two bodies each sufficed, so one
+    item row paid out nothing on a normal board. The semantics here won and
+    moved into `query`; this stays as the name three rows already call.
+    #651.
+
+    One difference, and it is the shared reader's to keep: it asks about the
+    **target's own side** the way `cover_between` does, where this asked
+    about *my* enemies. Identical whenever the target is an enemy, which is
+    all three callers, and right rather than lucky when it is not.
     """
-    mine, theirs = squares(c.world, c.me), squares(c.world, foe)
-    out: list[int] = []
-    for other in enemies(c.world, c.me):
-        if other == foe:
-            continue
-        body = set(squares(c.world, other))
-        if not body:
-            continue
-        best = Cover.SUPERIOR
-        for src in mine:
-            for dst in theirs:
-                best = min(best, c.world.grid.cover(src, dst, blockers=body))
-        if best is not Cover.NONE:
-            out.append(other)
-    return out
+    from combat_engine.engine.query import cover_granters
+
+    return cover_granters(c.world, c.me, foe)
 
 
 def _next_swing(c: Cast, then: Any, *, foe: int | None = None) -> None:
