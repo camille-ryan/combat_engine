@@ -23,6 +23,7 @@ from .components import (
     Mods,
     Movement,
     Position,
+    Powers,
     Shapes,
     Side,
     Stats,
@@ -1652,6 +1653,41 @@ def lingers(world: World, ref: str, *, by: int | None = None) -> bool:
         and (by is None or eff.source == by)
         for eff in world.effects.live.values()
     )
+
+def granted_amount(
+    world: World,
+    eid: int,
+    ref: str,
+    default: int,
+    ctx: dict[str, Any] | None = None,
+) -> int:
+    """How big a number a named mechanic hands out, for this creature.
+
+    **`Cast.amount_for`'s body, moved down here so it has one reader.**
+    `resolve._mark_penalty` needs the same question and has no `Cast` -- it
+    holds a `world` and the creatures -- and the obvious shape was to repeat
+    the four lines there. That is a second reader of one store, which drifts:
+    `Weapon.hands` answered differently by provenance for exactly that reason
+    (#562), and a whole session went into reconciling it. `query.py` is below
+    both and already has 325 importers.
+
+    **The largest wins**, where `dice_for` takes the first that matches. Two
+    rows raising one grant are not additive and the better applies -- and
+    taking the first would make the answer depend on the order the effects
+    were laid, which is not a rule anybody printed.
+
+    **The default is a fallback, not a floor.** `drivers.aid_grants` caught
+    that written as `max(default, ...)`: `f2444` sets its granted bonus to 0
+    because its reroll *replaces* the +2, and a floor quietly kept the 2.
+    """
+    known = world.get(eid, Powers)
+    if known is None:
+        return default
+    seen = ctx or {}
+    laid = [a for a, gate in known.amounts.get(ref, ())
+            if gate is None or gate(seen)]
+    return max(laid) if laid else default
+
 
 def leash_of(world: World, eid: int) -> tuple[tuple[int, int], int] | None:
     """Where this creature is tethered and how far it may stray, or None.

@@ -791,6 +791,14 @@ def _immunity_ignored(
     )
 
 
+#: The mechanic a feat raises to say "a -3 penalty instead of the normal -2".
+#: A symbol rather than a bare string because `c.change_amount` and
+#: `c.amount_for` have to spell it the same way, and `c.bonus(once=)`'s
+#: lesson is that nothing checks a key nobody wrote down -- five were
+#: silently mis-spent before #544.
+MARK_PENALTY = "mark"
+
+
 def _mark_penalty(world: World, attacker: int, among: tuple[int, ...]) -> int:
     """A mark costs you 2 when you attack anyone but the creature that marked you.
 
@@ -803,9 +811,26 @@ def _mark_penalty(world: World, attacker: int, among: tuple[int, ...]) -> int:
     the code underneath it did not implement it.
     """
     markers = world.relations.sources(Relation.MARKED_BY, attacker)
-    if markers and not set(markers) & set(among):
-        return -2
-    return 0
+    if not markers or set(markers) & set(among):
+        return 0
+    # **The number belongs to the marker, and four feats raise it.** "Enemies
+    # marked by you take a -3 penalty instead of the normal -2" is a fact
+    # about whoever did the marking, so it is read off each of them -- which
+    # is what `query.granted_amount`'s sibling `amount_for(who=)` exists for,
+    # "the number belongs to the creature being helped rather than the one
+    # helping". The worst applies, because a creature marked by two markers
+    # suffers the worse mark and not their sum.
+    from .query import granted_amount
+
+    # **One key, and an established spelling.** The creature suffering the
+    # mark is the one swinging, which is `attacker` everywhere else in this
+    # file -- so a feat narrowing by it ("an **adjacent** enemy that is
+    # marked by you") reads the word it already knows. No new ctx
+    # vocabulary: #639 is open on `kind` meaning four things, and this is
+    # not the moment to add a fifth name for a creature.
+    seen = {"attacker": attacker}
+    return -max(granted_amount(world, marker, MARK_PENALTY, 2, seen)
+                for marker in markers)
 
 
 # -- damage -----------------------------------------------------------------

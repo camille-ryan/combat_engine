@@ -96,6 +96,7 @@ from combat_engine.engine.query import (
     has_combat_advantage,
     team,
 )
+from combat_engine.engine.resolve import MARK_PENALTY as MARK_KEY
 
 DIVINE = [Keyword.DIVINE]
 DIVINE_HEAL = [Keyword.DIVINE, Keyword.HEALING]
@@ -1418,12 +1419,26 @@ def f1397(c: Cast) -> None:
 
 @power("f1398", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.amplify_bonus()", "c.mark_penalty()"))
+       dropped=("c.amplify_bonus()",))
 def f1398(c: Cast) -> None:
-    """Two clauses and neither has a handle. Raising every defence bonus
-    your own powers hand out means editing a modifier somebody else laid,
-    and the mark's -2 is a constant in `conditions.Rules` rather than a
-    modifier a row can reach."""
+    """The mark half is written; raising every defence bonus is not.
+
+    **`todo` to `dropped`, because one of the two clauses plays now.** The
+    old note said the mark's -2 "is a constant in `conditions.Rules` rather
+    than a modifier a row can reach" -- it was in `resolve._mark_penalty`,
+    and it is read off the marker now through `query.granted_amount`, so
+    "a -3 penalty ... instead of the normal -2" is the number said once.
+
+    No gate: this card asks nothing of the holder, unlike `f2411`'s grip
+    and `f2456`'s racial hold.
+
+    Still missing, and it is the other printed sentence: *"whenever one of
+    your powers grants a bonus to a defence, increase that bonus by 1"* --
+    editing a modifier **somebody else laid**, which `c.change_amount`
+    cannot do because it names a mechanic rather than an effect. The ritual
+    line is out of the fight.
+    """
+    c.change_amount(MARK_KEY, 3, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1402", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

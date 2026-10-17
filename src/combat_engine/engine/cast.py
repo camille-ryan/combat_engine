@@ -7810,22 +7810,18 @@ class Cast:
         number belongs to the creature being *helped* rather than the one
         helping: "Heal checks made to aid you gain a +2 item bonus" is a
         fact about you that the aider has to find.
+        
+        **The body moved to `query.granted_amount`**, which sits below both
+        this and `resolve.py`. `resolve._mark_penalty` asks the same
+        question and holds no `Cast`, and repeating the four lines there is
+        a second reader of one store -- the shape `Weapon.hands` drifted
+        into (#562). One reader, two callers.
         """
-        from .components import Powers
+        from .query import granted_amount
 
-        known = self.world.get(self.me if who is None else who, Powers)
-        if known is None:
-            return default
-        seen = ctx or {}
-        # **The default is a fallback, not a floor.** Written as
-        # `max(default, ...)` first, which `drivers.aid_grants` caught: f2444
-        # sets the granted bonus to 0 because its reroll *replaces* the +2,
-        # and a floor quietly kept the 2 -- so that feat would have paid out
-        # twice and nothing would have said so. The entries compete with each
-        # other; the default only answers when there are none.
-        laid = [a for a, gate in known.amounts.get(ref, ())
-                if gate is None or gate(seen)]
-        return max(laid) if laid else default
+        return granted_amount(
+            self.world, self.me if who is None else who, ref, default, ctx,
+        )
 
     def pre_empt(
         self,

@@ -11876,6 +11876,102 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def a_marks_penalty_is_the_markers_to_set(out: Result) -> None:
+    """"A -3 penalty instead of the normal -2" -- four feats, one number.
+
+    `resolve._mark_penalty` returned a hard-coded `-2`, so three of the four
+    rows printing this were written as a **separate +1 laid beside it** and
+    one was refused outright. Two things that shape could not say, both from
+    `f2411`'s own note:
+
+    * **"instead".** The engine *waives* the penalty when the marker is
+      caught in the same attack -- the mark is for leaving your marker out
+      of it -- and a second penalty on the victim knows nothing about that,
+      so a burst that included the marker still charged the extra 1 on its
+      other targets;
+    * a second marker's mark would have added a second 1.
+
+    The number is read off **each marker** now, through
+    `query.granted_amount`, whose `Cast.amount_for` sibling exists for
+    exactly this shape: *"the number belongs to the creature being helped
+    rather than the one helping"*.
+
+    **The waiver is the control and it is the half most easily broken.**
+    `_mark_penalty`'s docstring defends it at length -- "judging this per
+    announcement charged the penalty on every other target's roll even when
+    the marker was caught in the same blast ... the docstring said the right
+    rule for a long time and the code underneath it did not implement it" --
+    so a -3 feat that broke it would be a regression in a rule somebody
+    already had to fix once.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When as _When
+    from combat_engine.engine import resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+
+    for ref in ("f1398", "f2411", "f2456"):
+        stale = [w for w in REGISTRY[ref].unfinished if "mark" in w]
+        out.that(not stale,
+                 f"{ref} no longer waits on a mark symbol", f"{stale}")
+    out.that(REGISTRY["f2440"].unfinished == ("c.change_amount(compute=)",),
+             "and f2440 waits only on a figure decided at read time",
+             f"{REGISTRY['f2440'].unfinished}")
+
+    # **Posed on an unrelated row, because `audit.board` arms the row it is
+    # asked about.** The first draft used an `f1398` board for the
+    # "unaugmented" baseline and read **-3** -- the feat was already armed
+    # before the body ran, so the baseline was the augmented case and the
+    # comparison measured nothing. A plant would not have caught that; the
+    # assertion failing on its first run did.
+    def posed_without_the_feat():  # noqa: ANN202
+        world, me, _ = _posed("f2459", 1)
+        foes = sorted(enemies(world, me))
+        return world, me, foes
+
+    world, me, foes = posed_without_the_feat()
+    out.that(len(foes) >= 2, "two enemies on the board", f"{len(foes)}")
+    if len(foes) < 2:
+        return
+    foe, other = foes[0], foes[1]
+    c = Cast(world=world, me=me, ref="f1398")
+
+    # The marked creature swinging at somebody who is not the marker.
+    c.mark(on=foe)
+    plain = resolve._mark_penalty(world, foe, (other,))
+    out.that(plain == -2,
+             "an unaugmented mark costs the printed 2", f"{plain}")
+
+    REGISTRY["f1398"].body(c)
+    raised = resolve._mark_penalty(world, foe, (other,))
+    out.that(raised == -3,
+             "and 3 once the marker holds f1398 -- said as the number, not"
+             f" as a second penalty beside it ({raised})")
+
+    # -- the waiver, which is the rule this must not break ---------------
+    caught = resolve._mark_penalty(world, foe, (me, other))
+    out.that(caught == 0,
+             "and NOTHING when the attack catches the marker in it: the"
+             " penalty is for leaving your marker out, and a burst that"
+             f" includes them is not that ({caught})")
+
+    # -- and it is the marker's number, not the victim's ------------------
+    world2, me2, foes2 = posed_without_the_feat()
+    c2 = Cast(world=world2, me=me2, ref="f1398")
+    victim, bystander = foes2[0], foes2[1]
+    c2.mark(on=victim)
+    # The feat laid on the *victim* rather than on the marker must not raise
+    # the penalty the victim suffers -- the fact is about who did the
+    # marking, and `granted_amount` reads the marker's own store.
+    Cast(world=world2, me=victim, ref="f1398").change_amount(
+        resolve.MARK_PENALTY, 3, on=victim, until=_When.ENCOUNTER)
+    out.that(resolve._mark_penalty(world2, victim, (bystander,)) == -2,
+             "a hold on the creature being marked changes nothing, because"
+             " the number is read off the marker")
+
 def a_reroll_floor_can_be_narrowed_by_the_victim(out: Result) -> None:
     """`c.reroll_ones(when=)`, and why the parameter alone would have been
     worse than nothing.
@@ -15109,6 +15205,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_marks_penalty_is_the_markers_to_set": (
+        a_marks_penalty_is_the_markers_to_set,
+        "a -3 mark said as the number, with the burst waiver intact"),
     "a_reroll_floor_can_be_narrowed_by_the_victim": (
         a_reroll_floor_can_be_narrowed_by_the_victim,
         "c.reroll_ones(when=) plus the context that makes it narrow"),

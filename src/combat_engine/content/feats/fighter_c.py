@@ -61,6 +61,7 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import Moved, PowerUsed
 from combat_engine.engine.grid import distance, neighbours
 from combat_engine.engine.query import enemies, has_combat_advantage
+from combat_engine.engine.resolve import MARK_PENALTY as MARK_KEY
 
 from .styles import among, longer_shift_on_a_martial_hit
 
@@ -73,8 +74,14 @@ from .styles import among, longer_shift_on_a_martial_hit
 #: A racial power the page names in prose rather than by ref, and the
 #: paying half -- `c.expended` reads what has gone and nothing spends.
 RACIAL = ("c.racial_row()", "c.expend_row()")
-#: `resolve._mark_penalty` returns a hard-coded -2 and takes no modifier.
-MARK_PENALTY = ("c.mark_penalty()",)
+#: **Retired.** `resolve._mark_penalty` read a hard-coded -2 and took no
+#: modifier; it asks each marker what its mark is worth now, through
+#: `query.granted_amount`, so `f2411` and `f2456` say 3 and `f1398`'s mark
+#: half is written. Kept as a comment rather than deleted because three
+#: rows' docstrings argue against the shape it stood for.
+#:
+#: The key those rows name is `resolve.MARK_PENALTY`, imported at the top
+#: of this file as `MARK_KEY` so a content row spells it one way.
 
 _STUNNING = ("dazed", "stunned")
 
@@ -698,38 +705,67 @@ def f2478(c: Cast) -> None:
 
 
 @power("f2411", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=MARK_PENALTY)
+       reach=PERSONAL, target=SELF)
 def f2411(c: Cast) -> None:
-    """-3 for being marked instead of -2, written as the difference.
+    """-3 for being marked instead of -2, said as the number and not as a
+    difference beside it.
 
-    `resolve._mark_penalty` charges the 2 already and returns a constant,
-    so the extra 1 is laid beside it and the totals agree. What stacking
-    cannot say is the word "instead": the engine waives its 2 when the
-    attack catches you in it, and the context carries one target rather
-    than the whole burst, so a burst that includes you still pays this 1
-    on its other targets. Named rather than left in prose.
-    """
-    me = c.me
-    if not (_named(c, "w3610") or _holding(c, "spear")):
-        return
-    for foe in enemies(c.world, me):
-        c.penalty(
-            "attack", 1, on=foe, until=When.ENCOUNTER,
-            when=lambda ctx, f=foe: (
-                ctx.get("target") != me and c.marked(on=f, by=me)
-            ),
-        )
+    **The old shape was an approximation and its note said so.** It laid an
+    extra 1 on every enemy, gated on being marked, because
+    `resolve._mark_penalty` "charges the 2 already and returns a constant".
+    Two things that could not say:
+
+    * **"instead".** The engine *waives* its 2 when the marker is caught in
+      the same attack -- the mark is for leaving your marker out, not for
+      being marked -- and a separate 1 laid on the victim knows nothing
+      about that, so a burst that included the marker still charged the 1
+      on its other targets;
+    * and a second marker's mark would have added a second 1.
+
+    The number is readable now. `_mark_penalty` asks each marker what its
+    mark is worth, through `query.granted_amount`, so this says 3 once and
+    the waiver and the "worse of two markers" rule both keep working.
+
+    One hold on the **marker**, not one per enemy, which is what "enemies
+    marked by you" means: the fact is about who did the marking.
+
+    The grip is read in the gate rather than at arming, because a fighter
+    may draw or sheathe mid-fight and the card says "while you are
+    wielding"."""
+    c.change_amount(
+        MARK_KEY, 3, on=c.me, until=When.ENCOUNTER,
+        when=lambda _ctx: _named(c, "w3610") or _holding(c, "spear"),
+    )
 
 
 @power("f2440", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.bonus(compute=)", "c.mark_penalty()"))
+       todo=("c.change_amount(compute=)",))
 def f2440(c: Cast) -> None:
-    """"-2 or the number of enemies adjacent to you, whichever is worse",
-    and both halves of that are gaps: the number is counted afresh at
-    each swing where a modifier carries one decided when it is laid, and
-    the penalty *replaces* the engine's constant 2 rather than adding
-    to it."""
+    """"-2 or the number of enemies adjacent to you, whichever is worse."
+
+    **Half the old marker is spent and the other half is re-aimed.** It
+    named two gaps:
+
+    * *"the penalty replaces the engine's constant 2 rather than adding to
+      it"* -- not a gap any more. `resolve._mark_penalty` reads the number
+      off the marker through `query.granted_amount`, so a feat says what
+      the mark is worth and "replaces" is what saying it means.
+      `f1398`, `f2411` and `f2456` are written against that;
+    * *"the number is counted afresh at each swing where a modifier carries
+      one decided when it is laid"* -- still true, and still the whole of
+      what is left. `c.change_amount` takes an `int`.
+
+    So the symbol is `c.change_amount(compute=)` rather than
+    `c.bonus(compute=)`: the number this row wants is the *granted amount*
+    the mark hands out, not a modifier on a roll, and those are two
+    different stores with two different readers. `Mod.roll` is the
+    precedent for a figure decided at read time -- "roll a d6 and add it as
+    a power bonus" -- so the shape exists one store over.
+
+    The rest is writable and waiting on only that: `_mark_penalty` passes
+    `{"attacker": <the creature swinging>}` now, which is the key a gate
+    needs for "an **adjacent** enemy that is marked by you"."""
 
 
 @power("f2412", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -925,21 +961,22 @@ def f2448(c: Cast) -> None:
 
 
 @power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=MARK_PENALTY,
+       reach=PERSONAL, target=SELF,
        trigger="you use p2484",
        on=Trigger(PowerUsed, _i_used("p2484"), "you use p2484"))
 def f2456(c: Cast) -> None:
-    """The same stacking reading as `f2411`, and the same shortfall: the
-    extra 1 is laid beside the engine's constant 2 rather than replacing
-    it, so a burst that catches you still charges the other targets."""
+    """-3 while the racial power is up, said as the number. `f2411`'s note
+    has the argument; this is the same change for the same reason.
+
+    The duration is the card's: "while you are under the effect of your
+    `p2484`" is the power's own hold, so this runs to the end of the
+    encounter and the gate reads whether that hold still stands rather
+    than racing it."""
     me = c.me
-    for foe in enemies(c.world, me):
-        c.penalty(
-            "attack", 1, on=foe, until=When.ENCOUNTER,
-            when=lambda ctx, f=foe: (
-                ctx.get("target") != me and c.marked(on=f, by=me)
-            ),
-        )
+    c.change_amount(
+        MARK_KEY, 3, on=me, until=When.ENCOUNTER,
+        when=lambda _ctx: bool(c.suffering("p2484", by=me, include_self=True)),
+    )
 
 
 @power("f2472", level=1, cls="", usage=ENCOUNTER, action=ActionType.MINOR,
