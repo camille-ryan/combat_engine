@@ -1624,7 +1624,7 @@
   "refused_rows": 4,
   "rows": 5,
   "verdict": "mis-marked",
-  "why": "weapon_dice already edits one character's own copy of a weapon and needs no reader, which is the exact mechanism these rows want for `Weapon.properties`; `_high_crit` and `_with_property` already read the field. f1277's three clauses (dice, properties, group, range) are the same write on the same object."
+  "why": "weapon_dice already edits one character's own copy of a weapon and needs no reader, which is the exact mechanism these rows want for `Weapon.properties`; `_high_crit` and `_with_property` already read the field. f1277's three clauses (dice, properties, group, range) are the same write on the same object. The three symbols c.make_thrown(), c.weapon_range() and c.counts_as(property=) are ONE mechanism over 10 distinct rows -- f1841/f1843 carry two of them and f1277 carries two. #643."
  },
  "c.counts_as_kind()": {
   "by": "singleton-sweep",
@@ -3398,7 +3398,7 @@
   "refused_rows": 6,
   "rows": 4,
   "verdict": "mis-marked",
-  "why": "RE-JUDGED. The earlier verdict named c.as_ranged and was wrong: it said these rows want 'the same modifier without once=True', a standing 'reach' bonus. Read the cards -- f1841, f1843 and f3641 all say use this MELEE weapon as a heavy thrown weapon with a normal range of 5 and a long range of 10 (6/12 on f3641). A reach bonus cannot say that. Weapon.thrown is a separate field from Weapon.ranged on purpose -- its own comment: 'Gear.ranged means can be fired, and a dagger cannot be' -- and resolve._long_range reads the weapon's range pair, not its reach. So this is the per-character weapon write, the same mechanism as c.counts_as(property=) wants for Weapon.properties and the one c.weapon_dice already performs. The two symbols are ONE gap of 9 rows, not two of 4 and 5. Note for whoever builds it: Weapon.__post_init__ now derives hands from properties (#562), and dataclasses.replace re-runs it, so the per-character copy keeps the two fields in step for free."
+  "why": "RE-JUDGED. The earlier verdict named c.as_ranged and was wrong: it said these rows want 'the same modifier without once=True', a standing 'reach' bonus. Read the cards -- f1841, f1843 and f3641 all say use this MELEE weapon as a heavy thrown weapon with a normal range of 5 and a long range of 10 (6/12 on f3641). A reach bonus cannot say that. Weapon.thrown is a separate field from Weapon.ranged on purpose -- its own comment: 'Gear.ranged means can be fired, and a dagger cannot be' -- and resolve._long_range reads the weapon's range pair, not its reach. So this is the per-character weapon write, the same mechanism as c.counts_as(property=) wants for Weapon.properties and the one c.weapon_dice already performs. The two symbols are ONE gap of 9 rows, not two of 4 and 5. Note for whoever builds it: Weapon.__post_init__ now derives hands from properties (#562), and dataclasses.replace re-runs it, so the per-character copy keeps the two fields in step for free. The three symbols c.make_thrown(), c.weapon_range() and c.counts_as(property=) are ONE mechanism over 10 distinct rows -- f1841/f1843 carry two of them and f1277 carries two. #643."
  },
  "c.malfunction()": {
   "by": "singleton-sweep",
@@ -5997,11 +5997,11 @@
  },
  "c.weapon_range()": {
   "by": "slice1",
-  "found": "Cast.weapon_dice, Weapon.ranged / Weapon.thrown",
+  "found": "Cast.weapon_dice (the per-character replace(w) copy in Gear.weapons), Weapon.ranged / Weapon.thrown, resolve._long_range",
   "refused_rows": 5,
-  "rows": 6,
+  "rows": 4,
   "verdict": "mis-marked",
-  "why": "i1101x1 says 'Weapon.ranged is a column no body can reach'; c.weapon_dice reaches Weapon.damage from a body and its docstring explains why it needs no reader -- Gear.weapons holds per-character replace(w) copies. The same pattern on Weapon.ranged is a sibling verb, not a new mechanism."
+  "why": "RE-JUDGED with the cards. f1277 'increase its range to 10/20' and f2099 'its range increases to 20/40' are writes to Weapon.ranged on this character's own copy; both ALSO add a property, which is why each sits under two symbols. f1841 and f1843 want Weapon.thrown instead. c.weapon_dice performs exactly this write for Weapon.damage and needs no reader, because Gear.weapons holds replace(w) copies per character. The three symbols c.make_thrown(), c.weapon_range() and c.counts_as(property=) are ONE mechanism over 10 distinct rows -- f1841/f1843 carry two of them and f1277 carries two. #643."
  },
  "c.widen_area()": {
   "by": "slice2",
