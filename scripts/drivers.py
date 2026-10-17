@@ -11871,6 +11871,97 @@ def aid_another_grants(out: Result) -> None:
              f" (+{total('skill:stealth') - was_other})")
 
 
+
+def a_weapons_grip_is_one_fact(out: Result) -> None:
+    """`Weapon.hands` answered by provenance, and a Requirement could not pass.
+
+    `etl._printed_weapons` filled **both** `hands=` and a matching word in
+    `properties`; the 38 hand-written constants in `chargen` took the default
+    and 8 put the fact in `properties` only. One fact, two fields, neither on
+    every object -- so "how many hands does this weapon take" had a different
+    answer depending on where the weapon came from. #562.
+
+    **Both live readers were reading the field their own docstring names**,
+    which is why neither looked wrong:
+
+    * `Gear.proficient_with` only adds `f"{cat}:{hands} {reach}"` to its
+      match set `if arm.hands`. With `hands == ""` the assassin's printed
+      "simple **one-handed** melee" band **could not be satisfied by any of
+      the 19** -- and those are the weapons a low-level board deals;
+    * `content/feats/exploits.f978`, which asks `w.hands == "double"`.
+
+    Derived in `Weapon.__post_init__` rather than taught to each reader,
+    which is what the issue argued for: two more sites to keep in step is how
+    this got hard to see. Both directions, so neither spelling can drift
+    again.
+
+    **`off-hand` is deliberately not a hand count.** It says the thing may be
+    held in the off hand, not how many hands it occupies, and three constants
+    carried it beside nothing else -- reading it as a count would make a
+    dagger answer a band about grip.
+
+    Nine constants are still blank and that is the **printed** state: the
+    weapon table has no row at all for the eight implements or for a bare
+    `unarmed`, and there is no implement table in `game.db`, so the number
+    does not exist to copy. Nothing asks either -- an implement has no
+    `category`, so no band can be formed from it.
+    """
+    from combat_engine import chargen
+    from combat_engine.chargen import _bands, _printed_weapons
+    from combat_engine.engine.components import Gear, Weapon
+
+    hand_written = [(name, w) for name, w in sorted(vars(chargen).items())
+                    if isinstance(w, Weapon)]
+    out.that(len(hand_written) >= 38,
+             "the hand-written weapon constants are all here",
+             f"{len(hand_written)}")
+
+    # -- the two fields agree, whichever way round they were given -------
+    disagree = [name for name, w in hand_written
+                if w.hands and w.hands.lower() not in w.properties]
+    out.that(not disagree,
+             "every constant that records a grip also carries it as a"
+             " property, so `c.wielding` and `w.hands` cannot disagree",
+             f"{disagree}")
+
+    printed = _printed_weapons()
+    loaded = list(printed.values()) if hasattr(printed, "values") else list(printed)
+    out.that(bool(loaded) and not [w for w in loaded if not w.hands],
+             "and no database-loaded weapon is blank, which was always true"
+             f" and is the half that made the asymmetry invisible ({len(loaded)})")
+
+    # -- the band the 19 could not satisfy -------------------------------
+    assassin = Gear(bands=_bands("simple one-handed melee"))
+    out.that(assassin.bands == {"simple:one-handed melee"},
+             "the assassin's printed line is one narrow band",
+             f"{sorted(assassin.bands)}")
+    out.that(assassin.proficient_with(chargen.DAGGER),
+             "and it covers the dagger the class is dealt -- which it did"
+             " not, because the constant left its grip blank")
+    out.that(assassin.proficient_with(chargen.MACE),
+             "and the simple one-handed mace")
+
+    # The negative control, and it is the whole reason the band is narrow:
+    # reading it as the wider "simple melee" would hand the class two-handed
+    # weapons its page withholds.
+    out.that(not assassin.proficient_with(chargen.QUARTERSTAFF),
+             "and still NOT the two-handed quarterstaff, which is simple and"
+             " melee and the narrow band exists to withhold")
+    out.that(not assassin.proficient_with(chargen.LONGSWORD),
+             "nor the military longsword, one-handed though it is")
+
+    # -- a grip given only as a property is still read -------------------
+    guessed = Weapon(ref="w:drivers", category="simple", group="staff",
+                     properties=frozenset({"two-handed"}))
+    out.that(guessed.hands == "two-handed",
+             "a weapon handed only the property records the grip too",
+             f"{guessed.hands!r}")
+    offhand = Weapon(ref="w:drivers2", category="simple", group="light blade",
+                     properties=frozenset({"off-hand"}))
+    out.that(offhand.hands == "",
+             "and `off-hand` alone records none, because it is not a count"
+             f" of hands ({offhand.hands!r})")
+
 def penalties_by_source(out: Result) -> None:
     """Two penalties from two printed sources add; the same one twice does not.
 
@@ -14511,6 +14602,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_weapons_grip_is_one_fact": (
+        a_weapons_grip_is_one_fact,
+        "Weapon.hands answered by provenance, so a printed band could not pass"),
     "penalties_by_source": (penalties_by_source,
                             "two penalties from two sources add; one source"
                             " landing twice does not"),

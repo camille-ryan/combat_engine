@@ -3049,9 +3049,19 @@ def i1261x1(c: Cast) -> None:
     military one and then grants proficiency anyway, so the outcome the card
     describes is the one that lands. And the claw arrives **stowed** rather
     than held, so `actions._wielding` offers it: laying it in hand would
-    silently disarm whatever the wearer was already holding."""
+    silently disarm whatever the wearer was already holding.
+
+    **`hands="one-handed"`, and it was `1`.** `Weapon.hands` holds the
+    printed phrase, not a count -- `Gear.proficient_with` builds a band key
+    off `arm.hands.lower()`, so an `int` is an `AttributeError` on the first
+    proficiency test any character with a band makes. `c.as_weapon`'s own
+    docstring records that its annotation once said `int` "and one caller
+    obliged"; this was that caller, still obliging after the annotation was
+    corrected. #562, which found it by deriving the field in
+    `Weapon.__post_init__` and turning a latent crash into an immediate
+    one."""
     c.as_weapon(
-        damage="1d8", group="light blade", proficiency=3, hands=1,
+        damage="1d8", group="light blade", proficiency=3, hands="one-handed",
         on=c.me, until=When.ENCOUNTER,
     )
 

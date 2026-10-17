@@ -1614,6 +1614,13 @@ class Gear:
         return len(self.melee) > 1 and not self.shield
 
 
+#: The hand counts the printed weapon table uses, which are the only words
+#: `Weapon.hands` may hold. **Not `off-hand`**: that is a property saying the
+#: thing may be held in the off hand, not a count of hands it occupies, and
+#: reading it as one would make a dagger answer a Requirement about grip.
+_HAND_COUNTS = ("two-handed", "one-handed", "double")
+
+
 @dataclass
 class Weapon:
     ref: str
@@ -1684,3 +1691,36 @@ class Weapon:
     def two_handed(self) -> bool:
         """Needs both hands, so nothing else can be held with it."""
         return "two-handed" in self.properties
+
+    def __post_init__(self) -> None:
+        """Keep `hands` and `properties` saying the same thing.
+
+        **One fact lived in two fields and neither was on every object.**
+        `etl`'s `_printed_weapons` fills both -- `hands=row["hands"]` and
+        `properties` carrying the same word -- while the 38 hand-written
+        constants in `chargen` took the default, and 8 of them put the fact
+        in `properties` only. So a row asking how many hands a weapon takes
+        got a different answer depending on where the weapon came from, and
+        both live readers were reading the field their own docstring names:
+
+        * `Gear.suits`, which only adds `f"{cat}:{hands} melee"` to the
+          match set `if arm.hands`. With `hands == ''` a printed Requirement
+          naming a hand count -- the assassin's "simple one-handed melee" --
+          **could not be satisfied by any of the 19**, and those are the
+          weapons a low-level board deals;
+        * `content/feats/exploits.f978`, which asks `w.hands == "double"`.
+
+        Derived here rather than taught to each reader, which is the fix
+        #562 argues for: two more sites to keep in step is how this got hard
+        to see in the first place. Both directions, so neither spelling can
+        drift from the other again -- and `off-hand` is deliberately not in
+        the vocabulary. It is a *property* ("may be held in the off hand"),
+        not a hand count, and 3 constants carry it beside nothing else.
+        """
+        if not self.hands:
+            for word in _HAND_COUNTS:
+                if word in self.properties:
+                    self.hands = word
+                    break
+        elif self.hands.lower() not in self.properties:
+            self.properties = self.properties | {self.hands.lower()}

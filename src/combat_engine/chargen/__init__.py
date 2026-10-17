@@ -170,16 +170,17 @@ class ClassLine:
 # is no database at all. The cost is that `query.holding("<weapon>")` cannot
 # match by name in that state, which is a luxury when the database is missing.
 LONGSWORD = Weapon(ref="w3610", category="military", damage="1d8", proficiency=3,
-                   group="heavy blade")
+                   group="heavy blade", hands="one-handed")
 MACE = Weapon(ref="w3596",
-              category="simple", damage="1d8", proficiency=2, group="mace")
+              category="simple", damage="1d8", proficiency=2, group="mace",
+              hands="one-handed")
 DAGGER = Weapon(ref="w3594",
                 category="simple", damage="1d4", proficiency=3, group="light blade",
-                thrown=(5, 10),
+                thrown=(5, 10), hands="one-handed",
                 properties=frozenset({"light blade", "off-hand"}))
 SHORTSWORD = Weapon(ref="w3611",
                     category="military", damage="1d6", proficiency=3,
-                    group="light blade",
+                    group="light blade", hands="one-handed",
                     properties=frozenset({"light blade", "off-hand"}))
 LONGBOW = Weapon(ref="w3631",
                  category="military", damage="1d10", proficiency=2, group="bow",
@@ -187,6 +188,24 @@ LONGBOW = Weapon(ref="w3631",
 CROSSBOW = Weapon(ref="w3629", category="simple", damage="1d8", proficiency=2,
                   group="crossbow", ranged=(15, 30),
                   properties=frozenset({"two-handed"}))
+#: **No `hands=` on an implement, and that is the printed state rather than
+#: an omission.** `Weapon.hands` must hold a word the printed weapon table
+#: uses, and that table has **no row at all** for any of the eight
+#: implements below, nor for the bare fist `w:unarmed` -- only for `w3678`,
+#: which is a stat-blocked weapon and does record its grip. There is no
+#: `implement` table in `game.db` either, so the number does not exist to
+#: copy, and inventing one would be a fact this project did not get from
+#: the page.
+#:
+#: The `w:` refs here are this project's own, for the things the compendium
+#: prices as gear rather than tabulating as weapons. That is why the slugs
+#: beside them are not lookups into anything.
+#:
+#: Nothing asks, either: the only reader that wants a hand count is
+#: `Gear.suits`, matching a *weapon* proficiency band like the assassin's
+#: "simple one-handed melee", and an implement carries no `category` to form
+#: such a band from. #562, where the other 10 blanks were real and are now
+#: filled.
 ROD = Weapon(ref="w:rod", damage="1d4", proficiency=0, group="implement")
 #: The two implements nobody was carrying. The class pages print one for
 #: the wizard (orbs, staffs, wands, tomes) and one for the cleric and the
@@ -333,7 +352,7 @@ LONGSPEAR = Weapon(ref="w3617", category="military", damage="1d10", proficiency=
 #: under two spellings. Dealt only on the proficiency line that names the monk
 #: strike, which is how the duplicate went unnoticed. #282.
 MONK_STRIKE = Weapon(ref="w3678", category="simple", damage="1d8",
-                     proficiency=3, group="unarmed",
+                     proficiency=3, group="unarmed", hands="one-handed",
                      properties=frozenset({"off-hand"}))
 #: **A bare fist**, which the tree had none of: every row in the `unarmed` group is
 #: a *better* fist than a bare one, so "the damage die of your unarmed attack
