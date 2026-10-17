@@ -1667,10 +1667,12 @@
   "why": "query._carried_cover reads mods.total('cover', {}) with an empty ctx, so a when= can never see the attacker or the power"
  },
  "c.cover_from()": {
-  "found": "query.cover_between, Grid.cover, feats.warlord_b._covering",
-  "rows": 10,
+  "by": "slice3",
+  "found": "c.conceal (the self-side precedent), c.cover_in (the zone-side writer), query.cover_between, feats.warlord_b._covering",
+  "refused_rows": 0,
+  "rows": 5,
   "verdict": "mis-marked",
-  "why": "f1296 says 'nothing asks what cover a creature has'. query.cover_between traces it corner to corner at the moment of the attack, and _covering already asks which creature is giving it. What is missing is a Cast door, not a mechanism."
+  "why": "RE-JUDGED, and it is THREE gaps rather than the one this entry named. The old verdict said 'what is missing is a Cast door, not a mechanism' over query.cover_between -- true of exactly one of the five rows. Read the cards: (1) GRANT cover to yourself, gated on a circumstance -- f3527 'when in a square of difficult terrain, you gain partial cover against ranged attacks', f3701 'you gain partial cover from ranged and area attacks', p16434 'you gain partial cover while adjacent to a square of blocking terrain'. That is a WRITER and cover_between is a reader. c.conceal is the exact precedent -- the self-side sibling of c.conceal_in, as a self-side c.cover would be of c.cover_in. (2) READ whether I have cover -- f1296's 'if you move into an obscured space or gain cover before making a ranged attack'. This is the one the old verdict fits. (3) ATTRIBUTE cover to the creatures providing it -- i778x1's 'each enemy granting your target cover takes damage'. warlord_b._covering reportedly already asks this, so it may be writable alone. A marker names one gap, so these five want three symbols."
  },
  "c.crawl()": {
   "by": "slice3",
