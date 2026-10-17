@@ -1810,6 +1810,15 @@ def area_of(
     # directly.
     if stretch and r.kind not in ("melee", "ranged"):
         r = replace(r, size=r.size + stretch)
+    # **After the stretch, and it has the last word.** "Its area changed to
+    # 1 square" is absolute, so a `blast_size` bonus standing at the same
+    # moment is overridden rather than added to -- which is what the card
+    # says and the opposite of what applying this first would do. No printed
+    # pair of these is known; the order is stated so the answer is not an
+    # accident of line order. #614.
+    swap = _reshaped(world, actor, {"power": p.ref, "kind": r.kind})
+    if swap is not None:
+        r = swap(r)
     if r.kind == "close_burst":
         out = spread(mine, r.size)
     elif r.kind == "close_blast":
@@ -1919,6 +1928,39 @@ def _reach_of(
         hurled = getattr(gear, "thrown", None) if gear else None
         flies = getattr(hurled, "thrown", None) if hurled else None
     return (flies[1] if flies else r.size) + stretch
+
+
+def _reshaped(
+    world: World, actor: int, ctx: dict[str, Any]
+) -> Callable[[Range], Range] | None:
+    """A standing replacement for this row's **shape**, if one is in force.
+
+    `_stretched` beside this is the same arrangement one word smaller: it
+    returns an `int` added to `r.size`, so it can grow a burst and can never
+    make it a blast. Four of the six cards under #614 do exactly that, and
+    the gap was never the reading -- it was that `Mod.value` is an integer.
+
+    First match wins and the rest are ignored, deliberately. Two cards both
+    reshaping one use is not a printed case, and *composing* them -- a blast
+    to a burst and then that burst to a square -- would invent a rule no page
+    states. The effects are walked in the order they were laid, so "first"
+    means the earliest still standing.
+
+    **A read, with no side effect.** `area_of` is a query: the renderer calls
+    it to highlight squares and `_aimings` calls it once per candidate
+    origin, so spending a one-shot here would burn it on a preview. A card
+    reading "the next power you use" ends its own effect on the `PowerUsed`
+    it was waiting for -- see `i2467p1`, which watches for its own
+    qualifying use.
+    """
+    for eff in world.effects.of(actor):
+        if eff.reshape is None or eff.suspended:
+            continue
+        gate = eff.reshape_when
+        if gate is not None and not gate(ctx):
+            continue
+        return eff.reshape
+    return None
 
 
 def _stretched(

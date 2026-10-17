@@ -195,6 +195,10 @@ CATEGORIES: dict[str, dict] = {
             ("laid on the board", [
                 "area", "aura", "barrier", "conjure", "douse", "hazard",
                 "light", "line", "move_zone", "origin", "resize_aura",
+                # Beside `resize_aura` because it is the same question about
+                # another row's area: that one changes a size, this one
+                # changes the shape. #614.
+                "reshape_area",
                 "floor", "scenery", "set_origin", "terraform", "terrain",
                 "unlit",
                 "wall", "zone",

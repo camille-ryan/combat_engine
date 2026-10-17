@@ -1024,7 +1024,7 @@ def f2983(c: Cast) -> None:
 
 
 @power("f2177", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reshape_area()",))
+       reach=PERSONAL, target=SELF, todo=("dsl.aiming_option()",))
 def f2177(c: Cast) -> None:
     """**`todo=` was wrong and was throwing the working half away.** One of
     the two clauses is sayable: `c.counts_as_keyword` makes one named row

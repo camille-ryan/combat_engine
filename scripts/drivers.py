@@ -2239,6 +2239,107 @@ def scoped_vulnerable(out: Result) -> None:
 
 
 
+
+def an_area_can_be_reshaped_and_not_only_stretched(out: Result) -> None:
+    """`blast_size` grows an area and can never change its kind.
+
+    `c.bonus("blast_size", n)` is read inside `dsl.area_of` by `_stretched`
+    and returns an `int` added to `r.size`, so it can make a burst bigger and
+    can never make it a blast -- or make an area burst one square, which is
+    `i2467p1`'s whole printed effect. That one word is #614's gap, and
+    `c.reshape_area` is the same arrangement one layer up: a carrier on
+    `Effect` holding a **callable on the printed range**, because the card
+    says "1 square (within the same range)" and the `within` belongs to the
+    power rather than to the wand.
+
+    Driven through `REGISTRY["i2467p1"].body`, and the two halves that a
+    modifier could not have are asserted apart:
+
+    * `area_of` answers differently for a row the reshape names and the same
+      for one it does not -- the narrowing is real, not incidental;
+    * the reshape survives being **measured** and ends on the **use**.
+      `area_of` is a query the renderer and `_aimings` call repeatedly, so a
+      one-shot ending on measurement would be gone before the power was
+      thrown. That is the bug this rule exists to hold shut.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        CloseBurst,
+        area_of,
+    )
+    from combat_engine.engine.events import PowerUsed
+
+    ref = "i2467p1"
+    row = REGISTRY[ref]
+    out.that(not row.unfinished, "i2467p1 carries no marker",
+             f"{row.unfinished}")
+
+    world, me, _ = _posed(ref, 1)
+    # **A real area-burst row, not a synthetic one.** The first draft
+    # reshaped a copy of `p289` with its reach replaced and then emitted
+    # `PowerUsed(power="p289")` -- and the row's own handler reads the
+    # *registry's* `p289`, which is not an area burst, so it correctly
+    # refused to spend the wand and the rule failed on its own probe.
+    # `p4201` is an `area burst 1 within 10` as printed, so the measurement
+    # and the use are about the same row.
+    burst = REGISTRY["p4201"]
+    out.that(burst.reach.kind == "area_burst" and burst.reach.size == 1,
+             "p4201 is a printed area burst 1, which is what the card narrows to")
+    close = replace(burst, reach=CloseBurst(1))
+
+    # The printed areas, before anything is laid.
+    out.that(len(area_of(world, me, burst)) == 9,
+             "an area burst 1 covers nine squares as printed")
+    out.that(len(area_of(world, me, close)) == 9,
+             "and so does a close burst 1")
+
+    c = Cast(world=world, me=me, ref=ref)
+    REGISTRY[ref].body(c)
+
+    out.that(len(area_of(world, me, burst)) == 1,
+             "with the wand's power spent, the area burst is ONE square --"
+             " which no `blast_size` integer could have said",
+             f"{len(area_of(world, me, burst))}")
+    out.that(len(area_of(world, me, close)) == 9,
+             "and the CLOSE burst is untouched, because the card names area"
+             " bursts and the gate reads `kind`")
+
+    # Measured again, repeatedly. The renderer and `_aimings` both do this.
+    for _ in range(3):
+        area_of(world, me, burst)
+    out.that(len(area_of(world, me, burst)) == 1,
+             "measuring it four times does not spend it -- `area_of` is a"
+             " query, and a one-shot that expired on being read would be"
+             " gone before the power was thrown")
+
+    # And now the use it was bought for.
+    world.bus.emit(PowerUsed(actor=me, power="p4201", targets=[]))
+    out.that(len(area_of(world, me, burst)) == 9,
+             "after the area burst is USED, the wand is spent and the area is"
+             " back to its printed nine")
+
+    # The other half of the card, which was already written: a +2 that spends
+    # itself on one roll. Asserted here only to show the two halves end
+    # together, which is why they are one row.
+    world2, me2, _ = _posed(ref, 1)
+    c2 = Cast(world=world2, me=me2, ref=ref)
+    REGISTRY[ref].body(c2)
+    bonus = [e for e in world2.effects.of(me2) if e.reshape is not None]
+    out.that(len(bonus) == 1, "the body lays exactly one reshape")
+    gate = bonus[0].reshape_when if bonus else None
+    out.that(gate is not None, "and it is narrowed rather than blanket")
+    if gate is None:
+        return
+    out.that(not gate({"power": "p4201", "kind": "melee"}),
+             "a melee swing is not reshaped")
+    out.that(gate({"power": "p4201", "kind": "area_burst"}),
+             "an area burst is")
+
 def each_banked_reroll_names_its_own_roll(out: Result) -> None:
     """Four rows bank a reroll and each narrows it differently.
 
@@ -13785,6 +13886,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "an_area_can_be_reshaped_and_not_only_stretched": (
+        an_area_can_be_reshaped_and_not_only_stretched,
+        "blast_size grows an area and can never change its kind"),
     "each_banked_reroll_names_its_own_roll": (
         each_banked_reroll_names_its_own_roll,
         "four banked rerolls, each narrowed differently by its card"),

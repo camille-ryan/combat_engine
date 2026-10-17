@@ -853,7 +853,7 @@ def i1958p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reshape_area()",),
+    todo=("dsl.reshape_in_flight()",),
 )
 def i1979p1(c: Cast) -> None:
     """A power's reach is header data read before the body runs; nothing

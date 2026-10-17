@@ -61,7 +61,7 @@ from .types import (
 
 if TYPE_CHECKING:
     from .components import Weapon
-    from .dsl import Damage, Power
+    from .dsl import Damage, Power, Range
     from .ecs import World
 
 
@@ -4902,6 +4902,78 @@ class Cast:
             return True
 
         return self.bonus("may_enter", 1, on=who, until=until, when=allowed)
+
+    def reshape_area(
+        self,
+        into: Callable[[Range], Range],
+        *,
+        ref: str = "",
+        kinds: Sequence[str] = (),
+        keyword: Keyword | None = None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Replace the **shape** of another row's area, for as long as this lasts.
+
+        `c.bonus("blast_size", n)` is the same arrangement one word smaller:
+        it adds an `int` to the size, so it can grow a burst and can never
+        make it a blast. That one word is the whole of #614's gap -- six
+        cards turn a burst into a blast, a blast into a burst, or an area
+        into a single square, and no integer says any of them.
+
+        **`into` is a callable on the printed range, not a replacement
+        `Range`.** `i2467p1` prints "its area changed to 1 square (*within
+        the same range*)", so what it becomes is derived from what it was:
+        the `within` belongs to the power, not to the wand. A literal could
+        not say that, and the two cards that shrink a blast by two squares
+        could not either.
+
+        **Not `Range.alt` and not a header axis**, both of which were built
+        and backed out on #614 before the cards were read properly.
+        `Range.alt` + `branch` is "one row, two printed shapes" and 137 rows
+        use it correctly; every card here alters a *different* row's area
+        than its own, which `alt` cannot reach. A fourth header integer
+        collided with `Cast.form` (polymorph) and `variant` (#479's clause
+        substitution) -- one symbol, two meanings, which is the fault rather
+        than the fix.
+
+        Narrowed the way `_stretched`'s modifiers are, because "the next
+        **area burst** power" is a gate and not a blanket:
+
+        * `ref` -- one named row, which is `i1836x1`'s whole scope;
+        * `kinds` -- the printed shapes it applies to, `("area_burst",)`;
+        * `keyword` -- "an arcane close blast power".
+
+        With none of the three it reshapes everything the creature throws,
+        which no card prints; passing nothing is almost certainly a mistake
+        and is left legal only because refusing it here would be a second
+        opinion about what the cards say.
+
+        **Read, never consumed, by `area_of`.** That function is a query --
+        the renderer calls it to highlight squares and `_aimings` calls it
+        per candidate origin -- so a one-shot must end itself on the
+        `PowerUsed` it was waiting for rather than on being measured. See
+        `i2467p1`.
+        """
+        from .dsl import REGISTRY
+
+        who = on if on is not None else self.me
+
+        def gate(ctx: dict[str, Any]) -> bool:
+            if ref and ctx.get("power") != ref:
+                return False
+            if kinds and ctx.get("kind") not in kinds:
+                return False
+            if keyword is not None:
+                row = REGISTRY.get(str(ctx.get("power") or ""))
+                if row is None or keyword not in row.keywords:
+                    return False
+            return True
+
+        return self.world.effects.apply(
+            who, self.me, until, label=self.ref, by=self.ref,
+            reshape=into, reshape_when=gate,
+        )
 
     def shares_space(
         self,

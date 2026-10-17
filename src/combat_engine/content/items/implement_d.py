@@ -2056,15 +2056,51 @@ def i2411p2(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.reshape_area()",),
 )
 def i2467p1(c: Cast) -> None:
-    """`c.widen_areas` grows a close burst or blast; shrinking an area
-    burst to a single square is the other direction and nothing says it.
-    The attack bonus is written, spent on the first roll."""
+    """The next area burst through this wand becomes one square, and hits harder.
+
+    Both halves are the same "next one" and have to end together, which is
+    the whole shape of this row. `c.bonus(once=True)` already spends itself
+    on the first roll it modifies; the reshape has to be told, because
+    `dsl.area_of` is a **query** -- the renderer calls it to highlight
+    squares and `_aimings` calls it once per candidate origin -- so a
+    one-shot that ended on being *measured* would be gone before the power
+    was ever used. It ends on the `PowerUsed` it was waiting for instead.
+
+    `size=0` is one square: `area_of` returns 1 for an `area_burst` of size
+    0 against 9 for size 1, checked rather than assumed. `replace` keeps
+    `within`, which is the card's "(within the same range)" -- the distance
+    the origin may be placed at is the power's and not the wand's, and that
+    is why `c.reshape_area` takes a callable on the printed range rather
+    than a replacement `Range`.
+
+    Narrowed to `area_burst` because the card says so. A close burst
+    through the same wand is untouched. #614.
+    """
+    from dataclasses import replace
+
     c.bonus(
         "attack", 2, kind="power", on=c.me, until=When.ENCOUNTER, once=True
     )
+    held = c.reshape_area(
+        lambda r: replace(r, size=0),
+        kinds=("area_burst",),
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
+
+    def spent(ev: Any) -> None:
+        """End it on the use it was bought for, not on being measured."""
+        if getattr(ev, "actor", None) != c.me:
+            return
+        row = get(getattr(ev, "power", ""))
+        if row is None or row.reach_of().kind != "area_burst":
+            return
+        if held is not None:
+            c.world.effects.end(held, "spent")
+
+    c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(
@@ -2835,7 +2871,7 @@ def i683x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     trigger="you use an arcane close blast attack power through this staff",
-    todo=("c.reshape_area()",),
+    todo=("dsl.reshape_in_flight()",),
 )
 def i683p1(c: Cast) -> None:
     """Turning a close blast into a smaller close burst changes the shape a

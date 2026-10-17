@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .components import Budget, Conditions, Health, Mod, Mods
 from .events import (
@@ -147,6 +147,30 @@ class Effect:
     #: themselves. An effect carrying only installed state needs neither.
     on_suspend: list[Callable[[], None]] = field(default_factory=list)
     on_resume: list[Callable[[], None]] = field(default_factory=list)
+    #: A replacement **shape** for another row's area. `Mod.value` is an
+    #: `int`, so `c.bonus("blast_size", n)` can stretch a burst and can
+    #: never turn one into a blast -- which is the one word the six cards
+    #: under #614 need and no integer can say. This is that one layer up:
+    #: the modifier arrangement is proven (`dsl._stretched` has three live
+    #: consumers), and what it lacks is a carrier for a `Range`.
+    #:
+    #: **A callable on the printed range, not a fixed `Range`.** `i2467p1`
+    #: prints "its area changed to 1 square (**within the same range**)",
+    #: so the replacement is derived from what it replaces and a literal
+    #: could not say it -- the `within` is the power's, not the wand's.
+    #:
+    #: Here rather than in `Mods` so expiry comes free: an ordinary turn
+    #: boundary or a saving throw takes it off with everything else the
+    #: effect installed, and `suspend` lifts it for nothing extra.
+    #:
+    #: Typed loosely because `Range` lives in `dsl`, which imports this
+    #: module. See `dsl._reshaped`, the one reader.
+    reshape: Callable[[Any], Any] | None = None
+    #: What the reshape applies to, read the way `_stretched`'s modifiers
+    #: are: a predicate on a context carrying the row being measured and
+    #: its printed kind. Without it a wand that reshapes "the next area
+    #: burst" would reshape a melee swing.
+    reshape_when: Callable[[dict[str, Any]], bool] | None = None
 
     def __str__(self) -> str:
         bits = [self.label or "effect", self.when.value]
@@ -241,6 +265,8 @@ class Effects:
         on_resume: Iterable[Callable[[], None]] = (),
         sustain_cost: ActionType | None = None,
         drop_cost: ActionType | None = None,
+        reshape: Callable[[Any], Any] | None = None,
+        reshape_when: Callable[[dict[str, Any]], bool] | None = None,
         by: str = "",
     ) -> Effect:
         # Ongoing damage of one type does not stack -- the highest applies.
@@ -320,6 +346,8 @@ class Effects:
             sustained=self.world.round,
             sustain_cost=sustain_cost,
             drop_cost=drop_cost,
+            reshape=reshape,
+            reshape_when=reshape_when,
         )
         # **The ref of the row that laid this, as a plain attribute.**
         #

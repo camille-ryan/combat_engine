@@ -2573,7 +2573,7 @@ def i1832p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reshape_area()",),
+    todo=("dsl.aiming_option()",),
 )
 def i1836x1(c: Cast) -> None:
     """The ref is given, but a row's reach is header data: `c.widen_areas`

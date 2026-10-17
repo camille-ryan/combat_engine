@@ -2145,7 +2145,7 @@ def f3781(c: Cast) -> None:
 
 
 @power("f3782", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reshape_area()",))
+       reach=PERSONAL, target=SELF, todo=("c.omit_square()",))
 def f3782(c: Cast) -> None:
     """Cutting one square out of a blast or burst. An area is computed
     from the header when the power runs and nothing narrows it."""
