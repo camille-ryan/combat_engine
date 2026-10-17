@@ -539,7 +539,7 @@ def f3443(c: Cast) -> None:
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.pact_boon()",),
+       todo=("warlock.boon_instead_of()",),
        trigger="you drop an enemy you have cursed to 0 hit points",
        on=Trigger(Dropped, both(by_me, cursed_by_me),
                   "you drop an enemy you have cursed"))
@@ -555,6 +555,37 @@ def f3444(c: Cast) -> None:
     boon" suppresses whichever pact the warlock took -- the card names no
     one of them -- and nothing announces a pact boon or stands in its
     way, so this row is free where the card charges for it.
+
+    **The gap is a door in the boon's own body, not a missing mechanism,
+    and the old symbol said otherwise.** "Nothing announces a pact boon" is
+    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
+    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
+    star pact's card and `p16254` the remaining leg's.
+
+    What is missing is that **none of those payouts asks**.
+    `c.pre_empt(ref, what, clause)` is the registration and this row is one
+    of its callers; the read has to happen where the boon is paid.
+    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
+    which `dsl.use` settles from a chosen menu entry, and three of these
+    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
+
+    `c.instead_of_now` is written for exactly that shape and says so: *"for
+    a clause that fires inside a watcher the row installed itself rather
+    than from a body the menu reached"*, with the invoker's covenant
+    manifestation as its worked case. It settles the objection too -- a
+    question inside a watcher is invisible to `policy/`, which is
+    acceptable **because a boon is a passive**: the AI never chose the
+    bargain and cannot be asked to weigh it differently.
+
+    `cf:warlock-f1c10` is the one exception and takes plain
+    `c.instead_of`, because it carries a declared trigger and so is offered
+    by the dispatcher -- the distinction that verb's own docstring draws
+    with `rt:r24-t0`.
+
+    So the symbol names a content door in `features/warlock.py` rather than
+    a `Cast` verb, because that is where the work is. #551's verdict, read
+    down to the mechanism. #641.
+
 
     `ENCOUNTER` on a triggered trait is the card's own "once per
     encounter" and not the #210 accident. "If you have already used it"

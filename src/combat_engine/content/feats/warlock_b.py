@@ -723,7 +723,7 @@ def f1358(c: Cast) -> None:
 
 
 @power("f2759", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.pact_boon()",))
+       reach=PERSONAL, target=SELF, todo=("warlock.boon_instead_of()",))
 def f2759(c: Cast) -> None:
     """Takes the boon early, when a cursed enemy is first bloodied,
     and pays for it with the curse.
@@ -733,11 +733,39 @@ def f2759(c: Cast) -> None:
     it **causes** one, off `Bloodied`, which is the opposite operation and
     was sitting under the same symbol. Both halves of the price are sayable
     (the curse is a labelled hold `Effects.end` would lift); the thing
-    bought is not. The seven legs pay seven different boons, two of them
-    inside `cf:warlock-f1`'s own watch, so there is no one payout to
-    invoke. `i698x1` ("a second trigger on the feature") and `i2305p1`
-    ("instead of triggering your pact boon") are the same gap and the
-    symbol they already carry.
+    bought is not.
+
+    **The gap is a door in the boon's own body, not a missing mechanism,
+    and the old symbol said otherwise.** "Nothing models the boon" is
+    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
+    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
+    star pact's card and `p16254` the remaining leg's.
+
+    What is missing is that **none of those payouts asks**.
+    `c.pre_empt(ref, what, clause)` is the registration and this row is one
+    of its callers; the read has to happen where the boon is paid.
+    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
+    which `dsl.use` settles from a chosen menu entry, and three of these
+    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
+
+    `c.instead_of_now` is written for exactly that shape and says so: *"for
+    a clause that fires inside a watcher the row installed itself rather
+    than from a body the menu reached"*, with the invoker's covenant
+    manifestation as its worked case. It settles the objection too -- a
+    question inside a watcher is invisible to `policy/`, which is
+    acceptable **because a boon is a passive**: the AI never chose the
+    bargain and cannot be asked to weigh it differently.
+
+    `cf:warlock-f1c10` is the one exception and takes plain
+    `c.instead_of`, because it carries a declared trigger and so is offered
+    by the dispatcher -- the distinction that verb's own docstring draws
+    with `rt:r24-t0`.
+
+    So the symbol names a content door in `features/warlock.py` rather than
+    a `Cast` verb, because that is where the work is. #551's verdict, read
+    down to the mechanism. #641.
+
+    `i698x1` and `i2305p1` are the same gap and carry the same symbol.
     """
 
 
