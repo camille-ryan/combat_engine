@@ -60,6 +60,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.features.sorcerer import phase_of
 from combat_engine.engine import (
     AT_WILL,
     CHA,
@@ -99,6 +100,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
+from combat_engine.engine.dsl import get
 from combat_engine.engine.durations import keywords_of
 
 #: **Retired. `c.augment_with(resource)` never named a gap**, and this
@@ -125,14 +127,15 @@ FORGO = ("c.forgo_damage()",)
 #: `f1028`'s own hold: a power's reach is header data and is never rewritten
 #: for one use, so no attack is ever "made using" it.
 #:
-#: **Re-pointed off `c.reach_of(power=)`, which named no verb.** That symbol
-#: was carried by six rows wanting three different things -- reading a range,
-#: changing a range's *kind*, and widening a literal inside another row's
-#: body -- so it could not go green or red correctly for any of them, which
-#: is the "a marker names one gap" rule broken three ways at once. Reading a
-#: range is `c.reach(ref)` and has existed throughout. What `f1028` wants is
-#: to change a range's kind for one use, which is this.
-REACH = ("c.as_melee(ref=)",)
+# **`REACH` is retired and this records why the constant is gone.** It held
+# `c.as_melee(ref=)` for the three riders below, re-pointed there off
+# `c.reach_of(power=)` -- a symbol six rows had shared for three different
+# things, which is the "a marker names one gap" rule broken three ways at
+# once. The verb it finally named was never built either: #614 landed the
+# mechanism as a per-character **aiming** (`dsl.branches_for`) rather than a
+# verb that rewrites a reach, `f1028` is written against it, and all three
+# riders now test the aiming directly. The symbol is at zero rows.
+
 #: A skill bonus that applies only in a named circumstance.
 CIRCUMSTANCE = ("c.skill_circumstance()",)
 
@@ -220,6 +223,46 @@ def _while_insubstantial(c: Cast, fn, *, due_to: str = "") -> None:  # noqa: ANN
 
 
 # -- the hand-of-blight pacts -----------------------------------------------
+
+
+#: The weapon `f1028` names. Its group holds fourteen other things, so the
+#: three riders below ask by ref for the reason `general_r._wielding` gives.
+_F1028_WEAPON = "w3594"
+
+
+def _through_an_offered_aiming(c: Cast, ev: Any) -> bool:
+    """Was this hit made with the melee aiming `f1028` contributes?
+
+    `f1028` offers a ranged sorcerer power a melee aiming rather than
+    replacing its printed one (#614), so "an attack made **using** `f1028`"
+    is an attack aimed through that extra index. `dsl.branches_for` puts the
+    extras after the printed ones, so **an index past the printed count is
+    by definition an aiming some feat contributed** -- and the branch rides
+    the attack events as a plain attribute, the way `Moved.kind_` does.
+
+    The rest of the test is `f1028`'s own conditions, so a *different*
+    offered aiming does not trigger these riders: a ranged row of the
+    sorcerer's own class, and the named weapon in hand.
+
+    One residual ambiguity, recorded rather than engineered around:
+    `f1239` offers a melee aiming to five named rows and two of them are
+    sorcerer rows, so a character holding both feats has two cards offering
+    an aiming to the same power. The attack made is identical either way --
+    one melee aiming at the printed reach -- so the payout is the same
+    whichever card the player credits, and no reading of the page
+    distinguishes them.
+    """
+    from combat_engine.engine.components import Gear
+
+    p = get(getattr(ev, "power", "") or "")
+    if p is None or p.reach is None:
+        return False
+    if getattr(ev, "branch", 0) < len(p.branches):
+        return False
+    if p.cls != "sorcerer" or p.reach.kind != "ranged":
+        return False
+    gear = c.world.get(c.me, Gear)
+    return gear is not None and any(w.ref == _F1028_WEAPON for w in gear.held)
 
 
 @power("f3424", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -407,7 +450,7 @@ def f3429(c: Cast) -> None:
 
 
 @power("f3432", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REACH)
+       reach=PERSONAL, target=SELF)
 def f3432(c: Cast) -> None:
     """Two holds, either of which is fatal on its own: no attack is ever
     made *using* `f1028`, and nothing reports which phase is current, so
@@ -421,34 +464,87 @@ def f3432(c: Cast) -> None:
     `features.sorcerer.phase_of` answers which phase, and all three
     branches of the payout have somewhere to read.
 
-    So **one hold is left, and it is fatal on its own**: no attack is ever
-    made *using* `f1028`. A power's reach is header data and is never
-    rewritten for one use, which is `c.as_melee(ref=)` and is `f1028`'s
-    own marker. Until an attack can be made through that card there is no
-    trigger, whatever the phase says.
+    **And that last hold is gone too, so this is written.** `f1028`
+    contributes a melee *aiming* rather than rewriting a reach (#614), and
+    the branch rides the hit -- so "an attack made using `f1028`" is a test
+    and not a guess. Both holds this row carried are now readable, which is
+    why all three branches of the payout are here.
 
     Worth recording why naming the *feature* was wrong both times a wave
     reached for it: a ref resolves against the registry, and
     `cf:sorcerer-f0s0` has always been declared -- so the marker read as
-    arrived the moment anybody ran the tracker."""
+    arrived the moment anybody ran the tracker.
+
+    The slide is "to a square adjacent to you", which is the narrowing that
+    distinguishes it from the push: `c.slide` takes the destination, so the
+    adjacency is asked for rather than hoped for.
+    """
+    me = c.me
+    last = [-1]
+
+    def pay(ev: Hit) -> None:
+        if ev.attacker != me or last[0] == c.world.round:
+            return
+        if not _through_an_offered_aiming(c, ev):
+            return
+        here = phase_of(c)
+        if not here:
+            return
+        last[0] = c.world.round
+        if here == "sun":
+            c.push(1, on=ev.target)
+        elif here == "moon":
+            c.slide(1, on=ev.target, toward=me)
+        elif here == "stars":
+            c.save()
+
+    c.watch(Hit, pay, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3434", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=REACH)
+       reach=PERSONAL, target=SELF)
 def f3434(c: Cast) -> None:
-    """The shift is trivial; the trigger is not. `f1028` turns a ranged
-    power into a melee one and nothing rewrites a reach for one use, so
-    an attack "made using" it never happens and a row declared on any hit
-    instead would fire on every at-will in the fight."""
+    """Written: the trigger exists now, and the shift always was trivial.
+
+    The note here said *"an attack made using `f1028` never happens, and a
+    row declared on any hit instead would fire on every at-will in the
+    fight"*. Both halves were right, and the first is no longer true:
+    `f1028` contributes a melee **aiming** and the branch rides the hit, so
+    "made using it" is a precise test rather than a guess. #614.
+
+    The latch is by hand because `c.on_attack(once_per_round=)` watches
+    `AttackDeclared` and this pays out on the **hit** -- which is what that
+    verb's own docstring says was written out three times per class before
+    it existed. The round number is the latch, not a one-shot: "once per
+    round" comes back every round.
+    """
+    me = c.me
+    last = [-1]
+
+    def shift_away(ev: Hit) -> None:
+        if ev.attacker != me or last[0] == c.world.round:
+            return
+        if not _through_an_offered_aiming(c, ev):
+            return
+        last[0] = c.world.round
+        c.shift(1)
+
+    c.watch(Hit, shift_away, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power("f3435", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=(*REACH, "dsl.Power.energy_types"))
+       todo=("dsl.Power.energy_types",))
 def f3435(c: Cast) -> None:
-    """Same missing trigger as `f3434`, and a second hold beside it.
+    """One hold left, and the missing trigger is no longer it.
 
-    Re-aimed: the second hold was never a blow of two types at once --
+    "Same missing trigger as `f3434`" was the first half of this note and is
+    now false: `f1028` contributes a melee aiming, the branch rides the hit,
+    and `_through_an_offered_aiming` above is the test both `f3434` and
+    `f3432` are written on. #614.
+
+    So the remaining hold is the second one alone, and it is unchanged.
+    Re-aimed: it was never a blow of two types at once --
     this is "roll twice and choose **either** result", which `c.choose`
     over damage types already says (`psion_b.f3307` does exactly that).
     What is missing is the list to choose from. A power "that has a

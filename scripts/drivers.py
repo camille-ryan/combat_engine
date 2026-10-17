@@ -2289,6 +2289,99 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def rider_on_an_offered_aiming(out: Result) -> None:
+    """"When you hit with an attack made **using** `f1028`" -- three riders.
+
+    All three said the same thing before #614 landed: *"no attack is ever
+    made using `f1028`"*, and one added *"a row declared on any hit instead
+    would fire on every at-will in the fight"*. Both were right. `f1028`
+    offers a ranged sorcerer power a melee **aiming** now, and
+    `dsl.branches_for` puts contributed aimings after the printed ones -- so
+    an index past the printed count is, by construction, an attack made
+    through a card that offered one.
+
+    The controls are the second half of that old note, because a trigger
+    that fires on every at-will is the failure this row was refused to
+    avoid:
+
+    * **a hit on the printed aiming pays nothing.** Branch 0 is the ranged
+      shot the card is not about.
+    * **a hit on a row of the wrong class pays nothing**, even on an offered
+      index: `f1028`'s aiming is for its own class's rows.
+    * **the weapon has to be in hand.** `f1028` names one weapon, and its
+      group holds fourteen others.
+    * **once per round**, by round number and not by a one-shot -- "once per
+      round" comes back next round, and a `once=True` watch would pay out
+      once per *fight*.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    world, me, _ = _board("f1028", 1)
+    from combat_engine.content.feats.general_u import (
+        _F1028_WEAPON,
+        _through_an_offered_aiming,
+    )
+
+    gear = world.get(me, Gear)
+    out.that(gear is not None, "the board's sorcerer carries gear")
+    if gear is None:
+        return
+
+    ranged = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None and p.cls == "sorcerer"
+         and p.reach is not None and p.reach.kind == "ranged" and p.attack),
+        None,
+    )
+    other = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None and p.cls == "wizard"
+         and p.reach is not None and p.reach.kind == "ranged" and p.attack),
+        None,
+    )
+    out.that(ranged is not None and other is not None,
+             "the tree declares a ranged row for this class and another")
+    if ranged is None or other is None:
+        return
+
+    c = Cast(world=world, me=me, ref="drivers:rider")
+    foe = sorted(enemies(world, me))[0]
+
+    def hit(ref: str, branch: int):  # noqa: ANN202
+        ev = Hit(attacker=me, target=foe, power=ref, critical=False)
+        ev.branch = branch  # ty: ignore[unresolved-attribute]
+        return ev
+
+    row = get(ranged)
+    if row is None:
+        return
+    printed = len(row.branches)
+
+    # The weapon is not in hand yet: nothing qualifies.
+    out.that(not _through_an_offered_aiming(c, hit(ranged, printed)),
+             "without the named weapon in hand, an offered aiming does not"
+             " qualify -- the gate `f1028` itself applies")
+
+    gear.weapons[:] = [replace(gear.weapons[0], ref=_F1028_WEAPON),
+                       *gear.weapons[1:]]
+    gear.stowed.discard(_F1028_WEAPON)
+
+    out.that(_through_an_offered_aiming(c, hit(ranged, printed)),
+             "with it in hand, a hit on the OFFERED index qualifies")
+    out.that(not _through_an_offered_aiming(c, hit(ranged, 0)),
+             "a hit on the PRINTED aiming does not -- the control, and the"
+             " failure the old note refused this row to avoid: a trigger on"
+             " any hit fires on every at-will in the fight")
+    out.that(not _through_an_offered_aiming(c, hit(other, printed)),
+             "nor a row of another class, even on an offered index")
+
+
 def offered_aiming(out: Result) -> None:
     """A feat that offers a second way to aim a row, without taking the first.
 
@@ -16497,6 +16590,9 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "rider_on_an_offered_aiming": (rider_on_an_offered_aiming,
+                                   "a rider on an attack made through a"
+                                   " contributed aiming"),
     "offered_aiming": (offered_aiming,
                        "a second way to aim a row, offered not imposed"),
     "recast_range": (recast_range,
