@@ -100,6 +100,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Health, PowerPoints
 from combat_engine.engine.dsl import REGISTRY
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     ActionPointSpent,
     ActionSpent,
@@ -1815,12 +1816,24 @@ def f3274(c: Cast) -> None:
            ev.source == me
            and ev.condition in (Condition.DAZED, Condition.STUNNED)
            and team(w, ev.target) != team(w, me)
-       ), "you daze or stun an enemy"),
-       dropped=("ConditionApplied.power",))
+           and Keyword.PSIONIC in keywords_of(ev.power)
+       ), "you daze or stun an enemy with a psionic power"))
 def f3276(c: Cast) -> None:
-    """`ConditionApplied` says who, what and for how long and never which
-    row did it, so "using a psionic power" cannot be checked -- the slide
-    is offered whatever dazed the enemy."""
+    """Written: the event names the row that applied the condition now.
+
+    The note said `ConditionApplied` "says who, what and for how long and
+    never which row did it, so 'using a psionic power' cannot be checked --
+    the slide is offered whatever dazed the enemy". Too generous: the power
+    point was spendable on any daze at all.
+
+    `ConditionApplied.power` carries the ref from `Effect.by`, and
+    `durations.keywords_of` turns a ref into its keywords -- it takes a
+    string and answers the empty set for one it cannot resolve, which is
+    what a grab's condition needs (`relations.py` holds no effect, so it
+    knows no row).
+
+    The power point is still spent inside the body through `_point`, so a
+    psion without one is offered nothing -- that half was always right."""
     if _point(c):
         c.slide(1, on=c.trigger.target)
 

@@ -1323,12 +1323,28 @@ def f1870(c: Cast) -> None:
        on=Trigger(ConditionApplied, lambda w, me, ev: (
            ev.source == me
            and ev.condition in (Condition.DAZED, Condition.STUNNED)
-       ), "you daze or stun an enemy"),
-       dropped=("ConditionApplied.power",))
+           and Keyword.PRIMAL in keywords_of(ev.power)
+       ), "you daze or stun an enemy with a primal power"))
 def f1871(c: Cast) -> None:
-    """`ConditionApplied` names the source, the target and the condition
-    and never the row that applied it, so "with a primal power" cannot be
-    asked -- the push follows any daze or stun of the caster's."""
+    """Written: the event names the row that applied the condition now.
+
+    The note here said `ConditionApplied` "names the source, the target and
+    the condition and never the row that applied it, so 'with a primal
+    power' cannot be asked -- the push follows any daze or stun of the
+    caster's". That was the state and it was too generous: a druid dazing
+    with anything at all got the push.
+
+    `ConditionApplied.power` is the ref, taken from `Effect.by` where the
+    effect was laid, so the keyword is a lookup. Same shape as
+    `Bloodied.power` and `Dropped.power` -- three events making the same
+    argument.
+
+    **`""` has to read as "no keyword" and does.** A grab imposes its
+    condition through `relations.py`, which holds no effect and so knows no
+    row, so a gate on a keyword must not fire there. `durations.keywords_of` already takes a
+    ref string and answers the empty set for one it cannot resolve -- no new
+    reader was needed, which is the third time today a reader I was about to
+    write turned out to exist."""
     c.push(1, on=c.trigger.target)
 
 

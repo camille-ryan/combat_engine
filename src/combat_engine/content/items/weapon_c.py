@@ -510,15 +510,27 @@ def i3057x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("ConditionApplied.power",),
+    dropped=("ConditionApplied.weapon",),
 )
 def i3099x1(c: Cast) -> None:
-    """`ConditionApplied` names the source and the condition and not the
-    row that applied it, so "with a melee attack" cannot be asked -- an
-    immobilisation from anything of the wielder's arms this."""
+    """The melee half is written; the weapon half is not, and is re-pointed.
+
+    The note said `ConditionApplied` "names the source and the condition and
+    not the row that applied it, so 'with a melee attack' cannot be asked".
+    It names the row now, and `by_melee_only` reads the shape off the ref --
+    close attacks excluded, because the card says melee.
+
+    **"Using this weapon" is the half left.** The ref of the row does not
+    say which weapon swung it, so the marker moves to the field that would:
+    no event carries the weapon, which `weapon.py:829` records from the
+    other side and which `i1688p1` and `f3501` want too. Until then an
+    immobilisation through anything the wielder holds arms this, which is
+    wider than the card and why the marker stays."""
 
     def held(ev: ConditionApplied) -> None:
-        if ev.source == c.me and ev.condition == Condition.IMMOBILIZED:
+        if (ev.source == c.me
+                and ev.condition == Condition.IMMOBILIZED
+                and by_melee_only(c.world, c.me, ev)):
             c.grants_advantage(on=ev.target, until=When.EONT)
 
     c.watch(ConditionApplied, held, until=When.ENCOUNTER)

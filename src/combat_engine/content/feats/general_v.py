@@ -833,14 +833,26 @@ def _proned_by_me(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3501", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("c.counts_as(property=)", "ConditionApplied.power"),
+       dropped=("c.counts_as(property=)", "ConditionApplied.weapon"),
        trigger="you knock a larger enemy prone with a staff",
        on=Trigger(ConditionApplied, _proned_by_me, "you knock an enemy prone"))
 def f3501(c: Cast) -> None:
     """"Larger than you" is read off `Position.size` at the moment of the
-    knockdown. `ConditionApplied` names no power, so "with a weapon attack"
-    is as far as the staff in hand can narrow it, and wielding the
-    quarterstaff as a small weapon is a printed weapon property."""
+    knockdown, and that half plays.
+
+    **Re-pointed: `ConditionApplied.power` landed and does not reach this
+    row.** That field was added for the four rows printing the *keyword* or
+    the *shape* of the clause that applied the condition, and `f1871` and
+    `f3276` are written on it. This card says "with a weapon attack **using
+    a staff**", which is the weapon, and the ref of the row does not say
+    which weapon swung it -- so the marker names the field that would.
+
+    Three rows want it now (`i1688p1`, `i3099x1`, this), and no event
+    carries a weapon at all; `weapon.py:829` records the same finding from
+    the other side.
+
+    Wielding the quarterstaff as a small weapon stays a separate hold: that
+    is a printed weapon property, which is `c.counts_as(property=)`."""
     order = list(Size)
     foe = c.trigger.target
     if order.index(c.size_of(on=foe)) > order.index(c.size_of(on=c.me)):

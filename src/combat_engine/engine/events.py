@@ -850,10 +850,31 @@ class Died(Event):
 
 @dataclass
 class ConditionApplied(Event):
+    """A condition went on. `source` is who imposed it.
+
+    **`power` is the row that laid it**, and four rows need it: "whenever
+    you daze or stun an enemy with a **primal** power", "using a **psionic**
+    power", "when you immobilize a target with a **melee attack**". The
+    keyword and the shape both come off the ref, and `source` alone says
+    neither -- same argument as `Bloodied.power` and `Dropped.power`, which
+    is now three events making it.
+
+    `Effect.by` is where it comes from at both `durations.py` sites: that
+    field already holds "the ref of the row that laid this" and is
+    defaulted from the label, so 333 call sites keep today's behaviour.
+
+    **Empty when a *relation* imposed it** -- a grab, a domination. Those go
+    through `relations.py`, which holds no effect and so knows no row, and
+    the condition is a consequence of the hold rather than of a card's
+    clause. A reader must treat `""` as "nothing to ask about": gating on a
+    keyword would otherwise silently pay out on every grab.
+    """
+
     source: int
     target: int
     condition: Condition
     duration: str
+    power: str = ""
 
 
 @dataclass

@@ -2289,6 +2289,124 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def the_clause_that_applied_it(out: Result) -> None:
+    """"Whenever you daze or stun an enemy **with a primal power**."
+
+    `ConditionApplied` carried the source, the target, the condition and the
+    duration -- never the row that laid it. So four rows printing the
+    *keyword* or the *shape* of the clause could not ask, and two of them
+    paid out on **any** daze the caster managed: a druid's push on an
+    arcane multiclass power, a psion's point spent on anything at all.
+    Wider than the card, which is the direction worth refusing.
+
+    The ref comes from `Effect.by`, which already held "the row that laid
+    this" and is defaulted from the label -- so all 333 call sites keep
+    today's behaviour and say nothing. Third event to make this argument
+    after `Bloodied.power` and `Dropped.power`.
+
+    Three controls per row, and the third is the one that is easy to miss:
+
+    * the right keyword fires it;
+    * **the wrong keyword does not** -- the whole narrowing, and what the
+      rows were doing without it;
+    * **a condition imposed by a *relation* does not.** A grab goes through
+      `relations.py`, which holds no effect and so knows no row, so `power`
+      is `""`. A reader treating that as a miss rather than as "nothing to
+      ask" would fire these rows on every grab -- which is exactly the
+      state they were in, by a different route.
+
+    Asserted through each row's own declared `Trigger`, not a copy of its
+    predicate: the trigger is what the dispatcher consults, and a rule that
+    re-derives the test passes while the header says something else.
+
+    **One of the two emission sites is covered and the other is not**, which
+    is worth stating rather than leaving to be discovered. `durations.py`
+    emits `ConditionApplied` twice: from `_install_conditions`, which is
+    what `c.dazed` and every ordinary condition goes through and is what the
+    `c.dazed` assertion below exercises; and from the single-condition path
+    used when a condition is added to an effect already standing. A plant on
+    the second left this rule green until the `c.dazed` assertion existed,
+    and a plant on the *first* still does -- posing that path means
+    suspending and resuming an effect, which no row here needs.
+    """
+    from combat_engine.engine import Keyword
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import ConditionApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    for ref, kw in (("f1871", Keyword.PRIMAL), ("f3276", Keyword.PSIONIC)):
+        world, me, _ = _board(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        row = REGISTRY.get(ref)
+        out.that(row is not None, f"{ref} is declared")
+        if row is None:
+            continue
+        # `Power.on` is a `Trigger`, a sequence of them, or None, so the
+        # first one is fished out rather than indexed blind -- `ty` is right
+        # that `.when` is not on the union.
+        trig = row.on
+        first = trig[0] if isinstance(trig, (tuple, list)) else trig
+        gate = getattr(first, "when", None)
+        out.that(gate is not None, f"{ref} declares a trigger predicate")
+        if gate is None:
+            continue
+
+        right = next((r for r in sorted(REGISTRY)
+                      if (p := get(r)) is not None and kw in p.keywords), None)
+        wrong = next((r for r in sorted(REGISTRY)
+                      if (p := get(r)) is not None and p.keywords
+                      and kw not in p.keywords), None)
+        out.that(right is not None and wrong is not None,
+                 f"the tree declares a {kw.value} row and a non-{kw.value} one")
+        if right is None or wrong is None:
+            continue
+
+        def applied(power: str, who: int = me,
+                    whom: int = foe) -> ConditionApplied:
+            """`who`/`whom` bound in the signature, not captured.
+
+            Ruff's `B023` caught the closure reading the loop variables:
+            correct here only because it is called inside the iteration that
+            set them, and the classic late-binding bug the moment anything
+            defers the call.
+            """
+            return ConditionApplied(source=who, target=whom,
+                                    condition=Condition.DAZED,
+                                    duration="eont", power=power)
+
+        out.that(gate(world, me, applied(right)),
+                 f"{ref} fires on a {kw.value} clause")
+        out.that(not gate(world, me, applied(wrong)),
+                 "and NOT on a clause without the keyword -- the narrowing,"
+                 " and what this row did on every daze before the field")
+        out.that(not gate(world, me, applied("")),
+                 "nor on a condition a relation imposed, where `power` is"
+                 " empty: a grab must not fire a card that says 'power'")
+
+        # **Through a real `c.dazed`, because the three above hand-build the
+        # event.** A plant removing `power=eff.by` from the emission left
+        # every assertion green: they were testing the predicate, not the
+        # plumbing that feeds it. This is the only one that fails if the
+        # field stops being carried.
+        laid: list[ConditionApplied] = []
+        world.bus.on(ConditionApplied, laid.append)
+        Cast(world=world, me=me, ref=right).dazed(on=foe, until=When.EONT)
+        mine = [e for e in laid if e.target == foe]
+        out.that(bool(mine),
+                 f"a real `c.dazed` from {right} emitted the event")
+        if mine:
+            out.that(mine[0].power == right,
+                     "and it carries the laying row's ref off `Effect.by`"
+                     f" ({mine[0].power!r}) -- the assertion the hand-built"
+                     " events cannot make")
+            out.that(gate(world, me, mine[0]),
+                     "so the row's own trigger accepts the event the engine"
+                     " actually emits, not just the one this rule writes")
+
+
 def the_blow_that_bloodied(out: Result) -> None:
     """"You become bloodied from a **melee** attack" -- five rows asked this.
 
@@ -16780,6 +16898,8 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "the_clause_that_applied_it": (the_clause_that_applied_it,
+                                  "the row that laid a condition"),
     "the_blow_that_bloodied": (the_blow_that_bloodied,
                               "the shape of the blow that crossed the line"),
     "feats_that_offer_an_aiming": (feats_that_offer_an_aiming,

@@ -456,6 +456,10 @@ class Effects:
             ConditionApplied(
                 source=source or eff.owner, target=eff.owner,
                 condition=cond, duration=eff.when.value,
+                # The row that laid the effect. `by` is defaulted from the
+                # label, so this is the ref for all 333 call sites without
+                # any of them saying anything.
+                power=eff.by,
             )
         )
         return True
@@ -513,7 +517,8 @@ class Effects:
             if conds is not None and conds.add(c):
                 self.world.bus.emit(
                     ConditionApplied(
-                        source=source, target=eff.owner, condition=c, duration=duration
+                        source=source, target=eff.owner, condition=c,
+                        duration=duration, power=eff.by,
                     )
                 )
 
