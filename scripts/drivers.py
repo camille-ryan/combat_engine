@@ -11901,8 +11901,11 @@ def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
     """
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
+    from combat_engine.engine import DamageType as _DamageType
+    from combat_engine.engine import When as _When
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SavingThrow as _SavingThrow
 
     out.that(REGISTRY["f1099"].implemented_in == ("p836", "p1580"),
              "f1099 points at the two rows that carry its clauses",
@@ -12015,6 +12018,77 @@ def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
     out.that(kept is not None and any("ac" in lab for lab in kept[0])
              and not any("resist" in lab for lab in kept[0]),
              f"declined: the printed +1 to AC stands and no resist ({kept})")
+
+    # -- p833: the temporary hit points, or f1098's save in lieu ---------
+    #
+    # Same convention, a second feat, and the reason it is here rather than
+    # in a rule of its own: `f1098`'s note proposed the **older** rider
+    # shape -- `c.pre_empt` with `p833` asking `c.instead_of("temp_hp")` --
+    # and this went in as #550's instead. Both would work; only one of them
+    # is what the tree now does, and the assertion is the same either way.
+    def braced(*, say_yes: bool, undead: bool = True, held: bool = True):  # noqa: ANN202
+        """`(a save was rolled, the printed clause was reached)`.
+
+        **Both, because the card says "in lieu of" and a plant proved one
+        was not enough.** Asserting only that the save happened left the
+        rule green when the branch lost its `return` and did *both* -- the
+        printed clause plus a free extra, which is the direction that
+        matters.
+
+        **The printed half is read as a *call*, not as a number**, and two
+        boards' worth of state is why. `audit.board` hands this holder 5
+        temporary hit points before any body runs, so the pool cannot say
+        whether the row added to it; and the holder's Wisdom modifier is
+        **-1**, so `c.temp_hp(c.wis_mod)` grants nothing and emits no
+        `TempHP` either. Neither the pool nor the event can distinguish the
+        branches on this board. Which branch the body took is the actual
+        question, and a stub answers it exactly -- the same technique
+        `c.strike` is stubbed with two lines above.
+
+        **Read off the bus, not off the hit-point pool.** The pool was the
+        first draft and a plant showed it measuring nothing: `audit.board`
+        hands this holder **5 temporary hit points before any body runs**,
+        and its Wisdom modifier is **-1**, so `c.temp_hp(c.wis_mod)` moves
+        the number by nothing and both branches read 5. An event either
+        happened or it did not.
+        """
+        world, me, _ = _posed("p833", 1)
+        c = Cast(world=world, me=me, ref="p833")
+        foe = next(iter(sorted(c.enemies())), 0)
+        c.target = foe
+        c.targets = [foe]
+        c.strike = lambda **kw: True   # ty: ignore[invalid-assignment]
+        c.feat = (lambda ref: ref == "f1098" and held)  # ty: ignore[invalid-assignment]
+        c.is_kind = (lambda *a, **k: undead)  # ty: ignore[invalid-assignment]
+        # **The burn the card is about has to be on the board.** `c.save`
+        # finds no save-ends effect on a fresh holder and returns without
+        # rolling or logging -- correctly -- so a rule that did not lay one
+        # was asking the clause to prove itself against nothing. The
+        # `a-probe-must-not-wait-for-its-own-answer` shape.
+        c.ongoing(2, _DamageType.NECROTIC, on=me, until=_When.SAVE_ENDS)
+        answer(world, say_yes)
+        printed: list[int] = []
+        c.temp_hp = (lambda *a, **k: printed.append(1))  # ty: ignore[invalid-assignment]
+        cursor = len(world.bus.since(0))
+        REGISTRY["p833"].body(c)
+        after = world.bus.since(cursor)
+        rolled = any(isinstance(ev, _SavingThrow) and ev.actor == me
+                     for ev in after)
+        return rolled, bool(printed)
+
+    saved, gained = braced(say_yes=True)
+    out.that(saved and not gained,
+             "an undead target, offer taken: a saving throw is rolled and"
+             " the temporary hit points are NOT also granted -- the card's"
+             f" \"in lieu of\" ({saved=}, {gained=})")
+    saved2, gained2 = braced(say_yes=False)
+    out.that(gained2 and not saved2,
+             f"DECLINED: the printed clause stands and no save ({saved2=},"
+             f" {gained2=})")
+    out.that(braced(say_yes=True, undead=False) == (False, True),
+             "a target that is not undead is never offered it")
+    out.that(braced(say_yes=True, held=False) == (False, True),
+             "and neither is a paladin without the feat")
 
 def an_item_adds_to_what_a_pact_pays(out: Result) -> None:
     """`i2343p2` had nothing to add to, and said so in its own marker.

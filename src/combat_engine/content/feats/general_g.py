@@ -873,8 +873,14 @@ def _p620(c: Cast, ev: Any) -> None:
             return
 
 
+#: **`c.opt_in()` came off, and it named a clause this card has not got.**
+#: f1097's two printed riders are an *addition* (p1567 hands a neighbour a
+#: damage bonus) and an *exemption* (p463 ignores the insubstantial trait).
+#: Neither forgoes anything, so there is nothing to substitute -- the symbol
+#: was attached to a card with no opt-in in it. The p1567 half is written,
+#: right above; `c.ignore_insubstantial()` is the one real gap left.
 _riders("f1097", {"p1567": _p1567},
-        dropped=("c.ignore_insubstantial()", "c.opt_in()"))
+        dropped=("c.ignore_insubstantial()",))
 
 _riders("f1100", {"p841": _p841, "p835": _p835_will})
 
@@ -1627,7 +1633,7 @@ def f1149(c: Cast) -> None:
 
 
 @power("f1021", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.opt_in()",))
+       reach=PERSONAL, target=SELF, todo=("c.pre_empt(keyword=)",))
 def f1021(c: Cast) -> None:
     """A trade offered on every implement attack: two off the roll for
     two radiant on a hit. `c.may` asks a yes-or-no inside a body that is
@@ -1640,7 +1646,21 @@ def f1021(c: Cast) -> None:
     registration into its own entry in the action menu. This card names no
     row -- the trade is on *any* implement attack -- so there is nothing to
     key it to and no menu entry it could become. The two siblings below
-    each name their rows and are a different gap for that reason."""
+    each name their rows and are a different gap for that reason.
+
+    **Re-pointed, because `c.opt_in()` was serving two needs and is now
+    down to this one.** `f1097`, `f1098` and `f1099` carried it too and
+    none of them wanted what this row wants: each named *specific* powers,
+    so each belongs to #550's convention -- the clause written into the
+    power, gated on `c.feat` -- and those are written. `f1097`'s was not
+    even an opt-in; its card forgoes nothing.
+
+    What is left here is precisely the thing the paragraph above describes:
+    a substitution keyed to a **keyword** rather than a ref, so the offer
+    can be made at any implement attack. `c.pre_empt(keyword=)` names
+    that, and `content/CLAUDE.md` already carves out this case -- *"the
+    exception is a feat naming a class of powers -- 'any implement
+    attack'"*. #550."""
 
 
 @power("f1099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1682,7 +1702,7 @@ def _arcane_damage(ctx: dict[str, Any]) -> bool:
 
 @power("f1098", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.deals(ref=)", "c.opt_in()"))
+       dropped=("c.deals(ref=)",))
 def f1098(c: Cast) -> None:
     """Re-aimed from `todo` to `dropped`: the p839 clause plays, so the
     row is offered rather than refused.
@@ -1699,12 +1719,19 @@ def f1098(c: Cast) -> None:
     `c.deals` is an override keyed only to `Keyword.WEAPON` or
     `Keyword.IMPLEMENT`: `Cast._retyped` reads that label and nothing
     else, so narrowing it to a ref -- let alone to the target's origin --
-    is a change at `cast.py`'s own read site. p833's "in lieu of gaining
-    temporary hit points" is `c.pre_empt`, which needs p833 to ask
-    `c.instead_of("temp_hp", ...)`; `powers/warlock/level_1.py` already
-    does precisely that with the same clause word, and p833 lays its temp
-    hit points directly, so the one line owed is in
-    `powers/paladin/level_1.py`.
+    is a change at `cast.py`'s own read site.
+
+    **p833's half is written and `c.opt_in()` has come off.** This note
+    located it exactly -- "the one line owed is in
+    `powers/paladin/level_1.py`" -- and proposed `c.pre_empt` with p833
+    asking `c.instead_of("temp_hp", ...)`. It went in as #550's shape
+    instead: the gate is `c.feat` and the branch lives in p833, because
+    that convention replaced the rider one for a feat naming a single
+    power, and `content/CLAUDE.md` gives the reason -- the rider shape only
+    ever reached a power written to *ask*, and almost none were.
+
+    What is left is `c.deals(ref=)` for the p1458 half, which is the same
+    read-site change at `cast.py` and not a content line.
 
     The Diplomacy bonus was called "a check" and left unwritten, which
     was wrong: `skill:` bonuses are consulted, and the sibling f1099

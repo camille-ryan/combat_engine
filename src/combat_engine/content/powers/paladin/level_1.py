@@ -65,10 +65,22 @@ def _marked_by_me(c: Cast) -> bool:
     attack=Attack(STR, vs=AC),
 )
 def p1567(c: Cast) -> None:
+    """The radiant swing. `f1097`'s rider is **already written elsewhere**.
+
+    Nearly duplicated here while applying #550's convention, and the near
+    miss is worth recording: `feats/general_g._p1567` registers that
+    clause through the older `_riders` shape, so writing it in as well
+    would have handed the neighbour its damage bonus **twice**. Grep for
+    the ref before writing a clause into a row -- `content/CLAUDE.md`'s
+    "most gaps filed here have turned out to exist under another name"
+    applies to clauses and not only to verbs.
+
+    `f1097` still carries `c.ignore_insubstantial()` for its other printed
+    rider, and no longer carries `c.opt_in()`: nothing in that card is
+    forgone for anything, so there was never an opt-in in it."""
     if c.strike():
         bonus = c.str_mod + (c.wis_mod if _marked_by_me(c) else 0)
         c.damage(c.w(1), bonus, dtype=DamageType.RADIANT)
-
 
 @power(
     "p833",
@@ -82,8 +94,36 @@ def p1567(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p833(c: Cast) -> None:
+    """The temporary hit points, or `f1098`'s save in lieu of them.
+
+    **Written in rather than registered, which is #550's convention** and
+    not what this row's feat note proposed. That note said the clause is
+    `c.pre_empt` and the line owed was `p833` asking
+    `c.instead_of("temp_hp", ...)` -- the older rider shape, which
+    `content/CLAUDE.md` says the tree "still holds in places". #550
+    replaced it for a feat naming **one** power, and the reason is in that
+    file: the rider shape only reached a power written to *ask*, and almost
+    none were -- 36 registrations against 12 read sites.
+
+    So the gate is `c.feat` and the branch is here. `f1098` is unbracketed
+    (`feat.category` is empty in `game.db`), so a plain `if`.
+
+    `c.save(on=c.me, against="ongoing")` is the card's "a saving throw
+    against any necrotic ongoing effects": `against=` picks which save-ends
+    effect, and without it the throw would take whichever it found first --
+    "which may well be a daze when the row means the burn", as that verb's
+    own docstring puts it. The necrotic narrowing is not sayable there, so
+    this is the ongoing-damage save and the type is the approximation.
+
+    `c.may`, because the card says "you can", and declining leaves the
+    printed temporary hit points standing."""
     if c.strike():
         c.damage(c.w(1), c.cha_mod)
+        if (c.feat("f1098") and c.is_kind("undead")
+                and c.may("save against an ongoing effect instead of"
+                          " gaining temporary hit points")):
+            c.save(on=c.me, against="ongoing")
+            return
         c.temp_hp(c.wis_mod, on=c.me)
 
 
