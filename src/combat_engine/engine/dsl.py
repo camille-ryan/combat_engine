@@ -526,6 +526,36 @@ class Target:
     #: name a type, so the untyped form above is the rare one -- and filtering
     #: without the type would accept a creature alight from the wrong source.
     ongoing_types: frozenset[DamageType] = frozenset()
+    #: "Targets a creature **affected by** `mNNNNaN`" -- the ref of another
+    #: row of this creature's whose effect the target must be carrying.
+    #:
+    #: Five monster rows print it and every one of them names a *sibling
+    #: ability of the same stat block*: a swarm that strikes what its own
+    #: cloud has caught, a sickle that finishes what its own snare holds.
+    #: So this is not "any effect" -- it is a named row, which is what makes
+    #: it a header field rather than a body check.
+    #:
+    #: Read off `Effect.by`, the ref of the row that laid an effect, which
+    #: has been there since #580 and is the same field
+    #: `ConditionApplied.power` and `durations.keywords_of` read. No new
+    #: state: the question was always answerable and nothing asked it.
+    #:
+    #: **`Cast.suffering` is the body-side half and is not a duplicate of
+    #: this.** That returns the *list* of creatures carrying an effect the
+    #: caster laid, for a body that iterates; this is a *filter*, so the
+    #: offered menu only contains legal targets. Five rows had the
+    #: restriction in their bodies and played correctly while the interface
+    #: and `policy/` offered them against anybody -- which is what "header
+    #: is data, body is code" exists to prevent.
+    #:
+    #: The two read different fields and that is deliberate: `suffering`
+    #: matches a substring of `Effect.label`, this matches `Effect.by`
+    #: exactly. `by` is the robust one -- #580 added it precisely because
+    #: six `cast.py` sites label by content (`"ongoing 5"`,
+    #: `"deals:fire:weapon"`) rather than by ref, so a label match answers
+    #: nothing for those. Narrowing `suffering` to `by` would change a verb
+    #: with live callers and is not done here.
+    affected_by: str = ""
 
     def __str__(self) -> str:
         if self.label:
@@ -2445,6 +2475,7 @@ def candidates(
         or aim.kind_or_ident
         or aim.hit_by_me_this_turn
         or aim.missed_by_me_this_turn
+        or aim.affected_by
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2753,6 +2784,14 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
     `candidates()` offered a target zero times and `use` rolled the attack --
     and a second copy of this logic would reproduce it one field over.
     """
+    if aim.affected_by and not any(
+        getattr(eff, "by", "") == aim.affected_by and not eff.suspended
+        for eff in world.effects.of(target)
+    ):
+        # **A suspended effect does not count.** `#470` made suspension a
+        # real state, and a creature whose snare is suspended is not held by
+        # it -- the sickle row would otherwise finish something that is free.
+        return False
     if aim.relation is Relation.HIDDEN_FROM:
         # **Sight is never the bare relation.** `query.unseen_by` subtracts
         # `sees_through` and folds in a capped sight range, and its own

@@ -692,15 +692,27 @@ def m3295a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(1),
-    target=Target(side="enemy", everyone=True, label="enemies under m3295a1"),
+    target=Target(side="enemy", everyone=True, affected_by="m3295a1",
+                  label="enemies under m3295a1"),
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d6", 5, dtype=DamageType.PSYCHIC),
-    dropped=("Target.affected_by",),
 )
 def m3295a3(c: Cast) -> None:
+    """The burst catches only what the cloud already holds.
+
+    **Written: the restriction moved into the header.** The body enforced it
+    and the row played, but the interface and `policy/` read the decorator
+    *without running anything* -- so the row was offered against creatures
+    the card forbids and then declined. `Target.affected_by` reads
+    `Effect.by`, and the refusal a player now sees is the printed
+    restriction itself.
+
+    `_m3295_tagged` goes with it: the pool is filtered before the body runs,
+    so there is nothing left to re-check.
+    """
     victim = c.target
-    if victim is None or not _m3295_tagged(c, victim):
+    if victim is None:
         return
     if c.strike(on=victim):
         c.hit(on=victim)

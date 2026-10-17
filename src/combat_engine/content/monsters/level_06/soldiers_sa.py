@@ -1681,9 +1681,38 @@ def m5825a2(c: Cast) -> None:
     attack=Attack(vs=REF, printed=9),
     damage=Damage("3d6", 8, kind=LIMITED),
     requires_text="targets a Medium or smaller creature designated as its quarry",
-    dropped=("Target.affected_by",),
 )
 def m5825a3(c: Cast) -> None:
+    """Re-pointed off `Target.affected_by`, which is the wrong field, and the
+    right ones already exist.
+
+    The other four rows on that symbol name an **effect** laid by a sibling
+    row, which `Target.affected_by` now reads off `Effect.by`. This card
+    names a creature *designated as its quarry*, and a designation is not an
+    effect on the victim -- `_current_quarry` below reads it off a label on
+    the **caster**, `f"{c.ref} target:<eid>"`, with the victim's id encoded
+    in the string.
+
+    **So nothing is missing from `Target`.** `Relation.QUARRY_OF` exists,
+    `Target.relation` reads a relation, and `Target.max_size` is "Medium or
+    smaller" -- between them they express this entire restriction with
+    fields that are already there. What blocks it is the row's **own
+    storage**: `m5825a2` files the designation as an id inside a label
+    rather than as the relation the engine has for it.
+
+    **So the marker is gone rather than re-spelled, and that is the
+    finding.** This row *plays*: the body reads the quarry and the size and
+    refuses a target that is neither, so both printed halves are enforced.
+    What is wrong is only **where** -- in the body, where the interface and
+    `policy/` cannot see it, so the row is offered against anybody and then
+    declines.
+
+    That is a refactor, not a missing facility, and a marker is for a
+    facility. The import gate refused the prose I first tried to put here
+    and was right to: there is no symbol to wait for, because nothing has
+    to arrive. Moving the designation to `Relation.QUARRY_OF` reaches
+    `m5825a0` and `m5825a2` as well, so it is an issue rather than a
+    marker."""
     half = max(1, c.speed_of() // 2)
     c.move(half, at="fly")
     victim = c.target

@@ -2289,6 +2289,89 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def targets_what_my_other_row_caught(out: Result) -> None:
+    """"Targets a creature **affected by** `mNNNNaN`" -- a sibling's effect.
+
+    Four monster rows print it: a sickle that finishes what its own snare
+    holds, a burst that catches what its own cloud holds, an aura that
+    slides what it has already caught. All four **played**, with the
+    restriction enforced in the body -- and all four were offered against
+    any enemy and then declined, because the interface and `policy/` read
+    the decorator **without running anything**. "Header is data, body is
+    code" is the rule that was being broken.
+
+    `Target.affected_by` reads `Effect.by`, the ref of the row that laid an
+    effect, which has been there since #580. Nothing new is stored: the
+    question was always answerable and no header asked it.
+
+    Four controls:
+
+    * **nobody affected means no candidates**, and the refusal a player sees
+      is the printed restriction -- `nothing here is "a creature affected by
+      m3275a2"`;
+    * the sibling's effect on one enemy makes **exactly that one** a
+      candidate, not the whole pool;
+    * **another row's effect does not count.** The field names one ref, and
+      a filter that accepted any effect would make these rows targetable off
+      anything the monster had ever done;
+    * **a suspended effect does not count.** #470 made suspension real, and
+      a creature whose snare is suspended is not held by it -- the sickle
+      would otherwise finish something that is free.
+
+    Asserted through `dsl.candidates`, which is the offer path, because the
+    whole point of the change is what the menu contains. A rule reading
+    `_stands_right` alone would pass with the guard list unchanged -- and
+    that guard is hand-kept, which `candidates` itself warns about: *"a new
+    `Target` field must be named here as well as tested in `_stands_right`,
+    or the offer path skips it in silence."*
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import Target, _stands_right, candidates, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+
+    for row, sibling in (("m3275a1", "m3275a2"), ("m4727a1", "m4727a2"),
+                         ("m3295a3", "m3295a1"), ("m6686a1", "m6686a0")):
+        world, me, _ = _board(row, 1)
+        p = get(row)
+        out.that(p is not None, f"{row} is declared")
+        if p is None:
+            continue
+        foes = sorted(enemies(world, me))
+        out.that(len(foes) >= 2, f"{row}'s board has two enemies")
+        if len(foes) < 2:
+            continue
+
+        out.that(not candidates(world, me, p),
+                 f"{row}: nobody is affected by {sibling}, so nothing is"
+                 " offered -- the control, and what the body used to do"
+                 " after the offer was already made")
+
+        held = Cast(world=world, me=me, ref=sibling).slowed(
+            on=foes[0], until=When.ENCOUNTER)
+        got = candidates(world, me, p)
+        out.that(list(got) == [foes[0]],
+                 f"{row}: the one creature {sibling} caught is offered, and"
+                 f" only it ({list(got)})")
+
+        if held is not None:
+            world.effects.suspend(held, "drivers")
+            out.that(not candidates(world, me, p),
+                     f"{row}: a SUSPENDED effect does not count -- the"
+                     " sickle must not finish something that is free")
+            world.effects.resume(held)
+
+    # Another row's effect must not satisfy the field.
+    world, me, _ = _board("m3275a1", 1)
+    foes = sorted(enemies(world, me))
+    Cast(world=world, me=me, ref="m9999a9").slowed(
+        on=foes[0], until=When.ENCOUNTER)
+    aim = Target(side="enemy", affected_by="m3275a2")
+    out.that(not _stands_right(world, me, aim, foes[0]),
+             "an effect from a DIFFERENT row does not satisfy the field --"
+             " it names one ref, not any effect the monster ever laid")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -16898,6 +16981,9 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "targets_what_my_other_row_caught": (targets_what_my_other_row_caught,
+                                        "a target restricted to what a"
+                                        " sibling row caught"),
     "the_clause_that_applied_it": (the_clause_that_applied_it,
                                   "the row that laid a condition"),
     "the_blow_that_bloodied": (the_blow_that_bloodied,

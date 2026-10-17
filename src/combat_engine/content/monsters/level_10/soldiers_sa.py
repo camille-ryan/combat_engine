@@ -4978,14 +4978,27 @@ def m6686a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ENEMY,
-    dropped=("Target.affected_by",),
+    target=Target(side="enemy", everyone=True, affected_by="m6686a0",
+                  label="each creature affected by m6686a0 in the burst"),
 )
 def m6686a1(c: Cast) -> None:
+    """Slides whatever its own aura has caught.
+
+    **Written: the restriction moved into the header.** The body enforced it
+    and the row played, but the interface and `policy/` read the decorator
+    *without running anything* -- so the row was offered against creatures
+    the card forbids and then declined. `Target.affected_by` reads
+    `Effect.by`, and the refusal a player now sees is the printed
+    restriction itself.
+
+    The hand-rolled check this replaces read `e.label == "m6686a0"`, and the
+    header reads `Effect.by` instead -- which is the robust field. #580 added
+    `by` precisely because six `cast.py` sites label by *content* rather
+    than by ref, so a label comparison answers nothing for an effect laid
+    through one of them.
+    """
     victim = c.target
     if victim is None:
-        return
-    if not any(e.label == "m6686a0" for e in c.world.effects.of(victim)):
         return
     c.slide(2, on=victim)
 

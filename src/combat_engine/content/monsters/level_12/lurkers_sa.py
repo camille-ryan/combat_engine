@@ -2252,20 +2252,37 @@ def m3275a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(side="enemy", affected_by="m3275a2",
+                  label="a creature affected by m3275a2"),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d6", 7),
     requires_text="requires a sickle",
-    dropped=("Target.affected_by",),
 )
 def m3275a1(c: Cast) -> None:
-    """"Targets a creature affected by m3275a2" is a restriction `Target`
-    cannot express -- a relation to the caster's own earlier row, so
-    `Target.relation` -- and the row picks a bonded creature rather than being
-    thrown away when the chooser aims it elsewhere."""
-    bonded = set(c.suffering("m3275a2"))
-    victim = _restricted_to(c, 1, lambda f: f in bonded)
+    """The sickle finishes what the snare holds.
+
+    The note said "a restriction `Target` cannot express -- a relation to
+    the caster's own earlier row, so `Target.relation`". `Target.relation`
+    was the wrong guess: a relation is a standing pair in `Relations`, and
+    what this card names is an **effect** laid by one named row. That is
+    `affected_by`, and `Effect.by` has answered it since #580.
+
+    **Written: the restriction is in the header now, where the menu reads
+    it.** The body already enforced it and the row already played -- but the
+    interface and `policy/` read the decorator *without running anything*,
+    so the row was offered against creatures the card forbids and then
+    declined. "Header is data, body is code" is the rule this was breaking.
+
+    `Target.affected_by` reads `Effect.by`, the ref of the row that laid an
+    effect, and a **suspended** effect does not count: #470 made suspension
+    a real state, and a creature whose hold is suspended is not held by it.
+
+    So `_restricted_to` and the `c.suffering` scan both go: the chooser is
+    handed a pool that already contains only bonded creatures, which is why
+    the body no longer has to rescue a misaimed swing.
+    """
+    victim = c.target
     if victim is None or not c.strike(on=victim):
         return
     c.hit(on=victim)
@@ -2655,19 +2672,22 @@ def m4727a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(side="enemy", affected_by="m4727a2",
+                  label="a creature affected by m4727a2"),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("4d6", 7),
     requires_text="requires a sickle",
-    dropped=("Target.affected_by",),
 )
 def m4727a1(c: Cast) -> None:
-    """"Targets a creature affected by m4727a2" is a restriction `Target`
-    cannot express -- a relation to the caster's own earlier row, so
-    `Target.relation` -- and the row picks a bonded creature."""
-    bonded = set(c.suffering("m4727a2"))
-    victim = _restricted_to(c, 1, lambda f: f in bonded)
+    """`m3275a1`'s twin, and written the same way.
+
+    The note guessed `Target.relation`, and a relation is a standing pair in
+    `Relations` where this card names an **effect** laid by one named row.
+    `Target.affected_by` is that, read off `Effect.by`. The restriction is in
+    the header now, so the menu offers only bonded creatures and the body no
+    longer rescues a misaimed swing."""
+    victim = c.target
     if victim is None or not c.strike(on=victim):
         return
     c.hit(on=victim)
