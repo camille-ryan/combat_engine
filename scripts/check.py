@@ -340,7 +340,60 @@ def main() -> int:
         print(f"{len(wanted)} instruments clean, {owed}")
     else:
         print(f"all {len(wanted)} instruments clean")
+    for line in _clear_red(args.all, bool(failed), at):
+        print(line)
     return len(failed)
+
+
+def _clear_red(whole_tree: bool, any_failed: bool, started_at: str) -> list[str]:
+    """Take down `NIGHTLY-FAILED` when *this* run is the green verdict.
+
+    **The action that fixes an owed sweep was the one that left the signal
+    most wrong.** `logs/NIGHTLY-FAILED` is written by `nightly.sh` on a red
+    sweep and removed by `nightly.sh` on a green one -- and the root
+    `CLAUDE.md` tells anybody with an owed sweep to run `check.py --all`,
+    which reaches the same verdict through the other door and had no way to
+    clear the flag. So somebody doing exactly what the documentation says
+    ended with a green tree and a file saying the last sweep failed. #566's
+    third route to the same confusion.
+
+    **Not "removing the marker by hand"**, which `scripts/CLAUDE.md` rightly
+    calls the mistake. This is the instrument acting on a verdict it reached
+    itself, under the same four guards `nightly.sh` applies -- and it says so
+    on stdout, so the removal is never silent:
+
+    * **every instrument clean.** One red check is not a green sweep.
+    * **`--all`.** A narrow run has not looked at the rest of the tree, which
+      is the whole argument `audit.py` makes for only watermarking a full
+      sweep.
+    * **a clean tree.** A sweep over uncommitted edits certifies no commit --
+      `nightly.sh` refuses to start on one for this reason.
+    * **the sha did not move under it.** A sweep across two trees certifies
+      neither, which is `nightly.sh`'s `MOVED` state.
+
+    Left alone in every other case, including a red run: a non-verdict must
+    never erase a real one, which is the invariant #543 was filed for.
+    """
+    if not NIGHTLY_RED.exists():
+        return []
+    if any_failed or not whole_tree:
+        return []
+    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+                           capture_output=True, text=True)
+    if dirty.returncode != 0 or dirty.stdout.strip():
+        return ["         logs/NIGHTLY-FAILED left alone: the tree is dirty,"
+                " so this sweep certifies no commit"]
+    now = _commit()
+    if not now or not started_at or now != started_at:
+        return ["         logs/NIGHTLY-FAILED left alone: the sha moved under"
+                f" this run ({started_at} -> {now}), so it certifies neither"]
+    was = NIGHTLY_RED.read_text().strip().splitlines()
+    try:
+        NIGHTLY_RED.unlink()
+    except OSError:
+        return []
+    return [f"         logs/NIGHTLY-FAILED removed -- this run is the green"
+            f" verdict at {now}. It had said: {was[0] if was else '(empty)'}"]
 
 
 #: Where `audit.py` records the commit of the last sweep that looked at every
