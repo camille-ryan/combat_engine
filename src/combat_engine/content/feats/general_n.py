@@ -64,6 +64,7 @@ from combat_engine.engine import (
     Attack,
     Bloodied,
     Cast,
+    CloseBlast,
     CloseBurst,
     Condition,
     Cover,
@@ -1899,11 +1900,43 @@ def f2179(c: Cast) -> None:
 
 
 @power("f2202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
+       reach=PERSONAL, target=SELF,
+       dropped=("resolve.deal_damage(branch=)",))
 def f2202(c: Cast) -> None:
-    """Narrows a blast and pays for it in damage. Reach is header data
-    the action menu reads before anything runs, and nothing rewrites
-    one.
+    """The narrower blast is written. The damage it buys is not.
+
+    "Reach is header data the action menu reads before anything runs" was
+    the hold and #614 answered it: `c.reshape_area(optional=True)`
+    contributes the close blast 1 beside the printed close blast 3, which
+    `dsl.branches_for` offers and `dsl.reach_of` resolves. "You can
+    **choose** to make it a close blast 1 **instead of** a close blast 3" is
+    a choice, so both stay on the menu.
+
+    **Re-pointed, and off `c.recast(area=)` rather than left on it.** That
+    symbol is at zero other rows now, and what is left here is not an area
+    rewrite at all: *"If you do, add 2 to the damage roll"* is a rider on
+    **which aiming was chosen**, and nothing carries that into the damage
+    context.
+
+    The attack context has `branch`, and `dsl.use` knows which aiming it was
+    handed -- `resolve.attack` even puts `"branch"` in the ctx it builds. But
+    `deal_damage` builds its own context and `branch` is not in it, and its
+    own comment says so: *"`branch` is not carried this far, so a power
+    printing two ranges answers for its first -- wrong for the handful that
+    do, and right for everything else."* This is one of the handful.
+
+    So the marker names the parameter rather than a context key: the ctx is
+    built inside `deal_damage` and the branch has to reach the function
+    before it can reach the dict. (A `ctx['...']` marker is refused at
+    import as prose, rightly -- it names no symbol a tool can watch for.)
+
+    `f1028`'s three riders read the chosen aiming off the **hit** and that
+    works, which is why they are written and this is not: a hit is announced
+    with the branch on it, and the damage roll is a different moment.
+
+    Writing the bonus ungated would add 2 to every use of the power,
+    including the printed wide blast the card charges nothing for -- more
+    than the page gives, which is the one direction worth refusing.
 
     **Re-pointed off `c.recast(reach=)`, which was one symbol over two
     mechanisms.** This row rewrites a *named row's area* -- its size or
@@ -1914,6 +1947,13 @@ def f2202(c: Cast) -> None:
     melee-as-ranged, which is a different rewrite -- see
     `c.recast(as_ranged=)`.
     """
+    c.reshape_area(
+        lambda r: CloseBlast(1),
+        ref="p1448",
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f2206", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
