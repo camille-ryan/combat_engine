@@ -11873,6 +11873,81 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def an_item_adds_to_what_a_pact_pays(out: Result) -> None:
+    """`i2343p2` had nothing to add to, and said so in its own marker.
+
+    *"Add the enhancement bonus of this rod to the bonus your pact gives
+    you."* The star pact's boon is `cf:warlock-f1c10`, which paid a
+    hard-coded `1` -- so the number lived inside its body and no item could
+    reach it. That is the `change_amount` family's whole argument, and the
+    row had been marked for exactly this with the fix located: *"the one
+    content line that would close this is in that file and not in this
+    one"*. #551 carried it as a recorded verdict nothing surfaced.
+
+    One line: the boon reads `c.amount_for("cf:warlock-f1c10", 1)`.
+
+    **Both bodies are run, in order, on one board.** The commonest bug in
+    this family is the mirror image -- a `change_amount` aimed at a body that
+    still hard-codes its number -- and that fault is invisible from either
+    row alone. So the item's body raises the number and the *boon's* body is
+    what gets asked whether it paid it.
+
+    `audit.py` reports all three of this rod's rows UNUSED, including
+    `i2343p1`, which is finished: the board cannot field a warlock on the
+    star leg holding this rod. A verdict that is the board's reach rather
+    than the row's, which is why this is driven here.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+
+    boon_ref, item_ref = "cf:warlock-f1c10", "i2343p2"
+    out.that(not REGISTRY[item_ref].unfinished,
+             f"{item_ref} carries no marker",
+             f"{REGISTRY[item_ref].unfinished}")
+
+    def paid(*, with_item: bool) -> list[int]:
+        world, me, _ = _posed(item_ref, 8)
+        if with_item:
+            REGISTRY[item_ref].body(Cast(world=world, me=me, ref=item_ref))
+        boon = Cast(world=world, me=me, ref=boon_ref)
+        REGISTRY[boon_ref].body(boon)
+        mods = world.get(me, Mods)
+        return sorted(m.value for m in (mods.items if mods else ())
+                      if m.what in ("save", "skill", "ability_check"))
+
+    plain = paid(with_item=False)
+    out.that(plain == [1, 1, 1],
+             "the pact's boon pays the printed 1 on its three check keys with"
+             f" nothing raising it ({plain})")
+
+    world, me, _ = _posed(item_ref, 8)
+    rod = Cast(world=world, me=me, ref=item_ref)
+    out.that(rod.enhancement == 2,
+             "the board deals the holder the +2 printing of the rod",
+             f"{rod.enhancement}")
+
+    raised = paid(with_item=True)
+    out.that(raised == [3, 3, 3],
+             "and after the rod's free action it pays 1 + the enhancement,"
+             f" which is the card's own arithmetic ({plain} -> {raised})")
+
+    # **The new value, not a delta, and not a sum of raises.** `amount_for`
+    # takes the largest of what it is offered, so two rods are not two
+    # raises -- which is the rule for a granted number and the reason
+    # `change_amount` names the figure rather than adding to it.
+    world2, me2, _ = _posed(item_ref, 8)
+    twice = Cast(world=world2, me=me2, ref=item_ref)
+    REGISTRY[item_ref].body(twice)
+    REGISTRY[item_ref].body(twice)
+    boon2 = Cast(world=world2, me=me2, ref=boon_ref)
+    out.that(boon2.amount_for(boon_ref, 1) == 3,
+             "using it twice still pays 3, because the largest applies and a"
+             f" granted number is not additive ({boon2.amount_for(boon_ref, 1)})")
+
 def a_blanket_line_lengthens_every_blink(out: Result) -> None:
     """Five item rows said "nothing lengthens a blink". `c.extend_every` does.
 
@@ -14700,6 +14775,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "an_item_adds_to_what_a_pact_pays": (
+        an_item_adds_to_what_a_pact_pays,
+        "the star pact's boon hard-coded its 1, so no item could add to it"),
     "a_blanket_line_lengthens_every_blink": (
         a_blanket_line_lengthens_every_blink,
         "five rows refused a blink's extra square that c.extend_every lays"),

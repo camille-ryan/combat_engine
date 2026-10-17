@@ -320,8 +320,20 @@ def warlock_f1c10(c: Cast) -> None:
     drops are the printed +3 on one roll rather than three separate +1s,
     and the first roll ends every set at once."""
     me = c.me
+    # **Read, not hard-coded, so an item can add to it.** `i2343p2` prints
+    # "add the enhancement bonus of this rod to the bonus your pact gives
+    # you", and there was no bonus to add to: the number lived inside this
+    # body, which is the `change_amount` family's whole argument. One line,
+    # and the row that wanted it had been marked for it in as many words --
+    # "the one content line that would close this is in that file and not in
+    # this one". #551's recorded verdict.
+    #
+    # The default stays the printed 1, so a warlock with no such item is
+    # unchanged, and `amount_for` takes the largest rather than summing --
+    # two items raising one boon is not two raises.
+    boon = c.amount_for("cf:warlock-f1c10", 1)
     laid = [
-        c.bonus(what, 1, until=When.EONT, on=me)
+        c.bonus(what, boon, until=When.EONT, on=me)
         for what in ("attack", "save", "skill", "ability_check")
     ]
 

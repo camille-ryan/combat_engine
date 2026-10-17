@@ -2224,20 +2224,33 @@ def i2343p1(c: Cast) -> None:
     usage=DAILY,
     action=FREE,
     reach=PERSONAL,
-    target=SELF,
-    todo=("c.pact_boon()",),
+    target=NO_TARGET,
+    trigger="an enemy you cursed drops",
+    on=Trigger(Dropped, _boon_drop("star"), "an enemy you cursed drops"),
 )
 def i2343p2(c: Cast) -> None:
-    """Re-read a third time and still blocked, in the same place. The
-    trigger is sayable -- `i2343p1` above declares it off the same
-    `Dropped` -- and `c.amount_for` is the right read for "adds a number to
-    the bonus that leg gives".
+    """The rod's enhancement, added to what the pact pays.
 
-    What it cannot do from here is make the bonus readable. The leg pays a
-    hard-coded `c.bonus("attack", 1)` in `features/warlock.py`, and
-    `c.amount_for` only answers for a row that asks it; the one content line
-    that would close this is in that file and not in this one, so the row
-    stays marked until it lands."""
+    **The line this row waited for landed in the other file.** Its own note
+    said so: "the one content line that would close this is in
+    `features/warlock.py` and not in this one". `cf:warlock-f1c10` pays the
+    star pact's boon and hard-coded its `1`, so there was no number to add
+    to -- which is the `change_amount` family's whole argument, and the
+    commonest bug in it is the mirror image, a `change_amount` on a body
+    that still hard-codes. That body now reads
+    `c.amount_for("cf:warlock-f1c10", 1)`.
+
+    **The new value, not a delta.** `change_amount` names what the mechanic
+    hands out and `amount_for` takes the largest, so "add the enhancement
+    bonus of this rod to the bonus your pact gives you" is `1 +
+    c.enhancement` -- the printed 1 plus the rod's own number, which is why
+    the `+2` and `+3` printings are one row.
+
+    The trigger is `i2343p1`'s, and for the reason its note gives: the
+    printed heading names the pact's boon, which became a ref's printed name
+    when #586 imported the builds, so the words a player is shown are the
+    moment itself. `_boon_drop("star")` carries the pact."""
+    c.change_amount("cf:warlock-f1c10", 1 + c.enhancement, until=When.EONT)
 
 
 @power(
