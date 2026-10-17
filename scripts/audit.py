@@ -4224,12 +4224,56 @@ def main() -> int:
         import json
 
         if STARTED_AT:
+            # **The five buckets have to add up to the ref count, and the
+            # file used to record four of them.** `refs 21627, fired 20106,
+            # silent 260, never 1083` left **178** rows in a bucket the file
+            # did not name, and the previous watermark left 180 -- so two
+            # rows had changed bucket between sweeps and nothing said a
+            # word. The missing one is `known_quiet`: a row silent for a
+            # recorded reason, which is reported on screen and was never
+            # stored.
+            #
+            # Not an arithmetic coincidence that it closes. `ok` is *defined*
+            # at the top of this block as `len(chosen)` less the other four,
+            # so the identity below is the definition read back -- which is
+            # exactly why it is worth asserting. What it catches is somebody
+            # changing what `ok` means, or adding a sixth bucket and not
+            # telling the file.
+            #
+            # **If this fires, the buckets are wrong and not the assert.**
+            # Raising a number to make it close would turn the one piece of
+            # arithmetic that can see a silent migration into a formality.
+            # #596.
+            counted = (ok + len(broken) + len(silent) + len(never)
+                       + len(known_quiet))
+            if counted != len(chosen):
+                raise AssertionError(
+                    f"the watermark does not reconcile: fired {ok} + raises "
+                    f"{len(broken)} + silent {len(silent)} + never "
+                    f"{len(never)} + quiet {len(known_quiet)} = {counted}, "
+                    f"but {len(chosen)} rows were audited. A bucket is "
+                    f"missing from this sum or `ok` no longer means what it "
+                    f"did -- fix the buckets, never this sum. #596"
+                )
             WATERMARK.write_text(json.dumps({
                 "sha": STARTED_AT,
                 "refs": len(chosen),
                 "fired": ok,
                 "silent": len(silent),
                 "never": len(never),
+                # **The bucket the file never named.** Stored as a count and
+                # by ref, the same shape as `silent_refs` below and for the
+                # same reason its note gives: a count cannot see one row
+                # moving from `known_quiet` to `silent` while another moves
+                # back, because both totals are unchanged. That is the
+                # failure `silent_refs` exists to prevent, one bucket over.
+                "known_quiet": len(known_quiet),
+                "known_quiet_refs": sorted(r.ref for r in known_quiet),
+                # Raises, which fail the run -- so this is 0 on every sweep
+                # that wrote a watermark anybody trusted. Recorded anyway,
+                # because the sum above cannot be checked by a reader
+                # without it.
+                "raises": len(broken),
                 # **The refs, not just the count.** See the note beside `base`
                 # above: a count cannot tell a narrow run whether its silent
                 # rows are the known ones, and cannot see ten healing while
