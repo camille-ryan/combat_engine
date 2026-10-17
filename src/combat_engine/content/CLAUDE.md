@@ -186,17 +186,27 @@ here have turned out to exist under another name, and this line used to say
 which is the thing you do not know. **In this order:**
 
 1. **`docs/symbols/<category>.md`** — if you know what *kind* of symbol you
-   want. Ten files, generated from `Cast` and gated by `check.py`, so a verb
-   cannot be missing from them. Each ends with the near-misses that live in
-   another file, because the category is not always where you would look:
-   combat advantage is in `modifiers.md`, not `conditions.md`.
-2. **`uv run scripts/vocab.py --find <word> <word>`** — if you do not.
+   want. Eleven files, generated from `Cast` and `query.py` and gated by
+   `check.py`, so neither a verb nor a reader can be missing from them. Each
+   `Cast` page ends with the near-misses that live in another file, because
+   the category is not always where you would look: combat advantage is in
+   `modifiers.md`, not `conditions.md`.
+2. **`docs/symbols/reading.md` if the thing you want *asks* rather than
+   does.** It is the only page not generated from `Cast`: `query.py`'s 75
+   readers, which are the other half of what a row calls and were in no
+   document at all until #648. **Three families in one session were marked
+   as engine gaps when the reader already existed** — `f1296` said "nothing
+   asks what cover a creature has" and `query.cover_between` had always been
+   that, and `query.since_turn_began` was filed as a gap while 21 content
+   helpers already wrapped it. If your clause reads the board rather than
+   changing it, open this page before `--find`.
+3. **`uv run scripts/vocab.py --find <word> <word>`** — if you do not.
    Searches what a symbol *says it does*. **Separate words, not a quoted
    phrase**: `--find ignore resistance` finds 36 places and
    `--find "ignore resistance"` finds none, because the arguments are ANDed
    and no docstring holds that literal string. Four verbs that exist were
    marked missing in one session over exactly this.
-3. **`uv run scripts/vocab.py --brief`** — for the signature of something
+4. **`uv run scripts/vocab.py --brief`** — for the signature of something
    you have now found.
 4. **`uv run scripts/blocked.py --group`** — to reuse the symbol other rows
    are already waiting on, rather than minting a synonym.
