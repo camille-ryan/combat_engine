@@ -165,6 +165,16 @@ KNOWN_SILENT = {
     "m5481a0": "tethers to the block it is fielded beside; the board fields it alone",
     "m5482a0": "tethers to the block it is fielded beside; the board fields it alone",
     "m135a3": "targets a destroyed undead ally; the board has none",
+    # Its whole printed benefit rewrites **one named weapon** -- by ref,
+    # because the group holds more than one bow and the card names one of
+    # them -- and `chargen` deals this holder a greataxe. So the write
+    # matches nothing and the row correctly does nothing, where its sibling
+    # `f1277` fires because the board happens to deal it the weapon its
+    # card names. Nothing about the row is conditional that the card does
+    # not make conditional; the same configurable-dummy fix retires it
+    # (#437). The alternative was asking by group, which would have
+    # lengthened every bow the character holds.
+    "f2099": "rewrites one named weapon; the board deals it another",
     # Its printed benefit holds only "while you're not wearing heavy armor",
     # and the board deals this character heavy armour -- so the row correctly
     # lays nothing. `f3722` is silent for the same sentence and the same

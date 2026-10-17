@@ -305,7 +305,7 @@ CATEGORIES: dict[str, dict] = {
                 "dex_", "dex_mod", "int_", "int_mod", "level", "mod",
                 "primary", "primary_mod", "score", "stats", "str_", "str_mod",
                 "total", "total_defence", "weapon_dice", "weapon_of",
-                "wielding", "wis_", "wis_mod",
+                "weapon_range", "wielding", "wis_", "wis_mod",
             ]),
             ("state and identity", [
                 "bloodied", "build", "element", "feat", "granted_by",

@@ -11877,6 +11877,97 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
+    """`c.weapon_range`, the third of the `weapon_dice` family.
+
+    Five rows wanted a weapon's printed range rewritten and three symbols
+    were pointing at one mechanism (#643). Two of the five are written here;
+    the other three turned out to want something else entirely, which is
+    the part worth recording.
+
+    **`c.gains_property` already existed**, promoted out of
+    `feats.general_s` for the silver run, and nothing re-read
+    `c.counts_as(property=)`'s rows against it. So the properties half of
+    this family was never missing -- only the range.
+
+    **And the thrown rows are not range rows.** `f1841`, `f1843` and `f3641`
+    print "use this melee weapon as a heavy thrown weapon", and writing
+    `Weapon.thrown` buys them nothing: what decides whether a ranged attack
+    is open off a melee weapon is `Power.thrown_by_hand`, a **header field
+    on the card**, and these feats change the weapon. Re-pointed to
+    `Gear.ranged(thrown=)`, which is the site.
+
+    So this rule asserts the two that are range rows, and that the three are
+    no longer filed under a verb that exists.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+
+    # -- the verb, on a weapon the board does deal ------------------------
+    #
+    # **Posed on an unrelated row.** An `f1277` board *arms* `f1277`, which
+    # already re-ranges the weapon, so the "before" read came back equal to
+    # the "after" and the assertion proved nothing. The same trap caught
+    # `a_marks_penalty_is_the_markers_to_set` an hour earlier.
+    world, me, _ = _posed("f2459", 1)
+    c = Cast(world=world, me=me, ref="drivers:range")
+    gear = world.need(me, Gear)
+    held = next((w for w in gear.weapons if w.ranged is not None), None)
+    out.that(held is not None, "the board deals a weapon with a printed range",
+             f"{[(w.slug, w.ranged) for w in gear.weapons]}")
+    if held is None:
+        return
+    was = held.ranged
+    out.that(was != (10, 20),
+             "whose printed range is not the one about to be written",
+             f"{was}")
+    out.that(c.weapon_range(ranged=(10, 20), ref=held.ref, on=me) == 1,
+             "one weapon is re-ranged when asked by ref")
+    out.that(held.ranged == (10, 20),
+             f"and the field says so ({was} -> {held.ranged})")
+
+    # **No blanket, unlike `gains_property`.** A property only adds; a range
+    # replaces, so an `every=` would shorten a bow to make a dagger
+    # throwable. Asserted because the asymmetry is the reason the parameter
+    # is absent, and absence is invisible.
+    out.that("every" not in Cast.weapon_range.__code__.co_varnames,
+             "and there is no blanket form, because a range REPLACES where a"
+             " property only adds")
+    out.that(c.weapon_range(ref=held.ref, on=me) == 0,
+             "asking for neither field is a no-op rather than an error")
+
+    # -- the two rows that are range rows --------------------------------
+    out.that(REGISTRY["f1277"].unfinished == ("c.weapon_group()",),
+             "f1277 is down to its third rewrite, re-filing the group",
+             f"{REGISTRY['f1277'].unfinished}")
+    out.that(REGISTRY["f2099"].unfinished == ("Weapon.brutal",),
+             "and f2099 to a property with no reader, which is the gap worth"
+             f" naming rather than the write ({REGISTRY['f2099'].unfinished})")
+
+    world2, me2, _ = _posed("f1277", 1)
+    c2 = Cast(world=world2, me=me2, ref="f1277")
+    REGISTRY["f1277"].body(c2)
+    blow = next((w for w in world2.need(me2, Gear).weapons
+                 if w.ref == "w3662"), None)
+    out.that(blow is not None, "the board deals f1277 the weapon its card names")
+    if blow is None:
+        return
+    out.that(blow.ranged == (10, 20),
+             f"whose range the row raises as printed ({blow.ranged})")
+    out.that("high crit" in blow.properties,
+             "and whose high-crit property it lays -- a property with a live"
+             f" reader in `Cast._high_crit` ({sorted(blow.properties)})")
+
+    # -- and the three that are not --------------------------------------
+    for ref in ("f1841", "f1843", "f3641"):
+        out.that(REGISTRY[ref].unfinished == ("Gear.ranged(thrown=)",),
+                 f"{ref} names the ranged-basic site, not a weapon field",
+                 f"{REGISTRY[ref].unfinished}")
+
 def a_marks_penalty_is_the_markers_to_set(out: Result) -> None:
     """"A -3 penalty instead of the normal -2" -- four feats, one number.
 
@@ -15205,6 +15296,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_weapons_range_is_a_field_a_row_can_write": (
+        a_weapons_range_is_a_field_a_row_can_write,
+        "c.weapon_range, and the three rows that wanted something else"),
     "a_marks_penalty_is_the_markers_to_set": (
         a_marks_penalty_is_the_markers_to_set,
         "a -3 mark said as the number, with the burst waiver intact"),

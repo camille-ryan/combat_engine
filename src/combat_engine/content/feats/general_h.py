@@ -653,21 +653,34 @@ def f1255b(c: Cast) -> None:
     c.on_sustain(hold, lambda: c.damage(c.w(), on=victim))
 
 
-@_trait("f1277", todo=("c.weapon_range()", "c.counts_as(property=)",
-),
+@_trait("f1277", dropped=("c.weapon_group()",),
         proficiency=("w3662",))
 def f1277(c: Cast) -> None:
-    """The proficiency lands. What is left is the clauses that rewrite
-    the weapon itself, and they are three different rewrites rather than
-    one: the range (`Weapon.ranged`), the high crit property
-    (`Weapon.properties`), and re-filing the weapon so a class feature
-    and a group-gated power will take it (`Weapon.group`). Each field is
-    there and nothing edits a `Weapon` in place, so all three are named
-    -- a marker naming only the first would go quiet the day a range
-    verb landed and two clauses would still be gone.
+    """Two of the three rewrites land. The proficiency always did.
 
-    The free-action reload is not marked: nothing in the engine makes a
-    blowgun cost an action to load, so there is no cost to remove."""
+    **The old note called this exactly right and is why the marker is
+    precise now.** It said the clauses "are three different rewrites rather
+    than one: the range (`Weapon.ranged`), the high crit property
+    (`Weapon.properties`), and re-filing the weapon so a class feature and
+    a group-gated power will take it (`Weapon.group`) ... a marker naming
+    only the first would go quiet the day a range verb landed and two
+    clauses would still be gone."
+
+    A range verb has landed. So has the property one -- `c.gains_property`
+    was promoted out of `feats.general_s` a while ago and nothing re-read
+    these rows against it. `"high crit"` is a property with a live reader,
+    `Cast._high_crit`, so that clause is not merely written but consulted.
+
+    What is left is the third: **re-filing the weapon's group**, which is
+    the one field with no writer. It is also the one with teeth here --
+    `cf:rogue-scoundrel-f4` and the rogue's group-gated rows are what the
+    card is really buying -- so `dropped=` and a symbol for that alone.
+
+    The free-action reload is still not marked: nothing in the engine makes
+    this weapon cost an action to load, so there is no cost to remove."""
+    me = c.me
+    c.weapon_range(ranged=(10, 20), ref="w3662", on=me)
+    c.gains_property("high crit", ref="w3662", on=me)
 
 
 _swap("f1276", "f1276b")

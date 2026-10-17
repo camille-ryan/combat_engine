@@ -488,7 +488,7 @@ def f2884(c: Cast) -> None:
 
 
 @power("f1841", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=THROWN)
+       reach=PERSONAL, target=SELF, todo=("Gear.ranged(thrown=)",))
 def f1841(c: Cast) -> None:
     """Throw an off-hand blade like a handaxe, at 5/10.
 
@@ -504,17 +504,59 @@ def f1841(c: Cast) -> None:
     A standing `c.bonus("reach", 4)` is the other near miss. It is what
     `c.as_ranged` lays, but that one is `once=True` on the creature's *next*
     melee attack; standing, it would reach five squares with the greataxe in
-    the main hand, which is not this card."""
+    the main hand, which is not this card.
+    **Re-pointed: a range *write* landed and is not what this card needs.**
+    `c.weapon_range` sets `Weapon.thrown` on this character's own copy, and
+    `f1841`'s note was substantially right that it buys nothing here: the
+    clause these three print is "you may make a **ranged attack** with this
+    melee weapon", and what decides that is not the weapon's field.
+
+    Read down, since the old note had one detail wrong. `dsl.can_branch`
+    *does* open a ranged branch off a melee weapon -- `return bool(gear.melee)
+    if self.thrown_by_hand else gear.ranged is not None` -- so the gate is
+    not unconditionally `gear.ranged`. But `thrown_by_hand` is a **header
+    field on the power**, true for everybody holding that card, set by five
+    declared rows. These feats change the *weapon*, not the card, so no row
+    the character holds becomes throwable by writing the field.
+
+    So the gap is the ranged basic attack accepting a thrown melee weapon --
+    `Gear.ranged` is "can be fired", and its own comment is the argument
+    against widening it: *"a dagger cannot be -- letting it answer that
+    question hands a rogue a ranged basic attack it does not have."* That is
+    the site, and it is a `Gear`/basic-attack change rather than a weapon
+    field. #643.
+    """
 
 
 @power("f1843", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=THROWN)
+       reach=PERSONAL, target=SELF, todo=("Gear.ranged(thrown=)",))
 def f1843(c: Cast) -> None:
     """The same for whatever is lying about, plus a feat bonus when one
     is thrown. The bonus half cannot stand on its own either: an
     improvised weapon is not a thing `Gear` holds, so there is nothing
     for the gate to ask about -- and the throwing half is blocked at the
-    same read site as `f1841`, see there."""
+    same read site as `f1841`, see there.
+    **Re-pointed: a range *write* landed and is not what this card needs.**
+    `c.weapon_range` sets `Weapon.thrown` on this character's own copy, and
+    `f1841`'s note was substantially right that it buys nothing here: the
+    clause these three print is "you may make a **ranged attack** with this
+    melee weapon", and what decides that is not the weapon's field.
+
+    Read down, since the old note had one detail wrong. `dsl.can_branch`
+    *does* open a ranged branch off a melee weapon -- `return bool(gear.melee)
+    if self.thrown_by_hand else gear.ranged is not None` -- so the gate is
+    not unconditionally `gear.ranged`. But `thrown_by_hand` is a **header
+    field on the power**, true for everybody holding that card, set by five
+    declared rows. These feats change the *weapon*, not the card, so no row
+    the character holds becomes throwable by writing the field.
+
+    So the gap is the ranged basic attack accepting a thrown melee weapon --
+    `Gear.ranged` is "can be fired", and its own comment is the argument
+    against widening it: *"a dagger cannot be -- letting it answer that
+    question hands a rogue a ranged basic attack it does not have."* That is
+    the site, and it is a `Gear`/basic-attack change rather than a weapon
+    field. #643.
+    """
 
 
 # -- an event nothing emits ------------------------------------------------

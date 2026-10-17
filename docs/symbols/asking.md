@@ -122,6 +122,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Set the damage die of that creature's own weapons. Returns how many.
 - `c.weapon_of(self, ev: 'Any' = None) -> 'Weapon | None'`
   - Which weapon the attack behind this event was swung with.
+- `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', on: 'int | None' = None) -> 'int'`
+  - Give that creature's weapons a printed range. Returns how many.
 - `c.wielding(self, prop: 'str') -> 'bool'`
   - Does the caster meet a printed Requirement line?
 - `c.wis_`

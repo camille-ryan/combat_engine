@@ -1811,7 +1811,7 @@ def f3640(c: Cast) -> None:
 
 
 @power("f3641", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.make_thrown()",),
+       reach=PERSONAL, target=SELF, dropped=("Gear.ranged(thrown=)",),
        proficiency=("w3607",))
 def f3641(c: Cast) -> None:
     """The implement half plays: `c.as_implement` writes the fact onto
@@ -1819,7 +1819,28 @@ def f3641(c: Cast) -> None:
 
     Dropped: "treat the warhammer as a heavy thrown weapon with a range
     of 6/12". A weapon's range is a field on the `Weapon`, and nothing
-    writes one onto the thing being held."""
+    writes one onto the thing being held.
+    **Re-pointed: a range *write* landed and is not what this card needs.**
+    `c.weapon_range` sets `Weapon.thrown` on this character's own copy, and
+    `f1841`'s note was substantially right that it buys nothing here: the
+    clause these three print is "you may make a **ranged attack** with this
+    melee weapon", and what decides that is not the weapon's field.
+
+    Read down, since the old note had one detail wrong. `dsl.can_branch`
+    *does* open a ranged branch off a melee weapon -- `return bool(gear.melee)
+    if self.thrown_by_hand else gear.ranged is not None` -- so the gate is
+    not unconditionally `gear.ranged`. But `thrown_by_hand` is a **header
+    field on the power**, true for everybody holding that card, set by five
+    declared rows. These feats change the *weapon*, not the card, so no row
+    the character holds becomes throwable by writing the field.
+
+    So the gap is the ranged basic attack accepting a thrown melee weapon --
+    `Gear.ranged` is "can be fired", and its own comment is the argument
+    against widening it: *"a dagger cannot be -- letting it answer that
+    question hands a rogue a ranged basic attack it does not have."* That is
+    the site, and it is a `Gear`/basic-attack change rather than a weapon
+    field. #643.
+    """
     if _holding(c, "hammer"):
         c.as_implement(on=c.me)
 

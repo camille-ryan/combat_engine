@@ -11914,6 +11914,71 @@ class Cast:
                     ))
         return laid
 
+    def weapon_range(
+        self,
+        *,
+        ranged: tuple[int, int] | None = None,
+        thrown: tuple[int, int] | None = None,
+        group: str = "",
+        ref: str = "",
+        on: int | None = None,
+    ) -> int:
+        """Give that creature's weapons a printed range. Returns how many.
+
+        The third of the `weapon_dice` family, after `gains_property`, and
+        the same argument a third time: `Gear.weapons` holds `replace(w)`
+        copies made per character by `chargen.spawn`, never the module-level
+        weapons, so this **needs no reader** -- `resolve._long_range` and
+        `c.w` already read these fields for everybody.
+
+        **Five rows, and two different fields.** "Use any one-handed
+        off-hand weapon as a heavy thrown weapon, normal range 5, long range
+        10" is `thrown=`; "increase its range to 10/20" is `ranged=`. They
+        are separate fields on `Weapon` on purpose, and that comment is the
+        reason to keep them separate here: *"`Gear.ranged` means can be
+        fired, and a dagger cannot be -- letting it answer that question
+        hands a rogue a ranged basic attack it does not have."* A verb that
+        collapsed them would do exactly that.
+
+        **No `every=`**, unlike `gains_property`. That verb offers a blanket
+        because a property only ever adds; a range *replaces*, so a blanket
+        would shorten a bow to make a dagger throwable. `weapon_dice`
+        withholds `every=` for the same reason and says so.
+
+        Both may be given at once -- `f3641` makes one named weapon a thrown
+        weapon and nothing else -- and giving neither is a no-op rather than
+        an error, because a caller computing a range off a card may legally
+        arrive with nothing to set.
+
+        Announced on `WeaponChanged` like its two siblings, and only when it
+        changed something, so arming a trait twice says the same thing once.
+        """
+        who = self._who(on)
+        if who is None or (ranged is None and thrown is None):
+            return 0
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return 0
+        from .events import WeaponChanged
+
+        changed = 0
+        for weapon in gear.weapons:
+            if not ((group and weapon.group == group)
+                    or (ref and weapon.ref == ref)):
+                continue
+            changed += 1
+            # `named`, not `field`: `dataclasses.field` is imported at the
+            # top of this module and a loop variable would shadow it.
+            for named, want in (("ranged", ranged), ("thrown", thrown)):
+                if want is None or getattr(weapon, named) == want:
+                    continue
+                setattr(weapon, named, want)
+                self.world.bus.emit(WeaponChanged(
+                    actor=who, weapon=weapon.ref,
+                    field=named, what=f"{want[0]}/{want[1]}",
+                ))
+        return changed
+
     def struck_by_property(self, prop: str, ev: Any = None) -> bool:
         """Did the attack behind this event use a weapon with that property?
 

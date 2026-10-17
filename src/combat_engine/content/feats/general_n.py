@@ -1671,10 +1671,26 @@ def f2097(c: Cast) -> None:
 
 @power("f2099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Weapon.brutal", "c.weapon_range()"))
+       dropped=("Weapon.brutal",))
 def f2099(c: Cast) -> None:
-    """Both halves are about one named weapon. Bow is a group and
-    shortbow is not, and brutal is a weapon property nothing carries."""
+    """The range lands; brutal has no reader.
+
+    Both halves are about one named weapon, which is why this asks by
+    **ref** and not by group: the group holds more than one bow and the
+    card names one of them. That was the old note's first point and it
+    stands.
+
+    `c.weapon_range` writes `Weapon.ranged` on this character's own copy,
+    and `resolve._long_range` and `dsl._reach` both read that field, so the
+    20/40 is consulted rather than merely recorded.
+
+    **Brutal stays dropped, and for a sharper reason than "nothing carries
+    it".** `c.gains_property` would put the word on the weapon happily --
+    `properties` is a free-form set -- and nothing in `engine/` reads it.
+    Writing it would be a property nothing consults, which is this
+    component's named failure mode, so the symbol names the **reader** that
+    is missing rather than the write that is easy."""
+    c.weapon_range(ranged=(20, 40), ref="w3630", on=c.me)
 
 
 @power("f2101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
