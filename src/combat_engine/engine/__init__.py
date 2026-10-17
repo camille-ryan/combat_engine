@@ -148,6 +148,7 @@ from .triggers import (
     by_keyword,
     by_me,
     by_melee,
+    by_melee_only,
     by_opportunity,
     by_ranged,
     check_failed,

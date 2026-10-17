@@ -685,6 +685,31 @@ def by_melee(world: World, me: int, ev: Event) -> bool:
     )
 
 
+def by_melee_only(world: World, me: int, ev: Event) -> bool:
+    """Was it a **melee** attack, close attacks excluded?
+
+    `by_melee` above answers "melee or close", which is the right question
+    for the four rows that read it -- "missed by a melee attack" on a card
+    that does not distinguish. Five other rows do distinguish: "you become
+    bloodied from a **melee** attack", "an enemy adjacent to you bloodies
+    you with a melee attack". A close burst is a *close* attack and not a
+    melee one, so counting it would pay those rows out on a blast.
+
+    Both exist rather than one being widened, because changing `by_melee`
+    would silently narrow four written rows -- and whether *those* four
+    should be strict is a question about their cards, not about this
+    predicate. Worth asking one day; not answered here.
+
+    Reads `ev.power` through `_power_of`, so it works on any event carrying
+    the ref -- `Hit`, `Miss`, `Dropped`, and `Bloodied` since it gained one.
+    `False` with no ref, which is right for ongoing damage.
+    """
+    p = _power_of(ev)
+    if p is None:
+        return False
+    return p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+
+
 def by_ranged(world: World, me: int, ev: Event) -> bool:
 
     p = _power_of(ev)

@@ -93,6 +93,7 @@ from combat_engine.engine import (
     both,
     by_me,
     by_melee,
+    by_melee_only,
     by_ranged,
     cursed_by_me,
     get,
@@ -223,11 +224,19 @@ def _foe(c: Cast) -> int | None:
 
 
 def _bloodied_by_a_foe(world: World, me: int, ev: Any) -> bool:
+    """An enemy bloodied me **with a melee attack**.
+
+    Both cards reading this print the melee narrowing, and `Bloodied` now
+    carries the row that struck -- so `by_melee_only` can answer it.
+    **Not `by_melee`**: that counts a close burst as melee and these cards
+    do not, so a blast would pay them out.
+    """
     who = getattr(ev, "source", None)
     return (
         getattr(ev, "actor", None) == me
         and who is not None
         and query.team(world, who) is not query.team(world, me)
+        and by_melee_only(world, me, ev)
     )
 
 
@@ -436,13 +445,19 @@ def i2673x1(c: Cast) -> None:
 @power("i2673p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you become bloodied from a melee attack",
-       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"),
-       dropped=("Bloodied.power",))
+       on=Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"))
 def i2673p1(c: Cast) -> None:
     """`Bloodied.source` is the enemy that bloodied you, so the shove goes
     where the card puts it. "From a melee attack" is the dropped half --
     the event carries no attack, so the shape of the blow cannot be
-    asked."""
+    asked.
+
+    **"From a melee attack" is written now.** `Bloodied` gained a `power`
+    field, so the shape of the blow is askable -- and the predicate is
+    `by_melee_only` rather than `by_melee`, because that one counts a close
+    burst as melee and this card does not. A close attack is not a melee
+    attack, and paying out on a blast would be wider than the page.
+    """
     c.push(3, on=c.trigger.source)
 
 
@@ -1347,13 +1362,19 @@ def i3460x1(c: Cast) -> None:
        trigger="you are bloodied by a melee attack, or hit while bloodied",
        on=(Trigger(Bloodied, _bloodied_by_a_foe, "an enemy bloodies you"),
            Trigger(Hit, both(targets_me, by_melee),
-                   "you are hit while bloodied")),
-       dropped=("Bloodied.power",))
+                   "you are hit while bloodied")))
 def i3460p1(c: Cast) -> None:
     """Two printed triggers, so two declared ones. `_foe` reads
     `Bloodied.source` on the first and the attacker on the second, so both
     pay out against the creature that struck. "By a melee attack" is
-    dropped on the bloodying half only -- that event carries no attack."""
+    dropped on the bloodying half only -- that event carries no attack.
+
+    **"From a melee attack" is written now.** `Bloodied` gained a `power`
+    field, so the shape of the blow is askable -- and the predicate is
+    `by_melee_only` rather than `by_melee`, because that one counts a close
+    burst as melee and this card does not. A close attack is not a melee
+    attack, and paying out on a blast would be wider than the page.
+    """
     foe = _foe(c)
     if foe is not None and foe != c.me:
         c.flat(get(c.ref).level // 2, dtype=DamageType.ACID, on=foe)

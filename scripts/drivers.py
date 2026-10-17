@@ -2289,6 +2289,93 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def the_blow_that_bloodied(out: Result) -> None:
+    """"You become bloodied from a **melee** attack" -- five rows asked this.
+
+    `Bloodied` carried `actor` and `source`: who crossed the line and who
+    struck them. Five rows print the *shape* of the blow or the weapon it
+    came through, and neither is derivable from a creature. The event now
+    carries `power`, the same value `DamageApplied.detail` has always had
+    and from the same line of `deal_damage`.
+
+    **`by_melee_only` and not `by_melee`**, which is the whole care in this
+    change. The existing predicate answers "melee **or close**", which is
+    right for the four rows reading it -- cards that do not distinguish.
+    These five do: a close burst is a *close* attack, and a martial utility
+    paying out on a blast is wider than the page. Both predicates exist
+    rather than one being widened, because narrowing `by_melee` would
+    silently change four written rows.
+
+    Four controls:
+
+    * a melee blow satisfies both predicates -- the baseline;
+    * **a close burst satisfies `by_melee` and not `by_melee_only`**, which
+      is the only assertion that distinguishes them and the reason the
+      second exists;
+    * **ongoing damage satisfies neither.** `Bloodied.power` is `""` when
+      nothing with a row crossed the line, and a reader treating that as a
+      miss rather than as "nothing to ask" would pay out on a burn;
+    * and the content predicate the rows actually use agrees, asserted
+      through `items/hands.py` rather than re-derived here.
+    """
+    from combat_engine.engine import by_melee, by_melee_only
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import Bloodied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import deal_damage
+
+    world, me, _ = _board("p16434", 1)
+    from combat_engine.content.items.hands import _bloodied_by_a_foe
+
+    foe = sorted(enemies(world, me))[0]
+    health = world.need(foe, Health)
+
+    seen: list[Bloodied] = []
+    world.bus.on(Bloodied, seen.append)
+    deal_damage(world, me, foe, health.hp - health.max_hp // 2 + 1, detail="bmba")
+
+    out.that(len(seen) == 1, f"one Bloodied event was emitted ({len(seen)})")
+    if not seen:
+        return
+    ev = seen[0]
+    out.that(ev.power == "bmba",
+             f"and it names the row that struck ({ev.power!r}) -- the value"
+             " `DamageApplied.detail` has always carried, off the same line")
+    out.that(by_melee(world, me, ev) and by_melee_only(world, me, ev),
+             "a melee blow satisfies both predicates")
+    out.that(_bloodied_by_a_foe(world, foe, ev),
+             "and the content predicate the rows use agrees, asked through"
+             " the row's own file rather than re-derived here")
+
+    # The one arrangement that separates the two predicates.
+    burst = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None and p.reach is not None
+         and p.reach.kind == "close_burst"),
+        None,
+    )
+    out.that(burst is not None, "the tree declares a close burst to strike with")
+    if burst is not None:
+        close = Bloodied(actor=foe, source=me, power=burst)
+        out.that(by_melee(world, me, close),
+                 "`by_melee` counts a close burst as melee -- which is right"
+                 " for the four rows that read it")
+        out.that(not by_melee_only(world, me, close),
+                 "and `by_melee_only` does NOT -- the only assertion that"
+                 " separates them, and the reason the second exists")
+        out.that(not _bloodied_by_a_foe(world, foe, close),
+                 "so a blast does not fire the rows that say melee")
+
+    # Ongoing damage: no row struck, so nothing to ask about.
+    burn = Bloodied(actor=foe, source=me)
+    out.that(burn.power == "",
+             "an event with no row carries an empty ref, not a missing one")
+    out.that(not by_melee_only(world, me, burn),
+             "and it satisfies neither predicate -- a reader treating `\"\"`"
+             " as a miss would pay these rows out on ongoing damage")
+
+
 def feats_that_offer_an_aiming(out: Result) -> None:
     """The rows written against #614's contributed aiming, through the rows.
 
@@ -16693,6 +16780,8 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "the_blow_that_bloodied": (the_blow_that_bloodied,
+                              "the shape of the blow that crossed the line"),
     "feats_that_offer_an_aiming": (feats_that_offer_an_aiming,
                                   "the rows written against a contributed"
                                   " aiming"),

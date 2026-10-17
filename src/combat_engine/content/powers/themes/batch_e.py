@@ -87,6 +87,7 @@ from combat_engine.engine import (
     by_keyword,
     by_me,
     by_melee,
+    by_melee_only,
     either,
     get,
     leaves_me_out,
@@ -338,10 +339,10 @@ def p11871(c: Cast) -> None:
     keywords=MARTIAL,
     trigger="you bloody an enemy or reduce an enemy to 0 hit points with a melee attack",
     on=(
-        Trigger(Bloodied, by_me, "you bloody an enemy"),
-        Trigger(Dropped, by_me, "you reduce an enemy to 0 hit points"),
+        Trigger(Bloodied, both(by_me, by_melee_only), "you bloody an enemy"),
+        Trigger(Dropped, both(by_me, by_melee_only),
+                "you reduce an enemy to 0 hit points"),
     ),
-    dropped=("Bloodied.power",),
 )
 def p12234(c: Cast) -> None:
     """Two triggers, and the melee narrowing is askable on one of them.
@@ -355,6 +356,16 @@ def p12234(c: Cast) -> None:
     Gated rather than left wide, because answering a ranged kill was the
     fault: `by_melee` on a `Dropped` reads a field the event did not have
     and was false for ever, so the clause never narrowed anything.
+    
+
+    **Both halves carry the melee narrowing now.** `Dropped` has had a
+    `power` all along -- its own docstring says seven rows need it -- and
+    `Bloodied` has gained one, so "with a melee attack" is askable on each
+    trigger rather than on one.
+
+    `by_melee_only` and not `by_melee`: that counts a close burst as melee,
+    and this card says melee. A martial utility paying out on a blast is
+    wider than the page.
     """
     from combat_engine.engine.events import Dropped as _Dropped
 

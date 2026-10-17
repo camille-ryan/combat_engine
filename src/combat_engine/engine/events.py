@@ -688,10 +688,25 @@ class Bloodied(Event):
     same reason as `Dropped.source`: "whenever you bloody an enemy" is a
     common printed trigger and, without it, `by_me` was false on this
     event and nineteen rows had nowhere to ask.
+
+    **`power` is the ref of the row that struck**, and it is the second half
+    of the same argument. Five rows print the *shape* of the blow -- "you
+    become bloodied from a **melee** attack", "an enemy adjacent to you
+    bloodies you with a melee attack" -- or the weapon it came through, and
+    `source` alone cannot say either. With the ref, `dsl.reach_of` answers
+    the kind and `Cast.weapon_of` the weapon, which are the two questions
+    the cards actually ask.
+    #
+    Empty for ongoing damage and for anything that crosses the line without
+    a row behind it, which is the same case `source=None` covers. A reader
+    must treat `""` as "nothing to ask about" rather than as a miss --
+    `DamageApplied.detail` has carried it this way all along and is where
+    this value comes from.
     """
 
     actor: int
     source: int | None = None
+    power: str = ""
 
 
 @dataclass

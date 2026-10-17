@@ -1272,7 +1272,10 @@ def deal_damage(
         )
     )
     if not was_bloodied and health.bloodied and health.hp > 0:
-        world.bus.emit(Bloodied(actor=target, source=source))
+        # `detail` is the row that struck, the same value `DamageApplied`
+        # above carries. Five rows print the blow's *shape* or its weapon
+        # and `source` alone cannot say either.
+        world.bus.emit(Bloodied(actor=target, source=source, power=detail))
     _check_down(world, target, health, source, crit, detail)
     return landed
 

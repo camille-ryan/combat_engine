@@ -93,6 +93,7 @@ from combat_engine.engine import (
     by_keyword,
     by_me,
     by_melee,
+    by_melee_only,
     by_opportunity,
     by_ranged,
     get,
@@ -217,12 +218,18 @@ def _by_class(cls_: str):  # noqa: ANN202
 
 
 def _bloodied_by_adjacent(world: World, me: int, ev: Any) -> bool:
+    """An adjacent enemy bloodied me **with a melee attack**.
+
+    `by_melee_only` and not `by_melee`: a close burst is a close attack,
+    not a melee one, and the card says melee.
+    """
     who = getattr(ev, "source", None)
     return (
         getattr(ev, "actor", None) == me
         and who is not None
         and query.team(world, who) is not query.team(world, me)
         and query.distance_between(world, who, me) <= 1
+        and by_melee_only(world, me, ev)
     )
 
 
@@ -807,13 +814,18 @@ def i556p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="an adjacent enemy bloodies you with a melee attack",
     on=Trigger(Bloodied, _bloodied_by_adjacent, "an adjacent enemy bloodies you"),
-    dropped=("Bloodied.power",),
 )
 def i678p1(c: Cast) -> None:
     """`Bloodied.source` names the striker, so the swing goes back at it.
     "With a melee attack" is the dropped half -- the event carries no
     attack, so the shape of the blow cannot be asked. `c.run_at` is the
-    printed "you must end your movement adjacent to that enemy"."""
+    printed "you must end your movement adjacent to that enemy".
+
+    **"With a melee attack" is written now.** `Bloodied` gained a `power`
+    field, so the blow's shape is askable, and the predicate is
+    `by_melee_only` rather than `by_melee` -- that one counts a close burst
+    as melee and this card does not.
+    """
     foe = getattr(c.trigger, "source", None)
     if foe is None:
         return

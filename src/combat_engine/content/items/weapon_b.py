@@ -5556,12 +5556,25 @@ def i1687p1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     trigger="you bloody an enemy with an attack",
     on=Trigger(Bloodied, _my_bloodying, "you bloody an enemy"),
-    dropped=("Bloodied.power",),
+    dropped=("Bloodied.weapon",),
 )
 def i1688p1(c: Cast) -> None:
-    """"With an attack that uses the augmented weapon" is the dropped half:
-    `Bloodied` names its striker but not the blow, so any bloodying this
-    wielder does pays out. Paragon steps are out of scope."""
+    """Re-pointed: `Bloodied.power` landed and does not reach this row.
+
+    That field was added for the four rows printing the blow's **shape** --
+    "bloodied from a melee attack" -- and `by_melee_only` answers them now.
+    This card asks a different question: *"an attack that uses the augmented
+    weapon"*, which is **which weapon the blow came through**, and the ref
+    of the row does not say. A weapon power and a basic attack can both be
+    swung with either hand.
+
+    No event carries the weapon -- `weapon.py:829` records the same finding
+    from the other side, *"the attack context carries no weapon"* -- so the
+    marker names the field on the event this row watches rather than a verb.
+    Until it exists, any bloodying this wielder does pays out, which is
+    wider than the card and is why the marker stays.
+
+    Paragon steps are out of scope."""
     c.heal(10, on=c.me)
 
 
