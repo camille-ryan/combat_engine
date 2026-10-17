@@ -2289,6 +2289,109 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def feats_that_offer_an_aiming(out: Result) -> None:
+    """The rows written against #614's contributed aiming, through the rows.
+
+    `offered_aiming` proves the mechanism and `rider_on_an_offered_aiming`
+    proves the trigger. This proves the **content** reaches both: eight
+    heroic rows now call `c.reshape_area(optional=True)`, and a verb nothing
+    calls is this component's commonest bug.
+
+    Two rows, picked because their gates differ and each gate is the thing
+    its card is about:
+
+    * `f2070` -- "when you are attacking with a greatbow or a longbow". The
+      aiming must **not** be offered with a blade in hand, which is what
+      `audit.board` deals this warlord, so the row's own gate is the control
+      and the board supplies it for free.
+    * `f3275` -- "you can **expend** your `p8225`". The price is paid first,
+      so a character who cannot pay gets nothing. A row that offers the
+      aiming anyway is strictly stronger than its card.
+
+    And the shared property worth asserting once: `by_weapon=True` resolves
+    to the **wielded weapon's** range rather than the declared `0`. A ranged
+    aiming that reached nowhere would read as written and do nothing.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        _reach_of,
+        branches_for,
+        get,
+        reach_of,
+    )
+
+    # ---- f2070: the weapon gate, with the board's own blade as the control
+    world, me, _ = _board("f2070", 1)
+    p = get("p1556")
+    out.that(p is not None, "p1556 is declared")
+    if p is None:
+        return
+    gear = world.get(me, Gear)
+    out.that(gear is not None and "bow" not in {w.group for w in gear.held},
+             "the board deals this warlord no bow -- the control, supplied"
+             " by the board rather than arranged")
+    REGISTRY["f2070"].body(Cast(world=world, me=me, ref="f2070"))
+    out.that(branches_for(world, me, p) == (0,),
+             "so no aiming is offered: the card gates on the weapon")
+
+    if gear is not None:
+        gear.weapons[:] = [
+            replace(gear.weapons[0], ref="w3630", group="bow", ranged=(15, 30)),
+            *gear.weapons[1:],
+        ]
+        gear.stowed.discard("w3630")
+        REGISTRY["f2070"].body(Cast(world=world, me=me, ref="f2070"))
+        offered = branches_for(world, me, p)
+        out.that(offered == (0, 1),
+                 f"with a bow in hand the aiming is offered ({offered})")
+        out.that(reach_of(world, me, p, 0).kind == "melee",
+                 "the printed melee aiming survives")
+        far = reach_of(world, me, p, 1)
+        out.that(far.kind == "ranged" and far.by_weapon,
+                 "and the offered one is ranged, by the weapon")
+        out.that(_reach_of(world, me, far, "p1556") == 30,
+                 "which resolves to the bow's range and not the declared 0 --"
+                 " an aiming that reached nowhere would read as written and"
+                 f" do nothing ({_reach_of(world, me, far, 'p1556')})")
+
+    # ---- f3275: the price
+    w2, me2, _ = _board("f3275", 1)
+    q = get("p7546")
+    out.that(q is not None, "p7546 is declared")
+    if q is None:
+        return
+    before = branches_for(w2, me2, q)
+    out.that(before == (0,), f"p7546 prints one aiming ({before})")
+
+    # Pay once: the aiming arrives.
+    REGISTRY["f3275"].body(Cast(world=w2, me=me2, ref="f3275"))
+    paid = branches_for(w2, me2, q)
+    out.that(paid == (0, 1),
+             f"spending the named power offers the ranged aiming ({paid})")
+    out.that(reach_of(w2, me2, q, 1).kind == "ranged"
+             and reach_of(w2, me2, q, 1).size == 20,
+             "at the printed 20, a literal rather than the weapon's range --"
+             " this is a psionic row, not a weapon attack")
+
+    # **The price is a price.** Running it again on a character who has now
+    # spent the power must offer nothing further: `expend_row` returns
+    # whether there was anything to spend, and a row that offers the aiming
+    # regardless is strictly stronger than its card.
+    spent = Cast(world=w2, me=me2, ref="f3275")
+    out.that(not spent.expend_row("p8225"),
+             "the named power cannot be spent twice")
+    w3, me3, _ = _board("f3275", 1)
+    Cast(world=w3, me=me3, ref="drain").expend_row("p8225")
+    REGISTRY["f3275"].body(Cast(world=w3, me=me3, ref="f3275"))
+    out.that(branches_for(w3, me3, q) == (0,),
+             "and a character who has already spent it is offered nothing --"
+             " the row checks the price before offering")
+
+
 def rider_on_an_offered_aiming(out: Result) -> None:
     """"When you hit with an attack made **using** `f1028`" -- three riders.
 
@@ -16590,6 +16693,9 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "feats_that_offer_an_aiming": (feats_that_offer_an_aiming,
+                                  "the rows written against a contributed"
+                                  " aiming"),
     "rider_on_an_offered_aiming": (rider_on_an_offered_aiming,
                                    "a rider on an attack made through a"
                                    " contributed aiming"),

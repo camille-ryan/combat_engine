@@ -46,6 +46,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     ActionType,
+    AreaBurst,
     Cast,
     Condition,
     DamageType,
@@ -459,11 +460,19 @@ def f2227(c: Cast) -> None:
 
 
 @power("f2819", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
+       reach=PERSONAL, target=SELF)
 def f2819(c: Cast) -> None:
-    """Turns a named racial power from a close burst into an area burst
-    at range. `p2473` is nameable; the reach is header data the menu
-    reads before anything runs, and nothing rewrites one.
+    """Written. `p2473` was always nameable; the rewrite is what was missing.
+
+    "Reach is header data the menu reads before anything runs" was the
+    hold, and it is the argument `durations.keywords_of` makes about
+    keywords -- so the answer was the same: a per-character reader every
+    site consults, plus a contributed **aiming** rather than a replacement.
+    #614.
+
+    `optional=True` because the card says "you **can** use `p2473` as an
+    area burst 1 within 10": permission, not substitution, so the printed
+    close burst stays on the menu.
 
     **Re-pointed off `c.recast(reach=)`, which was one symbol over two
     mechanisms.** This row rewrites a *named row's area* -- its size or
@@ -474,6 +483,13 @@ def f2819(c: Cast) -> None:
     melee-as-ranged, which is a different rewrite -- see
     `c.recast(as_ranged=)`.
     """
+    c.reshape_area(
+        lambda _r: AreaBurst(1, within=10),
+        ref="p2473",
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f2822", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

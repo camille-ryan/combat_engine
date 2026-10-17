@@ -57,6 +57,7 @@ from combat_engine.engine import (
     WILL,
     ActionPointSpent,
     ActionType,
+    AreaBurst,
     Attack,
     AttackRolled,
     Bloodied,
@@ -564,11 +565,31 @@ def f2944(c: Cast) -> None:
 
 
 @power("f2945", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.teleport(within=)",))
 def f2945(c: Cast) -> None:
-    """Turns a close burst 1 into an area burst 1 within 5. Reach is
-    header data the action menu reads before anything runs, and nothing
-    rewrites one.
+    """The aiming is written; the teleport's leash is not.
+
+    "Reach is header data the action menu reads before anything runs" was
+    the hold, and #614 answered it: `c.reshape_area(optional=True)`
+    contributes an aiming and `dsl.branches_for` offers it, so the area
+    burst 1 within 5 joins the printed close burst 1 rather than replacing
+    it -- which is what "**instead of**" means on a card that also says
+    "you can **choose**".
+
+    **The second clause is dropped and is a real gap.** "The square you
+    teleport into as part of this power must be within the area of the
+    burst" restricts a *destination set*, and `c.teleport` takes `to=`,
+    `toward=` and `away_from=` -- a named square, or a direction. Naming
+    one square would take the choice off the player, which is the whole
+    point of the clause being a restriction rather than an instruction, so
+    the honest shape is a set the decider picks from.
+
+    `p11052` is where it would go, per the one-named-power convention: its
+    body teleports `max(1, speed // 2)` unconstrained, and the clause would
+    gate on `c.feat`. Marked rather than half-written, because a teleport
+    that ignores the leash is stronger than the card -- the feat buys reach
+    *and* would keep an unrestricted blink.
 
     **Re-pointed off `c.recast(reach=)`, which was one symbol over two
     mechanisms.** This row rewrites a *named row's area* -- its size or
@@ -579,6 +600,13 @@ def f2945(c: Cast) -> None:
     melee-as-ranged, which is a different rewrite -- see
     `c.recast(as_ranged=)`.
     """
+    c.reshape_area(
+        lambda _r: AreaBurst(1, within=5),
+        ref="p11052",
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f2946", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -54,6 +54,7 @@ from combat_engine.engine import (
     WILL,
     Ability,
     ActionType,
+    AreaBurst,
     Attack,
     AttackDeclared,
     AttackRolled,
@@ -1455,11 +1456,22 @@ def f921(c: Cast) -> None:
     # are header data shared by everyone who holds it.
     c.counts_as_keyword("p1767", Keyword.RELIABLE)
 @power("f725", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recast(area=)",))
+       reach=PERSONAL, target=SELF)
 def f725(c: Cast) -> None:
-    """Turns a named power's close blast into an area burst. Reach is
-    header data the action menu reads before anything runs, and
-    `c.recast` rewrites the action a row costs and nothing else.
+    """Written: the aiming is **offered**, which is what "instead of" means.
+
+    The old note called this one row away and named the near miss exactly:
+    a gated `blast_size` bonus rewrites a named row's range through
+    `dsl._stretched`, but only the *size* of the kind the header declares,
+    and this card changes the **kind** -- which decides provoking,
+    `c.ranged`, `by_ranged` and the `ranged` context key, so a bigger blast
+    would say the wrong rule as well as the wrong shape.
+
+    `c.reshape_area` is that rewrite one word wider, and `optional=True` is
+    the half the card insists on: "you can **choose** to make it an area
+    burst 2 **instead of** a close blast 3" leaves the close blast on the
+    menu. Replacing it would take the printed shape away from the only
+    power this feat is about. #614.
 
     **The near miss is worth naming, because it is one row away.** A gated
     `c.bonus("blast_size", ...)` really does rewrite one named power's
@@ -1479,6 +1491,13 @@ def f725(c: Cast) -> None:
     melee-as-ranged, which is a different rewrite -- see
     `c.recast(as_ranged=)`.
     """
+    c.reshape_area(
+        lambda _r: AreaBurst(2, within=10),
+        ref="p1448",
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 def _melee_or_close_at_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001

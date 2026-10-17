@@ -529,7 +529,7 @@ def f2333(c: Cast) -> None:
 
 
 @power("f2353", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_RANGED)
+       reach=PERSONAL, target=SELF)
 def f2353(c: Cast) -> None:
     """Two named rows shoot past cover and concealment.
 
@@ -543,7 +543,33 @@ def f2353(c: Cast) -> None:
     The second benefit, casting a melee row at range, stays dropped --
     see `AS_RANGED`, which records what was measured. The reach modifier
     looks like the answer and is inert on exactly these rows.
+    
+    **The ranged aiming is written now, and `AS_RANGED` was right about why
+    it could not be.** That constant records the measurement: a `"reach"`
+    modifier is read only for a line the header already declares melee, so
+    it lengthens the swing and never makes it a shot -- `reach.kind` decides
+    provoking, `c.ranged`, `by_ranged` and the `ranged` context key, and all
+    four would still say melee.
+
+    `c.reshape_area(optional=True)` contributes an **aiming** instead, which
+    `dsl.branches_for` offers and `dsl.reach_of` resolves (#614). Both halves
+    of the card hold: "**instead of** a melee power" is a choice, so the
+    printed melee aiming stays on the menu.
+
+    `Ranged(..., by_weapon=True)` and not a number: the card gates on the
+    weapon in hand, so the range is that weapon's, which is what
+    `dsl._reach_of` resolves `by_weapon` to. Only the heroic associated rows
+    are named -- the paragon ones belong to the band above.
     """
+    if _holding(c, "crossbow", "bow", "sling"):
+        for ref in ("p1556", "p1075"):
+            c.reshape_area(
+                lambda _r: Ranged(0, by_weapon=True),
+                ref=ref,
+                optional=True,
+                on=c.me,
+                until=When.ENCOUNTER,
+            )
     me = c.me
     picked = among("p1556", "p1075")
     c.ignore_cover(
@@ -579,7 +605,7 @@ def f1312(c: Cast) -> None:
 
 
 @power("f2070", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_RANGED,
+       reach=PERSONAL, target=SELF,
        trigger="you hit an enemy another enemy is giving cover")
 def f2070(c: Cast) -> None:
     """Punishes whatever is giving your target cover.
@@ -590,7 +616,33 @@ def f2070(c: Cast) -> None:
     once per candidate with that candidate as the only blocker. See
     `_covering`. Casting a melee row at range stays dropped -- see
     `AS_RANGED` for what was driven and why the reach modifier is not it.
+    
+    **The ranged aiming is written now, and `AS_RANGED` was right about why
+    it could not be.** That constant records the measurement: a `"reach"`
+    modifier is read only for a line the header already declares melee, so
+    it lengthens the swing and never makes it a shot -- `reach.kind` decides
+    provoking, `c.ranged`, `by_ranged` and the `ranged` context key, and all
+    four would still say melee.
+
+    `c.reshape_area(optional=True)` contributes an **aiming** instead, which
+    `dsl.branches_for` offers and `dsl.reach_of` resolves (#614). Both halves
+    of the card hold: "**instead of** a melee power" is a choice, so the
+    printed melee aiming stays on the menu.
+
+    `Ranged(..., by_weapon=True)` and not a number: the card gates on the
+    weapon in hand, so the range is that weapon's, which is what
+    `dsl._reach_of` resolves `by_weapon` to. Only the heroic associated rows
+    are named -- the paragon ones belong to the band above.
     """
+    if _holding(c, "bow"):
+        for ref in ("p1556", "p1074"):
+            c.reshape_area(
+                lambda _r: Ranged(0, by_weapon=True),
+                ref=ref,
+                optional=True,
+                on=c.me,
+                until=When.ENCOUNTER,
+            )
     me = c.me
 
     def punish(ev: Any) -> None:
@@ -604,8 +656,8 @@ def f2070(c: Cast) -> None:
             label=f"{c.ref} cover punished")
 
 
-@power("f2336", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=AS_RANGED,
+@power("f2336", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
        trigger="you attack with a bow or crossbow",
        on=Trigger(Hit, lambda w, me, ev: ev.attacker == me, "you attack"))
 def f2336(c: Cast) -> None:
@@ -617,7 +669,40 @@ def f2336(c: Cast) -> None:
     shot of a turn goes unprotected, which is a shortfall of one swing
     rather than of the clause, and it is why `f2337` is written the
     other way.
+    
+    **The ranged aiming is written now, and `AS_RANGED` was right about why
+    it could not be.** That constant records the measurement: a `"reach"`
+    modifier is read only for a line the header already declares melee, so
+    it lengthens the swing and never makes it a shot -- `reach.kind` decides
+    provoking, `c.ranged`, `by_ranged` and the `ranged` context key, and all
+    four would still say melee.
+
+    `c.reshape_area(optional=True)` contributes an **aiming** instead, which
+    `dsl.branches_for` offers and `dsl.reach_of` resolves (#614). Both halves
+    of the card hold: "**instead of** a melee power" is a choice, so the
+    printed melee aiming stays on the menu.
+
+    `Ranged(..., by_weapon=True)` and not a number: the card gates on the
+    weapon in hand, so the range is that weapon's, which is what
+    `dsl._reach_of` resolves `by_weapon` to. Only the heroic associated rows
+    are named -- the paragon ones belong to the band above.
+    
+    **`AT_WILL`, not `ENCOUNTER`, and the lint caught it the moment the
+    marker came off.** A triggered trait declared `ENCOUNTER` is spent on
+    its first firing, and this card prints no limit -- so the row would have
+    paid out once a fight where the page pays every time. The check only
+    applies to a row claiming to be finished, which is exactly why removing
+    a marker is the moment a header gets audited.
     """
+    if _holding(c, "bow", "crossbow"):
+        for ref in ("p4569", "p1065"):
+            c.reshape_area(
+                lambda _r: Ranged(0, by_weapon=True),
+                ref=ref,
+                optional=True,
+                on=c.me,
+                until=When.ENCOUNTER,
+            )
     if _holding(c, "bow", "crossbow"):
         c.no_provoke(from_=c.trigger.target, on=c.me, until=When.EOT)
 

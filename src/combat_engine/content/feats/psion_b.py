@@ -40,6 +40,7 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     PowerUsed,
+    Ranged,
     SavingThrow,
     Trigger,
     Usage,
@@ -486,9 +487,8 @@ def f3172(c: Cast) -> None:
     c.watch(PowerUsed, aimed, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
-@power("f3275", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET,
-       todo=("c.recast(as_ranged=)",))
+@power("f3275", level=1, cls="", usage=ENCOUNTER, action=ActionType.FREE,
+       reach=PERSONAL, target=NO_TARGET)
 def f3275(c: Cast) -> None:
     """Spends one racial power to use another at a range it does not
     print. Re-aimed, and onto the symbol ten other rows already use:
@@ -512,7 +512,35 @@ def f3275(c: Cast) -> None:
     per-caster effect on the next melee swing; what is missing is
     scoping it to the row the card names. The other five rows on the old
     symbol wanted a row's *area* rewritten -- see `c.recast(area=)`.
+
+    **Written. The one hold -- using a row at a reach it does not print --
+    landed as a contributed aiming.** `c.reshape_area(optional=True)` offers
+    `p7546` a ranged-20 aiming beside its printed melee one, which
+    `dsl.branches_for` puts on the menu and `dsl.reach_of` resolves (#614).
+    The note above was right that `c.bonus("reach", 19)` would have said
+    "melee 20" -- a different rule, since `reach.kind` decides provoking,
+    `c.ranged`, `by_ranged` and the `ranged` context key.
+
+    `Ranged(20)` as a literal, not `by_weapon=True`: the card prints the
+    number, and `p7546` is a psionic row rather than a weapon attack.
+
+    The price is paid first and the offer is only made if it was: `c.expend_row`
+    returns whether the power was there to spend, so a character who has
+    already used `p8225` gets nothing -- which is the whole of "expend your
+    `p8225`".
+
+    `action=FREE` on the header, because the card says so and the menu reads
+    the header. It was `NONE`, which is a trait that arms rather than an
+    action a player takes.
     """
+    if c.expend_row("p8225"):
+        c.reshape_area(
+            lambda _r: Ranged(20),
+            ref="p7546",
+            optional=True,
+            on=c.me,
+            until=When.ENCOUNTER,
+        )
 
 
 @power("f3284", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

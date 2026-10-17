@@ -55,6 +55,7 @@ from combat_engine.engine import (
     Keyword,
     Moved,
     PowerUsed,
+    Ranged,
     SavingThrow,
     SkillCheck,
     Trigger,
@@ -335,9 +336,9 @@ def f2711(c: Cast) -> None:
         c.push(2, on=ev.target)
 
 
-@power("f2713", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2713", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=AS_RANGED,
+      
        trigger="you score a critical hit with a one-handed axe",
        on=Trigger(Hit, _i_crit, "you crit"))
 def f2713(c: Cast) -> None:
@@ -351,7 +352,40 @@ def f2713(c: Cast) -> None:
 
     What is dropped is casting an associated row at range: reach is
     header data the menu reads before anything runs.
+    
+    **The ranged aiming is written now, and `AS_RANGED` was right about why
+    it could not be.** That constant records the measurement: a `"reach"`
+    modifier is read only for a line the header already declares melee, so
+    it lengthens the swing and never makes it a shot -- `reach.kind` decides
+    provoking, `c.ranged`, `by_ranged` and the `ranged` context key, and all
+    four would still say melee.
+
+    `c.reshape_area(optional=True)` contributes an **aiming** instead, which
+    `dsl.branches_for` offers and `dsl.reach_of` resolves (#614). Both halves
+    of the card hold: "**instead of** a melee power" is a choice, so the
+    printed melee aiming stays on the menu.
+
+    `Ranged(..., by_weapon=True)` and not a number: the card gates on the
+    weapon in hand, so the range is that weapon's, which is what
+    `dsl._reach_of` resolves `by_weapon` to. Only the heroic associated rows
+    are named -- the paragon ones belong to the band above.
+    
+    **`AT_WILL`, not `ENCOUNTER`, and the lint caught it the moment the
+    marker came off.** A triggered trait declared `ENCOUNTER` is spent on
+    its first firing, and this card prints no limit -- so the row would have
+    paid out once a fight where the page pays every time. The check only
+    applies to a row claiming to be finished, which is exactly why removing
+    a marker is the moment a header gets audited.
     """
+    if _holding(c, "axe"):
+        for ref in ("p1413", "p4569"):
+            c.reshape_area(
+                lambda _r: Ranged(0, by_weapon=True),
+                ref=ref,
+                optional=True,
+                on=c.me,
+                until=When.ENCOUNTER,
+            )
     if not _grip(c, "axe", hands=1):
         return
     me, foe = c.me, c.trigger.target
