@@ -12117,6 +12117,8 @@ class Cast:
         implement: bool = False,
         from_: DamageType | None = None,
         ranged: bool = False,
+        ref: str = "",
+        vs_kind: str = "",
     ) -> Effect | None:
         """This creature's weapon attacks deal that type from now on.
 
@@ -12162,6 +12164,20 @@ class Cast:
         which is what `i2595p1` already does -- the drop is offered to the
         creature holding it, for a free action.
 
+        **`ref` narrows to one named row** -- "`p1458` deals radiant damage
+        instead of fire" -- and is the last of the four narrowings this
+        label carries. It is compared against the row being *rolled*, which
+        is what `_typed` already holds.
+
+        **`vs_kind` narrows by the creature being hit**, which is the other
+        half of that same card: "when used against **undead** targets". A
+        creature kind rather than a predicate, deliberately -- `c.deals`
+        lays a labelled effect and not a gated modifier, so there is no
+        `when=` for a closure to ride, and a callable would have to live on
+        the `Effect` where the page reads it. A kind is a closed vocabulary
+        `query.kinds_of` already answers, it goes in the label beside the
+        other three, and it cannot reach the wire. See `_retyped`.
+
         Held as a labelled effect rather than written onto the `Weapon`,
         because the weapon object is the character's and the change is
         usually for a fight. Yours, so it defaults to the caster.
@@ -12180,7 +12196,8 @@ class Cast:
             who, self.me, until,
             label=(f"deals:{dtype.value}:{through.value}"
                    f":{from_.value if from_ is not None else ''}"
-                   f":{'ranged' if ranged else ''}"),
+                   f":{'ranged' if ranged else ''}"
+                   f":{ref}:{vs_kind}"),
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
@@ -12230,11 +12247,17 @@ class Cast:
         once, returning on the first miss would silence whichever the
         effect list happened not to yield first.
 
-        Three things can make a retype not cover a blow, and `printed` is
+        **Five things can make a retype not cover a blow**, and `printed` is
         why this takes the type at all: the keyword it speaks through, the
-        type it narrows to (`from_`), and whether it is scoped to a ranged
-        attack. An empty field does not narrow, which is what every card
-        saying "all damage" wants.
+        type it narrows to (`from_`), whether it is scoped to a ranged
+        attack, the one row it names (`ref`), and the kind of creature being
+        hit (`vs_kind`). An empty field does not narrow, which is what every
+        card saying "all damage" wants.
+
+        **Six fields now, and the padding is what keeps that safe.** A label
+        written before any of them existed is three parts long and must go
+        on meaning exactly what it meant; the split is padded for that, and
+        the precedent is `from_` and `scope`, which were added the same way.
         """
         for eff in self.world.effects.of(self.me):
             if not eff.label.startswith("deals:"):
@@ -12242,13 +12265,22 @@ class Cast:
             # Positional, and padded: a label written before the two
             # narrowing fields existed has three parts and must keep
             # meaning exactly what it meant.
-            parts = [*eff.label.split(":"), "", "", "", ""][1:5]
-            said, through, only, scope = parts
+            parts = [*eff.label.split(":"), "", "", "", "", "", ""][1:7]
+            said, through, only, scope, named, kind = parts
             if through and keywords is not None and Keyword(through) not in keywords:
                 continue
             if only and DamageType(only) is not printed:
                 continue
             if scope == "ranged" and not self.ranged:
+                continue
+            # One named row, compared against the row being rolled.
+            if named and named != self.ref:
+                continue
+            # And the creature being hit. `c.is_kind` reads the same set
+            # `query.kinds_of` answers from, so a stat block's own column
+            # and a `c.set_origin` grant both count -- which is the whole
+            # reason this is a kind and not a hand-rolled test.
+            if kind and not self.is_kind(kind):
                 continue
             return DamageType(said)
         return None

@@ -11878,6 +11878,80 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
+    """`c.deals(ref=, vs_kind=)`, and why neither is a `when=`.
+
+    `f1098` printed "when used against **undead** targets, `p1458` deals
+    radiant damage instead of fire" -- two narrowings on one clause, and
+    `c.deals` could express neither. It was the last of that feat's three
+    printed clauses.
+
+    **There is no `when=` on this verb and there should not be.** `c.deals`
+    lays a *labelled effect*, not a gated modifier, and `Cast._retyped`
+    reads the label **positionally** -- so a predicate has nowhere to ride
+    short of a closure on the `Effect`, which is where the page reads
+    effects. A creature *kind* is a closed vocabulary `query.kinds_of`
+    already answers, so it goes in the label beside the other narrowings
+    and cannot reach the wire.
+
+    Six fields now, and the padding is what keeps that safe: a label
+    written before any of them existed is three parts long and goes on
+    meaning what it meant. `from_` and `scope` set that precedent.
+
+    Four narrowings, asserted one at a time, because a label read by
+    position fails silently when a field shifts.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import DamageType, When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    out.that(not REGISTRY["f1098"].unfinished,
+             "f1098 carries no marker: all three printed clauses play",
+             f"{REGISTRY['f1098'].unfinished}")
+
+    world, me, _ = _posed("f2459", 1)
+    laid = Cast(world=world, me=me, ref="drivers:deals")
+    laid.deals(
+        DamageType.RADIANT, from_=DamageType.FIRE, ref="p1458",
+        vs_kind="undead", implement=True, on=me, until=When.ENCOUNTER,
+    )
+
+    def asked(*, ref: str, undead: bool, printed: DamageType):  # noqa: ANN202
+        rolling = Cast(world=world, me=me, ref=ref)
+        rolling.is_kind = (lambda *a, **k: undead)  # ty: ignore[invalid-assignment]
+        return rolling._retyped(None, printed)
+
+    out.that(asked(ref="p1458", undead=True, printed=DamageType.FIRE)
+             is DamageType.RADIANT,
+             "the named row's fire damage against an undead target comes out"
+             " radiant, which is the whole printed clause")
+    out.that(asked(ref="p1458", undead=False, printed=DamageType.FIRE) is None,
+             "the same row against anything else is untouched -- `vs_kind`")
+    out.that(asked(ref="p999", undead=True, printed=DamageType.FIRE) is None,
+             "another row of the same caster is untouched -- `ref`")
+    out.that(asked(ref="p1458", undead=True, printed=DamageType.COLD) is None,
+             "and cold damage on the named row is untouched -- `from_`,"
+             " which was already there and must keep working")
+
+    # **The three rows still waiting want three different things**, which is
+    # why one symbol over four could not go green correctly for any of them.
+    # Asserted so the symbol cannot quietly collapse back.
+    left = {
+        "f1488": ("c.deals(dtypes=)",),
+        "cf:warlock-f1s1": ("c.deals(from_many=)",),
+        "f2179": ("c.deals(like=)",),
+    }
+    for ref, want in left.items():
+        out.that(REGISTRY[ref].unfinished == want,
+                 f"{ref} waits on {want[0]} and not on the parameter that"
+                 f" landed", f"{REGISTRY[ref].unfinished}")
+    out.that("c.deals(ref=)" not in str(REGISTRY["f2877"].unfinished),
+             "and f2877 waits only on which racial power was chosen",
+             f"{REGISTRY['f2877'].unfinished}")
+
 def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
     """`c.weapon_range`, the third of the `weapon_dice` family.
 
@@ -15296,6 +15370,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_retype_can_name_one_row_and_one_victim": (
+        a_retype_can_name_one_row_and_one_victim,
+        "c.deals(ref=, vs_kind=) as label fields, not as a when="),
     "a_weapons_range_is_a_field_a_row_can_write": (
         a_weapons_range_is_a_field_a_row_can_write,
         "c.weapon_range, and the three rows that wanted something else"),

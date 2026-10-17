@@ -888,10 +888,20 @@ def f2875(c: Cast) -> None:
 
 
 @power("f2877", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*RACE_OPTION, "c.deals(ref=)"))
+       reach=PERSONAL, target=SELF, todo=RACE_OPTION)
 def f2877(c: Cast) -> None:
-    """Radiant damage from that borrowed power. `c.deals` overrides what
-    a creature's *weapon* rolls and has no way to name a row."""
+    """Radiant damage from that borrowed power.
+
+    **`c.deals(ref=)` came off: it exists now and this row's half of it is
+    one line.** The old note said the verb "overrides what a creature's
+    *weapon* rolls and has no way to name a row" -- the second half was the
+    blocker and `ref=` answers it.
+
+    What is left is the whole of `RACE_OPTION`: the card recolours "the
+    power you chose for your `rt:r6-t3` racial trait", and which power that
+    is is the choice nothing records. Without the ref there is nothing to
+    pass to `ref=`, so the row still cannot be written -- but it is waiting
+    on the choice and not on the retype, and the marker says so now."""
 
 
 @power("f2879", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

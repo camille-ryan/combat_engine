@@ -119,7 +119,7 @@ def warlock_f1s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL],
-    dropped=("c.deals(ref=)",),
+    dropped=("c.deals(from_many=)",),
     requires=on_leg("elemental"),
     requires_text="needs the pact that prints it",
 )
@@ -134,6 +134,23 @@ def warlock_f1s1(c: Cast) -> None:
     affinity's type instead. `c.deals` changes every type a creature deals
     rather than four named ones on one named row, so taking it would
     recolour the whole character.
+
+    **Re-pointed, because the half that landed is not the half this needs.**
+    `c.deals(ref=)` exists now -- and this card names no row. It says "an
+    arcane attack power", a *class*, so the narrowing it wants is by
+    keyword, which `implement=True` already half-does for one keyword. The
+    blocking clause is the other one: the affinity "replaces **each
+    instance** of force, necrotic, poison, and psychic damage", so the
+    retype has to narrow on **four** source types rather than one. Without
+    that it recolours every type the character deals, which is the widening
+    the paragraph above describes.
+
+    The symbol is `c.deals(from_many=)` and not `c.deals(from_=several)`,
+    because `blocked.py` resolves the second one as **existing** -- it sees
+    `from_` on the signature and does not read the value word -- so that
+    spelling would have reported this row READY on a facility nobody had
+    built. Checked with `blocked._exists` before choosing, the same way
+    `warlock.boon_instead_of()` was.
     """
     if not c.build("elemental"):
         return

@@ -1702,7 +1702,7 @@ def _arcane_damage(ctx: dict[str, Any]) -> bool:
 
 @power("f1098", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.deals(ref=)",))
+       )
 def f1098(c: Cast) -> None:
     """Re-aimed from `todo` to `dropped`: the p839 clause plays, so the
     row is offered rather than refused.
@@ -1730,14 +1730,34 @@ def f1098(c: Cast) -> None:
     power, and `content/CLAUDE.md` gives the reason -- the rider shape only
     ever reached a power written to *ask*, and almost none were.
 
-    What is left is `c.deals(ref=)` for the p1458 half, which is the same
-    read-site change at `cast.py` and not a content line.
+    **And the p1458 half is written, which was the last of the three.**
+    That read-site change landed as two label fields: `ref=` picks the one
+    named row and `vs_kind=` is the card's "against undead targets". It is
+    laid from this body rather than written into `p1458`, because
+    `Cast._typed` reads a standing retype unconditionally -- #550's
+    convention is for a clause the power must *ask* about, and this is not
+    one.
+
+    So the row carries no marker. All three printed clauses play: the
+    Diplomacy bonus, p833's save in lieu of temporary hit points, and
+    p1458's radiant.
 
     The Diplomacy bonus was called "a check" and left unwritten, which
     was wrong: `skill:` bonuses are consulted, and the sibling f1099
     writes the same sentence about Intimidate. Untyped, no type word."""
     me = c.me
     c.bonus("skill:diplomacy", 2, on=me, until=When.ENCOUNTER)
+    # **The p1458 clause, laid from here rather than written into that
+    # row.** #550's convention is for a clause the power has to *ask*
+    # about -- `c.instead_of`, a branch gated on `c.feat` -- and this one
+    # needs no asking: `Cast._typed` reads a standing retype
+    # unconditionally at the moment the dice are rolled, so the row being
+    # changed needs no cooperation at all. `ref=` picks it and
+    # `vs_kind=` is the card's "against undead targets".
+    c.deals(
+        DamageType.RADIANT, from_=DamageType.FIRE, ref="p1458",
+        vs_kind="undead", implement=True, on=me, until=When.ENCOUNTER,
+    )
 
     def opening(ev: Any) -> None:
         if ev.actor != me or ev.power != "p839":

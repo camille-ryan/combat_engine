@@ -1873,11 +1873,29 @@ def f2175(c: Cast) -> None:
     # of the row carries, which `dsl.keywords_of` merges with the header.
     c.counts_as_keyword("p1448", Keyword.ARCANE)
 @power("f2179", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.deals(ref=)",))
+       reach=PERSONAL, target=SELF, todo=("c.deals(like=)",))
 def f2179(c: Cast) -> None:
     """Changes the damage type of one named power. `c.deals` overrides
     what a creature's *weapon* attacks roll and has no way to name a
-    row, which would make this touch everything the character does."""
+    row, which would make this touch everything the character does.
+    **Re-pointed: `c.deals(ref=)` landed and is not this row's gap.** Four
+    rows carried it; `f1098` is written and the other three each wanted
+    something further, which is why one symbol over four rows could not go
+    green correctly for any of them. `ref=` picks one named row and
+    `vs_kind=` narrows by the creature hit; both are label fields read in
+    `Cast._retyped`.
+
+    What is left here is the **source of the type**: "make your `p1333` deal
+    the same damage type as your `p1448`". Not a type this row names -- a
+    type read off *another row*, which may itself have been retyped. So the
+    parameter wanted is `like=`, a second ref whose current type is copied
+    at the moment of the roll, and nothing reads one row's resolved type
+    from inside another's.
+
+    The old note's complaint is answered, though: `c.deals` **can** name a
+    row now, so "which would make this touch everything the character does"
+    no longer holds.
+    """
 
 
 @power("f2202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

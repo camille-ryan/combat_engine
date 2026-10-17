@@ -163,13 +163,25 @@ def f1079(c: Cast) -> None:
 
 
 @power("f1488", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.deals(ref=)",),
+       reach=PERSONAL, target=SELF, dropped=("c.deals(dtypes=)",),
        trigger="you use cf:invoker-f1c1",
        on=Trigger(PowerUsed, _used_card_b, "you use that covenant's card"))
 def f1488(c: Cast) -> None:
-    """The save penalty is written; the damage type is dropped. `c.deals`
-    rewrites what *this creature's* attacks deal for a duration, and the
-    printed line rewrites one named row's line for good."""
+    """The save penalty is written; the damage type is dropped, and the
+    reason has narrowed to one word.
+
+    The old note said `c.deals` "rewrites what *this creature's* attacks
+    deal for a duration, and the printed line rewrites one named row's line
+    for good". The first half is answered: `ref=` names a row now. The
+    duration is not the gap either -- an encounter is the span a feat's
+    clause plays over.
+
+    What is left is **two types at once**: "deals fire **and** radiant
+    damage". `c.deals` takes one `DamageType` and `_retyped` returns one, so
+    the symbol is the family's existing `c.deals(dtypes=)`, which two item
+    rows also want. The keyword half ("gains the fire keyword") is writable
+    with `c.counts_as_keyword` and lands with it, since a keyword on half a
+    retype would be a card that reads fire and deals none."""
     foe = _striker(c.trigger)
     if foe is not None:
         c.penalty("save", 1, on=foe, until=When.EONT)
