@@ -43,6 +43,7 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['opportunity']` -- is this an opportunity attack.
 - `ctx['power']` -- the ref of the row doing this. The commonest gate.
 - `ctx['ranged']` -- was it a ranged attack.
+- `ctx['reach']` -- the shape of the attack -- `Range.kind` verbatim.
 - `ctx['reroll_by']` -- the ref of whatever asked for the reroll.
 - `ctx['skill']` -- the skill being checked, lowercased.
 - `ctx['source']` -- who laid the effect.

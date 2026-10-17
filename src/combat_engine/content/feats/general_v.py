@@ -1229,15 +1229,36 @@ def f3525(c: Cast) -> None:
 
 
 @power("f3527", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.cover_from()",))
+       reach=PERSONAL, target=SELF)
 def f3527(c: Cast) -> None:
-    """`query._carried_cover` reads a plain `"cover"` bonus with an empty
-    context, so cover carried rather than traced cannot be narrowed to
-    ranged attacks -- and laying it ungated would shelter the caster from
-    the sword in front of it as well."""
+    """Written: the read site takes a context now, so the narrowing is sayable.
+
+    Two facts have to be true at once and they come from opposite places.
+    **Where the holder is standing** is world state a closure reads with no
+    context -- `Grid.difficult` is a dict of square to label, the same read
+    `p16434` does against `Grid.blocking`. **What shape the attack is** is
+    the attack's, and arrives as `ctx["ranged"]`, which
+    `query.cover_between` now hands down to `_carried_cover`. Before that it
+    was asked with `{}` and read false forever, which is why this clause sat
+    marked while the skill half paid out. #644.
+
+    `ctx.get`, not `ctx[...]`: the hide offer in `actions.py` has no attack
+    to describe and passes nothing, and the right answer there is no carried
+    cover rather than a raise.
+    """
     me = c.me
     c.bonus("skill:acrobatics", 2, kind="feat", on=me, until=When.ENCOUNTER)
     c.bonus("skill:athletics", 2, kind="feat", on=me, until=When.ENCOUNTER)
+
+    def ranged_while_in_rough(ctx: dict[str, Any]) -> bool:
+        if not ctx.get("ranged"):
+            return False
+        here = c.world.get(me, Position)
+        return here is not None and any(
+            sq in c.world.grid.difficult for sq in here.squares
+        )
+
+    c.cover(on=me, until=When.ENCOUNTER, when=ranged_while_in_rough)
 
 
 @power("f3528", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

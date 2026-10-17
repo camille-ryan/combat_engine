@@ -1374,14 +1374,40 @@ def f1237(c: Cast) -> None:
     deliberately does not mark."""
 
 
-@_trait("f1296", todo=("c.cover_from()", "c.forgo_attack()"))
+@_trait("f1296", todo=("query.cover_gained_in_move()", "c.forgo_attack()"))
 def f1296(c: Cast) -> None:
     """Both refs resolve now and neither clause turns on the hit. The
-    first is a free Stealth check made *before* a ranged attack, on
-    condition of having moved into an obscured space or gained cover --
-    and nothing asks what cover a creature has. The second withdraws the
-    second of a two-attack row to stay hidden, which no verb does to a
-    row that is already swinging."""
+    second withdraws the second of a two-attack row to stay hidden, which no
+    verb does to a row that is already swinging.
+
+    **Re-pointed off `c.cover_from()`, which was wrong about this row and was
+    the last of five hanging on it.** That note read "nothing asks what cover
+    a creature has", and `query.cover_between` has been exactly that reader
+    all along -- so the symbol arriving would have said nothing here. The
+    other four wanted a *writer* narrowed to the attack's shape, which
+    landed as `c.cover(when=)` (#644), and `i778x1` wanted attribution,
+    which landed as `query.cover_granters`. One name over three unrelated
+    questions.
+
+    What is wanted is **a change, not a state**. The card pays out for
+    *gaining* cover before the shot, and the state reading is the wrong rule:
+    a ranger standing permanently behind a pillar would collect this every
+    turn without moving, which is strictly stronger than the card.
+
+    **And the fact is derivable, so the marker says "no reader" and not "not
+    recorded".** That distinction is the whole lesson of this family --
+    `query.cover_between` was the reader a sibling row said did not exist.
+    `query.since_turn_began` returns the events of this creature's turn so
+    far and `Moved` carries **both ends of each step**, so the square the
+    move began in is on the log; `Grid.cover` from the target to that square,
+    against the same from the current square, is the comparison. Nobody has
+    written it, which is a reader-shaped gap and what the symbol names.
+
+    The rest of it is already here. `c.hide` makes the check, `c.passive`
+    reads the target's passive Perception, and a free action is the usual
+    `ActionType.FREE`. Per #550 the clause belongs **in `p971`** gated on
+    `c.feat`, not in this body.
+    """
 
 
 # p1000's clause slows *instead of* the push its row prints, and the

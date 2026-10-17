@@ -150,7 +150,7 @@ def situational_attack(
         # bank behind a pillar being unhittable.
         blocked = max(
             int(cover_between(world, attacker, target,
-                              ranged=_is_ranged(power, branch))),
+                              ranged=_is_ranged(power, branch), ctx=ctx)),
             int(concealment_of(world, target, ctx)),
             # **Standing somewhere badly lit**, which is a fact about the
             # square and about who is looking -- so it cannot be a modifier
@@ -257,6 +257,14 @@ def attack(
             # target take +4" is a one-line gate rather than a registry
             # lookup duplicating `_is_ranged`.
             "ranged": _is_ranged(power, branch),
+            # **The shape, not just "was it ranged".** `ranged` is a bool and
+            # three of the four rows gating cover on the attack need more
+            # than that: "melee attacks and ranged attacks" has to exclude a
+            # close burst, and "ranged and area attacks" has to include one.
+            # This is `Range.kind` verbatim -- melee | ranged | close_burst |
+            # close_blast | area_burst | wall | personal -- so a gate reads
+            # the same vocabulary `dsl.AREA_OR_CLOSE` is written in. #644.
+            "reach": _reach_kind(power, branch),
             "branch": branch,
             # Which magic ammunition this shot came from, empty for every
             # attack that is not one. In the context as well as on the
@@ -598,6 +606,21 @@ def _is_ranged(ref: str, branch: int = 0) -> bool:
 
     p = get(ref)
     return p is not None and p.reach_of(branch).kind == "ranged"
+
+
+def _reach_kind(power: str, branch: int) -> str:
+    """`Range.kind` for this swing, or `""` for a row nothing is declared for.
+
+    The same lookup `_is_ranged` does and deliberately not folded into it:
+    that one answers a bool the whole kernel asks for, this one carries the
+    word into the context so a row can ask a question the bool cannot
+    express. Empty string rather than None for a missing row, so a gate's
+    `ctx["reach"] in (...)` is false instead of raising.
+    """
+    from .dsl import get
+
+    p = get(power)
+    return "" if p is None else p.reach_of(branch).kind
 
 
 def _long_range(

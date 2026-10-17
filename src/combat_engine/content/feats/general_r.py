@@ -103,7 +103,14 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.basic import MELEE as BASIC_MELEE
 from combat_engine.engine.components import Health
-from combat_engine.engine.query import defence, distance_between, team, unseen_by
+from combat_engine.engine.query import (
+    creatures,
+    defence,
+    distance_between,
+    team,
+    unseen_by,
+)
+from combat_engine.engine.query import squares as squares_of
 
 #: The thirteen racial powers of `r33`, one per elemental
 #: manifestation. A character takes one of them.
@@ -2194,20 +2201,44 @@ def f3669(c: Cast) -> None:
 
 
 @power("f3670", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=("c.cover(when=)",))
+       reach=PERSONAL, target=SELF, )
 def f3670(c: Cast) -> None:
-    """Re-aimed, and the old reason was false. Two creatures in one
-    square **is** a thing the grid allows -- `c.shares_space` is the
-    standing property and `movement.shares_space` reads it back -- so
-    the gate the benefit hangs on can be true and can be asked.
+    """Written. Both halves of the paragraph this row went through are now true.
 
-    The payout is what is missing. Carried cover is a `"cover"`
-    modifier, but `query._carried_cover` reads it as
-    `mods.total("cover", {})`: the context is empty, so a `when=` on it
-    is silently false and the only cover a row can hand out is cover
-    against *everything*. This card gives it against melee and ranged
-    attacks and not against a burst, and over-delivering that is worse
-    than not playing it."""
+    The gate was never the problem -- two creatures in one square is a thing
+    the grid allows, and `query.squares` overlapping an ally's is the read.
+    The payout was, and the fix was at the read site rather than at a door:
+    `query.cover_between` passes the attack context down to
+    `_carried_cover`, which until now asked the carried `"cover"` modifier
+    with `{}`. So `ctx["reach"]` is readable inside the gate and the card's
+    enumeration is sayable exactly as printed. #644.
+
+    **The enumeration is the point, so it is spelled out rather than
+    negated.** "Melee attacks and ranged attacks" is two of the six
+    `Range.kind` words; writing it as "not a burst" would have quietly
+    covered a `personal` row and a wall. `dsl.AREA_OR_CLOSE` exists for the
+    opposite question and is deliberately not used here -- it lumps close
+    and area together, and this card distinguishes them by not mentioning
+    either.
+    """
+    me = c.me
+
+    def shielded_by_an_ally(ctx: dict[str, Any]) -> bool:
+        if ctx.get("reach") not in ("melee", "ranged"):
+            return False
+        mine = squares_of(c.world, me)
+        if not mine:
+            return False
+        side = team(c.world, me)
+        return any(
+            other != me
+            and team(c.world, other) is side
+            and squares_of(c.world, other) & mine
+            for other in creatures(c.world)
+        )
+
+    c.cover(on=me, until=When.ENCOUNTER, when=shielded_by_an_ally)
+
 
 
 @power("f3671", level=1, cls="", usage=ENCOUNTER, action=NONE,

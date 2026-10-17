@@ -252,7 +252,8 @@ CATEGORIES: dict[str, dict] = {
             # eleven were read one by one and every one is genuinely about
             # advantage, cover or concealment.
             ("advantage, cover and concealment", [
-                "conceal", "conceal_in", "cover_in", "damage_disadvantage",
+                "conceal", "conceal_in", "cover", "cover_in",
+                "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
                 "hide", "ignore_cover", "ignores_long_range", "invisible",
                 "no_advantage", "no_cover", "unhide",
@@ -432,6 +433,7 @@ CTX_KEYS: dict[str, str] = {
     "opportunity": "is this an opportunity attack.",
     "power": "the ref of the row doing this. The commonest gate.",
     "ranged": "was it a ranged attack.",
+    "reach": "the shape of the attack -- `Range.kind` verbatim.",
     "reroll_by": "the ref of whatever asked for the reroll.",
     "skill": "the skill being checked, lowercased.",
     "source": "who laid the effect.",

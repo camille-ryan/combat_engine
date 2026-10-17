@@ -47,6 +47,7 @@ from .types import (
     Ability,
     ActionType,
     Condition,
+    Cover,
     DamageType,
     Defense,
     Forced,
@@ -5626,6 +5627,56 @@ class Cast:
             when=when,
         )
 
+    def cover(
+        self,
+        *,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        on: int | None = None,
+        until: When = When.EONT,
+        superior: bool = False,
+    ) -> Effect | None:
+        """"You gain partial cover." The self-side sibling of `cover_in`.
+
+        Four rows print this about the **holder** rather than about a zone --
+        "when in a square of difficult terrain, you gain partial cover
+        against ranged attacks", "you gain partial cover from ranged and area
+        attacks", "you gain partial cover while adjacent to a square of
+        blocking terrain", "while you are in an ally's space" -- and
+        `c.cover_in` could not say any of them, because it hangs the modifier
+        on a zone's geometry. This is to `cover_in` what `c.conceal` is to
+        `c.conceal_in`.
+
+        **Read by `query._carried_cover`**, which takes the larger of the
+        traced cover and the carried modifier rather than adding them, so a
+        creature behind a pillar gains nothing from also carrying this.
+        `kind="cover"` for the same reason within the carried half: two
+        sources do not stack, the larger wins. `c.conceal`'s note records
+        what the untyped version cost -- a creature concealed three times
+        over came to 6 and read as *total*.
+
+        **`when` is handed the attack context**, so the printed narrowings
+        are sayable: `ctx["ranged"]` for "against ranged attacks" and
+        `ctx["reach"]` -- `Range.kind` verbatim -- for a card that enumerates
+        shapes. It was not, originally: `_carried_cover` asked
+        `mods.total("cover", {})`, so a gate read false forever and three of
+        the four rows above stayed marked while the fourth played wider than
+        its card. `concealment_of` sat on the next line of `resolve.attack`
+        taking the context all along, so it was an asymmetry rather than a
+        design. #644.
+
+        A gate may equally close over the holder's own position and ignore
+        the context entirely, which is what `p16434` does -- "adjacent to
+        blocking terrain" is world state, not a fact about the attack.
+
+        Defaults to the caster, like `c.conceal` and for the same reason:
+        every printed line says "you".
+        """
+        return self.bonus(
+            "cover", int(Cover.SUPERIOR) if superior else 2,
+            on=on if on is not None else self.me, until=until,
+            kind="cover", when=when,
+        )
+
     def conceal(
         self,
         *,
@@ -10606,7 +10657,13 @@ class Cast:
 
     # -- what a zone gives the people standing in it -------------------------
 
-    def cover_in(self, zone: int, *, side: str = "team") -> None:
+    def cover_in(
+        self,
+        zone: int,
+        *,
+        side: str = "team",
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> None:
         """"You and your allies have cover while within the zone."
 
         `c.zone(blocks_sight=True)` is the nearest thing and is not this: it
@@ -10619,11 +10676,19 @@ class Cast:
 
         Hung on the geometry like `c.grants_in`: taken on entering, given
         back on leaving.
+
+        **`when` narrows it to a kind of attack**, which one aura printed and
+        could not say: "allies have partial cover against ranged attacks
+        while in the aura" was laid ungated and sheltered them from melee
+        too. The gate is handed the attack context now --
+        `query.cover_between` passes it down to `_carried_cover` -- so
+        `ctx["ranged"]` and `ctx["reach"]` both read true inside it. #644.
         """
         self._while_inside(
             zone,
             lambda who: self.bonus(
-                "cover", 2, on=who, until=When.ENCOUNTER, kind="cover"
+                "cover", 2, on=who, until=When.ENCOUNTER, kind="cover",
+                when=when,
             ),
             side,
         )

@@ -1406,8 +1406,15 @@ class Power:
         bonus = line.bonus_for(world, actor, self.ref, branch)
         if has_combat_advantage(world, actor, target):
             bonus += 2
-        ranged = self.reach_of(branch, augment).kind == "ranged"
-        bonus -= int(cover_between(world, actor, target, ranged=ranged))
+        reach = self.reach_of(branch, augment).kind
+        ranged = reach == "ranged"
+        # The estimator is a *forecast*, so it hands the cover read the
+        # shape it knows -- otherwise a target carrying "cover against
+        # ranged attacks" is priced as having none, and the policy picks
+        # the shot the rules will penalise. Two keys, not the full attack
+        # context: this runs before any attack exists. #644.
+        bonus -= int(cover_between(world, actor, target, ranged=ranged,
+                                   ctx={"ranged": ranged, "reach": reach}))
         need = defence(world, target, line.vs) - bonus
         return min(0.95, max(0.05, (21 - need) / 20))
 

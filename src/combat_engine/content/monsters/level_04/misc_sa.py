@@ -293,26 +293,30 @@ _M6403_BASIC = "m6403a2"
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query._carried_cover(ranged=)",),
 )
 def m6403a0(c: Cast) -> None:
     """Cover held on the geometry, which is what `c.cover_in` is: taken on
     entering and given back on leaving, following the aura as it moves.
 
-    **Re-aimed off `c.cover_from()`, which was standing for two opposite
-    gaps.** `f1296` wants a *reader* -- "nothing asks what cover a creature
-    has" -- and `query.cover_between` has been that reader all along, which
-    is why that symbol arriving would say nothing about this row. This row
-    wants the grant *narrowed* to one kind of attack, and the narrowing is
-    missing at a read site rather than at a door: `cover_between` is told
-    whether the attack is ranged and does not pass it on, and
-    `query._carried_cover` asks the carried `"cover"` modifier with `{}`, so
-    a `when=` gate on `c.cover_in`'s bonus is false forever.
+    **Narrowed to the card, which it was not.** The paragraph below used to
+    end "this row is wider than its card -- allies in the aura are covered
+    against melee too", and that was the honest state: `query._carried_cover`
+    asked the carried `"cover"` modifier with `{}`, so a gate on it read
+    false forever and the only grant available was cover against everything.
+    `query.cover_between` passes the attack context down now and
+    `c.cover_in` takes a `when=`, so the aura shelters an ally from an arrow
+    and not from the sword beside it. #644.
 
-    Until that read site is handed the attack's context this row is **wider
-    than its card** -- allies in the aura are covered against melee too --
-    which is the honest state and the reason for the marker."""
-    c.cover_in(c.aura(1, until=When.ENCOUNTER), side="ally")
+    The gap was at a **read site**, not at a door, which is why
+    `c.cover_from()` arriving would have said nothing about this row --
+    `f1296` wanted a reader and `query.cover_between` had been that reader
+    all along. One symbol was standing for two opposite gaps.
+    """
+    c.cover_in(
+        c.aura(1, until=When.ENCOUNTER),
+        side="ally",
+        when=lambda ctx: bool(ctx.get("ranged")),
+    )
 
 
 @power(

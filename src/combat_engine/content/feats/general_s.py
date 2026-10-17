@@ -723,21 +723,29 @@ def f3700(c: Cast) -> None:
     c.counts_as("light blade", holding="unarmed")
 @power("f3701", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.cover_from()",))
+       )
 def f3701(c: Cast) -> None:
-    """The flanking half is written; the cover half is not.
+    """Written. The cover half was the last of it and the read site took a
+    context.
 
-    **The trigger has a ref now.** `c.flurry_of_blows()` names whichever flurry
-    the monk's tradition granted (#277), so "when you use your flurry of blows
-    power while wielding a quarterstaff" is a watch on `PowerUsed` with two
-    equalities.
+    The trigger was already here -- `c.flurry_of_blows()` names whichever
+    flurry the tradition granted (#277), so the watch is `PowerUsed` with
+    two equalities -- and the flanking half already paid out. What was
+    missing was downstream of the row entirely: `query._carried_cover` asked
+    the carried `"cover"` modifier with `{}`, so any narrowing read false.
+    `query.cover_between` passes the attack context down now. #644.
 
-    Partial cover **against ranged and area attacks only** is still a narrowing
-    `c.no_cover`'s mirror does not have -- `c.cover_from()` would be it -- so that
-    clause is dropped and the row pays out its other half. `todo` became
-    `dropped` for that reason: it plays now.
+    **"Ranged and area" is two kinds, not four.** `Range.kind` separates
+    `area_burst` and `wall` -- which are area attacks -- from `close_burst`
+    and `close_blast`, which are not, and this card covers the holder
+    against the first pair only. `dsl.AREA_OR_CLOSE` holds all four and is
+    the wrong set for this line; using it would shelter a monk from the
+    dragon breathing on it.
     """
     me = c.me
+
+    def _from_a_distance(ctx: dict[str, Any]) -> bool:
+        return bool(ctx.get("ranged")) or ctx.get("reach") in ("area_burst", "wall")
 
     def flurried(ev: PowerUsed) -> None:
         if ev.actor != me or ev.power != c.flurry_of_blows():
@@ -745,6 +753,7 @@ def f3701(c: Cast) -> None:
         if not _holding(c, "staff"):
             return
         c.cannot_be_flanked(on=me, until=When.EONT)
+        c.cover(on=me, until=When.EONT, when=_from_a_distance)
 
     c.watch(PowerUsed, flurried, until=When.ENCOUNTER, on=me, label=c.ref)
 

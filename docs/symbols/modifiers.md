@@ -76,7 +76,9 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You gain concealment." -2 to attacks against you, -5 if total.
 - `c.conceal_in(self, zone: 'int', *, side: 'str' = 'team', total: 'bool' = False) -> 'None'`
   - "You and your allies have concealment while within the zone."
-- `c.cover_in(self, zone: 'int', *, side: 'str' = 'team') -> 'None'`
+- `c.cover(self, *, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, superior: 'bool' = False) -> 'Effect | None'`
+  - "You gain partial cover." The self-side sibling of `cover_in`.
+- `c.cover_in(self, zone: 'int', *, side: 'str' = 'team', when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'None'`
   - "You and your allies have cover while within the zone."
 - `c.damage_disadvantage(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target rolls twice when it makes a damage roll and must use

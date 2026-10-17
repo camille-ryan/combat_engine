@@ -4524,12 +4524,50 @@ def i694p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.cover_from()",),
 )
 def i778x1(c: Cast) -> None:
-    """Damage to whichever creatures were granting the target cover cannot
-    be said: `query.cover_between` answers how much cover there is, never
-    who is giving it."""
+    """Written: `query.cover_granters` answers *who*, which nothing did.
+
+    The note here used to read "damage to whichever creatures were granting
+    the target cover cannot be said: `query.cover_between` answers how much
+    cover there is, never who is giving it." That was true and it was the
+    only thing missing -- so the reader was built rather than a door opened,
+    which is why this row shared no gap with the three that print "you gain
+    partial cover against ranged attacks". One symbol had been standing for
+    both questions. #644.
+
+    Attribution is asked the only way it can be: take each of the target's
+    allies out of the blockers and see whether the cover falls. **Every
+    creature whose removal matters is charged**, which is the printed reading
+    -- two allies either side of a corridor are both granting it -- and not a
+    minimal sufficient set, which would have to pick one of them at random.
+
+    Three gates besides, all printed: the swing must **miss**, the row must
+    be an **encounter or daily ranged attack** power, and the cover must come
+    from **allies** rather than from terrain. The last is free:
+    `cover_granters` returns entities, and a pillar is not one.
+    """
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.query import cover_granters
+
+    plus = c.enhancement
+    me = c.me
+
+    def missed_behind_a_friend(ev: Miss) -> None:
+        if ev.attacker != me:
+            return
+        p = get(ev.power)
+        if p is None or p.attack is None:
+            return
+        if p.usage not in (ENCOUNTER, Usage.DAILY):
+            return
+        if p.reach is None or p.reach.branch(getattr(ev, "branch", 0)).kind != "ranged":
+            return
+        for granter in cover_granters(c.world, me, ev.target):
+            c.flat(plus, on=granter)
+
+    c.watch(Miss, missed_behind_a_friend, until=When.ENCOUNTER)
+
 
 
 @power(

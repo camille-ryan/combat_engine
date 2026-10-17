@@ -2113,6 +2113,369 @@ def item_as_weapon(out: Result) -> None:
 
 ############################################################
 
+def cover_granters(out: Result) -> None:
+    """*Who* is granting the cover, not just how much there is.
+
+    `query.cover_between` answers a quantity and one item prints the other
+    question -- "each enemy granting your target cover takes damage equal to
+    the bow's enhancement bonus". That row carried a marker claiming the
+    thing could not be said, filed under the same symbol as three rows
+    printing "you gain partial cover against ranged attacks". One name was
+    standing for two opposite gaps: those three wanted a **writer** narrowed
+    to the attack's shape (#644), this one wanted a **reader**.
+
+    Attribution is asked by removal: take each ally out of the blockers and
+    see whether the cover falls. Every creature whose removal matters is
+    charged, which is the printed reading -- two allies either side of a
+    corridor are both granting it -- rather than a minimal sufficient set,
+    which would have to pick one arbitrarily.
+
+    **Asserted through `i778x1` and not through the helper**, so the rule
+    survives the helper being renamed and fails if the row stops calling it.
+    Four controls:
+
+    * **a body standing aside grants nothing.** The helper returns `[]` where
+      `cover_between` already returns `Cover.NONE`, and a rule asserting only
+      the positive passes on a helper that names every ally on the board.
+    * **terrain is not a granter.** A pillar gives real cover and has no
+      entity to charge, so the list is empty with the cover nonzero -- the
+      one case where the two answers legitimately disagree.
+    * **the row charges the granter, not the target**, which is what the card
+      says and the easy thing to get backwards.
+    * **an at-will miss charges nobody**, because the card says encounter or
+      daily. A gate on usage that is not tested is a gate that pays out on
+      every basic shot.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import Miss
+    from combat_engine.engine.query import allies, cover_between, enemies
+    from combat_engine.engine.query import cover_granters as granters
+    from combat_engine.engine.types import Cover, Usage
+
+    world, me, _ = _board()
+    mates = [a for a in allies(world, me) if a != me]
+    foe = sorted(enemies(world, me))[0]
+    out.that(len(mates) >= 1, "the board has an ally to stand in the way")
+    if not mates:
+        return
+
+    # Line them up: the foe four west, an ally two west, directly between.
+    here = world.get(me, Position).square
+    world.get(foe, Position).square = (here[0] - 4, here[1])
+    world.get(mates[0], Position).square = (here[0] - 2, here[1])
+    for spare in mates[1:]:
+        world.get(spare, Position).square = (here[0] + 6, here[1] + 6)
+
+    out.that(cover_between(world, foe, me, ranged=True) is not Cover.NONE,
+             "a body between the shooter and the target is cover")
+    out.that(granters(world, foe, me) == [mates[0]],
+             "and the helper names exactly that body"
+             f" -- {granters(world, foe, me)}")
+
+    # Stand it aside: the control, and the whole difference from "every ally".
+    world.get(mates[0], Position).square = (here[0] + 5, here[1] + 5)
+    out.that(granters(world, foe, me) == [],
+             "an ally standing clear grants nothing -- the control, which a"
+             " helper returning every ally on the board fails")
+
+    # Terrain gives cover and cannot be charged for it.
+    world.grid.blocking.add((here[0] - 2, here[1]))
+    out.that(cover_between(world, foe, me, ranged=True) is not Cover.NONE,
+             "a pillar is cover too")
+    out.that(granters(world, foe, me) == [],
+             "but nothing is charged for it -- terrain has no entity, which"
+             " is the one case the two answers legitimately disagree")
+    world.grid.blocking.discard((here[0] - 2, here[1]))
+
+    # Now through the row, and **the direction flips.** Everything above
+    # asks who shelters `me` from the foe; the card asks who shelters the
+    # *target* from me -- "an enemy that benefits from cover granted by its
+    # allies". So the body between us has to be a second enemy, not an ally.
+    # The first draft of this rule staged the mirror image and the row
+    # charged nobody, which read as a broken row and was a broken rule.
+    foes = sorted(enemies(world, me))
+    out.that(len(foes) >= 2,
+             "the board has a second enemy to shelter the first")
+    if len(foes) < 2:
+        return
+    shot_at, blocker = foes[0], foes[1]
+    world.get(shot_at, Position).square = (here[0] - 4, here[1])
+    world.get(blocker, Position).square = (here[0] - 2, here[1])
+    # **Clear everybody else off the line.** Leaving the board's other
+    # creatures where it put them made four of them load-bearing at once and
+    # the assertion read as a broken helper. A control has to be arranged
+    # before it says anything -- the same mistake `conceal_in`'s rule
+    # records making.
+    for spare in foes[2:]:
+        world.get(spare, Position).square = (here[0] + 7, here[1] - 6)
+    for mate in mates:
+        world.get(mate, Position).square = (here[0] + 5, here[1] + 5)
+    out.that(granters(world, me, shot_at) == [blocker],
+             "the target's own ally is what shelters it from me"
+             f" -- {granters(world, me, shot_at)}")
+
+    ranged_daily = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None and p.attack is not None
+         and p.usage is Usage.DAILY and p.reach is not None
+         and p.reach.kind == "ranged"),
+        None,
+    )
+    at_will = next(
+        (r for r in sorted(REGISTRY)
+         if (p := get(r)) is not None and p.attack is not None
+         and p.usage is Usage.AT_WILL and p.reach is not None
+         and p.reach.kind == "ranged"),
+        None,
+    )
+    out.that(ranged_daily is not None and at_will is not None,
+             "the tree declares a ranged daily and a ranged at-will to miss with")
+    if ranged_daily is None or at_will is None:
+        return
+
+    out.that("i778x1" in REGISTRY, "i778x1 is declared")
+    if "i778x1" not in REGISTRY:
+        return
+    REGISTRY["i778x1"].body(Cast(world=world, me=me, ref="i778x1"))
+
+    def miss_with(ref: str) -> int:
+        """Hit points the granter loses when `me` misses the target with `ref`."""
+        before = world.need(blocker, Health).hp
+        world.bus.emit(Miss(attacker=me, target=shot_at, power=ref))
+        return before - world.need(blocker, Health).hp
+
+    untouched = world.need(shot_at, Health).hp
+    took = miss_with(ranged_daily)
+    out.that(took > 0,
+             f"missing a covered enemy with a ranged daily hurts the GRANTER ({took})")
+    out.that(world.need(shot_at, Health).hp == untouched,
+             "and not the target it missed -- the easy thing to get backwards")
+    out.that(miss_with(at_will) == 0,
+             "an at-will miss charges nobody: the card says encounter or daily")
+
+
+def narrowed_cover(out: Result) -> None:
+    """Carried cover can be narrowed to the *shape* of the attack.
+
+    Cover is two things added together under one name, and only one of them
+    needed a context. The **trace** is pure geometry -- two positions, nothing
+    to gate -- so `query.cover_between` took no context and passed none on.
+    The **carried** half is a `"cover"` modifier, and `query._carried_cover`
+    asked it with `{}`.
+
+    `concealment_of` sits on the next line of `resolve.attack` and has taken
+    the context from the start, so this was an asymmetry rather than a design:
+    `c.conceal(when=)` could say "concealment from creatures more than 3
+    squares away" and `c.cover(when=)` could not say "cover against ranged
+    attacks". Four rows print the second and all four were marked or wider
+    than their card -- one aura sheltered its allies from melee too, which is
+    strictly stronger than what it prints. #644.
+
+    **Asserted through `resolve.situational_attack`**, not through
+    `cover_between` directly, because that is the function the kernel reads
+    cover inside and it is where the penalty has to show.
+
+    But `situational_attack` takes its context as a *parameter*, so a rule
+    that builds one by hand proves the gate works and says **nothing about
+    whether the kernel ever builds it**. The first draft of this rule read
+    exactly that way and its docstring claimed otherwise. So the last
+    assertion stubs `resolve.situational_attack`, runs a real `attack`, and
+    reads the context the kernel handed it -- the one control that fails if
+    `ctx["reach"]` is deleted from `resolve.attack`, which every assertion
+    above survives.
+
+    Four controls, and the first two are where a widened gate shows:
+
+    * **a melee attack is not penalised** by cover granted against ranged
+      ones. That is the whole narrowing, and a `when=` on a modifier nothing
+      passes a context to fails it by reading false -- or, with the gate
+      dropped, by covering everything.
+    * **a close burst is not an area attack.** `Range.kind` separates
+      `close_burst` and `close_blast` from `area_burst` and `wall`, and
+      `dsl.AREA_OR_CLOSE` holds all four; `f3701` covers against the second
+      pair only, so the lumped set is the wrong one for it.
+    * **no context at all means no carried cover**, which is what
+      `actions.py`'s hide offer passes. Under-offering a hide is the right
+      way to be wrong; sheltering a creature from a sword because a gate
+      could not be evaluated is not.
+    * **the ungated grant still covers everything**, so the parameter did not
+      quietly become mandatory. `c.cover_in`'s other callers pass no `when=`.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.resolve import _reach_kind, situational_attack
+    from combat_engine.engine.types import Defense
+
+    world, me, _ = _board()
+    foe = sorted(enemies(world, me))[0]
+
+    shapes = {}
+    for kind in ("melee", "ranged", "close_burst", "area_burst"):
+        ref = next((r for r in sorted(REGISTRY) if _reach_kind(r, 0) == kind), None)
+        if ref is not None:
+            shapes[kind] = ref
+    out.that(len(shapes) == 4,
+             "the tree declares a row of each shape to swing with"
+             f" -- got {sorted(shapes)}")
+    if len(shapes) != 4:
+        return
+
+    def hits(ref: str) -> int:
+        """What the situation adds to `foe`'s swing at `me` with this row.
+
+        The **delta** is what is read, never the number: `audit.board` arrives
+        with attack and defence modifiers already set, so every one of these
+        starts at some nonzero value that has nothing to do with cover.
+        """
+        kind = _reach_kind(ref, 0)
+        ctx = {"attacker": foe, "target": me, "power": ref,
+               "ranged": kind == "ranged", "reach": kind}
+        return situational_attack(world, foe, me, ref, ctx)
+
+    was = {k: hits(r) for k, r in shapes.items()}
+
+    c = Cast(world=world, me=me, ref="drivers:cover")
+    c.cover(on=me, until=When.ENCOUNTER,
+            when=lambda ctx: bool(ctx.get("ranged")))
+
+    now = {k: hits(r) for k, r in shapes.items()}
+    out.that(now["ranged"] == was["ranged"] - 2,
+             "cover against ranged attacks costs a ranged attacker 2"
+             f" ({was['ranged']} -> {now['ranged']})")
+    out.that(now["melee"] == was["melee"],
+             "and costs a MELEE attacker nothing -- the control, and the"
+             f" whole narrowing ({was['melee']} -> {now['melee']})")
+    out.that(now["close_burst"] == was["close_burst"],
+             "nor a close burst, which is not a ranged attack"
+             f" ({was['close_burst']} -> {now['close_burst']})")
+
+    # The shape, not just the bool. `f3670` enumerates melee and ranged and
+    # `f3701` enumerates ranged and area, so a gate has to be able to name a
+    # kind rather than answer "was it ranged".
+    w2, me2, _ = _board(seed=2)
+    foe2 = sorted(enemies(w2, me2))[0]
+
+    def hits2(ref: str) -> int:
+        kind = _reach_kind(ref, 0)
+        ctx = {"attacker": foe2, "target": me2, "power": ref,
+               "ranged": kind == "ranged", "reach": kind}
+        return situational_attack(w2, foe2, me2, ref, ctx)
+
+    before = {k: hits2(r) for k, r in shapes.items()}
+    c2 = Cast(world=w2, me=me2, ref="drivers:cover2")
+    c2.cover(on=me2, until=When.ENCOUNTER,
+             when=lambda ctx: ctx.get("reach") in ("area_burst", "wall"))
+    after = {k: hits2(r) for k, r in shapes.items()}
+    out.that(after["area_burst"] == before["area_burst"] - 2,
+             "a gate naming `area_burst` shelters the holder from one"
+             f" ({before['area_burst']} -> {after['area_burst']})")
+    out.that(after["close_burst"] == before["close_burst"],
+             "and NOT from a close burst -- `dsl.AREA_OR_CLOSE` lumps the two"
+             " and is the wrong set for a card that says \"area\""
+             f" ({before['close_burst']} -> {after['close_burst']})")
+    out.that(after["ranged"] == before["ranged"],
+             "nor from an ordinary ranged attack"
+             f" ({before['ranged']} -> {after['ranged']})")
+
+    # No context at all: `actions.py`'s hide offer. The gate cannot be
+    # evaluated, so there is no carried cover rather than cover against
+    # everything.
+    from combat_engine.engine.query import cover_between
+    from combat_engine.engine.types import Cover
+
+    out.that(cover_between(w2, foe2, me2) is Cover.NONE,
+             "a caller with no attack in hand gets NO carried cover, which"
+             " under-offers a hide rather than sheltering from a sword")
+
+    # And the ungated grant is unchanged: `when=` did not become mandatory.
+    w3, me3, _ = _board(seed=3)
+    foe3 = sorted(enemies(w3, me3))[0]
+    Cast(world=w3, me=me3, ref="drivers:cover3").cover(
+        on=me3, until=When.ENCOUNTER)
+    out.that(cover_between(w3, foe3, me3) is not Cover.NONE,
+             "an UNGATED c.cover still covers against everything, with no"
+             " context passed -- the parameter stayed optional")
+
+    # **The zone-bounded writer too.** `c.cover_in` is what the one aura
+    # printing this is written against, and a plant removing *its* `when=`
+    # left every assertion above green -- the rule exercised `c.cover` only.
+    # A verb with a gate nothing tests is a gate that can be deleted.
+    w4, me4, _ = _board(seed=4)
+    friend = next((a for a in allies(w4, me4) if a != me4), None)
+    out.that(friend is not None, "the board has an ally to shelter in the aura")
+    if friend is not None:
+        foe4 = sorted(enemies(w4, me4))[0]
+
+        def hits4(ref: str, who: int) -> int:
+            kind = _reach_kind(ref, 0)
+            ctx = {"attacker": foe4, "target": who, "power": ref,
+                   "ranged": kind == "ranged", "reach": kind}
+            return situational_attack(w4, foe4, who, ref, ctx)
+
+        # Stand the ally inside the aura, which is the caster's own square
+        # outward -- `_board` does not promise where it put anybody.
+        w4.get(friend, Position).square = w4.get(me4, Position).square
+        w4.get(friend, Position).square = (
+            w4.get(me4, Position).square[0] + 1, w4.get(me4, Position).square[1]
+        )
+        start = {k: hits4(r, friend) for k, r in shapes.items()}
+
+        c4 = Cast(world=w4, me=me4, ref="drivers:cover4")
+        c4.cover_in(c4.aura(1, until=When.ENCOUNTER), side="ally",
+                    when=lambda ctx: bool(ctx.get("ranged")))
+        w4.zones.refresh()
+        end = {k: hits4(r, friend) for k, r in shapes.items()}
+
+        out.that(end["ranged"] == start["ranged"] - 2,
+                 "an aura's cover shelters an ally in it from an ARROW"
+                 f" ({start['ranged']} -> {end['ranged']})")
+        out.that(end["melee"] == start["melee"],
+                 "and not from the SWORD beside it -- the aura played wider"
+                 " than its card until `c.cover_in` took a gate"
+                 f" ({start['melee']} -> {end['melee']})")
+
+    # Does the **kernel** build a context carrying the shape? Everything
+    # above hands `situational_attack` a context of its own making, so all of
+    # it passes with `resolve.attack` never plumbed. Stub the function and
+    # read what the real swing hands it.
+    from combat_engine.engine import resolve as resolve_mod
+
+    seen: list[dict] = []
+    real = resolve_mod.situational_attack
+
+    def recording(  # noqa: ANN202
+        world_, attacker, target, power, ctx, **kw  # noqa: ANN001, ANN003
+    ):
+        seen.append(dict(ctx))
+        return real(world_, attacker, target, power, ctx, **kw)
+
+    # The stub's signature is deliberately loose -- it forwards `**kw` -- so
+    # `ty` reads the assignment as narrowing the module attribute. A
+    # suppression rather than a baseline raise: `types.py --bless` refuses to
+    # raise an entry, and this is one site rather than a class of them.
+    resolve_mod.situational_attack = recording  # ty: ignore[invalid-assignment]
+    try:
+        resolve_mod.attack(w3, foe3, me3, 30, Defense.AC,
+                           power=shapes["ranged"])
+    finally:
+        resolve_mod.situational_attack = real
+
+    out.that(bool(seen), "a real swing reached the situational read")
+    if seen:
+        got = seen[0]
+        out.that(got.get("reach") == "ranged",
+                 "and the KERNEL put the attack's shape in the context"
+                 f" -- ctx['reach'] == {got.get('reach')!r}, which is the one"
+                 " assertion a hand-built ctx cannot make")
+        out.that(got.get("ranged") is True,
+                 "beside the bool it has always carried")
+
+
 def scoped_vulnerable(out: Result) -> None:
     """Vulnerable to *some* of what reaches you, not all of it.
 
@@ -15644,6 +16007,10 @@ DRIVERS = {
                          "a keyword one creature's copy of a row carries"),
     "item_as_weapon": (item_as_weapon,
                        "an item that is also a weapon"),
+    "cover_granters": (cover_granters,
+                       "which creatures are granting the cover"),
+    "narrowed_cover": (narrowed_cover,
+                       "cover narrowed to the shape of the attack"),
     "scoped_vulnerable": (scoped_vulnerable,
                           "vulnerable to some of what reaches you"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),

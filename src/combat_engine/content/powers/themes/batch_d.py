@@ -1655,16 +1655,60 @@ def p16433(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.MARTIAL],
-    todo=("c.cover_from()",),
 )
 def p16434(c: Cast) -> None:
-    """Both halves hang on the cover, and the half that is missing is
-    *granting* it. `query.cover_between` reads cover by tracing two
-    positions, which is what `p14177` needed and now uses; there is no
-    modifier key a row can write to say "you have partial cover", the way
-    `c.conceal` writes one for concealment. Standing next to blocking
-    terrain gives no traced cover from most angles, so the second clause
-    written alone would be a rider that is almost never true."""
+    """Both halves, and the first one is what the second hung on.
+
+    **The old note located the gap exactly**: "there is no modifier key a
+    row can write to say 'you have partial cover', the way `c.conceal`
+    writes one for concealment". `c.cover` is that key -- the self-side
+    sibling of `c.cover_in`, as `c.conceal` is of `c.conceal_in` -- and
+    `query._carried_cover` takes the larger of it and the traced cover
+    rather than adding, so standing behind a pillar as well gains nothing.
+
+    **The gate is a closure on the holder's own square**, which is what
+    makes this row writable where its two siblings are not. `f3527` and
+    `f3701` narrow their cover to *ranged* and *area* attacks -- a fact
+    about the attack -- and `_carried_cover` reads
+    `mods.total("cover", {})` with an empty context, so that narrowing
+    cannot be expressed and they stay marked. This card says only "while
+    you are adjacent to a square of blocking terrain", which the gate reads
+    off the grid without any context at all.
+
+    The second clause reads the cover back through `query.cover_between`
+    rather than assuming it, because the pillar the holder is standing
+    beside may be giving traced cover too and the card asks only whether
+    there *is* partial cover."""
+    from combat_engine.engine.grid import neighbours
+    from combat_engine.engine.query import Cover, cover_between
+
+    me = c.me
+
+    def beside_blocking(_ctx: dict[str, Any]) -> bool:
+        """Is the holder standing next to a blocking square right now?
+
+        Read live rather than at arming, because the card says "while you
+        are adjacent" and the holder may step away and back inside the
+        turn this lasts.
+        """
+        here = c.world.get(me, Position)
+        if here is None:
+            return False
+        blocked = c.world.grid.blocking
+        return any(sq in blocked
+                   for mine in here.squares
+                   for sq in neighbours(mine))
+
+    c.cover(on=me, until=When.EONT, when=beside_blocking)
+
+    def swung_and_missed(ev: Miss) -> None:
+        if ev.target != me or not by_melee(c.world, ev.attacker, ev):
+            return
+        if cover_between(c.world, ev.attacker, me) is Cover.NONE:
+            return
+        c.grants_advantage(on=ev.attacker, to="me", until=When.EONT)
+
+    c.watch(Miss, swung_and_missed, until=When.EONT, on=me, label=c.ref)
 
 
 @power(

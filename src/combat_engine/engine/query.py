@@ -1467,7 +1467,8 @@ def cover_waived(
 
 
 def cover_between(
-    world: World, attacker: int, target: int, *, ranged: bool = False
+    world: World, attacker: int, target: int, *, ranged: bool = False,
+    ctx: dict | None = None,
 ) -> Cover:
     """The worst cover the target has, measured from the attacker's best square.
 
@@ -1481,6 +1482,22 @@ def cover_between(
     fighter in a melee got a cover penalty for the enemy standing beside its
     target, and the target's enemies were sheltering it from its friends.
     Somebody in your way is cover your side gave you.
+
+    **`ctx` is the attack, and it reaches only the carried half.** The trace
+    needs no context -- it is two positions -- but a *carried* `"cover"`
+    modifier can be gated, and until this parameter existed the gate was
+    handed `{}` and read false. `concealment_of` has taken the context from
+    the start and sits one line below this call in `resolve.attack`, so the
+    asymmetry was the bug rather than a design: `c.conceal(when=)` could say
+    "concealment from creatures more than 3 squares away" and
+    `c.cover(when=)` could not say "cover against ranged attacks". Four rows
+    print the second. #644.
+
+    Callers with no attack in hand pass nothing and get today's behaviour: a
+    gated carried modifier reads false, so it is not counted. That
+    under-offers rather than over-delivers, which is the right way round for
+    `actions.py`'s hide check -- the alternative is sheltering a creature
+    from a sword because a gate it could not evaluate defaulted open.
     """
     theirs = squares(world, target)
     mine = squares(world, attacker)
@@ -1507,10 +1524,70 @@ def cover_between(
     for src in mine:
         for dst in theirs:
             best = min(best, world.grid.cover(src, dst, blockers=bodies))
-    return max(best, _carried_cover(world, target))
+    return max(best, _carried_cover(world, target, ctx))
 
 
-def _carried_cover(world: World, target: int) -> Cover:
+def cover_granters(world: World, attacker: int, target: int) -> list[int]:
+    """Which of `target`'s allies are the ones sheltering it from `attacker`.
+
+    `cover_between` answers *how much* cover there is and never *who* is
+    giving it, and one item prints the second question: "each enemy granting
+    your target cover takes damage". So this asks it the only way it can be
+    asked -- take each ally out of the blockers and see whether the cover
+    falls. A body nobody is standing behind changes nothing and does not come
+    back.
+
+    **Load-bearing, not merely in the way.** Two allies either side of a
+    corridor may each be unnecessary while the pair together is enough; both
+    come back, because each one's removal is tested against the full set. That
+    is the printed reading -- every creature granting cover is charged -- and
+    the alternative (a minimal sufficient set) would have to pick one of them
+    arbitrarily.
+
+    Ranged only, because that is the only kind of attack a creature can be
+    cover against: `cover_between`'s `bodies` set is empty for a melee swing,
+    so this is empty too and the caller gets a `[]` rather than a wrong name.
+    Terrain is never a granter -- it has no entity to charge -- and neither is
+    a carried modifier, for the same reason. #644.
+    """
+    theirs = squares(world, target)
+    mine = squares(world, attacker)
+    if not theirs or not mine:
+        return []
+
+    side = team(world, target)
+    allies_ = [
+        other
+        for other in creatures(world)
+        if other not in (attacker, target)
+        and alive(world, other)
+        and team(world, other) is side
+        and squares(world, other)
+    ]
+    if not allies_:
+        return []
+
+    blind = set(_blinding_squares(world, attacker, target))
+    bodies = {sq for other in allies_ for sq in squares(world, other)}
+
+    def traced(blockers: set[Square]) -> Cover:
+        best = Cover.SUPERIOR
+        for src in mine:
+            for dst in theirs:
+                best = min(best, world.grid.cover(src, dst, blockers=blockers))
+        return best
+
+    whole = traced(blind | bodies)
+    if whole is Cover.NONE:
+        return []
+    return [
+        other
+        for other in allies_
+        if traced(blind | (bodies - squares(world, other))) < whole
+    ]
+
+
+def _carried_cover(world: World, target: int, ctx: dict | None = None) -> Cover:
     """Cover a creature carries rather than one it stands behind.
 
     Everything here traces two positions, so "you and your allies have cover
@@ -1523,7 +1600,7 @@ def _carried_cover(world: World, target: int) -> Cover:
     mods = world.get(target, Mods)
     if mods is None or not mods.items:
         return Cover.NONE
-    n = mods.total("cover", {})
+    n = mods.total("cover", ctx or {})
     if n >= int(Cover.SUPERIOR):
         return Cover.SUPERIOR
     return Cover.PARTIAL if n > 0 else Cover.NONE
