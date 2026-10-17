@@ -1622,7 +1622,7 @@
   "by": "slice3",
   "found": "c.weapon_dice (writes the per-character `replace(w)` copies in Gear.weapons), feats.fighter_c._with_property, Cast._high_crit",
   "refused_rows": 4,
-  "rows": 8,
+  "rows": 5,
   "verdict": "mis-marked",
   "why": "weapon_dice already edits one character's own copy of a weapon and needs no reader, which is the exact mechanism these rows want for `Weapon.properties`; `_high_crit` and `_with_property` already read the field. f1277's three clauses (dice, properties, group, range) are the same write on the same object."
  },
@@ -3392,11 +3392,11 @@
  },
  "c.make_thrown()": {
   "by": "slice4",
-  "found": "c.as_ranged, which is c.bonus(\"reach\", ..., once=True)",
+  "found": "c.weapon_dice (the per-character replace(w) copy in Gear.weapons), Weapon.thrown, resolve._long_range",
   "refused_rows": 6,
-  "rows": 8,
+  "rows": 4,
   "verdict": "mis-marked",
-  "why": "c.as_ranged's body is one call: self.bonus(\"reach\", max(0, squares_-1), when=lambda ctx: ctx.get(\"kind\",\"melee\")==\"melee\", once=True, stacks=False). The standing weapon property these rows want is the same modifier without once=True, so what is missing is a kwarg on an existing verb, not a mechanism. It carries the same approximation as_ranged already ships and documents (distance only, no cover or opening change)."
+  "why": "RE-JUDGED. The earlier verdict named c.as_ranged and was wrong: it said these rows want 'the same modifier without once=True', a standing 'reach' bonus. Read the cards -- f1841, f1843 and f3641 all say use this MELEE weapon as a heavy thrown weapon with a normal range of 5 and a long range of 10 (6/12 on f3641). A reach bonus cannot say that. Weapon.thrown is a separate field from Weapon.ranged on purpose -- its own comment: 'Gear.ranged means can be fired, and a dagger cannot be' -- and resolve._long_range reads the weapon's range pair, not its reach. So this is the per-character weapon write, the same mechanism as c.counts_as(property=) wants for Weapon.properties and the one c.weapon_dice already performs. The two symbols are ONE gap of 9 rows, not two of 4 and 5. Note for whoever builds it: Weapon.__post_init__ now derives hands from properties (#562), and dataclasses.replace re-runs it, so the per-character copy keeps the two fields in step for free."
  },
  "c.malfunction()": {
   "by": "singleton-sweep",
