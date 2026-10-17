@@ -2256,6 +2256,126 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def squares_moved(out: Result) -> None:
+    """How far a creature has already moved, which the log always knew.
+
+    Three rows carried `query.moved_this_turn(world, eid)` as a marked
+    clause, and the helper they shared opened with "nothing records it.
+    `Movement` says what a creature *can* do and never what it did". It
+    tallied the steps **forward** from a watcher armed the first time the row
+    was used -- so the first swing of a fight read zero however far the
+    creature had come, which the markers said outright and treated as
+    unfixable.
+
+    `world.bus.log` held every `Moved` the whole time, and
+    `query.since_turn_began` already bounds a creature's own turn off it --
+    stopping at **its** `TurnStart`, skipping a ghost turn, and its docstring
+    records 21 content helpers being consolidated into it. #645.
+
+    Four controls, and two of them are the ones that caught real faults:
+
+    * **a creature at the start of its turn has moved nothing**, however
+      much happened before. The old watcher could not say this and the new
+      reader must, or every row reads the previous turn's travel.
+    * **a round is not a turn.** `m816a1` prints "when it doesn't move more
+      than 1 square **in a round**", and a creature shoved on somebody
+      else's turn has moved in the round while its own turn window shows
+      zero. Asserted both ways round, because a turn reading offers the row
+      the card forbids.
+    * **`kinds` narrows.** `m5444a0` says *per square shifted* and
+      `m4602a2` says *moved*; one walk plus one shift must read 2, 1 and 1.
+    * **the gate is a `requires=`, not a body check**, so the UI and
+      `policy/` never offer a row the card forbids. `m6665a3`'s note claimed
+      a `requires=` "that is false when a trait is armed refuses the row for
+      the whole fight" -- `Power.requires_of` is called per offer, so that
+      was a misreading of the field.
+    """
+    from combat_engine.content.monsters.level_01.skirmishers_sa import (
+        _moved_at_least,
+        _moved_no_more_than,
+        _squares_moved,
+    )
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.movement import shift, step
+    from combat_engine.engine.query import enemies, squares
+
+    def clear(world, me, dx):  # noqa: ANN001, ANN202
+        """An empty square `dx` away.
+
+        **A blocked `step` returns False and counts nothing**, and that read
+        as a broken reader twice while writing this -- `audit.board` stands
+        four creatures in reach, so the square straight ahead is often taken.
+        A probe that does not check the move happened is measuring its own
+        setup.
+        """
+        at = sorted(squares(world, me))[0]
+        for dy in (0, 1, -1, 2, -2):
+            dest = (at[0] + dx, at[1] + dy)
+            if world.grid.passable(dest) and world.grid.occupant(dest) is None:
+                return dest
+        return None
+
+    world, me, _ = _board("m3435a1", 1)
+    # **Begin its turn**, or `since_turn_began` finds no boundary and hands
+    # back the whole log -- which is a window that is never exercised and
+    # passes whatever the reader does.
+    world.encounter._begin(me)
+    out.that(_squares_moved(world, me) == 0,
+             "a creature at the start of its own turn has moved nothing")
+    out.that(not _moved_at_least(2)(world, me),
+             "so the dive is NOT offered -- the control, and what the old"
+             " watcher could not say")
+
+    out.that(step(world, me, clear(world, me, 1)), "it takes a square")
+    out.that(_squares_moved(world, me) == 1, "which reads as one")
+    out.that(not _moved_at_least(2)(world, me),
+             "one square is not two: still not offered")
+    out.that(step(world, me, clear(world, me, 1)), "it takes another")
+    out.that(_squares_moved(world, me) == 2
+             and _moved_at_least(2)(world, me),
+             "two squares and the dive is offered")
+
+    # `kinds` narrows: one walk and one shift.
+    w2, me2, _ = _board("m5444a0", 1)
+    w2.encounter._begin(me2)
+    step(w2, me2, clear(w2, me2, 1))
+    shift(w2, me2, clear(w2, me2, 1))
+    out.that(_squares_moved(w2, me2) == 2, "a walk and a shift is two squares")
+    out.that(_squares_moved(w2, me2, "shift") == 1,
+             "of which one was a shift -- what `m5444a0` is paid per")
+    out.that(_squares_moved(w2, me2, "walk") == 1,
+             "and one was a walk, which that card does not count")
+
+    # **A round is not a turn.** Shoved on the foe's turn, asked on its own.
+    w3, me3, _ = _board("m816a1", 1)
+    foe = sorted(enemies(w3, me3))[0]
+    w3.encounter._begin(foe)
+    out.that(step(w3, me3, clear(w3, me3, 2)), "the brute is shoved two squares")
+    w3.encounter._begin(me3)
+    out.that(_squares_moved(w3, me3) == 0,
+             "its own turn window shows nothing: the shove was not its turn")
+    out.that(_squares_moved(w3, me3, window="round") == 2,
+             "the ROUND window shows the shove -- the whole reason the card"
+             " says 'in a round'")
+    out.that(not _moved_no_more_than(1)(w3, me3),
+             "so the two swings are refused, where a turn reading would have"
+             " offered them")
+
+    # The positive: a brute that stood still gets them.
+    w4, me4, _ = _board("m816a1", 2)
+    w4.encounter._begin(me4)
+    out.that(_moved_no_more_than(1)(w4, me4),
+             "a brute that stood still gets its two swings")
+
+    # And the gate is on the header, where the menu reads it.
+    for ref, text in (("m3435a1", "at least 2 squares"),
+                      ("m816a1", "1 square in a round")):
+        row = REGISTRY.get(ref)
+        out.that(row is not None and row.requires is not None,
+                 f"{ref} carries a `requires=`, so the row is never offered"
+                 f" -- not merely failed ({text})")
+
+
 def narrowed_cover(out: Result) -> None:
     """Carried cover can be narrowed to the *shape* of the attack.
 
@@ -16009,6 +16129,8 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "squares_moved": (squares_moved,
+                      "how far a creature has already moved"),
     "narrowed_cover": (narrowed_cover,
                        "cover narrowed to the shape of the attack"),
     "scoped_vulnerable": (scoped_vulnerable,

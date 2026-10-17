@@ -2588,10 +2588,25 @@ def m6665a3(c: Cast) -> None:
     start -- a window the card leaves open is stale the moment it is
     snapshotted, and the printed clause pays on the very next stomp.
 
-    The Requirement is the dropped clause and is deliberately not a
-    `requires=`: nothing asks whether a move action has already gone this turn,
-    and a `requires=` that is false when a trait is armed refuses the row for
-    the whole fight. Here it would simply be false always.
+    **The note that stood here was wrong on both counts, and the row is
+    deferred for a different reason.** It said "nothing asks whether a move
+    action has already gone this turn" -- `Encounter.spend` emits
+    `ActionSpent(actor, cost)` on every spend and `world.bus.log` keeps it,
+    so a scan bounded by `query.since_turn_began` answers it exactly. And it
+    said "a `requires=` that is false when a trait is armed refuses the row
+    for the whole fight": `Power.requires_of` is called **per offer**, not
+    once at arming, so a gate that changes during the turn is precisely what
+    the field is for. `m816a1` and `m3435a1` are written against it. #645.
+
+    `ActionSpent.cost` is the right field and `Budget.move` is the trap:
+    `DOWNGRADES[MINOR]` is `(MINOR, MOVE, STANDARD)` and `spend` takes the
+    cheapest slot that can pay, so a minor spent with `minor` already at 0
+    decrements `budget.move` and the row would refuse itself on a turn where
+    nothing moved. `cost` carries the **requested** action type.
+
+    **Not written because this is a level 13 card and the band is heroic** --
+    monsters 1-10. The marker stays so the row is not reported ready, and it
+    names the reader rather than claiming the engine records nothing.
     """
     me, ref = c.me, c.ref
 

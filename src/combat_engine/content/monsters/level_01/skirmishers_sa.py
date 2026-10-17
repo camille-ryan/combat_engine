@@ -321,33 +321,83 @@ def _until_its_next_turn(c: Cast, who: int, held: Effect | None) -> None:
     )
 
 
-def _travelled_this_turn(c: Cast, *kinds: str) -> int:
-    """How far the creature has moved this turn, counting only those kinds.
+def _squares_moved(world: World, eid: int, *kinds: str, window: str = "turn") -> int:
+    """How far `eid` has moved in this turn or round, counting only `kinds`.
 
-    Nothing records it. `Movement` says what a creature *can* do and never what
-    it did, and `Moved` is the only event that says -- so the steps are tallied
-    as they happen. **Kept as a modifier rather than in a dictionary here**: a
-    `When.EOT` bonus expires at the end of the turn it was laid in, which is
-    exactly the window "since the start of its turn" names, and `c.total` reads
-    the sum back. No state in this module and nothing to reset.
+    **The log is the record, and the previous version of this said there was
+    none.** It read "nothing records it. `Movement` says what a creature *can*
+    do and never what it did" and tallied the steps forward from a watcher --
+    so the counter was armed the first time the row that read it was used, and
+    the first swing of a fight read zero however far the creature had come.
+    Three rows carried that as a marked clause.
 
-    The counter is armed the first time the row that reads it is used, which is
-    the half that cannot be fixed from here: a creature's movement before that
-    first use is not recorded anywhere to go back and read.
+    `query.since_turn_began` already bounds a creature's own turn off
+    `world.bus.log`, stopping at **its** `TurnStart` and skipping a ghost
+    turn, and its docstring records 21 content helpers being consolidated into
+    it. This is the 22nd, late. #645.
+
+    `window="round"` is the other half, for a card that says "in a round"
+    rather than "this turn": movement a creature is *slid* on somebody else's
+    turn counts toward that and is invisible to the turn window. Bounded by
+    the last `RoundStart`, which is on the log for the same reason.
+
+    `kinds` empty counts every kind of movement; naming them asks only about
+    those, which is how a card saying "per square shifted" differs from one
+    saying "moved at least 2 squares".
     """
-    me, key = c.me, f"{c.ref} steps"
-    label = f"{c.ref} odometer"
-    if not _armed(c, label):
+    from combat_engine.engine.events import RoundStart
+    from combat_engine.engine.query import since_turn_began
 
-        def stepped(ev: Moved) -> None:
-            if ev.actor != me or getattr(ev, "kind_", "") not in kinds:
-                return
-            far = max(abs(ev.to[0] - ev.from_[0]), abs(ev.to[1] - ev.from_[1]))
-            if far:
-                c.bonus(key, far, on=me, until=When.EOT)
+    if window == "round":
+        past: list[Any] = []
+        for event in reversed(world.bus.log):
+            if isinstance(event, RoundStart):
+                break
+            past.append(event)
+        past.reverse()
+    else:
+        past = list(since_turn_began(world, eid))
 
-        c.watch(Moved, stepped, until=When.ENCOUNTER, on=me, label=label)
-    return c.total(key, on=me)
+    far = 0
+    for event in past:
+        if not isinstance(event, Moved) or event.actor != eid:
+            continue
+        if kinds and getattr(event, "kind_", "") not in kinds:
+            continue
+        far += max(abs(event.to[0] - event.from_[0]),
+                   abs(event.to[1] - event.from_[1]))
+    return far
+
+
+def _travelled_this_turn(c: Cast, *kinds: str) -> int:
+    """`_squares_moved` for a row that has a `Cast` rather than a world."""
+    return _squares_moved(c.world, c.me, *kinds)
+
+
+def _moved_at_least(squares: int, *kinds: str):  # noqa: ANN202
+    """A `requires=` gate: has this creature already walked that far this turn?
+
+    A printed Requirement is a `requires=` and not a body check -- the UI and
+    `policy/` both read the menu, so a row the card forbids must not be
+    *offered*. `m6665a3`'s note says a `requires=` "that is false when a trait
+    is armed refuses the row for the whole fight", and that was a misreading of
+    the field: `Power.requires_of` is called per offer, not once at arming, so
+    a gate that changes during the turn is exactly what it is for.
+    """
+
+    def gate(world: World, eid: int) -> bool:
+        return _squares_moved(world, eid, *kinds) >= squares
+
+    return gate
+
+
+def _moved_no_more_than(squares: int):  # noqa: ANN202
+    """The mirror, over a **round**: "when it doesn't move more than N"."""
+
+    def gate(world: World, eid: int) -> bool:
+        return _squares_moved(world, eid, window="round") <= squares
+
+    return gate
 
 
 def _foe_ended_within(radius: int):  # noqa: ANN202
@@ -674,16 +724,22 @@ def m3435a0(c: Cast) -> None:
     keywords=[Keyword.PSYCHIC],
     attack=Attack(vs=WILL, printed=4),
     damage=Damage("1d4", 4, dtype=DamageType.PSYCHIC),
-    dropped=("query.moved_this_turn(world, eid)",),
+    requires=_moved_at_least(2),
+    requires_text="it must move at least 2 squares before using this attack",
 )
 def m3435a1(c: Cast) -> None:
     """A dive: the attack, then the rest of the flight.
 
-    "It must move at least 2 squares before using this attack" is a
+    **The Requirement is a `requires=` now.** The note here said it was "a
     Requirement nothing can read -- there is no record of how far a creature
-    has moved this turn -- so the row is offered a step sooner than the card
-    allows. The half that *is* printed as an Effect, continuing the flight
-    afterwards, is written out.
+    has moved this turn", and that was wrong: `world.bus.log` holds every
+    `Moved` and `query.since_turn_began` already bounds the window. The row
+    was being offered a step sooner than the card allows. #645.
+
+    A gate rather than a body check, because the UI and `policy/` both read
+    the offered menu: a dive the card forbids must not appear, not merely
+    fail. Every kind of movement counts -- the card says "move", not "shift"
+    -- which is why no `kinds` are named.
     """
     if c.strike():
         c.hit()
@@ -971,16 +1027,15 @@ def m4602a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=6),
     damage=Damage("1d10", 3),
-    dropped=("query.moved_this_turn(world, eid)",),
 )
 def m4602a2(c: Cast) -> None:
     """The larger expression replaces the printed one rather than adding to it.
 
-    The count of squares walked this turn has to be kept by hand -- nothing
-    records it -- and the tally is armed the first time this row is used, so
-    the very first swing of a fight reads zero however far the swarm came. That
-    is the clause marked: a creature's movement for the turn is not a question
-    the engine can be asked.
+    **Finished: the count is read off the log and no longer armed on first
+    use.** The note here said "nothing records it" and that the first swing
+    of a fight read zero however far the swarm had come -- both true of the
+    watcher this used to tally with, and neither true of `world.bus.log`,
+    which has held every `Moved` all along. `_squares_moved` reads it. #645.
     """
     moved = _travelled_this_turn(c, "walk", "shift", "run")
     if c.strike():
@@ -1743,15 +1798,15 @@ def m5426a2(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=6),
     damage=Damage("1d6", 3),
-    dropped=("query.moved_this_turn(world, eid)",),
 )
 def m5444a0(c: Cast) -> None:
     """Two more for every square of footwork this turn.
 
-    The count has to be kept by hand -- nothing records a creature's movement
-    for the turn -- and the tally is armed the first time this row is used, so
-    the first swing of a fight reads zero however much the creature danced.
-    That is the clause marked.
+    **Finished, and `"shift"` is the whole narrowing.** The card says *per
+    square shifted*, not per square moved, so this names the kind where
+    `m4602a2` above names none -- `Moved.kind_` carries the word on every
+    emission. The old note said the count was kept by hand and read zero on
+    the first swing of a fight; it is read off `world.bus.log` now. #645.
     """
     steps = _travelled_this_turn(c, "shift")
     if c.strike():

@@ -33,6 +33,9 @@ from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
 from combat_engine.content.monsters.level_01.brutes_sa import _felled_by_a_crit
+from combat_engine.content.monsters.level_01.skirmishers_sa import (
+    _moved_no_more_than,
+)
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.misc_sa import (
     _shrug_off_prone,
@@ -2806,12 +2809,23 @@ def m816a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("query.moved_this_turn(world, eid)",),
+    requires=_moved_no_more_than(1),
+    requires_text="when it doesn't move more than 1 square in a round",
 )
 def m816a1(c: Cast) -> None:
-    """Two swings, which plays. The Requirement -- that it did not travel more
-    than a square this round -- cannot be asked: nothing records what a creature
-    has already done with its turn."""
+    """Two swings, and the Requirement gates them now.
+
+    The note here said the Requirement "cannot be asked: nothing records what
+    a creature has already done with its turn". `world.bus.log` records it,
+    and has all along. #645.
+
+    **A round, not a turn, and the difference is the point.** Movement a
+    creature is *slid* on somebody else's turn counts toward "in a round" and
+    is invisible to `query.since_turn_began`, so `_squares_moved` takes
+    `window="round"` and bounds on the last `RoundStart`. Reading this as a
+    turn would let a brute be shoved four squares by an enemy and still swing
+    twice.
+    """
     _two_basics(c, separate=False)
 
 
