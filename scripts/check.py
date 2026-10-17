@@ -256,6 +256,13 @@ def main() -> int:
     failed: list[str] = []
     width = max(len(c.name) for c in wanted)
     at = _commit()
+    # **Captured before anything runs, not after.** A whole-tree sweep
+    # rewrites `fixtures/audited.json` itself, so asking about dirtiness at
+    # the *end* can never be satisfied -- the run dirties the tree by doing
+    # its job. `nightly.sh` asks the same question as a precondition and for
+    # the same reason; measured by watching a green `--all` refuse to clear
+    # the marker it had just earned. See `_clear_red`.
+    began_clean = _tree_clean()
     for c in wanted:
         started = time.monotonic()
         done = subprocess.run(c.argv, cwd=ROOT, capture_output=True, text=True)
@@ -340,12 +347,20 @@ def main() -> int:
         print(f"{len(wanted)} instruments clean, {owed}")
     else:
         print(f"all {len(wanted)} instruments clean")
-    for line in _clear_red(args.all, bool(failed), at):
+    for line in _clear_red(args.all, bool(failed), at, began_clean):
         print(line)
     return len(failed)
 
 
-def _clear_red(whole_tree: bool, any_failed: bool, started_at: str) -> list[str]:
+def _tree_clean() -> bool:
+    """Is the working tree clean *right now*? Used as a precondition only."""
+    done = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+                          capture_output=True, text=True)
+    return done.returncode == 0 and not done.stdout.strip()
+
+
+def _clear_red(whole_tree: bool, any_failed: bool, started_at: str,
+               began_clean: bool) -> list[str]:
     """Take down `NIGHTLY-FAILED` when *this* run is the green verdict.
 
     **The action that fixes an owed sweep was the one that left the signal
@@ -366,8 +381,13 @@ def _clear_red(whole_tree: bool, any_failed: bool, started_at: str) -> list[str]
     * **`--all`.** A narrow run has not looked at the rest of the tree, which
       is the whole argument `audit.py` makes for only watermarking a full
       sweep.
-    * **a clean tree.** A sweep over uncommitted edits certifies no commit --
-      `nightly.sh` refuses to start on one for this reason.
+    * **a tree that was clean when the run began.** A sweep over uncommitted
+      edits certifies no commit, which is why `nightly.sh` refuses to start
+      on one. Asked as a **precondition** and not at the end, because a
+      whole-tree sweep rewrites `fixtures/audited.json` itself: the first
+      version of this asked afterwards and so could never fire, which a
+      green `--all` demonstrated by declining to clear the marker it had
+      just earned.
     * **the sha did not move under it.** A sweep across two trees certifies
       neither, which is `nightly.sh`'s `MOVED` state.
 
@@ -378,11 +398,9 @@ def _clear_red(whole_tree: bool, any_failed: bool, started_at: str) -> list[str]
         return []
     if any_failed or not whole_tree:
         return []
-    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                           capture_output=True, text=True)
-    if dirty.returncode != 0 or dirty.stdout.strip():
-        return ["         logs/NIGHTLY-FAILED left alone: the tree is dirty,"
-                " so this sweep certifies no commit"]
+    if not began_clean:
+        return ["         logs/NIGHTLY-FAILED left alone: the tree was dirty"
+                " when this run started, so the sweep certifies no commit"]
     now = _commit()
     if not now or not started_at or now != started_at:
         return ["         logs/NIGHTLY-FAILED left alone: the sha moved under"
