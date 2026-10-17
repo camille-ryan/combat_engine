@@ -150,7 +150,8 @@ def situational_attack(
         # bank behind a pillar being unhittable.
         blocked = max(
             int(cover_between(world, attacker, target,
-                              ranged=_is_ranged(power, branch), ctx=ctx)),
+                              ranged=_is_ranged(power, branch, world, attacker),
+                              ctx=ctx)),
             int(concealment_of(world, target, ctx)),
             # **Standing somewhere badly lit**, which is a fact about the
             # square and about who is looking -- so it cannot be a modifier
@@ -256,7 +257,7 @@ def attack(
             # What shape the attack is, so "ranged attacks against this
             # target take +4" is a one-line gate rather than a registry
             # lookup duplicating `_is_ranged`.
-            "ranged": _is_ranged(power, branch),
+            "ranged": _is_ranged(power, branch, world, attacker),
             # **The shape, not just "was it ranged".** `ranged` is a bool and
             # three of the four rows gating cover on the attack need more
             # than that: "melee attacks and ranged attacks" has to exclude a
@@ -264,7 +265,7 @@ def attack(
             # This is `Range.kind` verbatim -- melee | ranged | close_burst |
             # close_blast | area_burst | wall | personal -- so a gate reads
             # the same vocabulary `dsl.AREA_OR_CLOSE` is written in. #644.
-            "reach": _reach_kind(power, branch),
+            "reach": _reach_kind(power, branch, world, attacker),
             "branch": branch,
             # Which magic ammunition this shot came from, empty for every
             # attack that is not one. In the context as well as on the
@@ -593,7 +594,8 @@ def _is_basic(world: World, attacker: int, power: str) -> bool:
     return bool(power and power in basics_of(world, attacker))
 
 
-def _is_ranged(ref: str, branch: int = 0) -> bool:
+def _is_ranged(ref: str, branch: int = 0, world: World | None = None,
+               actor: int | None = None) -> bool:
     """Is this row a ranged attack? Only those take cover from creatures.
 
     Read off the power's own range line rather than guessed, and False for a
@@ -602,13 +604,24 @@ def _is_ranged(ref: str, branch: int = 0) -> bool:
     ranges: its melee half takes no cover from bodies and its ranged half
     does.
     """
-    from .dsl import get
+    from .dsl import get, reach_of
 
     p = get(ref)
-    return p is not None and p.reach_of(branch).kind == "ranged"
+    if p is None:
+        return False
+    # **`dsl.reach_of` when there is a creature to ask about**, because a
+    # reshape is per-character: fifteen rows print "use this ranged power as
+    # a melee attack" and a cover penalty charged off the printed line would
+    # shelter the target from a sword. Falls back to the print when no actor
+    # is passed -- `expect.py`'s closed-form model and the two `Power`
+    # methods with no world both arrive that way. #614.
+    if world is not None and actor is not None:
+        return reach_of(world, actor, p, branch).kind == "ranged"
+    return p.reach_of(branch).kind == "ranged"
 
 
-def _reach_kind(power: str, branch: int) -> str:
+def _reach_kind(power: str, branch: int, world: World | None = None,
+                actor: int | None = None) -> str:
     """`Range.kind` for this swing, or `""` for a row nothing is declared for.
 
     The same lookup `_is_ranged` does and deliberately not folded into it:
@@ -617,10 +630,18 @@ def _reach_kind(power: str, branch: int) -> str:
     express. Empty string rather than None for a missing row, so a gate's
     `ctx["reach"] in (...)` is false instead of raising.
     """
-    from .dsl import get
+    from .dsl import get, reach_of
 
     p = get(power)
-    return "" if p is None else p.reach_of(branch).kind
+    if p is None:
+        return ""
+    # Through `dsl.reach_of` for the reason `_is_ranged` above records: the
+    # whole point of `ctx["reach"]` is that a row can gate on the shape of
+    # the attack, and the printed shape is the wrong answer for a creature
+    # holding a reshape. #614.
+    if world is not None and actor is not None:
+        return reach_of(world, actor, p, branch).kind
+    return p.reach_of(branch).kind
 
 
 def _long_range(
@@ -971,7 +992,13 @@ def deal_damage(
         # this far, so a power printing two ranges answers for its
         # first -- wrong for the handful that do, and right for
         # everything else.
-        "ranged": _is_ranged(detail),
+        #
+        # **`world` and `source` are passed**, so a reshape is honoured here
+        # too. `deal_damage` has both, and the whole argument for a single
+        # `dsl.reach_of` is that a grant honoured at one site and missed at
+        # the next is a modifier nothing consults -- `durations.keywords_of`
+        # records that as 22 sites and one miss. #614.
+        "ranged": _is_ranged(detail, 0, world, source),
         # **Every type the blow is**, for the handful that are more than
         # one. `dtype` above is the primary and answers for all the blows
         # it always did; a gate that means "is there any thunder in this"

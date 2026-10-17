@@ -348,9 +348,19 @@ class Cast:
 
     @property
     def ranged(self) -> bool:
-        """Is this use a ranged one? Asks the branch, not the keywords."""
+        """Is this use a ranged one? Asks the branch, not the keywords.
+
+        Through `dsl.reach_of`, so a creature holding a reshape gets the
+        shape it is actually using rather than the printed one. #614.
+        """
+        from .dsl import reach_of
+
         p = self._declared()
-        return bool(p and p.reach_of(self.branch).kind in ("ranged", "area_burst"))
+        if p is None:
+            return False
+        return reach_of(self.world, self.me, p, self.branch).kind in (
+            "ranged", "area_burst",
+        )
 
     def redirect(self, *, to: int | None = None, by: int | None = None) -> bool:
         """Point the attack you are interrupting at somebody else.
@@ -12082,7 +12092,7 @@ class Cast:
         one weapon and the other must not carry it. This one picks the way
         the attack itself did, off the reach of the row that made it.
         """
-        from .dsl import get
+        from .dsl import get, reach_of
 
         ev = ev if ev is not None else self.trigger
         attacker = getattr(ev, "attacker", None) if ev is not None else None
@@ -12090,7 +12100,11 @@ class Cast:
         if gear is None:
             return None
         p = get(getattr(ev, "power", "") or "")
-        fired = p is not None and p.reach.kind == "ranged"
+        # The *attacker's* reshape, not the caster's: this picks which
+        # weapon fired the shot being answered. #614.
+        fired = p is not None and reach_of(
+            self.world, attacker, p
+        ).kind == "ranged"
         return gear.ranged if fired and gear.ranged else gear.main
 
     def ammunition(self, ev: Any = None) -> bool:

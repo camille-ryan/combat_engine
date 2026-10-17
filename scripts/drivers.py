@@ -2256,6 +2256,136 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def recast_range(out: Result) -> None:
+    """A row's range replaced **for one creature**, and seen everywhere.
+
+    `Power.reach_of` is the printed line: header data, one value fixed at
+    import and shared by everybody who holds the row. Fifteen heroic rows
+    print a per-character replacement -- a ranged power used as a melee
+    attack, a close blast offered as an area burst, a bow feat making a melee
+    power ranged -- and a header cannot say that for one character only.
+    #614.
+
+    The carrier landed with `c.reshape_area` and `Effect.reshape`, and
+    `area_of` consulted it. **Nothing else did.** Every other reader called
+    `p.reach_of(...)` straight, so a reshape was honoured when highlighting
+    squares and ignored when charging cover, choosing a weapon, or deciding
+    whether the shot turned your back on the brute in front of you.
+
+    `durations.keywords_of` is the same problem solved, and its docstring is
+    the warning this rule exists to enforce: *there were 22 sites reading the
+    header, and a grant honoured at 21 is a modifier nothing consults at the
+    22nd.* So `dsl.reach_of(world, actor, p, branch, augment)` is the single
+    door and each reader below is asserted separately -- a rule that checks
+    one of them passes while the others are still blind.
+
+    Four readers, and the fourth is the one that changes how a fight goes:
+
+    * `resolve._is_ranged`, which decides whether creatures give the target
+      cover;
+    * `resolve._reach_kind`, which is `ctx["reach"]` and what a row gates on;
+    * `Cast.ranged`, which rows ask about their own use;
+    * **the provoke test**, because a ranged power a feat lets you use as a
+      melee attack must not leave an opening. That is the whole reason the
+      card is worth taking.
+
+    Two controls that matter as much as the four:
+
+    * **the printed header does not move.** It is shared by every creature
+      that holds the row, so a reshape that wrote through to it would change
+      the card for everybody.
+    * **another creature reads the print.** The grant is per-character or it
+      is not this mechanism.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        Power,
+        get,
+        provokes_for,
+        reach_of,
+    )
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.resolve import _is_ranged, _reach_kind
+
+    ref = next(
+        (r for r in sorted(REGISTRY)
+         if (row := get(r)) is not None and row.attack is not None
+         and row.reach is not None and row.reach.kind == "ranged"),
+        None,
+    )
+    out.that(ref is not None, "the tree declares a ranged attack row to recast")
+    if ref is None:
+        return
+    p = get(ref)
+    # Narrowed, not asserted away: `get` answers `Power | None` and every
+    # call below hands `p` to a function that wants a `Power`.
+    if p is None:
+        return
+
+    world, me, _ = _board("p16434", 1)
+    other = me + 1
+
+    def opens(who: int, row: Power = p) -> bool:
+        """`dsl.provokes_for`, which is the function `dsl.use` calls.
+
+        `row` is a default argument rather than a capture because `ty` will
+        not carry a narrowing across a closure boundary: `get` answers
+        `Power | None`, the guard above rules out `None`, and a captured name
+        is still the union as far as the checker is concerned. Binding it in
+        the signature makes the capture explicit and the type honest.
+
+        **Not a copy of its logic.** The first version of this rule spelled
+        the test out here, so planting the real site left the assertion
+        green -- it was checking the rule's own arithmetic. That is the
+        `assert-through-the-caller` fault, and the fix was to give `use`'s
+        question a name so both can call it.
+        """
+        return provokes_for(world, who, row)
+
+    out.that(reach_of(world, me, p).kind == "ranged", "it starts ranged")
+    out.that(_is_ranged(ref, 0, world, me), "and resolve agrees")
+    out.that(opens(me), "and firing it opens a window")
+
+    Cast(world=world, me=me, ref="drivers:recast").reshape_area(
+        lambda r: replace(r, kind="melee", size=1),
+        ref=ref, on=me, until=When.ENCOUNTER,
+    )
+
+    out.that(reach_of(world, me, p).kind == "melee",
+             "`dsl.reach_of` returns the melee shape -- the single door")
+    out.that(not _is_ranged(ref, 0, world, me),
+             "`resolve._is_ranged` says NO, so bodies no longer shelter the"
+             " target -- a cover penalty off the printed line would shelter"
+             " it from a sword")
+    out.that(_reach_kind(ref, 0, world, me) == "melee",
+             "`ctx['reach']` carries the melee shape, so a row gating on the"
+             " attack reads what is happening")
+    out.that(Cast(world=world, me=me, ref=ref).ranged is False,
+             "`Cast.ranged` says no")
+    out.that(not opens(me),
+             "and it no longer opens a window -- the whole reason the card is"
+             " worth taking")
+
+    # The two controls.
+    out.that(p.reach_of(0).kind == "ranged",
+             "the PRINTED header is untouched -- it is shared by everybody"
+             " who holds the row")
+    out.that(reach_of(world, other, p).kind == "ranged",
+             "and another creature still reads the print: the grant is"
+             " per-character or it is not this mechanism")
+    out.that(_is_ranged(ref, 0, world, other),
+             "which resolve agrees about for that creature too")
+
+    # And with no creature named at all, the print is the answer -- which is
+    # what `expect.py`'s closed-form model and the header-only methods get.
+    out.that(_is_ranged(ref, 0),
+             "asked with no world, the printed line answers -- the fallback"
+             " every header-only reader takes")
+
+
 def squares_moved(out: Result) -> None:
     """How far a creature has already moved, which the log always knew.
 
@@ -16129,6 +16259,8 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "recast_range": (recast_range,
+                     "a row's range replaced for one creature"),
     "squares_moved": (squares_moved,
                       "how far a creature has already moved"),
     "narrowed_cover": (narrowed_cover,

@@ -1352,7 +1352,7 @@ class Power:
         """Does *this branch* leave an opening? The melee half does not."""
         if self.no_provoke:
             return False
-        return self.reach_of(branch, augment).kind in ("ranged", "area_burst", "wall")
+        return self.reach_of(branch, augment).kind in PROVOKING_KINDS
 
     def label_of(self, branch: int = 0) -> str:
         """What to call this branch on the card. Empty for a single-branch row."""
@@ -1375,7 +1375,7 @@ class Power:
         """
         if self.no_provoke:
             return False
-        return self.reach.kind in ("ranged", "area_burst", "wall")
+        return self.reach.kind in PROVOKING_KINDS
 
     def hit_chance(
         self, world: World, actor: int, target: int, branch: int = 0, augment: int = 0
@@ -1935,6 +1935,77 @@ def _reach_of(
         hurled = getattr(gear, "thrown", None) if gear else None
         flies = getattr(hurled, "thrown", None) if hurled else None
     return (flies[1] if flies else r.size) + stretch
+
+
+#: The kinds of range that turn your back on somebody. One tuple, three
+#: readers -- `Power.provokes`, `Power.provokes_on` and `provokes_for` below
+#: -- where it used to be written out at each. A set spelled three times is
+#: three chances to update two of them.
+PROVOKING_KINDS = ("ranged", "area_burst", "wall")
+
+
+def provokes_for(
+    world: World, actor: int, p: Power, branch: int = 0, augment: int = 0
+) -> bool:
+    """Does **this creature's** use of this row leave an opening?
+
+    `Power.provokes_on` is the printed line and takes no creature, so it
+    cannot see a reshape. This is the same question asked where there is
+    somebody to ask about, and it is a function rather than inline in `use`
+    because the first version *was* inline -- which made it a second copy of
+    `provokes_on`'s set, the drift fault this engine keeps paying for, and
+    left `drivers.recast_range` asserting its own copy of the logic rather
+    than the code that runs.
+
+    A ranged power a feat lets you use as a melee attack must not turn your
+    back on the brute in front of you. That is the whole of why the card is
+    worth taking. #614.
+    """
+    return not p.no_provoke and reach_of(
+        world, actor, p, branch, augment
+    ).kind in PROVOKING_KINDS
+
+
+def reach_of(
+    world: World, actor: int, p: Power, branch: int = 0, augment: int = 0
+) -> Range:
+    """This row's range **for this creature**, reshape applied.
+
+    `Power.reach_of` is the printed line: header data, one value fixed at
+    import and shared by everybody who ever holds the row. Fifteen heroic
+    rows print a per-character replacement of it -- a ranged power usable as
+    a melee attack, a close blast offered as an area burst, a bow feat making
+    a melee power ranged -- and a header cannot say that for one character
+    only. #614.
+
+    **This is `durations.keywords_of`'s shape, and that is not a coincidence
+    -- it is the same problem.** That docstring records the trap and it is the
+    whole reason this function exists rather than each site asking
+    `_reshaped` for itself: *there were 22 sites reading the header, and a
+    grant honoured at 21 is a modifier nothing consults at the 22nd.* So
+    every reader that **has a world and an actor** must come through here.
+
+    The ones that cannot are named, because a blind spot nobody has written
+    down is indistinguishable from a bug:
+
+    * `Power.provokes`, `Power.label_of` and `Range.branches` are header-only
+      -- no world, no actor -- so they answer the printed line. `provokes_on`
+      is the one a caller holding a world should prefer, and
+      `Cast._would_provoke` already does.
+    * `Power.usable_with` reads the kind to pick a weapon from `Gear`. It has
+      a world, so it could come through here; it is left on the print
+      deliberately, because a reshape changing which *weapon* a row demands
+      is not a thing any of the fifteen cards says, and widening it would
+      make a dagger feat refuse the dagger.
+
+    `area_of` consults `_reshaped` itself and keeps doing so: it needs the
+    unswapped `kind` first to decide whether a `blast_size` stretch applies
+    at all, so the order there is stretch-then-swap and is documented on the
+    spot.
+    """
+    r = p.reach_of(branch, augment)
+    swap = _reshaped(world, actor, {"power": p.ref, "kind": r.kind})
+    return swap(r) if swap is not None else r
 
 
 def _reshaped(
@@ -3000,7 +3071,9 @@ def use(
         if guarded:
             _IN_FLIGHT.discard((actor, ref))
 
-    if p.provokes_on(branch, augment) and not _survive_provoking(world, actor, ref):
+    if provokes_for(world, actor, p, branch, augment) and not _survive_provoking(
+        world, actor, ref
+    ):
         # Stopped before it went off -- stunned by an interrupt, or killed.
         # The power is *not* spent: the action was lost, not used.
         return False
