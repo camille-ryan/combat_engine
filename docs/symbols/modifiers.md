@@ -48,7 +48,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Roll the damage twice and use the higher result."
 - `c.reroll_initiative(self, *, on: 'int | None' = None) -> 'int'`
   - Take a new initiative check and move in the order. Returns the roll.
-- `c.reroll_ones(self, *, below: 'int' = 2, pick: 'int' = 0, keyword: 'Keyword | None' = None, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.reroll_ones(self, *, below: 'int' = 2, pick: 'int' = 0, keyword: 'Keyword | None' = None, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "Reroll each damage die that shows a 1 until it shows a different
 - `c.reroll_save(self, *, bonus: 'int' = 0, keep: 'str' = 'new', ev: 'Any' = None) -> 'bool'`
   - Roll the **triggering** saving throw again. Returns the new result.

@@ -11875,6 +11875,124 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def a_reroll_floor_can_be_narrowed_by_the_victim(out: Result) -> None:
+    """`c.reroll_ones(when=)`, and why the parameter alone would have been
+    worse than nothing.
+
+    Four rows print a reroll narrowed by **which creature is being hit** --
+    adjacent to you, granting combat advantage, inside the aura, the enemy
+    you flank. `f3749` carried `dropped=("c.reroll_ones(when=)",)` and its
+    note said exactly why the clause could not be written:
+
+        `_reroll_floor` reads the hold with `c.total(key)` and no context,
+        so a `when=` on the modifier is false for ever.
+
+    **It is the second half that matters.** A gate nothing passes a context
+    to does not narrow, it *widens*: `c.total`'s own docstring records that
+    every such bonus counts, "which is how a '+2 to saving throws **against
+    poison**' came to be a bonus to every saving throw". For a reroll
+    floor that is a row **stronger** than its printed line -- a ranged sneak
+    attack rerolling a 1 the card leaves standing -- so adding the parameter
+    without `Cast._reroll_ctx` would have shipped the widening the marker
+    was there to prevent.
+
+    So both landed together, and this rule asks the floor itself rather
+    than the hold: same holder, same effect, two different victims.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import distance
+
+    ref, sneak = "f3749", "cf:rogue-scoundrel-f4"
+    out.that(not REGISTRY[ref].unfinished,
+             f"{ref} carries no marker", f"{REGISTRY[ref].unfinished}")
+
+    world, me, _ = _posed(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    REGISTRY[ref].body(c)
+
+    # The floor is read by whatever row is *rolling*, which for the extra
+    # damage is the class feature's own `Cast` -- `strikers.extra_damage`
+    # rolls through it, which is what makes `ref=` match at all. `f1661` is
+    # the worked example.
+    rolling = Cast(world=world, me=me, ref=sneak)
+    here = world.need(me, Position).square
+    foes = sorted(rolling.enemies())
+    out.that(len(foes) >= 2, "the board offers two enemies to compare",
+             f"{len(foes)}")
+    if len(foes) < 2:
+        return
+
+    near, far = foes[0], foes[1]
+    movement.place(world, near, next(
+        s for s in movement.neighbours(here)
+        if world.grid.passable(s) and world.grid.occupant(s) is None))
+    out.that(rolling.adjacent(to=near), "one enemy is put next to the rogue")
+
+    rolling.target = near
+    close = rolling._reroll_floor()
+    out.that(close == 2,
+             "the sneak-attack dice reroll a 1 against an ADJACENT victim,"
+             f" which is the card's own qualifier ({close})")
+
+    # **Moved, not assumed.** The first draft took whichever second enemy
+    # the board offered and it was adjacent too, so the "far" case was no
+    # control at all and the rule reported the gate working while measuring
+    # the same square twice.
+    grid = world.grid
+    off = next((sq for sq in ((x, y) for x in range(grid.width)
+                              for y in range(grid.height))
+                if grid.passable(sq)
+                and grid.occupant(sq) is None
+                and distance(here, sq) > 1), None)
+    out.that(off is not None, "the board has a square out of reach")
+    if off is None:
+        return
+    movement.place(world, far, off)
+    rolling.target = far
+    out.that(distance(here, world.need(far, Position).square) > 1,
+             "and the other enemy is moved out of reach",
+             f"{distance(here, world.need(far, Position).square)}")
+    away = rolling._reroll_floor()
+    out.that(away == 0,
+             "against which the floor is 0 -- the gate narrows, where an"
+             f" unasked one would have widened the row ({away})")
+
+    # **The context is the half that makes it a gate**, so it is asserted
+    # separately: a `when=` reading a key nothing carries is the fault this
+    # change exists to avoid, and it is invisible from the row.
+    seen = rolling._reroll_ctx()
+    out.that(seen.get("target") == far and seen.get("attacker") == me
+             and seen.get("power") == sneak,
+             "and the read passes the three keys the family turns on",
+             f"{seen}")
+
+    # -- the other two rows the parameter finished --------------------
+    #
+    # Four rows carried this symbol. Three wanted the victim narrowed and
+    # differ only in *which* fact about the victim, which is the argument
+    # for a callable rather than three parameters.
+    for ref2, narrows in (("i3374x1", "granting combat advantage"),
+                          ("p15894", "inside the aura")):
+        out.that(not REGISTRY[ref2].unfinished
+                 or "reroll" not in str(REGISTRY[ref2].unfinished),
+                 f"{ref2} no longer waits on a reroll symbol ({narrows})",
+                 f"{REGISTRY[ref2].unfinished}")
+
+    # **`f1969` is the one left, and it is a different shape.** Asserted so
+    # the symbol cannot quietly go back to the one that landed: its card
+    # says "the ally can reroll each die **once**", where the loop rerolls
+    # until the die clears -- stronger than print, which is the direction
+    # that matters.
+    out.that(REGISTRY["f1969"].unfinished == ("c.reroll_ones(tries=)",),
+             "and f1969 waits on reroll-each-die-once, not on the gate",
+             f"{REGISTRY['f1969'].unfinished}")
+
 def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
     """`f1099`'s two riders, written into the rows that pay them.
 
@@ -14991,6 +15109,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_reroll_floor_can_be_narrowed_by_the_victim": (
+        a_reroll_floor_can_be_narrowed_by_the_victim,
+        "c.reroll_ones(when=) plus the context that makes it narrow"),
     "a_feats_swap_is_written_where_it_is_read": (
         a_feats_swap_is_written_where_it_is_read,
         "f1099's two riders, written into p836 and p1580 per #550"),

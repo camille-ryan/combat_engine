@@ -1178,9 +1178,35 @@ def f1743(c: Cast) -> None:
 
 
 @power("f1969", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(when=)",))
+       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(tries=)",))
 def f1969(c: Cast) -> None:
     """Lets the ally you flank with reroll damage dice showing a 1.
+
+    **Re-pointed: `when=` landed and is not what this card needs.** Three
+    of the four rows that carried `c.reroll_ones(when=)` wanted the victim
+    narrowed and are written now. This one needs a **third shape of
+    reroll**, and the printed sentence is the last one: *"The ally can
+    reroll each die once."*
+
+    `c.reroll_ones` has two shapes and neither says that. The loop
+    (`below=`) rerolls a low die *until it is no longer low* --
+    `_rolled_above`'s own first line, "replace each die under `floor` until
+    it is not" -- which is **stronger** than one reroll. `pick=N` is the
+    other printed shape and is weaker in a different direction: it rerolls
+    N dice once and the new face stands, but it is "pick one of them", a
+    count of dice rather than one try each.
+
+    What this wants is every low die rerolled **exactly once**.
+    `_rolled_above` already counts `tries` internally -- as a termination
+    guard, not an option -- so the number exists in the right place and is
+    not exposed. Hence `c.reroll_ones(tries=)`.
+
+    Writing it with the loop instead would make the row stronger than its
+    printed line, which is the direction that matters, so it stays refused
+    rather than approximated. The rest of the card -- the flanking gate,
+    the two-handed gate, and laying the hold on the ally rather than on the
+    holder -- is all writable: `query.flankers` answers who holds the other
+    side, `c.wielding("two-handed")` the grip, and `when=` the victim.
 
     **Re-aimed from `dropped` to `todo`.** The whole printed benefit is
     the reroll; what was written beside the marker was a flanking gate

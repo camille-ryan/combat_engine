@@ -613,23 +613,31 @@ def i3345x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.reroll_ones(when=)",),
 )
 def i3374x1(c: Cast) -> None:
-    """A reroll of the ones on one named power's damage.
+    """A reroll of the ones on one named power's damage, against the victim
+    the card names.
 
     `p13799` is printed and declared, so the power the rider hangs on was
-    never the hold -- the rider itself was, and it is written now. Not
-    `c.reroll_damage`, which rolls the whole expression twice and keeps the
-    higher.
+    never the hold -- the rider itself was. Not `c.reroll_damage`, which
+    rolls the whole expression twice and keeps the higher.
 
-    **The printed combat-advantage condition is not expressed**, and that is
-    the one clause still missing: the floor is read where the dice are
-    rolled, and nothing there is told whether the target was granting
-    advantage. So this rerolls that power's ones against anybody, which is
-    wider than the card. Named rather than dropped silently.
+    **The combat-advantage condition is written now, and the old note said
+    exactly why it could not be.** It read: *"the floor is read where the
+    dice are rolled, and nothing there is told whether the target was
+    granting advantage. So this rerolls that power's ones against anybody,
+    which is wider than the card."* Correct, and a widening -- which is why
+    it was `dropped=`. `Cast._reroll_ctx` tells the read site who is being
+    hit, and `c.reroll_ones(when=)` reads it.
     """
-    c.reroll_ones(ref="p13799")
+    from combat_engine.engine.query import has_combat_advantage
+
+    me = c.me
+    c.reroll_ones(
+        ref="p13799", on=me,
+        when=lambda ctx: (ctx.get("target") is not None
+                          and has_combat_advantage(c.world, me, ctx["target"])),
+    )
 @power(
     "i3406p1",
     level=3,

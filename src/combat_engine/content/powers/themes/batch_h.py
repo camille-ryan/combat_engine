@@ -737,17 +737,17 @@ def p15893(c: Cast) -> None:
 @power(
     "p15894", level=10, cls=X7_917, usage=DAILY, action=MINOR,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    dropped=("c.reroll_ones(when=)", "story.rest(hours=)"),
+    dropped=("story.rest(hours=)",),
 )
 def p15894(c: Cast) -> None:
     """The slow is written and is gated on the aura rather than on a clock,
     so a sustained aura keeps slowing and a lapsed one stops.
 
-    Brutal 2 stays dropped and the stated reason was wrong.
-    `c.reroll_ones(below=3, keyword=Keyword.WEAPON)` *is* "reroll any weapon
-    damage die that shows 1 or 2" -- `_rolled_above` replaces each die under
-    the floor individually -- so "nothing rerolls a weapon damage die that
-    comes up low" was false. What cannot be said is the **narrowing**: the
+    **Brutal 2 is written.** The note below was right that the verb existed
+    and right about what was missing -- the narrowing -- and that is what
+    `c.reroll_ones(when=)` plus `Cast._reroll_ctx` added. Kept because the
+    reasoning is the record of why a parameter alone would not have done:
+    the
     floor is read by `Cast._reroll_floor`, which asks
     `Mods.total("reroll_damage_below")` with no context at all, so a `when=`
     gate is false forever and "against enemies in the aura" has nowhere to
@@ -769,7 +769,21 @@ def p15894(c: Cast) -> None:
     docstring already says "five minutes, or six hours" -- so the length is
     known in prose and is not data. `story.rest(hours=)` is the gap.
     """
+    me = c.me
     c.aura(1, until=When.EONT, sustain=MINOR)
+    # **"Against those enemies"**, which is the narrowing the brutal clause
+    # was dropped for. The old note had the verb right -- `below=3` with
+    # `keyword=WEAPON` *is* "reroll any weapon damage die that shows 1 or
+    # 2", and `_rolled_above` replaces each low die individually -- and the
+    # gap was that the floor is read where the dice are rolled, with nothing
+    # there to say who was being hit. `Cast._reroll_ctx` says it now, and
+    # `c.in_my_aura` is the same reader the slow below already uses, so a
+    # sustained aura keeps rerolling and a lapsed one stops.
+    c.reroll_ones(
+        below=3, keyword=Keyword.WEAPON, on=me, until=When.EONT,
+        when=lambda ctx: (ctx.get("target") is not None
+                          and c.in_my_aura(ctx["target"], label=c.ref)),
+    )
 
     def starts(ev: TurnStart) -> None:
         who = ev.actor

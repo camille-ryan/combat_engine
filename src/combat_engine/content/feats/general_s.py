@@ -1435,19 +1435,35 @@ def f3748(c: Cast) -> None:
 
 
 @power("f3749", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones(when=)",))
+       reach=PERSONAL, target=SELF)
 def f3749(c: Cast) -> None:
-    """The old marker said rerolling ones was a property of the roll with
-    no verb. `c.reroll_ones` is that verb and `ref=` is the narrowing the
-    card prints: `cf:rogue-scoundrel-f4` rolls its own dice through its own
-    `Cast`, so `reroll_damage_below@<ref>` is the key that matches.
+    """Both halves. `ref=` picks the dice and `when=` picks the victim.
 
-    Dropped: "to a creature adjacent to you". `_reroll_floor` reads the
-    hold with `c.total(key)` and no context, so a `when=` on the modifier
-    is false for ever -- the threshold cannot be narrowed by who was hit.
-    Written unqualified, so a ranged sneak attack rerolls a 1 the card
-    would leave standing."""
-    c.reroll_ones(ref="cf:rogue-scoundrel-f4", on=c.me, until=When.ENCOUNTER)
+    `c.reroll_ones` is the verb and `ref=` is the narrowing the card
+    prints: `cf:rogue-scoundrel-f4` rolls its own dice through its own
+    `Cast`, so `reroll_damage_below@<ref>` is the key that matches --
+    `f1661` is the worked example and `strikers.extra_damage` is why it
+    works.
+
+    **"To a creature adjacent to you" is the clause that was dropped, and
+    the reason it could not be written is gone.** That note read:
+    *"`_reroll_floor` reads the hold with `c.total(key)` and no context, so
+    a `when=` on the modifier is false for ever"*. Correct when written --
+    and a parameter alone would not have fixed it, because a gate nothing
+    passes a context to does not narrow, it **widens**: every bonus with an
+    unasked gate counts, which `c.total`'s docstring states outright. So
+    the read site passes one now (`Cast._reroll_ctx`), and the gate reads
+    the `target` key out of it.
+
+    Unqualified was a *widening* -- a ranged sneak attack rerolling a 1 the
+    card leaves standing -- which is why this was `dropped=` rather than
+    finished."""
+    me = c.me
+    c.reroll_ones(
+        ref="cf:rogue-scoundrel-f4", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (ctx.get("target") is not None
+                          and c.adjacent(to=ctx["target"])),
+    )
 
 
 @power("f3750", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

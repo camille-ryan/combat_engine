@@ -10730,6 +10730,7 @@ class Cast:
         ref: str = "",
         on: int | None = None,
         until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"Reroll each damage die that shows a 1 until it shows a different
         number."
@@ -10782,7 +10783,8 @@ class Cast:
             # keyed off the floor's own `what` so the pair cannot drift
             # apart, and `below` rides in the floor hold exactly as the
             # loop's does.
-            self.bonus(f"{what}#n", pick, on=who, until=until, stacks=False)
+            self.bonus(f"{what}#n", pick, on=who, until=until, stacks=False,
+                       when=when)
         # `stacks=False` because the floor is a `max`: a second identical
         # hold changes nothing and would only pile up effects -- a monster
         # whose own attack line prints the reroll lays one per swing
@@ -10791,7 +10793,8 @@ class Cast:
         # No `kind=`, and `c.bonus` refuses the pair outright: `stacks=False`
         # already buckets under the laying row's ref, and a reroll floor is
         # not a *typed* bonus that a printed type could stack against.
-        return self.bonus(what, below, on=who, until=until, stacks=False)
+        return self.bonus(what, below, on=who, until=until, stacks=False,
+                          when=when)
 
     def _reroll_floor(self) -> int:
         """The threshold under which a damage die is rerolled, for *this* row.
@@ -10800,16 +10803,37 @@ class Cast:
         The row being rolled is what answers a qualified hold, the same way
         `_rolls_twice_higher` asks it.
         """
-        best = self.total("reroll_damage_below")
-        aimed = self.total(f"reroll_damage_below@{self.ref}")
+        seen = self._reroll_ctx()
+        best = self.total("reroll_damage_below", ctx=seen)
+        aimed = self.total(f"reroll_damage_below@{self.ref}", ctx=seen)
         best = max(best, aimed)
         from .dsl import get
 
         p = get(self.ref)
         if p is not None:
             for k in self.keywords_of(p):
-                best = max(best, self.total(f"reroll_damage_below:{k.value}"))
+                best = max(best,
+                           self.total(f"reroll_damage_below:{k.value}", ctx=seen))
         return best
+
+    def _reroll_ctx(self) -> dict[str, Any]:
+        """What a gated reroll hold is asked, at the moment the dice are rolled.
+
+        **Added with `reroll_ones(when=)` and not after it**, because a gate
+        nothing passes a context to does not narrow -- `c.total`'s own
+        docstring says so outright: *"Without it a `c.bonus(..., when=...)`
+        cannot narrow, and every such bonus counts -- which is how a '+2 to
+        saving throws **against poison**' came to be a bonus to every saving
+        throw."* For a reroll that failure is a *widening*, so the parameter
+        without this would have been worse than no parameter at all.
+
+        The three keys every card of this family turns on, and the same
+        spellings `resolve.attack` builds its context from: four printed
+        lines narrow by **which creature is being hit** -- granting combat
+        advantage, adjacent to you, inside the aura, the enemy you flank --
+        and the row and the attacker are free beside it.
+        """
+        return {"power": self.ref, "target": self.target, "attacker": self.me}
 
     def _reroll_pick(self) -> tuple[int, int]:
         """The floor and the number of dice for the **pick-one** shape.
@@ -10824,12 +10848,18 @@ class Cast:
         """
         from .dsl import get
 
+        # The same context `_reroll_floor` reads with, for the same reason:
+        # the pick-one shape is laid by the same verb and would otherwise
+        # have a gate nothing asks.
+        seen = self._reroll_ctx()
+
         def best(prefix: str) -> int:
-            got = max(self.total(prefix), self.total(f"{prefix}@{self.ref}"))
+            got = max(self.total(prefix, ctx=seen),
+                      self.total(f"{prefix}@{self.ref}", ctx=seen))
             p = get(self.ref)
             if p is not None:
                 for k in self.keywords_of(p):
-                    got = max(got, self.total(f"{prefix}:{k.value}"))
+                    got = max(got, self.total(f"{prefix}:{k.value}", ctx=seen))
             return got
 
         floor = best("reroll_damage_pick")
