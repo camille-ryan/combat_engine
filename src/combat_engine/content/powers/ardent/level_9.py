@@ -52,22 +52,62 @@ def _pick(c: Cast, pool: list[int], prompt: str) -> int | None:
     attack=Attack(CHA, vs=AC),
 )
 def p10289(c: Cast) -> None:
-    """The worsening is a fresh -2 each time rather than an edit to the standing
-    one: penalties are untyped and stack, so the sum is the printed number. When
-    speed reaches 0 the restrained-and-stunned hold lands; the speed penalties
-    are left to run out with their own save, which the printed line ends early."""
+    """"It worsens by 2" -- and the old note had this exactly backwards.
+
+    It said *"penalties are untyped and stack, so the sum is the printed
+    number"*. They do not. `Mods.total` buckets penalties by `Mod.label`
+    and takes the **worse of a bucket** -- 4e's "two from the same source do
+    not add" -- and `c.bonus` defaults that label to the laying row's ref.
+    So every worsening carried the label `p10289` and collapsed into the
+    first -2.
+
+    Measured on a board before the fix: a speed-6 creature given four
+    successive -2 holds had **speed 4**, with four `Mod` entries all
+    labelled `p10289`. So the whole second half of this card was
+    unreachable -- speed never fell past the first step, "when the target's
+    speed reaches 0" never came true, and the restrained-and-stunned
+    finisher could not land on anything with a speed above 2.
+
+    **The step number goes in the `Mod` label**, which is
+    `monsters.level_06.skirmishers._worsen`'s settled answer to the same
+    question -- and that helper's docstring says in as many words that this
+    bug class *will recur*. It names four rows after `m238a3`; this is the
+    fifth site and the first outside `monsters/`.
+
+    **One save, not one per step**, which is the other half the stack got
+    wrong. The card prints a single "(save ends)", so the first hold carries
+    the throw and every worsening runs to the end of the encounter gated on
+    that hold still standing -- `races.powers_c.p27`'s idiom for "save ends
+    both" over two clauses. Ending the first one therefore drops the whole
+    staircase, which is what *"the penalty ends, but the target is restrained
+    and stunned"* says. The old note claimed the speed penalties "are left
+    to run out with their own save", and the card ends them outright.
+
+    #555."""
     victim = c.target
     if victim is None:
         return
     if c.strike():
         c.damage(c.w(2), c.cha_mod)
-        c.penalty("speed", 2, until=When.SAVE_ENDS)
+        first = c.penalty("speed", 2, until=When.SAVE_ENDS)
+        steps = [0]
 
         def worsen(ev: AttackDeclared) -> None:
-            if ev.attacker != victim or c.speed_of(victim) <= 0:
+            if ev.attacker != victim or first is None or first.ended:
                 return
-            c.penalty("speed", 2, on=victim, until=When.SAVE_ENDS)
             if c.speed_of(victim) <= 0:
+                return
+            steps[0] += 1
+            c.penalty(
+                "speed", 2, on=victim, until=When.ENCOUNTER,
+                label=f"{c.ref} worsening {steps[0]}",
+                when=lambda _ctx, e=first: not e.ended,
+            )
+            if c.speed_of(victim) <= 0:
+                # "The penalty ends" -- and ending the hold that carries the
+                # save takes every worsening with it, since each is gated on
+                # this one standing.
+                c.end_effect(first)
                 c.condition(
                     Condition.RESTRAINED,
                     Condition.STUNNED,

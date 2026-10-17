@@ -1889,6 +1889,23 @@ def m5373a0(c: Cast) -> None:
     target=NO_TARGET,
 )
 def m5373a1(c: Cast) -> None:
+    """Two triggers, **one** printed penalty -- so the shared label is right.
+
+    The card joins them with "or": exposed to direct sunlight *or* taking
+    radiant damage, -2 to attack rolls. One sentence, one source, so the two
+    holds here must **not** add, and `Mods.total` bucketing both under this
+    row's ref is exactly the answer. Read as part of #555, which was looking
+    for the opposite case -- two printed sentences collapsing into one -- and
+    this is the case that looks like it and is not.
+
+    Written down because the fix for the real thing is `label=`, and anybody
+    sweeping for this shape will find these two calls and be tempted. Giving
+    either one its own label would pay -4 where the card pays -2.
+
+    The sunlight half is a standing gate rather than a timed hold because
+    exposure is a state, not a moment. It is inert today for a reason that is
+    not this row's: nothing populates `World.terrain`, so all 70 `c.terrain`
+    gates in the tree read False. #539."""
     me = c.me
     c.penalty("attack", 2, on=me, until=When.ENCOUNTER, when=lambda ctx: c.terrain("sunlight"))
 

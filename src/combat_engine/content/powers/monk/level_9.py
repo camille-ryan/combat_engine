@@ -118,7 +118,25 @@ def p11229(c: Cast) -> None:
 )
 def p13171(c: Cast) -> None:
     """The finisher is read off hit points after the damage has landed,
-    which is what "after this attack is resolved" means."""
+    which is what "after this attack is resolved" means.
+
+    **The `Effect` clause's penalty carries its own `label=`, and without
+    one it collapsed into the Hit clause's.** `Mods.total` buckets penalties
+    by `Mod.label` and takes the worse of a bucket, and `c.bonus` defaults
+    that label to the row's ref -- so for the one creature that can be
+    caught by both printed sentences, the second -2 was free.
+
+    That creature is the target. The Hit clause puts -2 on it outright; the
+    Effect clause puts -2 against the caster on *each enemy within 5*, and
+    the target is one of those. Two printed sentences are two sources and
+    they add, so the right answer there is -4 against the caster and the row
+    was paying -2. Low stakes -- the Effect clause only fires when the
+    target is at 0 hit points, so it has to be healed before the difference
+    is ever rolled -- but it is wrong rather than approximate, and the fix
+    is one keyword. Every *other* enemy was always right, because the bucket
+    is per creature.
+
+    #555."""
     if c.strike():
         c.damage("3d8", c.dex_mod)
         c.slowed(until=When.SAVE_ENDS)
@@ -134,6 +152,7 @@ def p13171(c: Cast) -> None:
         for foe in c.within(5, side="enemy"):
             c.penalty(
                 "attack", 2, on=foe, until=When.SAVE_ENDS,
+                label=f"{c.ref} effect",
                 when=lambda ctx: ctx.get("target") == c.me,
             )
 

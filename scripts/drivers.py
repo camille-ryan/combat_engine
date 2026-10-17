@@ -11998,6 +11998,64 @@ def penalties_by_source(out: Result) -> None:
              " the shared Effect label",
              f"{held} holds standing after seven calls")
 
+    # ---- the sixth site, and the first outside monsters/ ----------------
+    #
+    # **`p10289` is the worst instance of this family found so far**, because
+    # the collapse did not cost a number, it cost the card's whole second
+    # half. "A -2 penalty to speed (save ends). Until the penalty ends, it
+    # worsens by 2 whenever the target attacks. When the target's speed
+    # reaches 0 in this way ... the target is restrained and stunned."
+    #
+    # Every worsening carried the row's bare ref, so the bucket kept the
+    # first -2 and speed stopped there: on a speed-6 creature, four
+    # successive holds left it at **4**, and "speed reaches 0" could not
+    # come true for anything faster than 2. The finisher was unreachable.
+    #
+    # The row's own docstring asserted the opposite -- "penalties are
+    # untyped and stack, so the sum is the printed number" -- which is what
+    # made it invisible to a reader. #555.
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.types import Condition
+
+    world3, caster3, _ = _board("p10289")
+    foe3 = sorted(query.enemies(world3, caster3))[0]
+    duel = Cast(world=world3, me=caster3, ref="p10289")
+    duel.strike = lambda **kw: True   # ty: ignore[invalid-assignment]
+    duel.target = foe3
+    rolled = query.speed(world3, foe3)
+    out.that(rolled >= 6,
+             "the board offers a creature with speed to lose",
+             f"speed {rolled}")
+    REGISTRY["p10289"].body(duel)
+    out.that(query.speed(world3, foe3) == rolled - 2,
+             "the hit costs the printed 2 squares",
+             f"{rolled} -> {query.speed(world3, foe3)}")
+
+    seen = [query.speed(world3, foe3)]
+    for _ in range(4):
+        world3.bus.emit(AttackDeclared(attacker=foe3, target=caster3,
+                                       power="drivers:swing", vs=Defense.AC))
+        seen.append(query.speed(world3, foe3))
+    out.that(seen[1] == rolled - 4 and seen[2] == 0,
+             "and each attack costs 2 more, down to 0 -- where this used to"
+             " stop at the first step", f"{rolled} then {seen}")
+    out.that(query.is_(world3, foe3, Condition.RESTRAINED)
+             and query.is_(world3, foe3, Condition.STUNNED),
+             "so the finisher the card prints at 0 speed actually lands,"
+             " which it could not before")
+
+    # **"The penalty ends", and it is the gate that ends it.** Every
+    # worsening runs to the end of the encounter gated on the first hold --
+    # the one carrying the single printed save -- still standing, which is
+    # `p27`'s idiom for "save ends both" over two clauses. Ending that hold
+    # drops the whole staircase at once.
+    mods3 = world3.need(foe3, Mods)
+    out.that(mods3.total("speed", {"who": foe3}) == 0,
+             "the speed penalties are gone once the finisher lands, not left"
+             " running -- the card ends them outright",
+             f"{mods3.total('speed', {'who': foe3})}")
+
 
 def feat_clause_exclusivity(out: Result) -> None:
     """The feat clauses written into `p704`: which exclude each other, which do not.
