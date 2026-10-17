@@ -263,12 +263,24 @@ def main() -> int:
         # exists must not read its absence as a pass.
         print("  (the DIFFICULT_LABELS census needs the whole tree and was"
               " not asked on a narrow run)")
+    # **The advice is per fault, not one line for both.** The census answers
+    # two opposite questions and the fixes are opposite too: an unused entry
+    # should be dropped, and a label a zone really lays must **not** be --
+    # dropping that one deletes the ground. This file's own note records that
+    # the fault *text* is what made an earlier version dangerous, because it
+    # invited an agent who trusts its tooling to delete live entries. #650.
     for label, why in _dead_terrain_labels():
-        print(
-            f"DIFFICULT_LABELS: {label!r} {why}. A closed vocabulary whose"
-            f" entries nobody uses stops being a check -- drop it, or write"
-            f" the row that needs it. #598."
+        advice = (
+            "Relabel the zone with a sort of going and let the creature waive"
+            " that sort from its own side -- the ground says what it is, the"
+            " creature says what it ignores. Do NOT add the word to"
+            " `DIFFICULT_LABELS` to silence this: a condition is not a"
+            " terrain. #650."
+            if "laid by a zone" in why else
+            "A closed vocabulary whose entries nobody uses stops being a"
+            " check -- drop it, or write the row that needs it. #598."
         )
+        print(f"DIFFICULT_LABELS: {label!r} {why}. {advice}")
         faults += 1
 
     for ref, host, why in _lends_nobody_asks_for():
@@ -1773,7 +1785,7 @@ def _reinvented_area_tuple() -> list[tuple[str, str]]:
 
 
 def _dead_terrain_labels() -> list[tuple[str, str]]:
-    """A `DIFFICULT_LABELS` entry that nothing writes and nothing waives.
+    """A difficult-terrain label nobody uses, or one nobody can waive.
 
     The set is closed so `c.ignores_difficult(kind=)` can refuse a word no
     square carries -- #598, where 29 calls named one and each waived nothing
@@ -1797,7 +1809,7 @@ def _dead_terrain_labels() -> list[tuple[str, str]]:
     """
     import ast as _ast
 
-    from combat_engine.engine.cast import DIFFICULT_LABELS
+    from combat_engine.engine.cast import DIFFICULT_LABELS, _is_terrain_label
 
     # **A census cannot be taken over part of the tree, and this one was.**
     # "Nobody writes it and nobody waives it" is a question about every
@@ -1822,6 +1834,9 @@ def _dead_terrain_labels() -> list[tuple[str, str]]:
 
     written: set[str] = set()
     waived: set[str] = set()
+    #: Where each written label was laid, so the inverse fault below can name
+    #: the row rather than only the word.
+    laid: dict[str, str] = {}
     for path in _asked_for():
         try:
             tree = _ast.parse(path.read_text())
@@ -1858,10 +1873,29 @@ def _dead_terrain_labels() -> list[tuple[str, str]]:
                     if (kw.arg == "difficult"
                             and isinstance(kw.value, _ast.Constant)
                             and isinstance(kw.value.value, str)):
-                        written.add(kw.value.value.lower())
+                        word = kw.value.value.lower()
+                        written.add(word)
+                        laid.setdefault(word, f"{path.name}:{node.lineno}")
+
     return [
         (label, "in DIFFICULT_LABELS but no zone writes it and no row waives it")
         for label in sorted(DIFFICULT_LABELS - written - waived)
+    ] + [
+        # **The same fault inverted, and the worse of the two.** Above: a
+        # vocabulary entry nobody uses, which is dead weight. Here: ground a
+        # zone really lays that `c.ignores_difficult` would **raise** on, so
+        # nothing can ever be exempt from it and the card's qualifier is
+        # inert. #598 closed the reader against an unknown word and left the
+        # writer taking any string, which is how a row came to write a
+        # movement trait's own printed name -- `f2700`'s -- into the field
+        # that says what the ground **is**. The *exemption condition* in
+        # place of the terrain: it reached the tree on `m5757a3` and hid the
+        # patch from the six rows that waive `"ice"`. #650.
+        (label, f"is laid by a zone ({laid[label]}) but is no sort of going,"
+                " so `c.ignores_difficult` raises on it and nothing can ever"
+                " be waived from that ground")
+        for label in sorted(written)
+        if not _is_terrain_label(label)
     ]
 
 

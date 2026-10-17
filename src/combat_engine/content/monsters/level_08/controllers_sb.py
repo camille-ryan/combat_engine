@@ -1557,8 +1557,26 @@ def m5757a2(c: Cast) -> None:
     damage=Damage("3d8", 5, dtype=DamageType.COLD, kind=LIMITED, half_on_miss=True),
 )
 def m5757a3(c: Cast) -> None:
+    """The ground is **ice**, and the label used to be the exemption.
+
+    The card makes the zone difficult terrain for creatures *without* a
+    named movement trait -- `f2700` is that trait -- and this row wrote the
+    trait's printed name into `difficult=`, which is the field that says
+    what the ground **is**. (The name is not repeated here: it is `f2700`'s
+    and belongs in `localization/`. `leaks.py --quoted` caught the first
+    draft of this very note, which had quoted it three times.)
+
+    A trait is not a sort of going, so `_is_terrain_label` refused the word
+    and `c.ignores_difficult` raised on it: nothing could ever be exempt
+    from this patch, and the card's whole qualifier was inert.
+
+    **Six rows already waive `"ice"`** and every one was blind to the patch
+    -- which is precisely the creature the card exempts. The zone says what
+    the ground is and the creature says which sort it ignores; that is the
+    division the system is built on. #650.
+    """
     if c.first:
-        c.zone(c.area(), difficult="ice walk", until=When.SUSTAIN, sustain=MINOR, label=c.ref)
+        c.zone(c.area(), difficult="ice", until=When.SUSTAIN, sustain=MINOR, label=c.ref)
     if c.strike():
         c.hit()
     else:
