@@ -189,6 +189,23 @@ def _ally_point(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor != me and team(world, ev.actor) == team(world, me)
 
 
+def _my_mount_rolled(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """An attack roll **my mount** made, which `p1450` does not answer.
+
+    `p1450`'s own trigger is `triggers.by_me`, so it is offered on the
+    holder's roll and on nothing else. That is correct for the racial power
+    and is why `f2793`'s second clause wanted a trigger of its own rather
+    than an edit to somebody else's header.
+
+    `me` is excluded deliberately: `p1450` already answers that roll, and
+    admitting it here would offer the same reroll twice for one die.
+    """
+    who = getattr(ev, "attacker", None)
+    if who is None or who == me:
+        return False
+    return who in world.relations.sources(Relation.RIDDEN_BY, me)
+
+
 def _my_point(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     """`ActionPointSpent.actor`, and `by_me` reads `attacker` then
     `source` -- so it is false on this event as well."""
@@ -1607,24 +1624,65 @@ def f2785(c: Cast) -> None:
 
 
 @power("f2793", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_attack(on=)",),
+       reach=PERSONAL, target=SELF,
        proficiency=("w3598", "w3630"))
 def f2793(c: Cast) -> None:
-    """The mounted damage half plays, and the grant is header data.
+    """The mounted damage half, and the grant is header data.
     Spears and shortbows are the spear and bow groups -- the closest
     this engine says it.
 
-    Re-aimed, and the reroll family landing (#496) confirms it: nothing
-    here needs to *notice* a reroll. The row needs to aim `p1450` at
-    somebody else's attack roll, and `c.reroll_attack` reads the attack off
-    `c.trigger` and takes no creature. Same shape as `f715`'s remaining
-    hold, from a different direction."""
+    **The second clause is `f2793b`, and the marker this carried was asking
+    for the wrong thing.** The old note said the row "needs to aim `p1450`
+    at somebody else's attack roll, and `c.reroll_attack` reads the attack
+    off `c.trigger` and takes no creature". Both halves are true and
+    neither was the blocker: nothing has to aim `p1450` anywhere, because
+    `c.use_power` passes `c.trigger` **through** to the borrowed row -- its
+    own docstring says so -- so `p1450` rerolls whatever event the *caller*
+    is answering. What was missing was a trigger that fires on a mount's
+    roll, and a feat may simply declare one.
+
+    `f3041` in `feats/artificer_b.py` is the same operation written two
+    files away: it declares the wider trigger itself and spends the racial
+    power with `c.use_power("p377")` rather than editing that power's
+    header. #625 is about exactly this -- the answer sitting in the tree
+    and not propagating.
+
+    Split rather than crowded into one row because **a row holds either a
+    printed trigger or standing modifiers, never both**: with a declared
+    `on=` the body runs only when the trigger fires, and a bonus laid there
+    is never laid. 72 `f<N>`/`f<N>b` pairs in the tree already have this
+    shape."""
     me = c.me
     c.bonus(
         "damage", 2, on=me, until=When.ENCOUNTER, kind="feat",
         when=lambda ctx: c.mount() is not None
         and _group_in(c, "spear", "bow"),
     )
+
+
+@power("f2793b", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="your mount makes an attack roll",
+       on=Trigger(AttackRolled, _my_mount_rolled,
+                  "your mount makes an attack roll"))
+def f2793b(c: Cast) -> None:
+    """Spend `p1450` on the mount's attack roll instead of your own.
+
+    One line, because `c.use_power` does the work and the borrowed row is
+    already right: it passes `c.trigger` through, so `p1450` rerolls the
+    event *this* row is answering -- the mount's. `spend=True` is the
+    default and is the card's "use your `p1450` racial power", which costs
+    the use.
+
+    Silent when the power is spent or absent: `c.use_power` answers False
+    and `p1450` is an encounter power, so a second mount roll in one fight
+    is simply not rerolled. That is the printed limit and not this row's.
+
+    **`AT_WILL`, not `ENCOUNTER`.** A triggered trait declared for the
+    encounter is spent by its first firing, and the limit here is
+    `p1450`'s own use -- the same correction `lint.py` made to `f807`.
+    """
+    c.use_power("p1450")
 
 
 @power("f2794", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

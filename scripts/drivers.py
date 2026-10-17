@@ -2240,6 +2240,118 @@ def scoped_vulnerable(out: Result) -> None:
 
 
 
+
+def a_feat_may_widen_what_another_rows_trigger_answers(out: Result) -> None:
+    """`f2793b` spends `p1450` on the mount's roll, which `p1450` never offers.
+
+    `p1450`'s trigger is `triggers.by_me`, so the racial reroll is offered on
+    the holder's own attack roll and on nothing else -- correct for that
+    power. `f2793`'s second clause is *"you can use your `p1450` racial power
+    to reroll an attack roll your mount makes"*, and it carried
+    `dropped=("c.reroll_attack(on=)",)` on the reasoning that the verb "reads
+    the attack off `c.trigger` and takes no creature".
+
+    **True, and not the blocker.** `c.use_power` passes `c.trigger` through
+    to the borrowed row, so `p1450` rerolls whatever event the *caller* is
+    answering. What was missing was a trigger that fires on a mount's roll,
+    and a feat may declare one -- which `f3041` already does two files away
+    for a different racial power. #625.
+
+    The three things worth holding, and the third is the one a single happy
+    path would miss:
+
+    * the mount's roll **is** rerolled, and the new face stands;
+    * the holder's **own** roll is not answered by this row -- `p1450`
+      already does, and admitting it here would offer one die two rerolls;
+    * a creature that is **not** my mount is not answered either.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, Rerolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+    from combat_engine.engine.triggers import Trigger
+    from combat_engine.engine.types import Defense
+
+    ref = "f2793b"
+    out.that(not REGISTRY[ref].unfinished, "f2793b carries no marker")
+    out.that(not REGISTRY["f2793"].unfinished,
+             "and f2793's marker is struck", f"{REGISTRY['f2793'].unfinished}")
+    out.that(REGISTRY["f2793"].on is None and REGISTRY[ref].on is not None,
+             "the trait half declares no trigger and the b half does, which"
+             " is why they are two rows")
+
+    # Narrowed rather than reached through: `Power.on` is
+    # `Trigger | Sequence[Trigger] | None`, and this row declares one.
+    declared = REGISTRY[ref].on
+    out.that(isinstance(declared, Trigger),
+             "f2793b declares exactly one trigger, not a sequence")
+    if not isinstance(declared, Trigger):
+        return
+    gate = declared.when
+    world, me, _ = _posed("f2793", 1)
+    c = Cast(world=world, me=me, ref="f2793")
+    foe = next(iter(sorted(enemies(world, me))), 0)
+
+    # No mount yet: nobody's roll is this row's business.
+    ev = AttackRolled(attacker=foe, target=me, power="p289", vs=Defense.AC,
+                      natural=3, bonus=5, total=8, defence=15,
+                      advantage=False)
+    out.that(not gate(world, me, ev),
+             "with no mount, a stranger's roll does not fire it")
+
+    # Mount the foe -- any creature will do; what matters is the relation.
+    out.that(c.ride(on=foe), "the holder mounts a creature")
+    out.that(gate(world, me, ev),
+             "and now that creature's attack roll fires it")
+    out.that(not gate(world, me, AttackRolled(
+        attacker=me, target=foe, power="p289", vs=Defense.AC, natural=3,
+        bonus=5, total=8, defence=15, advantage=False)),
+        "the holder's OWN roll still does not -- `p1450` answers that one,"
+        " and two rerolls for one die is the bug this excludes")
+
+    # -- and now the row, through the registry ---------------------------
+    world2, me2, _ = _posed("f2793", 1)
+    c2 = Cast(world=world2, me=me2, ref="f2793")
+    pet = next(iter(sorted(enemies(world2, me2))), 0)
+    c2.ride(on=pet)
+    known = REGISTRY["p1450"]
+    out.that(known is not None, "p1450 is declared, so there is a use to spend")
+
+    result = AttackResult(natural=4, total=11, target_defence=15, rolls=[4])
+    rolled = AttackRolled(attacker=pet, target=me2, power="p289",
+                          vs=Defense.AC, natural=4, bonus=7, total=11,
+                          defence=15, advantage=False)
+    setattr(rolled, "result", result)  # noqa: B010
+    world2.decider = lambda actor, kind, options, prompt: options[0]
+    world2.bus.emit(rolled)
+
+    # **Driven through the body with the event as its trigger**, which is
+    # what the dispatcher does for a declared `on=`. The emit above is not
+    # what rerolls: `audit.board` deals the row under test and not its `b`
+    # half, so nothing is armed to answer that event -- measured, because
+    # assuming either way would have made this rule about the wiring.
+    use = Cast(world=world2, me=me2, ref=ref)
+    use.trigger = rolled
+    REGISTRY[ref].body(use)
+
+    out.that(len(result.rolls) == 2,
+             "the mount's roll is rerolled", f"rolls={result.rolls}")
+    if len(result.rolls) < 2:
+        # Guarded so the plant that empties the body fails on the line
+        # above rather than raising `IndexError` two lines down -- the same
+        # correction the swap rule needed earlier today.
+        return
+    out.that(result.natural == result.rolls[1],
+             "and the second face stands, which is `p1450`'s printed"
+             " \"use the second roll even if it is lower\"")
+    out.that(any(isinstance(e, Rerolled) and e.by == "p1450"
+                 for e in world2.bus.log),
+             "and `p1450` is what announced it -- the use was spent on the"
+             " racial power, not duplicated here")
+
 def an_area_can_be_reshaped_and_not_only_stretched(out: Result) -> None:
     """`blast_size` grows an area and can never change its kind.
 
@@ -13886,6 +13998,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "a_feat_may_widen_what_another_rows_trigger_answers": (
+        a_feat_may_widen_what_another_rows_trigger_answers,
+        "f2793b spends p1450 on a roll p1450's own trigger never offers"),
     "an_area_can_be_reshaped_and_not_only_stretched": (
         an_area_can_be_reshaped_and_not_only_stretched,
         "blast_size grows an area and can never change its kind"),
