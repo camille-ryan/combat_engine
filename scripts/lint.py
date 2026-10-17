@@ -257,6 +257,12 @@ def main() -> int:
         )
         faults += 1
 
+    if _ONLY:
+        # Named rather than silently skipped, which is `types.py`'s rule
+        # about the files it swept past: a reader who knows this check
+        # exists must not read its absence as a pass.
+        print("  (the DIFFICULT_LABELS census needs the whole tree and was"
+              " not asked on a narrow run)")
     for label, why in _dead_terrain_labels():
         print(
             f"DIFFICULT_LABELS: {label!r} {why}. A closed vocabulary whose"
@@ -1792,6 +1798,27 @@ def _dead_terrain_labels() -> list[tuple[str, str]]:
     import ast as _ast
 
     from combat_engine.engine.cast import DIFFICULT_LABELS
+
+    # **A census cannot be taken over part of the tree, and this one was.**
+    # "Nobody writes it and nobody waives it" is a question about every
+    # content file, and `_asked_for()` returns only the files named -- so
+    # `lint.py <one file>` reported **every entry in the set** as dead
+    # weight. 20 to 22 phantom faults and an exit code of 1, on the exact
+    # invocation `content/CLAUDE.md` tells a parallel content agent to use,
+    # while the tree-wide run was clean. The narrower the run, the redder
+    # the instrument: the answer did not degrade, it inverted.
+    #
+    # So it declines to answer rather than answering wrongly. `check.py`
+    # runs `lint.py` with no paths, which is where the question belongs and
+    # where it is still asked. #640.
+    #
+    # The fault text is what made it dangerous rather than merely noisy --
+    # "drop it, or write the row that needs it" invites an agent who trusts
+    # its tooling to delete 20 live entries from the closed vocabulary that
+    # makes `c.ignores_difficult(kind=)` able to refuse a word at all, which
+    # is #598's entire mechanism.
+    if _ONLY:
+        return []
 
     written: set[str] = set()
     waived: set[str] = set()
