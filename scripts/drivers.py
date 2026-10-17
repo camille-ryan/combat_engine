@@ -11874,6 +11874,148 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:
+    """`f1099`'s two riders, written into the rows that pay them.
+
+    Both are "you can forgo X to instead Y" -- `p836`'s attack penalty for
+    combat advantage against an undead target, `p1580`'s ally AC bonus for
+    resist necrotic. The row's old note had located the work precisely and
+    is why this was quick:
+
+        what is missing is the read site, not the verb ... wrapping those is
+        one line each in `powers/paladin/level_1.py` and
+        `powers/cleric/level_1.py`, not here; registering from this side
+        alone lays a substitute nothing reads and would look finished.
+
+    Which is #550's convention stated for one feat: the clause goes **into**
+    the power, gated on `c.feat`, and the feat row becomes a pointer with
+    `implemented_in=`.
+
+    **Driven through the two power bodies, not the feat**, because the feat
+    body now holds only its own skill bonus -- and asserted in both
+    directions of the ask. Every one of these cards says "you can", so a
+    *declined* offer has to leave the printed clause standing; a rule that
+    only tested the accept path would pass on a body that had lost the
+    `else`.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    out.that(REGISTRY["f1099"].implemented_in == ("p836", "p1580"),
+             "f1099 points at the two rows that carry its clauses",
+             f"{REGISTRY['f1099'].implemented_in}")
+    out.that(not REGISTRY["f1099"].unfinished,
+             "and carries no marker", f"{REGISTRY['f1099'].unfinished}")
+
+    def answer(world, say_yes: bool) -> None:  # noqa: ANN001
+        # `c.may` offers "yes, <what>" first and `c.choose` is used for the
+        # ally, so the decider has to answer both kinds. Picking by prefix
+        # rather than by position keeps it honest about which it chose.
+        def decide(actor, kind, options, prompt):  # noqa: ANN001, ANN202
+            opts = list(options)
+            if kind == "may":
+                want = [o for o in opts if str(o).startswith("yes")]
+                skip = [o for o in opts if str(o).startswith("no")]
+                return (want or opts)[0] if say_yes else (skip or opts)[0]
+            return opts[0]
+
+        world.decider = decide
+
+    # **Asserted on the effects the row itself lays, not on board totals.**
+    # The first draft read the target's whole attack-modifier sum and
+    # `has_combat_advantage`, and every variant came back identical: the
+    # board contributes its own penalties and its own advantage, so the
+    # numbers said nothing about this clause. Labels are exact.
+    def laid_by(world, who, ref):  # noqa: ANN001, ANN202
+        return sorted(e.label for e in world.effects.of(who)
+                      if e.label.startswith(ref))
+
+    # -- p836: the penalty, or combat advantage against an undead ---------
+    def struck(*, say_yes: bool, undead: bool, held: bool = True):  # noqa: ANN202
+        world, me, _ = _posed("p836", 1)
+        c = Cast(world=world, me=me, ref="p836")
+        foe = next(iter(sorted(c.enemies())), 0)
+        c.target = foe
+        c.targets = [foe]
+        c.strike = lambda **kw: True   # ty: ignore[invalid-assignment]
+        c.mark(on=foe)
+        # The board poses the power's own holder and grants it no unrelated
+        # feat, so `c.feat` has to be answered here -- which the first draft
+        # missed, and is why all three variants read the same.
+        c.feat = (lambda ref: ref == "f1099" and held)  # ty: ignore[invalid-assignment]
+        c.is_kind = (lambda *a, **k: undead)  # ty: ignore[invalid-assignment]
+        answer(world, say_yes)
+        REGISTRY["p836"].body(c)
+        return laid_by(world, foe, "p836")
+
+    swapped = struck(say_yes=True, undead=True)
+    out.that(any("advantage" in lab for lab in swapped)
+             and not any("attack" in lab for lab in swapped),
+             "an undead target, offer taken: the row lays the advantage and"
+             f" NOT the printed penalty ({swapped})")
+
+    declined = struck(say_yes=False, undead=True)
+    out.that(any("attack" in lab for lab in declined)
+             and not any("advantage" in lab for lab in declined),
+             "the same hit with the offer DECLINED lays the printed penalty"
+             f" and nothing else ({declined})")
+
+    plain = struck(say_yes=True, undead=False)
+    out.that(any("attack" in lab for lab in plain)
+             and not any("advantage" in lab for lab in plain),
+             "and a target that is not undead is never offered it, however"
+             f" willing the holder ({plain})")
+
+    without = struck(say_yes=True, undead=True, held=False)
+    out.that(any("attack" in lab for lab in without)
+             and not any("advantage" in lab for lab in without),
+             "nor is a paladin without the feat, which is the gate that keeps"
+             f" every other character's row unchanged ({without})")
+
+    # -- p1580: the ally's AC bonus, or resist necrotic -------------------
+    def sheltered(*, say_yes: bool, held: bool = True):  # noqa: ANN202
+        world, me, _ = _posed("p1580", 1)
+        c = Cast(world=world, me=me, ref="p1580")
+        foe = next(iter(sorted(c.enemies())), 0)
+        c.target = foe
+        c.targets = [foe]
+        c.strike = lambda **kw: True   # ty: ignore[invalid-assignment]
+        c.feat = (lambda ref: ref == "f1099" and held)  # ty: ignore[invalid-assignment]
+        answer(world, say_yes)
+        mates = [a for a in c.within(1, side="ally") if a != me]
+        if not mates:
+            return None
+        REGISTRY["p1580"].body(c)
+        # **Both the allies' effects and the caster's, from one call.** The
+        # first draft returned only the allies' and read the caster's off a
+        # *fresh* board the body had never run on -- so that assertion was
+        # trivially empty and stayed green when the caster's own +1 was
+        # deleted outright. A plant caught it.
+        allies = sorted(lab for mate in mates
+                        for lab in laid_by(world, mate, "p1580"))
+        return allies, laid_by(world, me, "p1580")
+
+    taken = sheltered(say_yes=True)
+    out.that(taken is not None, "the board puts an ally beside the caster")
+    if taken is None:
+        return
+    mates_got, mine = taken
+    out.that(any("resist" in lab for lab in mates_got)
+             and not any("ac" in lab for lab in mates_got),
+             f"offer taken: an ally gains resist instead of AC ({mates_got})")
+    out.that(any("ac" in lab for lab in mine),
+             "and the CASTER keeps its own +1 in the same breath -- the card"
+             " trades only the bonus granted to an ALLY, so a body trading"
+             f" both would be wrong ({mine})")
+
+    kept = sheltered(say_yes=False)
+    out.that(kept is not None and any("ac" in lab for lab in kept[0])
+             and not any("resist" in lab for lab in kept[0]),
+             f"declined: the printed +1 to AC stands and no resist ({kept})")
+
 def an_item_adds_to_what_a_pact_pays(out: Result) -> None:
     """`i2343p2` had nothing to add to, and said so in its own marker.
 
@@ -14775,6 +14917,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_feats_swap_is_written_where_it_is_read": (
+        a_feats_swap_is_written_where_it_is_read,
+        "f1099's two riders, written into p836 and p1580 per #550"),
     "an_item_adds_to_what_a_pact_pays": (
         an_item_adds_to_what_a_pact_pays,
         "the star pact's boon hard-coded its 1, so no item could add to it"),

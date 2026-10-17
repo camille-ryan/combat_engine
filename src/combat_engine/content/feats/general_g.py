@@ -1645,21 +1645,28 @@ def f1021(c: Cast) -> None:
 
 @power("f1099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.opt_in()",))
+       implemented_in=("p836", "p1580"))
 def f1099(c: Cast) -> None:
-    """The skill bonus is the half that plays, so the row is offered rather
-    than refused: it was marked `todo` whole and threw a working clause
-    away.
+    """The skill bonus is this row's own; both riders are written where
+    they are read.
 
-    Both riders arrive as refs and both are "you can forgo X to instead
-    Y", which is `c.pre_empt(ref, what, clause)` exactly -- **and what is
-    missing is the read site, not the verb.** `c.instead_of` has to be
-    called by the row being changed, and p836 lays its attack penalty and
-    p1580 its two AC bonuses directly. Wrapping those is one line each in
-    `powers/paladin/level_1.py` and `powers/cleric/level_1.py`, not here;
-    registering from this side alone lays a substitute nothing reads and
-    would look finished. `f3232` is the same shape and says the same
-    thing about `features/warlock.py`.
+    **The old note located the work exactly and is why this was quick.**
+    It said: *"what is missing is the read site, not the verb ... wrapping
+    those is one line each in `powers/paladin/level_1.py` and
+    `powers/cleric/level_1.py`, not here; registering from this side alone
+    lays a substitute nothing reads and would look finished."* Correct in
+    every part, and `#550`'s convention says the same thing in general --
+    a feat naming one power writes its clause **into** that power, gated
+    on `c.feat`, rather than registering a rider from here.
+
+    So the clauses live in `p836` and `p1580` and this carries
+    `implemented_in=`, which `audit.py` buckets separately rather than
+    reporting the row silent. The feat is unbracketed (`feat.category` is
+    empty in `game.db`), so each is a plain `if` and not a `c.declare`
+    chain.
+
+    `p1580`'s half is the one worth reading twice: the card trades the
+    bonus granted to **an ally**, so the caster's own +1 is untouched.
 
     A plain "+2 bonus" with the word "bonus" and no type in front of it,
     so untyped.

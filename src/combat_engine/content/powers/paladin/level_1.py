@@ -121,10 +121,39 @@ def p835(c: Cast) -> None:
     attack=Attack(CHA, vs=AC),
 )
 def p836(c: Cast) -> None:
+    """The printed -2, and `f1099`'s swap written in rather than registered.
+
+    **#550's convention.** A feat that names one power writes its clause
+    into that power, gated on `c.feat`, and the feat row stays declared as
+    a pointer -- which is why `f1099` carries `implemented_in=("p836",)`
+    now instead of a marker. `p704` is the worked example.
+
+    `f1099` is **unbracketed** (`feat.category` is empty in `game.db`), so
+    it is a plain `if` and not a `c.declare` chain: the chain is only for
+    the bracketed categories, where one feat per bracket applies to one
+    use.
+
+    **`c.may`, because the card says "you can".** The swap is offered at
+    the hit rather than imposed, and an unanswered offer leaves the printed
+    penalty standing -- which is why the branch returns rather than falling
+    through to it.
+
+    `to="enemies"` on the target: "grant combat advantage" with nobody
+    named means to everybody attacking it, and the target's enemies are
+    this side. `c.grants_advantage(on=X)` is "X grants", `to=` is who
+    gains, and the default `"me"` would have said the target grants
+    advantage to itself.
+    """
     if c.strike():
         c.damage(c.w(1), c.cha_mod)
-        if _marked_by_me(c):
-            c.penalty("attack", 2)
+        if not _marked_by_me(c):
+            return
+        if (c.feat("f1099") and c.is_kind("undead")
+                and c.may("forgo the attack penalty to make it grant"
+                          " combat advantage")):
+            c.grants_advantage(on=c.target, to="enemies", until=When.SONT)
+            return
+        c.penalty("attack", 2)
 
 
 # -- encounter --------------------------------------------------------------

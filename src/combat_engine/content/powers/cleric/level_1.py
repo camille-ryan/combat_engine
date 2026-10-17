@@ -115,13 +115,35 @@ def p889(c: Cast) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p1580(c: Cast) -> None:
-    """The guard covers you and one neighbour, so it is two separate bonuses."""
+    """The guard covers you and one neighbour, so it is two separate bonuses.
+
+    **`f1099`'s swap is written in rather than registered**, which is
+    #550's convention: a feat naming one power writes its clause into that
+    power, gated on `c.feat`. The feat is unbracketed (`feat.category` is
+    empty in `game.db`), so a plain `if` and not a `c.declare` chain.
+
+    The card is specific about *which* bonus is tradeable -- "whenever you
+    would grant **an ally** a +1 power bonus to AC" -- so only the
+    neighbour's half is offered. The caster's own bonus is not an ally's
+    and stands either way, which is why the swap sits inside the `beside`
+    branch and after the chooser: there is nothing to trade until an ally
+    has been picked.
+
+    `c.may`, because the card says "you can", and declining leaves the
+    printed +1 standing."""
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         c.bonus(AC, 1, on=c.me, kind="power")
         beside = [a for a in c.within(1, side="ally") if a != c.me]
         if beside:
-            c.bonus(AC, 1, on=c.choose(beside, "who shelters with you"), kind="power")
+            mate = c.choose(beside, "who shelters with you")
+            if (c.feat("f1099")
+                    and c.may("give the ally resist necrotic instead of the"
+                              " AC bonus")):
+                c.resist(c.cha_mod, DamageType.NECROTIC, on=mate,
+                         until=When.EONT)
+            else:
+                c.bonus(AC, 1, on=mate, kind="power")
 
 
 @power(
