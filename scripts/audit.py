@@ -136,6 +136,20 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # Its printed Requirement is **one** weapon -- `w3594` -- and `chargen`
+    # deals this sorcerer `w3596`, a different blade from the same group. So
+    # the gate correctly declines and the row lays nothing.
+    #
+    # **Not an excuse covering a dead row**, which this file's own history
+    # warns about: with `w3594` put in hand on a probe board, the ranged
+    # sorcerer at-will `p16222` goes from one aiming to two -- branch 0
+    # `ranged 10`, branch 1 `melee 1`, exactly the card. The silence is the
+    # weapon the board dealt, not the clause.
+    #
+    # Gating on the group instead would retire this entry and be wrong: the
+    # group holds fourteen other things, including two boomerangs and a
+    # spiked shield, and `w3596` is one of them. #614.
+    "f1028": "needs one named weapon; chargen dealt another from its group",
     # Its printed Requirement is an obscured square to vanish from, and the
     # board is lit everywhere -- so the row correctly declines. Enforcing
     # the Requirement is what made it silent; before the light model it was

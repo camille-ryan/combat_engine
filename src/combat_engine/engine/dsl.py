@@ -2003,13 +2003,109 @@ def reach_of(
     at all, so the order there is stretch-then-swap and is documented on the
     spot.
     """
-    r = p.reach_of(branch, augment)
-    swap = _reshaped(world, actor, {"power": p.ref, "kind": r.kind})
-    return swap(r) if swap is not None else r
+    printed = p.branches
+    if branch in printed:
+        r = p.reach_of(branch, augment)
+        # A **replacing** reshape only. An optional one is reached through
+        # its own index below, and applying it here as well would impose the
+        # alternative on the printed aiming -- which is the whole thing
+        # `optional=` exists to avoid.
+        swap = _reshaped(world, actor, {"power": p.ref, "kind": r.kind},
+                         optional=False)
+        return swap(r) if swap is not None else r
+
+    # **An extra index**, contributed by an optional reshape in force for
+    # this creature. Derived from the printed count rather than hard-coded:
+    # a row with `reach.alt` already owns 0 and 1, so its first extra is 2.
+    extras = _offered(world, actor, p)
+    spot = branch - len(printed)
+    if 0 <= spot < len(extras):
+        # Applied to the row's **first** printed branch. Every one of the
+        # eleven cards names one alternative to one printed shape; a card
+        # offering an alternative to the *second* branch of a two-range row
+        # is not among them, and inventing a rule for it here would be a
+        # second opinion about what the pages say.
+        return extras[spot](p.reach_of(printed[0], augment))
+
+    # A branch nothing offers. The print for branch 0, which is what every
+    # caller that guessed an index got before any of this existed.
+    return p.reach_of(printed[0], augment)
+
+
+def can_branch_for(world: World, actor: int, p: Power, branch: int = 0) -> bool:
+    """Is this aiming open to this creature -- printed or contributed?
+
+    `Power.can_branch` indexes the printed branches: `requires_of` is
+    `requires_alt if branch else requires`, so handing it an extra index
+    would read the *alternate* branch's Requirement on a row that has none
+    and refuse an aiming the card allows.
+
+    **An extra aiming carries the printed branch's Requirement**, because
+    that is what the cards say. Every one of the eleven gates the *feat* --
+    "when you are attacking with a greatbow and you have proficiency" --
+    which is checked where the reshape is laid, not where it is aimed. The
+    target row's own Requirement does not change because you chose the other
+    shape. #614.
+    """
+    printed = p.branches
+    return p.can_branch(world, actor, branch if branch in printed else printed[0])
+
+
+def branches_for(world: World, actor: int, p: Power) -> tuple[int, ...]:
+    """Which aimings **this creature** may choose between for this row.
+
+    `Power.branches` is the printed line -- `(0, 1)` for a row printing two
+    ranges, `(0,)` otherwise -- and header data cannot say that one character
+    has a third option. Eleven heroic rows print exactly that: "you can
+    **choose** to make it X **instead of** Y". #614.
+
+    So each *optional* reshape in force adds an index past the printed ones,
+    and `reach_of` resolves it. The printed aimings keep their indices and
+    their shapes, which is the half that matters: a feat offering an
+    alternative must not take the card's own shape away.
+
+    **Every reader of `Power.branches` that has a creature must come through
+    here**, for the reason `durations.keywords_of` records and `reach_of`
+    repeats: a grant honoured at three sites and missed at the fourth is a
+    modifier nothing consults. The four are `dsl.unusable`, `dsl.usable`,
+    `dsl._within_reach` and `query.range_profile`.
+
+    `Range.branches` itself stays header-only and is named as a blind spot on
+    `reach_of`: it answers for the card, which is what the card asks.
+    """
+    return (*p.branches, *range(len(p.branches),
+                                len(p.branches) + len(_offered(world, actor, p))))
+
+
+def _offered(
+    world: World, actor: int, p: Power
+) -> tuple[Callable[[Range], Range], ...]:
+    """Every *optional* reshape standing on `actor` for this row, in order.
+
+    All of them, where `_reshaped` returns only the first. That difference is
+    deliberate and is the one place the two semantics genuinely part: two
+    cards both **replacing** one use is not a printed case and composing them
+    would invent a rule, but two cards each **offering** an alternative is
+    just a longer menu, and refusing the second would silently drop a feat
+    the character has.
+
+    Composing is still refused -- each extra applies to the printed shape,
+    never to another extra's output.
+    """
+    out = []
+    for eff in world.effects.of(actor):
+        if eff.reshape is None or eff.suspended or not eff.reshape_optional:
+            continue
+        gate = eff.reshape_when
+        r = p.reach_of(p.branches[0])
+        if gate is not None and not gate({"power": p.ref, "kind": r.kind}):
+            continue
+        out.append(eff.reshape)
+    return tuple(out)
 
 
 def _reshaped(
-    world: World, actor: int, ctx: dict[str, Any]
+    world: World, actor: int, ctx: dict[str, Any], *, optional: bool | None = None
 ) -> Callable[[Range], Range] | None:
     """A standing replacement for this row's **shape**, if one is in force.
 
@@ -2033,6 +2129,12 @@ def _reshaped(
     """
     for eff in world.effects.of(actor):
         if eff.reshape is None or eff.suspended:
+            continue
+        # `optional=None` is "either", which is what `area_of` wants: it
+        # draws the squares for the aiming actually in play, and by then the
+        # branch has already selected which. `reach_of` passes `False`, so a
+        # merely *offered* alternative never overwrites the printed shape.
+        if optional is not None and eff.reshape_optional is not optional:
             continue
         gate = eff.reshape_when
         if gate is not None and not gate(ctx):
@@ -2401,7 +2503,9 @@ def unmet_requirement(world: World, actor: int, p: Power) -> bool:
     Asked instead of matching on the words of `usable`'s reason, which is
     the printed sentence whenever the row has one.
     """
-    return not any(p.can_branch(world, actor, b) for b in p.branches)
+    return not any(
+        can_branch_for(world, actor, p, b) for b in branches_for(world, actor, p)
+    )
 
 
 def affordable(world: World, actor: int, p: Power) -> tuple[int, ...]:
@@ -2580,7 +2684,10 @@ def usable(
             return False, "no such augment"
         if augment not in affordable(world, actor, p):
             return False, "not enough power points"
-    open_branches = [b for b in p.branches if p.can_branch(world, actor, b)]
+    open_branches = [
+        b for b in branches_for(world, actor, p)
+        if can_branch_for(world, actor, p, b)
+    ]
     if not open_branches:
         # The printed sentence when there is one, because it is what the
         # card shows. Callers that need to know *which* refusal this is
@@ -2893,7 +3000,12 @@ def _no_targets(world: World, actor: int, p: Power) -> str:
         # states, rather than a distance that has nothing to do with it.
         return f'nothing here is "{aim}"'
     nearest = min(distance_between(world, actor, c) for c in fits)
-    furthest = max(p.reach_of(b).size for b in p.branches)
+    # Through the per-creature readers: a feat offering a longer aiming makes
+    # the row reach further for *that* creature, and a distance guard reading
+    # the print alone refuses a shot the card allows.
+    furthest = max(
+        reach_of(world, actor, p, b).size for b in branches_for(world, actor, p)
+    )
     if p.reach.kind in ("melee", "close_burst", "close_blast") and not p.reach.alt:
         return f"nearest is {nearest} squares away"
     return f"nearest is {nearest} squares away, range {furthest}"

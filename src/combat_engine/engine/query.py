@@ -551,7 +551,7 @@ def range_profile(world: World, eid: int) -> str:
     in the header, which is exactly the point of the header being data.
     """
     from .components import Powers
-    from .dsl import get
+    from .dsl import branches_for, get, reach_of
 
     known = world.get(eid, Powers)
     if known is None:
@@ -561,8 +561,12 @@ def range_profile(world: World, eid: int) -> str:
         p = get(ref)
         if p is None or not p.is_attack:
             continue
-        for branch in p.branches:
-            kind = p.reach_of(branch).kind
+        # Through the per-creature readers: a feat that offers this creature
+        # a ranged aiming of a melee row changes what it *prefers*, and the
+        # AI reads this to decide whether to close. Reading the print alone
+        # made the fourth site the one the grant was missed at. #614.
+        for branch in branches_for(world, eid, p):
+            kind = reach_of(world, eid, p, branch).kind
             far = far or kind in ("ranged", "area_burst")
             near = near or kind in ("melee", "close_burst", "close_blast")
     if far and near:

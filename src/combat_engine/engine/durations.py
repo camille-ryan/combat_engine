@@ -171,6 +171,20 @@ class Effect:
     #: its printed kind. Without it a wand that reshapes "the next area
     #: burst" would reshape a melee swing.
     reshape_when: Callable[[dict[str, Any]], bool] | None = None
+    #: **Does the reshape replace the printed shape, or offer an alternative
+    #: to it?** `False` replaces, which is what every caller meant until now
+    #: and what `i2467p1` needs: the wand's *activation* is the choice, and
+    #: once it is used the new area is forced for that one attack.
+    #:
+    #: `True` adds an aiming instead. Eleven heroic rows print "you can
+    #: **choose** to make it X **instead of** Y", where both shapes stay on
+    #: the menu -- replacing would take the printed one away and leave a
+    #: sorcerer unable to throw the close blast its card still lists, which
+    #: is worse than the card rather than merely different. #614.
+    #:
+    #: Read by `dsl.branches_for`, which turns each one in force into an
+    #: extra branch index, and by `dsl.reach_of`, which resolves that index.
+    reshape_optional: bool = False
 
     def __str__(self) -> str:
         bits = [self.label or "effect", self.when.value]
@@ -267,6 +281,7 @@ class Effects:
         drop_cost: ActionType | None = None,
         reshape: Callable[[Any], Any] | None = None,
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
+        reshape_optional: bool = False,
         by: str = "",
     ) -> Effect:
         # Ongoing damage of one type does not stack -- the highest applies.
@@ -348,6 +363,7 @@ class Effects:
             drop_cost=drop_cost,
             reshape=reshape,
             reshape_when=reshape_when,
+            reshape_optional=reshape_optional,
         )
         # **The ref of the row that laid this, as a plain attribute.**
         #

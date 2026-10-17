@@ -4983,6 +4983,8 @@ class Cast:
         ref: str = "",
         kinds: Sequence[str] = (),
         keyword: Keyword | None = None,
+        cls: str = "",
+        optional: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -5015,12 +5017,29 @@ class Cast:
 
         * `ref` -- one named row, which is `i1836x1`'s whole scope;
         * `kinds` -- the printed shapes it applies to, `("area_burst",)`;
-        * `keyword` -- "an arcane close blast power".
+        * `keyword` -- "an arcane close blast power";
+        * `cls` -- "any ranged **sorcerer** attack power", which `f1028`
+          prints and which no keyword says: a class is not a keyword, and
+          gating on the arcane one would also catch a wizard's rows carried
+          by a multiclass feat.
 
         With none of the three it reshapes everything the creature throws,
         which no card prints; passing nothing is almost certainly a mistake
         and is left legal only because refusing it here would be a second
         opinion about what the cards say.
+
+        **`optional=True` offers the new shape instead of imposing it.**
+        Eleven heroic rows print "you can **choose** to make it X **instead
+        of** Y", and replacing takes the printed shape *away* -- a sorcerer
+        with `f725` could no longer throw the close blast 3 its card still
+        lists, which is worse than the card rather than merely different.
+        With it, `dsl.branches_for` adds an extra aiming and the player picks
+        at targeting time; `dsl.reach_of` resolves whichever index was
+        chosen.
+
+        The default stays `False` because the one row shipping on this is
+        `i2467p1`, where the wand's **activation** is the choice and the new
+        area is rightly forced for that one attack. #614.
 
         **Read, never consumed, by `area_of`.** That function is a query --
         the renderer calls it to highlight squares and `_aimings` calls it
@@ -5041,11 +5060,15 @@ class Cast:
                 row = REGISTRY.get(str(ctx.get("power") or ""))
                 if row is None or keyword not in row.keywords:
                     return False
+            if cls:
+                row = REGISTRY.get(str(ctx.get("power") or ""))
+                if row is None or row.cls != cls:
+                    return False
             return True
 
         return self.world.effects.apply(
             who, self.me, until, label=self.ref, by=self.ref,
-            reshape=into, reshape_when=gate,
+            reshape=into, reshape_when=gate, reshape_optional=optional,
         )
 
     def shares_space(

@@ -28,7 +28,7 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.dsl import get
+from combat_engine.engine.dsl import Melee, get
 from combat_engine.engine.query import distance_between
 from combat_engine.engine.types import Usage
 
@@ -208,20 +208,46 @@ def f1491(c: Cast) -> None:
                     when=_from_bloodied(c))
 
 
+#: The five at-wills this feat names, one per class that can take it. Every
+#: clause on the card is identical: a melee reach **in addition to** the
+#: printed one, and the row usable as a melee basic attack.
+_TOUCHED = ("p2847", "p5259", "p3705", "p1333", "p463")
+
+
 @power("f1239", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_melee(ref=)",))
+       reach=PERSONAL, target=SELF)
 def f1239(c: Cast) -> None:
-    """Gives five named at-wills a melee reach **and** lets each be used
-    as a melee basic attack. Only the second half is sayable now.
+    """Written, both halves, for all five rows.
 
-    **Spelled `c.as_melee(ref=)`, with the `=`.** It read `c.as_melee(ref)`
-    and the other four rows on this gap read `c.as_melee(ref=)` -- one
-    character, two symbols, so neither could ever report complete and
-    `blocked.py` showed the family as 4 rows and 1. #614.
+    The note here said only the basic-attack half was sayable, and that
+    "four of the five rows arrive as prose in any case, so `p3705` is the
+    whole of what could be written". **Both halves of that are now false.**
+    All five arrive as refs -- the card lists `p2847`, `p5259`, `p3705`,
+    `p1333` and `p463`, one per class that may take the feat -- and the
+    reach half landed as `dsl.branches_for`. #614.
 
-    Re-aimed rather than half-written: the reach is what makes the
-    swap mean anything, and `c.as_basic` on a row that is still ranged
-    only would offer a bow shot where the game hands out a melee basic.
-    `c.as_ranged` is the verb this wants the mirror of. Four of the five
-    rows arrive as prose in any case, so p3705 is the whole of what
-    could be written even with the reach."""
+    **"In addition to its normal range" is the card saying `optional=`
+    out loud.** This is the clearest of the eleven: the printed ranged
+    aiming stays, and a melee one joins it. A replacement would have taken
+    the ranged aiming away from an at-will the character leans on.
+
+    `Melee(1)` and not `by_weapon=True`: the card prints melee *touch*,
+    which is reach 1 for anybody and is not the wielded weapon's reach.
+
+    The reach is why `c.as_basic` means anything here, which is what the
+    old note was right about -- offering a still-ranged row as a melee
+    basic would hand out a bow shot where the game asks for a swing. Both
+    go on together or neither does.
+
+    Ungated by class: a character may only know the row its own class
+    grants, and a reshape on a row nobody knows is never consulted.
+    """
+    for ref in _TOUCHED:
+        c.reshape_area(
+            lambda _r: Melee(1),
+            ref=ref,
+            optional=True,
+            on=c.me,
+            until=When.ENCOUNTER,
+        )
+    c.as_basic(*_TOUCHED, on=c.me, until=When.ENCOUNTER)

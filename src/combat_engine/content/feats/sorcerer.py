@@ -40,7 +40,8 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.dsl import get
+from combat_engine.engine.components import Gear
+from combat_engine.engine.dsl import Melee, get
 from combat_engine.engine.types import Usage
 
 #: "Ranged and melee attack powers", as the reach kinds a header carries.
@@ -135,19 +136,55 @@ def f998(c: Cast) -> None:
 
 
 @power("f1028", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.as_melee(ref=)",))
+       reach=PERSONAL, target=SELF)
 def f1028(c: Cast) -> None:
-    """Turns a ranged power into a melee one when cast through a named
-    weapon group. A power's reach is header data, read before the body
-    runs so the interface can draw it, and nothing rewrites it for one
-    use -- the same gap the wizard's f1134 names from the other side.
+    """Written: the melee aiming is **offered**, not imposed.
 
-    **Re-marked off `c.reach_of(power=)`, which named no verb at all.**
-    That symbol was shared by six rows wanting three different things, so
-    it could not go green for any of them. Reading a range is
-    `c.reach(ref)` and has existed all along; what this row wants is to
-    *change the kind* of a range for one use, which is a different verb and
-    now says so."""
+    The note here said "a power's reach is header data, read before the
+    body runs so the interface can draw it, and nothing rewrites it for one
+    use". That was right, and it is the argument `durations.keywords_of`
+    makes about keywords -- so the answer was the same one: a module reader
+    every site consults. `dsl.reach_of` is that door and `dsl.branches_for`
+    contributes this aiming. #614.
+
+    **`optional=True` is the whole of why this is faithful.** The card says
+    "you **can** use the power as a melee attack", so the printed ranged
+    aiming has to stay on the menu. A replacement would leave a sorcerer
+    unable to shoot at all while holding a dagger -- strictly worse than the
+    card, which is the `m5808a0` fault pointing the wrong way.
+
+    `cls=` and not `keyword=`: the card says *any ranged sorcerer attack
+    power*, and a class is not a keyword. Gating on the arcane one would
+    also catch a wizard's rows carried here by a multiclass feat, which the
+    page does not offer.
+
+    "The power's range equals your melee reach" is `Melee(1)` and not a
+    number copied off the dagger: `dsl._reach_of`'s melee branch already
+    resolves a creature's reach, including anything standing that extends
+    it, which is how every other melee row answers the same question.
+
+    **By ref, not by group.** The card names **one** weapon, and its group
+    holds fourteen others -- boomerangs, wrist razors, a spiked shield --
+    so `_holding("light blade")` would hand the melee aiming to a sorcerer
+    carrying any of them. That is the `general_r.py` idiom: *"the seven
+    share one group, so `_holding` cannot tell a wand from a totem and
+    every one of these cards names exactly one"*, and the same is true
+    here. `w3594` is the weapon; its name stays in `localization/`.
+
+    The weapon is checked when the trait arms, as this file's other rows
+    do: what is in hand at the top of the fight is what the feat is about.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is None or not any(w.ref == "w3594" for w in gear.held):
+        return
+    c.reshape_area(
+        lambda _r: Melee(1),
+        kinds=("ranged",),
+        cls="sorcerer",
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f1138", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

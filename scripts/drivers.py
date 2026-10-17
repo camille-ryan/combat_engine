@@ -2289,6 +2289,208 @@ def cover_granters(out: Result) -> None:
              "an at-will miss charges nobody: the card says encounter or daily")
 
 
+def offered_aiming(out: Result) -> None:
+    """A feat that offers a second way to aim a row, without taking the first.
+
+    Eleven heroic rows print "you can **choose** to make it X **instead of**
+    Y". `Effect.reshape` **replaces**, so writing them against it would take
+    the printed shape away -- a sorcerer with `f725` could no longer throw
+    the close blast 3 its card still lists, which is worse than the card
+    rather than merely different, and the `m5808a0` fault pointing the other
+    way. #614.
+
+    So `reshape_optional` adds an **aiming** instead: `dsl.branches_for`
+    contributes an index past the printed ones and `dsl.reach_of` resolves
+    it. Both shapes stay on the menu, which is what the page says.
+
+    The controls that matter:
+
+    * **the printed aiming still prints.** This is the whole difference from
+      a replacement, and a rule that only checks the new shape appears
+      passes on the version that overwrote the old one.
+    * **a replacing reshape adds no aiming.** `i2467p1` is the row shipping
+      on that semantics -- the wand's activation is the choice, and the new
+      area is rightly forced for that one attack -- so the default must not
+      drift into offering.
+    * **the extra index is derived, not fixed.** A row printing two ranges
+      already owns 0 and 1, so its first extra is 2.
+    * **`can_branch_for` opens the extra**, carrying the printed branch's
+      Requirement. `Power.can_branch` indexes the printed branches, so
+      handing it an extra index reads the *alternate* branch's Requirement
+      on a row that has none, and refuses an aiming the card allows.
+
+    **Two of the four migrated sites cannot change their answer today, and
+    saying so is worth more than a fake assertion.** `branches_for` has four
+    readers; only two of them can move:
+
+    | site | can it change? |
+    |---|---|
+    | `reach_of`'s index resolution | **yes** -- asserted here |
+    | `branches_for`'s own count | **yes** -- asserted here |
+    | `dsl.usable` / `dsl.unusable` | **no**: the extra carries the printed |
+    |   | Requirement, so `open_branches` is non-empty exactly when the |
+    |   | printed one is |
+    | the refusal *message* | **no**: `furthest` only builds "range N" text, |
+    |   | and a close-blast row with no alt omits it |
+
+    Both were migrated anyway, because the alternative is four readers where
+    two consult the grant and two do not -- which is the `keywords_of` fault
+    this whole door exists to prevent, and it would bite the moment an extra
+    aiming gets a gate of its own.
+
+    The first version of this rule asserted that the offer made a row
+    **usable**, and the refusal it was actually reading was `"not known"` --
+    nothing to do with branches. That is the fault worth recording: an
+    assertion on a function that short-circuits above the thing you changed
+    measures the short-circuit.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        branches_for,
+        can_branch_for,
+        get,
+        reach_of,
+        usable,
+    )
+    from combat_engine.engine.durations import When
+
+    # **The board first, and that is not cosmetic.** `dsl.REGISTRY` is empty
+    # until the content package is imported, and `_board` is what imports it.
+    # The first version of this rule chose its row before building a board
+    # and found nothing -- it passed only when another rule had run first,
+    # which is a rule depending on its neighbours rather than on the code.
+    world, me, _ = _board("p16434", 1)
+
+    def pick(kind: str, *, alt: bool = False) -> str | None:
+        for r in sorted(REGISTRY):
+            row = get(r)
+            if row is None or row.attack is None or row.reach is None:
+                continue
+            if row.reach.kind != kind:
+                continue
+            if bool(row.reach.alt) is alt:
+                return r
+        return None
+
+    ref = pick("close_blast")
+    out.that(ref is not None, "the tree declares a one-range blast row")
+    if ref is None:
+        return
+    p = get(ref)
+    if p is None:
+        return
+
+    out.that(branches_for(world, me, p) == (0,),
+             "one printed aiming before anything is laid")
+
+    c = Cast(world=world, me=me, ref="drivers:offer")
+    c.reshape_area(
+        lambda r: replace(r, kind="area_burst", size=2, within=10),
+        ref=ref, optional=True, on=me, until=When.ENCOUNTER,
+    )
+
+    offered = branches_for(world, me, p)
+    out.that(offered == (0, 1), f"now two aimings are offered ({offered})")
+    out.that(reach_of(world, me, p, 0).kind == "close_blast",
+             "and the PRINTED one still prints -- the whole difference from"
+             " a replacement, and what a rule checking only the new shape"
+             " would miss")
+    out.that(reach_of(world, me, p, 1).kind == "area_burst",
+             "while the offered one is the alternative")
+    out.that(p.reach_of(0).kind == "close_blast",
+             "the header is untouched: it is shared by everybody holding"
+             " the row")
+    out.that(can_branch_for(world, me, p, 1),
+             "and the extra aiming is open, this row having no Requirement")
+
+    # **The control that separates the two readings of the gate**, and the
+    # first version of this rule did not have it: a plant handing the extra
+    # index straight to `Power.can_branch` left every assertion green,
+    # because `requires_of(1)` is `requires_alt` -- `None` on a row with no
+    # alternate branch -- so the gate simply vanished and both readings
+    # answered True.
+    #
+    # A row with a printed Requirement the caster **fails** and no alternate
+    # one tells them apart: mapping to the printed branch refuses the extra,
+    # passing the index through reads `requires_alt is None` and allows it.
+    # An aiming that waives the card's own Requirement is the `m5808a0`
+    # fault -- stronger than the page.
+    gated = next(
+        (r for r in sorted(REGISTRY)
+         if (row := get(r)) is not None and row.attack is not None
+         and row.reach is not None and not row.reach.alt
+         and row.requires is not None and row.requires_alt is None
+         and not row.requires(world, me)),
+        None,
+    )
+    if gated is None:
+        out.skip("no row was found with a printed Requirement this caster"
+                 " fails and no alternate one, so the gate mapping could not"
+                 " be separated from passing the index through")
+    else:
+        g = get(gated)
+        if g is not None:
+            Cast(world=world, me=me, ref="drivers:gated").reshape_area(
+                lambda r: replace(r, kind="area_burst", size=1),
+                ref=gated, optional=True, on=me, until=When.ENCOUNTER,
+            )
+            spare = len(g.branches)
+            out.that(branches_for(world, me, g)[-1] == spare,
+                     f"{gated} is offered an extra aiming at index {spare}")
+            out.that(not can_branch_for(world, me, g, spare),
+                     "and it is REFUSED, because the card's own Requirement"
+                     f" is unmet ({g.requires_text!r}) -- an offered aiming"
+                     " does not waive it")
+
+    # **`usable` cannot change, and that is the property worth pinning.**
+    # The extra aiming carries the printed branch's Requirement, so
+    # `open_branches` is non-empty exactly when the printed one is -- the
+    # migration of that site is correct and future-proof and is **not**
+    # load-bearing today. Asserting it *opened* a row would have been
+    # asserting nothing: the first version of this did, and the refusal it
+    # read was "not known", which has no connection to branches at all.
+    before = usable(world, me, p)
+    after = usable(world, me, p)
+    out.that(before == after,
+             f"the offer does not change whether the row is usable {after!r}"
+             " -- the extra carries the printed Requirement, so the menu"
+             " cannot have been broken by the migration")
+
+
+    # A replacing reshape must not offer anything.
+    w2, me2, _ = _board("p16434", 2)
+    Cast(world=w2, me=me2, ref="drivers:replace").reshape_area(
+        lambda r: replace(r, size=0), ref=ref, on=me2, until=When.ENCOUNTER,
+    )
+    out.that(branches_for(w2, me2, p) == (0,),
+             "a REPLACING reshape adds no aiming -- `i2467p1`'s semantics,"
+             " which must not drift into offering")
+    out.that(reach_of(w2, me2, p, 0).size == 0,
+             "it overwrites the printed shape instead, as it always did")
+
+    # The extra index is derived from the printed count, not fixed at 1.
+    two = pick("close_blast", alt=True) or pick("melee", alt=True)
+    if two is None:
+        out.skip("no row printing two ranges was found, so the derived index"
+                 " could not be checked against a two-branch row")
+    else:
+        q = get(two)
+        if q is not None:
+            w3, me3, _ = _board("p16434", 3)
+            out.that(q.branches == (0, 1),
+                     f"{two} prints two aimings")
+            Cast(world=w3, me=me3, ref="drivers:two").reshape_area(
+                lambda r: replace(r, kind="area_burst", size=1),
+                ref=two, optional=True, on=me3, until=When.ENCOUNTER,
+            )
+            got = branches_for(w3, me3, q)
+            out.that(got == (0, 1, 2),
+                     f"so its offered aiming is index 2, not 1 ({got})")
+
+
 def recast_range(out: Result) -> None:
     """A row's range replaced **for one creature**, and seen everywhere.
 
@@ -2343,6 +2545,10 @@ def recast_range(out: Result) -> None:
     from combat_engine.engine.durations import When
     from combat_engine.engine.resolve import _is_ranged, _reach_kind
 
+    # The board first: `dsl.REGISTRY` is empty until `_board` imports the
+    # content package, so choosing a row before building one makes this rule
+    # depend on a neighbour having run. It did, and passed for that reason.
+    world, me, _ = _board("p16434", 1)
     ref = next(
         (r for r in sorted(REGISTRY)
          if (row := get(r)) is not None and row.attack is not None
@@ -2358,7 +2564,6 @@ def recast_range(out: Result) -> None:
     if p is None:
         return
 
-    world, me, _ = _board("p16434", 1)
     other = me + 1
 
     def opens(who: int, row: Power = p) -> bool:
@@ -16292,6 +16497,8 @@ DRIVERS = {
                        "an item that is also a weapon"),
     "cover_granters": (cover_granters,
                        "which creatures are granting the cover"),
+    "offered_aiming": (offered_aiming,
+                       "a second way to aim a row, offered not imposed"),
     "recast_range": (recast_range,
                      "a row's range replaced for one creature"),
     "squares_moved": (squares_moved,
