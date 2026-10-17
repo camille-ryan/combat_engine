@@ -84,7 +84,12 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.query import allies, has_combat_advantage
 
-from .styles import among, hit_with_one_of, used_one_of
+from .styles import (
+    among,
+    hit_with_one_of,
+    longer_shift_on_a_martial_hit,
+    used_one_of,
+)
 
 #: The narrower half of the extra damage: *when* it applies is the
 #: `applies=` callable closed over inside `strikers.extra_damage`, and a
@@ -470,38 +475,54 @@ def f2388(c: Cast) -> None:
 
 
 @power("f2362", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("Power.second_trigger",),
-       trigger="you attack with an associated power",
-       on=Trigger(PowerResolved, lambda w, me, ev: (
-           ev.actor == me and ev.power == "p4488"
-       ), "you attack with an associated power"))
+       reach=PERSONAL, target=SELF)
 def f2362(c: Cast) -> None:
-    """"**After** the attack", so `PowerResolved` and not `PowerUsed`.
+    """Both printed benefits, as two watches armed when the feat arms.
 
-    The two are the same row's bookends and picking the wrong one puts
-    the shift on the far side of the swing from where the card prints
-    it. `AT_WILL`, because the card prints no limit and an `ENCOUNTER`
-    triggered row fires once a fight.
+    **`Power.second_trigger` was not the gap, and a second trigger would
+    not have closed it.** The old note was right that this row's declared
+    `on=` made its body run only when `p4488` resolved, and right that the
+    other clause answers a hit with any martial encounter or daily power.
+    It was wrong about the remedy twice over:
 
-    **The other benefit's gap is no longer the extension, and the marker
-    moved.** `c.extend_every` lengthens every shift of a kind now, and
-    `styles.longer_shift_on_a_martial_hit` writes this card's exact
-    sentence for `fighter_c.f2360` and `ranger_b.f2361` -- one card
-    printed once per class. It cannot be written *here*, for a reason
-    with nothing to do with movement: **this row already has a declared
-    trigger**, so its body runs only when `p4488` resolves, while the
-    shift clause triggers on a hit with any martial encounter or daily
-    power. Two printed triggers on one row, and the dispatcher reaches a
-    no-action row through one of them.
+    * a header may **already** declare several triggers -- `on=` takes a
+      sequence, `Power.triggers` is the one accessor every reader goes
+      through, and **195 rows in the tree do it**. So the named symbol
+      described something that exists;
+    * and it still would not have helped, because
+      `styles.longer_shift_on_a_martial_hit` *arms a watch*
+      (`c.watch(Hit, …, until=When.ENCOUNTER)`). It needs the body to run
+      **once at the start of the fight**, and a row with any declared
+      trigger never does -- `turns.arm_traits` skips those deliberately,
+      since arming a triggered row would fire it out of nowhere.
 
-    So the symbol is `Power.second_trigger`, which is the thing actually
-    missing. The alternative -- drop the declared trigger and watch both
-    events from the body, the `f1395` shape -- would rewrite a clause
-    that works today, so it is a change to propose rather than to make
-    while writing a different one.
+    So this is the `f1395` shape that `content/CLAUDE.md` already names for
+    "a standing clause and a triggered one on the same card", and it is
+    what `ranger_b.f2361` and `fighter_c.f2360` -- the same card printed
+    once per class -- have been doing all along. This row was the odd one
+    out.
+
+    **"After the attack" is still `PowerResolved` and not `PowerUsed`**:
+    the two are the same row's bookends and picking the wrong one puts the
+    shift on the far side of the swing from where the card prints it. Only
+    the *route* to that event changed, from a declared trigger to a watch.
+
+    **`c.may` is new and is not decoration.** The card says "you **can**
+    use a free action to shift", and under a declared trigger the choice
+    was the dispatcher's -- it offers the row and the player declines. A
+    watch has nobody to decline to, so the ask has to be explicit or the
+    shift becomes compulsory.
     """
-    if _holding(c, "light blade"):
-        _slip_away(c, 2)
+    def after(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "power", "") != "p4488" or not _holding(c, "light blade"):
+            return
+        if c.may("shift 2 squares and try to go unseen"):
+            _slip_away(c, 2)
+
+    c.watch(PowerResolved, after, until=When.ENCOUNTER, on=c.me, label=c.ref)
+    longer_shift_on_a_martial_hit(c, lambda: _holding(c, "light blade"))
 
 
 @power("f2338", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

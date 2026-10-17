@@ -2241,6 +2241,129 @@ def scoped_vulnerable(out: Result) -> None:
 
 
 
+
+def two_printed_triggers_on_one_row_are_two_watches(out: Result) -> None:
+    """`f2362`'s second benefit was unreachable, and not for want of a symbol.
+
+    The row declared `on=Trigger(PowerResolved, …p4488…)`, so its body ran
+    only when that power resolved -- while its other printed benefit answers
+    *a hit with any martial encounter or daily power*. It carried
+    `dropped=("Power.second_trigger",)`.
+
+    **Two things wrong with that marker.** A header may already declare
+    several triggers -- `on=` takes a sequence, `Power.triggers` is the
+    single accessor every reader goes through, and 195 rows do it -- so the
+    symbol named something that exists. And it would not have helped anyway,
+    because `styles.longer_shift_on_a_martial_hit` *arms a watch* and so
+    needs the body to run once at the **start** of the fight, which no row
+    with a declared trigger ever does: `turns.arm_traits` skips those.
+
+    So both clauses are watches now, armed when the feat arms -- the
+    `f1395` shape `content/CLAUDE.md` names for "a standing clause and a
+    triggered one on the same card", and what `f2360` and `f2361` (the same
+    card printed once per class) already did.
+
+    **Driven through the arming the board does, not a hand call.**
+    `audit.board` arms the trait, which is the path that matters and the one
+    that was broken; calling the body as well armed the watch twice and made
+    one hit worth two squares, which is how the first draft of this rule got
+    a number nobody's card prints.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.feats.rogue_b import _holding
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Keyword
+
+    ref = "f2362"
+    row = REGISTRY[ref]
+    out.that(not row.unfinished, "f2362 carries no marker", f"{row.unfinished}")
+    out.that(row.on is None,
+             "and declares no trigger, which is what lets its body run when"
+             " the feat arms")
+
+    def armed_board():  # noqa: ANN202
+        world, me, _ = _posed(ref, 1)
+        c = Cast(world=world, me=me, ref=ref)
+        gear = world.get(me, Gear) or world.add(me, Gear())
+        # **The card's own opening gate, which the board does not satisfy.**
+        # `audit.board` deals this holder an implement, a crossbow and two
+        # hammers, so `_holding(c, "light blade")` is False and the clause
+        # correctly pays nothing. The first draft of this rule failed here
+        # and the row was right.
+        gear.weapons = [Weapon(ref="w3611", slug="dagger",
+                               group="light blade", category="simple")]
+        gear.stowed = set()
+        return world, me, c
+
+    world, me, c = armed_board()
+    out.that(_holding(c, "light blade"),
+             "the holder is given the melee light blade the card requires")
+    out.that(any(e.label == ref for e in world.effects.of(me)),
+             "and the board's own arming has laid this row's watch",
+             f"{[e.label for e in world.effects.of(me)]}")
+
+    martial = next(
+        (r for r, p in REGISTRY.items()
+         if r.startswith("p") and p.attack is not None
+         and p.usage.name in ("ENCOUNTER", "DAILY")
+         and Keyword.MARTIAL in (p.keywords or ())),
+        "",
+    )
+    out.that(bool(martial), "the tree holds a martial encounter or daily power")
+    if not martial:
+        return
+
+    foe = next(iter(sorted(enemies(world, me))), 0)
+    world.turn = me
+    out.that(c._extra_every(me, "shift") == 0, "no extra squares to start")
+    world.bus.emit(Hit(attacker=me, target=foe, power=martial, critical=False))
+    out.that(c._extra_every(me, "shift") == 1,
+             "a martial hit on my own turn lengthens every shift by one --"
+             " the clause that could not fire before",
+             f"{c._extra_every(me, 'shift')}")
+
+    # **Once a turn**, which the helper holds by re-checking its own live
+    # effect rather than counting. The entries *add* by design, so a second
+    # hit would otherwise be a second square and no card says that.
+    world.bus.emit(Hit(attacker=me, target=foe, power=martial, critical=False))
+    out.that(c._extra_every(me, "shift") == 1,
+             "and a second hit in the same turn adds nothing")
+
+    # "During your turn" is load-bearing: an opportunity attack is a hit of
+    # mine on somebody else's turn and pays nothing.
+    world2, me2, c2 = armed_board()
+    foe2 = next(iter(sorted(enemies(world2, me2))), 0)
+    world2.turn = foe2
+    world2.bus.emit(Hit(attacker=me2, target=foe2, power=martial,
+                        critical=False))
+    out.that(c2._extra_every(me2, "shift") == 0,
+             "and the same hit on somebody ELSE's turn pays nothing, which is"
+             " the card's \"during your turn\"")
+
+    # **And the card's opening gate, which this rule could not see.** The
+    # plant removing `_holding(c, "light blade")` -- arming the clause for
+    # anybody -- stayed **green** through every assertion above, because they
+    # all put a light blade in the holder's hand first. A plant that will not
+    # go red is a finding about the rule, and this was one: the gate needed a
+    # board where it is the only thing refusing.
+    world3, me3, _ = _posed(ref, 1)
+    c3 = Cast(world=world3, me=me3, ref=ref)
+    out.that(not _holding(c3, "light blade"),
+             "a holder left with the board's own gear holds no light blade")
+    foe3 = next(iter(sorted(enemies(world3, me3))), 0)
+    world3.turn = me3
+    world3.bus.emit(Hit(attacker=me3, target=foe3, power=martial,
+                        critical=False))
+    out.that(c3._extra_every(me3, "shift") == 0,
+             "and pays nothing, which is \"attacking with a melee light"
+             " blade\" -- the half the card opens with")
+
+
 def a_feat_may_widen_what_another_rows_trigger_answers(out: Result) -> None:
     """`f2793b` spends `p1450` on the mount's roll, which `p1450` never offers.
 
@@ -13998,6 +14121,9 @@ DRIVERS = {
     "area_that_depends_on_a_state": (area_that_depends_on_a_state,
                                      "\"close burst 2 (5 while bloodied)\":"
                                      " offered at 5, narrowed in the body"),
+    "two_printed_triggers_on_one_row_are_two_watches": (
+        two_printed_triggers_on_one_row_are_two_watches,
+        "f2362's second benefit was unreachable behind its declared trigger"),
     "a_feat_may_widen_what_another_rows_trigger_answers": (
         a_feat_may_widen_what_another_rows_trigger_answers,
         "f2793b spends p1450 on a roll p1450's own trigger never offers"),
