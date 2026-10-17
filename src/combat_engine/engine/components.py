@@ -8,7 +8,7 @@ never holds one.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -549,6 +549,84 @@ class Initiative:
 
 
 @dataclass
+class Counted:
+    """A set of keywords that remembers **how many effects** want each one.
+
+    The shape `Conditions` has and for the same reason: two powers can
+    forbid the same keyword, and the first one to expire must not lift a bar
+    the second is still imposing. `forbidden_keywords` and
+    `required_keywords` were bare sets, so the second `add` was a no-op and
+    whichever hold ended first `discard`ed the entry out from under the
+    other. #526.
+
+    **Reads like the set it replaced**, deliberately: `in`, `or`, `&`, `-`
+    and iteration all answer off `live`, so the five reader sites in
+    `dsl.py` and `drivers.py` did not change. `set & Counted` works through
+    `__rand__`, since the left operand's `__and__` returns `NotImplemented`
+    for a type it does not know.
+
+    `forbidden`, `forbidden_usages` and `forbidden_attack_usages` beside it
+    have the same shape and the same latent fault. They are not converted
+    here -- no row makes an overlap reachable on any of them yet, and one
+    issue names one gap -- but the class is the answer when one does.
+    """
+
+    counts: dict[Keyword, int] = field(default_factory=dict)
+
+    @property
+    def live(self) -> set[Keyword]:
+        return {k for k, n in self.counts.items() if n > 0}
+
+    def add(self, k: Keyword) -> bool:
+        """True when this is the keyword's first holder."""
+        was = k in self
+        self.counts[k] = self.counts.get(k, 0) + 1
+        return not was
+
+    def discard(self, k: Keyword) -> None:
+        """Give up one holder's claim on the keyword.
+
+        Named `discard` rather than `remove` because that is what the set it
+        replaced was called with, and an unheld keyword is not an error:
+        `c.forbid`'s undo runs whether or not anything else touched it.
+
+        **Returns nothing, where `Conditions.remove` returns "was that the
+        last one".** That answer has no reader here, and `c.forbid` hands
+        this straight to an `on_end` list typed `() -> None` -- so returning
+        a bool made every undo lambda the wrong type, which `ty` said and
+        was right about. A verb needs a reader; this one has none.
+        """
+        n = self.counts.get(k, 0) - 1
+        if n <= 0:
+            self.counts.pop(k, None)
+            return
+        self.counts[k] = n
+
+    def __bool__(self) -> bool:
+        return any(n > 0 for n in self.counts.values())
+
+    def __contains__(self, k: object) -> bool:
+        return self.counts.get(k, 0) > 0  # type: ignore[arg-type]
+
+    def __iter__(self) -> Iterator[Keyword]:
+        return iter(self.live)
+
+    def __len__(self) -> int:
+        return len(self.live)
+
+    def __and__(self, other: set[Keyword]) -> set[Keyword]:
+        return self.live & other
+
+    __rand__ = __and__
+
+    def __sub__(self, other: set[Keyword]) -> set[Keyword]:
+        return self.live - other
+
+    def __rsub__(self, other: set[Keyword]) -> set[Keyword]:
+        return other - self.live
+
+
+@dataclass
 class Conditions:
     """Which conditions hold, and how many effects are imposing each.
 
@@ -801,14 +879,17 @@ class Powers:
     #: use powers that have the polymorph keyword"* -- two items print that,
     #: and `p12344`'s "cannot teleport" is the same thing said about a
     #: different keyword.
-    forbidden_keywords: set[Keyword] = field(default_factory=set)
+    #:
+    #: **Counted, not a set** -- see `Counted` for why, and for which
+    #: neighbours still are not. #526.
+    forbidden_keywords: Counted = field(default_factory=Counted)
     #: Keywords a row **must** carry to be usable -- the opposite reading,
     #: and four rows print it: *"you can't use weapon or implement attack
     #: powers that lack the beast form keyword."* Kept apart from
     #: `forbidden_keywords` rather than inverted into it, because the two
     #: sentences coexist on one creature and a single set cannot say which
     #: direction each entry means. #487.
-    required_keywords: set[Keyword] = field(default_factory=set)
+    required_keywords: Counted = field(default_factory=Counted)
     #: Usage categories whose rows cannot be used. *"The target can't use
     #: encounter powers until the end of its next turn"* -- a whole category
     #: rather than one ref, which `forbidden` could not say.

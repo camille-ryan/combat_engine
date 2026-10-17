@@ -2476,6 +2476,246 @@ def a_feat_may_widen_what_another_rows_trigger_answers(out: Result) -> None:
              " racial power, not duplicated here")
 
 
+
+
+
+def a_reach_hold_cannot_reach_a_ranged_line(out: Result) -> None:
+    """`c.as_ranged`'s "next **melee** attack" is enforced by the key.
+
+    #547 read the method's own note and concluded the printed restriction was
+    unenforced -- that `ctx.get("kind", "melee") == "melee"` reads a key no
+    modifier context carries, so the gate is not a gate and the hold leaks
+    onto an attack of any shape. **Wrong in both halves, and this is the
+    measurement.**
+
+    `dsl._stretched` does carry the key, as `{"power": ..., "kind": r.kind}`
+    where `r.kind` is the *range* kind -- so on a melee line the gate is a
+    real test answering True. And it could not have mattered regardless,
+    because each range kind reads a **different** modifier key: melee asks
+    `"reach"`, ranged asks `"range"`, a blast or burst asks `"blast_size"`.
+
+    Pinned as a rule rather than only written in a docstring, because a
+    docstring is what misled the issue. The numbers below are what a reader
+    can check in a second instead of reasoning from prose.
+
+    The other reader is `movement._threat`, for threatening reach, whose ctx
+    carries no `kind` at all -- and the `"melee"` default is right there too,
+    since a threatened square is melee by definition.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import _stretched
+
+    world, me, _ = _posed("f2459", 1)
+    c = Cast(world=world, me=me, ref="drivers:as_ranged")
+    laid = c.as_ranged(5, on=me, until=When.EONT)
+    out.that(laid is not None, "the hold lays")
+    mods = world.get(me, Mods)
+    out.that(mods is not None
+             and any(m.what == "reach" for m in mods.items),
+             "as a 'reach' modifier and nothing else")
+
+    asked = {kind: _stretched(world, me, kind, {"power": "pX", "kind": kind})
+             for kind in ("melee", "ranged", "close_burst", "area_burst")}
+    out.that(asked["melee"] == 4,
+             "a MELEE range line is lengthened by 4 -- a range of 5 is the"
+             " printed 1 plus 4", f"{asked['melee']}")
+    out.that(asked["ranged"] == 0,
+             "a RANGED line gets nothing: it asks the 'range' key, not this"
+             " one", f"{asked['ranged']}")
+    out.that(asked["close_burst"] == 0 and asked["area_burst"] == 0,
+             "and a burst gets nothing either, for the same reason -- it asks"
+             " 'blast_size'", f"{asked}")
+
+    # -- the gate on its own, which the three above do not reach ---------
+    #
+    # **Those assertions measure the key, not the `when=`.** Cutting the
+    # gate and leaving the keys alone leaves every one of them green, which
+    # a plant showed -- so the two locks have to be asked about separately
+    # or the rule would report a conclusion it had not tested. Asked here by
+    # reading the modifier directly with a *ranged* ctx, which is the one
+    # question only the gate can answer.
+    out.that(mods is not None
+             and mods.total("reach", {"power": "pX", "kind": "ranged"}) == 0,
+             "and the when= gate refuses a ranged context by itself, so the"
+             " hold would still not leak if the keys were ever merged")
+    out.that(mods is not None
+             and mods.total("reach", {"power": "pX", "kind": "melee"}) == 4,
+             "while answering the melee one, which is what makes it a gate"
+             " and not a blanket refusal")
+
+def two_holds_on_one_keyword_do_not_collapse(out: Result) -> None:
+    """Ending the older of two keyword bars left the newer one lifted.
+
+    `c.forbid(keyword=)` and `c.forbid(lacking=)` wrote bare sets, so a
+    second hold of the same keyword was a no-op `add` -- and then whichever
+    effect ended *first* `discard`ed the entry, lifting a restriction the
+    other hold was still imposing. `Conditions` next door has counted for
+    exactly this reason since it was written. #526.
+
+    **Asserted through `dsl.usable`**, which is what the rules kernel and
+    the page both ask, not through the component. A rule that read
+    `Powers.forbidden_keywords` directly would survive the counter being
+    reverted as long as *something* still kept the keyword in a set -- and
+    the bug was never that the set was empty, it was that it emptied one
+    holder too early.
+
+    Three positions, and the middle one is the finding: barred under two
+    holds, **still barred** when the older lapses, permitted again only when
+    the last one does. The third is the negative control -- without it the
+    rule would pass by never lifting the bar at all, which is the other way
+    to get this wrong.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Keyword
+
+    world, me, _ = _posed("p12344", 1)
+    c = Cast(world=world, me=me, ref="drivers:forbid")
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), "the board has somebody to forbid")
+    if not foes:
+        return
+    foe = foes[0]
+    known = world.need(foe, Powers)
+
+    kw = Keyword.TELEPORTATION
+    row = next((r for r in known.known
+                if (p := REGISTRY.get(r)) and kw in (p.keywords or ())), "")
+    if not row:
+        # The dummy knows one row, so the keyword has to be brought to it.
+        # Granting a row the creature could already have been dealt is the
+        # cheap half of posing this; what is under test is the refusal.
+        row = next((r for r, p in REGISTRY.items()
+                    if r.startswith("p") and kw in (p.keywords or ())), "")
+        if row:
+            known.known.append(row)
+    out.that(bool(row), "and a teleportation power to refuse")
+    if not row:
+        return
+    card = REGISTRY[row]
+
+    out.that(usable(world, foe, card)[0],
+             "the row is usable with nothing forbidding it")
+
+    older = c.forbid(keyword=kw, on=foe, until=When.EONT)
+    newer = c.forbid(keyword=kw, on=foe, until=When.EOTNT)
+    out.that(older is not None and newer is not None,
+             "two separate holds lay on the same keyword",
+             f"{older} / {newer}")
+    if older is None or newer is None:
+        return
+    out.that(known.forbidden_keywords.counts.get(kw) == 2,
+             "and the component counts both, where a set could count one",
+             f"{dict(known.forbidden_keywords.counts)}")
+
+    barred, why = usable(world, foe, card)
+    out.that(not barred and "teleportation" in why,
+             "the row is refused while both stand", f"{barred} {why!r}")
+
+    world.effects.end(older, "the older hold lapses")
+    barred2, why2 = usable(world, foe, card)
+    out.that(not barred2 and "teleportation" in why2,
+             "and STILL refused when the older one lapses -- the assertion"
+             " that failed before this", f"{barred2} {why2!r}")
+
+    world.effects.end(newer, "the newer hold lapses")
+    out.that(usable(world, foe, card)[0],
+             "and permitted again once the last holder is gone, so the"
+             " count is a count and not a floor")
+
+def a_shared_shift_ends_in_the_occupied_square(out: Result) -> None:
+    """`c.shift(share=True)` with no `to=` was inert twice over.
+
+    Ten rows print "it can move into an occupied space" and every one of them
+    was a plain shift. `Cast.shift` has two branches and only the `to=` one
+    forwarded `share=`; the other asked `reachable_squares`, **which never
+    offered an occupied square**, so the destination a shared shift is about
+    was not in the option list -- and had it been, `share=` was dropped on the
+    way to `movement.shift` anyway. Two independent faults, which is why it
+    never looked suspicious: the row shifted, it just never melded. #527.
+
+    **`shares_space` is the occupant's property and this is the mover's**, and
+    that is the distinction `_can_stop` was missing. "Anybody may stand in my
+    square" and "I may stand in anybody's" are different sentences, and only
+    the first was readable.
+
+    **The control is the whole rule.** Broken and fixed look identical from
+    outside unless the destination is occupied, so the square the mover is
+    aimed at has a creature placed in it, and the same call with
+    `share=False` must still refuse it. Without that half the rule would pass
+    by letting everything through, which is the failure mode a waiver
+    introduces.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import neighbours
+    from combat_engine.engine.query import enemies
+
+    def melded(*, share: bool):  # noqa: ANN202
+        world, me, _ = _posed("f2459", 1)
+        c = Cast(world=world, me=me, ref="drivers:share")
+        start = world.need(me, Position).square
+        # A neighbour that is free, so `place` indexes cleanly, and then a
+        # creature put in it. One square away, so a printed 1 can reach it.
+        free = sorted(s for s in neighbours(start)
+                      if world.grid.passable(s)
+                      and world.grid.occupant(s) is None)
+        if not free:
+            return None
+        sq = free[0]
+        movement.place(world, next(iter(sorted(enemies(world, me)))), sq)
+        offered = sq in world.reachable_squares(me, 1, kind="shift", share=share)
+        # Aimed at that square whenever it is on the menu. A decider that
+        # cannot have it takes the lowest-sorted option instead, which is
+        # what the broken version did silently.
+        world.decider = (lambda actor, kind, options, prompt:
+                         sq if sq in options else sorted(options)[0])
+        world.turn = me
+        moved = c.shift(1, share=share)
+        return offered, moved, world.need(me, Position).square == sq, sq
+
+    shared = melded(share=True)
+    out.that(shared is not None,
+             "the board gives the holder a free neighbouring square to fill")
+    if shared is None:
+        return
+    offered, moved, landed, sq = shared
+    out.that(offered,
+             f"with share= the occupied square {sq} is offered as a shift"
+             " destination -- it was not, at all, before this",
+             f"offered={offered}")
+    out.that(moved, "and the shift resolves")
+    out.that(landed,
+             "and the mover ends IN that square, melded with its occupant",
+             f"landed={landed}")
+
+    # -- the same call, one argument different ---------------------------
+    plain = melded(share=False)
+    out.that(plain is not None, "the same board poses without share=")
+    if plain is None:
+        return
+    offered2, moved2, landed2, _ = plain
+    out.that(not offered2,
+             "without it the occupied square is NOT offered",
+             f"offered={offered2}")
+    out.that(moved2, "the shift still resolves -- somewhere else")
+    out.that(not landed2,
+             "and the mover does not end in the occupied square, so the"
+             " waiver above is the mover's claim and not a hole",
+             f"landed={landed2}")
+
 def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
     """`c.extend_every` raises a **budget**, and `f2459` charges for the spend.
 
@@ -14275,6 +14515,15 @@ DRIVERS = {
     "a_feat_may_widen_what_another_rows_trigger_answers": (
         a_feat_may_widen_what_another_rows_trigger_answers,
         "f2793b spends p1450 on a roll p1450's own trigger never offers"),
+    "a_reach_hold_cannot_reach_a_ranged_line": (
+        a_reach_hold_cannot_reach_a_ranged_line,
+        "c.as_ranged's melee restriction is enforced by the modifier key"),
+    "two_holds_on_one_keyword_do_not_collapse": (
+        two_holds_on_one_keyword_do_not_collapse,
+        "ending the older of two keyword bars lifted the newer one"),
+    "a_shared_shift_ends_in_the_occupied_square": (
+        a_shared_shift_ends_in_the_occupied_square,
+        "c.shift(share=True) with no to= was a plain shift on 10 rows"),
     "a_lengthened_move_says_how_much_of_the_extra_was_spent": (
         a_lengthened_move_says_how_much_of_the_extra_was_spent,
         "f2459 charges for the extra square only when it is taken"),

@@ -2291,6 +2291,43 @@ class Cast:
         is for and the rest of it is not sayable per creature. Spent on the
         next attack roll rather than on the next melee one, because the gate
         is also asked where no range line is in the question.
+
+        **"Melee" is enforced by the key, and the `when=` is a second lock
+        on the same door.** #547 read this note and concluded the gate was
+        dead -- "no modifier context carries `kind`" -- and that is wrong in
+        both halves, measured:
+
+        * `dsl._stretched` **does** carry it, as `{"power": ..., "kind":
+          r.kind}`, where `r.kind` is the *range* kind. So the gate is a
+          real test: it answers True on a melee line and **False on a
+          ranged one**, which is measured -- reading this modifier with a
+          ranged ctx returns 0 even if the key is right;
+        * and it could not matter anyway, because each range kind reads a
+          **different key**. A melee line asks `"reach"`, a ranged line asks
+          `"range"`, a blast or burst asks `"blast_size"`. Laying 4 squares
+          of `"reach"` and then asking each: melee 4, ranged 0, close burst
+          0, area burst 0. There is no attack of another shape for this hold
+          to leak onto.
+
+        **Two locks, either one sufficient, and the key is the one holding
+        today.** Three plants settle which is which: making a ranged line
+        read `"reach"` leaves the rule green, because the gate refuses it;
+        cutting the gate leaves it green, because the key never offers it;
+        doing both turns it red. So neither is dead and neither is
+        load-bearing alone, which is worth knowing before anybody removes
+        one as redundant. `drivers.a_reach_hold_cannot_reach_a_ranged_line`
+        asks about them separately for exactly that reason.
+
+        The other reader is `movement._threat`, for threatening reach, whose
+        ctx carries no `kind` -- and the `"melee"` default is right there
+        too, since a threatened square is melee by definition.
+
+        **The real hazard the issue found is the word `kind` itself**, which
+        is one context key over four vocabularies: a range kind here, a
+        *move* kind in `c.no_provoke` and `_extra_every`, and a *roll* kind
+        (`check`/`attack`/`save`) in what `p6186` hands its narrowers. A
+        reader cannot tell from the gate which one is meant, which is how
+        this came to be filed as a bug. #639.
         """
         return self.bonus(
             "reach", max(0, squares_ - 1), until=until,
@@ -2983,6 +3020,14 @@ class Cast:
 
         `share` moves *into* an occupied square, for a creature that melds
         with the one it is on top of.
+
+        **It was inert twice over on this branch, and ten rows were plain
+        shifts.** `reachable_squares` never offered an occupied square, so
+        the destination a shared shift is *about* was not in the option list
+        -- and even had it been, `share=` was not forwarded to
+        `movement.shift`. Only the `to=` branch above ever worked. Both
+        halves are fixed here, which is what `c.teleport` 600 lines below had
+        been doing correctly all along. #527.
         """
         mover = self.me if who is None else who
         if to is not None:
@@ -2998,12 +3043,13 @@ class Cast:
         # difficult terrain because the square costs two, so the exemption is
         # the difference between an option being offered and not. Nothing in
         # `shift` or `step` charges for terrain -- the budget goes here.
-        options = self.world.reachable_squares(mover, squares_, kind="shift")
+        options = self.world.reachable_squares(mover, squares_, kind="shift",
+                                               share=share)
         if not options:
             return False
         options = self._nearest_first(list(options), toward, away_from, mover)
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
-        return shift(self.world, mover, dest,
+        return shift(self.world, mover, dest, share=share,
                      stretched=self._stretch(mover, printed, dest))
 
     def shift_as(

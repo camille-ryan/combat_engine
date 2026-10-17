@@ -844,7 +844,7 @@ def _forced_square(
 
 def reachable(
     world: World, eid: int, budget: int, *, mode: str | None = None,
-    kind: str = "walk",
+    kind: str = "walk", share: bool = False,
 ) -> dict[Square, list[Square]]:
     """Every square reachable within `budget`, with a path to each.
 
@@ -862,6 +862,12 @@ def reachable(
 
     A flyer's search passes over occupied squares but will not offer one as a
     destination, since it has to come down at the end of the turn anyway.
+
+    `share` is the mover asking for the opposite: a creature that melds with
+    the one it stands on wants exactly the square the flyer filter removes.
+    It waives occupancy in both places -- along the path and at the stop --
+    and waives nothing else. Off by default, so no existing caller moves.
+    #527.
     """
     pos = world.get(eid, Position)
     if pos is None or budget <= 0:
@@ -888,7 +894,8 @@ def reachable(
         # asked whether a destination was adjacent to where the mover stood,
         # so the search is the only place a rift has to be known about.
         for nxt in sorted(set(neighbours(here)) | world.grid.links.get(here, frozenset())):
-            if not _clear(world, eid, footprint(nxt, pos.size), overhead=overhead):
+            if not _clear(world, eid, footprint(nxt, pos.size),
+                          overhead=overhead or share):
                 continue
             step_cost = 2 if nxt in rough else 1
             score = (spent + step_cost, risked + _provokes_step(threat, here, nxt, pos.size))
@@ -915,11 +922,11 @@ def reachable(
     # the default: aimed at a creature, that square is the nearest one and so
     # the first taken, and a row that leaps at a victim landed on top of it.
     # 79 content rows call `c.phasing`. #392.
-    if overhead or phasing(world, eid):
+    if overhead or share or phasing(world, eid):
         paths = {
             sq: path
             for sq, path in paths.items()
-            if _can_stop(world, eid, footprint(sq, pos.size))
+            if _can_stop(world, eid, footprint(sq, pos.size), share=share)
         }
     # **A tether, applied to the destinations rather than to the search.**
     # Fourteen rows print "cannot move more than N squares from ...", and
@@ -940,7 +947,8 @@ def reachable(
     return paths
 
 
-def _can_stop(world: World, eid: int, target: frozenset[Square]) -> bool:
+def _can_stop(world: World, eid: int, target: frozenset[Square], *,
+              share: bool = False) -> bool:
     """May `eid` *end* a move in these squares?
 
     `_clear` answers the neighbouring question -- may it be here on the way
@@ -952,12 +960,22 @@ def _can_stop(world: World, eid: int, target: frozenset[Square]) -> bool:
     `shares_space` is still honoured: a flyer directly above somebody and a
     creature melded with its target are the two things that legitimately end a
     move in an occupied square.
+
+    **`share` is the other half of that sentence, and it was missing.**
+    `shares_space` is the *occupant's* property -- "anybody may stand in my
+    square" -- and the ten rows printing "it can move into an occupied
+    square" are claims about the **mover**. Nothing read the second kind
+    here, so a melding shift was never offered the square it was about.
+    Terrain is unaffected: a creature that walks into bodies still cannot
+    walk into a wall. #527.
     """
     for sq in target:
         if not world.grid.passable(sq):
             return False
         who = world.grid.occupant(sq)
-        if who is not None and who != eid and not shares_space(world, who):
+        if who is None or who == eid or share:
+            continue
+        if not shares_space(world, who):
             return False
     return True
 

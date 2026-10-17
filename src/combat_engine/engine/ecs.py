@@ -75,14 +75,14 @@ class World:
         return self.decider(actor, kind, options, prompt)
 
     def reachable_paths(
-        self, eid: int, budget: int, kind: str = "walk"
+        self, eid: int, budget: int, kind: str = "walk", share: bool = False
     ) -> dict[Any, list[Any]]:
         from .movement import reachable
 
-        return reachable(self, eid, budget, kind=kind)
+        return reachable(self, eid, budget, kind=kind, share=share)
 
     def reachable_squares(
-        self, eid: int, budget: int, kind: str = "walk"
+        self, eid: int, budget: int, kind: str = "walk", share: bool = False
     ) -> list[Any]:
         """Where `eid` could get to. `kind` prices it as that sort of move.
 
@@ -91,8 +91,12 @@ class World:
         what they ask is not this change's business -- `Cast.shift`, which is
         the one path every one of them actually goes through to *move*, asks
         as a shift.
+
+        `share` offers the squares other creatures are standing in, for a
+        mover whose card says it may meld with them. Nothing else changes:
+        terrain still blocks and `blocks_entry` still refuses. #527.
         """
-        return sorted(self.reachable_paths(eid, budget, kind=kind))
+        return sorted(self.reachable_paths(eid, budget, kind=kind, share=share))
 
     def rough(self) -> dict[Any, str]:
         """Every square that costs extra, and what sort of going it is."""

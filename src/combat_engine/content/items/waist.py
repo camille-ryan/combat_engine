@@ -1497,9 +1497,13 @@ def i1341x1(c: Cast) -> None:
     off the squares around a creature against anybody's teleport, following
     it as it moves. Nothing refuses a teleport by where it lands.
 
-    One hold per creature, refreshed rather than stacked: a quiver is shot
-    round after round, and `Powers.forbidden_keywords` is an uncounted set,
-    so an older hold expiring would lift the newer shot's bar."""
+    One hold per creature, refreshed rather than stacked. A quiver is shot
+    round after round, and the original reason was that
+    `Powers.forbidden_keywords` was an uncounted set, so an older hold
+    expiring would lift the newer shot's bar. It counts now (#526). The
+    refresh stays on its own merits: the printed duration is the end of the
+    target's next turn, and the newest shot is the one that sets that
+    clock."""
     if not c.ammunition():
         return
     foe = c.target

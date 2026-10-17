@@ -1160,9 +1160,13 @@ def i1275x1(c: Cast) -> None:
     A trait with a `c.watch`, like the rest of this file's hit riders: the
     property is standing, and only the hit it sees names the creature.
 
-    One hold per creature, refreshed rather than stacked:
-    `Powers.forbidden_keywords` is a set with no count, so a second hold
-    expiring would lift a bar the later hit is still owed."""
+    One hold per creature, refreshed rather than stacked -- and **the
+    reason has changed**. It was that `Powers.forbidden_keywords` was a set
+    with no count, so a second hold expiring would lift a bar the later hit
+    was still owed. It counts now (#526), so stacking would be safe. The
+    refresh stays because it is what the card means: each hit's bar runs to
+    the end of *that* hit's turn, and a later hit moves the clock rather
+    than adding a second one behind it."""
 
     def struck(ev: Hit) -> None:
         if ev.attacker != c.me:

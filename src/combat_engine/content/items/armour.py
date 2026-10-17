@@ -152,10 +152,12 @@ def _defences(c: Cast, value: int, **kw: Any) -> None:
 def _shift_through(c: Cast, squares_: int) -> None:
     """A shift of a printed length that may cross occupied squares.
 
-    `c.shift` cannot be told to do this: `movement.shift(share=True)` lands
-    *in* somebody's square rather than passing over it, and the destinations
-    `c.shift` offers come from `movement.reachable`, which routes a walk
-    around bodies. `movement.overrun` is the one op that walks through them,
+    `c.shift` cannot be told to do this, and the reason narrowed rather than
+    went away. `share=True` on a bare `c.shift` was inert until #527 and now
+    works -- but what it does is land *in* somebody's square, and this card
+    says cross it. The waiver is at the stop as well as along the path, so a
+    shared shift may end on top of a creature and this row must not.
+    `movement.overrun` is the one op that walks through them,
     and `kind="shift"` is what keeps it a shift -- `step` opens no
     opportunity window for a kind in `movement._SAFE`. `_through_them` is
     the settled wrapper for the pair.
