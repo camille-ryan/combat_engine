@@ -5553,11 +5553,23 @@ def i1839p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.teleport_bonus()",),
 )
 def i1874x1(c: Cast) -> None:
-    """`c.forces` lengthens a push, a pull or a slide. A blink is none of
-    those and nothing lengthens one."""
+    """One square on every blink, which is the whole card.
+
+    **"Any teleport you make" is `c.extend_every`, and the old note was
+    stale.** It said `c.extend_move` keys on one row's ref so a blanket line
+    has nothing to aim at -- true of that verb, and `c.extend_every` is the
+    other one: `Cast.teleport` reads `_extra_every(mover, "teleport")`
+    unconditionally, so the row needs no cooperation from the teleporting
+    power at all. The verb knows the kind because the row called
+    `c.teleport`; the row never has to say. #551's recorded verdict, which
+    had been sitting unapplied.
+
+    The old note reached for `c.forces`, which lengthens a push, a pull or
+    a slide -- the forced-movement family, and a blink is none of those.
+    That was the right reading of the wrong verb."""
+    c.extend_every("teleport", 1)
 
 
 @power(
@@ -5715,11 +5727,28 @@ def i2358p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.teleport_bonus()",),
+    dropped=("c.bonded_to(penalty=)",),
 )
 def i2359x1(c: Cast) -> None:
-    """Lengthening a blink has no verb, and the bonded-weapon penalty is a
-    fact about who is holding the item, which the engine never asks."""
+    """The square lands; the bonded-weapon penalty does not.
+
+    **"Any teleport you make" is `c.extend_every`, and the old note was
+    stale.** It said `c.extend_move` keys on one row's ref so a blanket line
+    has nothing to aim at -- true of that verb, and `c.extend_every` is the
+    other one: `Cast.teleport` reads `_extra_every(mover, "teleport")`
+    unconditionally, so the row needs no cooperation from the teleporting
+    power at all. The verb knows the kind because the row called
+    `c.teleport`; the row never has to say. #551's recorded verdict, which
+    had been sitting unapplied.
+
+    **`dropped=` and not `todo=`, and the marker moved for that reason.**
+    The card's other sentence is a -2 for *any other creature* attacking
+    with this weapon while it is bonded to the wearer -- a fact about who is
+    holding the item, which nothing asks, and `cf:swordmage-f0`'s bond is
+    not recorded anywhere a penalty could read. That clause is a benefit
+    withheld from an enemy rather than one this row's holder loses, so the
+    row plays correctly short of it; `ranger_b.f2361`'s reading."""
+    c.extend_every("teleport", 1)
 
 
 @power(

@@ -2215,7 +2215,28 @@ def i844p1(c: Cast) -> None:
 @power("i969p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
        trigger="you use a teleport power of 10th level or lower",
-       todo=("c.teleport_bonus()",))
+       dropped=("c.extend_every(once=)",))
 def i969p1(c: Cast) -> None:
-    """The teleport has already happened by the time anything is
-    announced, and nothing lengthens one before it does."""
+    """Two squares on the blink, spent as a free action before it.
+
+    **The old note had the order backwards and that is why it was
+    refused.** It said the teleport has already happened by the time
+    anything is announced -- true of a *reaction* to the move, and this is
+    not one. The card says "expend this reagent **when you use** a power
+    with the teleport keyword", which is a free action the holder spends
+    first; `Cast.teleport` then reads `_extra_every(mover, "teleport")`
+    before it offers a square, so the two squares are there when the
+    distance is computed. Nothing has to watch the move at all.
+
+    **`dropped=` for the one clause that is missing, and it is a cost.**
+    `c.extend_every` has no `once=`, so this pays for every teleport until
+    the end of the turn where the card pays for one. Two teleports in a turn
+    is rare and the row is right in the ordinary case, which is what
+    `dropped=` means -- but it is a *widening*, so the symbol names it
+    rather than the row claiming to be finished.
+
+    **The printed level gate is not the gap and takes no marker.** "Of up to
+    10th level" cannot narrow anything at heroic tier, where no power is
+    higher, and the `Level 20` and `Level 30` lines are out of scope like
+    every other item's."""
+    c.extend_every("teleport", 2, until=When.EONT)

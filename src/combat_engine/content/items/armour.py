@@ -1222,18 +1222,30 @@ def i1103p1(c: Cast) -> None:
 
 
 @power("i1176x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.teleport_bonus()",))
+       reach=PERSONAL, target=SELF)
 def i1176x1(c: Cast) -> None:
-    """The penalty half plays: both are really charged, and
+    """Both halves now.
+
+    The penalty half always played: both are really charged, and
     `_no_armour_penalty` cancels this armour's share of each.
 
-    The teleport half stays dropped. `c.extend_move` lengthens a **named**
-    row's move and `c.squares_for` reads the entry back under that exact
-    ref, with no wildcard -- so "every teleport you make", which is what
-    this card prints, has no key to hang on and would have to be written
-    once per teleporting row in the game."""
+    **"Any teleport you make" is `c.extend_every`, and the old note was
+    stale.** It said `c.extend_move` keys on one row's ref so a blanket line
+    has nothing to aim at -- true of that verb, and `c.extend_every` is the
+    other one: `Cast.teleport` reads `_extra_every(mover, "teleport")`
+    unconditionally, so the row needs no cooperation from the teleporting
+    power at all. The verb knows the kind because the row called
+    `c.teleport`; the row never has to say. #551's recorded verdict, which
+    had been sitting unapplied.
+
+    The `Level 13 or 18` and `Level 23 or 28` lines are out of scope, like
+    every other item's.
+
+    The old note's reasoning was sound and ended one verb short: it said the
+    line "would have to be written once per teleporting row in the game",
+    which is exactly the cost `extend_every` exists to avoid."""
     _no_armour_penalty(c, check=True, speed=True)
+    c.extend_every("teleport", 1)
 
 
 @power("i1288x1", level=3, cls=ITEM, action=ActionType.NONE,

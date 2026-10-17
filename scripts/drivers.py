@@ -11872,6 +11872,104 @@ def aid_another_grants(out: Result) -> None:
 
 
 
+
+def a_blanket_line_lengthens_every_blink(out: Result) -> None:
+    """Five item rows said "nothing lengthens a blink". `c.extend_every` does.
+
+    All five were refused or clause-dropped on the same stale claim, each
+    phrased a little differently -- *"`c.forces` lengthens a push, a pull or
+    a slide; a blink is none of those"*, *"would have to be written once per
+    teleporting row in the game"*, *"`c.teleport` reads no modifier of its
+    own"*. Every one of those was true of `c.extend_move`, which keys on a
+    single row's ref, and none of them was true once `c.extend_every` landed:
+    `Cast.teleport` reads `_extra_every(mover, "teleport")` unconditionally,
+    so the teleporting power needs no cooperation at all.
+
+    #551 had this recorded as a `mis-marked` verdict and nothing surfaced the
+    list, which is what `triage.py --drift` is now for.
+
+    **Driven through the board's own arming**, because that is the path a
+    trait takes in play, and asserted on the number of squares the decider is
+    *offered* -- which is what "add 1 square to the maximum distance of any
+    teleport you make" actually says. A row that lays the modifier and a row
+    that is never armed look identical from the modifier's side.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+
+    # -- the single-clause row, which is the whole card -------------------
+    ref = "i1874x1"
+    out.that(not REGISTRY[ref].unfinished,
+             f"{ref} carries no marker: one square on every blink is its"
+             " whole printed line", f"{REGISTRY[ref].unfinished}")
+
+    world, me, _ = _posed(ref, 8)
+    c = Cast(world=world, me=me, ref=ref)
+    out.that(c._extra_every(me, "teleport") == 1,
+             "and the board's arming puts one square on every teleport",
+             f"{c._extra_every(me, 'teleport')}")
+    out.that(c._extra_every(me, "shift") == 0,
+             "and on no other kind of move, which is what keying on the kind"
+             " buys", f"{c._extra_every(me, 'shift')}")
+
+    # -- offered squares, which is where the card's words land -----------
+    #
+    # **The farthest square offered, not how many.** The count was the first
+    # draft and a plant proved it unsound: with `Cast.teleport` stopped from
+    # reading the modifier at all, the two reads still came to 41 and 42, so
+    # the rule passed while the mechanism was disconnected. The board is not
+    # identical between two blinks -- the first one's own events move things
+    # -- and one freed square was enough to fake the result.
+    #
+    # The *radius* is immune to that and is also what the card actually says:
+    # "add 1 square to the **maximum distance** of any teleport you make". It
+    # goes 3 to 4 or it does not.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import distance as _apart
+
+    world2, me2, _ = _posed("f2459", 1)
+    quiet = Cast(world=world2, me=me2, ref="drivers:blink")
+    out.that(quiet._extra_every(me2, "teleport") == 0,
+             "a holder of neither item starts with no extra squares",
+             f"{quiet._extra_every(me2, 'teleport')}")
+
+    reach: list[int] = []
+    here = world2.need(me2, Position).square
+    world2.decider = (lambda actor, kind, options, prompt:
+                      (reach.append(max((_apart(here, s) for s in options),
+                                        default=0)), here)[1])
+    world2.turn = me2
+    quiet.teleport(3)
+    quiet.extend_every("teleport", 1)
+    quiet.teleport(3)
+    out.that(len(reach) == 2, "two blinks of a printed 3 reach the decider",
+             f"{reach}")
+    if len(reach) != 2:
+        return
+    out.that(reach[0] == 3,
+             "a printed 3 offers squares up to 3 away and no further",
+             f"{reach[0]}")
+    out.that(reach[1] == 4,
+             "and with the item's square it offers up to 4 -- one added to"
+             " the maximum distance, which is the card's own phrase",
+             f"{reach[0]} -> {reach[1]}")
+
+    # -- the row whose distance is read, not written ----------------------
+    other = "i1616x1"
+    out.that(not REGISTRY[other].unfinished,
+             f"{other} carries no marker either", f"{REGISTRY[other].unfinished}")
+    world3, me3, _ = _posed(other, 9)
+    c3 = Cast(world=world3, me=me3, ref=other)
+    out.that(c3._extra_every(me3, "teleport") == c3.enhancement,
+             "and its squares are the item's enhancement bonus, so the +2 and"
+             " the +3 printings are one row",
+             f"{c3._extra_every(me3, 'teleport')} vs {c3.enhancement}")
+    out.that(c3.enhancement > 0,
+             "which is a number worth reading on this board",
+             f"{c3.enhancement}")
+
 def a_weapons_grip_is_one_fact(out: Result) -> None:
     """`Weapon.hands` answered by provenance, and a Requirement could not pass.
 
@@ -14602,6 +14700,9 @@ DRIVERS = {
                          "a feat lengthens another row's shift, read in the moved row"),
     "aid_another_grants": (aid_another_grants,
                            "the aid another action's +2 reaches a reader"),
+    "a_blanket_line_lengthens_every_blink": (
+        a_blanket_line_lengthens_every_blink,
+        "five rows refused a blink's extra square that c.extend_every lays"),
     "a_weapons_grip_is_one_fact": (
         a_weapons_grip_is_one_fact,
         "Weapon.hands answered by provenance, so a printed band could not pass"),

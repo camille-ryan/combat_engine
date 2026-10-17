@@ -1224,21 +1224,31 @@ def i1419p2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.teleport_bonus()",),
 )
 def i1616x1(c: Cast) -> None:
-    """Lengthens **every** teleport the wielder makes, which is the shape
-    `c.extend_move` cannot hold.
+    """Lengthens **every** teleport the wielder makes, by the enhancement.
 
-    That verb keys `Powers.extra_squares` by the ref of one row and is read
-    by that row calling `c.squares_for`, so a blanket line has nothing to
-    aim at: naming every teleportation row the character knows when the
-    trait arms goes stale the moment one is lent, and the rows that
-    hard-code their distance -- `i1616p1` below is one -- would consult it
-    anyway. `c.teleport` reads no modifier of its own, where a reach and a
-    range both do through `dsl._stretched`.
+    **"Any teleport you make" is `c.extend_every`, and the old note was
+    stale.** It said `c.extend_move` keys on one row's ref so a blanket line
+    has nothing to aim at -- true of that verb, and `c.extend_every` is the
+    other one: `Cast.teleport` reads `_extra_every(mover, "teleport")`
+    unconditionally, so the row needs no cooperation from the teleporting
+    power at all. The verb knows the kind because the row called
+    `c.teleport`; the row never has to say. #551's recorded verdict, which
+    had been sitting unapplied.
 
-    The ritual half is out of the fight either way."""
+    The old note's last line -- *"`c.teleport` reads no modifier of its own,
+    where a reach and a range both do through `dsl._stretched`"* -- was true
+    when written and is the exact sentence that stopped being true.
+
+    **The distance is the enhancement bonus, read not written.**
+    `c.enhancement` is the wielded item's own, which is what "equal to the
+    dagger's enhancement bonus" means and is why this row has no number in
+    it: the `+2` and the `+3` versions are one row.
+
+    The ritual half is out of the fight either way -- a travel ritual and a
+    skill bonus to performing it, neither of which has a combat moment."""
+    c.extend_every("teleport", c.enhancement)
 
 
 @power(
