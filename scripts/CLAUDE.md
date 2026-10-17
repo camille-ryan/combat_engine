@@ -213,7 +213,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `browser.py` | drive the real page in headless Chromium |
 | `spec.py` | the sanitised brief handed to an author |
 | `vocab.py` | the generated `Cast` surface — the authority on what exists; `--find` searches docstrings |
-| `triage.py` | for every blocked symbol, does the thing already exist? Ranks candidates; `fixtures/triage.json` holds the verdicts |
+| `triage.py` | for every blocked symbol, does the thing already exist? Ranks candidates; `fixtures/triage.json` holds the verdicts, and `--drift` reconciles them against the tree |
 | `twins.py` | for every blocked row, has somebody already written the same card? Ranks pairs by card text; not a gate |
 | `fight.py` | play a whole fight and print the log |
 | `show.py` | one row, printed text beside emitted events |
@@ -235,6 +235,28 @@ was **wrong seven times in ten**:
 
 A number that is wrong 70% of the time cannot be a gate. What it can do is
 put 1,105 symbols in an order worth reading, which nothing did before.
+
+**And the fixture of verdicts is an asset that goes stale silently**, which
+is what `--drift` is for. 883 verdicts, each written after reading both the
+row and the code and quoting what it found — three spot-checked were all
+correct, where the *automated* top candidate was wrong seven times in ten.
+But nothing reconciled them against the thing they describe, so it recorded a
+moment rather than detecting divergence from it. `--drift` asks four
+questions, which are the four ways an entry goes wrong:
+
+* **spent** — the symbol is no longer blocked. Evidence the verdict was
+  right, and a candidate for deletion.
+* **moved** — the live row count differs from the recorded one.
+* **stale rows** — a ref the verdict's own prose names that carries no marker
+  any more. The one that bites while *applying* a verdict.
+* **live and unapplied** — a `mis-marked` verdict whose symbol is still
+  blocked. **The actionable queue**, which nothing surfaced before.
+
+It is **not** a gate and not in `check.py`, for the same reason `triage.py`
+itself is not: every legitimate day's work moves all four numbers, and a check
+that reddens on normal progress gets routed around. `localise.py --drift` is
+the pattern — a manifest whose value is that it names the thing that moved.
+#551.
 
 **The measured rate, on the 24 symbols with the most rows waiting** — chosen
 by row count rather than by looking tractable, which the hand-reading was not:

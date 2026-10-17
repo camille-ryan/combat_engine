@@ -256,6 +256,118 @@ def _queue() -> dict[str, list[str]]:
     return dict(wanted)
 
 
+
+#: How a verdict's prose is cut into candidate refs. **Not a ref pattern.**
+#:
+#: The first version of this was one -- anchored on the known prefixes and a
+#: digit -- and it was wrong in a way a plant caught: `mba`, `rba`, `bmba` and
+#: four digit-less `cf:` features are **declared refs with no digit in them**,
+#: 7 of the tree's 23,060, and no pattern can tell them from English words.
+#: Widening it to catch them would have matched every three-letter word in
+#: every verdict.
+#:
+#: So the prose is cut into words and **intersected with what the tree
+#: declares**, which needs no pattern and cannot false-positive by
+#: construction: `1d8`, `2d10`, `#471` and `turns.py:686` are not refs because
+#: they are not in the registry, not because a regex was clever about them.
+_TOKENS = re.compile(r"[^\w:-]+")
+
+
+def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
+    """Reconcile the recorded verdicts against the tree, and report, not gate.
+
+    **452 hand-written verdicts with evidence, and nothing checked them
+    against the thing they describe.** Three spot-checked against the code
+    were all correct where `triage.py`'s own automated top candidate was
+    wrong seven times in ten -- the difference being that each was written
+    after reading both the row and the code, and quotes what it found. So the
+    fixture is an asset; it had simply recorded a *moment* rather than
+    detecting divergence from it. #551.
+
+    `localise.py --drift` is the pattern: a manifest of digests whose whole
+    value is that it **names the ref and the field that moved**. Four
+    questions, which are the four ways an entry goes wrong:
+
+    * **spent** -- the symbol is no longer in the queue. Each one is a small
+      piece of evidence that its verdict was right, and a candidate for
+      deletion.
+    * **moved** -- the live row count differs from the recorded one. The
+      verdict may well still hold; its arithmetic does not.
+    * **stale rows** -- a ref the verdict's own prose names that carries no
+      marker any more. This is the one that bites while *applying* a verdict:
+      "f30 is writable today, nothing new is needed" is advice about a row
+      finished since, filed under a symbol that now holds different rows.
+    * **live and unapplied** -- a `mis-marked` verdict whose symbol is still
+      blocked. The actionable queue, which nothing surfaced before.
+
+    **Not a gate, and not registered in `check.py`.** Every legitimate day's
+    work moves all four numbers, so a check that reddens on normal progress
+    gets routed around -- which `audit.py`'s docstring records the cost of.
+    `triage.py` is not a gate either, for the same reason. A number a session
+    can read is the right shape.
+    """
+    spent, moved, stale, unapplied = [], [], [], []
+    for symbol, entry in sorted(judged.items()):
+        # `_note` is the fixture's own header, a list of prose lines rather
+        # than a verdict. Skipped by shape rather than by name, so a second
+        # such key costs nothing -- and skipping by name is what a first
+        # draft did, which crashed on the one that is there.
+        if not isinstance(entry, dict):
+            continue
+        refs = wanted.get(symbol)
+        if refs is None:
+            spent.append((symbol, entry.get("verdict", "")))
+            continue
+        was = entry.get("rows")
+        if isinstance(was, int) and was != len(refs):
+            moved.append((symbol, was, len(refs)))
+        if entry.get("verdict") == "mis-marked":
+            unapplied.append((symbol, len(refs)))
+        # The prose's own row references, which drift independently of the
+        # count: a symbol can hold the same number of rows and not the same
+        # rows. Only refs the tree actually declares are judged -- an
+        # invented or mistyped one is a different fault and `lint.py`'s
+        # dead-comparison walk is what finds those.
+        said = f"{entry.get('why', '')} {entry.get('found', '')}"
+        named = {w for w in _TOKENS.split(said) if w in declared}
+        dead = sorted(r for r in named if not declared[r].unfinished)
+        if dead:
+            stale.append((symbol, dead))
+
+    print(f"  {len(judged)} verdict(s) recorded, {len(wanted)} symbol(s)"
+          f" in the queue today")
+    print(f"\n  spent -- no longer blocked, and the verdict earned it:"
+          f" {len(spent)}")
+    for symbol, verdict in spent[:20]:
+        print(f"      {symbol:<44} was {verdict or '(no verdict)'}")
+    if len(spent) > 20:
+        print(f"      ... and {len(spent) - 20} more")
+
+    print(f"\n  moved -- the row count is not what was recorded:"
+          f" {len(moved)}")
+    for symbol, was, now in sorted(moved, key=lambda m: -abs(m[1] - m[2]))[:20]:
+        print(f"      {symbol:<44} {was:>4} -> {now}")
+    if len(moved) > 20:
+        print(f"      ... and {len(moved) - 20} more")
+
+    print(f"\n  stale rows -- a ref the verdict names carries no marker now:"
+          f" {len(stale)}")
+    for symbol, dead in stale[:20]:
+        print(f"      {symbol:<44} {', '.join(dead[:6])}")
+    if len(stale) > 20:
+        print(f"      ... and {len(stale) - 20} more")
+
+    print(f"\n  live and unapplied -- `mis-marked`, still blocked:"
+          f" {len(unapplied)}")
+    for symbol, n in sorted(unapplied, key=lambda u: (-u[1], u[0]))[:20]:
+        print(f"      {symbol:<44} {n} row(s) waiting")
+    if len(unapplied) > 20:
+        print(f"      ... and {len(unapplied) - 20} more")
+
+    print("\n  Read, not gated: every day's work moves all four. The"
+          " unapplied list is the one with rows behind it.")
+    return 0
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -268,10 +380,17 @@ def main() -> int:
     ap.add_argument("--show", type=int, default=4, metavar="N",
                     help="candidates per symbol (default 4)")
     ap.add_argument("--quiet", action="store_true", help="counts only")
+    ap.add_argument("--drift", action="store_true",
+                    help="reconcile the recorded verdicts against the tree")
     args = ap.parse_args()
 
     wanted = _queue()
     judged = json.loads(VERDICTS.read_text()) if VERDICTS.exists() else {}
+
+    if args.drift:
+        import blocked
+
+        return _drift(judged, wanted, blocked._declared())
 
     pool = [(s, refs) for s, refs in wanted.items()
             if not s.startswith(SOURCE)]
