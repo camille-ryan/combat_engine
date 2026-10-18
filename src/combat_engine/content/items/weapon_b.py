@@ -825,12 +825,23 @@ def i1556x1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     once_per_round=True,
-    out_of_combat=True,
 )
 def i1556p1(c: Cast) -> None:
-    """Drawing and stowing are not modelled and the vanishing is a search,
-    not a fight. Inert by choice."""
-    c.note("i1556p1: drawn or sheathed, and only the wielder can find it")
+    """Draw or sheathe this weapon, once a turn.
+
+    **"Drawing and stowing are not modelled" was half the reason and it
+    stopped being true** -- `c.draw` and `c.stow` are the two doors, and
+    the printed free action is what this row is.
+
+    The other half still holds: "the vanishing is a search, not a fight". A
+    sheathed weapon only the wielder can find changes nothing on a board,
+    so it is neither written nor marked.
+
+    Sheathing first, which is the card's own order and the opposite of
+    `i1052p1` -- and `c.stow` answers False with nothing in hand, so the
+    draw is a fallback rather than a second question."""
+    if not c.stow():
+        c.draw()
 
 
 @power(

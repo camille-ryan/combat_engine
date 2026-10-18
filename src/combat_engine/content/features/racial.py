@@ -333,9 +333,12 @@ def rt_r2_t4(c: Cast) -> None:
 # -- r3 ----------------------------------------------------------------
 
 _inert("rt:r3-t0",
-       "Training in a skill of your choice. `engine/skills.py` has no "
-       "training model at all -- a check is the ability modifier plus "
-       "half level -- so there is nothing for the +5 to be laid on.")
+       "Training in a skill of your choice. **There is a training model** "
+       "-- `Skills.trained` and the +5 landed in #565 -- and training is "
+       "granted in `chargen`, not in a body: the sheet is made before the "
+       "board is. What is missing is a race being able to carry it at all, "
+       "which `feat.trains` does and the `race` table has no column for. "
+       "#688.")
 _inert("rt:r3-t1", "Proficiency, which is a build-time sentence.",
        proficiency=("w3610",))
 _inert("rt:r3-t5",
@@ -485,7 +488,9 @@ _inert("rt:r7-t0",
        "deals this race one more, which is where a build-time rule "
        "belongs.")
 _inert("rt:r7-t1",
-       "Training in one more skill, and there is no training model.")
+       "Training in one more skill. There is a training model (#565) and "
+       "`chargen` is where it is granted; a race cannot carry training "
+       "yet, which is #688.")
 
 
 @power("rt:r7-t4", level=0, cls="", usage=AT_WILL,
@@ -1326,7 +1331,11 @@ _inert("rt:r52-t1",
        "Trading a class utility for a racial one, which is a choice made "
        "when the character is built.")
 _inert("rt:r52-t3",
-       "Training in Stealth, and there is no training model.")
+       "Training in Stealth. There is a training model -- #565 -- and "
+       "`chargen` is where training is granted, so this is inert in a body "
+       "by convention rather than for want of a reader. A race cannot "
+       "carry training yet, which is #688; for this row it costs +5 to "
+       "Stealth, which `query.hidden_from` reads inside a fight.")
 _origin("r52", "shadow", instead_of="natural")
 
 

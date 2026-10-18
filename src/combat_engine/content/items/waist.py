@@ -815,11 +815,27 @@ def i2689p1(c: Cast) -> None:
 
 
 @power("i2746x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF, todo=("c.skill_circumstance()",))
 def i2746x1(c: Cast) -> None:
-    """Swimming, holding your breath and treading water: skill checks with
-    no combat consequence, and a check context cannot be asked what the
-    check was for."""
+    """+2 to Athletics made to swim, and to Endurance made to hold your
+    breath, swim or tread water.
+
+    **Re-pointed, and the premise needed splitting.** "Skill checks with no
+    combat consequence" is not the reason -- an Athletics check is rolled
+    in fights. The second half is: "a check context cannot be asked what
+    the check was for". That is `c.skill_circumstance()`, which four other
+    rows already wait on, so this joins them rather than claiming the
+    clause has no meaning.
+
+    Laying the +2 flat would be a row **stronger than its card** -- every
+    Athletics check rather than the swimming ones -- which is the direction
+    `m5808a0`'s rule says never to guess in. So nothing is laid.
+
+    `todo=` and not `dropped=`, which `lint.py` insisted on and is right:
+    the +2 is the whole row, so with nothing laid the row cannot play.
+    `dropped=` means "plays with one clause missing".
+
+    The Level 18 and 28 steps are out of scope."""
 
 
 @power("i593p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,

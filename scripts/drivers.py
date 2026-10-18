@@ -19676,7 +19676,186 @@ def one_carried_light_level_at_a_time(out: Result) -> None:
                  f"{ref} takes its brightest setting with nobody choosing",
                  f"{light_level(world, (x + 1, y))}")
 
+def drawing_stowing_and_a_running_jump(out: Result) -> None:
+    """Three rows inert on a premise that had stopped being true.
+
+    The light family (#686) was found by grepping `out_of_combat=True` rows
+    whose docstring *states* a premise. Widened past light, that screen
+    finds nineteen heroic rows over seven claims, and four of the claims
+    are false:
+
+        "drawing and stowing gear is not modelled"   c.draw / c.stow exist
+        "jumping is not modelled as movement"        c.jump exists
+        "the engine ... rolls no checks"             c.check(skill, dc) does
+        "there is no training model"                 landed in #565
+
+    **And two of them were invisible rather than unwritten**, which is the
+    half worth the engine change. `c.draw` and `c.stow` mutate `Gear` and
+    announced a `Note` -- and `Note` is deliberately outside
+    `audit.DID_SOMETHING`, because it carries no actor to attribute it
+    with. So `i1052p1` and `i1556p1` fired 48 times each, did exactly what
+    their cards say, and reported silent. `WeaponHeld` is the fix, the same
+    one `WeaponChanged`, `ZoneResized` and `EffectSuspended` each got.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SkillCheck, WeaponHeld
+
+    # -- the two doors both announce which weapon is in hand -------------
+    world, me, _ = audit_board("i1052p1", 1)
+    seen: list[WeaponHeld] = []
+    world.bus.on(WeaponHeld, seen.append)
+    gear = world.get(me, Gear)
+    out.that(gear is not None and bool(gear.held),
+             "the holder has something in hand to put away",
+             f"{gear if gear is None else [w.ref for w in gear.held]}")
+    if gear is None or not gear.held:
+        return
+    mine = gear.held[0].ref
+
+    c = Cast(world=world, me=me, ref="drivers:gear")
+    out.that(c.stow(), "`c.stow` puts it away")
+    out.that(mine in gear.stowed,
+             "and the gear says so", f"{sorted(gear.stowed)}")
+    out.that(bool(seen) and seen[-1].ref == mine and not seen[-1].drawn,
+             "announcing `WeaponHeld` with `drawn` False -- which is what"
+             " `i1052p1` fired 48 times without",
+             f"{[(e.ref, e.drawn) for e in seen]}")
+
+    out.that(c.draw(), "`c.draw` takes it back up")
+    out.that(mine not in gear.stowed, "and the gear says so",
+             f"{sorted(gear.stowed)}")
+    out.that(len(seen) == 2 and seen[-1].drawn,
+             "announcing it with `drawn` True -- one event for both halves",
+             f"{[(e.ref, e.drawn) for e in seen]}")
+
+    # **The action menu's door too**, so the event means "which weapon is
+    # in hand" rather than "a content row said so".
+    world2, me2, _ = audit_board("i1052p1", 1)
+    enc = world2.encounter
+    said: list[WeaponHeld] = []
+    world2.bus.on(WeaponHeld, said.append)
+    g2 = world2.get(me2, Gear)
+    if g2 is not None and g2.held:
+        g2.stowed.add(g2.held[0].ref)
+    wields = [a for a in legal(world2, enc, me2) if a.kind == "wield"] if enc else []
+    # **This found #689.** `_wielding` opened `if len(gear.weapons) < 2:
+    # return []`, and this board deals its character a single greataxe --
+    # so a character that had stowed its only weapon was offered no way to
+    # take it back up, which is the exact fault that function's docstring
+    # says it exists to prevent. The guard is the *swapping* condition and
+    # the comprehension below it already refuses to offer what is in hand.
+    out.that(bool(wields),
+             "a wield is on the menu for the one weapon just stowed --"
+             " #689, where `len(weapons) < 2` refused it",
+             f"{len(wields)}")
+    if wields:
+        perform(world2, enc, me2, wields[0])
+        out.that(bool(said) and said[-1].drawn,
+                 "and taking a weapon up through the menu announces it as"
+                 " well -- the printed minor, not only the free row",
+                 f"{[(e.ref, e.drawn) for e in said]}")
+    g3 = world2.get(me2, Gear)
+    out.that(g3 is not None and bool(g3.held),
+             "and the weapon really is back in hand afterwards",
+             f"{g3 if g3 is None else [w.ref for w in g3.held]}")
+
+    # -- the two rows ----------------------------------------------------
+    # **Both rows print "draw **or** put away", so what they do depends on
+    # the board** -- and the first draft of this asserted `i1052p1` draws,
+    # which is wrong on a board where nothing is stowed. On that board
+    # drawing is impossible and storing is the only thing the card allows,
+    # which is the row working. So the assertion is the one that holds
+    # either way, and then each direction is posed on purpose.
+    for ref in ("i1556p1", "i1052p1"):
+        world, me, _ = audit_board(ref, 1)
+        got: list[WeaponHeld] = []
+        world.bus.on(WeaponHeld, got.append)
+        world.decider = None
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        out.that(bool(got),
+                 f"{ref} announces what it did to the gear",
+                 f"{[(e.ref, e.drawn) for e in got]}")
+        out.that(bool(got) and not got[0].drawn,
+                 f"and with nothing stowed, {ref} puts a weapon away --"
+                 " drawing is impossible, so that is the card and not a"
+                 " preference",
+                 f"{[(e.ref, e.drawn) for e in got]}")
+
+        # Posed the other way: something stowed and nothing in hand, so
+        # drawing is the only thing either card can do.
+        world, me, _ = audit_board(ref, 1)
+        got = []
+        world.bus.on(WeaponHeld, got.append)
+        world.decider = None
+        gear4 = world.get(me, Gear)
+        if gear4 is not None and gear4.held:
+            gear4.stowed.add(gear4.held[0].ref)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        out.that(bool(got) and got[0].drawn,
+                 f"and with one stowed and nothing held, {ref} draws it",
+                 f"{[(e.ref, e.drawn) for e in got]}")
+
+    # -- p3958: the check, and the distance it buys -----------------------
+    from combat_engine.engine.grid import distance
+
+    world, me, _ = audit_board("p3958", 1)
+    was = world.get(me, Position).square
+    rolls: list[SkillCheck] = []
+    world.bus.on(SkillCheck, rolls.append)
+    world.rng.loaded = 20
+    # **A chooser that goes as far as it is allowed**, because that is the
+    # printed sentence -- "can move as far as the check allows" -- and
+    # because without one `c.jump` takes the lowest-sorted destination,
+    # which is a square away. The first draft measured that and read
+    # "moved 1" against an allowance of 6, so the distance said nothing
+    # about the divisor and the `// 10` plant stayed green.
+    def furthest(actor, kind, options, prompt):  # noqa: ANN001, ANN202
+        # **Any square decision, not `kind == "jump"`.** `c.jump` delegates
+        # to `c.move`, so the decision arrives under that name -- a chooser
+        # watching for "jump" never fired and the leap stayed one square.
+        if options and isinstance(options[0], tuple):
+            return max(options, key=lambda sq: distance(was, sq))
+        return options[0]
+
+    world.decider = furthest
+    REGISTRY["p3958"].body(Cast(world=world, me=me, ref="p3958"))
+    out.that(bool(rolls), "p3958 rolls an Athletics check",
+             f"{[(r.skill, r.total) for r in rolls]}")
+    if not rolls:
+        return
+    total = rolls[-1].total
+    now = world.get(me, Position).square
+    out.that(now != was, "and jumps", f"{was} -> {now}")
+    moved = distance(was, now)
+    out.that(moved <= max(0, total // 5),
+             "no further than the check over 5",
+             f"check {total}, moved {moved}, allowed {total // 5}")
+    # **An upper bound cannot fail the interesting way**, and the plant
+    # proved it: swapping the body's `// 5` for `// 10` left the rule
+    # **green**, because a shorter jump still satisfies "no further than".
+    # The card says "can move **as far as the check allows**", so the
+    # assertion that carries the divisor is a floor -- further than the
+    # plain over-10 a jump without a running start would get.
+    out.that(total // 5 > total // 10,
+             "the roll is one where the two divisors differ, so this is"
+             " not agreeing by accident",
+             f"{total // 5} against {total // 10}")
+    out.that(moved > total // 10,
+             "and the jump goes further than over-10 would allow -- the"
+             " card's 'considered to have a running start', and the"
+             " assertion the upper bound above could not make",
+             f"moved {moved}, over-10 would allow {total // 10}")
+
 DRIVERS = {
+    "gear_and_jump": (
+        drawing_stowing_and_a_running_jump,
+        "drawing, stowing and a running jump -- three false premises",
+    ),
     "illuminate": (
         one_carried_light_level_at_a_time,
         "one carried light level at a time, chosen from what the card offers",

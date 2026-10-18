@@ -1215,9 +1215,24 @@ def i1052x1(c: Cast) -> None:
 
 
 @power("i1052p1", level=7, cls=ITEM, action=FREE, reach=PERSONAL,
-       target=SELF, once_per_round=True, out_of_combat=True)
+       target=SELF, once_per_round=True)
 def i1052p1(c: Cast) -> None:
-    """Drawing and stowing gear is not modelled."""
+    """Draw an item from the cloak, or store one in it. Once a round.
+
+    **"Drawing and stowing gear is not modelled" was the whole docstring
+    and it stopped being true**: `c.draw` takes a stowed weapon up and
+    `c.stow` puts a held one away. `actions._wielding` is the other door
+    and charges the printed minor; this card is the free one.
+
+    "Draw **or** store" is a choice, and `c.may` is how a printed *or* is
+    asked. Drawing is the default answer because that is the direction a
+    fight wants, and because `c.draw` answers False with nothing stowed --
+    so the fallback costs nothing.
+
+    The cloak holding more than it should is encumbrance, which is not
+    modelled and is not a fight."""
+    if not (c.may("draw an item") and c.draw()):
+        c.stow()
 
 
 @power("i1201x1", level=7, cls=ITEM, action=ActionType.NONE,

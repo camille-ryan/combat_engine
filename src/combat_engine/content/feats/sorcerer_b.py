@@ -358,9 +358,15 @@ def f2808(c: Cast) -> None:
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def f2804(c: Cast) -> None:
     """Untrained skill checks and nothing else. Deliberately inert rather
-    than unwritten: no fight turns on one, and `engine/skills.py` has no
-    training model to tell a trained check from an untrained one even if
-    a fight did."""
+    than unwritten: no fight turns on one.
+
+    **The second half of the old reason stopped being true.** It read
+    "`engine/skills.py` has no training model to tell a trained check from
+    an untrained one even if a fight did"; `Skills.trained` and the +5
+    landed in #565, and this file's own `f2803` note is where that
+    convention is written down. So the engine *can* tell. The row is inert
+    because the clause has no combat weight, which is the reason that
+    holds."""
 
 
 # -- features named in prose ------------------------------------------------

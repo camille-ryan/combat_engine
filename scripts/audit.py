@@ -950,7 +950,7 @@ DID_SOMETHING = {
     "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
-    "EffectSuspended",
+    "EffectSuspended", "WeaponHeld",
 }  # fmt: skip
 # `EffectSuspended` is the **fifth** class of correct row admitted here one at
 # a time, and it arrived the way the note below predicts: a card whose verb is

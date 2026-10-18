@@ -1283,6 +1283,30 @@ class ZoneResized(Event):
 
 
 @dataclass
+class WeaponHeld(Event):
+    """Which weapon is in a creature's hand changed -- drawn or put away.
+
+    **Not `WeaponChanged`**, which is a weapon's own *fields* changing in
+    place. This is the other thing: the same weapon, a different hand.
+
+    Announced for the reason `WeaponChanged` and `ZoneResized` were.
+    `c.draw` and `c.stow` mutate `Gear` and emitted a `Note` -- and `Note`
+    is deliberately outside `audit.DID_SOMETHING`, because it "carries no
+    rules meaning" and has no actor to attribute it with. So a row whose
+    whole content is drawing or sheathing was correct and invisible:
+    `i1052p1` and `i1556p1` both fired 48 times, did exactly what their
+    cards say, and reported silent.
+
+    `drawn` is True for taking up and False for putting away, so one event
+    covers both -- the same shape `EffectSuspended` uses for `back`.
+    """
+
+    actor: int
+    ref: str
+    drawn: bool = True
+
+
+@dataclass
 class WeaponChanged(Event):
     """A carried weapon's own fields changed in place.
 

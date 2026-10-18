@@ -136,12 +136,23 @@ def p3957(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE],
-    out_of_combat=True,
 )
 def p3958(c: Cast) -> None:
-    """The whole printed Effect is an Athletics check with a bonus. Jumping
-    is not modelled as movement, so this is deliberately inert."""
-    c.note(f"{c.ref}: a running jump, +10, as far as the check allows")
+    """An Athletics check at +10, jumped as far as it allows.
+
+    **"Jumping is not modelled as movement" was the reason and it stopped
+    being true**: `c.jump` is a move that clears what is in the way and
+    lands somewhere legal, and `c.check` rolls a skill. Both were there.
+
+    **Divided by 5, not 10, and the card is why.** A long jump covers the
+    check result over 10 in squares -- *unless you moved at least 2 squares
+    first, when it is over 5*. This card says "you are considered to have a
+    running start", which is exactly that exemption, so the 5 is the
+    printed reading rather than a generous one. Looked up, not guessed.
+
+    Floored, because the rule says not to round."""
+    rolled = c.check("athletics", bonus=10)
+    c.jump(max(0, rolled.total // 5))
 
 
 @power(

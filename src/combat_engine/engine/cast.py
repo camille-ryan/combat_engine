@@ -11957,8 +11957,11 @@ class Cast:
         the number instead of comparing it. A `dc` of 0 is a check with
         nothing to beat and always succeeds.
 
-        Training is not modelled -- see `engine/skills.py` -- so this is the
-        ability modifier plus half level plus whatever modifiers stand.
+        **Training IS modelled**, which this said it was not: `skills.check`
+        adds the 4e +5 off `Skills.trained`, which landed in #565. So this
+        is the ability modifier plus half level plus the training plus
+        whatever modifiers stand. The old sentence outlived the gap by
+        enough to be quoted as a reason in five content rows.
         """
         from .skills import check as _check
 
@@ -12971,6 +12974,15 @@ class Cast:
         if not wanted:
             return False
         gear.wield(wanted[0])
+        # **An event, not only a `Note`.** A `Note` is outside
+        # `audit.DID_SOMETHING` on purpose -- it has no actor to attribute
+        # it with -- so a row whose whole content is this was invisible.
+        # See `WeaponHeld`.
+        from .events import WeaponHeld
+
+        self.world.bus.emit(
+            WeaponHeld(actor=who, ref=wanted[0].ref, drawn=True)
+        )
         self.world.bus.emit(Note(text=f"{who} draws {wanted[0].ref}"))
         return True
 
@@ -12991,6 +13003,11 @@ class Cast:
         if not wanted:
             return False
         gear.stowed.add(wanted[0].ref)
+        from .events import WeaponHeld
+
+        self.world.bus.emit(
+            WeaponHeld(actor=who, ref=wanted[0].ref, drawn=False)
+        )
         self.world.bus.emit(Note(text=f"{who} stows {wanted[0].ref}"))
         return True
 

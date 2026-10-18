@@ -870,7 +870,15 @@ def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     from .components import Gear, Weapon
 
     gear = world.get(actor, Gear)
-    if gear is None or len(gear.weapons) < 2:
+    # **`< 2` was here and it is the swapping case, not the drawing one.**
+    # A character carrying exactly one weapon and holding nothing could
+    # never take it back up -- which is word for word the fault this
+    # function's own docstring says it exists to fix, "a ranger who put the
+    # bow away could never pick it up again", one weapon short of being
+    # caught. The `w.ref not in held` filter below already refuses to offer
+    # what is in hand, so the guard was both redundant for the common case
+    # and wrong for the single-weapon one. #689.
+    if gear is None or not gear.weapons:
         return []
     # A minor is the rule; three rows buy their way out of it and
     # `c.draws_free` is what records that. `draws_left` is the "once per
@@ -1475,6 +1483,15 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         if gear.draw_cost is not None and action.cost == gear.draw_cost \
                 and gear.draws_left > 0:
             gear.draws_left -= 1
+        # **The other door, so the event means "which weapon is in hand"
+        # rather than "a content row said so".** `c.draw` is the free
+        # taking-up a row has already paid for; this is the printed minor
+        # the action menu offers, and both change the same fact.
+        from .events import WeaponHeld
+
+        world.bus.emit(WeaponHeld(
+            actor=actor, ref=gear.weapons[action.subject].ref, drawn=True,
+        ))
         world.bus.emit(Note(text=f"{actor} takes up {gear.weapons[action.subject].ref}"))
         return True
 

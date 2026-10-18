@@ -56,7 +56,13 @@ def _narrative(ref: str, what: str) -> None:
 
 
 _narrative("f441", "A bonus to six knowledge skills.")
-_narrative("f2562", "A bonus to every untrained check; there is no training model.")
+_narrative("f2562",
+           "A bonus to every untrained check. There IS a training model "
+           "(#565), so `Skills.trained` can say which checks are "
+           "untrained -- but the bonus is on *every* one of them, and a "
+           "check context cannot be asked what the check was for, which "
+           "is `c.skill_circumstance()`. Narrative because no fight turns "
+           "on an untrained check, not because nothing could tell.")
 _narrative("f1258", "Rolling one skill twice.")
 _narrative("f1271", "A bonus to one skill, larger when an ally helps.")
 _narrative("f1528", "Which domain feats may be taken, and a knowledge bonus.")
@@ -140,10 +146,14 @@ def f2913(c: Cast) -> None:
 def f1284(c: Cast) -> None:
     """Training in Stealth, and creating a diversion faster.
 
-    Both halves land outside what the engine has. There is no training
-    model -- `engine/skills.py` says so and applies no +5 -- and no
-    diversion action to make a minor one of, so neither is a number
-    anything would read.
+    **"There is no training model -- `engine/skills.py` says so and
+    applies no +5" was the reason and it stopped being true**: the +5
+    landed in #565, off `Skills.trained`, and that file's own note records
+    the correction. Training is still granted in `chargen` rather than in
+    a body, which is why this stays inert -- and what is actually missing
+    for a *feat* is nothing: `feat.trains` carries it. This one is a feat,
+    so its Stealth training should reach `Skills.trained` already; the
+    diversion half is the real gap.
     """
 
 

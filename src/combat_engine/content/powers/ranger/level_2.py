@@ -288,12 +288,23 @@ def p10607(c: Cast) -> None:
     target=SELF,
     keywords=MARTIAL_WEAPON,
     requires=_has_ranged,
-    out_of_combat=True,
+    todo=("Grid.climb_dc",),
 )
 def p10699(c: Cast) -> None:
-    """Inert by declaration: the whole printed Effect is a climb DC, and the
-    engine holds no DCs and rolls no checks."""
-    c.note(f"p10699: five squares of wall are {2 * c.dex_mod} easier to climb")
+    """Five squares of wall become easier to climb, by twice Dexterity.
+
+    **Re-pointed, and half the old reason was wrong.** It read "the engine
+    holds no DCs and rolls no checks": `c.check(skill, dc)` and
+    `c.ability_check(ability, dc)` both roll against a DC and have for
+    some time.
+
+    What is missing is the half that was right, and it is narrower: a
+    **climb DC painted on a square**. `Grid` holds terrain, cover and
+    light, and nothing about how hard a surface is to go up -- so there is
+    no number for this to reduce and no square to reduce it on.
+
+    `todo=` rather than `out_of_combat=True`, because going up a wall is a
+    fight thing: this is unwritten, not inert."""
 
 
 @power(
