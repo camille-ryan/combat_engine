@@ -3535,10 +3535,28 @@ def _cross_reference_rest(
     # thing is named, so the index must hold only that kind or the position is
     # wasted. #434.
     by_trait: dict[str, str] = {}
-    for (ref,) in out.execute("SELECT ref FROM racial_trait"):
-        name = _low(((names.get(ref) or {}).get("name") or "").strip())
-        if len(name) >= 3:
-            by_trait.setdefault(name, ref)
+    #: A race's traits by **printed name as printed**, keyed by race ref, for
+    #: `_required_race_traits`. Apart from `by_trait` above because that one
+    #: is lowercased for a position-proved lookup and this one is matched
+    #: case-sensitively: the evidence here is a prerequisite rather than a
+    #: noun, and Title Case is what keeps "your Ferocity" apart from the
+    #: ordinary word. #701.
+    traits_of: dict[str, dict[str, str]] = {}
+    for ref, race in out.execute("SELECT ref, race FROM racial_trait"):
+        printed = ((names.get(ref) or {}).get("name") or "").strip()
+        if len(printed) >= 3:
+            by_trait.setdefault(_low(printed), ref)
+            traits_of.setdefault(race, {}).setdefault(printed, ref)
+
+    #: Which races a feat's prerequisite names, by feat ref. The prereq is
+    #: stored as JSON and the race clauses are `{"race": "r24"}`, so this is
+    #: a token scan rather than a parse -- the shape is nested and any depth
+    #: of `all`/`any` means the same thing here: the card requires it.
+    needs_race: dict[str, set[str]] = {}
+    for ref, prereq in out.execute("SELECT ref, prereq FROM feat"):
+        found = set(re.findall(r'"race"\s*:\s*"(r\d+)"', prereq or ""))
+        if found:
+            needs_race[ref] = found
 
     # **The names that are not rows**, for `_elsewhere`. A ritual, a disease,
     # a hazard, a deity, a theme and a paragon path are compendium pages with
@@ -3764,6 +3782,30 @@ def _cross_reference_rest(
             # thirty involved -- which `identifies` waives, and the noun behind
             # it is what makes the position proof. #434.
             fixed = _named_traits(fixed, by_trait, ref)
+            # **"This benefit replaces <name>."** A variant race prints only
+            # its differences from a parent and ends each with that
+            # sentence, naming the parent's trait -- which is in no other
+            # row's map, so the general swap never saw it. Position proves
+            # it: a phrase directly after "replaces" is a thing being
+            # replaced, and in a racial block the things being replaced are
+            # traits. Four specs, all variant races. #701.
+            fixed = _replaced_traits(fixed, by_trait, ref)
+            # **A feat requiring a race may name that race's traits in
+            # ordinary prose** -- "the melee basic attack granted by your
+            # <name>", "choose to remain conscious due to <name>". No noun
+            # proves the position and both names are two ordinary words or
+            # one, so neither `identifies` nor `_uniquely_owned` can see
+            # them. The **prerequisite** is the evidence: the card requires
+            # that race, so a Title-Case phrase matching one of that race's
+            # printed trait names is that trait. 14 specs. #701.
+            if table == "feat" and ref in needs_race:
+                wanted = {
+                    printed: trait
+                    for race in needs_race[ref]
+                    for printed, trait in traits_of.get(race, {}).items()
+                }
+                if wanted:
+                    fixed = _required_race_traits(fixed, wanted, ref)
             # **Outside the `others` guard**, for the third time and the same
             # reason the two passes above are: that guard skips a row whose
             # spec names nothing `identifies` believes, and a ritual or a
@@ -4377,9 +4419,15 @@ def _named_feats(spec: str, by_feat: dict[str, str], own: str) -> str:
 #: trait". Non-greedy and bounded like `_NAMED_FEAT`, and for the same reason:
 #: the noun behind the run is what makes the position proof, so the run must not
 #: swallow the sentence before it. #434.
+#:
+#: **And "racial *feature*", which the corpus writes just as often.** The noun
+#: was `traits?` alone and four specs printed a trait's name in front of the
+#: other word -- "your <name> racial feature", "the r6's <name> racial
+#: feature". It is the same position and the same proof; one word was missing
+#: from the pattern. #701.
 _NAMED_TRAIT = re.compile(
     r"\b([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,4}?)"
-    r"\s+racial\s+traits?\b"
+    r"\s+racial\s+(?:traits?|features?)\b"
 )
 
 
@@ -4413,10 +4461,103 @@ def _named_traits(spec: str, by_trait: dict[str, str], own: str) -> str:
                     continue
                 head = " ".join(words[:start])
                 tail = " ".join(words[start + size:])
-                return " ".join(w for w in (head, ref, tail, "racial trait") if w)
+                # **The printed noun is kept, not normalised to "trait".**
+                # The pattern matches either word now, and rewriting
+                # "feature" to "trait" would edit the card's own prose while
+                # claiming only to swap a name. #701.
+                noun = m.group(0).split()[-2:]
+                return " ".join(
+                    w for w in (head, ref, tail, " ".join(noun)) if w
+                )
         return m.group(0)
 
     return _NAMED_TRAIT.sub(swap, spec)
+
+
+#: `This benefit replaces <name>.` -- how every variant race's page ends a
+#: paragraph. The run is bounded and non-greedy for `_NAMED_FEAT`'s reason,
+#: and terminated on the full stop because the name is the rest of the
+#: sentence rather than being followed by a proof noun. #701.
+_REPLACED = re.compile(
+    r"\breplaces\s+([A-Za-z][\w'\u2019-]*(?:\s+[A-Za-z][\w'\u2019-]*){0,4}?)"
+    r"(?=\s*[.;\n]|$)"
+)
+
+
+def _replaced_traits(spec: str, by_trait: dict[str, str], own: str) -> str:
+    """Swap the trait a variant race says it replaces for that trait's ref.
+
+    The fifth position-based pass, and it exists for the reason the four
+    above it do: `identifies` waives a phrase of two ordinary words because
+    in running prose such a phrase is usually coincidence, and both of these
+    names are exactly that shape. **Here it is never coincidence.** A phrase
+    directly after "replaces", at the end of its sentence, inside a racial
+    block, is the name of a thing being replaced -- and the things a racial
+    block replaces are its parent's traits.
+
+    `_uniquely_owned` cannot reach these either, and the threshold is why:
+    it believes a name printed by exactly one row, but only at **more than
+    two words**, and both of these are two. Lowering that threshold is not
+    the fix -- there are 11,680 uniquely-owned two-word names and 1,264
+    one-word ones, so believing them all would substitute a ref for every
+    coincidental pair in the corpus. The position costs nothing and reaches
+    the same four specs.
+
+    Sub-runs rather than the whole match, the way `_named_traits` does it:
+    the sentence may read "replaces the <name>".
+    """
+    base = re.sub(r"[a-z]\d*$", "", own)
+
+    def swap(m: re.Match) -> str:
+        words = m.group(1).split()
+        for size in range(len(words), 0, -1):
+            for start in range(len(words) - size + 1):
+                ref = by_trait.get(_low(" ".join(words[start: start + size])))
+                if not ref or ref in (own, base):
+                    continue
+                head = " ".join(words[:start])
+                tail = " ".join(words[start + size:])
+                return " ".join(
+                    w for w in ("replaces", head, ref, tail) if w
+                )
+        return m.group(0)
+
+    return _REPLACED.sub(swap, spec)
+
+
+def _required_race_traits(spec: str, wanted: dict[str, str], own: str) -> str:
+    """Swap a trait name a feat's own prerequisite entitles it to name.
+
+    The sixth pass in this family, and the first whose evidence is **not a
+    position**. The corpus writes these names in running prose with no
+    proof noun behind them -- "granted by your <name>", "due to <name>",
+    "the standard action <name> allows", "<name> grants you" -- so the four
+    positional passes above cannot reach them, and both `identifies` and
+    `_uniquely_owned` waive the names themselves: they are one or two
+    ordinary words.
+
+    What makes it safe is the **prerequisite**. A feat that requires `r24`
+    naming a phrase that is exactly one of `r24`'s printed trait names is
+    naming that trait; there is no other thing on the page it could be.
+    That is the same kind of argument `_uniquely_owned` makes from
+    uniqueness, narrowed from the whole corpus to one card's own
+    requirement -- which is why the threshold does not have to move.
+
+    **Case-sensitive, and that is the guard.** A printed name is Title Case
+    and the ordinary word is not, so "your Ferocity" is swapped and "fought
+    with ferocity" is left alone. `scrub` lowercases, so this does its own
+    substitution rather than borrowing it.
+
+    Longest first, for `scrub`'s reason: one of these names contains
+    another, and swapping the short one first leaves a ref with a stray
+    adjective in front of it.
+    """
+    for printed in sorted(wanted, key=len, reverse=True):
+        ref = wanted[printed]
+        if ref == own or ref.startswith(own):
+            continue
+        spec = re.sub(rf"\b{re.escape(printed)}\b", ref, spec)
+    return spec
 
 
 def _elsewhere(spec: str, by_other: dict[str, str], rules: set[str]) -> str:

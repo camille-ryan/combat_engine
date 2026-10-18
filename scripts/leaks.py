@@ -750,7 +750,7 @@ def specs() -> int:
     print("no printed names in any spec")
     bad = _self_named_clauses()
     return (bad or _unresolved_citations() or _unswapped_names(index)
-            or columns(index))
+            or _entitled_names() or columns(index))
 
 
 #: `<Head> (<class>, <book>, page <N>)` -- the compendium's inline citation,
@@ -875,6 +875,79 @@ UNSWAPPED_BASELINE: frozenset[tuple[str, str, str]] = frozenset({
     ("trap", "t:30", "p11722"),
     ("trap", "t:337", "f2247"),
 })
+
+
+def _entitled_names() -> int:
+    """A spec printing a racial trait's name where its own prereq names that
+    race. The fourth waiver-free question.
+
+    `--cited`, `--categories` and `_unswapped_names` are the other three, and
+    this one's discriminator is new: not uniqueness, but **entitlement**. A
+    feat whose prerequisite requires `r24` and whose spec prints a phrase
+    equal to one of `r24`'s printed trait names is naming that trait -- there
+    is nothing else on the page it could be -- so no word count and no
+    vocabulary test is needed, and none may be applied.
+
+    That matters because the names involved are exactly the shape every other
+    gate waives. Measured when this was written, **21 specs** printed one and
+    every single run of `leaks.py`, `--specs` and `--cited` on record had
+    reported clean:
+
+        4 races printing a parent's trait after "This benefit replaces"
+       14 feats naming a required race's trait in running prose
+        3 of those 14 a substring of a longer name in the same sentence
+
+    `identifies` waives them because they are one or two ordinary words.
+    `_uniquely_owned` cannot reach them either: it believes a name printed by
+    exactly one row, but only above two words. Lowering that threshold is not
+    available -- there are 11,680 uniquely-owned two-word names and 1,264
+    one-word ones in this corpus, so believing them all would put a ref in
+    the place of every coincidental pair.
+
+    **Case-sensitive, for the same reason `build._required_race_traits` is,
+    and the guard is load-bearing**: dropped, this gate reports 31 rows where
+    11 are real. A printed name is Title Case and the ordinary word is not,
+    so "your Ferocity" is a leak and "fought with ferocity" is prose. The
+    checker and the scrubber have to count the same way or 124 specs ship a
+    name while both halves believe they agree -- this file's own history.
+    """
+    db = game()
+    traits: dict[str, dict[str, str]] = {}
+    try:
+        rows = db.execute("SELECT ref, race FROM racial_trait").fetchall()
+    except sqlite3.OperationalError:
+        return 0
+    printed = localisation()
+    for ref, race in rows:
+        name = ((printed.get(ref) or {}).get("name") or "").strip()
+        if len(name) >= 3:
+            traits.setdefault(race, {})[name] = ref
+
+    found: list[tuple[str, str, str, str]] = []
+    want = re.compile(r'"race"\s*:\s*"(r\d+)"')
+    for ref, prereq, spec in db.execute(
+        "SELECT ref, prereq, spec FROM feat WHERE spec IS NOT NULL"
+    ):
+        for race in want.findall(prereq or ""):
+            for name, owner in traits.get(race, {}).items():
+                if owner.startswith(ref) or ref.startswith(owner):
+                    continue
+                if re.search(rf"\b{re.escape(name)}\b", spec):
+                    found.append(("feat", ref, owner, name))
+
+    if found:
+        for table, ref, owner, _name in sorted(set(found))[:40]:
+            print(f"{table}.{ref}: prints the name of {owner}, whose race"
+                  f" its own prerequisite requires")
+        print(f"\n{len(set(found))} spec(s) print a racial trait's name their"
+              " own prerequisite entitles them to name.")
+        print("Every one is shown to an author verbatim. The fix is"
+              " `_required_race_traits` in etl/build.py -- there is no"
+              " coincidence to waive here, because the prerequisite is the"
+              " proof.")
+        return 1
+    print("no spec prints a trait name its own prerequisite names")
+    return 0
 
 
 def _unswapped_names(index: dict[str, list[str]]) -> int:
