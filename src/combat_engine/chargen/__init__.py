@@ -1999,6 +1999,30 @@ def proficiency(feats: list[str]) -> list[Weapon]:
     A ref nothing carries yields nothing rather than raising. That is the
     honest direction: the row keeps its marker and `blocked.py` keeps
     saying so, where a silent invention would look finished.
+
+    **A copy, and this handed out the module-level object for its whole
+    life.** `PRINTED` and `IMPLEMENTS` are process-wide dicts, so a
+    character armed from one held the *same* `Weapon` every other character
+    in the process held -- and `c.weapon_range`, `c.gains_property` and
+    `c.weapon_dice` all edit the weapon in place. Those three say in their
+    own docstrings that they need no reader because "`Gear.weapons` holds
+    `replace(w)` copies made per character by `chargen.spawn`, never the
+    module-level weapons". True of the chassis; false of everything this
+    function added.
+
+    What it cost: `f1277` rewrites `w3662`'s range and gives it high crit,
+    and it is the *only* row the audit board equips that weapon for.
+    Audited three times in one process:
+
+        audit #1: fired= 1 silent=False events=[... 'WeaponChanged']
+        audit #2: fired=48 silent=True  events=['PowerResolved']
+        audit #3: fired=48 silent=True  events=['PowerResolved']
+
+    The first run rewrote the shared weapon; every later board found the
+    rewrite already done, so the verbs announced nothing and the row read
+    silent. In a wide sweep that is a coin flip on whether the worker had
+    already touched the weapon -- which is #652, 4 silent of 9 sweeps, and
+    the reason it was never reproducible narrow. #662.
     """
     from combat_engine.engine.dsl import REGISTRY
 
@@ -2008,7 +2032,7 @@ def proficiency(feats: list[str]) -> list[Weapon]:
         for want in getattr(declared, "proficiency", ()) or ():
             arm = PRINTED.get(want) or IMPLEMENTS.get(want)
             if arm is not None:
-                out.setdefault(arm.ref, arm)
+                out.setdefault(arm.ref, replace(arm))
     return list(out.values())
 
 

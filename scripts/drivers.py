@@ -3713,6 +3713,93 @@ def the_last_two_target_lines_of_that_census(out: Result) -> None:
                  " single `affected_by` would serve one and refuse two")
 
 
+def a_trait_credited_through_one_event(out: Result) -> None:
+    """A standing trait whose whole payload is one `WeaponChanged`.
+
+    `turns.arm_traits` applies a weapon rewrite at the start of the fight,
+    and both `c.weapon_range` and `c.gains_property` announce **only when
+    they changed something** -- so by the time the auditor fires the row
+    explicitly there is nothing left to change, and the row's entire credit
+    is a single `WeaponChanged` emitted during arming.
+
+    `_after_its_own_use` bounds a trait's slice by its **siblings** in a
+    shared log rather than by depth, which its own docstring records as the
+    fix for #216's second half. One event in a sibling-bounded window is the
+    thinnest margin in the instrument, and `f1277` has been flipping across
+    it -- 4 silent of 9 wide sweeps, green on every narrow and batched run.
+    #652, #662.
+
+    **Asserted through `audit.audit`, the real verdict**, not by firing the
+    row and watching the bus: a rule that did the second would pass while
+    the auditor's own window missed the event, which is exactly the fault.
+
+    Two subjects, and they reach a weapon by different routes -- which is
+    the point, because a rule with one would not distinguish "credited" from
+    "this particular board happens to equip it":
+
+    * `f1277` carries `proficiency=("w3662",)` and `audit.board` equips that
+      weapon for this row and no other;
+    * `f1075` uses `every=True`, the printed blanket, so it rewrites
+      whatever is in hand.
+
+    **The rest of the shape is not in this rule, and measuring that is how
+    the shape got its real size.** Of eight rows that looked like it, one is
+    marked, one lays an `Effect` instead, and four fire the full 48 attempts
+    emitting no `WeaponChanged` at all -- honestly silent, because the
+    weapon they name (`w:unarmed` among them) is not on any board the
+    auditor builds. That is gear, not crediting.
+    """
+    import audit as A
+
+    # **Audited twice, which is the assertion that matters and the one that
+    # found #652's root cause.** `chargen.proficiency` handed out the
+    # module-level `Weapon` rather than a copy, so `f1277`'s first audit
+    # rewrote the shared object and every later board in the process found
+    # the rewrite already done -- the verbs announced nothing and the row
+    # read silent. Three audits in one process, before the fix:
+    #
+    #     audit #1: fired= 1 silent=False events=[... 'WeaponChanged']
+    #     audit #2: fired=48 silent=True  events=['PowerResolved']
+    #     audit #3: fired=48 silent=True  events=['PowerResolved']
+    #
+    # A rule that audited once would have passed on the broken code, which
+    # is why this one runs it twice. It also reproduced in 40 seconds inside
+    # the full `drivers` suite, where a sibling rule had already touched the
+    # weapon -- the first repro of #652 outside a 35-minute sweep.
+    for ref, how in (("f1277", "proficiency= equips w3662"),
+                     ("f1075", "every=True rewrites whatever is in hand")):
+        first, again = A.audit(ref), A.audit(ref)
+        out.that("WeaponChanged" in again.events,
+                 f"{ref} is credited on a SECOND audit in the same process"
+                 " -- the shared-weapon leak that made this a coin flip",
+                 f"first {sorted(first.events)}, again {sorted(again.events)}")
+        got = first
+        out.that(not got.error, f"{ref} does not raise", got.error)
+        out.that("WeaponChanged" in got.events,
+                 f"{ref} is credited with the `WeaponChanged` its arming"
+                 f" emitted -- {how}",
+                 f"{sorted(got.events)}")
+        out.that(not got.silent,
+                 f"{ref} is not reported silent", f"fired {got.fired}")
+        out.that(got.fired == 1,
+                 f"{ref} fires once and stops -- `_attempts` gives up as"
+                 " soon as a row shows itself, so a second attempt would"
+                 " mean the first was not credited",
+                 f"fired {got.fired} of {A.TRIES * 3 * 2} attempts")
+
+    # The four that are silent for want of gear, measured rather than
+    # asserted: their verdict is correct and the gap is the board's.
+    # Reported so the number cannot drift unnoticed, which is the shape
+    # `symbols.py` uses for its undocumented readers.
+    short = [ref for ref in ("f3785", "f2099", "f2400", "f396")
+             if A.audit(ref).silent]
+    out.that(len(short) == 4,
+             "four rows of the same shape are silent because the weapon"
+             " they name is not on any board the auditor builds -- gear,"
+             " not crediting, and #437's territory rather than #662's",
+             f"silent for want of gear: {short}")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -18141,6 +18228,9 @@ DRIVERS = {
     "the_last_two_target_lines_of_that_census": (
         the_last_two_target_lines_of_that_census,
         "cover-or-concealment-against, and a rusting item"),
+    "a_trait_credited_through_one_event": (
+        a_trait_credited_through_one_event,
+        "a standing trait whose whole credit is one WeaponChanged"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),
