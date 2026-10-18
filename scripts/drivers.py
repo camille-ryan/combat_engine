@@ -20560,6 +20560,196 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_count_of_feats_of_one_printed_category(out: Result) -> None:
+    """Four runepriest feats pay a number equal to how many of them you have.
+
+    #692. `c.feats(category=)` is the symbol, and it is **the tree's
+    spelling, not mine**: `RUNE_FEATS = ("c.feats(category=)",)` sat in
+    `feats/defenders_b.py` carrying two of these rows before the reader
+    existed, so the issue's own sketch was corrected to it.
+
+    The premise that blocked them was *"feats are ordinary rows in
+    `Powers.known` and carry no category"*. Half of that is true and the
+    half that matters is not: `feat.category` has been a column in
+    `game.db` all along -- 570 of 3,501 feats carry one, 8 of them this
+    category, and 4 of those 8 are heroic. The other four are paragon and
+    epic, so this family is complete at the tier.
+
+    **The assertion is on `skills.modifier` and `Mods.split`**, which is
+    what a check and a blow actually read. A modifier nothing consults is
+    this project's commonest bug and three of these four rows are nothing
+    but a modifier.
+
+    Two negative controls, and they are the point of the rule rather than
+    decoration:
+
+    * a feat of a **different** printed category must not be counted. A
+      reader that answered "every feat you have" would make this family pay
+      five or six times what it prints and would still look right on a
+      character who happens to have taken nothing else.
+    * a category no feat carries must answer **nothing**, not everything --
+      the failure a truthy-filter bug gives.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.components import Mods, Powers
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import Bloodied
+    from combat_engine.engine.query import feats_of
+    from combat_engine.engine.skills import modifier
+
+    #: Declared, heroic, and all four of this category. The paragon and epic
+    #: pair are deliberately absent -- see the docstring.
+    RUNE = ("f2613", "f2614", "f2615", "f2616")
+    #: A declared feat of a *different* printed category. The control, and
+    #: it goes on **every** board here rather than only the first. Without
+    #: it the unfiltered count is 4 by accident -- exactly the four rune
+    #: feats -- so a plant that makes `category=` do nothing leaves three of
+    #: these assertions green. Measured: the plant reddened 5 of 15 before
+    #: this line and 9 after.
+    OTHER = "f1111"
+
+    def damage_bonus(world, who: int) -> int:  # noqa: ANN001
+        """What a blow by this creature would add, read where resolve reads it."""
+        mods = world.get(who, Mods)
+        return sum((mods.split("damage", {}) or {}).values()) if mods else 0
+
+    # -- the reader counts by category, and only by category ---------------
+    world, me, _ = audit_board("f2613", 1)
+    known = world.get(me, Powers)
+    out.that(known is not None and "f2613" in known.known,
+             "the board gives the caster the row under test",
+             f"{known is not None}")
+    if known is None:
+        return
+    for ref in (*RUNE, OTHER):
+        if ref not in known.known:
+            known.known.append(ref)
+    counted = feats_of(world, me, "Rune")
+    out.that(sorted(counted) == sorted(RUNE),
+             "the reader answers exactly the feats of that printed category",
+             f"{sorted(counted)} wanted {sorted(RUNE)}")
+    out.that(OTHER not in counted,
+             "and not a feat of a different category, which is the control:"
+             " an unfiltered reader would pay this family for every feat the"
+             " character has",
+             f"{OTHER} in {sorted(counted)}")
+    out.that(OTHER in feats_of(world, me),
+             "though the unfiltered call does see it -- so the exclusion"
+             " above is the filter working and not the feat being invisible",
+             f"{OTHER} not among {len(feats_of(world, me))} feats")
+    out.that(feats_of(world, me, "no-such-category") == (),
+             "and a category no feat carries answers nothing, not everything",
+             f"{feats_of(world, me, 'no-such-category')}")
+
+    # -- f2613: both printed skills, by the count, and no third skill ------
+    # **Lifted, not used again.** `audit.board` arms every `action=NONE` row
+    # before a rule looks, so the reading already contains the bonus and a
+    # second use is a no-op -- the mistake that made an earlier rule assert
+    # 17 -> 17 against a row that works. Ending the row's own effects and
+    # reading the difference asks it from the other side, and here it also
+    # pays for the known set this rule just widened: the armed effect was
+    # laid when the caster had one of these feats, so re-using it after is
+    # the only way the count under test is the count of four.
+    for eff in [e for e in world.effects.of(me)
+                if getattr(e, "by", "") == "f2613" and not e.ended]:
+        world.effects.end(eff, "drivers: lifted to re-arm against four feats")
+    was = {s: modifier(world, me, s) for s in ("bluff", "diplomacy", "stealth")}
+    use(world, me, "f2613")
+    now = {s: modifier(world, me, s) for s in ("bluff", "diplomacy", "stealth")}
+    for skill in ("bluff", "diplomacy"):
+        out.that(now[skill] - was[skill] == len(RUNE),
+                 f"f2613 pays {len(RUNE)} on a {skill} check -- the count,"
+                 " not a flat number",
+                 f"{was[skill]} -> {now[skill]}, wanted +{len(RUNE)}")
+    out.that(now["stealth"] == was["stealth"],
+             "and nothing on a stealth check: two printed keys, not the"
+             " blanket `skill` an armour penalty would use",
+             f"{was['stealth']} -> {now['stealth']}")
+
+    # -- f2616: the other printed pair, on its own board -------------------
+    world, me, _ = audit_board("f2616", 1)
+    known = world.get(me, Powers)
+    if known is None:
+        return
+    for ref in (*RUNE, OTHER):
+        if ref not in known.known:
+            known.known.append(ref)
+    for eff in [e for e in world.effects.of(me)
+                if getattr(e, "by", "") == "f2616" and not e.ended]:
+        world.effects.end(eff, "drivers: lifted to re-arm against four feats")
+    was = {s: modifier(world, me, s) for s in ("athletics", "endurance")}
+    use(world, me, "f2616")
+    now = {s: modifier(world, me, s) for s in ("athletics", "endurance")}
+    for skill in ("athletics", "endurance"):
+        out.that(now[skill] - was[skill] == len(RUNE),
+                 f"f2616 pays the same count on {skill}",
+                 f"{was[skill]} -> {now[skill]}")
+
+    # -- f2615: the trigger is asked of the row, and the bonus is the count
+    # **The row's own `Trigger` answers, not a predicate rewritten here.**
+    # Arming the body against every `Bloodied` and then asserting the
+    # narrowing tests the lambda in this file and not the header.
+    world, me, _ = audit_board("f2615", 1)
+    known = world.get(me, Powers)
+    if known is None:
+        return
+    for ref in (*RUNE, OTHER):
+        if ref not in known.known:
+            known.known.append(ref)
+    # `Power.triggers` rather than `Power.on`: `on=` takes one trigger or a
+    # sequence, and that property is what everything else reads it through.
+    row = REGISTRY["f2615"]
+    asked = row.triggers
+    out.that(len(asked) == 1, "f2615 declares one trigger", f"{asked}")
+    mine = Bloodied(actor=me, source=-1)
+    out.that(any(t.when(world, me, mine) for t in asked),
+             "f2615's own trigger answers a bloodying of the runepriest",
+             f"{asked}")
+    stranger = Bloodied(actor=me + 1, source=-1)
+    out.that(not any(t.when(world, me, stranger) for t in asked),
+             "and not somebody else's -- `about_me` reads `ev.actor`, which"
+             " is what this event names its subject",
+             "answered a stranger's bloodying")
+    was = damage_bonus(world, me)
+    use(world, me, "f2615", trigger=mine)
+    now = damage_bonus(world, me)
+    out.that(now - was == len(RUNE),
+             "and the damage bonus it lays is the count, read off"
+             " `Mods.split('damage')` where a blow reads it",
+             f"{was} -> {now}, wanted +{len(RUNE)}")
+
+    # -- f2614: the count reaches the ally, not the runepriest -------------
+    # The clause pays *the target of* the class feature, so a rider that
+    # banked the hit points on the caster would read correct on a board
+    # where the caster is also in the burst.
+    world, me, _ = audit_board("f2614", 1)
+    known = world.get(me, Powers)
+    if known is None:
+        return
+    for ref in (*RUNE, OTHER):
+        if ref not in known.known:
+            known.known.append(ref)
+    granted: list[tuple[int, int]] = []
+    from combat_engine.engine.events import TempHP
+
+    # `TempHP` names its recipient `target`, not `actor` -- `source` is who
+    # granted them. See the event's own fields.
+    world.bus.on(TempHP, lambda ev: granted.append((ev.target, ev.amount)))
+    mate = next((a for a in world.entities if a != me
+                 and getattr(world.get(a, Powers), "known", None) is not None), None)
+    row = REGISTRY["f2614"]
+    used = type("U", (), {"actor": me, "power": "p11353", "targets": [mate]})()
+    out.that(any(t.when(world, me, used) for t in row.triggers),
+             "f2614's trigger answers the runepriest using the class feature",
+             f"{row.triggers}")
+    use(world, me, "f2614", trigger=used)
+    out.that(granted == [(mate, len(RUNE))],
+             "and the temporary hit points land on that use's target, in the"
+             " size of the count",
+             f"{granted} wanted [({mate}, {len(RUNE)})]")
+
+
 def which_weapon_the_blow_came_through(out: Result) -> None:
     """Three rows print "using this weapon" and no event carried one.
 
@@ -20699,6 +20889,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "feat_category": (
+        a_count_of_feats_of_one_printed_category,
+        "four feats paying a number equal to how many of them you have (#692)",
     ),
     "porous": (
         a_blocker_with_a_gap_in_it,

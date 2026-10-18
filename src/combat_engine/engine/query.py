@@ -670,6 +670,59 @@ def _type_word(raw: str) -> str:
 
 
 @lru_cache(maxsize=1)
+def feat_categories() -> dict[str, str]:
+    """Every feat's printed category, by ref, from the database.
+
+    The bracket after a feat's printed name -- `feat.category` -- and the
+    only thing in this engine that reads it. Nine feats carry `Rune`, and
+    `f2613` pays a bonus "equal to the number of rune feats you have".
+
+    **The table is also the test for what a feat is.** A feat is an ordinary
+    row in `Powers.known` with nothing in its header to mark it one, so
+    "which of these refs are feats" was unanswerable from the registry;
+    being in this table is exactly it.
+
+    Cached: one query, and the database does not change inside a run -- the
+    bargain `printed_kinds` below strikes for the same reason.
+    """
+    from combat_engine.db import game
+
+    try:
+        return {ref: (category or "") for ref, category in game().execute(
+            "SELECT ref, category FROM feat")}
+    except Exception:
+        # A tree with no built database still has to answer. Content asks
+        # this through `c.feats`, and a row raising because `game.db` is
+        # absent would be a worse fault than a count of nought.
+        return {}
+
+
+def feats_of(world: World, eid: int, category: str = "") -> tuple[str, ...]:
+    """The feats this creature has, by ref, optionally of one category.
+
+    `f2613`, `f2614` and `f2615` all pay something "equal to the number of
+    rune feats you have", and nothing counted a character's feats at all --
+    `RUNE_FEATS = ("c.feats(category=)",)` is the marker all three carried
+    and `defenders_b.py` has held that spelling since before the reader
+    existed. #692.
+
+    **Matched as a substring, case-folded**, because two cells carry a comma
+    and one of them is a single category naming three classes -- `leaks.py`'s
+    category walk records measuring that rather than splitting on it. "Rune"
+    matches `Rune` and nothing else in the corpus.
+    """
+    known = world.get(eid, Powers)
+    if known is None:
+        return ()
+    every = feat_categories()
+    mine = [ref for ref in known.known if ref in every]
+    if category:
+        want = category.strip().lower()
+        mine = [ref for ref in mine if want in every[ref].lower()]
+    return tuple(mine)
+
+
+@lru_cache(maxsize=1)
 def printed_kinds() -> frozenset[str]:
     """Every type word the corpus prints, from the database.
 

@@ -23,6 +23,10 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Everything that can be targeted, flanked, covered or walked around.
 - `query.enemies(world: 'World', eid: 'int') -> 'list[int]'`
   - (no docstring)
+- `query.feat_categories() -> 'dict[str, str]'`
+  - Every feat's printed category, by ref, from the database.
+- `query.feats_of(world: 'World', eid: 'int', category: 'str' = '') -> 'tuple[str, ...]'`
+  - The feats this creature has, by ref, optionally of one category.
 - `query.is_(world: 'World', eid: 'int', c: 'Condition') -> 'bool'`
   - (no docstring)
 - `query.is_conjuration(world: 'World', eid: 'int') -> 'bool'`

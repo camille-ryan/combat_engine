@@ -712,6 +712,28 @@ class Cast:
         health = self.world.get(who, Health) if who else None
         return health is not None and health.hp < health.max_hp
 
+    def feats(self, *, category: str = "", on: int | None = None) -> tuple[str, ...]:
+        """The feats this creature has, by ref -- `c.feats(category="Rune")`.
+
+        Three rows pay something *"equal to the number of rune feats you
+        have"* and nothing counted a character's feats at all. `f2614` and
+        `f2615` have carried `RUNE_FEATS = ("c.feats(category=)",)` since
+        before this existed, so the spelling is the tree's and not mine.
+        #692.
+
+        **A feat is an ordinary row in `Powers.known`** with nothing in its
+        header to mark it one, so "which of these are feats" is answered by
+        the `feat` table carrying the ref -- which is also where the printed
+        category lives. See `query.feat_categories`.
+
+        Defaults to the **caster**, like `c.build` and unlike almost
+        everything else here: a feat count is always about whoever holds the
+        feat that asks.
+        """
+        from .query import feats_of
+
+        return feats_of(self.world, self.me if on is None else on, category)
+
     def race_of(self, on: int | None = None) -> str:
         """A character's race, by ref -- `c.race_of(on=ally) == "r4"`.
 

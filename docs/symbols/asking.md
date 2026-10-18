@@ -143,6 +143,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - The damage type this character's build is bound to, if any.
 - `c.feat(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Has this character taken that feat? `c.feat("f611")`.
+- `c.feats(self, *, category: 'str' = '', on: 'int | None' = None) -> 'tuple[str, ...]'`
+  - The feats this creature has, by ref -- `c.feats(category="Rune")`.
 - `c.granted_by: int`
   - who handed this creature the basic attack, or -1.
 - `c.granted_via: str`

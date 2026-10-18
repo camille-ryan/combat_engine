@@ -4,12 +4,14 @@ Four short lists in one file because three of them are four or five rows
 long. Two gaps run through the whole thing and neither is new:
 
 * **The class feature that announces nothing.** The swordmage's aegis
-  punishes an attacker from inside a `c.watch` callback, and the runepriest
-  counts its own feats by a category the engine has no column for. A feat
-  hanging off either has nothing to declare a trigger against. **The monk's
-  is no longer one of them**: its feature is five declared rows, one per
+  punishes an attacker from inside a `c.watch` callback, so a feat hanging
+  off it has nothing to declare a trigger against. **Two classes have come
+  off this list.** The monk's feature is five declared rows, one per
   tradition, and `FLURRY` below names them -- so the monk feats here are
-  held by what they do to that use, not by finding it.
+  held by what they do to that use, not by finding it. And the runepriest
+  no longer "counts its own feats by a category the engine has no column
+  for": the column was always in `game.db`, `c.feats(category=)` reads it,
+  and the four rune feats at the foot of this file are written. #692.
 * **The distance written into somebody else's body.** A teleport's range
   and the five squares `p9501` measures are constants inside those rows;
   nothing reaches in to add one.
@@ -29,6 +31,7 @@ from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
     FORT,
+    NO_TARGET,
     PERSONAL,
     REF,
     SELF,
@@ -55,7 +58,6 @@ from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.types import Usage
 
 FEATURE = ("c.class_feature()",)
-RUNE_FEATS = ("c.feats(category=)",)
 
 #: The five the swordmage's own damage feat names. `Keyword.FORCE` is not
 #: among them, which is the one worth saying out loud: the class's signature
@@ -684,39 +686,81 @@ def f2619(c: Cast) -> None:
 # -- runepriest -------------------------------------------------------------
 
 
-@power("f2613", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RUNE_FEATS)
+@power("f2613", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2613(c: Cast) -> None:
     """A feat bonus to two social checks, the size of it being how many rune
     feats you have.
 
-    **It read "deliberately inert rather than blocked on counting rune feats:
-    the count would only ever size a number no fight reads", and the second
-    half is false** -- bluff is rolled 18 times in this tree and diplomacy
-    four. So the row *is* blocked on the count, which is what `f2614` and
-    `f2615` beside it already say: `RUNE_FEATS` is the marker they carry and
-    this is the third row on it. #691, #692.
+    **The count is `c.feats(category=)` and it exists now** -- #692, written
+    against the spelling these four rows had already agreed on. It reads
+    `feat.category` out of the built database, so "how many of this
+    character's feats are of that category" is one question and not a
+    hand-kept list that would go stale the moment the ETL parsed one more
+    feat.
 
-    The bonus itself needs nothing new. `c.bonus("skill:bluff", n,
-    kind="feat")` is one line the moment `n` can be asked for."""
+    `AT_WILL`, not the `ENCOUNTER` this header carried while it was marked.
+    Nothing here is spent; the benefit is a standing one, and
+    [[un-marking a row audits its header]] is exactly this -- lint only
+    checks finished rows, so the usage had been wrong for as long as the
+    marker hid it.
+
+    **This feat counts itself**, which is the printed reading: a character
+    holding only this one has one rune feat and a +1. So no zero guard --
+    `n` is never 0 on a character who has the row."""
+    n = len(c.feats(category="Rune"))
+    c.bonus("skill:bluff", n, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("skill:diplomacy", n, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 
-@power("f2614", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RUNE_FEATS)
+@power("f2614", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you use p11353",
+       on=Trigger(PowerUsed, _used("p11353"), "you use p11353"))
 def f2614(c: Cast) -> None:
-    """p11353 is a ref and `PowerUsed` would carry its target, but the
-    whole payout is the count: feats are ordinary rows in `Powers.known`
-    and carry no category, so "how many rune feats" cannot be asked."""
+    """Temporary hit points riding on the class feature's target.
+
+    `PowerUsed` rather than `PowerResolved`, and the difference is real
+    here: `p11353` heals only if the ally agrees to spend a surge, and this
+    clause is not conditional on the healing -- the card says *the target*
+    gains them, not *the healed target*. `PowerUsed` is announced with the
+    targets already picked and before the body runs, so `c.trigger.targets`
+    is the ally either way. `f2143` in `ardent_b.py` makes the same choice
+    for the same reason.
+
+    `AT_WILL`: the rider applies to every use of a feature that limits
+    itself."""
+    n = len(c.feats(category="Rune"))
+    for who in c.trigger.targets:
+        c.temp_hp(n, on=who)
 
 
 @power("f2615", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=RUNE_FEATS)
+       reach=PERSONAL, target=SELF,
+       trigger="the first time you are bloodied during an encounter",
+       on=Trigger(Bloodied, about_me, "you are bloodied"))
 def f2615(c: Cast) -> None:
-    """`Bloodied` is the trigger and it is writable; the size of the bonus
-    is the same missing count as f2614."""
+    """*"The first time"* is carried by `ENCOUNTER`, not by a counter in
+    the body: a once-per-encounter triggered row answers its trigger once
+    and is spent, which is the same bargain `f1818` above makes, in this
+    file, against this event.
+
+    The card prints no type word in front of the bonus, so it is untyped.
+    `When.EONT` is the printed duration."""
+    n = len(c.feats(category="Rune"))
+    c.bonus("damage", n, on=c.me, until=When.EONT, kind="untyped")
 
 
-@power("f2616", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+@power("f2616", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2616(c: Cast) -> None:
-    """The other pair of skills, on the same terms as f2613."""
+    """The other pair of skills, on the same terms as f2613.
+
+    **`out_of_combat=True` came off it.** One of these two skills is rolled
+    in a fight: `escape.py` maps athletics to a Fortitude defence, so the
+    bonus is spent every time this character tries to get out of a grab.
+    Endurance is the half that never comes up, and half a clause mattering
+    is not a row with no combat meaning."""
+    n = len(c.feats(category="Rune"))
+    c.bonus("skill:athletics", n, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("skill:endurance", n, on=c.me, until=When.ENCOUNTER, kind="feat")

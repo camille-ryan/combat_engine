@@ -339,7 +339,7 @@ CATEGORIES: dict[str, dict] = {
                 "weapon_range", "wielding", "wis_", "wis_mod",
             ]),
             ("state and identity", [
-                "bloodied", "build", "element", "feat", "granted_by",
+                "bloodied", "build", "element", "feat", "feats", "granted_by",
                 "granted_via", "healed_by", "index", "instinctive", "is_",
                 "is_hidden", "is_kind", "is_minion", "is_quarry", "is_trap",
                 "keywords_of", "kinds_of", "knows", "made_by", "missing",
@@ -546,11 +546,14 @@ ENUMS = {
 #: fails the check, and a section naming a function `query.py` no longer has
 #: fails it too.
 READERS: dict[str, list[str]] = {
+    # `feat_categories` and `feats_of` are here with `race_of` and
+    # `printed_kinds` for the same reason: all four answer *what this
+    # character is*, off the build rather than off the board. #692.
     "who, and whose side": [
         "active", "alive", "allies", "combatants", "conscious", "creatures",
-        "enemies", "is_", "is_conjuration", "is_trap", "kinds_of",
-        "level_term", "living", "printed_kinds", "race_of", "scenery",
-        "stat_block", "targetable", "team",
+        "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
+        "is_trap", "kinds_of", "level_term", "living", "printed_kinds",
+        "race_of", "scenery", "stat_block", "targetable", "team",
     ],
     "where, and how far": [
         "adjacent", "distance_between", "leash_of", "line_of_effect",
