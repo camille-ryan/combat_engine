@@ -1343,13 +1343,47 @@ def i3474p1(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        trigger="you use a summoning power of 5th level or lower",
        on=Trigger(PowerUsed, _reagent(5, Keyword.SUMMONING),
-                  "you use a summoning power"),
-       dropped=("c.reroll_attack(on=)",))
+                  "you use a summoning power"))
 def i894p1(c: Cast) -> None:
-    """The temporary hit points land on whatever is serving the summoner.
-    Rerolling somebody else's first miss is the missing half."""
-    for who in c.servants():
+    """Temporary hit points for the summoned creature, and its first miss
+    rerolled.
+
+    **The second half is written and `c.reroll_attack(on=)` was never the
+    gap.** `ev=` names the roll when the roll is not `c.trigger`, which is
+    what a watcher over the servant's own attack has. The parameter landed
+    for banked rerolls and reaches another creature's roll unchanged. #677.
+
+    *"The first time it misses"* is a latch and not `once=`: `c.watch(...,
+    once=True)` is spent by the first **event**, and the first attack a
+    summoned creature makes is usually a hit. So the watch sees every roll
+    and the list below is what spends it, which is the difference between
+    "its first miss" and "its first attack".
+
+    **Read off `roll.result` at `AttackRolled`, before the miss resolves.**
+    That is the only moment a reroll buys anything -- `p10354`'s own marker
+    records why `PowerResolved` is too late -- and `resolve` attaches the
+    live `AttackResult` to that event for exactly this.
+
+    `keep="new"` is the card: *"you reroll that attack roll but must use the
+    second result."* Not `"best"`, which is the commoner printed wording and
+    would make this item strictly better than it is.
+    """
+    spent: list[int] = []
+    mine = list(c.servants())
+    for who in mine:
         c.temp_hp(5, on=who)
+
+    def first_miss(roll: Any) -> None:
+        if spent or roll.attacker not in mine:
+            return
+        result = getattr(roll, "result", None)
+        if result is None or result.hit:
+            return
+        spent.append(1)
+        c.reroll_attack(ev=roll, keep="new")
+
+    c.watch(AttackRolled, first_miss, until=When.ENCOUNTER,
+            label=f"{c.ref} reroll")
 
 
 # -- level 8 ----------------------------------------------------------------

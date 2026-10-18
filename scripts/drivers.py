@@ -20564,6 +20564,171 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_reroll_handed_to_somebody_else(out: Result) -> None:
+    """Three rows marked on `c.reroll_attack(on=)`, which was never the gap.
+
+    Found by #677's new split: all three sat in the "wants an ARGUMENT on a
+    verb that exists" bucket, which is what made them worth reading at all.
+    Every one says some version of *"`c.reroll_attack` rerolls the caster's
+    own roll with nothing to turn it on an ally's or a companion's"*.
+
+    **`ev=` is that turn.** It names the roll when the roll is not
+    `c.trigger`, which is exactly what a watcher over somebody else's attack
+    has. It landed for *banked* rerolls -- a row that fires now and rerolls
+    later -- and reaches another creature's roll unchanged, because
+    `AttackRolled` carries the live `AttackResult` and the function mutates
+    that. So the marker named the author's reach and not the tree's gap, and
+    it outlived its own reason.
+
+    `f776`, `i894p1` and `m5531a2` are written. Two are driven here; the
+    third is not drivable on any board this harness builds -- `i894p1` needs
+    a **summoned** creature to have missed, and the audit board poses no
+    summoning power -- which is said rather than papered over.
+
+    The assertions that matter are the narrowings, because the reroll itself
+    is one call:
+
+    * `f776` is **only about the companion**, and that correction came out
+      of a plant: with the row's own `c.reroll_attack` deleted the rule
+      stayed green, because `p1450` is a declared row triggered on "you
+      make an attack roll and dislike the result" and the dispatcher was
+      rerolling the caster's miss by itself. The feat's addition is the
+      *beast's* roll; the assertion is on `Rerolled.by`, not on a count.
+
+      **And the wide version is harmless, which is worth knowing before
+      calling it a bug.** Planting the caster back into the watch leaves
+      this rule green and leaves the caster's miss rerolled **once**: the
+      dispatcher claims `p1450` first and the feat's `c.expend_row` then
+      answers False. So the narrow reading is the better one because it
+      does not *depend* on the price interlocking, not because the wide one
+      pays twice.
+    * `f776` **pays first**: the card spends a racial power to buy the
+      reroll, so a reroll that happened and then found nothing to spend
+      would be free. With `p1450` already gone, nothing is rerolled.
+    * `m5531a2` hands its token to the ally that **damaged** the target --
+      not to any ally, and not on a hit that dealt nothing -- and the token
+      is spent by one roll.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import Rerolled
+    from combat_engine.engine.query import adjacent, alive, allies, enemies
+
+    # -- f776: the companion's roll, and the price paid first -------------
+    # **`cf:ranger-f1`'s board, not `f776`'s.** This feat is about a beast
+    # companion and `audit.board("f776")` poses none -- `c.beast()` is None
+    # there -- so the first draft drove the caster's own roll and measured
+    # `p1450` instead of the feat.
+    def ranger(who: str, *, spend_it_first: bool = False):  # noqa: ANN202
+        world, me, _ = audit_board("cf:ranger-f1", 1)
+        known = world.get(me, Powers)
+        if known is not None:
+            for ref in ("f776", "p1450"):
+                if ref not in known.known:
+                    known.known.append(ref)
+        c = Cast(world=world, me=me, ref="drivers:f776")
+        pet = c.beast()
+        if pet is None:
+            return None, None
+        if spend_it_first:
+            c.expend_row("p1450")
+        use(world, me, "f776")
+        seen: list[tuple[str, int]] = []
+        world.bus.on(Rerolled, lambda ev: seen.append((ev.by, ev.actor)))
+        swings = pet if who == "beast" else me
+        foe = next((f for f in enemies(world, me)
+                    if adjacent(world, swings, f)), None)
+        if foe is None:
+            return None, None
+        # A 2 misses everything on this board, which is what the card's
+        # "dislike the result" comes to.
+        world.rng.loaded = 2
+        use(world, swings, "mba", targets=[foe])
+        return seen, pet
+
+    paid, pet = ranger("beast")
+    out.that(paid is not None, "the ranger board poses a beast with a foe"
+             " beside it", f"{paid}")
+    if paid is None or pet is None:
+        return
+    out.that(("f776", pet) in paid,
+             "the beast's missed roll is rerolled by the feat -- through a"
+             " watcher over another creature's roll, which is the whole of"
+             " what `on=` was marked for",
+             f"{paid}")
+    mine, _ = ranger("caster")
+    out.that(mine is not None and not any(by == "f776" for by, _a in mine),
+             "and the caster's own miss is credited to `p1450` and not to"
+             " the feat: the card divides the labour, and this half is the"
+             " racial power's own declared trigger",
+             f"{mine}")
+    already, _ = ranger("beast", spend_it_first=True)
+    out.that(already == [],
+             "nothing is rerolled when the racial power has already been"
+             " spent: the price comes first, so the reroll is never free",
+             f"{already}")
+
+    # -- m5531a2: the token, and the two things that narrow it ------------
+    world, me, _ = audit_board("m5531a2", 1)
+    foes = list(enemies(world, me))
+    mate = next(iter(allies(world, me)), None)
+    out.that(mate is not None and len(foes) > 2,
+             "the m5531a2 board gives the caster an ally and several foes",
+             f"ally {mate}, foes {foes[:4]}")
+    if mate is None or len(foes) < 2:
+        return
+    victim = foes[0]
+    world.rng.loaded = 20
+    use(world, me, "m5531a2", targets=[victim])
+    held = [e.label for e in world.effects.of(me) if not e.ended]
+    out.that("m5531a2 token" in held,
+             "the burst leaves the caster watching for an ally to hurt that"
+             " target -- offered inside its own next turn, which is a"
+             " different window from the one the token is spent in",
+             f"{held[-3:]}")
+    out.that(not any((e.label or "").endswith("reroll")
+                     for e in world.effects.of(mate)),
+             "and the ally has no token yet: the card says the ally has to"
+             " hit *and damage* it first",
+             f"{[e.label for e in world.effects.of(mate)]}")
+    # **The ally swings its own at-will, not `mba`.** The board's ally is a
+    # second copy of the same stat block and knows three rows, none of them
+    # the basic attack -- `use(..., 'mba')` answers False and the first
+    # draft of this read as "the token never fires".
+    use(world, mate, "m5531a0", targets=[victim])
+    out.that(any((e.label or "").endswith("reroll")
+                 for e in world.effects.of(mate)),
+             "once it has damaged the target it carries the token",
+             f"{[e.label for e in world.effects.of(mate)]}")
+    seen: list[tuple[str, int]] = []
+    world.bus.on(Rerolled, lambda ev: seen.append((ev.by, ev.actor)))
+    # **A living target, because the first swing usually kills this one.**
+    # 23 damage on a level-7 board drops it, and `use` then answers False
+    # with no roll at all -- which is how this assertion first read as a
+    # token that did not work.
+    other = next((f for f in foes[1:]
+                  if adjacent(world, mate, f) and alive(world, f)), None)
+    out.that(other is not None, "another living foe beside that ally",
+             f"{[f for f in foes if alive(world, f)]}")
+    if other is None:
+        return
+    world.rng.loaded = 4
+    use(world, mate, "m5531a0", targets=[other])
+    out.that(seen == [("m5531a2", mate)],
+             "and its next attack roll is rerolled, credited to the row that"
+             " handed the token over and to the ally that rolled",
+             f"{seen}")
+    world.rng.loaded = 4
+    use(world, mate, "m5531a0", targets=[other])
+    out.that(len(seen) == 1,
+             "once, and not on every roll it makes afterwards -- the card"
+             " says one attack roll",
+             f"{seen}")
+
+
 def three_context_keys_where_one_word_served_four(out: Result) -> None:
     """`ctx["kind"]` was one key over four unrelated vocabularies.
 
@@ -21584,6 +21749,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "lent_reroll": (
+        a_reroll_handed_to_somebody_else,
+        "a reroll handed to an ally or a companion (#677)",
     ),
     "kind_keys": (
         three_context_keys_where_one_word_served_four,

@@ -3451,17 +3451,66 @@ def m5531a1(c: Cast) -> None:
     keywords=[Keyword.CLOSE],
     attack=Attack(vs=WILL, printed=10),
     damage=Damage("2d8", 6, kind=LIMITED),
-    dropped=("c.reroll_attack(on=)",),
 )
 def m5531a2(c: Cast) -> None:
-    """"The next ally that hits and damages the target can reroll one
-    attack before the end of the ally's next turn" needs a reroll token
-    aimed at a creature other than whoever is resolving the current
-    attack; `c.reroll_attack` takes no `on=` to hand one to. The prone and
-    the earlier damage both land."""
+    """Prone, and a reroll token for whichever ally next hurts this target.
+
+    **Written, and `c.reroll_attack(on=)` was never the gap.** The marker
+    said this "needs a reroll token aimed at a creature other than whoever
+    is resolving the current attack; `c.reroll_attack` takes no `on=` to
+    hand one to". `ev=` is that handle: it names the roll when the roll is
+    not `c.trigger`, which is what a watcher over somebody else's attack
+    has. It landed for banked rerolls and reaches another creature's roll
+    unchanged. #677.
+
+    **Three gates, one per clause of a long sentence**, and they are
+    separate on purpose:
+
+    * *the next ally of this creature that hits **and damages** the
+      target* -- so the watch is on `DamageApplied` and not on `Hit`: a hit
+      that deals nothing (resisted to zero, or a rider with no damage) has
+      not damaged it, and the card says both words;
+    * *before the end of this creature's next turn* -- the window the token
+      is **offered** in, which is this watch's own `When.EONT`;
+    * *before the end of the ally's next turn* -- the window the token is
+      **spent** in, which is the second watch's, and it starts when the
+      first fires. Two durations measured from two different turns, which
+      is why neither can be the other's.
+
+    *"Using either result"* is `keep="best"`.
+
+    Laid once, by the first ally to qualify: `spent` is the latch, because
+    `once=` on the outer watch would be consumed by the first `DamageApplied`
+    from anybody."""
     if c.strike():
         c.hit()
         c.prone()
+        victim = c.target
+        if victim is None:
+            return
+        mine = set(c.allies())
+        spent: list[int] = []
+
+        def hurt_it(ev: Any) -> None:
+            mate = getattr(ev, "source", None)
+            if spent or mate not in mine or ev.target != victim:
+                return
+            if ev.amount <= 0:
+                return
+            spent.append(1)
+            used: list[int] = []
+
+            def their_roll(roll: Any) -> None:
+                if used or roll.attacker != mate:
+                    return
+                used.append(1)
+                c.reroll_attack(ev=roll, keep="best")
+
+            c.watch(AttackRolled, their_roll, on=mate, until=When.EONT,
+                    label=f"{c.ref} reroll")
+
+        c.watch(DamageApplied, hurt_it, until=When.EONT,
+                label=f"{c.ref} token")
 
 
 # ==========================================================================

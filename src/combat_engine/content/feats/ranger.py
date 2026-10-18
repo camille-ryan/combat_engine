@@ -35,6 +35,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     AttackDeclared,
+    AttackRolled,
     Cast,
     Condition,
     DamageType,
@@ -304,22 +305,71 @@ def f773(c: Cast) -> None:
             label=f"{c.ref} shelter")
 
 
-@power("f776", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.reroll_attack(on=)",))
+@power("f776", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f776(c: Cast) -> None:
-    """The beast shifts over rough ground.
+    """The beast shifts over rough ground, and the racial reroll reaches it.
 
-    The terrain half is exact now -- `when="shift"`, which is what the card
-    says and what the beast previously had on every kind of move.
+    The terrain half is exact -- `when="shift"`, which is what the card says
+    and what the beast previously had on every kind of move.
 
-    The reroll half is still dropped and the gap is not its name: `p1450` is
-    declared, and what is missing is that `c.reroll_attack` rerolls the
-    caster's own roll with nothing to turn it on an ally's or a companion's.
+    **The reroll half is written, and `c.reroll_attack(on=)` was never the
+    gap.** The marker said "`c.reroll_attack` rerolls the caster's own roll
+    with nothing to turn it on an ally's or a companion's", and `ev=` is
+    exactly that turn: it names the roll when the roll is not `c.trigger`,
+    which is what a watcher over somebody else's attack has. The parameter
+    landed for banked rerolls and reaches another creature's roll for free.
+    #677 is the report that made this findable; the marker outlived its
+    reason.
+
+    **Only the beast's roll, and the first draft watched both.** The card
+    reads "to reroll an attack roll you made **or** one your beast companion
+    made", and the first half is already `p1450`'s own job: that row is
+    declared with `trigger="you make an attack roll and dislike the result"`
+    and the dispatcher offers it. What this feat adds is the companion, and
+    that is all it adds.
+
+    **Measured, because the obvious claim about the wide version is false.**
+    Watching the caster here as well does *not* reroll one miss twice: the
+    dispatcher offers `p1450` first, that use is then gone, and this row's
+    `c.expend_row` answers False. One reroll either way. So the narrow
+    reading is preferred not because the wide one misbehaves but because it
+    is only correct **by accident of the price** -- and a clause that is
+    right because something else happened to spend first is the shape this
+    repo keeps finding broken later. The plant that showed it is in
+    `drivers.lent_reroll`.
+
+    **Watched rather than triggered**, because the roll belongs to another
+    creature: a declared `Trigger` is offered to whoever holds the row, and
+    the beast does not hold this feat.
+
+    `c.expend_row("p1450")` is the price and it comes **first**: the card
+    spends the racial power to buy the reroll, so a reroll that happened and
+    then found nothing to spend would be free. `keep="new"` is the card's own
+    words -- "use the second roll, even if it's lower".
+
+    `AT_WILL`, not the `ENCOUNTER` it carried while marked: the limit is
+    `p1450`'s single use, which `c.expend_row` enforces, and declaring a
+    second one here would make the feat fire once a fight where the card
+    allows it as often as the racial power is available.
     """
     pet = c.beast()
     if pet is not None:
         c.ignores_difficult(on=pet, until=When.ENCOUNTER, when="shift")
+    me = c.me
+
+    def dislike(roll: Any) -> None:
+        beast = c.beast()
+        if beast is None or roll.attacker != beast:
+            return
+        result = getattr(roll, "result", None)
+        if result is None or result.hit:
+            return
+        if c.expend_row("p1450"):
+            c.reroll_attack(ev=roll, keep="new")
+
+    c.watch(AttackRolled, dislike, on=me, until=When.ENCOUNTER,
+            label=f"{c.ref} reroll")
 
 
 @power("f780", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
