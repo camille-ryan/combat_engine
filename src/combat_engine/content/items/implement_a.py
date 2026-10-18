@@ -807,7 +807,7 @@ def i2295x1(c: Cast) -> None:
     gated; see the module note."""
 
     def divine_attack(ctx: dict[str, Any]) -> bool:
-        return ctx.get("kind") == "attack" and Keyword.DIVINE in _keywords_of(
+        return ctx.get("roll_kind") == "attack" and Keyword.DIVINE in _keywords_of(
             str(ctx.get("power", ""))
         )
 

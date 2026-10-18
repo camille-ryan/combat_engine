@@ -347,7 +347,7 @@ class OpportunityWindow(Decision):
     #: opportunity-attack sentence was never once emitted.
     #:
     #: The **ctx key stays `"kind"`** -- see `Cast.does_not_provoke`. That dict is a
-    #: separate contract and content rows read `ctx.get("kind")`.
+    #: separate contract and content rows read `ctx.get("move_kind")`.
     kind_: str = ""
     #: And how it travelled: `walk`, `fly`, `swim`, `burrow`, resolved by
     #: `movement.mode_of`. "Your **flying** does not provoke" is one row.

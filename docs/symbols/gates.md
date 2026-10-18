@@ -35,18 +35,20 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['hand']` -- which hand the weapon is in.
 - `ctx['how']` -- the kind of forced movement -- push, pull, slide.
 - `ctx['keywords']` -- the keywords of the row or effect being asked about.
-- `ctx['kind']` -- the kind of action or roll. See `Cast.does_not_provoke`.
 - `ctx['label']` -- the label of the effect being asked about.
 - `ctx['mode']` -- the movement mode in use.
+- `ctx['move_kind']` -- how a creature moved -- `walk` `shift` `teleport` `push` `pull` `slide` `charge` `run`. Written by `Cast.does_not_provoke`'s window off `Moved.kind_`, and by `Cast._extra_every`. The event field keeps the trailing underscore because a field named `kind` shadows `Event.kind`.
 - `ctx['mover']` -- who is trying to enter a square. `movement.may_enter`.
 - `ctx['natural']` -- the d20 face of the check being resolved. Written by `skills.check` and `skills.ability_check` from inside their resolve callbacks, so it is **absent on a standalone read** of `skills.modifier` -- which is the right way round: a gate on the face is a contingency on a die that has not been thrown. It is the paying half of `CheckDeclared`, where the calling half happens. #693.
 - `ctx['occupant']` -- who is standing in it. The other half of `mover`.
 - `ctx['ongoing']` -- is this ongoing damage rather than a blow.
 - `ctx['opportunity']` -- is this an opportunity attack.
 - `ctx['power']` -- the ref of the row doing this. The commonest gate.
+- `ctx['range_kind']` -- the shape of the attack -- `Range.kind` verbatim: `melee` `ranged` `close_burst` `close_blast` `area_burst` `wall`. Written by `dsl`'s stretch and reshape gates and by `resolve`'s ranged pass. Not the same key as `reach`, which `resolve` writes from `_reach_kind` on an attack's own context -- two spellings of a near-identical fact, left apart because they are written by different passes and read by different gates.
 - `ctx['ranged']` -- was it a ranged attack.
 - `ctx['reach']` -- the shape of the attack -- `Range.kind` verbatim.
 - `ctx['reroll_by']` -- the ref of whatever asked for the reroll.
+- `ctx['roll_kind']` -- which kind of roll is being changed -- `attack` `check` `save`. Written by `p6186`, the one row that boosts whatever triggered it, and read by the three rows that narrow its die to an attack roll. Not `Cast.boost_roll`'s `kind=`, which is a parameter and a filter.
 - `ctx['skill']` -- the skill being checked, lowercased.
 - `ctx['source']` -- who laid the effect.
 - `ctx['target']` -- who it lands on. The commonest key in the tree.

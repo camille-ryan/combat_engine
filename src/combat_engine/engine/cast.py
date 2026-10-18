@@ -2615,7 +2615,7 @@ class Cast:
         return self.bonus(
             "reach", max(0, squares_ - 1), until=until,
             on=on if on is not None else self.me,
-            when=lambda ctx: ctx.get("kind", "melee") == "melee",
+            when=lambda ctx: ctx.get("range_kind", "melee") == "melee",
             once=True, stacks=False,
         )
 
@@ -5430,7 +5430,7 @@ class Cast:
         def gate(ctx: dict[str, Any]) -> bool:
             if ref and ctx.get("power") != ref:
                 return False
-            if kinds and ctx.get("kind") not in kinds:
+            if kinds and ctx.get("range_kind") not in kinds:
                 return False
             if keyword is not None:
                 row = REGISTRY.get(str(ctx.get("power") or ""))
@@ -5908,10 +5908,12 @@ class Cast:
                 {"actor": ev.actor, "provoker": ev.provoker, "why": ev.why,
                  # How and by what means the provoker moved, for the rows that
                  # narrow by it. Empty for a window a move did not open. #301.
-                 # The ctx key stays `kind`; the event field is `kind_` because a
-                 # field named `kind` shadows `Event.kind`. Content rows read
-                 # `ctx.get("kind")` and must not have to care.
-                 "kind": ev.kind_, "mode": ev.mode}
+                 # **`move_kind`, not `kind`.** One key carried four
+                 # unrelated vocabularies and a gate could not say which it
+                 # meant -- which cost a wrong bug report and three hours
+                 # (#547, #639). The event field stays `kind_`, because a
+                 # field named `kind` shadows `Event.kind`.
+                 "move_kind": ev.kind_, "mode": ev.mode}
             ):
                 return
             ev.cancel("the power says it does not provoke")
@@ -8940,7 +8942,7 @@ class Cast:
         # the gate needs the source row's own header to answer either.
         # `self.ref` is that row by construction -- a body calling
         # `c.shift` is the power granting the shift.
-        seen = {"kind": kind, "who": mover, "power": self.ref}
+        seen = {"move_kind": kind, "who": mover, "power": self.ref}
         return sum(
             n
             for n, gate in known.extra_squares.get(MOVE_KIND + kind, ())

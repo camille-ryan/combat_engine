@@ -1584,7 +1584,7 @@ def f1303(c: Cast) -> None:
         spent: list[int] = []
 
         def leaving(ctx: dict[str, Any]) -> bool:
-            if spent or not ctx.get("kind"):
+            if spent or not ctx.get("move_kind"):
                 return False
             if not any(c.adjacent_to(foe, me) for foe in foes):
                 return False

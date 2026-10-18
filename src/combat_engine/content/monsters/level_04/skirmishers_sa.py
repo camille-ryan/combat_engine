@@ -482,7 +482,7 @@ def m115923a0(c: Cast) -> None:
     c.no_provoke(
         on=c.me,
         until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("kind") == "charge",
+        when=lambda ctx: ctx.get("move_kind") == "charge",
     )
 
 
@@ -2019,7 +2019,7 @@ def m3562a1(c: Cast) -> None:
         return
     c.no_provoke(
         from_=foe, on=c.me, until=When.EOT,
-        when=lambda ctx: ctx.get("kind") == "charge",
+        when=lambda ctx: ctx.get("move_kind") == "charge",
     )
     c.charge_at(foe)
     c.shift(1)

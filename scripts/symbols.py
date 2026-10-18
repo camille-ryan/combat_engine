@@ -466,7 +466,36 @@ CTX_KEYS: dict[str, str] = {
     "hand": "which hand the weapon is in.",
     "how": "the kind of forced movement -- push, pull, slide.",
     "keywords": "the keywords of the row or effect being asked about.",
-    "kind": "the kind of action or roll. See `Cast.does_not_provoke`.",
+    # **`kind` was one key over four unrelated vocabularies** -- a range
+    # shape, a kind of movement, a kind of roll, and absent -- and from a
+    # gate alone there was no way to tell which was meant. The sets do not
+    # overlap, so a gate written against the wrong one is silently False for
+    # the life of the row, and `lint._unknown_context_keys` could not catch
+    # it because the key was legal in all four. It cost a wrong bug report
+    # and three hours (#547). Split, so a gate says which question it asks
+    # and this registry can refuse the rest. #639.
+    "move_kind": (
+        "how a creature moved -- `walk` `shift` `teleport` `push` `pull` "
+        "`slide` `charge` `run`. Written by `Cast.does_not_provoke`'s "
+        "window off `Moved.kind_`, and by `Cast._extra_every`. The event "
+        "field keeps the trailing underscore because a field named `kind` "
+        "shadows `Event.kind`."
+    ),
+    "range_kind": (
+        "the shape of the attack -- `Range.kind` verbatim: `melee` "
+        "`ranged` `close_burst` `close_blast` `area_burst` `wall`. Written "
+        "by `dsl`'s stretch and reshape gates and by `resolve`'s ranged "
+        "pass. Not the same key as `reach`, which `resolve` writes from "
+        "`_reach_kind` on an attack's own context -- two spellings of a "
+        "near-identical fact, left apart because they are written by "
+        "different passes and read by different gates."
+    ),
+    "roll_kind": (
+        "which kind of roll is being changed -- `attack` `check` `save`. "
+        "Written by `p6186`, the one row that boosts whatever triggered it, "
+        "and read by the three rows that narrow its die to an attack roll. "
+        "Not `Cast.boost_roll`'s `kind=`, which is a parameter and a filter."
+    ),
     "label": "the label of the effect being asked about.",
     "mode": "the movement mode in use.",
     "mover": "who is trying to enter a square. `movement.may_enter`.",

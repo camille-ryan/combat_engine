@@ -2067,7 +2067,8 @@ def area_of(
     mine = set()
     for eye in origins(world, actor, r):
         mine |= squares(world, eye)
-    stretch = _stretched(world, actor, r.kind, {"power": p.ref, "kind": r.kind})
+    stretch = _stretched(world, actor, r.kind,
+                         {"power": p.ref, "range_kind": r.kind})
     # **Not applied to a melee or ranged range here**, because those go
     # through `_reach_of` below and it derives its own answer from the
     # weapon -- so a size raised here was read, overwritten and lost. See
@@ -2081,7 +2082,7 @@ def area_of(
     # says and the opposite of what applying this first would do. No printed
     # pair of these is known; the order is stated so the answer is not an
     # accident of line order. #614.
-    swap = _reshaped(world, actor, {"power": p.ref, "kind": r.kind})
+    swap = _reshaped(world, actor, {"power": p.ref, "range_kind": r.kind})
     if swap is not None:
         r = swap(r)
     if r.kind == "close_burst":
@@ -2133,7 +2134,7 @@ def _reach_of(
 
     if stretch is None:
         stretch = _stretched(
-            world, actor, r.kind, {"power": ref, "kind": r.kind}
+            world, actor, r.kind, {"power": ref, "range_kind": r.kind}
         )
     gear = world.get(actor, Gear)
     if r.kind == "melee":
@@ -2273,7 +2274,7 @@ def reach_of(
         # its own index below, and applying it here as well would impose the
         # alternative on the printed aiming -- which is the whole thing
         # `optional=` exists to avoid.
-        swap = _reshaped(world, actor, {"power": p.ref, "kind": r.kind},
+        swap = _reshaped(world, actor, {"power": p.ref, "range_kind": r.kind},
                          optional=False)
         return swap(r) if swap is not None else r
 
@@ -2361,7 +2362,9 @@ def _offered(
             continue
         gate = eff.reshape_when
         r = p.reach_of(p.branches[0])
-        if gate is not None and not gate({"power": p.ref, "kind": r.kind}):
+        if gate is not None and not gate(
+            {"power": p.ref, "range_kind": r.kind}
+        ):
             continue
         out.append(eff.reshape)
     return tuple(out)

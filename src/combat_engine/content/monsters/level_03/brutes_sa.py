@@ -814,7 +814,7 @@ def m3547a1(c: Cast) -> None:
     for a window but takes no charge.
 
     "While bloodied its movement during a charge does not provoke" is sayable
-    now -- `c.no_provoke(when=)` is handed `ctx["kind"]`, which is `"charge"`
+    now -- `c.no_provoke(when=)` is handed `ctx["move_kind"]`, `"charge"`
     for a charge step, so the gate is one lambda. What it has nowhere to be
     *armed* from: the clause is standing, and `turns.arm_traits` arms only
     `action=NONE` rows. This stat block has none, and laying it from this

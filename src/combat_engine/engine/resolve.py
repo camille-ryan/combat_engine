@@ -686,7 +686,8 @@ def _long_range(
     if weapon is None or weapon.ranged is None:
         return 0
     normal = weapon.ranged[0] + _stretched(
-        world, attacker, "ranged", {**ctx, "power": power, "kind": "ranged"}
+        world, attacker, "ranged",
+        {**ctx, "power": power, "range_kind": "ranged"}
     )
     if distance_between(world, attacker, target) <= normal:
         return 0

@@ -674,7 +674,7 @@ def f1836(c: Cast) -> None:
     def narrowed(ctx: dict[str, Any]) -> bool:
         if ctx.get("skill", "") == "nature":
             return True
-        if ctx.get("kind") != "attack":
+        if ctx.get("roll_kind") != "attack":
             return False
         rolled = get(str(ctx.get("power", "")))
         return bool(rolled and Keyword.BEAST_FORM in (rolled.keywords or ()))

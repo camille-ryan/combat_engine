@@ -713,7 +713,7 @@ def m1828a3(c: Cast) -> None:
     me = c.me
 
     def gate(ctx: dict[str, Any]) -> bool:
-        if ctx.get("kind") != "charge":
+        if ctx.get("move_kind") != "charge":
             return False
         foe = _M1828_CHARGE_TARGET.get(me)
         return foe is not None and c.bloodied(on=foe)

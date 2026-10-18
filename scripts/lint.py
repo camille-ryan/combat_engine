@@ -442,7 +442,7 @@ def _context_keys(which: str = "") -> frozenset[str]:
             # `_stretched`, which spends it on `total("range", ctx)`. That is
             # a *distance* key, and `_CONTEXT_OF` sends every distance gate
             # to the wide union already. Counting it as attack context would
-            # mean an `attack`-key gate reading `ctx["kind"]` passes while
+            # mean an `attack`-key gate reading `ctx["range_kind"]` passes while
             # still being silently false, which is the hole this check's own
             # docstring was narrowed to close.
             forwarded = not which and name in _ctx_forwarders()

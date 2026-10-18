@@ -5281,12 +5281,13 @@ def a_reach_hold_cannot_reach_a_ranged_line(out: Result) -> None:
     """`c.as_ranged`'s "next **melee** attack" is enforced by the key.
 
     #547 read the method's own note and concluded the printed restriction was
-    unenforced -- that `ctx.get("kind", "melee") == "melee"` reads a key no
+    unenforced -- that `ctx.get("range_kind", "melee") == "melee"` reads a key no
     modifier context carries, so the gate is not a gate and the hold leaks
     onto an attack of any shape. **Wrong in both halves, and this is the
     measurement.**
 
-    `dsl._stretched` does carry the key, as `{"power": ..., "kind": r.kind}`
+    `dsl._stretched` does carry the key, as `{"power": ..., "range_kind":
+    r.kind}`
     where `r.kind` is the *range* kind -- so on a melee line the gate is a
     real test answering True. And it could not have mattered regardless,
     because each range kind reads a **different** modifier key: melee asks
@@ -5316,7 +5317,8 @@ def a_reach_hold_cannot_reach_a_ranged_line(out: Result) -> None:
              and any(m.what == "reach" for m in mods.items),
              "as a 'reach' modifier and nothing else")
 
-    asked = {kind: _stretched(world, me, kind, {"power": "pX", "kind": kind})
+    asked = {kind: _stretched(world, me, kind,
+                              {"power": "pX", "range_kind": kind})
              for kind in ("melee", "ranged", "close_burst", "area_burst")}
     out.that(asked["melee"] == 4,
              "a MELEE range line is lengthened by 4 -- a range of 5 is the"
@@ -5337,11 +5339,13 @@ def a_reach_hold_cannot_reach_a_ranged_line(out: Result) -> None:
     # reading the modifier directly with a *ranged* ctx, which is the one
     # question only the gate can answer.
     out.that(mods is not None
-             and mods.total("reach", {"power": "pX", "kind": "ranged"}) == 0,
+             and mods.total("reach",
+                            {"power": "pX", "range_kind": "ranged"}) == 0,
              "and the when= gate refuses a ranged context by itself, so the"
              " hold would still not leak if the keys were ever merged")
     out.that(mods is not None
-             and mods.total("reach", {"power": "pX", "kind": "melee"}) == 4,
+             and mods.total("reach",
+                            {"power": "pX", "range_kind": "melee"}) == 4,
              "while answering the melee one, which is what makes it a gate"
              " and not a blanket refusal")
 
@@ -5767,9 +5771,9 @@ def an_area_can_be_reshaped_and_not_only_stretched(out: Result) -> None:
     out.that(gate is not None, "and it is narrowed rather than blanket")
     if gate is None:
         return
-    out.that(not gate({"power": "p4201", "kind": "melee"}),
+    out.that(not gate({"power": "p4201", "range_kind": "melee"}),
              "a melee swing is not reshaped")
-    out.that(gate({"power": "p4201", "kind": "area_burst"}),
+    out.that(gate({"power": "p4201", "range_kind": "area_burst"}),
              "an area burst is")
 
 def each_banked_reroll_names_its_own_roll(out: Result) -> None:
@@ -20560,6 +20564,134 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def three_context_keys_where_one_word_served_four(out: Result) -> None:
+    """`ctx["kind"]` was one key over four unrelated vocabularies.
+
+    #639. A range shape (`melee` `ranged` `close_burst` ...), a kind of
+    movement (`walk` `shift` `charge` ...), a kind of roll (`attack` `check`
+    `save`), and absent -- all live, none written down, and **from a gate
+    alone there was no way to tell which was meant.** The sets do not
+    overlap, so a gate written against the wrong one is silently False for
+    the life of the row, and `lint._unknown_context_keys` could not catch it
+    because the key was legal in all four. It cost a wrong bug report and
+    three hours (#547).
+
+    Split into `range_kind`, `move_kind` and `roll_kind`, each written by one
+    family of writers and registered in `symbols.CTX_KEYS` with the writer
+    named -- so an author reading a gate can see which question it asks.
+
+    **Each half goes through the writer, not through a hand-built context,
+    and that is the whole point of this rule.** The plants that matter are
+    renaming a *writer* back to `kind`, and the suite was **green on all
+    three** before this existed: every rule touching these gates built its
+    own context by hand, so each was asserting the gate and never the
+    producer. That is `assert-through-the-caller` in a new place.
+    `move_kind` and `roll_kind` go red now.
+
+    **`range_kind` stays green under that plant, and the reason is a
+    finding rather than a shortfall.** `_stretched` dispatches the
+    *modifier key* off its own `kind` argument -- melee asks `"reach"`,
+    ranged asks `"range"`, a blast or burst asks `"blast_size"` -- so the
+    ctx gate is a **second** lock on a door the first one already holds.
+    That is #547's own conclusion ("doubly enforced"), and it means no
+    end-to-end arrangement can tell a correct writer from a renamed one
+    here: `c.as_ranged`'s gate also defaults to `"melee"` when the key is
+    absent, deliberately, because `movement._threat` builds a ctx with no
+    range kind and a threatened square is melee by definition. Both
+    assertions below are still worth their place -- they say what the hold
+    does -- but they do not prove the key, and a reader should not think
+    they do.
+
+    The one hand-built thing below is the `roll_kind` gate itself, because
+    installing a probe is the only way to watch a key whose single producer
+    is a content row -- and the probe is the thing under test there, not the
+    thing being trusted.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine import When
+    from combat_engine.engine import skills as engine_skills
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.events import Boosted, OpportunityWindow
+
+    # -- range_kind: through `dsl._reach_of`, which builds its own ctx -----
+    world, me, _ = audit_board("f2459", 1)
+    c = Cast(world=world, me=me, ref="drivers:range_kind")
+    was = (c.reach(ref="mba"), c.reach(ref="rba"))
+    c.as_ranged(5, on=me, until=When.EONT)
+    now = (c.reach(ref="mba"), c.reach(ref="rba"))
+    out.that(was == (1, 10), "a melee basic reaches 1 and a ranged one 10",
+             f"{was}")
+    out.that(now[0] == 5,
+             "`c.as_ranged(5)` lengthens the MELEE line to 5, asked through"
+             " `c.reach` -- which goes to `dsl._reach_of` and lets that"
+             " function build the context, rather than handing it one",
+             f"{was[0]} -> {now[0]}")
+    out.that(now[1] == was[1],
+             "and leaves the RANGED line alone: the hold's gate is on"
+             " `range_kind`, and a ranged line asks a different modifier"
+             " key as well",
+             f"{was[1]} -> {now[1]}")
+
+    # -- move_kind: through `c.does_not_provoke`'s own window ctx ----------
+    answered = {}
+    for how in ("charge", "walk"):
+        world, me, _ = audit_board("f2459", 1)
+        c = Cast(world=world, me=me, ref="drivers:move_kind")
+        c.no_provoke(on=me, until=When.EOT,
+                     when=lambda ctx: ctx.get("move_kind") == "charge")
+        window = OpportunityWindow(actor=me + 1, provoker=me,
+                                   why="moved away", kind_=how, mode="")
+        world.bus.emit(window)
+        answered[how] = window.cancelled
+    out.that(answered["charge"],
+             "a waiver gated on `move_kind == \"charge\"` cancels the"
+             " window a charge opened -- and the window is built by"
+             " `c.does_not_provoke` off `Moved.kind_`, not here",
+             f"{answered}")
+    out.that(not answered["walk"],
+             "and not the one a walk opened, which is what makes it a gate"
+             " rather than a blanket waiver",
+             f"{answered}")
+
+    # -- roll_kind: through `p6186`, its only producer --------------------
+    # The die's *size* is the observable, so it takes a sample: 1d6 and 1d10
+    # overlap on every face but four. 25 boosts of a d10 exceed 6 with
+    # probability 1 - 0.6**25, which is about three in a million.
+    def biggest(gate_on: str, skill: str, tries: int = 25) -> int:
+        got: list[int] = []
+        for seed in range(1, tries + 1):
+            world, me, _ = audit_board("f2459", seed)
+            known = world.get(me, Powers)
+            if known is not None and "p6186" not in known.known:
+                known.known.append("p6186")
+            c = Cast(world=world, me=me, ref="drivers:roll_kind")
+            # **`c.target` by hand, and only here.** `change_dice` defaults
+            # `on=` through it, so a bare `Cast` lays the probe on nobody --
+            # the trap `a-driver-rule-must-run-the-rows-body` records, and it
+            # read as "the writer is broken" for twenty minutes.
+            c.target = me
+            c.change_dice("p6186", "1d10", on=me,
+                          when=lambda ctx, k=gate_on:
+                          ctx.get("roll_kind") == k)
+            world.bus.on(Boosted, lambda ev, into=got: into.append(ev.amount))
+            engine_skills.check(world, me, skill, 0)
+        return max(got) if got else 0
+
+    on_check = biggest("check", "stealth")
+    on_attack = biggest("attack", "stealth")
+    out.that(on_check > 6,
+             "a die swap gated on `roll_kind == \"check\"` reaches a skill"
+             " check rolled through `skills.check`: `p6186` is the one row"
+             " that writes this key, and it writes it from the event",
+             f"largest of 25 boosts was {on_check}, over 1d6's ceiling")
+    out.that(on_attack <= 6,
+             "and one gated on `attack` does not, so the key is read and not"
+             " merely present",
+             f"largest of 25 boosts was {on_attack}")
+
+
 def a_charge_banked_in_somebody_elses_weapon(out: Result) -> None:
     """The artificer's reservoir, and the three things wrong with it.
 
@@ -21452,6 +21584,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "kind_keys": (
+        three_context_keys_where_one_word_served_four,
+        "three context keys where one word served four (#639)",
     ),
     "artificer_charge": (
         a_charge_banked_in_somebody_elses_weapon,

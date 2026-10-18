@@ -281,7 +281,7 @@ def f2911(c: Cast) -> None:
     """A charge at the sworn enemy draws no openings on the way in.
 
     **Both holds are gone.** `c.no_provoke` takes a `when=`, and the window says
-    how the creature moved -- `ctx["kind"]` is `"charge"` now, because
+    how the creature moved -- `ctx["move_kind"]` is `"charge"` now, because
     `actions.execute` passes `kind="charge"` to `walk` where it used to walk a
     charge as an ordinary move (#301).
 
@@ -291,7 +291,7 @@ def f2911(c: Cast) -> None:
     me = c.me
     c.no_provoke(
         on=me, until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("kind") == "charge"
+        when=lambda ctx: ctx.get("move_kind") == "charge"
         and sworn(c.world, me, ctx.get("actor")),
     )
 

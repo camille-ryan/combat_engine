@@ -1589,7 +1589,7 @@ def f718(c: Cast) -> None:
     the die rather than adding to the result."""
 
     def arcane_attack(ctx: dict[str, Any]) -> bool:
-        return ctx.get("kind") == "attack" and _arcane_row(ctx)
+        return ctx.get("roll_kind") == "attack" and _arcane_row(ctx)
 
     c.change_dice("p6186", "1d6+1", on=c.me, when=arcane_attack)
 

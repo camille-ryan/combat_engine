@@ -911,7 +911,7 @@ def p6186(c: Cast) -> None:
                 "1d6",
                 {
                     "skill": skill,
-                    "kind": kind,
+                    "roll_kind": kind,
                     "power": str(getattr(ev, "power", "") or ""),
                 },
             )
