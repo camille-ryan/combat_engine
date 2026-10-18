@@ -902,12 +902,29 @@ def i3470p1(c: Cast) -> None:
 
 @power("i693x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.save_order()", "c.skill_circumstance()"))
+       dropped=("c.skill_circumstance()",))
 def i693x1(c: Cast) -> None:
-    """Nothing here plays. The light is narrative; the Charisma bonus is
-    against one sort of creature, which a check's context has no room
-    for; and the rest is *when* a saving throw is rolled -- `Effects`
-    rolls them at `TurnEnd` and nothing moves them."""
+    """Saving throws against ongoing **untyped** damage move to the start
+    of the turn.
+
+    **The timing half plays now.** The note said "`Effects` rolls them at
+    `TurnEnd` and nothing moves them"; `c.save_early` is what moves them,
+    and `_on_turn_end` skips what it covers so this is the printed
+    "instead of" rather than a second throw. #671.
+
+    `ctx["ongoing"]` is "this hold carries a burn" and `ctx["dtype"] is
+    None` is the untyped half -- a burn with a type is somebody else's
+    card. The two together are the printed line and neither alone is: the
+    first would move a save against a daze, the second is true of every
+    hold that burns nothing at all.
+
+    The light is narrative. The Charisma bonus is against one sort of
+    creature, which a check's context has no room for, and that is the
+    marker that stays."""
+    c.save_early(
+        lambda ctx: bool(ctx.get("ongoing")) and ctx.get("dtype") is None,
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power("i883x1", level=8, cls=ITEM, action=ActionType.NONE,

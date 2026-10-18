@@ -30,7 +30,7 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['effect']` -- the effect being asked about.
 - `ctx['from_attack']` -- did this come out of an attack.
 - `ctx['granted_by']` -- who handed this creature the attack, or -1.
-- `ctx['granted_via']` -- the ref of the row that handed it over.
+- `ctx['granted_via']` -- the ref of the row that handed it over -- an attack, or since #672 a **saving throw**. `Cast.save` writes it from its own `ref`, the way `Effect.by` does, and it is empty for the ordinary end-of-turn throw nobody granted.
 - `ctx['hand']` -- which hand the weapon is in.
 - `ctx['how']` -- the kind of forced movement -- push, pull, slide.
 - `ctx['keywords']` -- the keywords of the row or effect being asked about.
@@ -48,4 +48,5 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['skill']` -- the skill being checked, lowercased.
 - `ctx['source']` -- who laid the effect.
 - `ctx['target']` -- who it lands on. The commonest key in the tree.
+- `ctx['when_']` -- where in the turn a saving throw was taken -- `"end"` for the ordinary one, `"early"` for one moved or granted at the start. Written by `Effects.save` and `Cast.save`, which take it as a keyword. Named with the trailing underscore for `Event.kind`'s reason: a field called `when` shadows the property `wire()` puts in every replay envelope. #671.
 - `ctx['why']` -- the reason recorded for this.

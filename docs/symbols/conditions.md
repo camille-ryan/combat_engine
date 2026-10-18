@@ -82,8 +82,10 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - "You take your turn as though you were not stunned, dazed or
 - `c.immune(self, *conditions: 'Condition', until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You cannot be marked or slowed until the end of your next turn."
-- `c.save(self, *, on: 'int | None' = None, bonus: 'int' = 0, against: 'str' = '', bare: 'bool' = False) -> 'bool'`
+- `c.save(self, *, on: 'int | None' = None, bonus: 'int' = 0, against: 'str' = '', bare: 'bool' = False, when_: 'str' = 'end') -> 'bool'`
   - Roll a saving throw now against one save-ends effect.
+- `c.save_early(self, when: 'Callable[[dict[str, Any]], bool]', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You make saving throws against X at the start of your turn
 - `c.unsave(self, ev: 'Any' = None) -> 'bool'`
   - Make the saving throw being rolled fail. "It automatically fails."
 

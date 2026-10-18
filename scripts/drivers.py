@@ -18533,7 +18533,236 @@ def a_printed_weapon_property_a_feat_grants(out: Result) -> None:
              "and it installs its own watch for the triggered half",
              f"{[e.label for e in world.effects.of(me)]}")
 
+def what_a_saving_throw_says_about_itself(out: Result) -> None:
+    """A throw now says **when** it was taken and **what granted it**, and
+    seven rows narrow on one or the other.
+
+    #671, #672. The save context carried `label`, `conditions`, `ongoing`,
+    `dtype`, `dtypes` and `keywords` -- everything about the *effect* and
+    nothing about the *throw*. So "a +2 bonus to saving throws made at the
+    start of your turn" could not be gated and "when you succeed on a
+    saving throw granted by your `cf:warden-f0` class feature" could not be
+    triggered.
+
+    **`f2553` was the live cost**: declared, firing, and paying its +2 on
+    the ordinary end-of-turn throw as well, which its own docstring
+    admitted. That is the first assertion here and the one with a negative
+    control, because a rule that only checked the early throw would pass on
+    the broken code.
+
+    Three traps this rule is written against:
+
+    * **A gate read with an empty context is silently false**, which is this
+      module's own recorded lesson -- `Effects.save` was once called with
+      `{}` and `c.bonus(SAVE, when=...)` could not be written the obvious
+      way. So the end-of-turn case is asserted, not assumed.
+    * **A move must not become an extra throw.** Counted per round: a
+      creature `c.save_early` covers must get **one** throw, early, and the
+      end-of-turn tick must skip it whether it passed or failed.
+    * **Timing is not provenance.** `cf:warden-f0` is the only thing
+      granting a warden an early throw today, so gating `f2554` on timing
+      would pass -- and break the moment `i499x1` is on the same character.
+      Both are put on one board to show they are different questions.
+    """
+    from typing import Any
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import SavingThrow, TurnEnd, TurnStart
+    from combat_engine.engine.types import Condition, DamageType, Keyword
+
+    def board(ref: str):  # noqa: ANN202
+        world, me, _ = audit_board(ref, 1)
+        return world, me, Cast(world=world, me=me, ref=ref)
+
+    def throws(world: Any, who: int) -> list[SavingThrow]:
+        seen: list[SavingThrow] = []
+        world.bus.on(SavingThrow, seen.append, owner=who)
+        return seen
+
+    def a_round(world: Any, who: int) -> None:
+        world.bus.emit(TurnStart(actor=who, round=world.round))
+        world.bus.emit(TurnEnd(actor=who, round=world.round))
+
+    # -- the throw carries both facts ------------------------------------
+    world, me, c = board("cf:warden-f0")
+    seen = throws(world, me)
+    held = c.condition(Condition.DAZED, on=me, until=When.SAVE_ENDS)
+    out.that(held is not None, "a save-ends hold to roll against")
+    if held is None:
+        return
+    world.effects.save(held)
+    out.that(bool(seen), "the throw was announced", f"{len(seen)}")
+    if not seen:
+        return
+    out.that(seen[-1].when_ == "end",
+             "an ordinary throw says it happened at the END of the turn --"
+             " the default, and the half a rule could assume away",
+             f"{seen[-1].when_!r}")
+    out.that(seen[-1].granted_via == "",
+             "and names no granting row, because nobody granted it",
+             f"{seen[-1].granted_via!r}")
+
+    world, me, c = board("cf:warden-f0")
+    seen = throws(world, me)
+    c.condition(Condition.DAZED, on=me, until=When.SAVE_ENDS)
+    Cast(world=world, me=me, ref="cf:warden-f0").save(on=me, when_="early")
+    out.that(bool(seen) and seen[-1].when_ == "early",
+             "a throw handed over at the start of the turn says so",
+             f"{[e.when_ for e in seen]}")
+    out.that(bool(seen) and seen[-1].granted_via == "cf:warden-f0",
+             "and names the row that handed it over -- which is #672 and is"
+             " NOT the same question as the timing",
+             f"{[e.granted_via for e in seen]}")
+
+    # -- f2553: the correctness fix, with its negative control -----------
+    # The +2 must reach the early throw and NOT the end-of-turn one. Asked
+    # by the bonus the throw was rolled with, which is the number the row
+    # exists to change.
+    from combat_engine.engine.dsl import REGISTRY
+
+    # **The hold is laid BY a row carrying one of the five keywords**, and
+    # that is the whole of what `_elemental_save` reads: `keywords_of` asks
+    # the effect's `by` for the ref of the row that laid it, and that row
+    # for its keywords. Laid by the item's own ref the gate is correctly
+    # false, which is how the first draft of this measured 0 against 0 and
+    # read like the fix not working.
+    #
+    # Rolled through `Effects.save`, which is the site the gate is read at
+    # and the one `_on_turn_end` calls -- `Cast.save` takes "whichever
+    # save-ends effect it finds first" and the board has others.
+    FIERY = "f1403b"            # a level-1 row carrying Keyword.FIRE
+    for early, expect in (("early", 2), ("end", 0)):
+        world, me, c = board("f2553")
+        seen = throws(world, me)
+        laid = Cast(world=world, me=me, ref=FIERY)
+        hold = laid.condition(Condition.DAZED, on=me, until=When.SAVE_ENDS)
+        world.effects.save(hold, when_=early, granted_via="probe")
+        before = seen[-1].bonus if seen else 0
+
+        world, me, c = board("f2553")
+        seen = throws(world, me)
+        REGISTRY["f2553"].body(c)
+        laid = Cast(world=world, me=me, ref=FIERY)
+        hold = laid.condition(Condition.DAZED, on=me, until=When.SAVE_ENDS)
+        world.effects.save(hold, when_=early, granted_via="probe")
+        after = seen[-1].bonus if seen else 0
+        out.that(after - before == expect,
+                 f"f2553 pays {expect} on a {early!r} throw against a fire"
+                 " effect" + ("" if expect else " -- the negative control,"
+                              " and the bug: it used to pay on both"),
+                 f"{before} without the feat, {after} with it")
+
+    # -- f1024 and f2554 gate on provenance, not on timing ---------------
+    # One board, two throws: one granted by the feature and one not, both
+    # early. A row gating on timing cannot tell them apart; these must.
+    def pays(ref: str, granted_via: str) -> list[str]:
+        """What that row emits when a throw it watches for succeeds.
+
+        A natural 20, because both rows pay out **on succeeding** and a
+        failed throw proves nothing about either.
+        """
+        world, me, c = board(ref)
+        world.rng.loaded = 20
+        c.condition(Condition.DAZED, on=me, until=When.SAVE_ENDS)
+        REGISTRY[ref].body(c)
+        mark = len(world.bus.log)
+        Cast(world=world, me=me, ref=granted_via).save(on=me, when_="early")
+        return [e.kind for e in world.bus.log[mark:]]
+
+    for ref, pays_with in (("f1024", "EffectApplied"), ("f2554", "Moved")):
+        # **The positive half first.** Asserting only that somebody else's
+        # throw pays nothing passes with the row doing nothing at all,
+        # which is the vacuous control this suite exists to refuse.
+        theirs = pays(ref, "cf:warden-f0")
+        out.that(pays_with in theirs,
+                 f"{ref}: a throw granted by `cf:warden-f0` pays out"
+                 f" ({pays_with})",
+                 f"{theirs}")
+        # And the half that distinguishes provenance from timing: the same
+        # early throw, granted by something else, pays nothing.
+        mine = pays(ref, "somebody-else")
+        out.that(pays_with not in mine,
+                 f"{ref}: and the same EARLY throw granted by somebody else"
+                 " pays nothing -- the assertion a timing gate would fail",
+                 f"{mine}")
+
+    # -- the move is a move, not an extra throw --------------------------
+    CHARMING = "f1414b"         # a level-1 row carrying Keyword.CHARM
+    world, me, c = board("i499x1")
+    seen = throws(world, me)
+    hold = Cast(world=world, me=me, ref=CHARMING).condition(
+        Condition.DAZED, on=me, until=When.SAVE_ENDS)
+    out.that(hold is not None, "a charm hold on the wearer, laid by a row"
+             " that carries the keyword -- which is what the selector reads")
+    if hold is None:
+        return
+    REGISTRY["i499x1"].body(c)
+    out.that(world.effects._rolls_early(hold),
+             "and the item covers it")
+    # **A natural 1, so the early throw FAILS and the hold survives** --
+    # which is the case the card's second sentence is about: "if you fail
+    # any of these saving throws, you do not make a saving throw to end
+    # that effect at the end of your turn". A passing throw ends the hold
+    # and there is nothing left for the end-of-turn tick to skip, so it
+    # proves nothing. The first draft let it pass and counted every throw
+    # on the board, which the board's own save-ends effects made two.
+    world.rng.loaded = 1
+    mark = str(hold)
+    a_round(world, me)
+    mine = [e for e in seen if e.against == mark and not e.cancelled]
+    out.that(len(mine) == 1,
+             "one throw against that hold in the round, not two -- a move"
+             " that left the end-of-turn one in place would hand the wearer"
+             " twice the printed chance to shake something off",
+             f"{[(e.when_, e.saved) for e in mine]}")
+    out.that(bool(mine) and mine[0].when_ == "early",
+             "and it is the early one, failed",
+             f"{[(e.when_, e.saved) for e in mine]}")
+    out.that(not hold.ended,
+             "the hold is still standing, which is why the skip matters")
+
+    # And the control: a hold the selector does **not** cover still rolls at
+    # the end of the turn, which is where this breaks if the skip is too
+    # wide.
+    world, me, c = board("i499x1")
+    seen = throws(world, me)
+    c.condition(Condition.IMMOBILIZED, on=me, until=When.SAVE_ENDS)
+    REGISTRY["i499x1"].body(c)
+    a_round(world, me)
+    out.that(any(e.when_ == "end" for e in seen),
+             "and a hold the card does NOT name still rolls at the end of"
+             " the turn -- without this the skip could cover everything",
+             f"{[(e.when_, e.against) for e in seen]}")
+
+    # -- the selector narrows on what the card says ----------------------
+    world, me, c = board("i693x1")
+    REGISTRY["i693x1"].body(c)
+    untyped = c.condition(Condition.DAZED, on=me, until=When.SAVE_ENDS)
+    if untyped is not None:
+        untyped.ongoing = (5, None)
+    typed = c.condition(Condition.SLOWED, on=me, until=When.SAVE_ENDS)
+    if typed is not None:
+        typed.ongoing = (5, DamageType.FIRE)
+    out.that(world.effects._rolls_early(untyped),
+             "i693x1 moves the throw against ongoing UNTYPED damage")
+    out.that(not world.effects._rolls_early(typed),
+             "and not the one against ongoing fire -- a burn with a type is"
+             " somebody else's card, and `ctx['ongoing']` alone would have"
+             " taken both")
+    plain = c.condition(Condition.PRONE, on=me, until=When.SAVE_ENDS)
+    out.that(plain is not None and not world.effects._rolls_early(plain),
+             "nor a hold that burns nothing at all, which"
+             " `ctx['dtype'] is None` alone would have taken")
+    _ = Keyword  # the keyword selectors are exercised through i499x1 above
+
 DRIVERS = {
+    "save_timing": (
+        what_a_saving_throw_says_about_itself,
+        "a saving throw says when it happened and what granted it (#671, #672)",
+    ),
     "weapon_property": (
         a_printed_weapon_property_a_feat_grants,
         "a feat giving a held weapon a property it does not print (#676)",

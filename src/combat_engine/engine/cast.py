@@ -1056,7 +1056,7 @@ class Cast:
 
     def save(
         self, *, on: int | None = None, bonus: int = 0, against: str = "",
-        bare: bool = False,
+        bare: bool = False, when_: str = "end",
     ) -> bool:
         """Roll a saving throw now against one save-ends effect.
 
@@ -1067,6 +1067,20 @@ class Cast:
         form -- "a saving throw against an ongoing damage effect" -- or a
         label fragment. Without it this takes whichever save-ends effect it
         finds first, which may well be a daze when the row means the burn.
+
+        **`when_` is where in the turn the throw is being taken** --
+        `"early"` for one handed over at the start of a turn, which is what
+        `cf:warden-f0` does. It reaches both the modifier context and the
+        event, so "a +2 bonus to saving throws made at the start of your
+        turn" is a gate and "when you save against a poison effect at the
+        start of your turn" is a trigger. Neither was writable: nothing said
+        which of the turn's throws this was, and `f2553` is declared and
+        pays on both. #671.
+
+        The row handing the throw over is recorded for free, from
+        `self.ref`, the way `Effect.by` already is -- `f2554` and `f1024`
+        print "a saving throw granted by your `cf:warden-f0` class feature"
+        and had nothing to read. #672.
 
         **Follows `c.target`, and falls back to the caster.** "The target
         makes a saving throw" is how this is printed almost every time, so
@@ -1101,16 +1115,21 @@ class Cast:
                 (e for e in self.world.effects.of(who) if e.label == label),
                 None,
             )
+            words = keywords_of(held or label)
             plus = bonus + self.total(
                 "save", who, {"actor": who, "label": label,
                               "conditions": frozenset(), "ongoing": False,
                               "dtype": None,
-                              "keywords": keywords_of(held or label)}
+                              "keywords": words,
+                              "when_": when_,
+                              "granted_via": self.ref}
             )
             ev = self.world.bus.emit(
                 SavingThrow(
                     actor=who, against=against or self.ref, natural=natural,
                     bonus=plus, saved=natural + plus >= 10,
+                    when_=when_, granted_via=self.ref,
+                    keywords=frozenset(words),
                 )
             )
             return ev.saved
@@ -1121,9 +1140,55 @@ class Cast:
                 continue
             if effect.when is When.SAVE_ENDS:
                 effect.save_mod += bonus
-                self.world.effects.save(effect)
+                self.world.effects.save(
+                    effect, when_=when_, granted_via=self.ref
+                )
                 return effect.ended
         return False
+
+    def save_early(
+        self,
+        when: Callable[[dict[str, Any]], bool],
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You make saving throws against X at the start of your turn
+        instead of at the end."
+
+        A **move**, not an extra throw, and the difference is the whole of
+        it: `Effects._on_turn_end` skips an effect this covers and
+        `_on_turn_start` rolls it. So `i499x1`'s second sentence -- "if you
+        fail any of these saving throws, you do not make a saving throw to
+        end that effect at the end of your turn" -- needs no clause of its
+        own, which is the tell that the move is the right shape. Writing
+        that sentence as a mechanism would be modelling the explanation.
+
+        **`cf:warden-f0` is the other sentence and is not this.** That
+        feature grants an *additional* throw from a `TurnStart` watch and
+        its docstring says the ordinary end-of-turn one still happens when
+        this one fails. Both arrive as `when_="early"` on the throw, because
+        from the throw's side they are the same moment -- what differs is
+        whether the late one still happens.
+
+        `when` is **required** rather than defaulting to None, for
+        `c.gains_advantage`'s reason: an ungated version is "every saving
+        throw you ever make moves", which no card says and which would
+        quietly halve the value of every ongoing effect in the game by
+        letting a creature shake it off before taking the damage.
+
+        The predicate is read with the **save context** -- `keywords`,
+        `conditions`, `ongoing`, `dtype`, `dtypes`, `label` -- so the three
+        rows say what they print:
+
+            i499x1  {CHARM, FEAR, PSYCHIC} & ctx["keywords"]
+            i693x1  ctx["ongoing"] and ctx["dtype"] is None
+            p16438  {CHARM, PSYCHIC} & ctx["keywords"]
+
+        #671.
+        """
+        return self.bonus("save_early", 1, on=on, until=until,
+                          kind="untyped", when=when)
 
     def worsen(self, eff: Effect, cond: Condition) -> bool:
         """"First Failed Saving Throw: the target is **also** dazed (save ends

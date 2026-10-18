@@ -62,7 +62,14 @@ def warden_font(c: Cast) -> None:
 
     def at_start(ev: TurnStart) -> None:
         if ev.actor == me and not ev.ghost:
-            c.save(on=me)
+            # **`when_="early"`, which is what four feats narrow on.** The
+            # throw is announced with where in the turn it was taken and
+            # which row handed it over, so "+2 to saving throws made at the
+            # start of your turn" and "when you succeed on a saving throw
+            # granted by this feature" are both sayable. They were not:
+            # `f2553` paid on the ordinary end-of-turn throw as well, and
+            # `f1024`/`f2554` had nothing to match on at all. #671, #672.
+            c.save(on=me, when_="early")
 
     c.watch(TurnStart, at_start, until=When.ENCOUNTER, on=me, label="cf:warden-f0")
 

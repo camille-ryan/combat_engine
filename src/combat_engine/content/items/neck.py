@@ -1095,14 +1095,30 @@ def i494p1(c: Cast) -> None:
 
 
 @power("i499x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
+       reach=PERSONAL, target=SELF)
 def i499x1(c: Cast) -> None:
-    """Which holds it means is answerable now -- charm, fear and psychic
-    are keywords `keywords_of` reads back. The whole of the benefit is
-    the other half: moving the throw from the end of the turn to the
-    start, and suppressing the end-of-turn one after a failure. Rolling
-    an extra save at the start instead would be a strictly better item
-    than the printed one."""
+    """Saving throws against charm, fear and psychic effects move to the
+    start of the turn.
+
+    **The old note had the shape exactly right and the verb did not
+    exist**: "moving the throw from the end of the turn to the start, and
+    suppressing the end-of-turn one after a failure. Rolling an extra save
+    at the start instead would be a strictly better item than the printed
+    one." `c.save_early` is a move and not an addition, so both halves come
+    together -- `Effects._on_turn_end` skips what this covers, whether the
+    early throw passed or failed. #671.
+
+    So the card's second sentence -- "if you fail any of these saving
+    throws, you do not make a saving throw to end that effect at the end of
+    your turn" -- needs nothing written. It is what the move means, and
+    writing it as its own clause would be modelling the explanation."""
+    c.save_early(
+        lambda ctx: bool(
+            {Keyword.CHARM, Keyword.FEAR, Keyword.PSYCHIC}
+            & set(ctx.get("keywords", ()))
+        ),
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power("i499p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,

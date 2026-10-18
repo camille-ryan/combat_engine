@@ -814,7 +814,7 @@
   "SkillCheck(actor=1, skill='stealth', dc=12, natural=8, bonus=2, total=10, success=False)",
   "TurnEnd(actor=1, round=2)",
   "EffectExpired(actor=1, what='e81[i541p1 no_advantage+1, end of this turn]', why='end of turn')",
-  "SavingThrow(actor=1, against='e82[ongoing 5, save ends, ongoing 5 fire]', natural=17, bonus=2, saved=True)",
+  "SavingThrow(actor=1, against='e82[ongoing 5, save ends, ongoing 5 fire]', natural=17, bonus=2, saved=True, keywords=frozenset({<Keyword.FIRE: 'fire'>}))",
   "EffectExpired(actor=1, what='e82[ongoing 5, save ends, ongoing 5 fire]', why='saved')",
   "TurnStart(actor=4, round=2)",
   "ActionSpent(actor=4, cost=<ActionType.NONE: 'none'>)",

@@ -67,7 +67,6 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     ActionPointSpent,
     Bloodied,
@@ -522,8 +521,7 @@ def f1874(c: Cast) -> None:
 
 
 @power("f1941", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.save_order()",))
+       reach=PERSONAL, target=SELF)
 def f1941(c: Cast) -> None:
     """Temporary hit points for shaking off a poison effect.
 
@@ -535,18 +533,23 @@ def f1941(c: Cast) -> None:
     `durations.keywords_of(eff.label)` off it. That lookup was written for
     exactly this and the old note here missed it.
 
-    "At the start of your turn" is the hold that stays, shared with f2553
-    and f2554: nothing on the throw says which of the turn's two it is, so
-    the pool is also paid for the ordinary end-of-turn throw."""
+    **"At the start of your turn" is written now and was the hold.** The
+    note here said "nothing on the throw says which of the turn's two it
+    is, so the pool is also paid for the ordinary end-of-turn throw";
+    `SavingThrow.when_` says it since #671.
+
+    **And the keywords come off the event rather than being matched back.**
+    The old body found the effect by comparing `str(eff)` to `ev.against`
+    and read `keywords_of` off its label -- which worked, and only because
+    `Effects.save` announces before it ends the hold. The event carries the
+    keywords now, so there is no repr to match and no ordering to depend
+    on."""
     me = c.me
 
     def paid(ev: SavingThrow) -> None:
-        if ev.actor != me or not ev.saved:
+        if ev.actor != me or not ev.saved or ev.when_ != "early":
             return
-        if any(
-            str(eff) == ev.against and Keyword.POISON in keywords_of(eff.label)
-            for eff in c.world.effects.of(me)
-        ):
+        if Keyword.POISON in ev.keywords:
             c.temp_hp(c.con_mod, on=me)
 
     c.watch(SavingThrow, paid, until=When.ENCOUNTER, on=me, label=c.ref)
@@ -560,33 +563,65 @@ _ELEMENTAL_DTYPES = (DamageType.ACID, DamageType.COLD, DamageType.FIRE,
 
 def _elemental_save(ctx: dict[str, Any]) -> bool:
     """The hold being saved against is one of the five elements -- by the
-    keywords of the row that laid it, or by the type of its burn."""
-    return bool(set(_ELEMENTAL) & set(ctx.get("keywords", ()))) or (
-        ctx.get("dtype") in _ELEMENTAL_DTYPES
+    keywords of the row that laid it, or by the type of its burn.
+
+    **And the throw is one taken at the start of the turn**, which the
+    context could not say until #671 and which this gate was therefore
+    missing. `f2553` is declared, fires, and was paying its +2 on the
+    ordinary end-of-turn throw as well -- a working row, wrong, and quiet
+    about it, which is the direction `m5808a0`'s rule says to err away
+    from."""
+    return ctx.get("when_") == "early" and (
+        bool(set(_ELEMENTAL) & set(ctx.get("keywords", ())))
+        or ctx.get("dtype") in _ELEMENTAL_DTYPES
     )
 
 
 @power("f2553", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.save_order()",))
+       reach=PERSONAL, target=SELF)
 def f2553(c: Cast) -> None:
-    """The five keywords are exact. "Made at the start of your turn" is
-    not: nothing in the save context says which of the turn's two throws
-    this is, so the bonus also helps the ordinary end-of-turn one. No
-    type word on the card, so untyped."""
+    """The five keywords are exact, and so is "made at the start of your
+    turn" now.
+
+    **This row was declared, firing, and over-paying.** Its own note said
+    so: "nothing in the save context says which of the turn's two throws
+    this is, so the bonus also helps the ordinary end-of-turn one". The
+    context carries `when_` since #671 and `_elemental_save` asks for it,
+    so the +2 reaches the throw `cf:warden-f0` grants and no other.
+
+    No type word on the card, so untyped."""
     c.bonus("save", 2, on=c.me, until=When.ENCOUNTER, when=_elemental_save)
 
 
 @power("f2554", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.save_order()",))
+       reach=PERSONAL, target=SELF)
 def f2554(c: Cast) -> None:
     """Pays out on succeeding at the throw `cf:warden-f0` grants.
 
-    Re-aimed to the hold it shares with f2553 and f1941. The feature is a
-    ref, but it is a trait that calls `c.save` from a `TurnStart` watch
-    rather than a row anybody uses -- so there is no `PowerUsed` to
-    bracket the throw with, and what would tell this one from the
-    ordinary end-of-turn throw is the same missing thing: which of the
-    turn's saves is being rolled."""
+    **Gated on `granted_via`, not on the timing**, and the two are not
+    interchangeable. The old note was right that "there is no `PowerUsed`
+    to bracket the throw with" -- the feature calls `c.save` from a
+    `TurnStart` watch -- and settled for "which of the turn's saves is
+    being rolled", which would be correct today and wrong the moment the
+    same warden also carries `i499x1` or `p16438`: both move a throw to the
+    start of the turn without being this feature. `SavingThrow.granted_via`
+    is the printed gate. #672.
+
+    "One random creature adjacent to you" is `c.first` over the neighbours
+    with the board's own generator, which is where every other printed
+    "random" in this tree goes."""
+    me = c.me
+
+    def shoved(ev: SavingThrow) -> None:
+        if ev.actor != me or not ev.saved:
+            return
+        if ev.granted_via != "cf:warden-f0":
+            return
+        near = sorted(c.within(1, side="any"))
+        if near:
+            c.slide(1, on=c.world.rng.choice(near))
+
+    c.watch(SavingThrow, shoved, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- rows that turn on a named power's hold standing on you -----------------

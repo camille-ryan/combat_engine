@@ -96,7 +96,6 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
-from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.query import allies, distance_between, enemies, flanked_by
 from combat_engine.engine.triggers import Trigger
 
@@ -1573,20 +1572,24 @@ def p16377(c: Cast) -> None:
         both(targets_me, either(by_keyword(Keyword.CHARM), by_keyword(Keyword.PSYCHIC))),
         "you are hit by a charm or a psychic attack",
     ),
-    dropped=("c.save_order()",),
 )
 def p16438(c: Cast) -> None:
     """Both halves read the keywords of the hold rather than the throw.
 
-    The bonus is gated with `_saving_against`, and the augment's early
-    throw picks the standing charm or psychic hold by label instead of
-    taking whichever save-ends effect `c.save` happens to find first.
+    The bonus is gated with `_saving_against`.
 
-    **Re-aimed, and the residue is the word "instead".** The augment moves
-    the throw from the end of the turn to the start; this offers it at the
+    **The word "instead" is written now, and it was the whole residue.**
+    This used to hand-roll an extra throw from a `TurnStart` watch, which
+    left the ordinary end-of-turn one in place -- "the augment moves the
+    throw from the end of the turn to the start; this offers it at the
     start and the ordinary one still comes at the end, because nothing says
-    which of a turn's two throws is being rolled -- the hold f1941, f2553
-    and f2554 all share."""
+    which of a turn's two throws is being rolled". `c.save_early` is the
+    move: `Effects._on_turn_end` skips what it covers and
+    `_on_turn_start` rolls it. #671.
+
+    The selector is the same keyword test the bonus uses, asked of the save
+    context rather than of a hand-walked effect list -- so the row no
+    longer has to pick the hold itself, and cannot pick the wrong one."""
     c.resist(5, DamageType.PSYCHIC, until=When.EONT, on=c.me)
     c.bonus(
         "save", 2, kind="power", on=c.me, until=When.EONT,
@@ -1594,18 +1597,12 @@ def p16438(c: Cast) -> None:
     )
     if not augment(c, 1):
         return
-
-    def early(ev: TurnStart) -> None:
-        if ev.actor != c.me:
-            return
-        for eff in c.world.effects.of(c.me):
-            if eff.when is not When.SAVE_ENDS:
-                continue
-            if {Keyword.CHARM, Keyword.PSYCHIC} & keywords_of(eff):
-                c.save(on=c.me, against=eff.label)
-                return
-
-    c.watch(TurnStart, early, until=When.ENCOUNTER, on=c.me)
+    c.save_early(
+        lambda ctx: bool(
+            {Keyword.CHARM, Keyword.PSYCHIC} & set(ctx.get("keywords", ()))
+        ),
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power(

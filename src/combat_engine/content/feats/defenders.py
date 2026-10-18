@@ -22,6 +22,7 @@ from combat_engine.engine import (
     Condition,
     Hit,
     Keyword,
+    SavingThrow,
     SecondWind,
     Trigger,
     When,
@@ -240,20 +241,37 @@ def f584(c: Cast) -> None:
 
 
 @power("f1024", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("SavingThrow.granted_via",))
+       reach=PERSONAL, target=SELF)
 def f1024(c: Cast) -> None:
     """Pays out on succeeding at a saving throw `cf:warden-f0` granted.
 
-    **Re-aimed.** `c.on_save()` was the wrong symbol: `SavingThrow` is an
-    ordinary event and `c.watch` reaches it, so there is nothing missing
-    on that side. What is missing is on the event -- `Effects.save`
-    builds it with `against=str(eff)`, the effect being *saved against*,
-    and nothing records which row handed the throw over. The feature
-    rolls its save from inside a `TurnStart` watch, so the only thing
-    separating it from the ordinary end-of-turn throw is when in the turn
-    it happened, and "the first save of my turn" is a guess rather than
-    the printed gate.
+    **The marker named the gap exactly and it landed**:
+    `SavingThrow.granted_via` is the ref of the row that handed the throw
+    over, defaulted from `Cast.ref` the way `Effect.by` already is. #672.
+
+    Worth keeping the old note's reasoning, because it is the argument for
+    `granted_via` over the obvious alternative: "the feature rolls its save
+    from inside a `TurnStart` watch, so the only thing separating it from
+    the ordinary end-of-turn throw is when in the turn it happened, and
+    'the first save of my turn' is a guess rather than the printed gate".
+    Timing would pass today and break the moment the same warden carries
+    `i499x1` or `p16438`, both of which move a throw to the start of the
+    turn without being this feature.
+
+    "All **other** saving throws during or at the end of your current turn"
+    needs no exclusion written: the bonus is laid after the throw that
+    triggered it has already been totalled, so it cannot reach backwards.
+    `When.EOT` is the printed window.
     """
+    me = c.me
+
+    def rewarded(ev: SavingThrow) -> None:
+        if ev.actor != me or not ev.saved:
+            return
+        if ev.granted_via == "cf:warden-f0":
+            c.bonus("save", 2, on=me, until=When.EOT)
+
+    c.watch(SavingThrow, rewarded, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 # -- monk -------------------------------------------------------------------

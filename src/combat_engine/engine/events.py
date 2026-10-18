@@ -23,7 +23,16 @@ from dataclasses import MISSING, asdict, dataclass, field, fields
 from typing import Any
 
 from .grid import Square
-from .types import ActionType, Condition, DamageType, Defense, Forced, Relation, Window
+from .types import (
+    ActionType,
+    Condition,
+    DamageType,
+    Defense,
+    Forced,
+    Keyword,
+    Relation,
+    Window,
+)
 
 
 @dataclass
@@ -1124,6 +1133,32 @@ class SavingThrow(Decision):
     natural: int
     bonus: int
     saved: bool
+    #: **When in the turn this throw was taken.** `"end"` is the ordinary
+    #: one; `"early"` is a throw moved to the start of the turn, or an extra
+    #: one taken there. Nothing said which, and three rows narrow on it:
+    #: `f2553` gives "+2 to saving throws made **at the start of your
+    #: turn**" and was paying on both, `f1941` triggers on one, and `i499x1`
+    #: moves one. A gate could not be written and a trigger could not tell
+    #: the two apart. #671.
+    when_: str = "end"
+    #: The ref of the row that handed this throw over, empty for the
+    #: ordinary end-of-turn one nobody granted. `f2554` and `f1024` print
+    #: "a saving throw granted by your `cf:warden-f0` class feature" and
+    #: there was nothing to read: `against` is the effect being saved
+    #: **against**, and a display string at that. #672.
+    #:
+    #: **Named `when_` and `granted_via` for `Event.kind`'s reason**: a
+    #: field called `when` or `kind` shadows the property `wire()` puts in
+    #: the envelope every replay fixture reads, which breaks the wire format
+    #: rather than only this event. `Rerolled.roll` records the same
+    #: collision from the other side.
+    granted_via: str = ""
+    #: The keywords of the effect being saved against, read off the row that
+    #: laid it. On the event as well as in the modifier context because
+    #: `f1941` *triggers* on the throw rather than modifying it -- "when you
+    #: save against a poison effect" -- and `against=str(eff)` is a display
+    #: string with nothing to match on.
+    keywords: frozenset[Keyword] = frozenset()
 
 
 @dataclass

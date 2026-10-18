@@ -176,9 +176,14 @@ CATEGORIES: dict[str, dict] = {
                 "dying", "grabbed_by", "grabbing", "latched", "marked",
                 "suffering",
             ]),
+            # `c.save_early` sits beside `c.save` because it is about the
+            # same throw, and the pair is the one place the difference
+            # between a **move** and an **extra** throw is written down:
+            # this one moves the end-of-turn throw to the start, where
+            # `cf:warden-f0` adds a second one and leaves the first. #671.
             ("getting out, and not getting out", [
                 "cure", "escape", "immune", "ignore_condition", "save",
-                "unsave",
+                "save_early", "unsave",
             ]),
             ("dying and after", [
                 "decay", "destroy", "kill", "reanimate", "revives_unless",
@@ -439,7 +444,12 @@ CTX_KEYS: dict[str, str] = {
     "effect": "the effect being asked about.",
     "from_attack": "did this come out of an attack.",
     "granted_by": "who handed this creature the attack, or -1.",
-    "granted_via": "the ref of the row that handed it over.",
+    "granted_via": (
+        "the ref of the row that handed it over -- an attack, or "
+        "since #672 a **saving throw**. `Cast.save` writes it from "
+        "its own `ref`, the way `Effect.by` does, and it is empty "
+        "for the ordinary end-of-turn throw nobody granted."
+    ),
     "hand": "which hand the weapon is in.",
     "how": "the kind of forced movement -- push, pull, slide.",
     "keywords": "the keywords of the row or effect being asked about.",
@@ -457,6 +467,14 @@ CTX_KEYS: dict[str, str] = {
     "skill": "the skill being checked, lowercased.",
     "source": "who laid the effect.",
     "target": "who it lands on. The commonest key in the tree.",
+    "when_": (
+        "where in the turn a saving throw was taken -- `\"end\"` for the "
+        "ordinary one, `\"early\"` for one moved or granted at the start. "
+        "Written by `Effects.save` and `Cast.save`, which take it as a "
+        "keyword. Named with the trailing underscore for `Event.kind`'s "
+        "reason: a field called `when` shadows the property `wire()` puts "
+        "in every replay envelope. #671."
+    ),
     "why": "the reason recorded for this.",
 }
 

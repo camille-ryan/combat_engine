@@ -781,6 +781,42 @@ class Effects:
 
     # -- the clock -----------------------------------------------------------
 
+    def _rolls_early(self, eff: Effect) -> bool:
+        """Does this effect's saving throw happen at the start of the turn?
+
+        Three rows move one: "saving throws against charm, fear or psychic
+        effects at the start of your turn", "against ongoing untyped damage
+        at the start of your turn **instead of** at the end", and a psionic
+        augment that does the same for the encounter. All three narrow on
+        what the effect *is*, so the selector is a predicate over the same
+        save context `save` already builds -- `keywords`, `ongoing`,
+        `dtype`, `conditions` -- rather than a new vocabulary.
+
+        Held as a gated `Mod` because that is what `Mods` holds and what
+        `c.bonus(when=)` already means; `c.save_early` is the writer.
+
+        **Not `cf:warden-f0`.** That feature is an *extra* throw taken from
+        a `TurnStart` watch, and its own docstring says the ordinary
+        end-of-turn one still happens when it fails. A move and an addition
+        are different sentences and this is only the first. #671.
+        """
+        holder = self.world.get(eff.owner, Mods)
+        if holder is None or not holder.items:
+            return False
+        ctx = {
+            "actor": eff.owner,
+            "effect": eff,
+            "label": eff.label,
+            "conditions": frozenset(eff.conditions),
+            "ongoing": eff.ongoing is not None,
+            "dtype": eff.ongoing[1] if eff.ongoing else None,
+            "dtypes": eff.ongoing_types or (
+                (eff.ongoing[1],) if eff.ongoing else ()
+            ),
+            "keywords": keywords_of(eff),
+        }
+        return holder.total("save_early", ctx) > 0
+
     def _on_turn_start(self, ev: TurnStart) -> None:
         for eff in list(self.live.values()):
             if eff.ongoing is not None and eff.owner == ev.actor:
@@ -789,6 +825,12 @@ class Effects:
                     eff.source, eff.owner, amount, dtype, detail=str(eff),
                     dtypes=eff.ongoing_types,
                 )
+            if (
+                eff.when is When.SAVE_ENDS
+                and eff.clock == ev.actor
+                and self._rolls_early(eff)
+            ):
+                self.save(eff, when_="early")
             if eff.when is When.SONT and eff.clock == ev.actor:
                 self.end(eff, "start of turn")
             elif eff.when is When.SOTNT and eff.clock == ev.actor:
@@ -819,7 +861,14 @@ class Effects:
                 else:
                     self.end(eff, "end of turn")
             elif eff.when is When.SAVE_ENDS:
-                self.save(eff)
+                # **Skipped when something moved this throw to the start of
+                # the turn**, which is a *move* and not an extra: `i499x1`
+                # spells the consequence out -- "if you fail any of these
+                # saving throws, you do not make a saving throw to end that
+                # effect at the end of your turn" -- and that falls out of
+                # the skip rather than needing a clause of its own. #671.
+                if not self._rolls_early(eff):
+                    self.save(eff)
             elif (
                 eff.when is When.SUSTAIN
                 and eff.sustained < self.world.round
@@ -867,8 +916,18 @@ class Effects:
         self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True
 
-    def save(self, eff: Effect) -> None:
-        """Roll a saving throw against one effect now."""
+    def save(
+        self, eff: Effect, *, when_: str = "end", granted_via: str = "",
+    ) -> None:
+        """Roll a saving throw against one effect now.
+
+        `when_` is **where in the turn** this throw is being taken and
+        `granted_via` is **the row that handed it over**. Neither was
+        recorded, in the context or on the event, and seven rows narrow on
+        one or the other -- `f2553` is declared, fires, and pays its +2 on
+        both of the turn's throws because nothing could say which this was.
+        #671, #672.
+        """
         holder = self.world.get(eff.owner, Mods)
         # With a context. It was called with none, so a `when=` gate on a
         # save bonus ran against `{}` and anything reading a key was
@@ -903,6 +962,13 @@ class Effects:
             # of #580 that reaches a *rule*: "a +2 to saves against charm
             # and psychic effects" never saw a psychic burn.
             "keywords": keywords_of(eff),
+            # **Which of the turn's throws, and whose doing.** "A +2 bonus
+            # to saving throws made at the start of your turn" and "a
+            # saving throw granted by your `cf:warden-f0` class feature"
+            # are both gates on the throw rather than on the effect, and
+            # the context carried nothing about the throw at all.
+            "when_": when_,
+            "granted_via": granted_via,
         }
         bonus = eff.save_mod + (holder.total("save", ctx) if holder else 0)
         roll = self.world.rng.d20()
@@ -917,6 +983,12 @@ class Effects:
                 natural=roll.total,
                 bonus=bonus,
                 saved=saved,
+                # On the event as well as in the context: `f1941` and
+                # `f2554` **trigger** on the throw rather than modifying
+                # it, and a `when=` gate is no use to a watcher.
+                when_=when_,
+                granted_via=granted_via,
+                keywords=frozenset(ctx["keywords"]),
             )
         )
         # Refusing it is not the same as failing it. A cancelled save never
