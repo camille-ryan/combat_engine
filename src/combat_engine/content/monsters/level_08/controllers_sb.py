@@ -2642,7 +2642,6 @@ def m6640a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.squeeze_through()",),
 )
 def m6640a2(c: Cast) -> None:
     """Squeezing through any opening sized for one of the creatures it
@@ -2662,6 +2661,16 @@ def m6640a2(c: Cast) -> None:
             ev.cancel("the swarm cannot be shoved by that")
 
     c.watch(ForcedMove, refuse, until=When.ENCOUNTER, window=Window.BEFORE, on=me, label=c.ref)
+    # **Squeezing through an opening, written now.** It read "no reader --
+    # there is no verb for a size-gated opening on a board that records no
+    # openings", and the second half was the true one: the verb was missing
+    # because the *grid* could not say why a square blocked. `Grid.porous`
+    # labels a blocker with a gap and `c.squeeze_through` is the permission
+    # (#674). The size gate is deliberately not written: "large enough for
+    # at least one of the creatures it comprises" is a swarm of Tiny bodies,
+    # which means any gap at all, and a `gap=` sort would be inventing a
+    # taxonomy no board fills.
+    c.squeeze_through(on=me, until=When.ENCOUNTER)
 
 
 @power(

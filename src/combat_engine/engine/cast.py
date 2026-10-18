@@ -5145,6 +5145,39 @@ class Cast:
         """
         return self.mode("phasing", self.speed_of(on or self.me), until=until, on=on)
 
+    def squeeze_through(
+        self, *gaps: str, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Can enter and move through a porous obstacle that would otherwise
+        prevent movement (such as a door or a cracked window)."
+
+        **Narrower than `c.phasing` above, which is the whole point.** That
+        verb passes through earth, rock and anything else in the way, so
+        granting it to the two elite blocks printing this sentence would let
+        them leave through a solid wall. The card says a door or a cracked
+        window: something with a gap, not everything.
+
+        What made it writable is the grid being able to say *why* a square
+        blocks. `Grid.blocking` is a bare set and records only that one
+        does; `Grid.porous` labels the ones with a gap, the way
+        `Grid.difficult` labels what sort of going a rough square is -- and
+        that field's own comment records having had this exact gap, for a
+        creature that wades through mud but not through rubble. #674.
+
+        `gaps` narrows to named sorts. Naming none means any gap at all,
+        which is what both printed rows mean: neither says what sort, they
+        say the property. A board with nothing porous on it is every board
+        today, so the permission costs nothing until something fills the map.
+
+        `movement._may_squeeze` is the reader.
+        """
+        return self.bonus(
+            "may_squeeze", 1, on=on if on is not None else self.me,
+            until=until, label=f"{self.ref} squeeze",
+            when=(lambda ctx: str(ctx.get("gap", "")) in gaps) if gaps else None,
+        )
+
     def blocks_entry(
         self, *, on: int | None = None, until: When = When.ENCOUNTER,
     ) -> Effect | None:

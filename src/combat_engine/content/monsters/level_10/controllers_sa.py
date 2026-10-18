@@ -407,7 +407,6 @@ def m1062a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.phasing(through=)",),
 )
 def m1062a4(c: Cast) -> None:
     """Insubstantial and the fly speed are exact. Passing through a
@@ -447,6 +446,14 @@ def m1062a4(c: Cast) -> None:
             moves.modes["fly"] = had_fly
 
     hold.on_end.append(grounded)
+    # **The porous obstacle, written now.** `c.phasing` passes through
+    # anything solid and the card says a door or a cracked window, so the
+    # grid had to be able to say *why* a square blocks before this could be
+    # narrowed: `Grid.porous` labels the blockers with a gap and
+    # `c.squeeze_through` is the permission `movement._clear` reads. Granted
+    # with no sort named, because the card names the property and not a
+    # sort. #674.
+    c.squeeze_through(on=me, until=When.SUSTAIN)
 
 
 # ==========================================================================

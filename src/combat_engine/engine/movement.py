@@ -305,7 +305,16 @@ def _clear(
         # Phasing walks through earth and rock. It still has to *stop*
         # somewhere legal, which `settle` enforces -- this only says the
         # wall is not a wall on the way past.
-        if not world.grid.passable(sq) and not ghost:
+        #
+        # **A porous blocker is narrower than phasing**, and that narrowness
+        # is the whole of what two cards print: "can enter and move through a
+        # porous obstacle that would otherwise prevent movement (such as a
+        # door or a cracked window)". Granting `c.phasing` would let the
+        # creature leave through a solid wall, which the card does not say.
+        # `Grid.porous` records which blockers have a gap and
+        # `c.squeeze_through` is the permission. #674.
+        if (not world.grid.passable(sq) and not ghost
+                and not _may_squeeze(world, eid, sq)):
             return False
         who = world.grid.occupant(sq)
         if who is None or who == eid:
@@ -436,6 +445,28 @@ def shares_space(world: World, eid: int) -> bool:
 
     mods = world.get(eid, Mods)
     return bool(mods and mods.items and mods.total("shares_space", {}) > 0)
+
+
+def _may_squeeze(world: World, eid: int, sq: Square) -> bool:
+    """May this creature pass a blocker with a gap in it? See `Grid.porous`.
+
+    Gated through `Mods` on the kind of gap, so "a door or a cracked window"
+    is a predicate on one mechanism rather than a second mechanism -- the
+    arrangement `may_enter` above uses for the creature in the way, and
+    `world.difficult` uses for the sort of going.
+
+    An empty kind in the permission means any gap at all, which is what both
+    printed rows mean: neither names a sort, they name the property.
+    """
+    from .components import Mods
+
+    kind = world.grid.porous.get(sq)
+    if kind is None:
+        return False
+    mods = world.get(eid, Mods)
+    if mods is None or not mods.items:
+        return False
+    return mods.total("may_squeeze", {"gap": kind}) > 0
 
 
 def may_enter(world: World, mover: int, occupant: int) -> bool:

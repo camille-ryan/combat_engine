@@ -1408,7 +1408,6 @@ def m2245a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.phasing(through=)",),
 )
 def m2245a4(c: Cast) -> None:
     """Sustain Standard, which `c.insubstantial` cannot carry -- applied
@@ -1434,6 +1433,12 @@ def m2245a4(c: Cast) -> None:
             moves.modes["fly"] = had_fly
 
     hold.on_end.append(restore)
+    # **The porous obstacle, written now.** See `m1062a4`, the twin:
+    # `c.phasing` passes through anything solid and the card says a door or
+    # a cracked window, so `Grid.porous` labels the blockers with a gap and
+    # `c.squeeze_through` is the permission `movement._clear` reads. No sort
+    # named, because the card names the property. #674.
+    c.squeeze_through(on=me, until=When.SUSTAIN)
 
 
 # ==========================================================================

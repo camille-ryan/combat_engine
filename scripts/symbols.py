@@ -144,7 +144,7 @@ CATEGORIES: dict[str, dict] = {
                 "extend_move", "forces", "ignores_difficult",
                 "ignores_difficult_in", "immovable", "no_walk", "phasing",
                 "may_enter", "resist_forced", "shares_space",
-                "speed_of", "squares_for",
+                "speed_of", "squares_for", "squeeze_through",
             ]),
             # **Two attack modifiers, filed under movement on purpose.**
             # Both are about what the *run action* costs -- the printed -5
@@ -471,6 +471,12 @@ CTX_KEYS: dict[str, str] = {
     "mode": "the movement mode in use.",
     "mover": "who is trying to enter a square. `movement.may_enter`.",
     "occupant": "who is standing in it. The other half of `mover`.",
+    "gap": (
+        "what sort of hole a blocking square has -- \"door\", \"cracked "
+        "window\". Read by `movement._may_squeeze` off `Grid.porous`, so a "
+        "card naming one sort is a predicate on one mechanism rather than a "
+        "second mechanism. #674."
+    ),
     "ongoing": "is this ongoing damage rather than a blow.",
     "opportunity": "is this an opportunity attack.",
     "power": "the ref of the row doing this. The commonest gate.",

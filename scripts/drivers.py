@@ -20404,6 +20404,161 @@ def a_shift_walks_the_squares_in_between(out: Result) -> None:
              " naming a square keeps the behaviour it had",
              f"{jumped}")
 
+
+def a_blocker_with_a_gap_in_it(out: Result) -> None:
+    """Two elite blocks pass a door; neither passes a wall.
+
+    #674. "It can enter and move through a porous obstacle that would
+    otherwise prevent movement (such as a door or a cracked window)" is
+    narrower than `c.phasing`, which passes through earth, rock and anything
+    else in the way -- so granting that verb would let the creature leave
+    through a solid wall, which the card does not say.
+
+    **What made it writable is the grid being able to say *why* a square
+    blocks.** `Grid.blocking` is a bare set and records only that one does;
+    `Grid.porous` labels the ones with a gap, the way `Grid.difficult`
+    labels what sort of going a rough square is -- and that field's own
+    comment records having had this exact gap, for a creature that wades
+    through mud but not through rubble.
+
+    **The assertion that matters is the pair**: the permission crosses the
+    porous square and still refuses the solid one. Either half alone would
+    pass for `c.phasing`, which is the verb this is not.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.movement import place, step
+    from combat_engine.engine.query import squares
+
+    def two_blockers(ref: str) -> tuple:
+        """A board with a door one way and a wall the other.
+
+        **Measured from the creature's footprint, not from its square.**
+        Every one of these five is **Large** or bigger -- they are elites and
+        swarms -- so `x + 1` is a square it is already standing in, and the
+        first draft painted the door *under* the creature. `step` then moved
+        it one east onto a footprint whose only painted square was the one it
+        had just left, `_clear` refused for an ordinary reason, and the rule
+        read as a permission that did not work.
+        """
+        world, me, _ = audit_board(ref, 1)
+        here = world.get(me, Position)
+        mine = sorted(here.squares) if here is not None else [_at(world, me)]
+        east = max(x for x, _y in mine) + 1
+        west = min(x for x, _y in mine) - 1
+        row = mine[0][1]
+        door, wall = (east, row), (west, row)
+        # **Everything nearby cleared of bodies first, not just the two
+        # squares.** The board puts four creatures in reach and one of them
+        # stood in the door, so `_clear` refused for occupancy and the rule
+        # read as a permission that did not work -- measured, `occupant of
+        # door: 3`. Clearing only the door and the wall was not enough
+        # either: these creatures are **Large**, so a step east lands on a
+        # footprint four squares wide and any body in the far column refuses
+        # it for an ordinary reason.
+        # Six, not three: `m6086a1` is a **Gargantuan** swarm, sixteen
+        # squares, and a step east lands on a footprint whose far column is
+        # four squares beyond the one this started from.
+        near = spread(set(mine), 6)
+        for sq in sorted(near):
+            who = world.grid.occupant(sq)
+            if who is not None and who != me:
+                place(world, who, (2, 2))
+        # **And the board's own walls, which are not the subject.** The
+        # board paints blocking squares of its own, and one of them sat in
+        # the Gargantuan's destination footprint -- measured, `blocking in
+        # target: [(9, 8), (10, 8)]`, where only the second is the painted
+        # door. A pre-existing wall refusing the step is a true answer to a
+        # question this rule is not asking.
+        world.grid.blocking -= near
+        world.grid.blocking.add(door)
+        world.grid.blocking.add(wall)
+        world.grid.porous[door] = "door"
+        # **One square, and for a Large creature that is not the same square
+        # as the blocker.** `step` takes the square the creature's *own*
+        # square becomes; its footprint then covers the blocker beyond it.
+        # Handing `step` the door outright asked a Large creature to jump
+        # two, which it cannot, and the rule read as a permission that did
+        # not work.
+        start = mine[0]
+        return (world, me, door, wall,
+                (start[0] + 1, start[1]), (start[0] - 1, start[1]))
+
+    world, me, door, wall, east, west = two_blockers("m1062a4")
+    out.that(not world.grid.passable(door),
+             "the door is a blocking square, so nothing walks it by default",
+             f"{world.grid.passable(door)}")
+    out.that(world.grid.porous.get(door) == "door",
+             "and the grid records what sort of blocker it is, which is the"
+             " thing `blocking` alone could not say",
+             f"{world.grid.porous.get(door)}")
+    out.that(not step(world, me, east),
+             "without the permission the creature cannot enter it -- the"
+             " control, and the state every board is in")
+
+    # -- the permission, and the narrowness --------------------------------
+    world, me, door, wall, east, west = two_blockers("m1062a4")
+    Cast(world=world, me=me, ref="drivers:squeeze").squeeze_through(
+        on=me, until=When.ENCOUNTER)
+    out.that(step(world, me, east),
+             "with it, the creature moves through the door")
+    out.that(door in squares(world, me),
+             "and is standing in it", f"{sorted(squares(world, me))}")
+
+    world, me, door, wall, east, west = two_blockers("m1062a4")
+    Cast(world=world, me=me, ref="drivers:squeeze").squeeze_through(
+        on=me, until=When.ENCOUNTER)
+    out.that(not step(world, me, west),
+             "and the SOLID blocker still refuses it -- the half that makes"
+             " this narrower than `c.phasing`, and the half either assertion"
+             " alone would pass without")
+
+    # -- the verb it is not ------------------------------------------------
+    world, me, door, wall, east, west = two_blockers("m1062a4")
+    Cast(world=world, me=me, ref="drivers:ghost").phasing(on=me)
+    out.that(step(world, me, west),
+             "`c.phasing` crosses the solid one, which is why granting it to"
+             " these rows would have been wider than the card",
+             f"{_at(world, me)}")
+
+    # -- a named sort, and a gap of another sort ---------------------------
+    world, me, door, wall, east, west = two_blockers("m1062a4")
+    world.grid.porous[wall] = "cracked window"
+    Cast(world=world, me=me, ref="drivers:fussy").squeeze_through(
+        "door", on=me, until=When.ENCOUNTER)
+    out.that(step(world, me, east),
+             "a permission naming `door` passes a door")
+    world, me, door, wall, east, west = two_blockers("m1062a4")
+    world.grid.porous[wall] = "cracked window"
+    Cast(world=world, me=me, ref="drivers:fussy").squeeze_through(
+        "door", on=me, until=When.ENCOUNTER)
+    out.that(not step(world, me, west),
+             "and refuses a cracked window, so the `gap=` context key is"
+             " read rather than decorative")
+
+    # -- the rows themselves -----------------------------------------------
+    for ref in ("m1062a4", "m2245a4", "m6640a2", "m6000a1", "m6086a1"):
+        row = REGISTRY[ref]
+        out.that(not row.dropped and not row.todo,
+                 f"{ref} carries no marker for it any more",
+                 f"todo={row.todo} dropped={row.dropped}")
+        world, me, door, wall, east, west = two_blockers(ref)
+        here = world.get(me, Position)
+        if here is None:
+            continue
+        row.body(Cast(world=world, me=me, ref=ref))
+        out.that(step(world, me, east),
+                 f"{ref} grants it: the creature moves through the door",
+                 f"{sorted(squares(world, me))} wanted to cover {door}")
+        out.that(wall not in squares(world, me),
+                 f"and {ref} does not grant the wall",
+                 f"{sorted(squares(world, me))}")
+
 DRIVERS = {
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
@@ -20416,6 +20571,10 @@ DRIVERS = {
     "lamp_settings": (
         one_lamp_three_settings_and_putting_the_lights_out,
         "one lamp's three settings, and a row that suppresses a light (#686)",
+    ),
+    "porous": (
+        a_blocker_with_a_gap_in_it,
+        "a blocker with a gap in it, which is narrower than phasing (#674)",
     ),
     "shift_path": (
         a_shift_walks_the_squares_in_between,

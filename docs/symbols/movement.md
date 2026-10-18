@@ -86,6 +86,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - How fast somebody is. **Defaults to the caster**, not the target.
 - `c.squares_for(self, ref: 'str' = '', default: 'int' = 0, ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How far this row moves this creature, after anything lengthening it.
+- `c.squeeze_through(self, *gaps: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "Can enter and move through a porous obstacle that would otherwise
 
 ## what running costs
 

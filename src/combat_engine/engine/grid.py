@@ -225,6 +225,22 @@ class Grid:
     #: creature that wades through mud but not through rubble had nothing to
     #: test. An empty label means rough ground of no particular kind.
     difficult: dict[Square, str] = field(default_factory=dict)
+    #: Blocking squares with a **gap** in them, and what sort -- "door",
+    #: "cracked window", "portcullis". `blocking` above is a bare set, so it
+    #: records *that* a square blocks and not *why*, which is the gap
+    #: `difficult`'s own comment describes having had: a creature that slips
+    #: through a door but not through a wall had nothing to test.
+    #:
+    #: Two elite stat blocks print it -- "can enter and move through a porous
+    #: obstacle that would otherwise prevent movement (such as a door or a
+    #: cracked window)" -- and `c.phasing` is too wide for them, because it
+    #: passes through anything solid. `movement._may_squeeze` is the reader
+    #: and `c.squeeze_through` is the permission. #674.
+    #:
+    #: A square absent from this map is solid, which is every square on every
+    #: board today: the reader lands with the model and costs nothing until
+    #: something fills it. Same bargain `light` above strikes.
+    porous: dict[Square, str] = field(default_factory=dict)
     #: How well lit a square is, where it is not bright. Absent means
     #: `Light.BRIGHT`, which is the whole board until something darkens it --
     #: so the map is empty on every board that never mentions light, and the

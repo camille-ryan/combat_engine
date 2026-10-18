@@ -29,6 +29,7 @@ applied (#591). `symbols.py` refuses a key that is not listed here.
 - `ctx['dtypes']` -- every type of a blow that is several at once.
 - `ctx['effect']` -- the effect being asked about.
 - `ctx['from_attack']` -- did this come out of an attack.
+- `ctx['gap']` -- what sort of hole a blocking square has -- "door", "cracked window". Read by `movement._may_squeeze` off `Grid.porous`, so a card naming one sort is a predicate on one mechanism rather than a second mechanism. #674.
 - `ctx['granted_by']` -- who handed this creature the attack, or -1.
 - `ctx['granted_via']` -- the ref of the row that handed it over -- an attack, or since #672 a **saving throw**. `Cast.save` writes it from its own `ref`, the way `Effect.by` does, and it is empty for the ordinary end-of-turn throw nobody granted.
 - `ctx['hand']` -- which hand the weapon is in.

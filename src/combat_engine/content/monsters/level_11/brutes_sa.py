@@ -2831,7 +2831,6 @@ def m6086a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.squeeze_through()",),
 )
 def m6086a1(c: Cast) -> None:
     """A swarm's three habits: it shares its square, it will not be shoved,
@@ -2848,6 +2847,18 @@ def m6086a1(c: Cast) -> None:
     """
     me = c.me
     c.shares_space(on=me, until=When.ENCOUNTER, difficult=True)
+    # **Squeezing through an opening, written now** -- see `m6640a2`, whose
+    # card prints the same sentence. The old note said there was no opening
+    # on a board to slip through, and the real gap was that `Grid.blocking`
+    # could not say *why* a square blocked; `Grid.porous` labels the ones
+    # with a gap and `c.squeeze_through` is the permission (#674). No size
+    # gate: a swarm of Tiny bodies fits any gap at all, and a `gap=` sort
+    # would be inventing a taxonomy no board fills.
+    #
+    # Paragon, and written anyway because it is one line and the alternative
+    # is leaving `todo.py` red on an arrived symbol. The band rule is about
+    # not taking on paragon *scope*.
+    c.squeeze_through(on=me, until=When.ENCOUNTER)
 
     def shoved_by_a_swing(ctx: dict[str, Any]) -> bool:
         from combat_engine.engine.dsl import get
