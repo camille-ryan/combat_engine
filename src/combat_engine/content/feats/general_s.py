@@ -2235,17 +2235,30 @@ def f3785(c: Cast) -> None:
 
 @power("f3786", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.counts_as(property=)",))
+       )
 def f3786(c: Cast) -> None:
     """The racial burst rolls d8s, and the unarmed attack gains a property.
+    Both halves now.
 
-    The dice half is written -- `p5599` asks `c.dice_for` for its die now.
+    The dice half was already written -- `p5599` asks `c.dice_for` for its
+    die.
 
-    The property half is the dropped clause: a weapon's properties are
-    columns on the row the character is holding, shared by every copy of that
-    weapon, so "this character's counts as off-hand" has nowhere to be
-    recorded. Same verb f3784 beside it wants, and the same reason."""
+    **The property half was dropped on a premise that had stopped being
+    true.** The note read "a weapon's properties are columns on the row the
+    character is holding, shared by every copy of that weapon, so 'this
+    character's counts as off-hand' has nowhere to be recorded".
+    `Gear.weapons` holds per-character `replace(w)` copies, which is the
+    guarantee `c.gains_property` is built on and which #652's `replace(arm)`
+    extended to the arms a feat grants. So there is somewhere to record it
+    and the verb to do it is not `counts_as` -- that one waives a printed
+    Requirement and changes no weapon. #676.
+
+    By group and not by ref, which is the opposite of `f3784` beside it and
+    is right for the opposite reason: the card says "your unarmed attack"
+    generally, and a *property* only ever adds where a *die* set across a
+    group would lower a monk's."""
     c.change_dice("p5599", "1d8")
+    c.gains_property("off-hand", group="unarmed", on=c.me)
 
 
 @power("f3787", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -18409,7 +18409,135 @@ def the_run_action_costs_what_it_costs(out: Result) -> None:
              " two keys, and no card prints both",
              f"it charged {exposed}")
 
+def a_printed_weapon_property_a_feat_grants(out: Result) -> None:
+    """Three rows give a weapon a property it does not print, and the
+    property has to be **read** afterwards.
+
+    #676. All three carried `c.counts_as(property=)` and all three wanted
+    `c.gains_property`, which has been there since the silver wave -- the
+    markers argued that a weapon's properties are "shared by every copy",
+    which stopped being true when `Gear.weapons` started holding
+    `replace(w)` copies and became true of feat-granted arms too with #652.
+
+    **Posed here because the audit board cannot pose it**, and that is the
+    whole reason this rule exists rather than a `--calls` run: none of the
+    three characters is dealt the weapon its card names. `f2405` wants a
+    sling and holds a dagger, a crossbow and two hammers; `f3786` wants a
+    fist and `f3501` a staff, and both hold a greataxe. The same gear gap as
+    #663, from the other side, so all three will read silent in a sweep
+    while being correct.
+
+    **The high-crit half is asserted through `_high_crit`**, not by reading
+    the word back out of `Weapon.properties`. A rule that only checked the
+    string would pass with nothing consulting it, which is this component's
+    signature failure -- and `expect.py` still claims "high crit
+    contributes nothing because the kernel reads it nowhere" (#678), so the
+    question is live rather than rhetorical.
+    """
+    from dataclasses import replace
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.dsl import REGISTRY
+
+    def armed_with(ref: str, weapon: Weapon):  # noqa: ANN202
+        """That row's board, with one named weapon in hand and nothing else."""
+        world, me, _ = audit_board(ref, 1)
+        gear = world.get(me, Gear) or world.add(me, Gear())
+        gear.weapons = [replace(weapon)]
+        gear.stowed = set()
+        return world, me, Cast(world=world, me=me, ref=ref)
+
+    SLING = Weapon(ref="w3628", slug="sling", group="sling",
+                   category="simple", damage="1d6", proficiency=2)
+    FIST = Weapon(ref="w3678", slug="unarmed", group="unarmed",
+                  category="simple", damage="1d4", proficiency=0)
+    STAFF = Weapon(ref="w3601", slug="quarterstaff", group="staff",
+                   category="simple", damage="1d8", proficiency=2)
+
+    wanted = (
+        ("f2405", SLING, "high crit"),
+        ("f3786", FIST, "off-hand"),
+        ("f3501", STAFF, "small"),
+    )
+    for ref, weapon, word in wanted:
+        row = REGISTRY[ref]
+        out.that(word not in weapon.properties,
+                 f"{ref}: the {weapon.group} does not print {word!r} to"
+                 " start with -- without this the whole rule is vacuous",
+                 f"{weapon.properties}")
+
+        world, me, c = armed_with(ref, weapon)
+        row.body(c)
+        held = world.get(me, Gear).weapons[0]
+        out.that(word in held.properties,
+                 f"{ref}: the {weapon.group} in hand gains {word!r}",
+                 f"{sorted(held.properties)}")
+
+        # **The negative control, and the one that matters**: the grant is by
+        # group, so a weapon of another group standing beside it must not
+        # pick the word up. A row that laid the property on everything would
+        # satisfy every assertion above.
+        world2, me2, c2 = armed_with(ref, weapon)
+        gear2 = world2.get(me2, Gear)
+        gear2.weapons = [*gear2.weapons,
+                         replace(STAFF if weapon is not STAFF else SLING)]
+        REGISTRY[ref].body(c2)
+        other = gear2.weapons[1]
+        out.that(word not in other.properties,
+                 f"{ref}: and the {other.group} beside it does NOT, which is"
+                 " what `group=` is for",
+                 f"{other.group} {sorted(other.properties)}")
+
+    # -- and the word is read, not merely written ------------------------
+    # `_high_crit` pays one rolled `[W]` on a critical for a weapon carrying
+    # the property, only on a row with the weapon keyword. Asked of `f2405`'s
+    # sling, before and after, on one board.
+    world, me, c = armed_with("f2405", SLING)
+    before = Cast(world=world, me=me, ref="mba")._high_crit()
+    out.that(before == 0,
+             "a plain sling pays nothing extra on a critical -- the control"
+             " for the next assertion",
+             f"{before}")
+    REGISTRY["f2405"].body(c)
+    reader = Cast(world=world, me=me, ref="mba")
+    paid = [reader._high_crit() for _ in range(12)]
+    out.that(all(p > 0 for p in paid),
+             "and after `f2405` it pays an extra die on every critical --"
+             " `_high_crit` reads the word the feat wrote, which is the"
+             " assertion a string check would have missed",
+             f"{paid}")
+    out.that(all(1 <= p <= 6 for p in paid),
+             "one rolled d6, the sling's own die -- rolled and not maxed,"
+             " which is what the rule pays and what `_high_crit`'s docstring"
+             " says it was careful about",
+             f"{sorted(set(paid))}")
+
+    # -- f3501 is a trait with a watch, not a declared trigger -----------
+    # It prints a standing property **and** a triggered shift, and
+    # `content/CLAUDE.md` is explicit that a row cannot hold both: under
+    # `on=`, the body runs only when the trigger fires, so the property would
+    # be laid only on a turn somebody was knocked prone. The first version of
+    # this change did exactly that and raised on `c.trigger.target`.
+    row = REGISTRY["f3501"]
+    out.that(row.on is None,
+             "f3501 declares no trigger, which is what lets its standing"
+             " clause be laid at all",
+             f"{row.on}")
+    world, me, c = armed_with("f3501", STAFF)
+    row.body(c)
+    out.that(any(e.label == "f3501" for e in world.effects.of(me))
+             or bool([e for e in world.effects.of(me) if "f3501" in e.label]),
+             "and it installs its own watch for the triggered half",
+             f"{[e.label for e in world.effects.of(me)]}")
+
 DRIVERS = {
+    "weapon_property": (
+        a_printed_weapon_property_a_feat_grants,
+        "a feat giving a held weapon a property it does not print (#676)",
+    ),
     "run_costs": (
         the_run_action_costs_what_it_costs,
         "running is speed + 2, -5 to attack rolls, and granting combat advantage",

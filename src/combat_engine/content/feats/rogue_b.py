@@ -1074,12 +1074,31 @@ def f2074(c: Cast) -> None:
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.counts_as(property=)", "Weapon.proficiency"))
+       dropped=("Weapon.proficiency",))
 def f2405(c: Cast) -> None:
-    """The sling exists now; what does not is any way to rewrite the
-    weapon a character is holding. Both clauses are that -- a better
-    proficiency bonus and the high-crit property -- and `Weapon` is read
-    off the item rather than off the wielder."""
+    """Slings gain the high crit property, and print a better proficiency
+    bonus. One of the two is writable and the row plays now.
+
+    **"Any way to rewrite the weapon a character is holding" exists**, and
+    the premise under that note -- `Weapon` being "read off the item rather
+    than off the wielder" -- stopped holding when `Gear.weapons` started
+    carrying `replace(w)` copies. `c.gains_property` is the writer and
+    `_high_crit` is the reader. #676.
+
+    **The proficiency half is not a bonus and that is why it is still
+    marked.** The card says "treat slings as having a +3 proficiency bonus";
+    `w3628` prints **2**, and `cast.py:1748` already adds the held weapon's
+    printed figure to the attack. Measured through a swing: proficiency
+    0/2/3/5 gives +5/+7/+8/+10. So `c.bonus("attack", 3,
+    kind="proficiency")` would pay 3 on top of the 2 already there, and the
+    honest shape is a **set** -- a third weapon-field writer beside
+    `c.gains_property` and `c.weapon_dice`, which is what
+    `Weapon.proficiency` names.
+
+    `f3784` lays a flat +2 for unarmed and is right, because unarmed prints
+    0: there the delta and the printed figure coincide, which is why it
+    does not settle this case."""
+    c.gains_property("high crit", group="sling", on=c.me)
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

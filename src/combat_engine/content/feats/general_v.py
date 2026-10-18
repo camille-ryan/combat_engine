@@ -833,11 +833,22 @@ def _proned_by_me(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3501", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("c.counts_as(property=)", "ConditionApplied.weapon"),
-       trigger="you knock a larger enemy prone with a staff",
-       on=Trigger(ConditionApplied, _proned_by_me, "you knock an enemy prone"))
+       dropped=("ConditionApplied.weapon",))
 def f3501(c: Cast) -> None:
-    """"Larger than you" is read off `Position.size` at the moment of the
+    """A standing weapon property and a triggered shift, so this is a trait
+    with a watch and **not** a declared trigger.
+
+    **That is not a style choice.** `content/CLAUDE.md`: "a row holds either
+    a printed trigger **or** standing modifiers, not both: declared `on=`,
+    the body runs only when the trigger fires, so modifiers laid there are
+    never laid." The first version of this change left the `on=Trigger` in
+    place and put `c.gains_property` at the top of the body -- which lays
+    the property only on a turn the knockdown happens, and raised on
+    `c.trigger.target` the moment anything called the body without one.
+    `feats/fighter_c.py`'s header records the same conversion for ten rows
+    of this shape.
+
+    "Larger than you" is read off `Position.size` at the moment of the
     knockdown, and that half plays.
 
     **Re-pointed: `ConditionApplied.power` landed and does not reach this
@@ -851,12 +862,24 @@ def f3501(c: Cast) -> None:
     carries a weapon at all; `weapon.py:829` records the same finding from
     the other side.
 
-    Wielding the quarterstaff as a small weapon stays a separate hold: that
-    is a printed weapon property, which is `c.counts_as(property=)`."""
+    **Wielding the quarterstaff as a small weapon is written now**, and
+    `c.counts_as(property=)` was the wrong verb for it: that one waives a
+    printed Requirement and changes no weapon, where this changes the
+    weapon. `small` is a real entry in the `properties` column and
+    `c.gains_property` is the writer. `w3601` is the quarterstaff and its
+    group is `staff`. #676."""
+    c.gains_property("small", group="staff", on=c.me)
+    me = c.me
     order = list(Size)
-    foe = c.trigger.target
-    if order.index(c.size_of(on=foe)) > order.index(c.size_of(on=c.me)):
-        c.shift(1)
+
+    def knocked(ev: Any) -> None:
+        if not _proned_by_me(c.world, me, ev):
+            return
+        foe = ev.target
+        if order.index(c.size_of(on=foe)) > order.index(c.size_of(on=me)):
+            c.shift(1)
+
+    c.watch(ConditionApplied, knocked, on=me, until=When.ENCOUNTER)
 
 
 def _close_arcane_staff(world: Any, me: int, ev: Any) -> bool:
