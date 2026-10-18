@@ -42,7 +42,6 @@ from typing import Any
 from combat_engine.content.monsters.level_01.artillery_sa import _recharge_when_bloodied
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES, _saves_off_prone
 from combat_engine.content.monsters.level_03.brutes import _taking_ongoing as _burning_with
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import (
     _free_square_beside,
     _is_bloodied,
@@ -97,6 +96,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Stats,
+    Target,
     Usage,
     When,
     Window,
@@ -1480,16 +1480,29 @@ def m3257a0(c: Cast) -> None:
     usage=Usage.RECHARGE,
     recharge=0,
     action=STANDARD,
-    reach=PERSONAL,
-    target=NO_TARGET,
+    reach=Melee(1),
+    target=Target(
+        "enemy", 1,
+        label="one creature it has combat advantage against",
+        grants_ca=True,
+    ),
 )
 def m3257a1(c: Cast) -> None:
     """No attack line of its own -- two swings of its basic sickle (a0)
-    against one target, redirected to whoever it has combat advantage
-    against rather than refused when the chooser aims it elsewhere."""
+    against one target.
+
+    The printed requirement is combat advantage **against the target**,
+    which narrows the pool and so is `Target.grants_ca` -- not a
+    `requires=`, which would allow the row and then let it be aimed at
+    anybody. It was a body filter that *redirected* the swing, so the menu
+    offered every enemy and the sickles landed on somebody else. #656
+
+    `reach=PERSONAL, target=NO_TARGET` could not carry a target line at
+    all, which is why the restriction had nowhere to go: the row does have
+    one target, reached at melee like the swings it spends."""
 
     _recharge_on(c, Bloodied, lambda ev: ev.actor in c.enemies())
-    victim = _restricted_to(c, 1, lambda foe: has_combat_advantage(c.world, c.me, foe))
+    victim = c.target
     if victim is None:
         return
     hits = _struck(c, "m3257a0", 2, victim)
@@ -2312,20 +2325,30 @@ def m5571a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="the target must be immobilized, stunned or unconscious",
+        conditions=frozenset({
+            Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS,
+        }),
+    ),
     attack=Attack(vs=AC, printed=12),
     damage=Damage("3d8", 5),
 )
 def m5571a1(c: Cast) -> None:
-    """Redirected to a qualifying victim rather than refused when the
-    chooser aims elsewhere -- `Target` has no field for a condition."""
-    down = (Condition.IMMOBILIZED, Condition.STUNNED, Condition.UNCONSCIOUS)
-    victim = _restricted_to(c, 1, lambda foe: any(c.is_(cond, on=foe) for cond in down))
-    if victim is None:
+    """**A printed Requirement about the *target* is a target line**, and
+    that is why this is `Target.conditions` and not `requires=`. The card
+    says "the target must be immobilized, stunned, or unconscious";
+    `Power.requires` is handed `(world, caster)` and cannot ask about a
+    creature it is not given, so a row written that way would have to pick
+    its target first -- which is the body filter this had. #656
+
+    Any of the three, which is what the set means."""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.dazed(on=victim, until=When.SAVE_ENDS)
+    if c.strike():
+        c.hit()
+        c.dazed(until=When.SAVE_ENDS)
 
 
 @power(
@@ -2637,23 +2660,33 @@ def m5738a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature slowed by it",
+        affected_by="m5738a1",
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("2d10", 4, dtype=DamageType.POISON),
 )
 def m5738a2(c: Cast) -> None:
-    """Redirected to whoever it has slowed, rather than refused when the
-    chooser aims elsewhere."""
+    """"One creature slowed **by the m5738**", which is narrower than
+    `conditions={SLOWED}`: a creature slowed by somebody in the party is not
+    a legal target and the plain condition would accept it.
 
-    def slowed_by_me(foe: int) -> bool:
-        return c.is_(Condition.SLOWED, on=foe) and _slowed_or_immobilized_by_me(c, foe)
+    So `Target.affected_by`, which matches `Effect.by` -- the ref of the row
+    that laid the effect. `m5738a1` is the only row of this block that
+    slows, so naming it is exact rather than a narrowing of the card. If the
+    block ever grows a second slowing row this becomes too narrow and wants
+    the disjunction. #656
 
-    victim = _restricted_to(c, 1, slowed_by_me)
+    It was a body filter before, so the row was offered against every enemy
+    in reach and then swung at whoever happened to be slowed."""
+    victim = c.target
     if victim is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
         def worsen(eff: Effect) -> None:
             c.world.effects.end(eff, "the poison worsened")

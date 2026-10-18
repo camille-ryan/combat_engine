@@ -54,7 +54,6 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
     _ref_of,
     _square_of,
 )
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import (
     _adjacent_foe_looks_away,
     _marked_shifts,
@@ -1712,7 +1711,11 @@ def m4004a3(c: Cast) -> None:
 
 
 @power(
-    "m4005a0", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1), target=ONE_CREATURE,
+    "m4005a0", level=9, usage=AT_WILL, action=MINOR, reach=Melee(1),
+    target=Target(
+        side="enemy", count=1, label="a creature not grabbed by it",
+        relation=Relation.GRABBED_BY, without=True,
+    ),
     attack=Attack(vs=AC, printed=16), damage=Damage("2d6", 7),
 )
 def m4005a0(c: Cast) -> None:
@@ -1721,13 +1724,14 @@ def m4005a0(c: Cast) -> None:
     creature barred from swinging, which leaves the grabbed creature's other
     attacks alone. The hold lasts as long as the grab does, so the printed
     narrowing is the `when=` gate re-reading the relation at each opening
-    rather than a duration."""
+    rather than a duration.
 
-    def not_already_held(who: int) -> bool:
-        return who not in c.world.relations.targets(Relation.GRABBED_BY, c.me)
-
-    victim = _restricted_to(c, 1, not_already_held)
-    if victim is None or not c.strike(on=victim):
+    The target line -- "a creature that is **not** grabbed by it" -- is
+    `relation=GRABBED_BY, without=True`, and was a body filter. Its own
+    sibling `m4005a1` declares the positive of the same relation, so the
+    field was in this file and one row above. #656."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
     me = c.me
     c.hit(on=victim)

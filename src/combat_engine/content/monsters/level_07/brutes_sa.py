@@ -93,6 +93,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Stats,
+    Target,
     Usage,
     When,
     Window,
@@ -243,16 +244,22 @@ def m1192a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one immobilized creature",
+        conditions=frozenset({Condition.IMMOBILIZED}),
+    ),
     keywords=[Keyword.COLD],
     attack=Attack(vs=FORT, printed=10),
 )
 def m1192a2(c: Cast) -> None:
-    """"Targets an immobilized creature" is asked of the body, not the
-    header -- `Target` has no such filter -- and where the chooser aims this
-    at somebody who does not qualify, `_restricted_to` aims it at one in
-    reach who does rather than throwing the row away. `Target.kind` is the
-    gap, as it is for the 112 other rows of this shape.
+    """"Targets an immobilized creature" is `Target.conditions` and is
+    declared. This docstring used to say `Target` had no such filter and
+    named "the 112 other rows of this shape" -- the field had arrived and
+    nothing came back for the rows, which is #656. The old body
+    did worse than refuse: it was offered against every enemy and then
+    *redirected* the swing to one who qualified, so the chooser's pick was
+    discarded in silence.
 
     The damage split is read off `DamageRolled`, the one moment a blow is
     a number and not yet a wound: half comes off this creature and lands
@@ -260,10 +267,8 @@ def m1192a2(c: Cast) -> None:
     the other half" means when the attack is the one landing on *this*
     creature and not on the target of this row.
     """
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.IMMOBILIZED, on=f))
-    if victim is None:
-        return
-    if not c.strike(on=victim):
+    victim = c.target
+    if victim is None or not c.strike():
         return
     c.grab()
     me = c.me

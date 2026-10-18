@@ -34,7 +34,6 @@ condition wires up on its own, and `_kin_adjacent_count` is `_kin_count`
 from __future__ import annotations
 
 from combat_engine.content.monsters.level_02.lurkers_sa import _recharge_when_using
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import _free_square_beside
 from combat_engine.engine import (
     AC,
@@ -65,6 +64,7 @@ from combat_engine.engine import (
     Melee,
     Ranged,
     Relation,
+    Size,
     Target,
     Usage,
     When,
@@ -522,7 +522,11 @@ def m2619a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one Medium or smaller target",
+        max_size=Size.MEDIUM,
+    ),
     attack=Attack(vs=REF, printed=12),
     dropped=("When.ESCAPE",),
 )
@@ -534,8 +538,14 @@ def m2619a1(c: Cast) -> None:
     marker was re-aimed off the target line entirely. What is missing is the
     clock: the daze and the burn run "until it escapes the grab" and `When`
     has no escape-tied member, so both are hung on `When.ENCOUNTER` instead
-    and `When.ESCAPE` is the named gap."""
-    victim = _restricted_to(c, 1, lambda f: _medium_or_smaller(c, f))
+    and `When.ESCAPE` is the named gap.
+
+    **And the field it pointed at is now actually used.** The marker moved
+    off the target line two changes ago and the *body* went on filtering,
+    so the row was offered against creatures of any size and then engulfed
+    a different one. Saying a field says it is not the same as declaring
+    it. #656."""
+    victim = c.target
     if victim is None:
         return
     landed = (

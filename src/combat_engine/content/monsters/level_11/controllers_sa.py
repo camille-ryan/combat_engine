@@ -74,6 +74,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_07.brutes import (
     _aura,
     _crowded,
@@ -83,7 +84,6 @@ from combat_engine.content.monsters.level_07.brutes import (
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_08.skirmishers import _adjacent_foe
 from combat_engine.content.monsters.level_09.brutes import _volley
-from combat_engine.content.monsters.level_09.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_11.controllers import (
     EVERY_DEFENCE,
     _ends_its_turn_in,

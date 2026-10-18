@@ -2355,17 +2355,21 @@ def m5293a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed creature",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d8", 7),
 )
 def m5293a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.DAZED, on=f))
-    if victim is None:
+    """"One dazed creature" is `Target.conditions`. #656"""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.stunned(on=victim, until=When.EONT)
+    if c.strike():
+        c.hit()
+        c.stunned(until=When.EONT)
 
 
 @power(

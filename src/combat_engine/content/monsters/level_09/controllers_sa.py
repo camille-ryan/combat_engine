@@ -1053,15 +1053,22 @@ def m1906a1(c: Cast) -> None:
     recharge=5,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one bloodied enemy",
+        bloodied=True,
+    ),
     keywords=[Keyword.RANGED],
     attack=Attack(vs=WILL, printed=11),
 )
 def m1906a2(c: Cast) -> None:
     """ "Aftereffect: the target is slowed (save ends)" fires when the
-    stun ends, not on a failed save -- `Effect.on_end`, not `escalate`."""
-    victim = _restricted_to(c, 5, lambda f: c.bloodied(on=f))
-    if victim is None or not c.strike(on=victim):
+    stun ends, not on a failed save -- `Effect.on_end`, not `escalate`.
+
+    "Targets a bloodied enemy" is `Target.bloodied`, declared rather than
+    filtered in the body. #656."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
     hold = c.condition(Condition.STUNNED, until=When.SAVE_ENDS, on=victim)
     if hold is not None:
@@ -2303,17 +2310,28 @@ def m5417a2(c: Cast) -> None:
     usage=Usage.RECHARGE,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_ENEMY,
+    target=Target(
+        "enemy", 1,
+        label="one slowed creature in the burst",
+        conditions=frozenset({Condition.SLOWED}),
+    ),
     keywords=[Keyword.CHARM, Keyword.CLOSE],
     attack=Attack(vs=WILL, printed=13),
 )
 def m5417a3(c: Cast) -> None:
+    """**`EACH_ENEMY` was wrong twice over.** The card says "one slowed
+    creature in the burst": one, not each, and slowed. The header said each
+    enemy and the body then picked a single slowed one, so the page and
+    `policy/` read a burst catching the whole room.
+
+    `Target("enemy", 1, conditions={SLOWED})` says both -- a burst with a
+    count of one is a burst you choose a target inside, which is what the
+    card prints. #656."""
     if c.first:
         _rearms_when_bloodied(c)
-    victim = _restricted_to(c, 2, lambda f: c.is_(Condition.SLOWED, on=f))
-    if victim is None or not c.strike(on=victim):
+    if c.target is None or not c.strike():
         return
-    c.condition(Condition.DOMINATED, until=When.EONT, on=victim)
+    c.condition(Condition.DOMINATED, until=When.EONT)
 
 
 # ==========================================================================
@@ -2981,14 +2999,18 @@ def m5779a3(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one slowed creature",
+        conditions=frozenset({Condition.SLOWED}),
+    ),
     attack=Attack(vs=REF, printed=12),
 )
 def m5779a4(c: Cast) -> None:
-    victim = _restricted_to(c, 5, lambda f: c.is_(Condition.SLOWED, on=f))
-    if victim is None or not c.strike(on=victim):
+    """"One slowed creature" is `Target.conditions`. #656."""
+    if c.target is None or not c.strike():
         return
-    c.immobilized(until=When.EONT, on=victim)
+    c.immobilized(until=When.EONT)
 
 
 # ==========================================================================
@@ -3645,7 +3667,12 @@ def m6092a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one humanoid creature grabbed by it",
+        kinds=frozenset({"humanoid"}),
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.POISON, Keyword.MELEE],
     attack=Attack(vs=FORT, printed=12),
 )
@@ -4091,13 +4118,21 @@ def m6409a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one nondeafened creature in the burst",
+        conditions_without=frozenset({Condition.DEAFENED}),
+    ),
     keywords=[Keyword.CHARM, Keyword.PSYCHIC, Keyword.CLOSE],
     attack=Attack(vs=WILL, printed=12),
 )
 def m6409a3(c: Cast) -> None:
-    victim = _restricted_to(c, 10, lambda f: not c.is_(Condition.DEAFENED, on=f))
-    if victim is None or not c.strike(on=victim):
+    """**The negative, so `conditions_without` and not `conditions`.** The
+    card says "one nondeafened creature", and the field exists separately
+    for exactly this: writing it as the positive would make the row its own
+    opposite. A body filter before. #656."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
     choice = c.choose(
         ["dominated", "psychic damage and prone"], f"{c.ref}: what the target chooses"

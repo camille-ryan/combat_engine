@@ -2570,6 +2570,198 @@ def grabbed_targets_only(out: Result) -> None:
                      " restriction and its negation, both from one field")
 
 
+def a_target_line_naming_what_it_is_suffering(out: Result) -> None:
+    """"One dazed creature", "an unconscious target only", "a bloodied enemy".
+
+    Nineteen heroic rows print a target line that `Target` has had a field for
+    all along and filtered in the **body** instead, so the page and `policy/`
+    offered the row against every enemy in reach and `_restricted_to` then
+    redirected the swing to whoever qualified. The chooser's pick was
+    discarded in silence, which is worse than a refusal. #656.
+
+    **The audit cannot see any of this and says so.** Nine of them moved to
+    "never usable here" when the restriction reached the header, because the
+    audit board has nobody dazed, slowed or unconscious standing on it -- so a
+    green sweep is no evidence either way and this rule is the only evidence
+    there is. The condition is armed here, per row, and the pool is read off
+    `dsl.candidates` before and after.
+
+    Four shapes, and the last three are each the field that would be got
+    wrong by using the first:
+
+    * `conditions` -- a **set**, meaning any of them. Four of these rows print
+      four alternatives on one line and `m5987a2` is asserted on a *different*
+      member of its four than `m115911a2` is, so a one-condition reading
+      cannot pass both;
+    * `conditions_without` -- `m6409a3` prints "one **nondeafened** creature",
+      and the before/after runs the other way: the whole pool, then minus the
+      one creature deafened;
+    * `bloodied`, `grants_ca`, `max_size`, `affected_by` -- not conditions at
+      all, and each with a row that prints only it;
+    * **two clauses that compound.** `m6092a2` wants a humanoid *and* grabbed;
+      `m5814a2` wants Large-or-smaller *and* not grabbed. Both are asserted
+      with one half satisfied and the other not, which is what tells a
+      conjunction from a disjunction.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import candidates, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition, Relation, Size
+
+    def arm(label: str):  # noqa: ANN202
+        def go(c: Cast, who: int) -> None:
+            c.condition(Condition(label), until=When.ENCOUNTER, on=who)
+        return go
+
+    # (ref, how the printed line is satisfied, what the line says)
+    WANTS = [
+        ("m1192a2", arm("immobilized"), "immobilized"),
+        ("m5571a1", arm("stunned"), "immobilized, stunned or unconscious"),
+        ("m115704a1", arm("dazed"), "dazed"),
+        ("m1812a4", arm("prone"), "prone"),
+        ("m2245a2", arm("unconscious"), "unconscious only"),
+        ("m5293a1", arm("dazed"), "dazed"),
+        ("m5417a3", arm("slowed"), "slowed, one in the burst"),
+        ("m5779a4", arm("slowed"), "slowed"),
+        ("m1062a2", arm("unconscious"), "unconscious only"),
+        ("m115911a2", arm("dazed"), "dazed, dominated, stunned or unconscious"),
+        ("m5987a2", arm("stunned"), "a DIFFERENT member of the same four"),
+        ("m6422a3", arm("dominated"), "dazed or dominated"),
+        # Not a condition at all.
+        ("m1906a2", None, "bloodied"),
+        ("m3257a1", arm("prone"), "combat advantage against the target"),
+        ("m1987a2", arm("prone"), "combat advantage against the target"),
+        ("m5738a2", None, "slowed BY THIS CREATURE, by ref"),
+    ]
+
+    for ref, qualify, says in WANTS:
+        world, me, _ = _board(ref, 1)
+        p = get(ref)
+        out.that(p is not None, f"{ref} is declared")
+        if p is None:
+            continue
+        c = Cast(world=world, me=me, ref=ref)
+        reach = [f for f in sorted(enemies(world, me)) if c.distance(f) <= 10]
+        out.that(len(reach) >= 2, f"{ref}'s board has two enemies in reach")
+        if len(reach) < 2:
+            continue
+        # **Compared before against after, not against zero.** Some of
+        # these boards already carry a creature in the condition asked
+        # about -- `m5293a1`'s has a dazed one standing on it -- so
+        # "nothing is offered" is a claim about the board and not about
+        # the field, and it failed for five rows on the first run for
+        # that reason alone.
+        before = set(candidates(world, me, p))
+        who = next((f for f in reach if f not in before), None)
+        out.that(who is not None,
+                 f"{ref}: the board has an enemy in reach that does NOT"
+                 f" qualify -- otherwise the narrowing is invisible ({reach})")
+        if who is None:
+            continue
+        if qualify is not None:
+            qualify(c, who)
+        elif ref == "m1906a2":
+            hp = world.need(who, Health)
+            hp.hp = max(1, hp.max_hp // 2 - 1)
+        elif ref == "m5738a2":
+            Cast(world=world, me=me, ref="m5738a1").slowed(
+                on=who, until=When.ENCOUNTER)
+        got = set(candidates(world, me, p))
+        out.that(got == before | {who},
+                 f"{ref}: making one creature {says} adds exactly it to the"
+                 f" offer, and nothing else ({sorted(got)} from"
+                 f" {sorted(before)})")
+
+    # ---------------------------------------------------- the negative
+    world, me, _ = _board("m6409a3", 1)
+    p = get("m6409a3")
+    if p is not None:
+        everyone = set(candidates(world, me, p))
+        out.that(len(everyone) >= 2,
+                 f"m6409a3 offers the pool while nobody is deafened ({len(everyone)})")
+        if len(everyone) >= 2:
+            one = sorted(everyone)[0]
+            Cast(world=world, me=me, ref="drivers").condition(
+                Condition.DEAFENED, until=When.ENCOUNTER, on=one)
+            out.that(set(candidates(world, me, p)) == everyone - {one},
+                     "and loses exactly the deafened one -- `conditions_without`"
+                     " runs the other way, and writing it as the positive would"
+                     " make the row its own opposite")
+
+    # ------------------------------------------- a size, not a condition
+    world, me, _ = _board("m2619a1", 1)
+    p = get("m2619a1")
+    if p is not None:
+        c = Cast(world=world, me=me, ref="m2619a1")
+        got = list(candidates(world, me, p))
+        out.that(bool(got), f"m2619a1 offers somebody ({got})")
+        SMALL_ENOUGH = (Size.TINY, Size.SMALL, Size.MEDIUM)
+        out.that(not [f for f in got if c.size_of(on=f) not in SMALL_ENOUGH],
+                 "m2619a1 offers nothing bigger than Medium -- `max_size`, and"
+                 " the marker named the field two changes before anything"
+                 " actually used it")
+        # **The control the assertion above cannot be without.** On a board
+        # where everything is Medium it is vacuously true, so grow one
+        # creature and watch it leave the offer.
+        reach = [f for f in sorted(enemies(world, me)) if c.distance(f) <= 1]
+        grew = next((f for f in reach if f in got), None)
+        out.that(grew is not None, f"m2619a1 has an offered creature in reach ({reach})")
+        if grew is not None:
+            world.need(grew, Position).size = Size.HUGE
+            out.that(grew not in candidates(world, me, p),
+                     "and a creature grown past Medium leaves the offer, so"
+                     " the line above is a measurement and not an accident")
+
+    # ---- the other conjunction: a size AND the relation inverted
+    world, me, _ = _board("m5814a2", 1)
+    p = get("m5814a2")
+    if p is not None:
+        c = Cast(world=world, me=me, ref="m5814a2")
+        free = set(candidates(world, me, p))
+        out.that(len(free) >= 2,
+                 f"m5814a2 offers the ungrabbed pool ({len(free)})")
+        huge = [f for f in free if c.size_of(on=f) in (Size.HUGE, Size.GARGANTUAN)]
+        out.that(not huge,
+                 f"and nothing bigger than Large is in it ({huge})")
+        if free:
+            one = sorted(free)[0]
+            c.grab(on=one)
+            out.that(set(candidates(world, me, p)) == free - {one},
+                     "grabbing one creature removes exactly it -- `without=`"
+                     " on the relation, and the size half still applies")
+            world.need(one, Position).size = Size.GARGANTUAN
+            world.relations.clear(Relation.GRABBED_BY, me, one, "drivers")
+            out.that(one not in candidates(world, me, p),
+                     "and letting go does NOT bring back a creature that is"
+                     " now too big -- the two clauses compound, so satisfying"
+                     " one is not enough")
+
+    # --------------------------------- two clauses that must compound
+    world, me, _ = _board("m6092a2", 1)
+    p = get("m6092a2")
+    if p is not None:
+        c = Cast(world=world, me=me, ref="m6092a2")
+        reach = [f for f in sorted(enemies(world, me)) if c.distance(f) <= 1]
+        human = [f for f in reach if c.is_kind("humanoid", on=f)]
+        out.that(bool(human), f"m6092a2's board has a humanoid in reach ({reach})")
+        if human:
+            out.that(not candidates(world, me, p),
+                     "m6092a2: a humanoid in reach is not enough -- it must"
+                     " also be grabbed, and the two clauses compound")
+            c.grab(on=human[0])
+            out.that(list(candidates(world, me, p)) == [human[0]],
+                     "and once grabbed, it is the one offered")
+            world.relations.clear(Relation.GRABBED_BY, me, human[0], "drivers")
+        other = [f for f in reach if f not in human]
+        if other:
+            c.grab(on=other[0])
+            out.that(not candidates(world, me, p),
+                     "grabbing a NON-humanoid offers nothing -- the kind half"
+                     " is not waived by the relation half")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -17185,6 +17377,10 @@ DRIVERS = {
     "only_what_it_is_already_holding": (only_what_it_is_already_holding,
                                        "a target narrowed to the creature the"
                                        " caster already holds"),
+    "a_target_line_naming_what_it_is_suffering": (
+        a_target_line_naming_what_it_is_suffering,
+        "a target line narrowed by what the creature is suffering, or"
+        " carrying, or how big it is"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),

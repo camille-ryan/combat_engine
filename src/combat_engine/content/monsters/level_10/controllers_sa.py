@@ -63,7 +63,6 @@ from typing import Any
 
 from combat_engine.content.monsters.level_01.artillery_sa import _prone_save
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_09.brutes import _put_beside
@@ -109,6 +108,7 @@ from combat_engine.engine import (
     PowerRecharged,
     Ranged,
     Relation,
+    Size,
     SkillCheck,
     Target,
     Team,
@@ -368,19 +368,20 @@ def m1062a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="an unconscious target only",
+        conditions=frozenset({Condition.UNCONSCIOUS}),
+    ),
     keywords=[Keyword.HEALING, Keyword.PSYCHIC, Keyword.MELEE],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d10", 5, dtype=DamageType.PSYCHIC),
 )
 def m1062a2(c: Cast) -> None:
-    def unconscious_only(f: int) -> bool:
-        return c.is_(Condition.UNCONSCIOUS, on=f)
-
-    victim = _restricted_to(c, 1, unconscious_only)
-    if victim is None or not c.strike(on=victim):
+    """"Affects an unconscious target only" is `Target.conditions`. #656."""
+    if c.target is None or not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     c.heal(10, on=c.me)
 
 
@@ -658,24 +659,25 @@ def m115911a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed, dominated, stunned or unconscious creature",
+        conditions=frozenset({
+            Condition.DAZED, Condition.DOMINATED,
+            Condition.STUNNED, Condition.UNCONSCIOUS,
+        }),
+    ),
     keywords=[Keyword.HEALING, Keyword.MELEE],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("3d10", 10),
 )
 def m115911a2(c: Cast) -> None:
-    def helpless_enough(f: int) -> bool:
-        return (
-            c.is_(Condition.DAZED, on=f)
-            or c.is_(Condition.DOMINATED, on=f)
-            or c.is_(Condition.STUNNED, on=f)
-            or c.is_(Condition.UNCONSCIOUS, on=f)
-        )
-
-    victim = _restricted_to(c, 1, helpless_enough)
-    if victim is None or not c.strike(on=victim):
+    """Four alternatives on one target line, which is what `conditions`
+    being a **set** is for -- any of them, not all. It was a four-way `or`
+    in the body. `m5987a2` prints the same line. #656."""
+    if c.target is None or not c.strike():
         return
-    c.hit(on=victim)
+    c.hit()
     c.heal(15, on=c.me)
 
 
@@ -3646,22 +3648,23 @@ def m5814a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(4),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one Large or smaller creature not grabbed by it",
+        max_size=Size.LARGE,
+        relation=Relation.GRABBED_BY,
+        without=True,
+    ),
     attack=Attack(vs=REF, printed=13),
     damage=Damage("2d10", 2),
 )
 def m5814a2(c: Cast) -> None:
-    def small_and_free(f: int) -> bool:
-        from combat_engine.content.monsters.level_03.brutes import NO_BIGGER_THAN_MEDIUM
-        from combat_engine.engine import Size
-
-        return f not in c.grabbing(of=c.me) and c.size_of(on=f) in (
-            *NO_BIGGER_THAN_MEDIUM,
-            Size.LARGE,
-        )
-
-    victim = _restricted_to(c, 4, small_and_free)
-    if victim is None or not c.strike(on=victim):
+    """**Two clauses that compound, which is the ordinary case.** "One Large
+    or smaller creature not grabbed by it" is `max_size` and the inverted
+    relation together -- a conjunction, so both fields apply and neither
+    waives the other. It was a two-test helper in the body. #656."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
     c.hit(on=victim)
     c.pull(3, on=victim)
@@ -4104,25 +4107,24 @@ def m5987a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed, dominated, stunned or unconscious creature",
+        conditions=frozenset({
+            Condition.DAZED, Condition.DOMINATED,
+            Condition.STUNNED, Condition.UNCONSCIOUS,
+        }),
+    ),
     keywords=[Keyword.HEALING, Keyword.POISON, Keyword.MELEE],
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d10", 5),
 )
 def m5987a2(c: Cast) -> None:
-    def helpless_enough(f: int) -> bool:
-        return (
-            c.is_(Condition.DAZED, on=f)
-            or c.is_(Condition.DOMINATED, on=f)
-            or c.is_(Condition.STUNNED, on=f)
-            or c.is_(Condition.UNCONSCIOUS, on=f)
-        )
-
-    victim = _restricted_to(c, 1, helpless_enough)
-    if victim is None or not c.strike(on=victim):
+    """The same printed line as `m115911a2`, and the same set. #656."""
+    if c.target is None or not c.strike():
         return
-    c.hit(on=victim)
-    c.ongoing(10, DamageType.POISON, on=victim)
+    c.hit()
+    c.ongoing(10, DamageType.POISON)
     c.heal(15, on=c.me)
 
 
@@ -4896,21 +4898,23 @@ def m6422a2(c: Cast) -> None:
     recharge=0,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed or dominated creature",
+        conditions=frozenset({Condition.DAZED, Condition.DOMINATED}),
+    ),
     keywords=[Keyword.HEALING, Keyword.MELEE],
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("2d12", 5),
 )
 def m6422a3(c: Cast) -> None:
+    """"One dazed or dominated creature" is two members of one set. #656."""
     me = c.me
     _recharge_on(c, Bloodied, lambda ev: adjacent(c.world, me, ev.actor))
-    victim = _restricted_to(
-        c, 1, lambda f: c.is_(Condition.DAZED, on=f) or c.is_(Condition.DOMINATED, on=f)
-    )
-    if victim is None or not c.strike(on=victim):
+    if c.target is None or not c.strike():
         return
-    c.hit(on=victim)
-    c.weakened(until=When.SAVE_ENDS, on=victim)
+    c.hit()
+    c.weakened(until=When.SAVE_ENDS)
     c.heal(20, on=me)
 
 

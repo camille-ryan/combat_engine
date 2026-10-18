@@ -73,7 +73,6 @@ from typing import Any
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
 from combat_engine.content.monsters.level_03.brutes import NO_BIGGER_THAN_MEDIUM
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_06.brutes import _living
 from combat_engine.content.monsters.level_07.controllers_sa import _no_sight_past
 from combat_engine.content.monsters.level_08.controllers import (
@@ -146,7 +145,6 @@ from combat_engine.engine.query import (
     allies,
     distance_between,
     enemies,
-    has_combat_advantage,
     is_,
     scenery,
 )
@@ -526,13 +524,20 @@ def m115704a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one dazed creature",
+        conditions=frozenset({Condition.DAZED}),
+    ),
     keywords=[Keyword.CHARM, Keyword.RANGED],
     attack=Attack(vs=WILL, printed=11),
 )
 def m115704a1(c: Cast) -> None:
-    victim = _restricted_to(c, 5, lambda f: c.is_(Condition.DAZED, on=f))
-    if victim is None or not c.strike(on=victim):
+    """"One dazed creature" is `Target.conditions`, declared rather than
+    filtered in the body -- which offered the row at anybody in 5 and then
+    slid whoever happened to be dazed. #656"""
+    victim = c.target
+    if victim is None or not c.strike():
         return
     c.slide(c.speed_of(victim), on=victim)
     _forced_basic_against_own_side(c, victim)
@@ -953,14 +958,19 @@ def m1812a3(c: Cast) -> None:
     recharge=6,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one adjacent prone creature",
+        conditions=frozenset({Condition.PRONE}),
+    ),
     attack=Attack(vs=FORT, printed=12),
 )
 def m1812a4(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: c.is_(Condition.PRONE, on=f))
-    if victim is None or not c.strike(on=victim):
+    """Adjacency is the reach and prone is `Target.conditions`; the second
+    half was a body filter. #656"""
+    if c.target is None or not c.strike():
         return
-    c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)
+    c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
 
 
 @power(
@@ -1049,7 +1059,11 @@ def m1987a1(c: Cast) -> None:
     recharge=0,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature it has combat advantage against",
+        grants_ca=True,
+    ),
     keywords=[Keyword.HEALING, Keyword.MELEE],
     attack=Attack(vs=FORT, printed=11),
     damage=Damage("2d12", 8, kind=LIMITED),
@@ -1059,12 +1073,11 @@ def m1987a1(c: Cast) -> None:
 def m1987a2(c: Cast) -> None:
     if c.first:
         _hands_the_use_back(c, Bloodied, lambda ev: adjacent(c.world, c.me, ev.actor))
-    victim = _restricted_to(c, 2, lambda f: has_combat_advantage(c.world, c.me, f))
-    if victim is None or not c.strike(on=victim):
+    if c.target is None or not c.strike():
         return
-    c.hit(on=victim)
-    c.spend_surge(on=victim)
-    c.weakened(until=When.SAVE_ENDS, on=victim)
+    c.hit()
+    c.spend_surge()
+    c.weakened(until=When.SAVE_ENDS)
     c.heal(29, on=c.me)
 
 
@@ -1350,18 +1363,26 @@ def m2245a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="an unconscious target only",
+        conditions=frozenset({Condition.UNCONSCIOUS}),
+    ),
     keywords=[Keyword.HEALING, Keyword.PSYCHIC, Keyword.MELEE],
     damage=Damage("2d10", 4, dtype=DamageType.PSYCHIC),
 )
 def m2245a2(c: Cast) -> None:
     """"Affects an unconscious target only" with no attack line at all is
     a roll-less effect, the same shape as any other automatic hit -- there
-    is nothing to roll against a helpless creature."""
-    victim = _restricted_to(c, 2, lambda f: c.is_(Condition.UNCONSCIOUS, on=f))
-    if victim is None:
+    is nothing to roll against a helpless creature.
+
+    And "only" is the whole target line, so it is `Target.conditions` rather
+    than a body filter. This row had no attack roll to miss with, so the
+    body filter was the *only* gate and the row would otherwise land its
+    damage and heal on anybody within 2. #656"""
+    if c.target is None:
         return
-    c.hit(on=victim)
+    c.hit()
     c.heal(10, on=c.me)
 
 
