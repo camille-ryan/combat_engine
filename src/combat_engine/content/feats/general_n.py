@@ -762,21 +762,26 @@ _granted("f2105", "f2105b", swap=Swap(9, Usage.DAILY))
 @power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(REF, vs=AC),
-       dropped=("c.shift(path=)", "c.pick_pocket()"))
+       dropped=("c.pick_pocket()",))
 def f2105b(c: Cast) -> None:
     """The Effect runs first, as printed: the shift is what brings you
     into reach. The free-action Thievery check is dropped, and was going
     unsaid here while f2103b named it.
 
-    **Re-pointed, and the permission was never the blocker.**
-    `c.may_enter(when=)` says "through the target's space" exactly -- the
-    gate reads `ctx["occupant"]` and the mover's own `Cast` is in scope.
-    What there is no moment for is the *passing*: `movement.shift` is a
-    single `step` to the destination, so a four-square shift enters no
-    square between the two and "during this shift can move through the
-    target's space" has nothing to happen in. The gap is a shift that walks
-    its squares, which `p12426b` names with the same symbol and for the
-    same reason. #673.
+    **Both halves of "during this shift can move through the target's
+    space" are written now.** The permission never was the blocker --
+    `c.may_enter(when=)` reads `ctx["occupant"]` and names one creature
+    (#673). The *passing* was: `movement.shift` was a single `step` to the
+    destination, so a four-square shift entered no square between the two
+    and there was no moment for the clause to be about. `movement.shift`
+    walks its path now (#684), and `_clear` asks `may_enter` of every
+    square on the way.
+
+    **The permission is scoped to this shift and no further**, which is
+    what "during this shift" means: laid immediately before and ended
+    immediately after, rather than held for a duration `When` has a name
+    for. The two later shifts this row makes -- the miss clause and the
+    speed one -- print no such permission and must not get it.
 
     The secondary attack is rolled by hand with `c.attack`, because a
     header carries one attack line and this card prints two.
@@ -785,7 +790,12 @@ def f2105b(c: Cast) -> None:
     if foe is None:
         return
     edge = max(0, c.cha_mod - c.dex_mod)
-    c.shift(4)
+    crossing = c.may_enter(when=lambda ctx: ctx.get("occupant") == foe)
+    try:
+        c.shift(4)
+    finally:
+        if crossing is not None:
+            c.world.effects.end(crossing, "the shift is over")
     if c.strike(plus=edge):
         c.damage(c.w(2))
     else:

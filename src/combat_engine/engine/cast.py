@@ -3273,14 +3273,20 @@ class Cast:
         # difficult terrain because the square costs two, so the exemption is
         # the difference between an option being offered and not. Nothing in
         # `shift` or `step` charges for terrain -- the budget goes here.
-        options = self.world.reachable_squares(mover, squares_, kind="shift",
-                                               share=share)
-        if not options:
+        # **The paths, not just the destinations.** `reachable_squares` is a
+        # sort over `reachable_paths` and threw the route away, so a
+        # multi-square shift jumped straight to its destination and entered
+        # no square on the way. Two rows print a clause about the squares in
+        # between; `movement.shift` walks them now. #684.
+        routes = self.world.reachable_paths(mover, squares_, kind="shift",
+                                            share=share)
+        if not routes:
             return False
-        options = self._nearest_first(list(options), toward, away_from, mover)
+        options = self._nearest_first(list(routes), toward, away_from, mover)
         dest = self.world.decide(mover, "shift", options, f"{self.ref}: shift {squares_}")
         return shift(self.world, mover, dest, share=share,
-                     stretched=self._stretch(mover, printed, dest))
+                     stretched=self._stretch(mover, printed, dest),
+                     path=routes.get(dest))
 
     def shift_as(
         self,

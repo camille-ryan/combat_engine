@@ -675,12 +675,36 @@ def settle(world: World, eid: int) -> bool:
 
 def shift(
     world: World, eid: int, to: Square, *, mode: str | None = None,
-    share: bool = False, stretched: int = 0,
+    share: bool = False, stretched: int = 0, path: list[Square] | None = None,
 ) -> bool:
     """A shift is a move that does not provoke. One square unless a power says otherwise.
 
     `share` is for the handful of things that move *into* somebody else's
     square rather than beside it -- a creature that melds with its target.
+
+    **`path` walks the squares in between, and two rows need that.** This
+    called `step` once -- one jump to the destination -- so a multi-square
+    shift entered no square between where it started and where it ended, and
+    "during this shift you can move through the target's space" had no moment
+    to happen in. `f2105b` prints that clause and `p12426b` charges damage
+    "the first time you enter an enemy's space during the shift", which is an
+    `EnterSquare` per square crossed and nothing less. `step` emits one
+    already; it was never being asked more than once. #684.
+
+    No path means the old single jump, so every caller naming a destination
+    outright -- "shift into the square the target left" -- is unchanged.
+
+    Two details the shape of this decides:
+
+    * **`stretched` is charged once, on the last step.** It is the difference
+      between the printed distance and the square actually taken, and
+      `Moved.stretched_` reporting it per square would report the whole
+      stretch for every square crossed.
+    * **`share` applies to the last square only.** Along the way, entering an
+      occupied square is governed by `may_enter`, which `_clear` consults and
+      which `c.may_enter(when=)` is the writer for (#673). On the *final*
+      square it means something else -- ending on top of somebody, which only
+      a melding power may do.
     """
     from .query import can_shift
 
@@ -688,9 +712,16 @@ def shift(
         return False
     if world.bus.emit(MoveStart(actor=eid, kind_="shift")).cancelled:
         return False
-    moved = step(world, eid, to, kind="shift",
-                 mode=mode_of(world, eid, mode), through=share,
-                 stretched=stretched)
+    route = list(path) if path else [to]
+    walked = mode_of(world, eid, mode)
+    moved = False
+    for i, square in enumerate(route):
+        last = i == len(route) - 1
+        if not step(world, eid, square, kind="shift", mode=walked,
+                    through=share and last,
+                    stretched=stretched if last else 0):
+            break
+        moved = True
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_="shift"))
     return moved

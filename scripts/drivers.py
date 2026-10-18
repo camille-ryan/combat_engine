@@ -5566,7 +5566,13 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
 
     # -- the extra square taken ------------------------------------------
     ok, moved, went, adv = shifted(far=True)
-    out.that(ok and len(moved) == 1, "a printed 1-square shift resolves",
+    # **One `Moved` per square now, and this asked for exactly one.** A
+    # shift walks its path since #684, so a two-square shift announces two
+    # arrivals -- which is the printed behaviour and was what this rule had
+    # to catch up with, not a fault in the row. The count is left loose on
+    # purpose: what the card is about is how far the holder got, asserted
+    # below, and pinning the number of steps would be asserting the router.
+    out.that(ok and len(moved) >= 1, "a printed 1-square shift resolves",
              f"ok={ok} events={len(moved)}")
     if not moved:
         return
@@ -5575,7 +5581,12 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
     # `Moved.stretched_` is a plain attribute, not a field -- see that
     # event's note for why, and why a `ty` suppression is the honest way to
     # read one rather than a declaration.
-    spent = moved[0].stretched_
+    #
+    # **The LAST arrival carries it**, because the stretch is the difference
+    # between the printed distance and the square finally taken --
+    # `movement.shift` charges it once, on the step that lands. Reading
+    # `moved[0]` got 0 the moment a shift had more than one step.
+    spent = moved[-1].stretched_
     out.that(spent == 1,
              "the event says ONE square beyond the print was spent",
              f"{spent}")
@@ -5588,7 +5599,7 @@ def a_lengthened_move_says_how_much_of_the_extra_was_spent(out: Result) -> None:
              f"ok={ok2} went={went2}")
     if not moved2:
         return
-    spent2 = moved2[0].stretched_
+    spent2 = moved2[-1].stretched_
     out.that(spent2 == 0,
              "nothing beyond the print was spent", f"{spent2}")
     out.that(not adv2,
@@ -20241,6 +20252,144 @@ def _an_implement_row() -> str:
             return ref
     return ""
 
+
+def a_shift_walks_the_squares_in_between(out: Result) -> None:
+    """A multi-square shift used to enter no square between its ends.
+
+    #684. `movement.shift` called `step` once -- one jump to the destination
+    -- so "during this shift you can move through the target's space" had no
+    moment to happen in, and `p12426b`'s "the first time you enter an enemy's
+    space during the shift" had nothing to charge. `step` has emitted an
+    `EnterSquare` per square all along; it was never being asked more than
+    once.
+
+    `Cast.shift` asks `reachable_paths` now -- `reachable_squares` was a sort
+    over it that threw the route away -- and `movement.shift` walks it,
+    which also means `_clear` asks `may_enter` of every square on the way.
+
+    **The board marks the creature next to the caster**, and that is the
+    trap this rule had to be written around: the first draft's "unmarked"
+    control crossed the body and charged the damage exactly like the marked
+    run, because `audit.board` had already laid the mark. The control clears
+    it and asserts that it was there.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, EnterSquare
+    from combat_engine.engine.movement import place, shift
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Relation
+
+    def staged(ref: str, marked: bool) -> tuple:
+        """`ref` shifting east past one enemy standing in the way."""
+        world, me, _ = audit_board(ref, 1)
+        x, y = _at(world, me)
+        foes = [o for o in enemies(world, me) if world.get(o, Position) is not None]
+        if not foes:
+            return None, None, None, None, None
+        near = foes[0]
+        place(world, near, (x + 1, y))
+        for other in foes[1:]:
+            place(world, other, (x + 9, y + 9))
+        c = Cast(world=world, me=me, ref="drivers:shift")
+        was = c.marked(on=near)
+        if marked:
+            c.mark(on=near)
+        else:
+            world.relations.clear(Relation.MARKED_BY, me, near, "drivers")
+            for eff in list(world.effects.of(near)):
+                if "mark" in str(eff.label).lower():
+                    world.effects.end(eff, "drivers: clearing the board's mark")
+        entered: list[tuple[int, int]] = []
+        charged: list[tuple[int, str]] = []
+        world.bus.on(EnterSquare, lambda ev: entered.append(ev.square))
+        world.bus.on(DamageApplied, lambda ev: charged.append(
+            (ev.amount, str(getattr(ev, "detail", "")))))
+        world.decider = lambda actor, kind, options, prompt: (
+            (x + 2, y) if (x + 2, y) in options else options[0])
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        return entered, _at(world, me), charged, was, (x, y)
+
+    from combat_engine.engine.components import Position
+
+    # -- the walk itself ---------------------------------------------------
+    entered, ended, charged, was_marked, start = staged("p12426b", marked=True)
+    out.that(entered is not None, "a board with somebody to shift past")
+    if entered is None:
+        return
+    out.that(was_marked,
+             "the board had already marked the creature beside the caster,"
+             " which is what the control below has to undo",
+             f"{was_marked}")
+    out.that(len(entered) == 2,
+             "a two-square shift enters TWO squares, where the single `step`"
+             " entered only the destination",
+             f"{entered}")
+    out.that(entered[0] == (start[0] + 1, start[1]),
+             "and the first of them is the square the enemy is standing in,"
+             " which is the clause both rows print",
+             f"{entered[0]} with the enemy at {(start[0] + 1, start[1])}")
+    out.that(ended == (start[0] + 2, start[1]),
+             "ending where it was sent, two squares along",
+             f"{ended}")
+
+    # -- the damage the crossing charges -----------------------------------
+    mine = [(n, why) for n, why in charged if why.startswith("p12426b")]
+    out.that(len(mine) == 1,
+             "the crossing is charged exactly once -- 'the FIRST time you"
+             " enter an enemy's space during the shift'",
+             f"{charged}")
+    out.that(bool(mine) and mine[0][0] > 0,
+             "and it is force damage of the caster's Charisma modifier,"
+             " which is the card's own ability and not the attack line's",
+             f"{mine}")
+
+    # -- the control: an unmarked body still blocks ------------------------
+    # The destination is deliberately not asserted here: with the mark gone
+    # the row may legitimately end anywhere its detour reaches, and pinning
+    # the square would be asserting the router rather than the permission.
+    plain, _end2, charged2, _was2, start2 = staged("p12426b", marked=False)
+    out.that(plain is not None, "the same board with the mark cleared")
+    if plain is not None:
+        out.that((start2[0] + 1, start2[1]) not in plain,
+                 "with the mark gone the shift does NOT cross the body: it"
+                 " goes around, because `may_enter` gates on the mark and"
+                 " `_clear` asks it of every square now",
+                 f"{plain}")
+        out.that(not [why for _n, why in charged2 if why.startswith("p12426b")],
+                 "and nothing is charged, which is the half that makes the"
+                 " permission a permission rather than a free pass",
+                 f"{charged2}")
+
+    # -- f2105b: the permission is scoped to its own shift -----------------
+    world, me, _ = audit_board("f2105b", 1)
+    foes = [o for o in enemies(world, me) if world.get(o, Position) is not None]
+    if foes:
+        c = Cast(world=world, me=me, ref="f2105b")
+        c.target = foes[0]
+        REGISTRY["f2105b"].body(c)
+        held = [e for e in world.effects.of(me)
+                if not e.ended and "may_enter" in str(e.label)]
+        out.that(not held,
+                 "f2105b leaves no standing permission behind: 'during this"
+                 " shift' is laid before its own shift and ended after, and"
+                 " the two later shifts the card prints get nothing",
+                 f"{[e.label for e in held]}")
+
+    # -- and a shift told where to go is still one step --------------------
+    world, me, _ = audit_board("p12426b", 1)
+    x, y = _at(world, me)
+    jumped: list[tuple[int, int]] = []
+    world.bus.on(EnterSquare, lambda ev: jumped.append(ev.square))
+    out.that(shift(world, me, (x + 2, y)),
+             "a shift named a destination outright still goes")
+    out.that(len(jumped) == 1 and jumped[0] == (x + 2, y),
+             "and enters ONE square -- no path, no walk, so every caller"
+             " naming a square keeps the behaviour it had",
+             f"{jumped}")
+
 DRIVERS = {
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
@@ -20253,6 +20402,10 @@ DRIVERS = {
     "lamp_settings": (
         one_lamp_three_settings_and_putting_the_lights_out,
         "one lamp's three settings, and a row that suppresses a light (#686)",
+    ),
+    "shift_path": (
+        a_shift_walks_the_squares_in_between,
+        "a multi-square shift enters the squares in between (#684)",
     ),
     "high_crit_price": (
         the_expectation_model_prices_high_crit,
