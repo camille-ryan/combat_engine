@@ -20564,6 +20564,91 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_zone_exempts_by_naming_the_going(out: Result) -> None:
+    """Three rows said a zone cannot exempt *some* of the creatures in it.
+
+    They were marked `c.zone(exempt_if=)` -- a predicate parameter -- and
+    the tree had the answer written twice over before any of them:
+    **name the going.** Earth walk is three `c.ignores_difficult` words and
+    ice walk is one, and `World.difficult(for_=)` drops a square whose kind
+    the mover ignores. So `difficult="ice"` is rough for everybody and free
+    for every ice walker, with nobody named and nothing snapshotted --
+    which is the objection the marker itself raised against `exempt=`'s set
+    of ids.
+
+    `p16097` made exactly this correction about exactly this ability, and
+    `p16470` and `batch_h.p16064` make it about earth walk. Found by #677's
+    split, which put all three in the "wants an ARGUMENT on a verb that
+    exists" bucket.
+
+    **`True` is not the same as a name**, and that is the half worth
+    asserting: a zone laid `difficult=True` gives its squares an empty
+    label, so an ice walker is *not* exempt from it. Four of `i3569p1`'s
+    six varieties print no exemption and get `True` deliberately.
+
+    What a predicate would still be for: a card exempting by a **sense**
+    rather than by a kind of going -- `m2515a2`'s darkness blocks sight for
+    creatures that cannot see in it -- which no label can say. That row
+    keeps its marker.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+
+    # -- m1652a3: a cold zone that an ice walker crosses for nothing -------
+    world, me, _ = audit_board("m1652a3", 1)
+    foe = next(iter(enemies(world, me)), None)
+    out.that(foe is not None, "the board has a creature to cross the zone",
+             f"{foe}")
+    if foe is None:
+        return
+    # **The board's own rough ground is measured first**, which the first
+    # draft did not: this board carries three rough squares of its own, so
+    # "nothing is rough any more" was the wrong assertion and read
+    # `3 rough squares left of 49` against a zone that works.
+    was = {sq for sq in world.difficult(foe)}
+    world.rng.loaded = 20
+    use(world, me, "m1652a3")
+    rough = {sq for sq in world.difficult(foe)}
+    out.that(len(rough) > len(was) + 20,
+             "the zone makes its own squares rough for an ordinary"
+             " creature, which is the half a named label must not give"
+             " away",
+             f"{len(was)} on the bare board, {len(rough)} with the zone")
+
+    walker = Cast(world=world, me=foe, ref="drivers:ice-walk")
+    walker.target = foe
+    walker.ignores_difficult("ice", on=foe, until=When.ENCOUNTER)
+    after = {sq for sq in world.difficult(foe)}
+    out.that(after == was,
+             "and an ice walker -- one `c.ignores_difficult(\"ice\")`, which"
+             " is all that ability is -- crosses every square of the zone"
+             " for nothing, with the zone naming nobody. What is left is"
+             " exactly the ground that was there before it",
+             f"{len(after)} left of {len(rough)}; the board's own was"
+             f" {len(was)}")
+
+    # -- the control: `True` is an empty label and exempts nobody ----------
+    world, me, _ = audit_board("m1652a3", 1)
+    foe = next(iter(enemies(world, me)))
+    c = Cast(world=world, me=me, ref="drivers:unnamed")
+    c.target = me
+    # The one square the creature is standing in is enough to ask this, and
+    # it keeps the control independent of the board's geometry.
+    c.zone([_at(world, foe)], until=When.ENCOUNTER, difficult=True)
+    bare = Cast(world=world, me=foe, ref="drivers:ice-walk-2")
+    bare.target = foe
+    bare.ignores_difficult("ice", on=foe, until=When.ENCOUNTER)
+    out.that(bool({sq for sq in world.difficult(foe)}),
+             "a zone laid `difficult=True` is *not* escaped by an ice"
+             " walker: an empty label is nobody's kind of going, which is"
+             " why the four varieties printing no exemption keep it",
+             f"{len({sq for sq in world.difficult(foe)})} rough squares")
+
+
 def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
     """Three rows said `c.as_basic` had "no word for the charge's own".
 
@@ -21929,6 +22014,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "exempt_by_going": (
+        a_zone_exempts_by_naming_the_going,
+        "a zone exempting by the name of its going, not a predicate (#677)",
     ),
     "stands_in_on_a_charge": (
         a_row_that_stands_in_for_a_basic_on_its_own_card,

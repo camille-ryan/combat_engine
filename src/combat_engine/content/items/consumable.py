@@ -1693,13 +1693,31 @@ def i3300p1(c: Cast) -> None:
 #: printing a word of any of their headings -- six signatures over seven
 #: eggs, the two untyped ones sharing their damage *and* their rider and
 #: differing only in a clause nothing here can say.
-_EGGS: tuple[tuple[tuple[DamageType, ...], str], ...] = (
-    ((DamageType.UNTYPED,), ""),
-    ((DamageType.COLD,), Light.DARK),
-    ((DamageType.COLD, DamageType.LIGHTNING), Light.DIM),
-    ((DamageType.LIGHTNING, DamageType.THUNDER), ""),
-    ((DamageType.FIRE, DamageType.POISON), Light.DIM),
-    ((DamageType.FIRE,), ""),
+#: Each egg as `(damage types, how obscured, what the rough ground is)`.
+#:
+#: **The third element is the exemption, said as a kind of going.** Two of
+#: the varieties print "creatures that have earth walk ignore the zone's
+#: difficult terrain" and one prints the same of ice walk -- and that is not
+#: a predicate on the zone: earth walk *is* three `c.ignores_difficult`
+#: words and ice walk is one, and `World.difficult(for_=)` drops a square
+#: whose kind the mover ignores. So naming the going exempts every earth
+#: walker on the board without naming one, which is the correction `p16097`
+#: made about this very ability and `p16470` and `batch_h.p16064` make about
+#: earth walk. #703-adjacent; the marker was `c.zone(exempt_if=)`.
+#:
+#: `True` for the four varieties that print **no** exemption, which is the
+#: honest label there: nobody is at home in that ground and nobody is meant
+#: to be.
+_EGGS: tuple[tuple[tuple[DamageType, ...], str, bool | str], ...] = (
+    # Avalanche and Earthquake are one entry: both save-or-fall-prone, both
+    # exempt earth walk. The card's two varieties differ only in a clause
+    # about standing up, which `_egg_rider` does not carry either.
+    ((DamageType.UNTYPED,), "", "rubble"),
+    ((DamageType.COLD,), Light.DARK, "ice"),
+    ((DamageType.COLD, DamageType.LIGHTNING), Light.DIM, True),
+    ((DamageType.LIGHTNING, DamageType.THUNDER), "", True),
+    ((DamageType.FIRE, DamageType.POISON), Light.DIM, True),
+    ((DamageType.FIRE,), "", True),
 )
 
 
@@ -1723,7 +1741,7 @@ def _egg_rider(c: Cast, kinds: tuple[DamageType, ...], who: int) -> None:
 
 @power("i3569p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=AreaBurst(5, 10), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.zone(exempt_if=)", "c.grant_action(slide=)"))
+       dropped=("c.grant_action(slide=)",))
 def i3569p1(c: Cast) -> None:
     """Seven eggs on one card, asked of the decider the way `_element`
     asks for a damage type -- the choice *is* the variety.
@@ -1735,14 +1753,22 @@ def i3569p1(c: Cast) -> None:
     variety adds. One `TurnStart` watcher says all three, and needs no
     once-per-turn latch because a turn starts once.
 
-    Still dropped, both with clauses the tree already has symbols for: the
-    exemptions from the difficult ground, which are by movement mode or by
-    a resistance rather than by id, and the slide or pull the zone's owner
-    may spend an action on.
+    **The exemptions are written and `c.zone(exempt_if=)` was not the
+    gap.** "Creatures that have earth walk ignore the zone's difficult
+    terrain" is the `difficult=` **label**, not a predicate: earth walk is
+    three `c.ignores_difficult` words, ice walk is one, and
+    `World.difficult(for_=)` drops a square whose kind the mover ignores.
+    `p16097` made this correction about ice walk and `p16470` about earth
+    walk -- *"naming the going is what exempts them, and it exempts every
+    other earth walker on the board too."* `_EGGS` carries the going per
+    variety.
+
+    Still dropped on the slide or pull the zone's owner may spend an action
+    on, which is a line in the action menu rather than a zone's property.
     """
-    kinds, dark = c.choose(list(_EGGS), "the egg's element") or _EGGS[0]
+    kinds, dark, rough = c.choose(list(_EGGS), "the egg's element") or _EGGS[0]
     zone = c.zone(c.area(), label=c.ref, until=When.ENCOUNTER,
-                  difficult=True, obscured=dark)
+                  difficult=rough, obscured=dark)
 
     def at_dawn(ev: TurnStart) -> None:
         who = ev.actor

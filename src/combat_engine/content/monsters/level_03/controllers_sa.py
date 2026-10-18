@@ -293,7 +293,7 @@ def _hurts_when_it_moves(c: Cast) -> None:
 
 def _sustained_zone(
     c: Cast, squares_: Any, far: int, *, until: When = When.SUSTAIN,
-    obscured: str = "",
+    obscured: str = "", difficult: bool | str = False,
 ) -> int:
     """A zone that is kept up as a minor action and walks when it is.
 
@@ -302,8 +302,14 @@ def _sustained_zone(
     this shape used to carry. The zone's own `Effect` is where `c.on_sustain`
     hangs it -- `c.zone` hands back the zone's id, and `Zone.effect` is the
     hold that id's duration lives on.
+
+    `difficult` takes the **kind** rather than `True` for the reason
+    `p16470` and `batch_h.p16064` both record: a named going is what exempts
+    whoever ignores that going, and `True` gives the squares an empty label
+    nobody can be at home in.
     """
-    zone = c.zone(squares_, until=until, sustain=MINOR, obscured=obscured)
+    zone = c.zone(squares_, until=until, sustain=MINOR, obscured=obscured,
+                  difficult=difficult)
     body = c.world.get(zone, Zone)
     if body is not None and far:
         c.on_sustain(body.effect, lambda: c.move_zone(zone, far))
@@ -1185,26 +1191,33 @@ def m1652a2(c: Cast) -> None:
     reach=AreaBurst(3, 10),
     target=NO_TARGET,
     keywords=[Keyword.COLD, Keyword.ZONE],
-    dropped=("c.zone(exempt_if=)",),
 )
 def m1652a3(c: Cast) -> None:
-    """Two clauses are absent and they are different absences. Nothing hangs
-    concealment on a zone; and a zone that exempts *some* of the creatures in
-    it has no form -- `c.ignores_difficult_in` waives the terrain for a whole
-    side, which is not what "creatures with that ability can ignore this"
-    says.
+    """A difficult, concealing zone that walks when it is sustained.
 
-    **Re-pointed off `c.zone(exempt=)`, which landed as a set of ids.** That
-    serves the ten cards exempting *one named creature* -- their own maker.
-    This card exempts whoever has a particular sense or ability, which a set
-    cannot say: snapshotting who qualifies when the zone is laid would be
-    wrong the moment anything changed, and the zone is asked per look. A
-    predicate parameter -- `exempt_if=` -- is a different gap and this
-    names it. Not `exempt=<a predicate>`: `todo.py` matches a symbol
-    against the code and reads that as the parameter it already has,
-    so the row reported ready the moment the set form landed.
+    **Both of the old reasons were stale, and the second had a worked
+    precedent sitting in the tree.**
+
+    "Nothing hangs concealment on a zone" -- `c.conceal_in` does, and the
+    body has called it for a while; the docstring had not caught up.
+
+    "A zone that exempts *some* of the creatures in it has no form", and
+    `c.zone(exempt_if=)` was the marker. **It does have a form and it is not
+    a predicate: name the going.** Ice walk is `c.ignores_difficult("ice")`
+    -- five rows say it -- and `World.difficult(for_=)` drops a square whose
+    kind the mover ignores, so a zone labelled `difficult="ice"` is rough
+    for everybody and free for every ice walker without naming one.
+    `p16097` made exactly this correction about exactly this ability, and
+    `p16470` and `batch_h.p16064` make it about earth walk: *"naming the
+    going is what exempts them, and it exempts every other earth walker on
+    the board too."*
+
+    So a predicate parameter is not wanted here. A card that exempts by a
+    *sense* -- seeing in darkness, not a kind of going -- still would, and
+    `m2515a2` is that card; this one is a movement ability and the label
+    says it.
     """
-    zone = _sustained_zone(c, c.area(), 5)
+    zone = _sustained_zone(c, c.area(), 5, difficult="ice")
     # "to the m1652 and its allies" is the printed narrowing.
     c.conceal_in(zone, side="team")
 
