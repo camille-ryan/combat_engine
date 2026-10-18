@@ -2087,7 +2087,7 @@ def _my_at_will_attacks(c: Cast) -> list[str]:
     """The at-will attack *powers* this character owns.
 
     The card names a set rather than a row, so the set is read off
-    `Powers.all` the way `_spend_unused` reads its own in `implement_c`.
+    `Powers.all` the way `c.unspent` reads its own.
 
     **The engine's own two basics are not powers and are left out.** `mba`
     and `rba` are at-will and carry an attack, so an unfiltered read picks

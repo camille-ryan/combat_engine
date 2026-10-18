@@ -317,36 +317,32 @@ def _spend_unused(
     *,
     cls: str,
     level: int,
-    attacks: bool,
+    attacks: bool | None,
     usage: Usage | None = None,
 ) -> bool:
     """"Expend an unused wizard daily attack power of level 5 or higher."
 
     `c.expend_row` is the spend and refuses a row that is not owned, is an
     at-will or is already gone -- but it takes a ref and the card names a
-    *set*, so the set is read off what the character actually carries. A
-    card that names no usage leaves `usage` off: an at-will is refused by
-    `c.expend_row` anyway, having nothing to count down.
+    *set*. `c.unspent` is that set: the refs `c.expend_row` would accept,
+    narrowed by class, a level **floor**, usage and attack line. A card
+    that names no usage leaves `usage` off; `attacks=None` is the card
+    that says "attack or utility".
+
+    **The pick is offered.** This walked the sorted candidates and burned
+    the first one, so the engine chose which of the character's dailies
+    the player lost -- and `c.borrow_row` asks `world.decide` for the
+    other half of the same printed sentence. Spending one daily rather
+    than another is a real cost and no audit verdict can see it go wrong.
 
     Returns False when there is nothing to charge, which is the printed
     Requirement.
     """
-    from combat_engine.engine.components import Powers
-
-    known = c.world.get(c.me, Powers)
-    if known is None:
+    pool = c.unspent(cls=cls, level=level, usage=usage, attacks=attacks)
+    if not pool:
         return False
-    for ref in sorted(known.all):
-        p = get(ref)
-        if p is None or p.cls != cls or p.level < level:
-            continue
-        if usage is not None and p.usage is not usage:
-            continue
-        if (p.attack is not None) is not attacks:
-            continue
-        if c.expend_row(ref):
-            return True
-    return False
+    pick = c.choose(pool, c.ref)
+    return bool(pick) and c.expend_row(pick)
 
 
 def _boon_drop(leg: str):  # noqa: ANN202
@@ -496,7 +492,7 @@ def i744x1(c: Cast) -> None:
 
     "A tome's two stored powers are not a thing the engine holds" is stale,
     and the marker is gone rather than re-aimed: the contents are reached by
-    `implement_b._tome_power`, which walks `c.borrow_row` down the level
+    `implement_b._tome_trade`, which walks `c.borrow_row` down the level
     ladder this card prints. They are also not a *combat* clause of this
     property -- choosing them happens when the tome is acquired, and the
     only thing that ever spends them is `i744p1` beside this, which now
@@ -524,19 +520,19 @@ def i744x1(c: Cast) -> None:
     keywords=[Keyword.ARCANE, Keyword.FIRE, Keyword.IMPLEMENT],
 )
 def i744p1(c: Cast) -> None:
-    """There is something to buy after all. `implement_b._tome_power` is the
+    """There is something to buy after all. `implement_b._tome_trade` is the
     tome's contents: `c.borrow_row` is "the card names a set and asks the
     character to take one of it", which is exactly what two chosen dailies
     are, and it walks the ladder down from the tome's own rung because the
     card says "equal to or lower than that of the tome".
 
-    The price is charged first and its False is the printed Requirement --
-    there is no loan when there is no unused attack power to expend, and the
-    card prints that as a cost rather than as an option."""
-    from combat_engine.content.items.implement_b import _tome_power
+    The price and the loan are one walk now, in `_tome_trade`: this row
+    had them as two statements, and that shape charged at the tome's rung
+    rather than the lent card's and charged at all when the set was empty.
+    `""` is the printed Requirement -- no card lent and no price paid."""
+    from combat_engine.content.items.implement_b import _tome_trade
 
-    if _spend_unused(c, cls="wizard", level=5, attacks=True):
-        _tome_power(c, 5, Keyword.FIRE)
+    _tome_trade(c, 5, Keyword.FIRE)
 
 
 @power(

@@ -1569,25 +1569,26 @@ def i2895x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.expend_row(among=)",),
 )
 def i2895p1(c: Cast) -> None:
     """"The powers contained in the tome" is a set the card names by
     description rather than by ref, which is exactly what `c.borrow_row`
     reads off the registry and records the pick of -- wizard dailies with
     the force keyword, of a level the tome's own level allows, highest
-    first. The price is not written: expending an unused daily of equal
-    or higher level means choosing among the ones the character still
-    has, and `c.expend_row` takes one ref rather than a set."""
-    for lv in range(_item_level(c), 0, -1):
-        if c.borrow_row(
-            cls="wizard",
-            level=lv,
-            usage=DAILY,
-            keyword=Keyword.FORCE,
-            until=When.ENCOUNTER,
-        ):
-            return
+    first.
+
+    **The price is charged now.** The marker said "`c.expend_row` takes
+    one ref rather than a set", which was true and was not the gap:
+    `implement_c._spend_unused` had read the set off the bearer's own
+    `Powers.all` since `i744p1` was written (it still does, for the two
+    rows that grant a *named* power rather than borrowing from a set). `c.unspent` is where that
+    read lives now and `implement_b._tome_trade` is the whole sentence,
+    which matters most on this row of the seven: the tome is level 9 and
+    the ladder is walked downwards, so charging at the tome's rung instead
+    of the lent card's refused the most uses here."""
+    from combat_engine.content.items.implement_b import _tome_trade
+
+    _tome_trade(c, _item_level(c), Keyword.FORCE)
 
 
 @power(

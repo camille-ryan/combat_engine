@@ -21998,7 +21998,345 @@ def which_weapon_the_blow_came_through(out: Result) -> None:
     health = world.get(me, Health)
     out.that(health is not None, "and the board is otherwise intact")
 
+def a_tome_lends_a_card_and_charges_for_it(out: Result) -> None:
+    """Seven tome rows, one printed sentence, and three faults in the seam.
+
+    > You choose a power contained in the tome and expend an unused c9
+    > attack power of an equal or higher level.
+
+    `i2895p1`, `i2898p1` and `i3012p1` carried
+    `dropped=("c.expend_row(among=)",)` on the reading that nothing lists
+    the bearer's unspent powers. **Four other rows had been listing them
+    all along** -- `implement_c._spend_unused`, written for `i744p1` --
+    so the markers were the fifth stale parameter family of the day, and
+    #704's own body was filed on the same wrong premise before the content
+    tree was grepped for the mechanism.
+
+    What was left after that correction is `c.unspent`, and it is two
+    things rather than one facility:
+
+    * **The read belongs beside the write.** `c.expend_row`, `c.expended`
+      and `c.restore_use` are all on `Cast`; the complement was a private
+      function in one content file that three others imported privately.
+      It is defined as *"the refs `c.expend_row` would accept"*, which is
+      the definition that can be checked both ways -- and is, below.
+    * **The price is offered.** `_spend_unused` sorted the candidates and
+      burnt the first one `c.expend_row` took, so the *engine* chose which
+      of the character's dailies the player lost, while `c.borrow_row`
+      asked `world.decide` for the other half of the same sentence.
+
+    And then the seam itself, which is what `_tome_trade` is for. Having
+    the loan and the price as two statements got three things wrong, and
+    **two of them were live in the tree, not hypothetical**:
+
+    1. **Charged with nothing to lend.** No wizard daily lightning power
+       at or below level 4 is declared, and none summoning at or below 5,
+       so `i2898p1` and `i2717p1` burnt one of the character's attack
+       powers and handed back nothing. Every use, today.
+    2. **Charged at the tome's rung, not the lent card's.** "Of an equal
+       or higher level" is higher than *the card taken*, and the ladder is
+       walked downwards -- so `i2895p1`, a level-9 tome, demanded a
+       level-9 price for a level-1 card and refused the use outright. The
+       floor is only knowable inside the walk.
+    3. **Nothing stopped the loan paying for itself.** `c.borrow_row`
+       grants the chosen card, which puts a fresh wizard power of exactly
+       the right class and level into `Powers.all`.
+
+    The third never shipped -- every row read the price first -- so it is
+    asserted here as the thing the new shape must not regress, by the
+    positive form: the borrowed card comes back **unspent**.
+
+    `i2898p1` is driven only as far as its price, because its borrowable
+    set is genuinely empty. That is said rather than papered over: the
+    assertion is that it charges *nothing*, which is the fault from (1)
+    in its only live instance.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Usage
+
+    # Five wizard rows spanning every axis `c.unspent` narrows on. Chosen
+    # so no two differ in only one way: p480 and p722 are the same level
+    # and usage and differ only in the attack line, p1430 is an attack of
+    # a *lower* level and a different usage, p451 is a daily attack far
+    # below any floor asked for, and p1167 is the at-will.
+    #
+    # **`p480` rather than `p191`, and the difference is the whole value of
+    # one assertion below.** Both are level-9 wizard daily attack powers,
+    # so either reads identically everywhere except one place: the pool is
+    # sorted and the card `i2895p1` lends is `p419`. With `p191` as the
+    # price, a pool read *after* the borrow still answers `p191` first and
+    # the "lent card comes back unspent" assertion passes for either
+    # implementation. `p480` sorts after `p419`, so the wrong order makes
+    # the loan pay for itself and the assertion bites. The plant found
+    # this; it did not redden until the ref changed.
+    AT_WILL, LOW, HIGH_ATK, HIGH_UTIL, MID_ENC = (
+        "p1167", "p451", "p480", "p722", "p1430",
+    )
+
+    def bearer(ref: str, knows: tuple[str, ...]):  # noqa: ANN202
+        """The row's own board, with the bearer's spell list set exactly.
+
+        `audit.board` deals a character, so the class powers it happens to
+        hold are not a control -- they are whatever the dealer drew. Every
+        `p...` ref is cleared and only the named ones put back.
+        """
+        world, me, _ = audit_board(ref, 1)
+        known = world.need(me, Powers)
+        known.known[:] = [
+            r for r in known.known if r == ref or not r.startswith("p")
+        ]
+        for r in knows:
+            if r not in known.known:
+                known.known.append(r)
+        asked: list[tuple[str, tuple[str, ...]]] = []
+        first = world.decide
+
+        def watching[T](actor: int, kind: str, options: list[T],
+                        prompt: str = "") -> T:
+            asked.append((kind, tuple(str(o) for o in options)))
+            return first(actor, kind, options, prompt)
+
+        # Shadowing a bound method is a diagnostic however the stand-in is
+        # annotated -- the attribute's type carries `self`. Suppressed the
+        # way the other four recorder swaps in this file are.
+        world.decide = watching  # ty: ignore[invalid-assignment]
+        return world, me, known, asked
+
+    # -- 1. the definition, checked in both directions ---------------------
+    PLANTED = frozenset({AT_WILL, LOW, HIGH_ATK, HIGH_UTIL, MID_ENC})
+
+    world, me, known, _ = bearer("i2895p1", tuple(sorted(PLANTED)))
+    c = Cast(world=world, me=me, ref="drivers:unspent")
+    # **Intersected with the five, and that is not a weakening.**
+    # `audit.board` deals a whole character: four class features and two
+    # other item dailies are in `Powers.all` and belong there. An equality
+    # over the full list measures the dealer's draw, which is what the
+    # first run of this rule did -- the five planted refs are the axis.
+    listed = set(c.unspent())
+    out.that(listed & PLANTED == PLANTED - {AT_WILL},
+             "`c.unspent()` lists every planted row with a use left and"
+             " leaves out the at-will, which has nothing to count down",
+             f"{sorted(listed & PLANTED)}")
+    out.that(not (listed & set(c.expended())),
+             "and over the WHOLE list, not just the planted five, it is"
+             " disjoint from `c.expended` -- the pair are complements",
+             f"{sorted(listed & set(c.expended()))}")
+    # The definition is "what `c.expend_row` would accept", so ask it --
+    # on a throwaway bearer each time, because accepting spends the use.
+    accepts, refuses = set(), set()
+    for ref in sorted(set(known.all)):
+        w2, me2, _k2, _ = bearer(
+            "i2895p1", (AT_WILL, LOW, HIGH_ATK, HIGH_UTIL, MID_ENC),
+        )
+        taken = Cast(world=w2, me=me2, ref="drivers:unspent").expend_row(ref)
+        (accepts if taken else refuses).add(ref)
+    out.that(accepts == listed,
+             "and that set is EXACTLY the one `c.expend_row` accepts --"
+             " which is the definition, so the two can only differ if one"
+             " of them is wrong",
+             f"accepted {sorted(accepts)} / listed {sorted(listed)}")
+    out.that(AT_WILL in refuses and not (refuses & listed),
+             "nothing it refuses is listed, the at-will included",
+             f"refused {sorted(refuses)}")
+
+    # The level floor, which is where this parts company with
+    # `c.borrow_row(level=)`: a floor, not an exact match.
+    out.that(set(c.unspent(level=9)) & PLANTED == {HIGH_ATK, HIGH_UTIL},
+             "`level=` is a FLOOR -- the level-9 pair, not the level-7 or"
+             " level-1 rows",
+             f"{sorted(set(c.unspent(level=9)) & PLANTED)}")
+    out.that(set(c.unspent(level=7)) & PLANTED
+             == {HIGH_ATK, HIGH_UTIL, MID_ENC},
+             "and dropping the floor to 7 takes the level-7 row in, which"
+             " an exact match would never do",
+             f"{sorted(set(c.unspent(level=7)) & PLANTED)}")
+    # The tri-state, which is the one knob only `i3012p1` turns.
+    out.that(set(c.unspent(level=9, attacks=True)) & PLANTED == {HIGH_ATK},
+             "`attacks=True` keeps the attack power of that level",
+             f"{sorted(set(c.unspent(level=9, attacks=True)) & PLANTED)}")
+    out.that(set(c.unspent(level=9, attacks=False)) & PLANTED
+             == {HIGH_UTIL},
+             "`attacks=False` keeps the utility -- the SAME level and the"
+             " same usage, so the attack line is the only difference the"
+             " answer can be coming from",
+             f"{sorted(set(c.unspent(level=9, attacks=False)) & PLANTED)}")
+    out.that(set(c.unspent(level=9, attacks=None)) & PLANTED
+             == {HIGH_ATK, HIGH_UTIL},
+             "and the default `None` is 'attack OR utility', which is what"
+             " one of the seven cards prints",
+             f"{sorted(set(c.unspent(level=9, attacks=None)) & PLANTED)}")
+    out.that(set(c.unspent(usage=Usage.DAILY, level=7)) & PLANTED
+             == {HIGH_ATK, HIGH_UTIL},
+             "`usage=` drops the encounter power of a qualifying level",
+             f"{sorted(set(c.unspent(usage=Usage.DAILY, level=7)) & PLANTED)}")
+    out.that(set(c.unspent(cls="wizard")) & PLANTED == PLANTED - {AT_WILL}
+             and not (set(c.unspent(cls="fighter")) & PLANTED),
+             "and `cls=` holds in both directions: all four planted rows"
+             " answer to the wizard, none of them to the fighter -- whose"
+             " own features this dealt character really does hold, so the"
+             " second half is not vacuous",
+             f"wizard {sorted(set(c.unspent(cls='wizard')) & PLANTED)}"
+             f" fighter {sorted(c.unspent(cls='fighter'))}"),
+
+    # Disjoint from `c.expended`, which it is the complement of.
+    out.that(HIGH_ATK not in c.expended() and HIGH_ATK in c.unspent(),
+             "the planted level-9 attack power is unspent before anything"
+             " is spent -- the control for the pair below. (`c.expended()`"
+             " is NOT empty here and must not be asserted so: arming the"
+             " board's traits spends their uses, #529.)",
+             f"expended {sorted(c.expended())}")
+    c.expend_row(HIGH_ATK)
+    out.that(HIGH_ATK in c.expended() and HIGH_ATK not in c.unspent(),
+             "spending one row moves it from `c.unspent` to `c.expended`,"
+             " and the two never hold it at once",
+             f"unspent {sorted(c.unspent())} expended {sorted(c.expended())}")
+
+    # -- 2. the trade: a card lent, a price spent, and both offered --------
+    world, me, known, asked = bearer("i2895p1", (HIGH_ATK,))
+    held = set(known.all)
+    REGISTRY["i2895p1"].body(Cast(world=world, me=me, ref="i2895p1"))
+    gained = set(known.all) - held
+    out.that(gained == {"p419"},
+             "`i2895p1` lends one card -- the level-9 wizard force daily,"
+             " the top rung its own level allows",
+             f"{sorted(gained)}")
+    out.that(known.times(HIGH_ATK) == 1,
+             "and charges for it: the bearer's one qualifying attack power"
+             " is spent",
+             f"times={known.times(HIGH_ATK)}")
+    out.that(known.times("p419") == 0,
+             "the card lent comes back UNSPENT -- the assertion that the"
+             " loan did not pay for itself, which it could, being a fresh"
+             " wizard power of exactly the class and level the price wants",
+             f"times={known.times('p419')}")
+    out.that([pool for kind, pool in asked if kind == "choose"]
+             == [("p419",), (HIGH_ATK,)],
+             "both halves of the printed sentence are OFFERED, the card"
+             " first and the price second -- the price used to be taken by"
+             " whichever ref sorted first",
+             f"{asked}")
+
+    # -- 3. the price's floor is the rung, not the tome ---------------------
+    world, me, known, asked = bearer("i2895p1", (LOW,))
+    held = set(known.all)
+    REGISTRY["i2895p1"].body(Cast(world=world, me=me, ref="i2895p1"))
+    gained = set(known.all) - held
+    out.that(bool(gained) and known.times(LOW) == 1,
+             "with only a LEVEL-1 attack power to pay with, this level-9"
+             " tome still lends -- it walks down to a rung the bearer can"
+             f" afford ({sorted(gained)}) and charges the level-1 row."
+             " Charging at the tome's rung refused this outright",
+             f"gained {sorted(gained)} times={known.times(LOW)}")
+    out.that(all(REGISTRY[r].level <= REGISTRY[LOW].level for r in gained),
+             "and the card lent is at or below the price's level, which is"
+             " the printed direction of the clause",
+             f"{[(r, REGISTRY[r].level) for r in sorted(gained)]}")
+
+    # -- 4. nothing payable, nothing lent ----------------------------------
+    for knows, why in (
+        ((), "a bearer with no wizard powers at all"),
+        ((HIGH_UTIL,), "a bearer whose only qualifying row is a UTILITY,"
+                       " which this card's `attacks=True` refuses"),
+        ((AT_WILL,), "a bearer holding only an at-will, which has no use"
+                     " to spend"),
+    ):
+        world, me, known, asked = bearer("i2895p1", knows)
+        held = set(known.all)
+        REGISTRY["i2895p1"].body(Cast(world=world, me=me, ref="i2895p1"))
+        out.that(set(known.all) == held and not asked,
+                 f"{why} is lent nothing -- and is asked nothing either,"
+                 " which is the control that bites when a body chooses"
+                 " first and only then finds there was nothing to do",
+                 f"gained {sorted(set(known.all) - held)} asked {asked}")
+
+    # -- 5. `i3012p1` prints the price differently, and both knobs show ----
+    world, me, known, _ = bearer("i3012p1", ("p16280",))
+    held = set(known.all)
+    REGISTRY["i3012p1"].body(Cast(world=world, me=me, ref="i3012p1"))
+    out.that(set(known.all) - held == {"p3219"}
+             and known.times("p16280") == 1,
+             "`i3012p1` takes a level-5 wizard daily UTILITY as its price,"
+             " because its card says 'attack or utility' and nothing else"
+             " in the seven does -- `attacks=None`",
+             f"gained {sorted(set(known.all) - held)}"
+             f" times={known.times('p16280')}")
+    world, me, known, asked = bearer("i3012p1", (MID_ENC,))
+    held = set(known.all)
+    REGISTRY["i3012p1"].body(Cast(world=world, me=me, ref="i3012p1"))
+    out.that(set(known.all) == held and not asked,
+             "and refuses a level-7 ENCOUNTER attack power, which clears"
+             " the floor and the attack line and is the wrong usage --"
+             " `usage=DAILY`, which the other six cards do not print",
+             f"gained {sorted(set(known.all) - held)}")
+
+    # -- 6. `i2898p1`: a payable price, an empty shelf, and no charge ------
+    world, me, known, asked = bearer("i2898p1", (HIGH_ATK,))
+    c = Cast(world=world, me=me, ref="i2898p1")
+    out.that(c.unspent(cls="wizard", level=4, attacks=True) == [HIGH_ATK],
+             "`i2898p1`'s bearer CAN pay -- the price is not what stops"
+             " this row",
+             f"{c.unspent(cls='wizard', level=4, attacks=True)}")
+    held = set(known.all)
+    REGISTRY["i2898p1"].body(c)
+    out.that(set(known.all) == held and known.times(HIGH_ATK) == 0,
+             "and nothing is lent and nothing charged: no wizard daily"
+             " lightning power at or below level 4 is declared, so the"
+             " shelf is empty. This is fault (1) in its only live"
+             " instance -- the two-statement shape took the price anyway",
+             f"gained {sorted(set(known.all) - held)}"
+             f" times={known.times(HIGH_ATK)}")
+    out.that(not asked,
+             "nothing is offered either, so the bearer is not asked to"
+             " pick a price for a card that does not exist",
+             f"{asked}")
+
+    # -- 7. the two rows that grant a NAMED power, not a borrowed set ------
+    # **These are here because a plant stayed green.** Reverting
+    # `_spend_unused` to burning the first candidate reddened nothing: no
+    # tome row calls it any more, and these two were driven by nothing at
+    # all. `c.grant_row` always succeeds, so they have no empty-shelf case
+    # -- what they share with the seven is the price and its offer.
+    for ref, price, lent, why in (
+        ("i1098p1", "p1208", "p2273",
+         "a level-6 wizard UTILITY, which is what this card asks for"),
+        ("i1461p1", HIGH_ATK, "p259",
+         "a level-5-or-higher wizard DAILY attack power"),
+    ):
+        world, me, known, asked = bearer(ref, (price,))
+        held = set(known.all)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        out.that(set(known.all) - held == {lent} and known.times(price) == 1,
+                 f"`{ref}` grants `{lent}` and charges {why}",
+                 f"gained {sorted(set(known.all) - held)}"
+                 f" times={known.times(price)}")
+        out.that(known.times(lent) == 0,
+                 f"and `{lent}` comes back unspent -- which `i1461p1` could"
+                 " get wrong, its lent card being a wizard daily attack"
+                 " power of exactly the level its price wants",
+                 f"times={known.times(lent)}")
+        out.that([pool for kind, pool in asked if kind == "choose"]
+                 == [(price,)],
+                 "and the price is OFFERED here too, through"
+                 " `implement_c._spend_unused`, which these two still use",
+                 f"{asked}")
+        world, me, known, asked = bearer(ref, ())
+        held = set(known.all)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        out.that(set(known.all) == held and not asked,
+                 f"and with nothing to pay with, `{ref}` grants nothing --"
+                 " its False is the printed Requirement",
+                 f"gained {sorted(set(known.all) - held)} asked {asked}")
+
+
 DRIVERS = {
+    "tome_trade": (
+        a_tome_lends_a_card_and_charges_for_it,
+        "a tome lending a card and charging for it, as one walk (#704)",
+    ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
         "drawing, stowing and a running jump -- three false premises",

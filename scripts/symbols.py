@@ -403,7 +403,8 @@ CATEGORIES: dict[str, dict] = {
         "sections": [
             ("granting and spending a row", [
                 "borrow_row", "borrowed_rows", "expend_row", "expended",
-                "grant_row", "recast", "spellbook", "use_power", "used",
+                "grant_row", "recast", "spellbook", "unspent", "use_power",
+                "used",
             ]),
             ("changing what a row does", [
                 "branch", "instead_of", "instead_of_now", "pass_on",

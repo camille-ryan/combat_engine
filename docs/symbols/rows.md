@@ -21,6 +21,8 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - "You can use a power you already know for a cheaper action."
 - `c.spellbook(self, *, of: 'int | None' = None) -> 'list[str]'`
   - The rows this creature owns and has not prepared.
+- `c.unspent(self, *, cls: 'str' = '', level: 'int' = 0, usage: 'Any' = None, attacks: 'bool | None' = None, group: 'str' = '', on: 'int | None' = None) -> 'list[str]'`
+  - The refs `c.expend_row` would accept. The complement of `c.expended`.
 - `c.use_power(self, ref: 'str', *, on: 'int | None' = None, who: 'int | None' = None, spend: 'bool' = True, again: 'bool' = False) -> 'bool'`
   - "You can use your p1449 racial power as a free action."
 - `c.used(self) -> 'None'`

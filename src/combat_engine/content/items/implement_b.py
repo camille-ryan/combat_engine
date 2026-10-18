@@ -35,7 +35,7 @@ flurry is `FLURRIES` -- five declared rows, one per tradition -- and
 that named `cf:monk-f0c0`..`c4` are written. `c.fell_might()` was
 likewise never a gap: the boon is a row with `usage=ENCOUNTER`, so
 `c.expend_row` spends its charge. `c.tome_powers()` named a store that
-turns out to have no business in a round -- `_tome_power` is what a fight
+turns out to have no business in a round -- `_tome_trade` is what a fight
 reaches the tome's dailies through. And `c.curse_damage()` named two
 numbers that `features/strikers.py` publishes by label: the flat bonus is
 `c.total(f"{CURSE} damage")` and the die is `c.dice_for(CURSE, ...)`.
@@ -207,23 +207,68 @@ def _just_bloodied(c: Cast, ev: Any) -> bool:
     return ev.hp <= half < ev.hp + ev.amount
 
 
-def _tome_power(c: Cast, cap: int, *words: Keyword) -> str:
-    """One of the dailies a tome would have been stocked with.
+def _tome_trade(
+    c: Cast,
+    cap: int,
+    *words: Keyword,
+    usage: Usage | None = None,
+    attacks: bool | None = True,
+) -> str:
+    """A tome's whole printed sentence: take one of its cards, pay for one.
+
+    > You choose a power contained in the tome and expend an unused wizard
+    > attack power of an equal or higher level.
 
     `c.borrow_row` is the verb for "the card names a set and asks the
     character to take one of it", which is exactly what a tome's two
-    chosen powers are. It matches the level **exactly** and the card
-    says "equal to or lower than that of the tome", so the ladder is
-    walked from the tome's rung down and the first with anything on it
-    answers. Several `words` because one card names two keywords.
+    chosen powers are. It matches the level **exactly** and the card says
+    "equal to or lower than that of the tome", so the ladder is walked
+    from the tome's rung down. Several `words` because one card names two
+    keywords; `usage` and `attacks` narrow the **price** -- one of these
+    cards asks for a *daily* power and takes an attack or a utility.
+
+    **The two halves are one loop, and that is the whole point of this
+    function.** Seven rows had them as two statements and each got the
+    same three things wrong:
+
+    * **The price was charged when there was nothing to lend.** `i2898p1`
+      and `i2717p1` have an empty borrowable set in the tree today, so
+      using either one burnt the item's daily *and* one of the
+      character's attack powers for nothing. `i2717p1`'s own docstring
+      flagged the risk and then argued *for* the order that causes it.
+    * **The price was charged at the tome's rung.** The clause is "of an
+      equal or higher level" -- higher than **the card actually taken** --
+      and the ladder is walked downwards, so a level-9 tome lending a
+      level-2 card demanded a level-9 price and refused uses the card
+      allows. The floor has to be the rung, which means it can only be
+      known inside the walk.
+    * **Nothing stopped the loan paying for itself.** `c.borrow_row`
+      *grants* the chosen card, which puts a fresh wizard power of exactly
+      the right class and level into `Powers.all` -- so a price read after
+      the borrow could pick the borrowed card and the trade would cost
+      nothing. The candidates are read before `c.borrow_row` and the pick
+      is made from that list.
+
+    Returns the ref taken, or `""` -- which happens when no rung has both
+    a card to lend and a price the bearer can pay, and that `""` **is**
+    the printed Requirement.
     """
     for word in words:
         for lvl in range(cap, 0, -1):
+            # Read before the borrow, so the borrowed card cannot be the
+            # thing that pays for it.
+            pool = c.unspent(cls="wizard", level=lvl, usage=usage, attacks=attacks)
+            if not pool:
+                continue
             taken = c.borrow_row(
                 cls="wizard", level=lvl, usage=DAILY, keyword=word, uses=1
             )
-            if taken:
-                return taken
+            if not taken:
+                continue
+            pick = c.choose(pool, c.ref)
+            if pick:
+                c.expend_row(pick)
+            return taken
     return ""
 
 
@@ -2947,7 +2992,7 @@ def i2898x1(c: Cast) -> None:
 
     **Marker removed, as `i2717x1`.** The second paragraph describes what
     the tome holds; the one moment a fight reaches those powers is
-    `i2898p1`, which `_tome_power` already writes. Choosing them at
+    `i2898p1`, which `_tome_trade` already writes. Choosing them at
     acquisition and adding them to a spellbook both happen before a
     board."""
     c.bonus(
@@ -2964,7 +3009,6 @@ def i2898x1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.expend_row(among=)",),
 )
 def i2898p1(c: Cast) -> None:
     """Re-aimed and written. `c.borrow_row` is the verb for exactly this
@@ -2973,15 +3017,23 @@ def i2898p1(c: Cast) -> None:
     usage, which is where the tome's two powers would have been chosen
     from. `uses=1` is the printed "during this encounter".
 
-    What is dropped is the price: "expend an unused daily of an equal or
-    higher level" needs the bearer's own unspent dailies enumerated, and
-    `c.expend_row` takes one ref and nothing lists the candidates.
+    **The price is charged now, and the old marker was wrong about why it
+    could not be.** It asked for `c.expend_row(among=)` on the reading
+    that nothing lists the bearer's unspent powers;
+    `implement_c._spend_unused` had listed them since `i744p1` was
+    written, and six sibling rows paid with it. `c.unspent` is where that
+    read lives now, and `_tome_trade` is the whole sentence. The printed
+    clause says *attack* power and nothing about daily, so the price
+    takes no usage.
 
-    The set is empty in the tree today -- the only wizard daily
-    lightning power declared is level 5 and this tome is level 4 -- so
-    the row is silent until one is written. That is a content gap and
-    not a hole in the row: it fills itself the day the power lands."""
-    _tome_power(c, 4, Keyword.LIGHTNING)
+    The borrowable set is empty in the tree today -- the only wizard daily
+    lightning power declared is level 5 and this tome is level 4 -- so the
+    row is quiet until one is written. That is a content gap and not a
+    hole in the row: it fills itself the day the power lands. **This row
+    is why `_tome_trade` charges nothing when it lends nothing**: with the
+    price as a separate statement, a bearer using the tome today paid a
+    wizard attack power for an empty set."""
+    _tome_trade(c, 4, Keyword.LIGHTNING)
 
 
 @power(
@@ -4201,7 +4253,7 @@ def i2717x1(c: Cast) -> None:
     says what the tome *contains* -- two dailies at or below its level,
     chosen when it is acquired, addable to the spellbook. The only thing a
     fight does with them is `i2717p1`, which is "you gain the use of the
-    chosen power during this encounter", and that is written: `_tome_power`
+    chosen power during this encounter", and that is written: `_tome_trade`
     walks the ladder from the tome's rung down through `c.borrow_row`. The
     choice itself happens before any board exists and the spellbook line is
     chargen's; there is no round in which this property owes anything
@@ -4236,23 +4288,21 @@ def i2717p1(c: Cast) -> None:
 
     **The price is charged now.** It was the dropped clause, on the reading
     that nothing enumerates the bearer's unspent powers -- and
-    `implement_c._spend_unused` does, off `Powers.all`, filtering by class,
-    level and attack line and handing each candidate to `c.expend_row`.
-    `i744p1` is this same card at level 5 and has paid it since it was
-    written; see `i2899p1` for the full note.
+    `implement_c._spend_unused` did, off `Powers.all`. `c.unspent` is where
+    that read lives now, and `_tome_trade` is the whole sentence.
 
     No wizard daily summoning power at or below level 5 is declared yet, so
     the borrowable set is empty and the row is quiet until one lands. That
-    is a gap in the powers rather than in this row, and it is why the price
-    is charged *first*: a bearer with nothing to borrow should not be
-    charged, and `c.borrow_row` returning False leaves the spend already
-    made. Which is the one thing to watch here if such a power ever
-    arrives."""
-    from combat_engine.content.items.implement_c import _spend_unused
+    is a gap in the powers rather than in this row.
 
-    if not _spend_unused(c, cls="wizard", level=5, attacks=True):
-        return
-    _tome_power(c, 5, Keyword.SUMMONING)
+    **This docstring used to argue for the order that broke it**, and the
+    correction is worth leaving visible: it said the price was charged
+    first so that "a bearer with nothing to borrow should not be charged",
+    which is exactly backwards -- charging first is what charges them.
+    With an empty borrowable set, every use of this tome spent one of the
+    character's attack powers and handed back nothing. `_tome_trade`
+    charges inside the rung walk, so no card lent means no price paid."""
+    _tome_trade(c, 5, Keyword.SUMMONING)
 
 
 @power(
@@ -4402,7 +4452,7 @@ def i3012x1(c: Cast) -> None:
     not anything the body does.
 
     **Marker removed, as `i2717x1`.** The tome's two stored powers are
-    reached by `i3012p1` through `_tome_power`, and nothing else in a
+    reached by `i3012p1` through `_tome_trade`, and nothing else in a
     fight asks after them."""
 
     def used(ev: PowerUsed) -> None:
@@ -4434,14 +4484,22 @@ def i3012x1(c: Cast) -> None:
     keywords=[
         Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.PSYCHIC, Keyword.TELEPORTATION,
     ],
-    dropped=("c.expend_row(among=)",),
 )
 def i3012p1(c: Cast) -> None:
     """Re-aimed and written, as `i2898p1`. "Psychic or teleportation" is
-    two sets and `c.borrow_row` narrows on one keyword, so they are
-    asked in turn and the first with anything in it answers. The price
-    -- an unused daily of equal or higher level -- is dropped."""
-    _tome_power(c, 5, Keyword.PSYCHIC, Keyword.TELEPORTATION)
+    two sets and `c.borrow_row` narrows on one keyword, so they are asked
+    in turn and the first with anything in it answers.
+
+    **The price is charged now.** This card prints it more narrowly than
+    its six siblings -- a *daily* power, and an attack **or** utility one
+    -- which is exactly the two knobs: `usage=DAILY`, and `attacks=None`
+    for "do not narrow on the attack line at all". `attacks=True` would
+    refuse a utility the card allows, and leaving the usage off would
+    accept an encounter power it does not."""
+    _tome_trade(
+        c, 5, Keyword.PSYCHIC, Keyword.TELEPORTATION,
+        usage=DAILY, attacks=None,
+    )
 
 
 @power(

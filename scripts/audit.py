@@ -333,15 +333,41 @@ KNOWN_SILENT = {
     "f3235": "needs a cursed enemy to fall with the pact leg's use already spent",
     "i1470p1": "hides from blindsight; the board fields no enemy that has it",
     "i744p1": "needs an unused wizard attack power to expend; the printed cost refuses",
-    # The same tome card at three other levels, all written to charge the
+    # The same tome card at six other levels, all written to charge the
     # same printed price. `i744p1` has refused on this board since it was
-    # written; the other three refused only once they started charging, and
-    # a row that declines because the cost cannot be paid is the card
-    # working, not a row doing nothing. The borrowable set is also empty for
-    # the summoning one -- see `i2717p1`'s docstring.
+    # written; the others refused only once they started charging, and a row
+    # that declines because the cost cannot be paid is the card working, not
+    # a row doing nothing. The borrowable set is also empty for the
+    # summoning and lightning ones -- see `i2717p1`'s docstring.
+    #
+    # **The board is a fighter, which is why none of these can pay.** The
+    # price is "an unused wizard attack power" and `audit.board` deals a
+    # character, so the bearer holds a dealt class's powers and no wizard
+    # row at all. `drivers.tome_trade` is what proves the trade works: it
+    # plants the bearer's spell list and asserts the loan, the charge, the
+    # offer, and all three ways the old two-statement shape got it wrong.
+    # So this is an excuse about the board, which is the only kind allowed
+    # here -- and the second axis of `_attempts` cannot fix it, because
+    # posing the row differently does not deal it a different class.
     "i2717p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    "i2895p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    "i2898p1": "needs an unused wizard attack power to expend; the printed cost refuses",
     "i2899p1": "needs an unused wizard attack power to expend; the printed cost refuses",
     "i2900p1": "needs an unused wizard attack power to expend; the printed cost refuses",
+    # **`i3012p1` is deliberately NOT here, and that is the useful part.**
+    # It was, and `audit.py` answered OUTGROWN on the next run: its price is
+    # the widest of the seven -- a daily attack *or* utility -- so one of
+    # the 48 dealt bearers holds a wizard daily it can pay with, and the row
+    # lends a card and charges for it on the real `dsl.use` path. Which is
+    # also the sharpest evidence the trade works outside the planted board.
+    #
+    # Not tomes: these two grant a *named* power rather than borrowing from
+    # a set, and they charge the same printed price through
+    # `implement_c._spend_unused`. Silent at every sweep since they were
+    # written, and for the same reason as the six above -- now driven, which
+    # is what moves them from unexplained to excused. #704.
+    "i1098p1": "needs an unused wizard utility power to expend; the printed cost refuses",
+    "i1461p1": "needs an unused wizard daily attack power; the printed cost refuses",
     "m1526a2": "resets an adjacent sprung trap; the board fields none",
     "m6115a0": "lends its square to siblings of its own stock; the board fields it alone",
     # Sustains. Both narrow to holds whose printed cost is a minor, and the

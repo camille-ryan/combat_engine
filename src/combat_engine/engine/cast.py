@@ -3601,6 +3601,81 @@ class Cast:
             and (not group or ((p := _get(ref)) is not None and p.group == group))
         ]
 
+    def unspent(
+        self,
+        *,
+        cls: str = "",
+        level: int = 0,
+        usage: Any = None,
+        attacks: bool | None = None,
+        group: str = "",
+        on: int | None = None,
+    ) -> list[str]:
+        """The refs `c.expend_row` would accept. The complement of `c.expended`.
+
+        "...and expend an unused c9 attack power of an equal or higher
+        level" is printed on three tomes, and nothing could answer *which*
+        powers the character still has to pay with. `c.expended` exists for
+        the mirror case and says why in its own docstring -- a ref is what
+        `c.restore_use` takes and "an expended channel divinity power"
+        prints none -- so the shape was already settled: **the writer takes
+        one ref, the reader lists the candidates, the row does the
+        `c.choose`.** What was filed instead was `c.expend_row(among=)`,
+        which would be a second way to do that.
+
+        Defined as "the refs `c.expend_row` would accept" rather than
+        "powers with a use left", deliberately: the two can only disagree
+        if one of them is wrong. So an at-will is out (there is nothing to
+        count down, and `c.expend_row` refuses it), and a row at its `uses`
+        is out.
+
+        `level` is a **floor**, which is the one place this parts company
+        with `c.borrow_row(level=)`. Every card printing this clause says
+        *"of an equal or higher level"*; `c.borrow_row` matches the level
+        exactly because its cards name a rung. Different questions.
+
+        `attacks` is tri-state: `True` for "attack power", `False` for a
+        utility, and the default `None` for "attack or utility", which is
+        what one of the three cards prints.
+
+        Defaults to the **caster**, like `c.expended` and `c.expend_row`
+        beside it. Sorted, so a headless engine's pick is stable.
+        """
+        from .components import Powers as _Powers
+        from .dsl import get as _get
+        from .types import Usage as _Usage
+
+        who = on if on is not None else self.me
+        powers = self.world.get(who, _Powers)
+        if powers is None:
+            return []
+        out: list[str] = []
+        for ref in powers.all:
+            p = _get(ref)
+            # Mirrors `c.expend_row`'s own treatment of a ref the registry
+            # does not hold: one use, and not an at-will.
+            if p is not None and p.usage is _Usage.AT_WILL:
+                continue
+            if powers.times(ref) >= (p.uses if p is not None else 1):
+                continue
+            if p is None:
+                if cls or level or usage is not None or attacks is not None or group:
+                    continue
+                out.append(ref)
+                continue
+            if cls and p.cls != cls:
+                continue
+            if p.level < level:
+                continue
+            if usage is not None and p.usage is not usage:
+                continue
+            if attacks is not None and (p.attack is not None) is not attacks:
+                continue
+            if group and p.group != group:
+                continue
+            out.append(ref)
+        return sorted(out)
+
     def initiative(self, amount: int, *, on: int | None = None) -> int:
         """"Each target gains a +10 bonus to his or her initiative check."
 

@@ -1506,19 +1506,13 @@ def i2900p1(c: Cast) -> None:
     been stocked from off the registry, walking down from the tome's rung,
     and `uses=1` is "during this encounter".
 
-    The price is charged too, by the helper `i744p1` has used all along --
-    see `i2899p1` for the full note. "Nothing enumerates the bearer's
-    unspent dailies" was the one thing the old marker got wrong:
-    `implement_c._spend_unused` does, off `Powers.all`."""
-    from combat_engine.content.items.implement_c import _spend_unused
+    The price is charged too -- see `i2899p1` for the full note. "Nothing
+    enumerates the bearer's unspent dailies" was the one thing the old
+    marker got wrong; `c.unspent` is that enumeration and `_tome_trade`
+    the whole printed sentence."""
+    from combat_engine.content.items.implement_b import _tome_trade
 
-    if not _spend_unused(c, cls="wizard", level=2, attacks=True):
-        return
-    for lvl in range(2, 0, -1):
-        if c.borrow_row(
-            cls="wizard", level=lvl, usage=DAILY, keyword=Keyword.FIRE, uses=1
-        ):
-            return
+    _tome_trade(c, 2, Keyword.FIRE)
 
 
 @power(
@@ -3875,28 +3869,24 @@ def i2899p1(c: Cast) -> None:
     of the tome".
 
     **The price is charged now, and `i744p1` had it all along.** This card
-    is printed four times; the level-5 one has paid it since it was written.
-    `implement_c._spend_unused` walks the bearer's own `Powers.all`, filters
-    by class, level and whether the row carries an attack line, and hands
-    each candidate to `c.expend_row` -- which is the enumeration the old
-    marker said did not exist. It returns False when there is nothing to
-    charge, and that False **is** the printed Requirement.
+    is printed seven times; the level-5 one has paid it since it was
+    written. The enumeration the old marker said did not exist is
+    `c.unspent` -- the refs `c.expend_row` would accept, narrowed by
+    class, a level floor and the attack line.
 
-    Charged before the loan, as the card prints it and as `i744p1` does: no
-    unused attack power means no borrowed card, not a free one.
+    **`_tome_trade` is the loan and the price as one walk**, which is not
+    tidiness: the price's floor is the level of the card actually taken,
+    the candidates have to be read before `c.borrow_row` grants anything,
+    and a rung with nothing to lend must cost nothing. Three different
+    faults, one of them live in the tree, and all three come from having
+    the two halves as two statements. Its full note is on the helper.
 
     The borrowable set may still be empty in the tree -- that is a content
     gap in the powers, not in this row, and it fills itself the day such a
     power is written."""
-    from combat_engine.content.items.implement_c import _spend_unused
+    from combat_engine.content.items.implement_b import _tome_trade
 
-    if not _spend_unused(c, cls="wizard", level=3, attacks=True):
-        return
-    for lvl in range(3, 0, -1):
-        if c.borrow_row(
-            cls="wizard", level=lvl, usage=DAILY, keyword=Keyword.COLD, uses=1
-        ):
-            return
+    _tome_trade(c, 3, Keyword.COLD)
 
 
 @power(
