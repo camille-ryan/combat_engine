@@ -195,20 +195,23 @@ KNOWN_SILENT = {
     # the row needed and never by grepping `audit.py` for the pass that
     # provides it.
     # ------------------------------------------------------------------
-    # `f1028`: its printed Requirement is **one** weapon -- `w3594` -- and `chargen`
-    # deals this sorcerer `w3596`, a different blade from the same group. So
-    # the gate correctly declines and the row lays nothing.
+    # **`f1028` was here and `#663` retired it, which nobody noticed.** The
+    # entry read "needs one named weapon; chargen dealt another from its
+    # group" -- true when it was written, and the hand probe it records is
+    # still the right reading of the row. What changed is the harness: the
+    # third `_attempts` axis arms the weapon a row's **body** names, and
+    # `f1028`'s body names `w3594` outright. So the board holds it now, the
+    # gate passes, and `c.reshape_area` lays its aiming.
     #
-    # **Not an excuse covering a dead row**, which this file's own history
-    # warns about: with `w3594` put in hand on a probe board, the ranged
-    # sorcerer at-will `p16222` goes from one aiming to two -- branch 0
-    # `ranged 10`, branch 1 `melee 1`, exactly the card. The silence is the
-    # weapon the board dealt, not the clause.
+    # Measured both ways before removing it, because the obvious suspect was
+    # today's `Rerolled` admission crediting it for somebody else's reroll:
+    # with those two events taken back out, `f1028` is still credited. The
+    # #663 axis is what does it.
     #
-    # Gating on the group instead would retire this entry and be wrong: the
-    # group holds fourteen other things, including two boomerangs and a
-    # spiked shield, and `w3596` is one of them. #614.
-    "f1028": "needs one named weapon; chargen dealt another from its group",
+    # The entry survived the change that killed it because `--calls` is
+    # scoped: the commit that added the axis measured the four rows the
+    # issue named and this one was not among them. An excuse is only
+    # re-examined when something puts its row back in scope.
     # Its printed Requirement is an obscured square to vanish from, and the
     # board is lit everywhere -- so the row correctly declines. Enforcing
     # the Requirement is what made it silent; before the light model it was
