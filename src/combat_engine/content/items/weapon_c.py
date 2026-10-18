@@ -510,24 +510,28 @@ def i3057x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("ConditionApplied.weapon",),
 )
 def i3099x1(c: Cast) -> None:
-    """The melee half is written; the weapon half is not, and is re-pointed.
+    """Both halves now: a melee attack, and **this** weapon.
 
     The note said `ConditionApplied` "names the source and the condition and
     not the row that applied it, so 'with a melee attack' cannot be asked".
-    It names the row now, and `by_melee_only` reads the shape off the ref --
+    It names the row, and `by_melee_only` reads the shape off the ref --
     close attacks excluded, because the card says melee.
 
-    **"Using this weapon" is the half left.** The ref of the row does not
-    say which weapon swung it, so the marker moves to the field that would:
-    no event carries the weapon, which `weapon.py:829` records from the
-    other side and which `i1688p1` and `f3501` want too. Until then an
-    immobilisation through anything the wielder holds arms this, which is
-    wider than the card and why the marker stays."""
+    **"Using this weapon" is answered by `ConditionApplied.weapon`** (#653),
+    which `c.condition` stamps from the `Cast` that laid the hold -- the
+    only thing that knows which arm swung. Before it, an immobilisation
+    through anything the wielder held armed this, which was wider than the
+    card.
+
+    `c.my_weapon()` is the weapon this row's item sits on, so the comparison
+    is "the hold came through my blade" and not "I was holding my blade"."""
 
     def held(ev: ConditionApplied) -> None:
+        mine = c.my_weapon()
+        if mine is None or getattr(ev, "weapon", "") != mine.ref:
+            return
         if (ev.source == c.me
                 and ev.condition == Condition.IMMOBILIZED
                 and by_melee_only(c.world, c.me, ev)):

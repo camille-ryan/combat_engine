@@ -20559,6 +20559,130 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"and {ref} does not grant the wall",
                  f"{sorted(squares(world, me))}")
 
+
+def which_weapon_the_blow_came_through(out: Result) -> None:
+    """Three rows print "using this weapon" and no event carried one.
+
+    #653. `Bloodied.power` and `ConditionApplied.power` name the row that
+    struck, which answers the clause's keyword and the attack's shape and
+    says nothing about **which weapon** swung it -- a weapon power and a
+    basic attack can both be made with either hand. `items/weapon.py:829`
+    recorded the same finding from the other side: "the attack context
+    carries no weapon".
+
+    `Cast._swung_weapon` is the stamp, and it is the only thing that knows.
+    **Only for a row carrying the weapon keyword**, exactly as
+    `_high_crit_dice` decides: an implement power held by a character with a
+    sword in the other hand must stamp nothing, or "using this weapon"
+    quietly becomes "while holding it". That is the negative control below
+    and it is the half that matters.
+
+    **An attribute, not a field.** Declared as a field first and all seven
+    replay fixtures diverged -- which is exactly what `Effect.by`'s own
+    comment warns about, "a field would reach the wire and every replay
+    fixture, neither of which is a change in how a fight resolves".
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import ConditionApplied, DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    # -- a weapon attack stamps the weapon it swung ------------------------
+    world, me, _ = audit_board("mba", 1)
+    gear = world.get(me, Gear)
+    out.that(gear is not None and bool(gear.weapons),
+             "the caster holds a weapon", f"{gear}")
+    if gear is None or not gear.weapons:
+        return
+    swung = gear.weapons[0].ref
+    hits: list[str] = []
+    world.bus.on(DamageApplied, lambda ev: hits.append(getattr(ev, "weapon", "")))
+    foe = next(iter(enemies(world, me)), None)
+    world.rng.loaded = 20
+    use(world, me, "mba", targets=[foe] if foe is not None else None)
+    out.that(swung in hits,
+             "a basic attack's damage names the weapon it came through,"
+             " which no event carried at all before",
+             f"{hits} wanted {swung}")
+
+    # -- and the negative control: an implement power stamps nothing -------
+    other = _an_implement_row()
+    out.that(other != "", "an implement attack to use as the control", f"{other}")
+    if other:
+        world, me, _ = audit_board(other, 1)
+        held = world.get(me, Gear)
+        # **A sword actually in hand, which the board does not give it.**
+        # The first draft asserted that an implement power stamps nothing
+        # while its caster held only an orb -- and `_swinging` answers None
+        # for want of `gear.main` whatever the keyword gate says, so the
+        # plant that removed the gate stayed **green**. A control that
+        # cannot tell two implementations apart is no control.
+        if held is not None:
+            from combat_engine import chargen
+
+            blade = chargen.PRINTED.get("w3612")
+            if blade is not None:
+                from dataclasses import replace as _replace
+
+                mine = _replace(blade)
+                held.weapons.append(mine)
+                held.wield(mine)
+        marks: list[str] = []
+        world.bus.on(DamageApplied, lambda ev: marks.append(getattr(ev, "weapon", "")))
+        foe = next(iter(enemies(world, me)), None)
+        world.rng.loaded = 20
+        use(world, me, other, targets=[foe] if foe is not None else None)
+        out.that(held is not None and getattr(held.main, "ref", "") == "w3612",
+                 f"{other}'s caster is wielding a sword all the same, which"
+                 " is what makes this control able to fail",
+                 f"{getattr(held.main, 'ref', None) if held else None}")
+        out.that(bool(marks) and not any(marks),
+                 f"and {other} stamps nothing, because it is not a weapon"
+                 " attack -- the half that stops 'using this weapon'"
+                 " meaning 'while holding it'",
+                 f"{marks}")
+
+    # -- a condition carries it too ---------------------------------------
+    world, me, _ = audit_board("mba", 1)
+    gear = world.get(me, Gear)
+    if gear is None or not gear.weapons:
+        return
+    swung = gear.weapons[0].ref
+    laid: list[str] = []
+    world.bus.on(ConditionApplied, lambda ev: laid.append(getattr(ev, "weapon", "")))
+    foe = next(iter(enemies(world, me)), None)
+    c = Cast(world=world, me=me, ref="mba")
+    c.target = foe
+    c.condition(Condition.IMMOBILIZED, on=foe)
+    out.that(swung in laid,
+             "a condition laid by a weapon attack names the weapon, which is"
+             " what `i3099x1` and `f3501` ask",
+             f"{laid} wanted {swung}")
+
+    # -- the two rows that the board can pose ------------------------------
+    for ref in ("i3099x1", "f3501"):
+        row = REGISTRY[ref]
+        out.that(not row.dropped and not row.todo,
+                 f"{ref} carries no marker for it any more",
+                 f"todo={row.todo} dropped={row.dropped}")
+
+    # -- and the one it cannot, with the reason named ----------------------
+    world, me, _ = audit_board("i1688p1", 1)
+    gear = world.get(me, Gear)
+    mine = Cast(world=world, me=me, ref="i1688p1").my_weapon()
+    out.that(mine is None,
+             "i1688p1's board puts a DIFFERENT item on the weapon, so"
+             " `c.my_weapon()` answers None and its gate cannot pass -- the"
+             " reason it is excused rather than written wider (#699)",
+             f"{[(w.ref, w.item) for w in gear.weapons] if gear else None}")
+    health = world.get(me, Health)
+    out.that(health is not None, "and the board is otherwise intact")
+
 DRIVERS = {
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
@@ -20571,6 +20695,10 @@ DRIVERS = {
     "lamp_settings": (
         one_lamp_three_settings_and_putting_the_lights_out,
         "one lamp's three settings, and a row that suppresses a light (#686)",
+    ),
+    "swung_weapon": (
+        which_weapon_the_blow_came_through,
+        "which weapon a blow came through, which no event carried (#653)",
     ),
     "porous": (
         a_blocker_with_a_gap_in_it,

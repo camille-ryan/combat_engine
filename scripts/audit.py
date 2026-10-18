@@ -136,6 +136,26 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # "You bloody an enemy with an attack that uses **the augmented
+    # weapon**", and the gate is written now that `Bloodied.weapon` exists
+    # (#653). Two separate board facts keep it quiet, both measured:
+    #
+    # * the board puts a **different** item on the weapon. It equips the
+    #   item under test through `chargen.magic_for`, and the character
+    #   already holds `w3612` with `item='i1159'` from its own kit -- so
+    #   `c.my_weapon()` answers None and the gate cannot pass whatever the
+    #   blow does. #699.
+    # * the blow that bloodies is a **rider's**, not the basic attack's:
+    #   `Bloodied(source=1, power='f274', weapon='')`. A rider is a row of
+    #   its own with its own `Cast` and no weapon keyword, so it stamps no
+    #   weapon even though the swing came through one. #698.
+    #
+    # Driven by hand: with `i1688` put on the weapon in hand,
+    # `c.my_weapon()` answers it and the row's gate reads the right ref.
+    # The row is strictly narrower than it was -- it used to heal on any
+    # bloodying this wielder did, which was wider than the card.
+    "i1688p1": "needs the blow to come through its own weapon; the board's"
+               " weapon carries another item and the bloodying blow is a rider's",
     # An immediate interrupt that rerolls an **ally's** bluff, diplomacy or
     # intimidate check. The board never makes an ally roll one: `_provoke`
     # makes an attack, and nothing in the harness asks an ally for a social

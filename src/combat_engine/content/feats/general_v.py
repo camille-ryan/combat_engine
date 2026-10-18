@@ -833,7 +833,7 @@ def _proned_by_me(world: Any, me: int, ev: Any) -> bool:
 
 @power("f3501", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=("ConditionApplied.weapon",))
+       )
 def f3501(c: Cast) -> None:
     """A standing weapon property and a triggered shift, so this is a trait
     with a watch and **not** a declared trigger.
@@ -851,16 +851,17 @@ def f3501(c: Cast) -> None:
     "Larger than you" is read off `Position.size` at the moment of the
     knockdown, and that half plays.
 
-    **Re-pointed: `ConditionApplied.power` landed and does not reach this
-    row.** That field was added for the four rows printing the *keyword* or
-    the *shape* of the clause that applied the condition, and `f1871` and
-    `f3276` are written on it. This card says "with a weapon attack **using
-    a staff**", which is the weapon, and the ref of the row does not say
-    which weapon swung it -- so the marker names the field that would.
+    **"Using a staff" is answered by `ConditionApplied.weapon`** (#653).
+    `ConditionApplied.power` was added for the four rows printing the
+    *keyword* or the *shape* of the clause -- `f1871` and `f3276` read it --
+    and the ref of the row cannot say which weapon swung it. `c.condition`
+    stamps the weapon from the `Cast` that laid the hold, which is the only
+    thing that knows.
 
-    Three rows want it now (`i1688p1`, `i3099x1`, this), and no event
-    carries a weapon at all; `weapon.py:829` records the same finding from
-    the other side.
+    **A group, not a ref**, because the card says "a staff" and not one
+    staff: the knockdown counts if the weapon the hold came through is in
+    the `staff` group, which is the same read `_close_arcane_staff` below
+    makes for this row's sibling.
 
     **Wielding the quarterstaff as a small weapon is written now**, and
     `c.counts_as(property=)` was the wrong verb for it: that one waives a
@@ -875,11 +876,29 @@ def f3501(c: Cast) -> None:
     def knocked(ev: Any) -> None:
         if not _proned_by_me(c.world, me, ev):
             return
+        swung = getattr(ev, "weapon", "")
+        if not swung or swung not in _staves(c.world, me):
+            return
         foe = ev.target
         if order.index(c.size_of(on=foe)) > order.index(c.size_of(on=me)):
             c.shift(1)
 
     c.watch(ConditionApplied, knocked, on=me, until=When.ENCOUNTER)
+
+
+def _staves(world: Any, me: int) -> set[str]:
+    """The refs of the staves this creature is holding.
+
+    `ConditionApplied.weapon` is a ref and the card says "a staff", so the
+    comparison is against the group rather than against one weapon --
+    `_groups` below is the same read `_close_arcane_staff` makes.
+    """
+    from combat_engine.engine import Gear
+
+    gear = world.get(me, Gear)
+    if gear is None:
+        return set()
+    return {w.ref for w in gear.weapons if (w.group or "") == "staff"}
 
 
 def _close_arcane_staff(world: Any, me: int, ev: Any) -> bool:

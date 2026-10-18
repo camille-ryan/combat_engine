@@ -212,6 +212,24 @@ class Effect:
         return f"e{self.id}[{', '.join(bits)}]"
 
 
+def _with_weapon(ev: object, eff: object) -> object:
+    """Hang the weapon the hold came through on the announcement.
+
+    **An attribute, not a field**, for the reason `Effect.by` is one: a
+    field reaches the wire and every replay fixture, and which arm swung is
+    not a change in how a fight resolves. Declared as a field first and all
+    seven fixtures diverged.
+
+    **Two emit sites, which is why this is a function.** `ConditionApplied`
+    is announced when an effect is installed *and* when a suspended one
+    comes back, and patching only the first left the stamp empty on the path
+    a `c.condition` from a `Cast` actually takes -- measured, `[''] wanted
+    w3612`, with the effect itself carrying the ref correctly. #653.
+    """
+    ev.weapon = getattr(eff, "weapon", "")  # ty: ignore[unresolved-attribute]
+    return ev
+
+
 def keywords_of(which: object) -> frozenset:
     """The keywords of the row that laid an effect.
 
@@ -326,6 +344,7 @@ class Effects:
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
         reshape_optional: bool = False,
         by: str = "",
+        weapon: str = "",
     ) -> Effect:
         # Ongoing damage of one type does not stack -- the highest applies.
         # The rule lived in `Cast.ongoing` alone, and this is the door a
@@ -429,6 +448,14 @@ class Effects:
         # today's behaviour and only the six in `cast.py` that label by
         # content need to say anything.
         eff.by = by or (label.split()[0] if label else "")
+        # **And which weapon the blow came through**, an attribute for the
+        # reason `by` above is one. `ConditionApplied.power` answers the
+        # clause's keyword and the attack's shape and says nothing about
+        # which arm did it, so "when you immobilize a target with a melee
+        # attack **using this weapon**" had nothing to ask. Defaulted empty,
+        # so all 333 call sites keep today's behaviour and only `c.condition`
+        # says anything. #653.
+        eff.weapon = weapon
         self.live[eff.id] = eff
 
         # Everything the effect installs goes on **before** anything is
@@ -495,7 +522,7 @@ class Effects:
             conds = self.world.add(eff.owner, Conditions())
         if not conds.add(cond):
             return False
-        self.world.bus.emit(
+        self.world.bus.emit(_with_weapon(
             ConditionApplied(
                 source=source or eff.owner, target=eff.owner,
                 condition=cond, duration=eff.when.value,
@@ -503,8 +530,9 @@ class Effects:
                 # label, so this is the ref for all 333 call sites without
                 # any of them saying anything.
                 power=eff.by,
-            )
-        )
+            ),
+            eff,
+        ))
         return True
 
     # -- installing and lifting ----------------------------------------------
@@ -559,9 +587,12 @@ class Effects:
         for c in eff.conditions:
             if conds is not None and conds.add(c):
                 self.world.bus.emit(
-                    ConditionApplied(
-                        source=source, target=eff.owner, condition=c,
-                        duration=duration, power=eff.by,
+                    _with_weapon(
+                        ConditionApplied(
+                            source=source, target=eff.owner, condition=c,
+                            duration=duration, power=eff.by,
+                        ),
+                        eff,
                     )
                 )
 

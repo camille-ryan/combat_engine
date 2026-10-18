@@ -534,6 +534,8 @@ class DamageApplied(Event):
     #: this event -- and one content row had already been routed off `Hit`
     #: to work around it without anyone noticing why.
     detail: str = ""
+    #: The weapon the blow came through, by ref -- an attribute, not a
+    #: field. See `Bloodied.weapon`.
     #: The whole type of the blow, as on `DamageRolled`. Empty means "just
     #: `dtype`", which is every blow that is of one type.
     dtypes: tuple[DamageType, ...] = ()
@@ -716,6 +718,23 @@ class Bloodied(Event):
     actor: int
     source: int | None = None
     power: str = ""
+    #: The weapon the blow came through, by ref, or "" when it came through
+    #: none -- an implement power, ongoing damage, a monster's claws.
+    #:
+    #: `power` answers the clause's keyword and the attack's shape and says
+    #: nothing about *which* weapon swung it, because a weapon power and a
+    #: basic attack can both be made with either hand. `i1688p1` prints "you
+    #: bloody an enemy with an attack **that uses the augmented weapon**",
+    #: and nothing between `Cast.w()` picking a weapon and this event
+    #: carried it forward. Stamped by the `Cast` that struck, which is the
+    #: only thing that knows.
+    #:
+    #: **An attribute, not a field**, for the reason `Moved.kind_` and
+    #: `Effect.by` are: a field reaches the wire and every replay fixture,
+    #: and which arm swung is not a change in how a fight resolves. Declared
+    #: as a field first and **all 7 fixtures diverged**, which is the cost
+    #: that comment was written about. Read it with
+    #: `getattr(ev, "weapon", "")`. #653.
 
 
 @dataclass
@@ -884,6 +903,14 @@ class ConditionApplied(Event):
     condition: Condition
     duration: str
     power: str = ""
+    #: The weapon the blow came through, by ref, or "" for none. `power`
+    #: answers the keyword and the shape; three rows print *which weapon*
+    #: -- "when you immobilize a target with a melee attack using this
+    #: weapon" -- and nothing carried it. Hung on the effect by
+    #: `Effects.apply` and read off it here, the way `power` reads `by`.
+    #:
+    #: **An attribute, not a field**, exactly as `Bloodied.weapon` is and
+    #: for the same measured reason. #653.
 
 
 @dataclass

@@ -2001,6 +2001,37 @@ class Cast:
         dice = self._high_crit_dice()
         return self._roll_damage(dice) if dice else 0
 
+    def _swung_weapon(self) -> str:
+        """The weapon this blow came through, by ref, or "" for none.
+
+        **Only for a row carrying the weapon keyword**, exactly as
+        `_high_crit_dice` below decides: an implement power held by a
+        character with a sword in the other hand must stamp nothing, or
+        "using this weapon" quietly becomes "while holding it".
+
+        Read at the moment the blow is dealt, which for `Cast.damage` is the
+        same moment the weapon was chosen. For a rider applied later it is
+        not always -- a row that drew a different weapon in between would
+        stamp the new one -- and three rows do not justify a weapon of
+        record on the attack. Stated rather than left to be discovered. #653.
+
+        **A rider's extra damage therefore stamps nothing**, and that is the
+        measured limitation rather than a guess: on `i1688p1`'s board the
+        blow that bloodies is `f274`'s rider, not the basic attack, so
+        `Bloodied.weapon` came back `""` while the swing really did come
+        through the weapon. The rider is a row of its own with its own
+        `Cast` and no weapon keyword, which is exactly the test above. The
+        fix is a weapon of record on the attack, which three rows do not
+        justify; the alternative -- stamping whatever is in hand -- would
+        make an implement power claim the sword in the other one, which is
+        the wrong direction. #698.
+        """
+        p = self._declared()
+        if p is None or Keyword.WEAPON not in self.keywords_of(p):
+            return ""
+        weapon = self._swinging()
+        return getattr(weapon, "ref", "") if weapon is not None else ""
+
     def _high_crit_dice(self) -> str | int:
         """The extra dice, without rolling them.
 
@@ -2872,6 +2903,9 @@ class Cast:
             dtypes=dtypes,
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via, crit=self.crit,
+            # Which weapon the blow came through. `detail` says which row
+            # swung and cannot say which arm did it. #653.
+            weapon=self._swung_weapon(),
         )
         if dealt:
             self._rattle(who)
@@ -4046,6 +4080,11 @@ class Cast:
             ongoing=ongoing,
             escalate=escalate,
             by=self.ref,
+            # Which weapon the blow came through, for the three rows that
+            # print "using this weapon". `power` on the event says which row
+            # and not which arm. "" for anything that is not a weapon
+            # attack, which `_swung_weapon` decides. #653.
+            weapon=self._swung_weapon(),
         )
 
     def prone(

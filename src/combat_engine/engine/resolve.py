@@ -897,6 +897,7 @@ def deal_damage(
     crit: bool = False,
     dtypes: Sequence[DamageType] = (),
     unpreventable: bool = False,
+    weapon: str = "",
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1258,24 +1259,34 @@ def deal_damage(
 
     was_bloodied = health.bloodied
     health.hp -= landed
-    world.bus.emit(
-        DamageApplied(
-            source=source,
-            target=target,
-            amount=landed,
-            dtype=dtype,
-            absorbed=absorbed,
-            hp=health.hp,
-            detail=detail,
-            dtypes=types if len(types) > 1 else (),
-            resisted=resisted,
-        )
+    landed_ev = DamageApplied(
+        source=source,
+        target=target,
+        amount=landed,
+        dtype=dtype,
+        absorbed=absorbed,
+        hp=health.hp,
+        detail=detail,
+        dtypes=types if len(types) > 1 else (),
+        resisted=resisted,
     )
+    # An attribute, not a field -- see `DamageApplied.weapon`. A field
+    # reached every replay fixture and all seven diverged.
+    landed_ev.weapon = weapon  # ty: ignore[unresolved-attribute]
+    world.bus.emit(landed_ev)
     if not was_bloodied and health.bloodied and health.hp > 0:
         # `detail` is the row that struck, the same value `DamageApplied`
         # above carries. Five rows print the blow's *shape* or its weapon
         # and `source` alone cannot say either.
-        world.bus.emit(Bloodied(actor=target, source=source, power=detail))
+        #
+        # **And `weapon` for the same reason one step further on.** `power`
+        # says which row swung and not which weapon it swung, because a
+        # weapon power and a basic attack can both be made with either hand
+        # -- so "you bloody an enemy with an attack that uses the augmented
+        # weapon" had nothing to ask. #653.
+        crossed = Bloodied(actor=target, source=source, power=detail)
+        crossed.weapon = weapon  # ty: ignore[unresolved-attribute]
+        world.bus.emit(crossed)
     _check_down(world, target, health, source, crit, detail)
     return landed
 

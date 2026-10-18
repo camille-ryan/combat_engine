@@ -5612,25 +5612,28 @@ def i1687p1(c: Cast) -> None:
     keywords=[Keyword.HEALING],
     trigger="you bloody an enemy with an attack",
     on=Trigger(Bloodied, _my_bloodying, "you bloody an enemy"),
-    dropped=("Bloodied.weapon",),
 )
 def i1688p1(c: Cast) -> None:
-    """Re-pointed: `Bloodied.power` landed and does not reach this row.
+    """Healing, when the blow that bloodied came through **this** weapon.
 
-    That field was added for the four rows printing the blow's **shape** --
-    "bloodied from a melee attack" -- and `by_melee_only` answers them now.
-    This card asks a different question: *"an attack that uses the augmented
-    weapon"*, which is **which weapon the blow came through**, and the ref
-    of the row does not say. A weapon power and a basic attack can both be
-    swung with either hand.
+    `Bloodied.power` was added for the four rows printing the blow's
+    *shape* -- "bloodied from a melee attack" -- and `by_melee_only`
+    answers those. This card asks a different question: *"an attack that
+    uses the augmented weapon"*, which is **which weapon the blow came
+    through**, and the ref of the row cannot say -- a weapon power and a
+    basic attack can both be swung with either hand.
 
-    No event carries the weapon -- `weapon.py:829` records the same finding
-    from the other side, *"the attack context carries no weapon"* -- so the
-    marker names the field on the event this row watches rather than a verb.
-    Until it exists, any bloodying this wielder does pays out, which is
-    wider than the card and is why the marker stays.
+    **`Bloodied.weapon` exists now** (#653), stamped by the `Cast` that
+    struck, which is the only thing that knows. The gate is in the body
+    rather than in the `on=` predicate because the comparison needs
+    `c.my_weapon()` -- the weapon this row's item sits on -- and a
+    predicate is handed no `Cast`.
 
-    Paragon steps are out of scope."""
+    Without the gate any bloodying this wielder did paid out, which was
+    wider than the card. Paragon steps are out of scope."""
+    mine = c.my_weapon()
+    if mine is None or getattr(c.trigger, "weapon", "") != mine.ref:
+        return
     c.heal(10, on=c.me)
 
 
