@@ -11291,6 +11291,69 @@ class Cast:
 
     # -- added for the tail-3 batch ------------------------------------------
 
+    def run_penalty(
+        self, value: int, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"When you run, you take only a -2 penalty to attack rolls."
+
+        The printed penalty is -5 and `actions.perform` is the one site that
+        lays it. This says the **replacement**, not the difference, so a row
+        does not have to know what the printed number is -- the arithmetic
+        stays where the number does. Stored as the softening, clamped there,
+        because `Mods` holds numbers and a replacement cannot be summed.
+
+        Two sources both softening is the larger softening and not the sum,
+        which is what one shared `kind` buys: no card prints two of these
+        and a stacked pair would turn the penalty into a bonus.
+
+        #669. Before it there was no penalty to soften -- the run branch
+        laid the combat advantage and nothing else -- so `i1695x1` read
+        "running is not an action the engine takes", which had stopped
+        being true.
+        """
+        from .actions import RUN_PENALTY
+
+        return self.bonus(
+            "run_softened", max(0, RUN_PENALTY - value), on=on, until=until,
+            kind="run_softened",
+        )
+
+    def ignore_run_penalty(
+        self,
+        *,
+        against: int | None = None,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+        on: int | None = None,
+        until: When = When.SONT,
+    ) -> Effect | None:
+        """"You take no penalty on attack rolls against your p3069 target."
+
+        **Per-target, which is why it is a gate and not a flag.** The run
+        penalty is read with `resolve`'s attack context, which carries
+        `target`, so a waiver can answer for one creature and leave the
+        penalty standing against everybody else. A blanket version would
+        have been the easy thing to write and wrong for the one row that
+        asked.
+
+        `against=` names a creature; `when=` takes the predicate for a row
+        whose creature is not known when the trait arms -- `f2165`'s is
+        "whoever my p3069 is on", which can change mid-fight. Neither is
+        "all attacks", which is what omitting both means and what no card
+        this reaches prints.
+
+        `until=When.SONT` by default: the penalty itself lasts until the
+        start of your next turn, so a waiver outliving it would be a
+        standing permission nothing printed. #669.
+        """
+        gate = when
+        if against is not None and gate is None:
+            def gate(ctx: dict[str, Any], _who: int = against) -> bool:
+                return ctx.get("target") == _who
+
+        return self.bonus("run_waived", 1, on=on, until=until,
+                          kind="untyped", when=gate)
+
     def no_walk(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
         """"It cannot use move actions to walk or run." It may still shift.
 

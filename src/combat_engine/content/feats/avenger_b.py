@@ -59,6 +59,7 @@ from combat_engine.engine import (
 from combat_engine.engine.basic import RANGED
 from combat_engine.engine.components import Position
 from combat_engine.engine.dsl import get
+from combat_engine.engine.events import MoveEnd
 from combat_engine.engine.grid import distance, spread
 from combat_engine.engine.query import (
     allies,
@@ -278,12 +279,51 @@ def f2162(c: Cast) -> None:
     """
 
 
-@power("f2165", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+@power("f2165", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
 def f2165(c: Cast) -> None:
     """Cancels the run action's attack penalty against the sworn enemy.
-    There is no run action: `actions.legal` offers a walk, a shift, a
-    charge and the standard menu, and running is not on it."""
+
+    **The old note was right in 2026 and wrong by the time anyone read
+    it**: "there is no run action: `actions.legal` offers a walk, a shift,
+    a charge and the standard menu, and running is not on it". It is on it
+    now. What was actually missing was the penalty -- `actions.perform`
+    laid the combat advantage and nothing else -- which is #669.
+
+    Two printed conditions and they are asked in two different places,
+    because they are about two different moments.
+
+    * **"If you end a run action adjacent to a target of your p3069"** is
+      about the move, so it is a `MoveEnd` watch reading `kind_ == "run"`.
+      `walk` threads the kind through, so this is exact rather than "ran
+      this turn".
+    * **"No penalty on attack rolls against your p3069 target"** is about
+      the swing, so it is the gate on the waiver and not a condition here:
+      the penalty is read with `resolve`'s attack context, which carries
+      `target`, and a blanket waiver would cover every other enemy on the
+      board.
+
+    `usage=AT_WILL` and not the declared `ENCOUNTER`: the card puts no
+    budget on it, and `ENCOUNTER` on a row with a trigger means once per
+    fight. It cost nothing while the body was empty.
+
+    **No `trigger=`/`on=` in the header**, deliberately. This is a trait:
+    it arms once and lays a watch, and a row that declares `on=` has its
+    body run only when the trigger fires -- so the watch would never be
+    laid. `f2362` is the same shape and its driver rule asserts exactly
+    that about it."""
+    me = c.me
+
+    def ended_a_run(ev: MoveEnd) -> None:
+        if ev.actor != me or ev.kind_ != "run":
+            return
+        if any(sworn(c.world, me, foe) for foe in c.within(1, side="enemy")):
+            c.ignore_run_penalty(
+                on=me, until=When.SONT,
+                when=lambda ctx: sworn(c.world, me, ctx.get("target")),
+            )
+
+    c.watch(MoveEnd, ended_a_run, on=me, until=When.ENCOUNTER)
 
 
 @power("f2009", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -13,9 +13,9 @@ scored on the choice it actually made.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from .components import Budget, Build, Health, Position, Powers
+from .components import Budget, Build, Health, Mod, Position, Powers
 from .dsl import affordable, aim_points, candidates, get, usable
 from .durations import When
 from .grid import Square, distance, spread
@@ -26,6 +26,19 @@ from .types import ActionType, Condition, Relation, Usage
 if TYPE_CHECKING:
     from .ecs import World
     from .turns import Encounter
+
+
+#: What running costs the runner on every attack roll until the start of
+#: its next turn. The printed action is three things -- speed + 2, this,
+#: and granting combat advantage -- and for a long time only the third was
+#: here, so running was cheaper in this engine than on the page and the AI
+#: policy was scoring it that way.
+#:
+#: A constant because two rows change it and neither should have to know
+#: the number: `c.run_penalty(2)` says the replacement and the arithmetic
+#: from 5 happens here. The rule gives no higher figure at any tier, so
+#: unlike the high-crit dice this needs no level band. #669.
+RUN_PENALTY = 5
 
 
 @dataclass(frozen=True)
@@ -1270,14 +1283,38 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # "You grant combat advantage until the start of your next turn."
         # Unless something says otherwise -- the ranger's stance is the
         # printed exception and turns this off with `run_exposed`.
-        if _mods(world, actor, "run_exposed", {}) >= 0:
+        # **Two printed consequences, and only one was here.** The action is
+        # speed + 2, *a -5 penalty to all your attack rolls* until the start
+        # of your next turn, and granting combat advantage until the same
+        # moment. The penalty was modelled nowhere, so running was cheaper in
+        # this engine than on the page and the policy was scoring it that
+        # way. Two rows wait on it and both *change* it, which is why it is a
+        # gated `Mod` rather than a number in `resolve`. #669.
+        relations = [
+            (Relation.GRANTS_CA_TO, actor, e)
+            for e in enemies(world, actor)
+            if alive(world, e)
+        ] if _mods(world, actor, "run_exposed", {}) >= 0 else []
+        # "You take only a -2 penalty" -- `i1695x1`. Softening, not a
+        # replacement, so two sources cannot fight over which number wins;
+        # clamped at 0 because nothing turns the penalty into a bonus.
+        paid = max(0, RUN_PENALTY - _mods(world, actor, "run_softened", {}))
+        mods = []
+        if paid:
+            # "No penalty on attack rolls **against your p3069 target**" --
+            # `f2165`. Per-target, so the waiver has to be asked at the swing
+            # with the attack context rather than when the running happened:
+            # `resolve`'s ctx carries `target`, and `run_waived` is an
+            # ordinary gated modifier like every other narrow permission here.
+            def unwaived(ctx: dict[str, Any]) -> bool:
+                return _mods(world, actor, "run_waived", ctx) <= 0
+
+            mods = [(actor, Mod(what="attack", value=-paid, kind="untyped",
+                                label="running", when=unwaived))]
+        if relations or mods:
             world.effects.apply(
                 actor, actor, When.SONT, label="running",
-                relations=[
-                    (Relation.GRANTS_CA_TO, actor, e)
-                    for e in enemies(world, actor)
-                    if alive(world, e)
-                ],
+                relations=relations, mods=mods,
             )
         return True
 

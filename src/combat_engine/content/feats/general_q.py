@@ -1898,12 +1898,27 @@ def f3297(c: Cast) -> None:
 
 
 @power("f3308", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.run()",))
+       reach=PERSONAL, target=SELF)
 def f3308(c: Cast) -> None:
-    """The point-spend half is writable because `ActionSpent` names the
-    cost: a move action is announced and the bonus is laid inside the
-    turn it belongs to. Running is not an action this engine has, so the
-    standing +1 on a run or a charge is the dropped half."""
+    """All of it now, and the marker was stale rather than wrong.
+
+    **"Running is not an action this engine has" has been false since
+    `actions._movement` built one**, and `f2278` already carries that
+    correction for this same pair of clauses -- along with how the two
+    halves divide, which is the part worth copying rather than
+    rediscovering: a charge is measured through `"speed"` with `charge` in
+    the context, and a run is measured through `"run"`, which is the +2 the
+    action adds. So +1 on `"run"` is +1 on the run's distance.
+
+    Nothing in #669 was needed for this; the row has been writable for as
+    long as the run action has existed.
+
+    The point-spend half is unchanged: `ActionSpent` names the cost, so a
+    move action is announced and the bonus is laid inside the turn it
+    belongs to."""
+    c.bonus("run", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
+    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+            when=lambda ctx: bool(ctx.get("charge", False)))
 
     def hustle(ev: Any) -> None:
         if ev.actor != c.me or ev.cost != ActionType.MOVE:

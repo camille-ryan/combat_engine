@@ -37,8 +37,16 @@ the power *is* the whole benefit.
 What is still missing there is smaller than a verb. `Character` has no
 field naming which option was taken, so `granted` always deals the first
 of the list and a player cannot pick. That is one field in `chargen.py`
-beside `race`, and no row waits on it: a row reading `Powers.known` is
-right whichever one is dealt.
+beside `race`.
+
+**This used to end "and no row waits on it: a row reading `Powers.known`
+is right whichever one is dealt", and that is true of four rows and false
+of nine.** The four *fork* on which option arrived and are right either
+way. The nine feats keyed to `rt:r6-t3`'s borrowed power do not fork:
+they need the branch where the borrow happened, and since `granted`
+always deals `p13689` the trait always takes its early return and never
+borrows anything. Six races deal one of a list and all six always deal
+the same thing. #680.
 
 What the engine still cannot say, and what is therefore marked, is in
 each row's own docstring; nothing in this file is blocked on a symbol

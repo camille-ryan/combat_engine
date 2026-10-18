@@ -18211,7 +18211,209 @@ def once_during_each_of_your_turns(out: Result) -> None:
              " the row is a no-op rather than a board-wide grant",
              f"{blank.in_telepathy()}")
 
+def the_run_action_costs_what_it_costs(out: Result) -> None:
+    """Running is speed + 2, **-5 to attack rolls**, and granting combat
+    advantage. Only the third was modelled.
+
+    #669. `actions.perform`'s run branch laid the combat-advantage relations
+    and nothing else, so running in this engine was cheaper than on the page
+    and the AI policy was scoring it that way. Two rows wait on the penalty
+    and **both change it**, which is why it is a gated `Mod` read at the
+    swing rather than a number inside `resolve`:
+
+    * `i1695x1` softens it to -2
+    * `f2165` waives it against one creature only
+
+    The run-only prohibition that was the other half of this branch is
+    **not** here. #670's one row is on `m5452`, which `loader.UNUSABLE`
+    refuses for an all-zero stat line, so `c.no_run` would have no fieldable
+    row to prove it with -- and a rule asserting a verb no card can reach is
+    the shape this suite exists to avoid.
+
+    **Asserted through a real swing**, not by reading the modifier back: a
+    rule that asked `Mods.total("attack")` would pass with the mod laid and
+    nothing consulting it, which is this component's signature failure.
+    `resolve` totals `"attack"` with the full context at one site, and the
+    waiver needs that context's `target`, so the swing is the only honest
+    question.
+    """
+    from typing import Any
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine.engine.actions import legal, perform
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense, Relation
+
+    def board_with_an_encounter():  # noqa: ANN202
+        world, me, _ = _board()
+        enc = world.encounter
+        return world, me, enc
+
+    # -- the board, and a run to take ------------------------------------
+    world, me, enc = board_with_an_encounter()
+    if enc is None:
+        out.skip("the board has no encounter, so nothing can be offered")
+        return
+    out.that("run" in {a.kind for a in legal(world, enc, me)},
+             "a run is on the menu at all -- the action exists, which is what"
+             " four rows' docstrings still deny",
+             f"{sorted({a.kind for a in legal(world, enc, me)})}")
+
+    # -- #669: what a run costs the runner --------------------------------
+    def swing_bonus(w: Any, actor: int, victim: int, ref: str) -> int:
+        """The bonus on a real swing, which is where the penalty is read."""
+        seen: list[AttackRolled] = []
+        w.bus.on(AttackRolled, seen.append, owner=actor)
+        caster = Cast(world=w, me=actor, ref=ref)
+        caster.target = victim
+        caster.attack(0, Defense.AC, on=victim)
+        return seen[-1].bonus if seen else 0
+
+    def run_once(w: Any, e: Any, actor: int) -> bool:
+        runs = [a for a in legal(w, e, actor) if a.kind == "run"]
+        return bool(runs) and perform(w, e, actor, runs[0])
+
+    def cost_of_running(w: Any, actor: int, victim: int, ref: str) -> int:
+        """What the live run is charging this swing, in points.
+
+        **Measured against the same board with the run's own effect ended**,
+        not against the board before the run. Comparing across the move was
+        the first draft and it read 7 where the printed figure is 5: running
+        moves the creature, so the second swing picks up a -2 the move
+        earned -- long range, or cover the runner no longer has a clear line
+        past. That -2 is correct and is not this.
+
+        **And a warm-up swing first, which is the second thing this got
+        wrong.** The audit board hands the caster combat advantage on its
+        *first* attack and one swing spends it, so a reading taken first
+        carried +2 that the reading taken second did not -- and the rule
+        reported the penalty as 3 where it is 5, and as 0 where it is 2.
+        Both readings were honest; the board was pre-setting the number
+        being measured, which is this suite's standing trap. Measured on a
+        board that has already swung once, the figures are exact:
+
+            before the run #1   bonus= 2  adv=True
+            before the run #2   bonus= 0  adv=False
+            after  the run      bonus=-5
+            running ended       bonus= 0
+
+        So the only thing that changes between the two readings here is
+        whether the `"running"` effect is standing, which is the question.
+        """
+        swing_bonus(w, actor, victim, ref)       # spend the board's own CA
+        before = swing_bonus(w, actor, victim, ref)
+        live = [e for e in w.effects.of(actor) if e.label == "running"]
+        for eff in live:
+            w.effects.end(eff, "drivers: measuring")
+        after = swing_bonus(w, actor, victim, ref)
+        return after - before
+
+    world3, me3, enc3 = board_with_an_encounter()
+    if enc3 is None:
+        out.skip("the third board has no encounter")
+        return
+    foes = sorted(enemies(world3, me3))
+    out.that(len(foes) >= 2, "two enemies, so the waiver has somebody to"
+             " NOT apply to", f"{foes}")
+    if len(foes) < 2:
+        return
+    foe = foes[0]
+
+    out.that(run_once(world3, enc3, me3),
+             "the run is on the menu and `perform` carries it out")
+
+    # The half that always worked, asserted BEFORE the measurement ends the
+    # effect, and asserted at all so the restructuring cannot quietly drop
+    # it.
+    live = [e.label for e in world3.effects.of(me3)]
+    out.that("running" in live,
+             "and the same effect still carries the combat advantage",
+             f"{live}")
+    out.that(world3.relations.holds(Relation.GRANTS_CA_TO, me3, foe),
+             "which is what granting it means")
+
+    paid = cost_of_running(world3, me3, foe, "drivers:running")
+    out.that(paid == 5,
+             "running costs the runner -5 on its attack rolls -- the half of"
+             " the printed action that was modelled nowhere",
+             f"it charged {paid}")
+
+    # -- the penalty softened: `i1695x1` ----------------------------------
+    world4, me4, enc4 = board_with_an_encounter()
+    if enc4 is None:
+        out.skip("the fourth board has no encounter")
+        return
+    foe4 = sorted(enemies(world4, me4))[0]
+    c4 = Cast(world=world4, me=me4, ref="drivers:running")
+    c4.run_penalty(2, on=me4, until=When.ENCOUNTER)
+    out.that(run_once(world4, enc4, me4), "the softened runner runs")
+    soft = cost_of_running(world4, me4, foe4, "drivers:running")
+    out.that(soft == 2,
+             "`c.run_penalty(2)` makes it -2 and not -5, which is"
+             " `i1695x1`'s whole clause",
+             f"it charged {soft}")
+
+    # -- the penalty waived against one creature: `f2165` -----------------
+    world5, me5, enc5 = board_with_an_encounter()
+    if enc5 is None:
+        out.skip("the fifth board has no encounter")
+        return
+    foes5 = sorted(enemies(world5, me5))
+    sworn, bystander = foes5[0], foes5[-1]
+    c5 = Cast(world=world5, me=me5, ref="drivers:running")
+    c5.ignore_run_penalty(against=sworn, on=me5, until=When.ENCOUNTER)
+    out.that(run_once(world5, enc5, me5), "the waived runner runs")
+    # **Both read before either is ended**, so the two questions are asked
+    # of the same standing effect. `cost_of_running` ends it, so the order
+    # matters: the bystander is measured first and the sworn target's
+    # reading would otherwise be taken with no run standing at all -- which
+    # answers 0 whether the waiver works or not. The sort of vacuous pass
+    # this suite exists to refuse.
+    swing_bonus(world5, me5, bystander, "drivers:running")   # warm-up; see
+    swing_bonus(world5, me5, sworn, "drivers:running")       # cost_of_running
+    at_other = swing_bonus(world5, me5, bystander, "drivers:running")
+    at_sworn = swing_bonus(world5, me5, sworn, "drivers:running")
+    for eff in [e for e in world5.effects.of(me5) if e.label == "running"]:
+        world5.effects.end(eff, "drivers: measuring")
+    free_other = swing_bonus(world5, me5, bystander, "drivers:running")
+    free_sworn = swing_bonus(world5, me5, sworn, "drivers:running")
+    out.that(free_sworn - at_sworn == 0,
+             "no penalty against the named creature",
+             f"it charged {free_sworn - at_sworn}")
+    out.that(free_other - at_other == 5,
+             "and the FULL penalty against everybody else -- the negative"
+             " control, without which a blanket waiver would pass",
+             f"it charged {free_other - at_other}")
+
+    # -- the two clauses are independent ----------------------------------
+    # `run_exposed` is the ranger stance's printed exception and suppresses
+    # the combat advantage. It must not touch the attack penalty: no card
+    # prints both halves at once, and folding them would make the stance
+    # silently better than it reads.
+    world6, me6, enc6 = board_with_an_encounter()
+    if enc6 is None:
+        out.skip("the sixth board has no encounter")
+        return
+    foe6 = sorted(enemies(world6, me6))[0]
+    c6 = Cast(world=world6, me=me6, ref="drivers:running")
+    c6.penalty("run_exposed", 1, on=me6, until=When.ENCOUNTER)
+    out.that(run_once(world6, enc6, me6), "the unexposed runner runs")
+    out.that(not world6.relations.holds(Relation.GRANTS_CA_TO, me6, foe6),
+             "`run_exposed` still suppresses the combat advantage")
+    exposed = cost_of_running(world6, me6, foe6, "drivers:running")
+    out.that(exposed == 5,
+             "and leaves the attack penalty alone -- two printed clauses,"
+             " two keys, and no card prints both",
+             f"it charged {exposed}")
+
 DRIVERS = {
+    "run_costs": (
+        the_run_action_costs_what_it_costs,
+        "running is speed + 2, -5 to attack rolls, and granting combat advantage",
+    ),
     "telepathy_radius": (
         a_radius_two_races_print,
         "telepathy is a radius two races print, and three rows measure in it",

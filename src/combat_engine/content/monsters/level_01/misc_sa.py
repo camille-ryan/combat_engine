@@ -166,7 +166,7 @@ def m5452a1(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.run()",),
+    dropped=("c.no_run()",),
 )
 def m5452a2(c: Cast) -> None:
     """A conjuration's whole move action, printed out because it has none of
@@ -174,8 +174,17 @@ def m5452a2(c: Cast) -> None:
     and the only one worth offering a policy; standing, crawling and shifting
     are already in the action menu for anything that can move at all.
 
-    "It cannot run" is the clause with nothing to say it: nothing forbids a
-    run.
+    **"It cannot run" is re-pointed rather than written, and the old note
+    was wrong about why.** It said "nothing forbids a run", and something
+    does: `c.no_walk`. The trouble is that its own docstring says it takes
+    "walk **or** run", and walking its speed is what this row is *for*. So
+    the gap is a run-only prohibition, `c.no_run()`, which is #670.
+
+    Not built, and the reason is a measurement rather than an opinion:
+    `m5452` is in `loader.UNUSABLE` -- "stat line parsed to all zeroes,
+    including hit points" -- so nothing may field this creature and the verb
+    would have no fieldable row behind it. The marker is what makes this
+    findable the day a second card prints the clause.
     """
     c.move(c.speed_of())
 

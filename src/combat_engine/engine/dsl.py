@@ -481,8 +481,12 @@ class Target:
     #: fault `content/CLAUDE.md` states: a symbol doing duty for two needs
     #: cannot go red or green correctly for either.
     #:
-    #: So the general `Target.any_of` is still unbuilt and still wanted by
-    #: those four, and this field says only what it does.
+    #: The general `Target.any_of` **landed in #656** and those four rows
+    #: were written in the same wave; this comment said it was "still
+    #: unbuilt and still wanted" for as long as that took, which is the
+    #: hazard of arguing a gap in the place the gap is not. The naming
+    #: argument above still holds and is why the two fields are two
+    #: fields: this one says only what it does.
     #:
     #: Eight rows print one sentence that needs it: "allies of its own
     #: sort" counts an ally that carries the printed type word *or* one of

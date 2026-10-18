@@ -2872,10 +2872,20 @@ def i1614p1(c: Cast) -> None:
 
 
 @power("i1695x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.run()",))
+       reach=PERSONAL, target=SELF)
 def i1695x1(c: Cast) -> None:
-    """Running is not an action the engine takes, so there is no -5 to
-    soften."""
+    """"Only a -2 penalty to attack rolls" when you run.
+
+    **The old note said "running is not an action the engine takes, so
+    there is no -5 to soften", and both halves of that were wrong by the
+    end.** `actions._movement` builds a run and `actions.perform` walks it;
+    what was missing was the -5 itself, which that branch never laid --
+    it modelled the combat advantage and nothing else. #669.
+
+    `c.run_penalty(2)` says the replacement rather than the difference, so
+    the arithmetic from the printed 5 stays at the one site that lays the
+    penalty and this row does not have to know what 5 is."""
+    c.run_penalty(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1695p1", level=8, cls=ITEM, usage=ENCOUNTER, action=MINOR,

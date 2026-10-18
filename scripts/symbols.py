@@ -140,6 +140,16 @@ CATEGORIES: dict[str, dict] = {
                 "may_enter", "resist_forced", "shares_space",
                 "speed_of", "squares_for",
             ]),
+            # **Two attack modifiers, filed under movement on purpose.**
+            # Both are about what the *run action* costs -- the printed -5
+            # until the start of your next turn -- so an author looking for
+            # "what does running cost" reads this page and not
+            # `modifiers.md`. The same judgement `c.hide` got in reverse:
+            # placed by what the docstring is about rather than by the
+            # mechanism it uses. #669.
+            ("what running costs", [
+                "ignore_run_penalty", "run_penalty",
+            ]),
             ("modes and mounts", [
                 "lose_mode", "mode", "mount", "move_companion",
             ]),

@@ -497,33 +497,42 @@ def _any_reroll_of_mine(world: World, me: int, ev: Any) -> bool:
 @power("f1697", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you reroll an attack roll, a skill check or an ability check",
-       on=Trigger(Rerolled, _any_reroll_of_mine, "you roll a d20 again"),
-       dropped=("c.grants_advantage(everyone=)",))
+       on=Trigger(Rerolled, _any_reroll_of_mine, "you roll a d20 again"))
 def f1697(c: Cast) -> None:
     """+2 on the reroll, and combat advantage to all attackers if it came
-    out worse.
+    out worse. Both clauses now.
 
-    The bonus is the half that plays. It answers any reroll of this
-    creature's, narrowing on neither a ref nor a power, which is what the
-    card prints -- so it reads `Rerolled` bare where the racial-power feats
-    use `rerolled_by`.
+    The bonus answers any reroll of this creature's, narrowing on neither a
+    ref nor a power, which is what the card prints -- so it reads
+    `Rerolled` bare where the racial-power feats use `rerolled_by`.
 
-    Two clauses are short and both are `dropped=` rather than notes. The
-    **ability check** is a roll this engine does not have, with eleven other
-    rows waiting on it. And "grants combat advantage to **all** attackers"
-    has no spelling: `c.grants_advantage(to=)` names one beneficiary, an
-    ally, or your own side -- there is no word for the other side, and
-    looping over the enemies on the board at this instant would miss
-    whatever arrives next. #496.
+    "If the second result is less than the first" is `ev.new < ev.old`.
+    Those are the **faces** and not the totals, which is what the card
+    compares: a total carries modifiers the sentence does not mention.
 
-    **The marker is spelled `everyone=` and was first written
-    `to='everyone'`, which `todo.py` reported as already existing.** A
-    symbol naming a *value* for a kwarg that exists collides with the verb
-    itself, so the row read as ready the moment it was marked. A kwarg that
-    genuinely does not exist is the only shape the check can answer
-    honestly.
+    **Two reasons were given for dropping the rest and both had stopped
+    being true.**
+
+    * *"`c.grants_advantage(to=)` names one beneficiary, an ally, or your
+      own side -- there is no word for the other side."* `to="enemies"` is
+      that word, added for the eight monster rows printing "grants combat
+      advantage to any enemy".
+    * *"The ability check is a roll this engine does not have, with eleven
+      other rows waiting on it."* `c.ability_check` exists, and
+      `blocked.py --group` lists one row waiting on a *parameter* of it
+      rather than eleven on the verb. Nothing here needs it anyway: the
+      trigger is any reroll, so an ability-check reroll already arrives if
+      one is ever made.
+
+    The residual is smaller than the marker was and is written rather than
+    carried: `to="enemies"` is the enemies standing there when the grant is
+    laid, so a creature arriving later is not covered. That errs **against**
+    this creature, which is the safe direction (`m5808a0`), where leaving
+    the clause out errs against the whole card. #496, #667.
     """
     c.boost_roll(2)
+    if c.trigger.new < c.trigger.old:
+        c.grants_advantage(on=c.me, to="enemies", until=When.EONT)
 
 
 @power("f1704", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

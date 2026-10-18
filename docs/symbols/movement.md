@@ -87,6 +87,13 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
 - `c.squares_for(self, ref: 'str' = '', default: 'int' = 0, ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How far this row moves this creature, after anything lengthening it.
 
+## what running costs
+
+- `c.ignore_run_penalty(self, *, against: 'int | None' = None, when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.SONT: "start of source's next turn">) -> 'Effect | None'`
+  - "You take no penalty on attack rolls against your p3069 target."
+- `c.run_penalty(self, value: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "When you run, you take only a -2 penalty to attack rolls."
+
 ## modes and mounts
 
 - `c.lose_mode(self, name: 'str', *, until: 'When' = <When.EOTNT: "end of target's next turn">, on: 'int | None' = None) -> 'Effect | None'`
