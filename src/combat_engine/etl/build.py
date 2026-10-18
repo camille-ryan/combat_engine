@@ -323,7 +323,39 @@ CREATE INDEX feat_category ON feat(category);
 -- feats gate on one, and the racial powers are already in `power` -- the
 -- compendium files them under the race in its Class column.
 CREATE TABLE race (
-  ref TEXT PRIMARY KEY, id INTEGER, size TEXT, scores TEXT, spec TEXT
+  ref TEXT PRIMARY KEY, id INTEGER, size TEXT, scores TEXT, spec TEXT,
+  -- **Skill training, which a race could not carry at all.** The three
+  -- columns are `feat.trains` / `trains_choice` / `trains_from` by name and
+  -- by meaning, so `chargen._trained_skills` reads a race the same way it
+  -- reads a feat, and `_from_class_list` is reused rather than twinned.
+  --
+  -- Exactly three racial traits print training and all three are here:
+  --
+  --   rt:r52-t3  "You have training in Stealth."
+  --              -> trains = "stealth"
+  --   rt:r3-t0   "You gain training in one skill of your choice."
+  --              -> trains_choice = all seventeen
+  --   rt:r7-t1   "...one additional skill from your class skills list."
+  --              -> trains_from = "class"
+  --
+  -- Two of those need a word about the storage.
+  --
+  -- **Enumerating all seventeen is the reading, not an invention.** "A
+  -- skill of your choice" *is* the whole table, and writing it out means
+  -- `chargen` samples one with the same two lines it already uses for a
+  -- feat's choice. The alternative -- a token meaning "any" -- would make
+  -- the reader branch on a value only a race can hold.
+  --
+  -- **`trains_from = "class"` is the one invented token in these columns**,
+  -- and it cannot collide: every other value of this column on either table
+  -- is a printed class or build name ("ranger", "executioner assassin"),
+  -- and no class is called that. The page says "your class skills list" and
+  -- names no class, because the character supplies it -- which is a thing
+  -- `feat.trains_from` never has to express.
+  --
+  -- Was the gap in #688: `Skills.trained` is +5 on a skill (`skills.TRAINING`,
+  -- read since #565), so every elf, human and one more race was short one.
+  trains TEXT, trains_choice TEXT, trains_from TEXT
 );
 
 -- Which skills a race is good at, and by how much. The racial twin of

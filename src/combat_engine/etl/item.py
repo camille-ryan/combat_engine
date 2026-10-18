@@ -201,6 +201,59 @@ _SKILL_BONUSES = re.compile(r"^Skill Bonuses?\s*:\s*(.+)$", re.M)
 _ONE_BONUS = re.compile(r"([+-]\d+)\s+([A-Za-z]+)")
 
 
+#: "You have training in Stealth", "You gain training in one skill of your
+#: choice", "...one additional skill from your class skills list". Three
+#: racial traits print one of these and nothing else does.
+_TRAINS = re.compile(r"train(?:ing|ed) in ([^.;]*)", re.I)
+
+#: The one shape whose pool is the character's own class list rather than a
+#: named one. `feat.trains_from` holds a printed class and has no way to say
+#: this, because on a feat the page always names the class.
+_OWN_LIST = re.compile(r"from your class skills?\s*list", re.I)
+
+
+def _race_training(traits: list[tuple[str, str]]) -> tuple[str, str, str]:
+    """`(trains, trains_choice, trains_from)` for one race's trait lines.
+
+    The same three columns `feat.trains*` carries, filled by the same
+    argument: granted, chosen-from-a-pool and chosen-from-a-class-list are
+    three different sentences, and reading them all as the first trains one
+    character in every option a card offers between. #574 measured that on
+    the feat side; this is the racial twin. #688.
+
+    Every skill word is checked against `skills.SKILLS` rather than
+    trusted, because the clause also contains "one", "additional" and
+    whatever the sentence goes on to say.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    granted: list[str] = []
+    choice = ""
+    from_list = ""
+    for _label, rules in traits:
+        found = _TRAINS.search(rules or "")
+        if not found:
+            continue
+        clause = found.group(1)
+        if _OWN_LIST.search(clause):
+            # The character supplies the list, so there is no class to
+            # record. See `race.trains_from`'s comment for the token.
+            from_list = "class"
+            continue
+        named = sorted({
+            w.lower() for w in re.findall(r"[A-Za-z]+", clause)
+            if w.lower() in SKILLS
+        })
+        if named:
+            granted.extend(n for n in named if n not in granted)
+        else:
+            # "one skill of your choice" names nothing, and the pool it
+            # means is the whole table. Enumerated rather than tokenised --
+            # see the column's comment.
+            choice = ",".join(sorted(SKILLS))
+    return ",".join(granted), choice, from_list
+
+
 def _race_skills(spec: str) -> list[tuple[str, int]]:
     """Which skills this race gains a bonus to, and how much. See `race_skill`.
 
@@ -331,10 +384,12 @@ def races(
             # The label where every other printed name lives, and the rules text
             # beside it -- taken before the scrub, so the two are one extraction.
             names[trait_ref] = {"name": label, "rules_text": rules}
+        trains, trains_choice, trains_from = _race_training(traits)
         out.execute(
-            "INSERT INTO race VALUES (?,?,?,?,?)",
+            "INSERT INTO race VALUES (?,?,?,?,?,?,?,?)",
             (ref, row["ID"], size, json.dumps(_scores(spec)),
-             scrub(spec, {name: ref, **trait_refs, **options})),
+             scrub(spec, {name: ref, **trait_refs, **options}),
+             trains, trains_choice, trains_from),
         )
         # **Off the unscrubbed spec**, which is where the line still reads
         # "+2 History" rather than a ref. Nothing in it is a printed name --

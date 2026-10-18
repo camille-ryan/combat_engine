@@ -1676,8 +1676,13 @@ class Character:
     #: it carries the warlock's element. `meets` answers a race
     #: prerequisite off this field, which is 690 of the heroic feats.
     #:
-    #: See `DEAL_RACES` for why one is not dealt to a character that names
-    #: none.
+    #: **A character that names none is dealt one**, because `DEAL_RACES`
+    #: is on -- see `spawn`, which `replace`s this field before anything
+    #: below reads it. This comment said the opposite ("why one is not
+    #: dealt to a character that names none"), which is what the flag meant
+    #: while it was off, and it cost a real confusion: a `drivers.py` rule
+    #: used `race=""` as its raceless control and the control had a race.
+    #: #688.
     race: str = ""
 
     @property
@@ -2601,25 +2606,48 @@ def _from_class_list(db: sqlite3.Connection, printed: str,
     `_trained_skills` below and for the same #339 reason: the table's key
     is the printed word and `Character.cls` is a slug.
     """
+    pool = sorted(_class_skill_pool(db, printed))
+    return {rng.choice(pool)} if pool else set()
+
+
+def _class_skill_pool(db: sqlite3.Connection, printed: str) -> set[str]:
+    """Every skill on the class list a page names, by printed class word.
+
+    Split out of `_from_class_list` so `_plus_race` can read the pool
+    without also taking the draw: a race picking from the character's own
+    list has to exclude what it already has, which means seeing the pool
+    rather than one sample of it. #688.
+
+    Empty for a build ("executioner assassin") or a class this build does
+    not import -- never the parent's wider list, which is the narrowing
+    `_from_class_list`'s docstring argues for.
+    """
     rows = db.execute(
         "SELECT skill FROM class_skill WHERE lower(class) = ? ORDER BY skill",
         (printed.lower(),),
     ).fetchall()
-    if not rows:
-        # Either a build ("executioner assassin") or a class this build
-        # does not import. Nothing, rather than the parent's wider list.
-        return set()
-    pool = sorted({r["skill"] for r in rows})
-    return {rng.choice(pool)} if pool else set()
+    return {r["skill"] for r in rows}
 
 
-def _trained_skills(cls: str, feats: list[str], rng: Random) -> frozenset[str]:
+def _trained_skills(cls: str, feats: list[str], rng: Random,
+                    race: str = "") -> frozenset[str]:
     """Which skills this character is trained in: the given, plus the chosen.
 
     Off `class_skill`, which `etl/build.py` fills from the two sentences
     every class page prints -- "Trained Skills: Stealth, Thievery." and
     "Class Skills: ...". `granted=1` is the first sentence, `granted=0` the
     pool, and `class.skill_choices` is how many of the pool to take. #565.
+
+    **And off the race, which was missing entirely.** Three racial traits
+    print skill training -- `rt:r3-t0`, `rt:r7-t1`, `rt:r52-t3` -- and this
+    was the only writer of `Skills.trained` with no race among its sources,
+    so every character of those races was short one trained skill. That is
+    **+5** on it (`skills.TRAINING`), and for `rt:r52-t3` it is +5 to
+    Stealth, which `query.hidden_from` consumes inside a fight. #688.
+
+    The three rows themselves stay inert and are not at fault: where
+    training is granted is chargen and not a body, because the sheet is
+    made before the board is.
 
     **Matched case-insensitively on purpose.** `Character.cls` is a slug
     (`"fighter"`) and the table's key is the printed word (`"Fighter"`),
@@ -2680,7 +2708,64 @@ def _trained_skills(cls: str, feats: list[str], rng: Random) -> frozenset[str]:
     # exchange, which is the printed rule and the reason the sample is
     # taken before the union rather than from `pool - from_feats`.
     chosen = set(rng.sample(pool, min(picks, len(pool))))
-    return frozenset(given | chosen | from_feats)
+    return frozenset(
+        _plus_race(db, cls, race, given | chosen | from_feats, rng)
+    )
+
+
+def _plus_race(db: sqlite3.Connection, cls: str, race: str,
+               already: set[str], rng: Random) -> set[str]:
+    """Add the race's printed training to a set already holding the rest.
+
+    The same three branches `_trained_skills` reads a feat with, because
+    `race.trains` / `trains_choice` / `trains_from` are the same three
+    columns: granted, chosen-from-a-pool and chosen-from-a-class-list are
+    three different sentences, and folding them would train one character in
+    every option a page offers between -- #574 measured that on the feat
+    side. #688.
+
+    **Last, and the two reasons are different.**
+
+    *It must not perturb the class sample.* A draw taken before
+    `rng.sample` shifts it, so adding this moved which skills every elf and
+    human got from their class list -- a second change, hidden inside the
+    first. Taken here, the class picks are what they always were.
+
+    *"One additional skill" means additional.* `rt:r7-t1` picks from the
+    character's own class list, which is the pool the class just sampled, so
+    a collision is the common case rather than the rare one -- and reading
+    it as "no extra skill" would make the trait worth nothing to a human
+    about half the time. So the choice is made from what is left.
+
+    That is **not** how the feat branch behaves, deliberately: a feat
+    training a skill the class also offers is one training and does not buy
+    a free pick, which is the printed rule there and is documented where it
+    happens. The difference is in the two cards, not in the two readers.
+    """
+    if not race:
+        return already
+    got = db.execute(
+        "SELECT trains, trains_choice, trains_from FROM race WHERE ref = ?",
+        (race,),
+    ).fetchone()
+    if got is None:
+        return already
+    out = set(already)
+    # Granted outright: no choice to make, so a collision is just one
+    # training rather than a wasted pick.
+    if got["trains"]:
+        out |= {s for s in got["trains"].split(",") if s}
+    offered = [s for s in (got["trains_choice"] or "").split(",") if s]
+    if got["trains_from"]:
+        # `"class"` is the one value of that column which is not a printed
+        # class: the page says "your class skills list" and names none,
+        # because the character supplies it. See `race.trains_from`.
+        printed = cls if got["trains_from"] == "class" else got["trains_from"]
+        offered = sorted(_class_skill_pool(db, printed))
+    left = sorted(set(offered) - out)
+    if left:
+        out.add(rng.choice(left))
+    return out
 
 
 def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
@@ -2817,6 +2902,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
                 who.cls,
                 feats,
                 Random(f"{world.rng.seed}:{who.ref}:{who.level}:skills"),
+                who.race,
             )
         ),
         Gear(

@@ -20560,6 +20560,130 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_race_that_trains_a_skill(out: Result) -> None:
+    """Three racial traits print skill training and none of it was recorded.
+
+    #688. `chargen._trained_skills` was the only writer of `Skills.trained`
+    and its two sources were the class page and the character's feats. No
+    race. Being trained is **+5** (`skills.TRAINING`, read since #565), so
+    every character of these races was short one trained skill -- and for
+    `rt:r52-t3` that is +5 to Stealth, which `query.hidden_from` consumes
+    inside a fight.
+
+    `race.trains` / `trains_choice` / `trains_from` are the same three
+    columns `feat.trains*` carries and are read with the same three
+    branches, because granted, chosen-from-a-pool and chosen-from-a-class-
+    list are three different sentences. Folding them would train one
+    character in every option a page offers between -- #574 measured that
+    on the feat side.
+
+    **Asserted through `chargen.spawn`, not through `_trained_skills`.** The
+    bug was the *call site* omitting the race, so a rule that passed the
+    race to the helper itself would be green against the actual fault. That
+    is the same trap as [[assert through the caller, not the helper]], and
+    here the caller is three lines away from the helper in the same file.
+
+    The baseline is **`r1`, a race that prints a skill bonus and no
+    training** -- not `race=""`. `DEAL_RACES` is on, so a character naming
+    no race is dealt one, and the first draft used the raceless case as its
+    control: the control had a race. It read as a pass until a plant giving
+    *every* race training left it green, and `Character.race`'s own comment
+    said one was not dealt. Both are corrected.
+
+    So `r1` carries the negative control too -- a parse matching too widely
+    trains every character in something -- and the size of that baseline is
+    checked against the class page rather than against a second reading of
+    the same code.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.chargen import Character, spawn
+    from combat_engine.engine.components import Skills
+    from combat_engine.engine.skills import TRAINING, modifier
+
+    def dealt(cls: str, race: str):  # noqa: ANN202
+        """One character off the real path. Returns `(world, eid, trained)`.
+
+        A fresh board per character, borrowed from the auditor: `spawn`
+        mutates the world it is handed, and the skills stream is seeded off
+        `world.rng.seed` with the character's own ref -- which is
+        `c:<class>` and carries no race -- so two of these are comparable
+        only when the world is the same seed and a fresh object.
+        """
+        world, _caster, _ = _board()
+        eid = spawn(world, Character(cls=cls, level=1, race=race), (2, 2))
+        held = world.get(eid, Skills)
+        return world, eid, frozenset(held.trained if held else ())
+
+    # -- `rt:r52-t3`: training in Stealth, named outright -------------------
+    # A cleric, because its printed list has no Stealth -- so the training
+    # is visible rather than already there.
+    _bland_world, _bland, plain = dealt("cleric", "r1")
+    out.that("stealth" not in plain,
+             "a cleric of a race that prints no training is not trained in"
+             " stealth, so the racial training is measurable rather than"
+             " already present",
+             f"{sorted(plain)}")
+    world, me, shade = dealt("cleric", "r52")
+    out.that("stealth" in shade,
+             "and a cleric of the race whose trait prints training in"
+             " Stealth is trained in it, through `chargen.spawn`",
+             f"{sorted(shade)}")
+    # **Measured by taking the training away on the same creature**, not by
+    # comparing two races. Two races differ in Dexterity, in size, in their
+    # printed *skill bonus* -- `r52` prints +2 Stealth as well -- and in
+    # which armour they ended up in, so the first draft read `-1 -> 7` and
+    # called an 8-point gap a 5. Clearing the set and re-asking cancels
+    # every one of those terms and leaves TRAINING as the only difference.
+    with_it = modifier(world, me, "stealth")
+    held = world.get(me, Skills)
+    held.trained = frozenset(held.trained - {"stealth"})
+    out.that(with_it - modifier(world, me, "stealth") == TRAINING,
+             "which is worth exactly TRAINING on a stealth check, read off"
+             " `skills.modifier` where a check reads it",
+             f"{modifier(world, me, 'stealth')} untrained, {with_it} trained;"
+             f" TRAINING is {TRAINING}")
+
+    # -- the two that print a choice ---------------------------------------
+    # Counted rather than named: both pick one skill from a pool, so which
+    # one is a property of the seed and the *number* is the claim.
+    for race, what in (("r3", "a skill of your choice"),
+                       ("r7", "one more from your own class list")):
+        _w, _e, got = dealt("cleric", race)
+        out.that(len(got) == len(plain) + 1,
+                 f"{race} prints training in {what}, and its character ends"
+                 " up with one more trained skill than the same class of a"
+                 " race that trains nothing",
+                 f"{len(plain)} -> {len(got)}: {sorted(got)}")
+
+    # -- the control: the baseline really is the class's own training -----
+    # Against `class_skill` rather than against another race, so "no race
+    # trains this character" is checked on the page and not on a second
+    # reading of the same code. A parse matching too widely makes this
+    # baseline one bigger and the line goes red -- which is what the first
+    # draft of this rule could not see.
+    from combat_engine.chargen import _class_skill_pool
+    from combat_engine.db import game
+
+    db = game()
+    row = db.execute(
+        "SELECT skill_choices FROM class WHERE lower(name) = 'cleric'"
+    ).fetchone()
+    given = {r[0] for r in db.execute(
+        "SELECT skill FROM class_skill WHERE lower(class) = 'cleric'"
+        " AND granted = 1")}
+    owed = len(given) + int((row[0] if row else 0) or 0)
+    out.that(len(plain) == owed,
+             "and a race printing a skill bonus and no training leaves the"
+             " character with exactly what its class page gives -- the"
+             " granted skills plus its printed number of picks",
+             f"{len(plain)} trained; {len(given)} granted +"
+             f" {owed - len(given)} picks = {owed}")
+    out.that(bool(_class_skill_pool(db, "cleric")),
+             "measured against a class list that is actually populated, so"
+             " the arithmetic above is not two zeroes agreeing",
+             f"{len(_class_skill_pool(db, 'cleric'))} skills on the list")
+
+
 def a_racial_skill_pool_and_the_one_race_that_has_none(out: Result) -> None:
     """`f2900` pays +2 to a skill the race it imitates is good at.
 
@@ -21137,6 +21261,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "race_training": (
+        a_race_that_trains_a_skill,
+        "three racial traits that train a skill, which nothing read (#688)",
     ),
     "race_skills": (
         a_racial_skill_pool_and_the_one_race_that_has_none,

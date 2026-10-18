@@ -333,12 +333,12 @@ def rt_r2_t4(c: Cast) -> None:
 # -- r3 ----------------------------------------------------------------
 
 _inert("rt:r3-t0",
-       "Training in a skill of your choice. **There is a training model** "
-       "-- `Skills.trained` and the +5 landed in #565 -- and training is "
-       "granted in `chargen`, not in a body: the sheet is made before the "
-       "board is. What is missing is a race being able to carry it at all, "
-       "which `feat.trains` does and the `race` table has no column for. "
-       "#688.")
+       "Training in a skill of your choice. **Granted, and still inert "
+       "here, which is the point.** `race.trains_choice` carries the pool "
+       "-- all seventeen, because 'of your choice' is the whole table -- "
+       "and `chargen._trained_skills` samples one into `Skills.trained`, "
+       "worth +5 on it. The row does nothing in a body because the sheet "
+       "is made before the board is. #565, #688.")
 _inert("rt:r3-t1", "Proficiency, which is a build-time sentence.",
        proficiency=("w3610",))
 _inert("rt:r3-t5",
@@ -488,9 +488,12 @@ _inert("rt:r7-t0",
        "deals this race one more, which is where a build-time rule "
        "belongs.")
 _inert("rt:r7-t1",
-       "Training in one more skill. There is a training model (#565) and "
-       "`chargen` is where it is granted; a race cannot carry training "
-       "yet, which is #688.")
+       "Training in one more skill, from this character's own class list. "
+       "`race.trains_from` holds `\"class\"` for it -- the one value of "
+       "that column that is not a printed class, because the page names "
+       "none and the character supplies it -- and "
+       "`chargen._from_class_list` picks from the class's own pool. Inert "
+       "in a body for the same reason as `rt:r3-t0`. #688.")
 
 
 @power("rt:r7-t4", level=0, cls="", usage=AT_WILL,
@@ -1331,11 +1334,11 @@ _inert("rt:r52-t1",
        "Trading a class utility for a racial one, which is a choice made "
        "when the character is built.")
 _inert("rt:r52-t3",
-       "Training in Stealth. There is a training model -- #565 -- and "
-       "`chargen` is where training is granted, so this is inert in a body "
-       "by convention rather than for want of a reader. A race cannot "
-       "carry training yet, which is #688; for this row it costs +5 to "
-       "Stealth, which `query.hidden_from` reads inside a fight.")
+       "Training in Stealth, which `race.trains` now carries outright. It "
+       "is the one of the three that names a skill, and the one whose cost "
+       "was measurable: +5 to Stealth, read by `query.hidden_from` inside "
+       "a fight, and every character of this race was short it. Inert in a "
+       "body because training is granted in `chargen`. #688.")
 _origin("r52", "shadow", instead_of="natural")
 
 
