@@ -3808,17 +3808,31 @@ def a_trait_credited_through_one_event(out: Result) -> None:
                  " mean the first was not credited",
                  f"fired {got.fired} of {A.TRIES * 3 * 2} attempts")
 
-    # The four that are silent for want of gear, measured rather than
-    # asserted: their verdict is correct and the gap is the board's.
-    # Reported so the number cannot drift unnoticed, which is the shape
-    # `symbols.py` uses for its undocumented readers.
-    short = [ref for ref in ("f3785", "f2099", "f2400", "f396")
-             if A.audit(ref).silent]
-    out.that(len(short) == 4,
-             "four rows of the same shape are silent because the weapon"
-             " they name is not on any board the auditor builds -- gear,"
-             " not crediting, and #437's territory rather than #662's",
-             f"silent for want of gear: {short}")
+    # **These four were silent for want of gear and are not any more**,
+    # which is #663: `_attempts` arms the weapon a row's body names, as a
+    # third axis paid only by a row that has shown nothing. This block
+    # asserted `len(short) == 4` -- "four rows of the same shape are silent
+    # because the weapon they name is not on any board the auditor builds"
+    # -- and that was a true measurement of a board gap, recorded so the
+    # number could not drift unnoticed. The gap is closed, so the assertion
+    # is inverted rather than deleted: the same four rows, the same shape,
+    # and now none of them is silent.
+    #
+    # `f396` is not in the set. It was silent for the same *reason* and its
+    # body names no weapon ref at all -- `_wanted_weapon` reads
+    # `ref="wNNNN"` out of the source -- so the axis cannot reach it and
+    # saying so here is the honest half of the count.
+    armed = {ref: A.audit(ref).silent for ref in ("f3785", "f2099", "f2400", "f621")}
+    out.that(not any(armed.values()),
+             "the four rows that name a weapon in their body are credited"
+             " now, where every one of them used to be silent for want of"
+             " gear -- #663's third axis",
+             f"{armed}")
+    out.that(A.audit("f396").silent,
+             "and `f396` is still silent, because it names no weapon ref for"
+             " the axis to read -- the limit of the fix, stated rather than"
+             " rounded off",
+             f"{A.audit('f396').events}")
 
 
 def the_clause_that_applied_it(out: Result) -> None:
