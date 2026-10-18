@@ -199,16 +199,6 @@ KNOWN_SILENT = {
     "m5481a0": "tethers to the block it is fielded beside; the board fields it alone",
     "m5482a0": "tethers to the block it is fielded beside; the board fields it alone",
     "m135a3": "targets a destroyed undead ally; the board has none",
-    # Its whole printed benefit rewrites **one named weapon** -- by ref,
-    # because the group holds more than one bow and the card names one of
-    # them -- and `chargen` deals this holder a greataxe. So the write
-    # matches nothing and the row correctly does nothing, where its sibling
-    # `f1277` fires because the board happens to deal it the weapon its
-    # card names. Nothing about the row is conditional that the card does
-    # not make conditional; the same configurable-dummy fix retires it
-    # (#437). The alternative was asking by group, which would have
-    # lengthened every bow the character holds.
-    "f2099": "rewrites one named weapon; the board deals it another",
     # Its printed benefit holds only "while you're not wearing heavy armor",
     # and the board deals this character heavy armour -- so the row correctly
     # lays nothing. `f3722` is silent for the same sentence and the same
@@ -242,23 +232,6 @@ KNOWN_SILENT = {
     "f2860": "applies a shield bonus; the board's fighter holds no shield",
     "f949": "trades a shield bonus away; the board's fighter holds none",
     "i3207p1": "hands a shield's bonuses over; the board holds no shield",
-    # **Two entries that came back with corrected reasons, and the
-    # correction is the point.** Both were added as "not an event", which
-    # was true of the mechanism and wrong about why each row is quiet.
-    # `WeaponChanged` made the write visible; what is left is a board gap
-    # in one case and a second unannounced writer in the other. A reason
-    # that reads as the wrong kind of limit is the fault
-    # `scripts/CLAUDE.md` records about `m6655a0`, pointed the other way.
-    #
-    # `f3785` lays its property on an **unarmed** weapon, and no character
-    # the board deals carries one -- measured: the four parties hold axe,
-    # sling, implement, mace, hammer, light blade, crossbow, heavy blade
-    # and orb, and nothing with `group == "unarmed"` or `ref ==
-    # "w:unarmed"`. So it lays nothing, announces nothing, and is right.
-    # `f3786` beside it fires, because it names a printed weapon that is
-    # dealt. A dummy posing an unarmed combatant retires this one (#437),
-    # exactly as a shield-bearer retires `f1873`.
-    "f3785": "lays a property on an unarmed weapon; no dealt character carries one",
     # `i1101x1` goes through `items.weapon._longer_range`, which writes
     # `range_short` and `range_long` straight onto the carried copy and
     # still announces nothing -- the one writer `WeaponChanged` has not
@@ -1294,6 +1267,30 @@ def _wields_of(ref: str) -> list[str]:
     return _WIELDS.get(ref, [])
 
 
+def _put_in_hand(world, caster: int, ref: str) -> bool:  # noqa: ANN001
+    """Put one printed weapon in the caster's hands and wield it.
+
+    Lifted out of the prose path below, which reads a Requirement for a
+    weapon *word*; `_wanted_weapon` reads the body for a *ref*, and both
+    want the same three lines. A copy, for the reason `chargen.spawn` takes
+    one: `chargen.PRINTED` holds module-level singletons and `Cast.decay`
+    reduces enhancement in place.
+    """
+    from dataclasses import replace as _replace
+
+    from combat_engine.engine import Gear
+
+    gear = world.get(caster, Gear)
+    arm = chargen.PRINTED.get(ref)
+    if gear is None or arm is None:
+        return False
+    held = _replace(arm)
+    gear.weapons.append(held)
+    gear.wield(held)
+    _train(gear, held)
+    return True
+
+
 def _train(gear: object, held: object) -> None:
     """Count the handed-over weapon as one this character is trained with.
 
@@ -1456,11 +1453,17 @@ def _source_of(body: object, ref: str = "") -> str:
         return ""
 
 
-def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]]:
+def board(ref: str, seed: int, pose: bool = False,
+          arm: str = "") -> tuple[World, int, set[str]]:
     """A caster with the row, four creatures in reach, and the fight started.
 
     The third value is what got emitted while the encounter was starting,
     which is where a trait does its work.
+
+    `arm` puts one named weapon in the caster's hands, for the rows whose
+    printed clause is "when you wield X, X gets better" -- see
+    `_wanted_weapon` and `_attempts`. Off unless a row has already shown
+    nothing on every other arrangement, so it carries no collateral.
     """
     world = World(Grid(24, 16), Rng(seed), Bus())
     declared = get(ref)
@@ -1910,6 +1913,11 @@ def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]
     # traits, so a trait whose whole content is installing an effect is
     # still credited with having done something. Snapshotting after arming
     # reported a hundred and twenty-three correct traits as silent.
+    # **Before the traits arm**, which is the whole point for `f2400`: it
+    # is an `action=NONE` row, so it does its work as the encounter starts
+    # and a weapon put in hand afterwards is one it never saw. #663.
+    if arm:
+        _put_in_hand(world, caster, arm)
     world.setup_effects = set(world.effects.live)
     Encounter(world).start()
     # And again once every trait on the board is armed. Two snapshots,
@@ -3110,6 +3118,36 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
     return False
 
 
+#: Weapon refs a row's **body** names, by ref.
+#:
+#: `f2400` says `c.weapon_dice("1d8", ref="w3635")`, and four rows in #663
+#: name their weapon this way: every one of them says *"when you wield X, X
+#: gets better"*, so `c.weapon_dice` / `c.gains_property` / `c.weapon_range`
+#: walk `Gear.weapons` for a match and answer 0 when the board holds none.
+#: All four fired the full 48 attempts and emitted nothing.
+#:
+#: **`proficiency=` is not the fix**, and that is #663's own argument: none of
+#: these *grants* proficiency, so declaring it would make the header say
+#: something the card does not and `chargen.proficiency` would hand the
+#: character an arm it never paid for.
+_WANTED_WEAPON: dict[str, tuple[str, ...]] = {}
+
+_WEAPON_REF = re.compile(r'"(w[0-9]+|w:[a-z-]+)"')
+
+
+def _wanted_weapon(ref: str) -> tuple[str, ...]:
+    """Weapon refs this row's body names, in source order. Cached."""
+    if ref in _WANTED_WEAPON:
+        return _WANTED_WEAPON[ref]
+    row = get(ref)
+    seen: list[str] = []
+    for found in _WEAPON_REF.findall(_source_of(getattr(row, "body", None), ref)):
+        if found not in seen and found in chargen.PRINTED:
+            seen.append(found)
+    _WANTED_WEAPON[ref] = tuple(seen)
+    return _WANTED_WEAPON[ref]
+
+
 def _grip_for(world, caster: int, ref: str) -> None:  # noqa: ANN001
     """Draw a weapon this row can actually be used with, before provoking it.
 
@@ -3699,14 +3737,25 @@ def _attempts(out: Result):  # noqa: ANN202
     # global would not travel. The header is data and every worker reads it.
     claimed = get(out.ref)
     if claimed is not None and claimed.out_of_combat:
-        yield 1, None, False
+        yield 1, None, False, ""
         return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
                 if out.fired and (out.events & DID_SOMETHING):
                     return
-                yield seed, face, posed
+                yield seed, face, posed, ""
+    # **A third axis, on the same principle as the posed one.** A row naming
+    # a weapon its board does not hold can show nothing however it is posed,
+    # because the reader walks `Gear.weapons` and finds no match. Paid only
+    # by a row that has already shown nothing through every arrangement
+    # above, so it is free of collateral by construction -- #663.
+    for held in _wanted_weapon(out.ref):
+        for face in LOADED:
+            for seed in range(1, TRIES + 1):
+                if out.fired and (out.events & DID_SOMETHING):
+                    return
+                yield seed, face, False, held
 
 
 @contextlib.contextmanager
@@ -3942,9 +3991,9 @@ def audit(ref: str) -> Result:
     # something on this face, the rest re-prove the same thing. Eight of them
     # meant twenty-four boards for every row, and the audit builds a hundred
     # thousand boards.
-    for seed, face, posed in _attempts(out):
+    for seed, face, posed, held in _attempts(out):
         try:
-            world, caster, _armed = board(ref, seed, pose=posed)
+            world, caster, _armed = board(ref, seed, pose=posed, arm=held)
             world.rng.loaded = face
             if not (trait or triggered):
                 # The rows this one is printed beside, **before** the
