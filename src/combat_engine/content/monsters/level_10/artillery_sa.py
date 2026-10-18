@@ -404,12 +404,19 @@ def m1587a2(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    todo=("Cast.summon(ref=)",),
+    todo=("spec.ref",),
 )
 def m1587a3(c: Cast) -> None:
     """The printed line names this row's own ref as what it conjures --
     extraction noise with nothing behind it. There is no second ref to
-    summon with."""
+    summon with.
+
+    **Re-pointed: the marker named the wrong thing.** `Cast.summon(ref=)`
+    reads as a missing parameter and `c.summon` has taken a ref as its
+    first positional argument all along, so the symbol could never go
+    green and the row could never read ready. What is missing is a *usable
+    ref in the spec*, which is `spec.ref` -- the symbol five other rows
+    already share for exactly this."""
 
 
 @power(
@@ -419,12 +426,26 @@ def m1587a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
+    dropped=("c.dim(instead_of=)",),
 )
 def m1587a4(c: Cast) -> None:
-    """Light radius has no reader -- the grid holds terrain and cover and
-    no light level -- and nothing else in the printed line has a combat
-    consequence."""
+    """Bright light out to 5 squares, dimmable to 2 as a free action.
+
+    **"Light radius has no reader -- the grid holds terrain and cover and
+    no light level" was the reason and it stopped being true.**
+    `query.light_level` reads `Grid.light`, darkening zones and carried
+    radii, and `c.light` is the writer for a carried one. #686.
+
+    Inert on a board nothing has darkened, which is `c.light`'s own stated
+    position for a light in daylight -- and not a reason to declare the row
+    inert, because it plays the moment a square goes dark.
+
+    **The free-action swap to dim 2 is the dropped clause.** It is a
+    *replacement*, not an addition: the creature trades its bright 5 for a
+    dim 2, which would conceal it. `c.dim` and `c.light` are two radii and
+    nothing says one supersedes the other, so the swap has nowhere to be
+    written. #687."""
+    c.light(5, on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

@@ -1917,9 +1917,20 @@ def i1370p1(c: Cast) -> None:
 
 
 @power("i1444x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i1444x1(c: Cast) -> None:
-    """Dim light, two squares out."""
+    """Dim light, two squares out -- and dim light is an attack penalty.
+
+    **The one-line docstring was the whole reason this was `out_of_combat`,
+    and it describes a combat fact.** `query.light_concealment` turns a
+    light level into a `Cover` that `resolve.attack_mods` takes the larger
+    of, so a stone that dims its own two squares conceals whoever is
+    standing in them -- its carrier included. #686.
+
+    `c.dim` and not `c.light`: this *lowers* the level where that one
+    raises it, and the two are different operations rather than a signed
+    radius. #687."""
+    c.dim(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1444p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

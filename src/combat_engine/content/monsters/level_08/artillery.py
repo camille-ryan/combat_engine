@@ -1265,13 +1265,21 @@ def m655a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
+    dropped=("c.dim(instead_of=)",),
 )
 def m655a1(c: Cast) -> None:
-    """Light and its absence: the engine holds no illumination and darkness
-    is not a condition here, so there is nothing for this to change.
-    Declared inert rather than given an invented mechanic."""
-    c.note("m655a1: bright light to 5 squares, dimmable to 2 as a free action")
+    """Bright light out to 5 squares, dimmable to 2 as a free action.
+
+    **"The engine holds no illumination" was the reason and it stopped
+    being true** -- `query.light_level` reads `Grid.light`, darkening zones
+    and carried radii. The note went on "declared inert rather than given
+    an invented mechanic", which was the right instinct and is now
+    answered by a real one. #686.
+
+    The same card as `m1587a4` two levels up, and the same single dropped
+    clause: the free-action swap to dim 2 is a *replacement* of the bright
+    5, and nothing says one carried radius supersedes another. #687."""
+    c.light(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

@@ -10670,6 +10670,36 @@ class Cast:
             until=until, kind=self.ref,
         )
 
+    def dim(
+        self, radius: int = 2, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"This candle sheds dim light in a 2-square radius."
+
+        **The mirror of `c.light` and not a parameter on it**, because it is
+        a different operation. That one makes anything inside its radius
+        bright "however dark the square itself is"; this *reduces* bright to
+        dim and never lightens a square that is already darker. `i1213x1`
+        says the order outright -- "bright light within the candle's radius
+        is reduced to dim light" -- so a dimmer beats a carried light, which
+        a single signed radius could not express.
+
+        Five rows shed dim light rather than bright: two whose whole content
+        it is, and three that print a bright radius with a dim one as the
+        alternative. All five sat `out_of_combat` on "light is not
+        modelled", which stopped being true when the light model landed
+        (#686).
+
+        **Dim light is an attack penalty**, via `query.light_concealment`
+        turning a level into a `Cover` that `resolve.attack_mods` takes the
+        larger of -- so unlike `c.light`, this is never inert. It conceals
+        whoever stands in it, including its own carrier. #687.
+        """
+        return self.bonus(
+            "dim_radius", max(1, radius), on=on if on is not None else self.me,
+            until=until, kind=self.ref,
+        )
+
     def unlit(self, *, on: int | None = None) -> bool:
         """Is this creature standing in dim light or darkness? Defaults to the
         **caster**, because every row that asks is about itself.

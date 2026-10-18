@@ -2579,11 +2579,28 @@ def i2694p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
+    dropped=("c.dim(control=)",),
 )
 def i2723x1(c: Cast) -> None:
-    """Light and darkness are not modelled. Inert by choice."""
-    c.note("i2723x1: sheds bright or dim light out to 20 squares, at will")
+    """Bright light out to 20 squares, or dim light at a range you choose.
+
+    **"Light and darkness are not modelled. Inert by choice" was the whole
+    docstring and it stopped being true.** `query.light_level` reads
+    `Grid.light`, darkening zones and carried radii, and
+    `light_concealment` turns a level into a `Cover` the attack path takes
+    the larger of. #686.
+
+    The bright half is `c.light`, and on a board nothing has darkened it is
+    inert -- which is the honest answer for a torch in daylight and is
+    `c.light`'s own stated position, not a reason to declare the row inert.
+    The moment anything darkens a square it plays.
+
+    **"You control the brightness and range" is the dropped clause**, and
+    it is a real choice rather than a formality: dim light conceals, so a
+    wielder who wants to be hard to hit would choose it over the bright 20.
+    `c.dim` lays a fixed radius and takes no per-use range, so the choice
+    has nowhere to be made. #687."""
+    c.light(20, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -2955,11 +2972,20 @@ def i2990x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
 )
 def i2990p1(c: Cast) -> None:
-    """Light is not modelled. Inert by choice."""
-    c.note("i2990p1: bright light out to 4 squares until ended")
+    """Bright light out to 4 squares until ended.
+
+    **"Light is not modelled. Inert by choice" was the whole docstring and
+    it stopped being true** -- see `i2723x1` beside this and #686.
+
+    "Until you end this effect as a minor action" is the encounter horizon
+    plus `c.endable`, which is the standing verb for a hold its owner can
+    drop. Inert on a lit board and real on a darkened one, which is what
+    bright light is."""
+    held = c.light(4, on=c.me, until=When.ENCOUNTER)
+    if held is not None:
+        c.endable(held, ActionType.MINOR)
 
 
 @power(

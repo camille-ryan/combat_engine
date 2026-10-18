@@ -1465,7 +1465,14 @@ def light_level(
             if _DARKER[level] > _DARKER[worst]:
                 worst = level
     if worst is Light.BRIGHT:
-        return worst
+        # **Still has to ask about a carried dimmer**, which is the one
+        # thing that can make a bright square darker. The early return was
+        # right while `c.light` was the only carried radius -- a light can
+        # only brighten, so a square already bright had nothing to gain --
+        # and `c.dim` is the opposite operation, so skipping the search left
+        # every dimmer invisible on exactly the boards it is for. Caught by
+        # `drivers.light_and_dim`'s first assertion. #687.
+        return _dimmed(world, square)
     # **A carried light moves, so it cannot be written into the terrain.**
     # `c.light(n)` lays a radius on the creature and this is what reads it:
     # anything within that radius is bright however dark the square itself
@@ -1480,8 +1487,55 @@ def light_level(
             continue
         for mine in squares(world, eid):
             if abs(mine[0] - square[0]) <= radius and abs(mine[1] - square[1]) <= radius:
-                return Light.BRIGHT
-    return worst
+                worst = Light.BRIGHT
+                break
+        else:
+            continue
+        break
+    return _dimmed(world, square) if worst is Light.BRIGHT else worst
+
+
+def _anyone_dimming(world: World) -> bool:
+    """Is anybody on the board carrying a dimmer at all?
+
+    The cheap half of the question `_dimmed` answers precisely, for
+    `light_concealment`'s fast path. See the note there for why a dimmer
+    cannot be skipped where a carried light can.
+    """
+    return any(
+        m.what == "dim_radius"
+        for _, mods in world.each(Mods)
+        for m in mods.items
+    )
+
+
+def _dimmed(world: World, square: Square) -> Light:
+    """`BRIGHT`, unless somebody standing near is carrying a dimmer.
+
+    **Read after everything that brightens, and able to beat it.** Five rows
+    shed *dim* light rather than bright, and one says outright what the
+    order has to be: "this candle sheds dim light in a 2-square radius …
+    **bright light within the candle's radius is reduced to dim light**". So
+    a dimmer lowers bright to dim and never lightens a square that is
+    already darker -- it is a reduction, not a level, which is why it cannot
+    be `c.light` with a sign.
+
+    `c.light` could not say this: it makes anything inside its radius bright
+    "however dark the square itself is", the opposite operation, and the
+    reason five rows sat `out_of_combat` on "light is not modelled" after
+    the model landed (#686). #687.
+    """
+    for eid, mods in world.each(Mods):
+        if not mods.items:
+            continue
+        shade = mods.total("dim_radius", {})
+        if shade <= 0:
+            continue
+        for mine in squares(world, eid):
+            if (abs(mine[0] - square[0]) <= shade
+                    and abs(mine[1] - square[1]) <= shade):
+                return Light.DIM
+    return Light.BRIGHT
 
 
 #: A sense with no printed range. The board is never more than a few dozen
@@ -1574,7 +1628,21 @@ def light_concealment(world: World, attacker: int, target: int) -> Cover:
     # projected ~73. So the cheapest question is asked first -- is there any
     # light on this board at all -- and on every board that never mentions
     # light the answer is no and nothing else is read.
-    if not world.grid.light and not world.zones.darkening:
+    # **A carried dimmer is the third source and cannot be skipped**, which
+    # is the asymmetry with `c.light`: a carried *light* only ever removes
+    # concealment, so on a board the fast path calls bright there was none
+    # to remove and skipping the carrier walk is free. A carried *dimmer*
+    # creates concealment, so a board with nothing painted and no zone can
+    # still conceal somebody. `drivers.light_and_dim` caught this with the
+    # assertion that matters -- the level went dim and the attack penalty
+    # stayed zero. #687.
+    #
+    # Scanned by key rather than through `Mods.total`: no gating, no
+    # stacking arithmetic, just "does anybody carry one". That is a flat
+    # pass over about ten creatures, where the thing this fast path exists
+    # to avoid was walking the *zone list once per square of the target*.
+    if (not world.grid.light and not world.zones.darkening
+            and not _anyone_dimming(world)):
         return Cover.NONE
     dark_zones = world.zones.dark()
 

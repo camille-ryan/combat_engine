@@ -481,9 +481,30 @@ def i3269x1(c: Cast) -> None:
 
 
 @power("i3347p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET)
 def i3347p1(c: Cast) -> None:
-    """Light level only, and there is no light model to dim."""
+    """All light within 10 squares becomes dim, for the encounter.
+
+    **"There is no light model to dim" was the reason and it stopped being
+    true**: `query.light_level` reads darkening zones and
+    `light_concealment` turns the level into a `Cover` the attack path
+    takes the larger of. #686.
+
+    **A zone and not `c.dim`.** The card dims an *area* measured from the
+    bottle, which is put down and stays put -- where `c.dim` is a radius
+    carried by a creature. The two are different printings and this is the
+    first one.
+
+    Dim light conceals everybody standing in it, the thrower included,
+    which is what the card does and is why this is never inert."""
+    from combat_engine.engine import Position
+    from combat_engine.engine.types import Light
+
+    here = c.world.get(c.me, Position)
+    if here is None:
+        return
+    c.zone(spread({here.square}, 10), label=c.ref,
+           until=When.ENCOUNTER, obscured=Light.DIM)
 
 
 @power("i564x1", level=1, cls=ITEM, action=ActionType.NONE,
@@ -1682,9 +1703,22 @@ def i1107p1(c: Cast) -> None:
 
 
 @power("i1213x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def i1213x1(c: Cast) -> None:
-    """A candle that dims the light around it."""
+    """A candle that dims the light around it -- and that is a combat fact.
+
+    **The one-line docstring was the whole reason it was inert**, and the
+    card is explicit about an operation the engine had no way to express:
+    "this candle sheds dim light in a 2-square radius … **bright light
+    within the candle's radius is reduced to dim light**". `c.light` makes
+    its radius bright however dark the square is, which is the opposite;
+    `c.dim` is the reduction, and that sentence is where its ordering comes
+    from. #686, #687.
+
+    Carried, because the candle is. It conceals whoever holds it as much as
+    anybody else standing in the radius, which is what the card says and
+    not a side effect to design around."""
+    c.dim(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

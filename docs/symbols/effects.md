@@ -15,6 +15,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - The attackable body of a wall, given the zone `c.wall` returned.
 - `c.conjure(self, at: 'Square | None' = None, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>, speed: 'int' = 0, aura: 'int' = 0, burn: 'tuple[int, DamageType] | None' = None, solid: 'bool' = False) -> 'int'`
   - Put a conjuration on the board and return its entity id.
+- `c.dim(self, radius: 'int' = 2, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "This candle sheds dim light in a 2-square radius."
 - `c.douse(self, *, on: 'int | None' = None) -> 'bool'`
   - Take a map feature off the board. It does not come back.
 - `c.floor(self, area: 'Iterable[Square]', *, until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>) -> 'Effect | None'`

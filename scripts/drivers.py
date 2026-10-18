@@ -19201,7 +19201,177 @@ def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
              " square and there is none",
              f"{distance(was, now)}")
 
+def what_a_carried_light_does_and_what_a_dimmer_does(out: Result) -> None:
+    """Two radii, two operations, and one of them conceals.
+
+    #686, #687. Twenty-four heroic rows were declared `out_of_combat=True`
+    with a reason naming the light model -- "light is not modelled. Inert by
+    choice", "there is no light model to dim", "the engine holds no
+    illumination" -- and the model is there: `Grid.light`,
+    `query.light_level` worst-wins over darkening zones and carried radii,
+    and `light_concealment` turning a level into a `Cover` that
+    `resolve.attack_mods` takes the larger of.
+
+    Seven of the twenty-four are written here, and the pair of verbs is what
+    the cards divide on:
+
+    * **`c.light` raises**, making its squares bright however dark they are,
+      and is therefore inert on a board nothing has darkened -- which is
+      the honest answer for a torch in daylight and is *not* a reason to
+      declare a row inert, because it plays the moment a square goes dark.
+    * **`c.dim` lowers** bright to dim and never lightens. `i1213x1` is
+      where the ordering comes from: "bright light within the candle's
+      radius is reduced to dim light", so a dimmer beats a carried light.
+
+    **The assertion that matters is the attack penalty**, not the level: a
+    rule that read `light_level` back would pass with nothing consulting it,
+    which is this component's signature failure. Dim light has to cost an
+    attacker something.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import light_concealment, light_level
+    from combat_engine.engine.types import Cover, Light
+
+    # -- a carried dimmer conceals its own carrier -----------------------
+    world, me, _ = audit_board("i1444x1", 1)
+    here = world.get(me, Position)
+    out.that(here is not None, "the carrier is on the grid")
+    if here is None:
+        return
+    foe = next(iter(sorted(
+        e for e in world.entities if e != me)), 0)
+    # **The board has already armed it**, which is the point of a property:
+    # `audit.board` starts the fight and `turns.arm_traits` runs every
+    # `action=NONE` row the holder has. So the state to compare against is
+    # the one with the effect *lifted*, not the one before the body ran --
+    # the first draft asserted "the board is lit to start with" and read
+    # `dim`, which is the row working.
+    mine = [e for e in world.effects.of(me) if e.label.startswith("i1444x1")]
+    out.that(bool(mine),
+             "the board armed the property without being asked -- which is"
+             " what an `action=NONE` item property is",
+             f"{[e.label for e in world.effects.of(me)]}")
+    out.that(light_level(world, here.square) is Light.DIM,
+             "so its own square is already dimly lit",
+             f"{light_level(world, here.square)}")
+    out.that(light_concealment(world, foe, me) is not Cover.NONE,
+             "and that is an attack penalty on whoever swings at the"
+             " carrier -- the assertion a level check would have missed,"
+             " and the one `light_concealment`'s fast path failed",
+             f"{light_concealment(world, foe, me)}")
+
+    for eff in mine:
+        world.effects.end(eff, "drivers: measuring")
+    out.that(light_level(world, here.square) is Light.BRIGHT,
+             "lift it and the square is lit again -- the control, and the"
+             " proof the dimming is this row's doing",
+             f"{light_level(world, here.square)}")
+    out.that(light_concealment(world, foe, me) is Cover.NONE,
+             "with nobody concealed",
+             f"{light_concealment(world, foe, me)}")
+
+    REGISTRY["i1444x1"].body(Cast(world=world, me=me, ref="i1444x1"))
+    out.that(light_level(world, here.square) is Light.DIM,
+             "and running the body lays it again",
+             f"{light_level(world, here.square)}")
+    # The negative control: two squares, not the board.
+    far = (here.square[0] + 6, here.square[1])
+    out.that(light_level(world, far) is Light.BRIGHT,
+             "six squares off is still lit, so this is a radius and not a"
+             " board-wide dimming",
+             f"{light_level(world, far)}")
+
+    # -- a carried light raises, and beats a dark square -----------------
+    world, me, _ = audit_board("m655a1", 1)
+    here = world.get(me, Position)
+    x, y = here.square
+    world.grid.light[(x + 1, y)] = Light.DARK
+    # Armed by the board, like the property above, so the comparison is
+    # again against the effect lifted rather than against "before".
+    lights = [e for e in world.effects.of(me) if e.label.startswith("m655a1")]
+    out.that(bool(lights), "the board armed the creature's own light",
+             f"{[e.label for e in world.effects.of(me)]}")
+    out.that(light_level(world, (x + 1, y)) is Light.BRIGHT,
+             "so the square painted dark beside it reads bright --"
+             " `c.light` beats the terrain, which is what a torch in a dark"
+             " room does",
+             f"{light_level(world, (x + 1, y))}")
+    # **Every carrier, not just this one.** `audit.board` spawns "a second
+    # of its kind" for a monster row, so there are two of these creatures
+    # and both armed the trait -- lifting one left the square lit by the
+    # other and the control read `bright`. The board putting a sibling on
+    # the field is the same trap as it pre-setting a number.
+    for who in list(world.entities):
+        for eff in [e for e in world.effects.of(who)
+                    if e.label.startswith("m655a1")]:
+            world.effects.end(eff, "drivers: measuring")
+    out.that(light_level(world, (x + 1, y)) is Light.DARK,
+             "and lifting every carrier's leaves the dark square dark --"
+             " the control",
+             f"{light_level(world, (x + 1, y))}")
+    REGISTRY["m655a1"].body(Cast(world=world, me=me, ref="m655a1"))
+    out.that(light_level(world, (x + 1, y)) is Light.BRIGHT,
+             "and running the body lights it again",
+             f"{light_level(world, (x + 1, y))}")
+
+    # -- and a dimmer beats a carried light, which is the printed order --
+    # `i1213x1`: "bright light within the candle's radius is reduced to dim
+    # light." So the candle wins over the torch.
+    Cast(world=world, me=me, ref="i1213x1").dim(2, on=me)
+    out.that(light_level(world, (x + 1, y)) is Light.DIM,
+             "a dimmer inside a carried light's radius reduces it, which is"
+             " `i1213x1`'s printed sentence and the reason the reader makes"
+             " two passes rather than summing one signed radius",
+             f"{light_level(world, (x + 1, y))}")
+
+    # -- but it never LIGHTENS a square that is already dark -------------
+    world, me, _ = audit_board("i1444x1", 1)
+    here = world.get(me, Position)
+    x, y = here.square
+    world.grid.light[(x + 1, y)] = Light.DARK
+    REGISTRY["i1444x1"].body(Cast(world=world, me=me, ref="i1444x1"))
+    out.that(light_level(world, (x + 1, y)) is Light.DARK,
+             "a dimmer leaves darkness alone -- it is a reduction, not a"
+             " level, and the one direction it must not work in",
+             f"{light_level(world, (x + 1, y))}")
+
+    # -- the dimming zone is an area, not a carried radius ---------------
+    world, me, _ = audit_board("i3347p1", 1)
+    here = world.get(me, Position)
+    x, y = here.square
+    REGISTRY["i3347p1"].body(Cast(world=world, me=me, ref="i3347p1"))
+    out.that(light_level(world, (x + 8, y)) is Light.DIM,
+             "i3347p1 dims eight squares out, which a two-square carried"
+             " radius could not reach -- an area and not a carrier",
+             f"{light_level(world, (x + 8, y))}")
+    out.that(light_level(world, (x + 12, y)) is Light.BRIGHT,
+             "and twelve squares out is still lit, so the ten is doing the"
+             " work",
+             f"{light_level(world, (x + 12, y))}")
+
+    # -- the markers say what is left ------------------------------------
+    for ref, want in (("i2723x1", "c.dim(control=)"),
+                      ("m1587a4", "c.dim(instead_of=)"),
+                      ("m655a1", "c.dim(instead_of=)")):
+        row = REGISTRY[ref]
+        out.that(want in row.dropped,
+                 f"{ref} keeps one dropped clause, {want} -- the swap or the"
+                 " chosen range, which one carried level at a time cannot"
+                 " say",
+                 f"{row.dropped}")
+        out.that(not getattr(row, "out_of_combat", False),
+                 f"and {ref} is no longer declared inert, which is the"
+                 " premise that was false")
+
 DRIVERS = {
+    "light_and_dim": (
+        what_a_carried_light_does_and_what_a_dimmer_does,
+        "a carried light raises, a carried dimmer lowers, and dim conceals",
+    ),
     "teleport_into": (
         a_teleport_that_must_land_somewhere_dark,
         "a teleport whose destination must be dim or dark (#685)",

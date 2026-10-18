@@ -216,7 +216,13 @@ CATEGORIES: dict[str, dict] = {
         "sections": [
             ("laid on the board", [
                 "area", "aura", "barrier", "conjure", "douse", "hazard",
-                "light", "line", "move_zone", "origin", "resize_aura",
+                # `c.dim` beside `c.light` because they are two radii and
+                # two operations: one makes its squares bright however dark
+                # they are, the other lowers bright to dim and never
+                # lightens. `i1213x1` is where the ordering comes from --
+                # "bright light within the candle's radius is reduced to
+                # dim light". #687.
+                "dim", "light", "line", "move_zone", "origin", "resize_aura",
                 # Beside `resize_aura` because it is the same question about
                 # another row's area: that one changes a size, this one
                 # changes the shape. #614.
