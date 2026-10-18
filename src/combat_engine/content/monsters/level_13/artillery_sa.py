@@ -1006,18 +1006,27 @@ def m4126a1(c: Cast) -> None:
     level=13,
     usage=AT_WILL,
     action=STANDARD,
-    reach=Ranged(10),
+    reach=Ranged(10, other_size=20, other_when="aquatic"),
     target=ONE_CREATURE,
     keywords=[Keyword.RANGED],
     attack=Attack(vs=AC, printed=20),
     damage=Damage("2d6", 4),
-    dropped=("Power.reach_alt",),
 )
 def m4126a2(c: Cast) -> None:
-    """Two numbers for water and two for dry land. The damage half is
-    written out, because `c.terrain` is exactly the question the parenthesis
-    asks; the longer range has nowhere to go -- a header carries one reach
-    and the alternative band it does carry is for a melee-or-ranged row."""
+    """Two numbers for water and two for dry land, and both halves are
+    written now.
+
+    The damage half always was, because `c.terrain` is exactly the question
+    the parenthesis asks. The range half said it had "nowhere to go -- a
+    header carries one reach and the alternative band it does carry is for
+    a melee-or-ranged row", which was true: `Range.alt` is a printed
+    *choice* and this is not one. `other_size`/`other_when` is the shape it
+    wanted, and `aquatic` goes in `OTHER_WHEN` beside the two creature
+    states because it answers the same printed sentence. #657.
+
+    The marker said `Power.reach_alt`, which was the nearest existing name
+    and the wrong one -- taking it would have made `m5193a2`'s real printed
+    "or" and this creature's state-decided band the same symbol."""
     if not c.strike():
         return
     if c.terrain("aquatic"):

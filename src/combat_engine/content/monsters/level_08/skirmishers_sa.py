@@ -897,39 +897,42 @@ def m1826a3(c: Cast) -> None:
     level=8,
     usage=ENCOUNTER,
     action=MINOR,
-    reach=CloseBurst(5),
+    reach=CloseBurst(2, other_size=5, other_when="bloodied"),
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR],
     attack=Attack(vs=WILL, printed=11),
 )
 def m1826a4(c: Cast) -> None:
-    """"Close burst 2 (5 while bloodied)" -- the wider burst, narrowed here.
+    """"Close burst 2 (5 while bloodied)".
 
-    **The header carries 5 and the body drops anybody past the real
-    radius.** The old note said "`reach` is fixed at the header and
-    targeting runs before this body sees anything", which is true and is
-    the argument for declaring the *permissive* burst rather than the
-    printed 2: the chooser can only offer what the header says, so a
-    burst 2 could never reach 5 squares even while bloodied, and that is
-    the half the card is about. `m6683a0` answers the same sentence the
-    same way for a melee reach, and `m5466a0` is where the reasoning comes
-    from.
+    **The printed line is two sizes and the header says both now.**
+    `Range(other_size=, other_when=)` is resolved by `dsl.reach_of`, which
+    is handed the world and the actor, so the size the chooser is offered is
+    the one this creature has right now. #657.
 
-    `EACH_ENEMY` dispatches the body once per target, so the narrowing is
-    a distance guard rather than `_restricted_to`'s re-aim -- there is
-    nobody to re-aim at when every enemy in the burst is already being
-    offered in turn.
+    This docstring used to argue for declaring the **permissive** size --
+    "the chooser can only offer what the header says, so a burst 2 could
+    never reach 5 squares even while bloodied". The first half is true and
+    the conclusion does not follow: a header wider than the card offers an
+    illegal target. Measured, with an enemy stood at three squares and the
+    creature unbloodied, it was offered -- where the card allows two.
 
-    `on=c.me`, because "while bloodied" here is the **creature**: a bare
-    `c.bloodied()` reads the target, which is #621's fault in eight other
-    rows.
+    "While bloodied" is the **creature**, which `_other_holds` reads off the
+    caster -- a bare `c.bloodied()` reads the target, and that is #621's
+    fault in eight other rows. The body's own `on=c.me` was right and is
+    now unnecessary.
+
+    **And the push was measured off the wrong creature.** "The target is
+    pushed a number of squares equal to **its** speed" is the target's, and
+    the body read `c.speed_of()`, which defaults to the caster -- the same
+    direction `c.speed_of`'s own note records costing eight rows. Found
+    while removing the distance guard, not looked for.
     """
-    far = 5 if c.bloodied(on=c.me) else 2
     victim = c.target
-    if victim is None or c.distance(victim) > far:
+    if victim is None:
         return
     if c.strike():
-        c.push(c.speed_of(), on=victim)
+        c.push(c.speed_of(victim), on=victim)
         c.prone()
 
 

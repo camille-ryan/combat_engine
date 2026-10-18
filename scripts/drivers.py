@@ -3296,6 +3296,178 @@ def a_target_line_about_standing_on_the_floor(out: Result) -> None:
                  " hold, and the one `None` carries")
 
 
+def a_reach_that_changes_with_the_creature_s_state(out: Result) -> None:
+    """"Close burst 2 (**5 while bloodied**)", and three more like it.
+
+    Four rows print a range whose size depends on a state, and all four
+    declared the **permissive** size and narrowed in the body. Two
+    docstrings argued for it -- *"the permissive reach is the one the chooser
+    must offer, and declaring the short one would mean the row could never
+    reach 4 squares even while bloodied"*. The second half is right and the
+    conclusion does not follow: a header wider than the card offers an
+    illegal target, and the body then *redirects* the swing.
+
+    Measured before the change, with an enemy stood at three squares and the
+    creature unbloodied: `m1826a4` and `m6683a0` both offered it, where the
+    card allows two.
+
+    `Range(other_size=, other_when=)` and `dsl.switched`. Four controls:
+
+    * **out of the state, the pool stops at the printed size** -- the half
+      that was wrong;
+    * **in the state, it reaches the other size** -- the half those
+      docstrings were protecting, and the one a narrowed header would have
+      broken;
+    * **it switches back**, so it is a state and not a latch;
+    * **`m5466a0` switches the other way.** Its state makes the reach
+      *shorter*, so a rule that only ever tested a widening state would pass
+      on a sign error. Grabbing somebody must take a creature at two squares
+      off the menu.
+
+    Plus the guard: `other_when` outside `OTHER_WHEN` raises at import, and
+    one field without the other raises too -- a size nothing switches to, or
+    a state that switches to nothing.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defenses, Health, Position
+    from combat_engine.engine.dsl import (
+        OTHER_WHEN,
+        CloseBurst,
+        Melee,
+        Range,
+        candidates,
+        get,
+        use,
+    )
+    from combat_engine.engine.events import ForcedMove
+    from combat_engine.engine.query import enemies, squares
+    from combat_engine.engine.types import DEFENCES
+
+    def stand(world, who: int, away: int, from_: int) -> None:  # noqa: ANN001
+        spot = world.need(from_, Position).square
+        world.need(who, Position).square = (spot[0] + away, spot[1])
+        world.grid.place(who, frozenset(squares(world, who)))
+
+    # ---- the two bloodied rows: the state WIDENS the reach
+    for ref, printed, other in (("m1826a4", 2, 5), ("m6683a0", 2, 4)):
+        world, me, _ = _board(ref, 1)
+        p = get(ref)
+        out.that(p is not None, f"{ref} is declared")
+        if p is None:
+            continue
+        c = Cast(world=world, me=me, ref=ref)
+        hp = world.need(me, Health)
+        hp.hp = hp.max_hp
+        foe = sorted(enemies(world, me))[0]
+        stand(world, foe, printed + 1, me)
+        out.that(c.distance(foe) == printed + 1,
+                 f"{ref}: an enemy stood one square past the printed"
+                 f" {printed} ({c.distance(foe)})")
+        out.that(foe not in candidates(world, me, p),
+                 f"{ref}: unbloodied, it is NOT offered -- the header used to"
+                 f" declare {other} and offered it")
+        hp.hp = 1
+        out.that(foe in candidates(world, me, p),
+                 f"{ref}: bloodied, it IS offered -- the half the old"
+                 " docstrings were protecting, and the one a narrowed header"
+                 " would have broken")
+        hp.hp = hp.max_hp
+        out.that(foe not in candidates(world, me, p),
+                 f"{ref}: healed, off the menu again -- a state, not a latch")
+
+    # ---- m5466a0: the state SHORTENS it, which is the sign control
+    world, me, _ = _board("m5466a0", 1)
+    p = get("m5466a0")
+    if p is not None:
+        c = Cast(world=world, me=me, ref="m5466a0")
+        foes = sorted(enemies(world, me))
+        far, near = foes[0], foes[1]
+        stand(world, far, 2, me)
+        stand(world, near, 1, me)
+        out.that(far in candidates(world, me, p),
+                 "m5466a0 holding nobody reaches two squares, which is the"
+                 " print")
+        c.grab(on=near)
+        out.that(far not in candidates(world, me, p),
+                 "and with somebody grabbed it does NOT -- the state makes"
+                 " the reach SHORTER, so a sign error passes every widening"
+                 " test and fails here")
+        out.that(near in candidates(world, me, p),
+                 "while the creature at one square is still offered")
+
+    # ---- the guard
+    for bad in ("water", "flying", "BLOODIED", "nonsense"):
+        try:
+            Melee(2, other_size=1, other_when=bad)
+        except ValueError:
+            out.that(True, f"other_when={bad!r} raises")
+        else:
+            out.that(False, f"other_when={bad!r} was ACCEPTED")
+    out.that(CloseBurst(2, other_size=5, other_when="bloodied").other_size == 5,
+             "while a known state is accepted")
+    # **Written out rather than unpacked from a dict.** `Range("melee", 2,
+    # **kwargs)` over a heterogeneous dict costs six `ty` diagnostics on one
+    # line, because the unpacked value is `int | str` and neither half fits
+    # every parameter it might land on.
+    def half(size: int = 0, when: str = "") -> bool:
+        try:
+            Range("melee", 2, other_size=size, other_when=when)
+        except ValueError:
+            return True
+        return False
+
+    out.that(half(size=5),
+             "`other_size` alone raises -- a size nothing switches to")
+    out.that(half(when="bloodied"),
+             "`other_when` alone raises -- a state that switches to nothing")
+    out.that(frozenset({"bloodied", "grabbing", "aquatic"}) == OTHER_WHEN,
+             "three states, from the four rows that print one",
+             f"{sorted(OTHER_WHEN)}")
+
+    # ---- the clause that moves WITH the reach
+    #
+    # Kept from `reach_that_depends_on_a_state`, which this rule replaces
+    # and which is deleted in the same change. `m6683a0` slides the target
+    # the same number of squares it reaches, and a row that switched one and
+    # not the other would look right in a log: the attack lands, something
+    # slides, and only the distance is wrong.
+    #
+    # The slide stays in the body -- it is a distance, not a range, and has
+    # no header to move to. Read off **`ForcedMove`** rather than a stubbed
+    # `c.slide`, which is what the deleted rule did: a hand-built verb tests
+    # the rule's own stub and not the emission site.
+    # **A fresh board per reading, and the attack made certain.** The first
+    # run of this reused one board and read `[]` on the second pass, which
+    # looks exactly like the switch failing. Two reasons, both the probe's:
+    # `use` rolls a real attack and `c.slide` is on the Hit line, and the
+    # first slide had already moved the creature. So the defences go to the
+    # floor and the board is rebuilt -- board arrangement, not a stub.
+    for hurt, want in ((False, 2), (True, 4)):
+        world, me, _ = _board("m6683a0", 1)
+        p = get("m6683a0")
+        if p is None:
+            continue
+        hp = world.need(me, Health)
+        hp.hp = 1 if hurt else hp.max_hp
+        foe = sorted(enemies(world, me))[0]
+        stand(world, foe, 1, me)
+        guard = world.get(foe, Defenses)
+        if guard is not None:
+            guard.values = dict.fromkeys(DEFENCES, -50)
+        seen: list[int] = []
+        # Bound as a default, not closed over: `B023` is a real trap here
+        # and the board is rebuilt each pass, so the listener must see
+        # *this* pass's list.
+        world.bus.on(ForcedMove, lambda ev, into=seen: into.append(ev.squares))
+        use(world, me, "m6683a0", targets=[foe], spend=False)
+        out.that(want in seen,
+                 f"m6683a0 slides {want} while"
+                 f" {'bloodied' if hurt else 'unhurt'} -- the slide moves"
+                 " with the reach, and `on=c.me` is why it reads the"
+                 " caster and not the victim",
+                 f"ForcedMove squares seen: {seen}")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -12277,105 +12449,6 @@ def both_printed_shapes_offered(out: Result) -> None:
                  f" branches={getattr(row.reach, 'branches', None)}")
 
 
-def reach_that_depends_on_a_state(out: Result) -> None:
-    """"Melee 2, or 4 while bloodied" -- both, and the slide to match. #614.
-
-    The header carries the **permissive** reach and the body narrows it,
-    which is `m5466a0`'s answer to the same sentence. Its reasoning is the
-    assertion here: the chooser offers from the header, so declaring the
-    short reach would mean the row could never reach 4 squares even while
-    bloodied -- the half the card is about.
-
-    **Both halves move together and that is worth asserting separately.**
-    The reach and the slide are the same number on this card, and a row that
-    narrowed one and not the other would look right in a log: the attack
-    lands, something slides, and only the distance is wrong.
-
-    Asserted on the *offered action*, not just the header, for the reason
-    `m5193a2`'s rule gives -- a reach that reads correctly while the menu
-    offers something else is a form nobody can use.
-    """
-    import combat_engine.content  # noqa: F401  -- fills the registry
-    from combat_engine.engine import actions as A
-    from combat_engine.engine.components import Health
-    from combat_engine.engine.dsl import REGISTRY, area_of
-
-    p = REGISTRY["m6683a0"]
-    out.that(p.reach.size == 4,
-             "the header declares the permissive reach, 4 -- the one the"
-             " chooser has to be able to offer",
-             f"Melee {p.reach.size}")
-    out.that(not p.unfinished, "and carries no marker", f"{p.unfinished}")
-
-    def squares_at(bloodied: bool) -> int:
-        world, me, _ = _board("m6683a0", 1)
-        body = world.get(me, Health)
-        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
-        return len(area_of(world, me, p, None, 0))
-
-    whole, hurt = squares_at(False), squares_at(True)
-    out.that(whole == hurt,
-             "the *offered* area is the same either way, because the header"
-             " is one number -- the narrowing is the body's job and this"
-             " says so rather than pretending the menu changes",
-             f"{whole} squares unhurt, {hurt} bloodied")
-
-    world, me, _ = _board("m6683a0", 1)
-    offered = A._aimings(world, me, "m6683a0")
-    out.that(offered, "the row is reachable in the action menu at all",
-             f"{len(offered)} action(s)")
-
-    # The narrowing itself, which is the clause that was dropped.
-    from combat_engine.engine.cast import Cast
-    from combat_engine.engine.query import enemies
-
-    # **Who was hit, not whether anything was.** The first version of this
-    # asked "did the attack land" and the control passed when it should not
-    # have: `_restricted_to` **re-aims** to another enemy within reach rather
-    # than throwing the attack away -- that is its documented job and about
-    # 160 rows rely on it -- so something was always hit, just not the far
-    # creature. The printed rule is about distance, so the distance is what
-    # the assertion has to name.
-    def hit_whom(bloodied: bool, at: int) -> tuple[int | None, int]:
-        from combat_engine.engine.components import Position
-
-        world, me, _ = _board("m6683a0", 1)
-        body = world.get(me, Health)
-        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
-        here = world.get(me, Position)
-        foes = sorted(enemies(world, me))
-        far = foes[0]
-        # Everybody else out of the way, so a re-aim has nowhere to go but
-        # the one creature this is about.
-        for i, other in enumerate(foes[1:], start=1):
-            spot = world.get(other, Position)
-            if spot is not None:
-                spot.square = (here.square[0] + 20 + i, here.square[1])
-        spot = world.get(far, Position)
-        spot.square = (here.square[0] + at, here.square[1])
-        c = Cast(world=world, me=me, ref="m6683a0", targets=[far])
-        struck: list[int] = []
-        c.strike = lambda **kw: True  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
-        c.hit = lambda **kw: struck.append(kw.get("on") or -1)  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
-        REGISTRY["m6683a0"].body(c)
-        return (struck[0] if struck else None), far
-
-    got, far = hit_whom(True, 4)
-    out.that(got == far,
-             "bloodied, the creature 4 squares off is the one hit -- the"
-             " clause the old marker dropped",
-             f"hit {got}, wanted {far}")
-    got, far = hit_whom(False, 4)
-    out.that(got != far,
-             "unhurt, that creature is NOT hit -- the control, and the whole"
-             " reason the header cannot simply declare 4 and stop",
-             f"hit {got}, the far creature is {far}")
-    got, far = hit_whom(False, 2)
-    out.that(got == far,
-             "and unhurt it still reaches 2, which is its ordinary state",
-             f"hit {got}, wanted {far}")
-
-
 def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
     """f1010: one named power's burst grows by Charisma, while raging. #614.
 
@@ -12499,119 +12572,6 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              " damage, and `f454`'s note is that a barbarian's rage rows are"
              " not all of them",
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
-
-
-def area_that_depends_on_a_state(out: Result) -> None:
-    """"Close burst 2 (5 while bloodied)" -- the same sentence about an area.
-
-    `reach_that_depends_on_a_state` is this card's melee twin and the
-    reasoning carries over unchanged: the header declares the **permissive**
-    radius, because the chooser can only offer what the header says, and a
-    burst 2 could never reach 5 squares even while bloodied -- the half the
-    card is about. The body drops anybody past the real radius.
-
-    **Two layers, because the area version can fail in a way the melee one
-    cannot.** A burst both *offers* a target set and *resolves* one, so:
-
-    * the chooser must hand the body the creature 4 squares off at all --
-      that is what declaring 5 buys, and it is the assertion that would have
-      gone red under the old `CloseBurst(2)` header;
-    * and the body must refuse it when the creature is unhurt -- the
-      control, without which the row would simply be a burst 5 that always
-      reaches.
-
-    **No `_restricted_to` here, and that is the difference worth recording.**
-    `EACH_ENEMY` dispatches the body once per target (`dsl.use` sets
-    `cast.target` and calls the body in a loop), so the narrowing is a
-    distance guard; there is nobody to re-aim at when every enemy in the
-    burst is already being offered in turn. The melee row needs the re-aim
-    precisely because its chooser picked **one** creature.
-    """
-    import combat_engine.content  # noqa: F401  -- fills the registry
-    from combat_engine.engine import actions as A
-    from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Health, Position
-    from combat_engine.engine.dsl import REGISTRY, area_of
-    from combat_engine.engine.query import enemies
-
-    p = REGISTRY["m1826a4"]
-    out.that(p.reach.kind == "close_burst" and p.reach.size == 5,
-             "the header declares the permissive radius, 5 -- the one the"
-             " chooser has to be able to offer",
-             f"{p.reach.kind} {p.reach.size}")
-    out.that(not p.unfinished, "and carries no marker", f"{p.unfinished}")
-
-    def posed(bloodied: bool, at: int):  # noqa: ANN202
-        """The creature, one enemy `at` squares off, everybody else parked."""
-        world, me, _ = _board("m1826a4", 1)
-        body = world.get(me, Health)
-        body.hp = (body.max_hp // 2) if bloodied else body.max_hp
-        here = world.get(me, Position)
-        foes = sorted(enemies(world, me))
-        far = foes[0]
-        for i, other in enumerate(foes[1:], start=1):
-            spot = world.get(other, Position)
-            if spot is not None:
-                spot.square = (here.square[0] + 30 + i, here.square[1])
-        world.get(far, Position).square = (here.square[0] + at, here.square[1])
-        return world, me, far
-
-    # The offered area is the header's, both ways -- the menu is one number
-    # and the narrowing is the body's job. Said plainly rather than left to
-    # be inferred, because a reader's first guess is that the burst shrinks.
-    sizes = []
-    for hurt in (False, True):
-        world, me, _ = posed(hurt, 4)
-        sizes.append(len(area_of(world, me, p, None, 0)))
-    out.that(sizes[0] == sizes[1],
-             "the *offered* burst is the same either way -- the header is one"
-             " number, so the narrowing cannot be the menu's doing",
-             f"{sizes[0]} squares unhurt, {sizes[1]} bloodied")
-
-    # Layer one: the chooser hands the body the far creature at all. This is
-    # the assertion the old `CloseBurst(2)` header failed.
-    world, me, far = posed(True, 4)
-    offered = A._aimings(world, me, "m1826a4")
-    reached = {t for a in offered for t in a.targets}
-    out.that(far in reached,
-             "the creature 4 squares off is OFFERED -- past the printed 2 and"
-             " inside the bloodied 5, which is the whole reason the header"
-             " carries the permissive radius",
-             f"{len(offered)} action(s), {len(reached)} target(s) offered")
-
-    # Layer two: the body, per target, exactly as `dsl.use` runs it.
-    #
-    # **Recorded off `c.push`, not `c.hit`.** The first version stubbed
-    # `c.hit` -- the verb the melee twin's body calls -- and reported
-    # nothing hit in every case, including the one the control needs to
-    # fail. This card's effect is a push and a knockdown, so `c.hit` is
-    # never reached and the probe was measuring a verb the row does not
-    # use. A probe that reads the same in all three cases is measuring the
-    # wrong thing, not finding a dead row.
-    def hit_at(bloodied: bool, at: int) -> tuple[int | None, int]:
-        world, me, far = posed(bloodied, at)
-        c = Cast(world=world, me=me, ref="m1826a4", targets=[far])
-        c.target = far
-        struck: list[int] = []
-        c.strike = lambda **kw: True  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
-        c.push = lambda *a, **kw: struck.append(kw.get("on") or far)  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
-        c.prone = lambda **kw: None  # ty: ignore[invalid-assignment]  -- a stub standing in for a die roll
-        p.body(c)
-        return (struck[0] if struck else None), far
-
-    got, far = hit_at(True, 4)
-    out.that(got == far,
-             "bloodied, that creature is hit -- the clause the old marker"
-             " dropped", f"hit {got}, wanted {far}")
-    got, far = hit_at(False, 4)
-    out.that(got is None,
-             "unhurt, it is NOT hit -- the control, and the whole reason the"
-             " header cannot simply declare 5 and stop",
-             f"hit {got}, the far creature is {far}")
-    got, far = hit_at(False, 2)
-    out.that(got == far,
-             "and unhurt it still reaches 2, which is its printed radius",
-             f"hit {got}, wanted {far}")
 
 
 def defective_entry(out: Result) -> None:
@@ -17705,15 +17665,9 @@ DRIVERS = {
     "named_in_prose": (named_in_prose,
                        "three creatures a card names in prose, whose refs"
                        " were declared all along"),
-    "reach_that_depends_on_a_state": (reach_that_depends_on_a_state,
-                                      "\"Melee 2, or 4 while bloodied\": the"
-                                      " header carries the permissive one"),
     "one_rows_burst_grows_by_a_modifier": (one_rows_burst_grows_by_a_modifier,
                                           "f1010: one named row's burst"
                                           " grows by Charisma while raging"),
-    "area_that_depends_on_a_state": (area_that_depends_on_a_state,
-                                     "\"close burst 2 (5 while bloodied)\":"
-                                     " offered at 5, narrowed in the body"),
     "two_printed_triggers_on_one_row_are_two_watches": (
         two_printed_triggers_on_one_row_are_two_watches,
         "f2362's second benefit was unreachable behind its declared trigger"),
@@ -17933,6 +17887,9 @@ DRIVERS = {
     "a_target_line_about_standing_on_the_floor": (
         a_target_line_about_standing_on_the_floor,
         "a target line narrowed by whether the creature is on the floor"),
+    "a_reach_that_changes_with_the_creature_s_state": (
+        a_reach_that_changes_with_the_creature_s_state,
+        "a printed range whose size a state decides"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),

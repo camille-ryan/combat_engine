@@ -84,6 +84,69 @@ Body = Callable[[Cast], None]
 AREA_OR_CLOSE = ("close_burst", "close_blast", "area_burst", "wall")
 
 
+#: The states a printed range may switch size on. Closed, and
+#: `Range.__post_init__` raises outside it.
+#:
+#: Three entries, from the four rows that print one. `aquatic` is **not** a
+#: state of the creature at all -- it is a property of the encounter, which
+#: `Cast.terrain` already reads and `World.terrain` already holds -- and it
+#: is in the same set because it answers the same printed shape: a size the
+#: range takes instead, decided by something other than the caster's choice.
+OTHER_WHEN = frozenset({"bloodied", "grabbing", "aquatic"})
+
+
+def switched(world: World, actor: int, r: Range) -> Range:
+    """The printed range with its state-switched size applied, if one holds.
+
+    **The one place the switch happens, called by every site that reads a
+    size and has a world.** `dsl.reach_of` is the door for reshapes; this is
+    narrower and is needed in places that door does not cover -- `area_of`,
+    which must see the unswapped `kind` before it stretches, and
+    `_within_reach`, which the explicit-target arm reaches without going
+    through `candidates` at all.
+
+    A grant honoured at one site and missed at the next is `keywords_of`'s
+    trap and this component's commonest bug, so this is a function rather
+    than five copies of two lines. #657.
+
+    Clears the two fields on the way out: the answer is a plain range, and
+    leaving them set would let a second application switch an
+    already-switched size.
+    """
+    if r.other_when and _other_holds(world, actor, r.other_when):
+        return replace(r, size=r.other_size, other_size=0, other_when="")
+    return r
+
+
+def _other_holds(world: World, actor: int, state: str) -> bool:
+    """Is the state that switches a range's size in force for this creature?
+
+    Both readings are about the **caster**, which is what all four cards
+    say: "while *it* has a creature grabbed", "5 while *bloodied*". A
+    version of this asking about the target would be a different mechanism
+    and no card in the corpus prints one.
+    """
+    if state == "bloodied":
+        from .components import Health
+
+        hp = world.get(actor, Health)
+        return hp is not None and hp.bloodied
+    if state == "grabbing":
+        from .types import Relation
+
+        return bool(world.relations.targets(Relation.GRABBED_BY, actor))
+    if state == "aquatic":
+        # **The encounter, not the creature.** `Cast.terrain`'s own note
+        # records that `World.terrain` is empty today (#539), so this reads
+        # False in every fight the harness builds -- which makes the row no
+        # worse than it was and the clause correct the day a board sets it.
+        # Said out loud because an always-False gate is indistinguishable
+        # from a misspelled one, which is the fault `TERRAIN_WORDS` exists
+        # to prevent.
+        return "aquatic" in getattr(world, "terrain", frozenset())
+    return False
+
+
 @dataclass(frozen=True)
 class Range:
     """How far a power reaches, and what shape it arrives in."""
@@ -115,6 +178,47 @@ class Range:
     #: already aimed the roll correctly; what refused the row was this
     #: measurement, taken before the body ever ran.
     from_: str = ""
+    #: A size the range takes **instead** while a named state holds: "Close
+    #: burst 2 (**5 while bloodied**)", "Melee 2, or 1 **while it has a
+    #: creature grabbed**". Four rows, three heroic.
+    #:
+    #: **Not `alt`, which is a printed choice.** `m5193a2` really does print
+    #: "Close blast 3 **or** area burst 3 within 10" and the caster picks;
+    #: these four are not choices -- the state decides, and offering a
+    #: branch would put a menu entry in front of the player the card does
+    #: not have.
+    #:
+    #: **A word, not a callable**, so the header stays data. `dsl.reach_of`
+    #: resolves it and is handed the world and the actor, which is what #614
+    #: built it for. `Power.reach_of` still answers the print.
+    #:
+    #: All four rows declared the **permissive** size and narrowed in the
+    #: body, with two docstrings arguing for it -- "the permissive reach is
+    #: the one the chooser must offer". Measured: with an enemy at three
+    #: squares, `m1826a4` and `m6683a0` both offered it unbloodied, where
+    #: the card allows two. A header wider than the card offers an illegal
+    #: target and the body then *redirects* the swing. #657.
+    other_size: int = 0
+    #: The state that forces `other_size`. A closed vocabulary --
+    #: `OTHER_WHEN` -- and `Range.__post_init__` raises on anything else,
+    #: for the reason `DIFFICULT_LABELS` does: a word nothing reads is a
+    #: clause that never fires on a row that looks finished.
+    other_when: str = ""
+
+    def __post_init__(self) -> None:
+        if self.other_when and self.other_when not in OTHER_WHEN:
+            raise ValueError(
+                f"Range(other_when={self.other_when!r}) names no state"
+                f" anything reads. Known: {', '.join(sorted(OTHER_WHEN))}."
+                " A new one is a line in `OTHER_WHEN` plus a branch in"
+                " `_other_holds`."
+            )
+        if bool(self.other_when) is not bool(self.other_size):
+            raise ValueError(
+                "Range: `other_size` and `other_when` go together -- one"
+                " without the other is a size nothing switches to, or a"
+                " state that switches to nothing."
+            )
 
     def __str__(self) -> str:
         mine = {
@@ -154,7 +258,10 @@ class Range:
         return (0, 1) if self.alt else (0,)
 
 
-def Melee(n: int = 1, *, by_weapon: bool = False, from_: str = "") -> Range:
+def Melee(
+    n: int = 1, *, by_weapon: bool = False, from_: str = "",
+    other_size: int = 0, other_when: str = "",
+) -> Range:
     """`by_weapon` for a row the compendium does not list, which is `mba`.
 
     The melee branch of `_reach_of` decides by `BY_WEAPON`, a set
@@ -162,15 +269,23 @@ def Melee(n: int = 1, *, by_weapon: bool = False, from_: str = "") -> Range:
     **engine-declared** row can never be in it however plainly its reach is the
     weapon's. `Ranged` has taken this argument all along for the same reason.
     """
-    return Range("melee", n, by_weapon=by_weapon, from_=from_)
+    return Range("melee", n, by_weapon=by_weapon, from_=from_,
+                 other_size=other_size, other_when=other_when)
 
 
-def Ranged(n: int, *, by_weapon: bool = False, from_: str = "") -> Range:
-    return Range("ranged", n, by_weapon=by_weapon, from_=from_)
+def Ranged(
+    n: int, *, by_weapon: bool = False, from_: str = "",
+    other_size: int = 0, other_when: str = "",
+) -> Range:
+    return Range("ranged", n, by_weapon=by_weapon, from_=from_,
+                 other_size=other_size, other_when=other_when)
 
 
-def CloseBurst(n: int, *, from_: str = "") -> Range:
-    return Range("close_burst", n, from_=from_)
+def CloseBurst(
+    n: int, *, from_: str = "", other_size: int = 0, other_when: str = "",
+) -> Range:
+    return Range("close_burst", n, from_=from_,
+                 other_size=other_size, other_when=other_when)
 
 
 def CloseBlast(n: int, *, from_: str = "") -> Range:
@@ -1914,6 +2029,15 @@ def area_of(
     highlights what it is given lights up squares that are not there.
     """
     r = p.reach_of(branch, augment)
+    # **The state-switched size first, before any stretch or swap.** "Close
+    # burst 2 (5 while bloodied)" is the printed line for this creature
+    # right now, so it is what a stretch adds to and what a reshape
+    # replaces -- the card the feat rewrites is the one the creature is
+    # holding. Applied here as well as in `reach_of`, because this function
+    # deliberately does not come through that door (the stretch needs the
+    # unswapped `kind` first) and a switch honoured at one site and not the
+    # other is `keywords_of`'s trap one field over. #657.
+    r = switched(world, actor, r)
     # Every origin, unioned. One companion gives one origin and the same answer
     # as before; two give the area either of them could reach, which is what the
     # printed rule asks for on both of its sentences. See `origins`.
@@ -2117,6 +2241,11 @@ def reach_of(
     printed = p.branches
     if branch in printed:
         r = p.reach_of(branch, augment)
+        # **The state-switched size, before any reshape.** "Close burst 2 (5
+        # while bloodied)" is the printed line for this creature right now,
+        # and a reshape replaces *that* -- the card the feat is rewriting is
+        # the one the creature is actually holding.
+        r = switched(world, actor, r)
         # A **replacing** reshape only. An optional one is reached through
         # its own index below, and applying it here as well would impose the
         # alternative on the printed aiming -- which is the whole thing
@@ -2383,7 +2512,7 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Squ
     # The form being used, not the printed base: an augment that turns a
     # melee swing into an area burst has a `within` the base row has not
     # got, and asking the base here offered the burst nowhere to land.
-    reach = p.reach_of(0, augment)
+    reach = switched(world, actor, p.reach_of(0, augment))
     if reach.kind == "close_blast":
         return sorted(blast_placements(mine, reach.size))
     if reach.kind in ("area_burst", "wall"):
@@ -2856,7 +2985,8 @@ def _can_land(world: World, actor: int, p: Power, branch: int = 0, augment: int 
         # sword -- which is every time a charge is the right thing to do.
         from .query import distance_between, enemies, speed
 
-        far = p.reach_of(branch, augment).size + speed(world, actor, {"charge": True})
+        far = (switched(world, actor, p.reach_of(branch, augment)).size
+               + speed(world, actor, {"charge": True}))
         return any(
             distance_between(world, actor, foe) <= far for foe in enemies(world, actor)
         )
@@ -3102,7 +3232,7 @@ def _within_reach(
       whose squares were entered, and a caller passes this only for one of them.
       A bare opt-out is what the next author copies by habit.
     """
-    r = p.reach_of(branch, augment)
+    r = switched(world, actor, p.reach_of(branch, augment))
     if r.kind not in ("melee", "ranged") or charge or reached:
         return True
     if trigger is not None and type(trigger).__name__ in _DEPARTING:

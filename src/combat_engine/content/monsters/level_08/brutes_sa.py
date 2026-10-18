@@ -1898,31 +1898,38 @@ def m5388a3(c: Cast) -> None:
     level=8,
     usage=AT_WILL,
     action=STANDARD,
-    reach=Melee(2),
+    reach=Melee(2, other_size=1, other_when="grabbing"),
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("4d6", 6),
 )
 def m5466a0(c: Cast) -> None:
-    """"Melee 2, or melee 1 while it has a creature grabbed." The header
-    carries the longer reach, because that is the one the chooser must offer,
-    and the shorter one is enforced here -- the same answer `_restricted_to`
-    gives every other printed target line the header cannot say, and the
-    reason it redirects rather than returns: a creature the card does allow
-    should not lose the attack because the chooser picked one it does not.
+    """"Melee 2, or melee 1 while it has a creature grabbed."
 
-    Narrowing the header instead would be the opposite error -- the row would
-    never reach 2 squares, which is its ordinary state.
+    **The printed line is two sizes and the header says both now.**
+    `Range(other_size=, other_when=)` is resolved by `dsl.reach_of`, which
+    is handed the world and the actor, so the size the chooser is offered is
+    the one this creature has right now. #657.
+
+    This docstring used to argue for declaring the **permissive** size --
+    "the chooser can only offer what the header says, so a burst 2 could
+    never reach 5 squares even while bloodied". The first half is true and
+    the conclusion does not follow: a header wider than the card offers an
+    illegal target. Measured, with an enemy stood at three squares and the
+    creature unbloodied, it was offered -- where the card allows two.
+
+    This is the row the argument came from, and it is also the one where
+    the state **narrows**: with somebody grabbed the card allows one
+    square, and the header said two. The body's `_restricted_to(c, far,
+    lambda _f: True)` narrowed nobody -- the reach was the whole
+    restriction, which is why it handed in a predicate with nothing to
+    ask.
     """
-    far = 1 if c.grabbing() else 2
-    # The reach *is* the whole restriction here, and `_restricted_to` applies
-    # it itself -- so the test it takes has nothing left to ask.
-    victim = _restricted_to(c, far, lambda _f: True)
-    if victim is None:
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
 
 
 @power(

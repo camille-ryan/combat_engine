@@ -52,7 +52,6 @@ from typing import Any
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_02.lurkers_sa import _triggering_enemy
 from combat_engine.content.monsters.level_02.skirmishers_sa import _melee_only
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import (
     _free_square_beside,
     _recharge_on,
@@ -3514,7 +3513,7 @@ def m6439a4(c: Cast) -> None:
     level=9,
     usage=AT_WILL,
     action=STANDARD,
-    reach=Melee(4),
+    reach=Melee(2, other_size=4, other_when="bloodied"),
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=14),
     damage=Damage("2d8", 8),
@@ -3522,40 +3521,39 @@ def m6439a4(c: Cast) -> None:
 def m6683a0(c: Cast) -> None:
     """"Melee 2, or 4 while bloodied" -- both reaches, and the slide to match.
 
-    **The header carries the longer one and the body narrows it**, which is
-    `m5466a0`'s answer to the same sentence and its reasoning applies
-    unchanged: the permissive reach is the one the chooser must offer, and
-    declaring the short one would mean the row could never reach 4 squares
-    even while bloodied. `_restricted_to` then enforces the real distance,
-    and it re-aims rather than throwing the attack away when the chooser
-    picked somebody out of range -- about 160 rows take that route.
+    **The header carries both numbers now.** It used to declare the
+    permissive 4 and narrow in the body, and this docstring argued for it:
+    "the permissive reach is the one the chooser must offer, and declaring
+    the short one would mean the row could never reach 4 squares even while
+    bloodied". The second half is right; the conclusion does not follow. A
+    header wider than the card offers an illegal target -- measured, with an
+    enemy at three squares and the creature unbloodied, it was offered.
+    `Range(other_size=, other_when=)` says both, and `dsl.switched` resolves
+    it where the world is in hand. #657.
 
-    So the marker goes. It said "there is no field for an alternate reach
-    the way `attack_alt`/`damage_alt` carry an alternate branch", which is
-    true of the header and beside the point: this is not a *choice* between
-    two reaches, it is one reach that depends on a state, and a state is the
-    body's to read. `m5193a2`, which prints a genuine "or", is the one that
-    wanted a header field -- and `Range.alt` turned out to be it.
+    The marker before that said "there is no field for an alternate reach
+    the way `attack_alt`/`damage_alt` carry an alternate branch", which was
+    true and pointed at the wrong field: `Range.alt` is a printed *choice*,
+    which `m5193a2` really does print, and this is a state deciding.
 
-    `cards.py` reads "Melee 2" as the printed range and will disagree with
-    the declared 4; that waiver is argued in `cards.KNOWN` rather than here.
+    `cards.py` now **agrees** with the header -- 2 is the printed range --
+    so the `cards.KNOWN` waiver this row used to need is gone.
 
-    **`on=c.me`, and the half that was already written had this wrong.** The
-    card says "while the <creature> is bloodied" in both clauses, and
-    `c.bloodied()` with no argument asks about the **target** -- `_who(None)`
-    returns `self.target`, which is the default across almost all of `Cast`
-    and is right for almost every card. So the slide read the victim's hit
-    points: a healthy creature slid a bloodied target 4 squares, and a
-    bloodied one slid a healthy target 2. Found by writing the reach half
-    against the same condition, which is the only reason it surfaced.
+    **The slide keeps its body test, and the half that was already written
+    had it wrong.** The card says "while the <creature> is bloodied" in both
+    clauses, and `c.bloodied()` with no argument asks about the **target**.
+    So the slide read the victim's hit points: a healthy creature slid a
+    bloodied target 4 squares, and a bloodied one slid a healthy target 2.
+    `on=c.me` is the fix and it stays -- a slide distance is not a range and
+    has no header to move to.
     """
     far = 4 if c.bloodied(on=c.me) else 2
-    victim = _restricted_to(c, far, lambda _f: True)
+    victim = c.target
     if victim is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.slide(far, on=victim)
+    if c.strike():
+        c.hit()
+        c.slide(far)
 
 
 @power(
