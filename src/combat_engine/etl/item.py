@@ -192,6 +192,39 @@ def _trait_lines(spec: str, skip: dict[str, str]) -> list[tuple[str, str]]:
     return out
 
 
+#: The one line a race page prints for what it is good at. 44 of 55 carry it
+#: and every one of those 44 is this shape -- measured, not assumed.
+_SKILL_BONUSES = re.compile(r"^Skill Bonuses?\s*:\s*(.+)$", re.M)
+
+#: `+2 History` inside it. The sign is taken as written: nothing prints a
+#: negative one today, and reading `\d+` would turn one into its opposite.
+_ONE_BONUS = re.compile(r"([+-]\d+)\s+([A-Za-z]+)")
+
+
+def _race_skills(spec: str) -> list[tuple[str, int]]:
+    """Which skills this race gains a bonus to, and how much. See `race_skill`.
+
+    An empty list means the page prints no such line, which for `r7` is a
+    fact about the race and not a failed read -- its skill benefit is a
+    *choice*, and `f2900`'s card turns on telling the two apart.
+
+    A word that is not in `skills.SKILLS` is dropped rather than stored, the
+    same way `_skills_of` drops one: the line is parsed by shape and that
+    shape would match a sentence which prints anything else the same way.
+    """
+    from combat_engine.engine.skills import SKILLS
+
+    found = _SKILL_BONUSES.search(spec or "")
+    if not found:
+        return []
+    out: list[tuple[str, int]] = []
+    for amount, word in _ONE_BONUS.findall(found.group(1)):
+        skill = word.lower()
+        if skill in SKILLS and skill not in {s for s, _ in out}:
+            out.append((skill, int(amount)))
+    return out
+
+
 def races(
     source: sqlite3.Connection,
     out: sqlite3.Connection,
@@ -302,6 +335,14 @@ def races(
             "INSERT INTO race VALUES (?,?,?,?,?)",
             (ref, row["ID"], size, json.dumps(_scores(spec)),
              scrub(spec, {name: ref, **trait_refs, **options})),
+        )
+        # **Off the unscrubbed spec**, which is where the line still reads
+        # "+2 History" rather than a ref. Nothing in it is a printed name --
+        # see `race_skill`'s own comment -- so the two extractions do not
+        # have to agree about scrubbing, only about the text. #694.
+        out.executemany(
+            "INSERT INTO race_skill VALUES (?,?,?)",
+            [(ref, skill, bonus) for skill, bonus in _race_skills(spec)],
         )
         names[ref] = {"name": name, "description": flavour}
         # **A sub-option gets a row, not only a name.** Its label was

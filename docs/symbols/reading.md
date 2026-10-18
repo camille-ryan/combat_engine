@@ -43,6 +43,12 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Every type word the corpus prints, from the database.
 - `query.race_of(world: 'World', eid: 'int') -> 'str'`
   - A character's race, by ref -- `r4` -- or `""` for anything without one.
+- `query.race_sizes() -> 'dict[str, str]'`
+  - Every printed race's ref and size word, from the database.
+- `query.race_skills(race: 'str') -> 'tuple[tuple[str, int], ...]'`
+  - Which skills that race is good at, as `(skill, bonus)` pairs.
+- `query.races_sized(size: 'str') -> 'tuple[str, ...]'`
+  - Every race of that printed size, by ref, in ref order.
 - `query.scenery(world: 'World', kind: 'str' = '', *, within: 'int' = 0, of: 'int | None' = None, loose: 'bool' = False) -> 'list[int]'`
   - What is standing on the map that is not a creature.
 - `query.stat_block(world: 'World', eid: 'int') -> 'dict[str, Any]'`

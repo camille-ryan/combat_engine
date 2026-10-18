@@ -112,10 +112,13 @@ from combat_engine.engine.query import (
     distance_between,
     enemies,
     flanked_by,
+    race_skills,
+    races_sized,
     spread,
     squares,
     team,
 )
+from combat_engine.engine.skills import SKILLS
 from combat_engine.engine.triggers import familiar_dropped
 
 #: A racial power or trait the benefit names in prose rather than by ref.
@@ -2373,22 +2376,69 @@ def f2898(c: Cast) -> None:
     c.watch(Dropped, boon, on=me, until=When.ENCOUNTER, window=Window.BEFORE)
 
 
-@power("f2900", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.race_skills()",))
+@power("f2900", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, narrative=("skill:bluff",))
 def f2900(c: Cast) -> None:
     """A language, +2 to one skill the chosen race is good at, and +5 to
     avoid detection while imitating it.
 
-    **"No fight in it" was the whole reason and the middle third is false**
-    -- a +2 racial bonus to a skill is `c.bonus("skill:<name>", 2,
-    kind="racial")`, and a fight rolls these. #691.
+    **The pool exists now.** `race_skill` is the racial twin of
+    `class_skill`, read off the one line a race page prints for it, and
+    `query.race_skills` answers it by ref. 44 of the 55 races carry 83
+    pairs. #694.
 
-    What is missing is the **pool**: nothing records which skills a race
-    gains a bonus to. `game.db` has `class_skill` and no racial twin, and
-    `query.race_of` answers which race and nothing about what it is good at.
-    #694.
+    **The human clause is the reason a partial write would have been wrong
+    rather than merely incomplete**, and it is why the empty case is
+    branched three ways rather than two:
 
-    A partial write would be wrong rather than incomplete here: the card's
-    human clause is "any skill of your choice", so a row that cannot tell
-    which race was chosen cannot tell whether it applies. The +5 to avoid
-    detection is a second gap and belongs to `p2472`'s disguise."""
+    * a race with a pool -- choose one of its skills;
+    * `r7`, whose page prints no bonus because its benefit is *training in
+      an extra skill of your choosing* -- so the card says any skill, and
+      that is what it gets;
+    * any other race with no pool -- `r25` and nine variant races that
+      restate only their differences from a parent -- pays nothing. An
+      empty pool is a fact about the page, not a licence to pick freely,
+      and collapsing those two cases is the bug this branch exists to
+      avoid.
+
+    **Chosen each encounter rather than stored on the build.** The card says
+    "when you select this feat", which wants a persistent choice, and
+    `Build.choices` is for a class's own fork -- it is filled by `chargen`
+    and holds nothing a feat put there. Only **two** heroic feats print that
+    phrase (`f2900` and `f3214`), so a store for two rows is not worth the
+    seam; `c.choose` at arming is the honest stand-in and the decision is
+    real either way.
+
+    **`narrative=("skill:bluff",)` and not `dropped=`, which the first draft
+    had.** `dropped=` names a symbol the clause waits on, and the +5 to
+    avoid detection waits on nothing that should be built: it applies to the
+    Bluff check `p2472` makes against an onlooker's Insight when somebody
+    tries to see through the ruse, and **being disguised is a circumstance
+    no board presents**. Say the circumstance and never the skill -- bluff
+    is rolled 18 times in this tree, so "a fight rolls no bluff" would be
+    false; what holds is that nothing on a board is looking through a
+    disguise. The four other disguise rows in the tree reached the same
+    verdict independently (`i1615p1`, `i2075p1`, `i481p1`, `f3674`).
+
+    The first draft wrote `dropped=("p2472",)` on the `f2805` precedent of
+    naming the row a clause waits for. `todo.py` was right to go red at it:
+    `p2472` **is** declared, so that marker reads "the thing has arrived,
+    finish the row", and what is actually absent is a circumstance rather
+    than a row.
+
+    The language third has no combat meaning either and needs no marker --
+    nothing in the engine models a language, and nothing should."""
+    chosen = c.choose(list(races_sized("medium")),
+                      f"{c.ref}: the race to imitate")
+    if chosen is None:
+        return
+    pool = [skill for skill, _bonus in race_skills(chosen)]
+    if not pool:
+        # The human clause, by ref. Anything else with no pool pays nothing.
+        if chosen != "r7":
+            return
+        pool = sorted(SKILLS)
+    skill = c.choose(pool, f"{c.ref}: the skill to gain the bonus in")
+    if skill is None:
+        return
+    c.bonus(f"skill:{skill}", 2, kind="racial", on=c.me, until=When.ENCOUNTER)

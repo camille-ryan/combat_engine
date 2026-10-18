@@ -699,11 +699,16 @@ def f2613(c: Cast) -> None:
     hand-kept list that would go stale the moment the ETL parsed one more
     feat.
 
-    `AT_WILL`, not the `ENCOUNTER` this header carried while it was marked.
-    Nothing here is spent; the benefit is a standing one, and
-    [[un-marking a row audits its header]] is exactly this -- lint only
-    checks finished rows, so the usage had been wrong for as long as the
-    marker hid it.
+    `AT_WILL`, not the `ENCOUNTER` this header carried while it was marked
+    -- **and the earlier claim that `ENCOUNTER` was *wrong* here was too
+    strong.** `content/CLAUDE.md` measured it: 2,326 rows are `action=NONE`
+    with `usage=ENCOUNTER` and no declared trigger, which is the tree's
+    majority, and on a row with no trigger `arm_traits` spends the use
+    *after* the trait has done its work, so either value plays identically.
+    `AT_WILL` is the *preferable* one, because it cannot become wrong the
+    day the row grows a trigger. `f2614` below is where it stops being a
+    preference: that row does have a trigger, and `ENCOUNTER` there would
+    be a once-per-fight limit its card does not print.
 
     **This feat counts itself**, which is the printed reading: a character
     holding only this one has one rune feat and a +1. So no zero guard --
@@ -728,8 +733,11 @@ def f2614(c: Cast) -> None:
     is the ally either way. `f2143` in `ardent_b.py` makes the same choice
     for the same reason.
 
-    `AT_WILL`: the rider applies to every use of a feature that limits
-    itself."""
+    `AT_WILL`, and here that is not a preference. A declared trigger means
+    `arm_traits` deliberately leaves the row alone and it fires on its
+    trigger instead -- so `ENCOUNTER` would be a once-per-fight limit, and
+    the card prints none: the rider applies to every use of a feature that
+    already limits itself."""
     n = len(c.feats(category="Rune"))
     for who in c.trigger.targets:
         c.temp_hp(n, on=who)

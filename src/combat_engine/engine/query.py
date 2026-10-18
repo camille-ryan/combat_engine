@@ -652,6 +652,78 @@ def race_of(world: World, eid: int) -> str:
     return ""
 
 
+@lru_cache(maxsize=1)
+def _race_skills() -> dict[str, tuple[tuple[str, int], ...]]:
+    """`race_skill`, by race ref. One read of the database, cached.
+
+    A race absent from the mapping printed no skill-bonus line. See the
+    table's own comment: for `r7` that is a **fact** -- its benefit is an
+    extra trained skill of the character's choosing -- and for nine variant
+    races it means the page restates only its differences from a parent. A
+    reader must not fill either one in. #694.
+    """
+    from combat_engine.db import game
+
+    out: dict[str, list[tuple[str, int]]] = {}
+    try:
+        rows = game().execute("SELECT race, skill, bonus FROM race_skill")
+    except Exception:
+        return {}
+    for race, skill, bonus in rows:
+        out.setdefault(race, []).append((skill, int(bonus)))
+    return {race: tuple(pairs) for race, pairs in out.items()}
+
+
+def race_skills(race: str) -> tuple[tuple[str, int], ...]:
+    """Which skills that race is good at, as `(skill, bonus)` pairs.
+
+    The racial twin of `class_skill`, which `chargen` has read since #565.
+    `race_of` answers *which* race a character is and said nothing about
+    what it is good at, and `f2900` is the row that needs the second half:
+    *"a +2 racial bonus to one skill to which the chosen race gains a
+    bonus"*. #694.
+
+    **Takes a ref, like everything else about a race** -- `race_skills("r1")`
+    -- and not a creature, because the race a row asks about is often not
+    the one the character is: `f2900`'s is a race the changeling *imitates*.
+    Ask `race_of` first when the caster's own is what is wanted.
+
+    Empty for a race printing no such line, and that is not the same as "no
+    bonus to anything": see `_race_skills`.
+    """
+    return _race_skills().get(race, ())
+
+
+@lru_cache(maxsize=1)
+def race_sizes() -> dict[str, str]:
+    """Every printed race's ref and size word, from the database.
+
+    Here because "any Medium humanoid" is a printed pool and not a list
+    anybody should keep by hand: `p2472` prints exactly that, and `f2900`
+    chooses out of it. Lowercase, and empty for the nine variant races whose
+    page leaves the column blank and prints the size in their traits.
+    """
+    from combat_engine.db import game
+
+    try:
+        return {ref: (size or "").lower()
+                for ref, size in game().execute("SELECT ref, size FROM race")}
+    except Exception:
+        return {}
+
+
+def races_sized(size: str) -> tuple[str, ...]:
+    """Every race of that printed size, by ref, in ref order.
+
+    `races_sized("medium")` is the pool `p2472` prints -- "the appearance of
+    any Medium humanoid" -- and the one `f2900` chooses a race from.
+    """
+    want = size.strip().lower()
+    return tuple(sorted(
+        ref for ref, printed in race_sizes().items() if printed == want
+    ))
+
+
 def _type_word(raw: str) -> str:
     """One type word, as a power asks for it.
 

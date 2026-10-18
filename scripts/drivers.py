@@ -20560,6 +20560,123 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_racial_skill_pool_and_the_one_race_that_has_none(out: Result) -> None:
+    """`f2900` pays +2 to a skill the race it imitates is good at.
+
+    #694. `game.db` had `class_skill` and no racial twin, so the **pool**
+    was missing and the bonus had no size and no menu. `race_skill` is that
+    twin, parsed off the one line a race page prints -- 83 pairs over 44 of
+    the 55 races, every one of them +2.
+
+    **The empty case is the rule, not an edge.** Three branches, because two
+    of them look identical from the database and are opposite on the card:
+
+    * `r1` has a pool, so the choice is one of its two printed skills;
+    * `r7` prints no line because its benefit is training in an extra skill
+      of the character's choosing, and the card names that case outright --
+      *"if you chose human you gain the bonus to one skill of your
+      choice"*;
+    * `r25` prints no line and is not human, so the feat pays nothing. A
+      reader that filled an empty pool in would hand this race all 17
+      skills, and it would look right on every board where the race chosen
+      happens to be human.
+
+    That third case is the negative control and it is why this rule exists
+    rather than an assertion that the bonus lands.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import race_skills, races_sized
+    from combat_engine.engine.skills import SKILLS, modifier
+
+    # -- the table, and what it does not claim -----------------------------
+    out.that(race_skills("r1") == (("history", 2), ("intimidate", 2)),
+             "a race's pool is the skills its page prints, in page order,"
+             " with the printed amount",
+             f"{race_skills('r1')}")
+    out.that(race_skills("r7") == () and race_skills("r25") == (),
+             "and it is empty for the two medium races printing no such"
+             " line -- one of which the card singles out and one of which"
+             " it does not",
+             f"r7 {race_skills('r7')}, r25 {race_skills('r25')}")
+    out.that("r1" in races_sized("medium") and len(races_sized("medium")) > 30,
+             "the pool of races to imitate is the printed size `p2472`"
+             " names, read from the database and not kept by hand",
+             f"{len(races_sized('medium'))} medium races")
+    out.that(races_sized("gargantuan") == (),
+             "and a size no race prints answers nothing",
+             f"{races_sized('gargantuan')}")
+
+    # -- the row: a race with a pool, and only its own skills offered ------
+    def paid(race: str, skill: str) -> tuple[int, int, list[tuple[str, ...]]]:
+        """Run `f2900` choosing that race and that skill. Returns before/after.
+
+        Through `dsl.use`, which is what reads the header and sets
+        `c.target`; calling the body leaves every bare `on=` landing on
+        nobody.
+
+        **The row's own effect is lifted first, and the rule failed without
+        it.** `audit.board` arms every `action=NONE` row before a rule
+        looks, and it does so under the default decider -- first option --
+        which here is `r1` and `history`. So the "before" reading already
+        held that +2, and a second one does not stack with it: both are
+        `kind="racial"`, where the highest wins. The assertion read
+        `3 -> 3` against a row that works, with two identical mods on the
+        creature and one of them the board's.
+        """
+        world, me, _ = audit_board("f2900", 1)
+        for eff in [e for e in world.effects.of(me)
+                    if getattr(e, "by", "") == "f2900" and not e.ended]:
+            world.effects.end(eff, "drivers: lifted, the board armed it")
+        menus: list[tuple[str, ...]] = []
+
+        def decide(actor, kind, options, prompt=""):  # noqa: ANN001, ANN202
+            menus.append(tuple(options))
+            for want in (race, skill):
+                if want in options:
+                    return want
+            return None
+
+        world.decider = decide
+        was = modifier(world, me, skill)
+        use(world, me, "f2900")
+        return was, modifier(world, me, skill), menus
+
+    was, now, menus = paid("r1", "history")
+    out.that(now - was == 2,
+             "choosing a race and one of its printed skills pays +2 on that"
+             " skill, read off `skills.modifier` where a check reads it",
+             f"{was} -> {now}")
+    skill_menu = next((m for m in menus if "history" in m), ())
+    out.that(sorted(skill_menu) == ["history", "intimidate"],
+             "and the skills offered are that race's two and nothing else",
+             f"{sorted(skill_menu)}")
+
+    # -- the human clause: any skill, and the menu says so -----------------
+    _, _, human_menus = paid("r7", "stealth")
+    human_menu = next((m for m in human_menus if "stealth" in m), ())
+    out.that(len(human_menu) == len(SKILLS),
+             "a human offers every skill, which is the clause the card"
+             " prints for exactly that race",
+             f"{len(human_menu)} offered of {len(SKILLS)}")
+    was, now, _ = paid("r7", "stealth")
+    out.that(now - was == 2,
+             "and pays +2 on whichever one is picked",
+             f"{was} -> {now}")
+
+    # -- the control: no pool and not human pays nothing -------------------
+    was, now, empty_menus = paid("r25", "endurance")
+    out.that(now == was,
+             "a race whose page prints no skill bonus pays nothing -- an"
+             " empty pool is a fact about the page, not a free choice",
+             f"{was} -> {now}")
+    out.that(not any("endurance" in m and len(m) > 2 for m in empty_menus),
+             "and no skill menu is offered for it at all, so the row stops"
+             " rather than asking a question it cannot honour",
+             f"{empty_menus}")
+
+
 def a_check_called_before_its_die_is_thrown(out: Result) -> None:
     """`f2804` calls odd or even before an untrained check, and means it.
 
@@ -21020,6 +21137,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "race_skills": (
+        a_racial_skill_pool_and_the_one_race_that_has_none,
+        "which skills a race is good at, and the race that has none (#694)",
     ),
     "check_declared": (
         a_check_called_before_its_die_is_thrown,

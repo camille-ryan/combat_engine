@@ -326,6 +326,45 @@ CREATE TABLE race (
   ref TEXT PRIMARY KEY, id INTEGER, size TEXT, scores TEXT, spec TEXT
 );
 
+-- Which skills a race is good at, and by how much. The racial twin of
+-- `class_skill`, filed under the same argument: skill names are rules
+-- vocabulary, not printed names -- all 17 are in `skills.SKILLS` and the
+-- tree writes `skill:stealth` as a modifier key in 50 files -- so there is
+-- nothing here to scrub.
+--
+-- Read off the one line the page prints for it, `Skill Bonuses : +2 History,
+-- +2 Intimidate.` **44 of the 55 races print it and 0 of those 44 print it
+-- in any other shape**, which is why this is a parse and not a hand-kept
+-- table.
+--
+-- The 11 without the line are two different absences and neither is a bug:
+--
+--  * `r7` prints none because it *has* none -- its printed trait is training
+--    in an extra skill of the character's choosing, and `f2900`'s card names
+--    exactly that case ("if you chose human you gain the bonus to one skill
+--    of your choice"). So **an empty pool is a fact about the race**, not a
+--    failed read, and a reader must not fill it in.
+--  * nine are **variant races that print only their differences** from a
+--    parent -- "This benefit replaces rt:r2-t2" -- so their skill bonuses
+--    are the parent's and are not restated. `r25` is the eleventh and
+--    genuinely prints no skill bonus at all.
+--
+-- `bonus` is a column rather than an assumed 2 for `class_skill.granted`'s
+-- reason: all 83 rows are +2 today and a disagreement would mean the parse
+-- drifted or the page does something else.
+--
+-- **One sub-shape is dropped on purpose and is worth naming.** `r46` prints
+-- "+2 Insight, +2 to choice of one other", and "other" is not a skill, so
+-- that race gets one row where it should get one row and a *choice*. Nothing
+-- reads a racial pool as a choice yet and the table has no column for one; a
+-- row needing it would be the moment to add one rather than now. The other
+-- four single-entry races (`r17`, `r41`, `r42`, `r65`) genuinely print one
+-- skill. #694.
+CREATE TABLE race_skill (
+  race TEXT, skill TEXT, bonus INTEGER
+);
+CREATE INDEX race_skill_race ON race_skill(race);
+
 -- One racial trait, as the page prints it: a labelled line inside the race's
 -- own block. These were **prose and nothing else** until #341 -- so content
 -- needing a stable name for one invented a ref out of the printed label, 94 of

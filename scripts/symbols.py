@@ -562,7 +562,8 @@ READERS: dict[str, list[str]] = {
         "active", "alive", "allies", "combatants", "conscious", "creatures",
         "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
         "is_trap", "kinds_of", "level_term", "living", "printed_kinds",
-        "race_of", "scenery", "stat_block", "targetable", "team",
+        "race_of", "race_sizes", "race_skills", "races_sized", "scenery",
+        "stat_block", "targetable", "team",
     ],
     "where, and how far": [
         "adjacent", "distance_between", "leash_of", "line_of_effect",
