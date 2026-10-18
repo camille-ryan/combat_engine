@@ -253,6 +253,13 @@ _REF_LABEL = re.compile(
 )
 
 
+#: A bare stat block, which is what "difficult terrain that is <this
+#: creature>" names. Deliberately **not** `_REF_LABEL`: that matches a *row*
+#: (`m2824a4`), and a creature's own square is made rough by the creature,
+#: not by one of its rows.
+_BLOCK_REF = re.compile(r"\Am\d+(?:c\d+)?\Z")
+
+
 def _is_terrain_label(word: str) -> bool:
     """Could any square carry this label?
 
@@ -1473,6 +1480,7 @@ class Cast:
         self,
         kind: str = "",
         *,
+        made_by: str = "",
         on: int | None = None,
         until: When = When.ENCOUNTER,
         when: str = "",
@@ -1506,6 +1514,20 @@ class Cast:
         that set, and a typo is now a failure instead of a silent waiver --
         `"webs"` for `"web"` was exactly that, on a row that read as
         finished.
+
+        **`made_by` is the other question and not a spelling of `kind`:** not
+        what the going *is* but what **made** it. Five rows print it -- "that
+        is `m2824`" (its own kind) and "related to spider swarms"
+        (anybody's) -- and the only rough ground with a maker is a creature
+        whose own square costs to enter. So it takes a **stat-block ref** or
+        a **printed type word**, and raises on anything else, which is the
+        contract `kind` keeps and the one that stopped #598 recurring.
+
+        One sentence can want both: `m2824a4` prints "difficult terrain that
+        is `m2824` or shallow water", which is one call per handle. Passing
+        both here at once is refused rather than guessed at, because the two
+        exemptions have different scopes and one effect cannot carry two
+        labels honestly.
         """
         from .components import Movement
 
@@ -1513,6 +1535,14 @@ class Cast:
         moves = self.world.get(who, Movement)
         if moves is None:
             return None
+        if made_by and kind:
+            raise ValueError(
+                f"{self.ref}: c.ignores_difficult takes `kind` or `made_by`,"
+                " not both -- they are different questions and a card"
+                " printing both wants one call each."
+            )
+        if made_by:
+            return self._ignores_difficult_made_by(made_by, who, moves, until)
         word = kind.lower() or "*"
         # **Refused, not accepted silently.** `"*"` is the bare call --
         # every sort of going -- and anything else must be a label something
@@ -1557,6 +1587,55 @@ class Cast:
             who, self.me, until, label=f"{self.ref} sure-footed",
             on_suspend=[lambda: moves.ignores.discard(word)],
             on_resume=[lambda: moves.ignores.add(word)],
+            by=self.ref,
+        )
+
+    def _ignores_difficult_made_by(
+        self, made_by: str, who: int, moves: Any, until: When
+    ) -> Effect | None:
+        """The `made_by=` half, kept apart because the vocabulary differs.
+
+        A **stat-block ref** (`m2824`) or a **printed type word**
+        (`spider`). Not `DIFFICULT_LABELS`: those are sorts of going and
+        this is a sort of creature, and accepting one for the other is the
+        mistake #598 is on record for -- `c.ignores_difficult("swarm")` was
+        exactly that, a creature kind handed to a terrain filter, dead on
+        every board while the row read as finished.
+
+        The type words are not a closed set here: `monster.keywords` holds
+        101 of them and they come out of the database, so the guard is the
+        *shape* -- a bare stat-block ref, or a lower-case word the corpus
+        actually prints. `query.printed_kinds` is the authority.
+        """
+        from .query import printed_kinds
+
+        word = made_by.strip()
+        if not (_BLOCK_REF.match(word) or word.lower() in printed_kinds()):
+            raise ValueError(
+                f"{self.ref}: c.ignores_difficult(made_by={made_by!r}) is"
+                " neither a stat-block ref nor a printed type word. The"
+                " first is what 'terrain that is <this creature>' means;"
+                " the second is 'related to <a sort of creature>'. A sort"
+                " of *going* belongs in `kind=`."
+            )
+        key = word if _BLOCK_REF.match(word) else word.lower()
+        if key in moves.ignores_made_by:
+            return None
+        moves.ignores_made_by = moves.ignores_made_by | {key}
+
+        def drop() -> None:
+            moves.ignores_made_by = moves.ignores_made_by - {key}
+
+        def restore() -> None:
+            moves.ignores_made_by = moves.ignores_made_by | {key}
+
+        # `on_suspend` rather than `on_end`, for the reason the `kind=` half
+        # records: `Effects._lift` runs it for an expiry *and* a suspension,
+        # so the waiver comes off exactly once either way.
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} sure-footed about {key}",
+            on_suspend=[drop],
+            on_resume=[restore],
             by=self.ref,
         )
 

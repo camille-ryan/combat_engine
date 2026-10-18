@@ -397,19 +397,22 @@ def m1090a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=18),
     damage=Damage("1d8", 5),
-    dropped=("When.ESCAPE",),
 )
 def m1090a1(c: Cast) -> None:
     """Pinned on the end of the weapon, which is then busy.
 
-    The hold is laid `When.SUSTAIN` with a standard action to keep it, which
-    is the printed sustain, and `c.on_sustain` is the payout half -- without
-    it the "the target takes 1d8 + 5 damage and is still restrained" sentence
-    goes nowhere.
+    **Two clauses that look like one duration and are not.** The printed
+    duration is "(until escape)", so the hold is `When.ESCAPE`; the sustain
+    line is about the *damage*, and `c.on_sustain` is its payout half --
+    without it the "the target takes 1d8 + 5 damage and is still restrained"
+    sentence goes nowhere.
 
-    "(until escape)" has no door: `When` has no escape-tied member, so the
-    hold ends when the sustain lapses rather than on a successful escape
-    attempt.
+    So the effect carries `when=When.ESCAPE` **and** a `sustain_cost`, which
+    composes: the lapse branch in `_on_turn_end` gates on
+    `when is When.SUSTAIN`, so this hold is sustainable without being
+    sustain-*ended*. Laid `When.SUSTAIN` before, which made the hold lapse
+    when nobody paid -- weaker than the card rather than stronger, which is
+    the right way to be wrong, but still wrong.
 
     The printed Requirement -- it must still have the weapon -- is not
     written as a `requires`, because the same sentence says what takes the
@@ -421,7 +424,7 @@ def m1090a1(c: Cast) -> None:
         return
     c.hit()
     held = c.world.effects.apply(
-        victim, me, When.SUSTAIN, label=c.ref,
+        victim, me, When.ESCAPE, label=c.ref,
         conditions=(Condition.RESTRAINED,), sustain_cost=STANDARD,
     )
     c.on_sustain(held, lambda: c.hit(on=victim))

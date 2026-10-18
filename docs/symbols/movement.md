@@ -66,7 +66,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Make a named row move you further. `c.extend_move("p1449", 5)`.
 - `c.forces(self, squares_: 'int' = 1, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Lengthen every push, pull and slide this creature makes.
-- `c.ignores_difficult(self, kind: 'str' = '', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'str' = '') -> 'Effect | None'`
+- `c.ignores_difficult(self, kind: 'str' = '', *, made_by: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'str' = '') -> 'Effect | None'`
   - Cross rough ground for nothing. `kind` names which sort, or all.
 - `c.ignores_difficult_in(self, zone: 'int', *, side: 'str' = 'team') -> 'None'`
   - "You and your allies can ignore difficult terrain in the zone."

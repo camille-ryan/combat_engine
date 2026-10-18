@@ -126,9 +126,9 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 
   `blinded`, `dazed`, `dead`, `deafened`, `dominated`, `dying`, `grabbed`, `helpless`, `immobilized`, `insubstantial`, `marked`, `petrified`, `pinned`, `prone`, `removed`, `restrained`, `shaped`, `cannot shift`, `slowed`, `squeezing`, `stunned`, `surprised`, `unconscious`, `weakened`
 
-## `When` (10 members)
+## `When` (11 members)
 
-  `instant`, `end of this turn`, `end of source's next turn`, `start of source's next turn`, `end of target's next turn`, `start of target's next turn`, `save ends`, `end of encounter`, `stance`, `sustain`
+  `instant`, `end of this turn`, `end of source's next turn`, `start of source's next turn`, `end of target's next turn`, `start of target's next turn`, `save ends`, `end of encounter`, `stance`, `sustain`, `until it escapes`
 
 ## not here -- look in another file
 

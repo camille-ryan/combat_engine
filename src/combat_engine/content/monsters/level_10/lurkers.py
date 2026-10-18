@@ -546,7 +546,6 @@ def m3081a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m3081a2(c: Cast) -> None:
     """Filed as a standard action and plainly a trait. The web half plays.
@@ -558,12 +557,21 @@ def m3081a2(c: Cast) -> None:
     `DIFFICULT_LABELS` refuses the word now rather than accepting it
     silently.
 
-    What the card narrows by is **what made the ground**, which is provenance
-    and not a label: `Grid.difficult` holds one word per square and nothing
-    records who put it there. `m4766a4` carried this marker all along and its
-    twin made the dead call, which is how the pair was found.
+    What the card narrows by is **what made the ground**, and it names its
+    own block -- "m3081 webs and m3081 swarms" -- so `made_by=` takes
+    the stat block rather than a printed type word. A swarm's square is
+    rough because the creature standing in it shares its space, and
+    `World._shared_by` has the occupant in hand: `rough()` was labelling it
+    the literal `"shared"` and throwing that away, which is what this
+    family's docstrings were describing when they said "nothing records who
+    put it there". #659.
+
+    The web half stays a bare terrain word and is wider than the card,
+    which says *m3081* webs: a zone's provenance is a separate question
+    from a creature's square. Left as it was rather than quietly narrowed.
     """
     c.ignores_difficult("web", until=When.ENCOUNTER)
+    c.ignores_difficult(made_by="m3081", until=When.ENCOUNTER)
 
 
 # ==========================================================================

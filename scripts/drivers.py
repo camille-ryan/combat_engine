@@ -2915,6 +2915,285 @@ def either_of_two_printed_alternatives(out: Result) -> None:
                      " entirely. 24 rows, 18 heroic. #658")
 
 
+def a_hold_that_lasts_until_it_gets_out(out: Result) -> None:
+    """"Restrained **until escape**", and the three rows printing the same.
+
+    Four rows print a condition whose clock is the held creature getting
+    free, and all four laid it on a clock that is not that: three on
+    `ENCOUNTER` and one on `SUSTAIN`. So a creature that escaped stayed
+    dazed, or prone and pinned, or immobilised, for the rest of the fight.
+
+    **Two of the four had a second clause that could never fire because of
+    it.** `m939a0`'s printed Requirement counts the creatures it has
+    immobilised and refuses the row at two, so a hold that never ended locked
+    the row out permanently after two uses. `m1829a2`'s printed recharge is
+    "when no creature is immobilized by this power", which needs the hold to
+    *end*. Neither was marked; both fall out of fixing the clock.
+
+    `When.ESCAPE` needs no new parameter anywhere -- every writer already
+    takes `until=` -- which is why it is a `When` member rather than a flag
+    on `Effect`. `Durations._on_escape` ends it.
+
+    Three controls, and the last two are the ones with teeth:
+
+    * a **successful** escape ends the hold;
+    * a **failed** attempt does not. `Escaped` is emitted either way, because
+      "whenever a creature fails an escape attempt against you" is printed as
+      often as the other half -- so an unguarded subscription frees the
+      creature the first time it struggles;
+    * **somebody else's grab is not this one.** A creature can be held by two
+      grabbers at once (`Effect.grab_dc` says so outright), and escaping one
+      must not lift a hold hung on the other. A board with a single grabber
+      cannot tell the two readings apart, which is the trap on record from
+      `cover_granters`.
+
+    Plus `m1090a1`, where the two clauses look like one duration and are not:
+    the printed duration is "(until escape)" and the sustain line is about
+    the *damage*. So the effect carries `when=When.ESCAPE` **and** a
+    `sustain_cost`, and the assertion is that it is still sustainable --
+    `_on_turn_end`'s lapse branch gates on `when is When.SUSTAIN`, so this
+    hold does not end for want of paying.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Conditions
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.escape import attempt
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType, Condition, Relation
+
+    world, me, _ = _board("m939a0", 1)
+    foes = sorted(enemies(world, me))
+    out.that(len(foes) >= 2, f"the board fields two enemies ({foes})")
+    if len(foes) < 2:
+        out.skip("one enemy cannot carry the two-grabber control")
+        return
+    victim = foes[0]
+    c = Cast(world=world, me=me, ref="m939a0")
+
+    # ---- a failed attempt must not free it
+    c.grab(on=victim)
+    hold = c.condition(Condition.IMMOBILIZED, on=victim, until=When.ESCAPE)
+    out.that(hold is not None, "the hold is laid")
+    out.that(is_(world, victim, Condition.IMMOBILIZED), "and the creature is held")
+    attempt(world, victim, holder=me, bonus=-100)
+    out.that(world.relations.holds(Relation.GRABBED_BY, me, victim),
+             "a hopeless attempt does not break the grab")
+    out.that(is_(world, victim, Condition.IMMOBILIZED),
+             "and does NOT end the hold -- `Escaped` is emitted for a"
+             " failure too, which is the trap")
+
+    # ---- a successful one does
+    attempt(world, victim, holder=me, auto=True)
+    out.that(not world.relations.holds(Relation.GRABBED_BY, me, victim),
+             "an automatic escape breaks the grab")
+    out.that(not is_(world, victim, Condition.IMMOBILIZED),
+             "and ends the hold -- which is the whole printed clause")
+
+    # ---- somebody else's grab is not this one
+    world, me, _ = _board("m939a0", 1)
+    foes = sorted(enemies(world, me))
+    victim = foes[0]
+    mate = next((a for a in world.each(Conditions) if a[0] not in (me, *foes)), None)
+    grabber = mate[0] if mate is not None else foes[1]
+    c = Cast(world=world, me=me, ref="m939a0")
+    c.grab(on=victim)
+    Cast(world=world, me=grabber, ref="drivers").grab(on=victim)
+    out.that(len(world.relations.sources(Relation.GRABBED_BY, victim)) == 2,
+             "the creature is held by two grabbers at once")
+    c.condition(Condition.IMMOBILIZED, on=victim, until=When.ESCAPE)
+    attempt(world, victim, holder=grabber, auto=True)
+    out.that(not world.relations.holds(Relation.GRABBED_BY, grabber, victim),
+             "it gets out of the OTHER grab")
+    out.that(is_(world, victim, Condition.IMMOBILIZED),
+             "and this row's hold stands -- the end matches on `eff.source =="
+             " ev.holder`, and a one-grabber board cannot tell that from a"
+             " blanket end")
+    attempt(world, victim, holder=me, auto=True)
+    out.that(not is_(world, victim, Condition.IMMOBILIZED),
+             "then getting out of THIS one ends it")
+
+    # ---- the sustain composes with it
+    world, me, _ = _board("m1090a1", 1)
+    foes = sorted(enemies(world, me))
+    if foes:
+        c = Cast(world=world, me=me, ref="m1090a1")
+        held = world.effects.apply(
+            foes[0], me, When.ESCAPE, label="drivers",
+            conditions=(Condition.RESTRAINED,), sustain_cost=ActionType.STANDARD,
+        )
+        out.that(held is not None, "a When.ESCAPE effect may carry a sustain cost")
+        if held is not None:
+            out.that(held in world.effects.sustaining(me),
+                     "and is offered to its holder to sustain -- `sustaining`"
+                     " reads `sustain_cost`, not `when`")
+            # **Through the turn machinery, not a hand-built event.**
+            # `Turns.end_turn` is what emits `TurnEnd` in play, and the
+            # lapse branch this asserts about is one of its subscribers --
+            # emitting the event here would test the subscriber and not
+            # the path.
+            world.round += 1
+            world.turn = me
+            Encounter(world).end_turn()
+            out.that(not held.ended,
+                     "and does NOT lapse unsustained: the lapse branch gates"
+                     " on `when is When.SUSTAIN`, so the printed '(until"
+                     " escape)' is the clock and the sustain is only the"
+                     " damage")
+
+    # ---------------------------------------- the grabber dying has to clear it
+    #
+    # **This is the assertion a plant found missing.** Taking `When.ESCAPE`
+    # out of `_UNREACHABLE` left every other assertion here green, because
+    # none of them killed anybody -- and that set is the only thing standing
+    # between "until it escapes" and a creature held forever by a corpse.
+    # The plant that stays green is the finding.
+    world, me, _ = _board("m939a0", 1)
+    foes = sorted(enemies(world, me))
+    if foes:
+        victim = foes[0]
+        c = Cast(world=world, me=me, ref="m939a0")
+        c.grab(on=victim)
+        c.condition(Condition.IMMOBILIZED, on=victim, until=When.ESCAPE)
+        out.that(is_(world, victim, Condition.IMMOBILIZED),
+                 "a hold is in force before the grabber dies")
+        world.effects.bereave(me)
+        out.that(not is_(world, victim, Condition.IMMOBILIZED),
+                 "and the grabber dying clears it -- nothing else ever would,"
+                 " which is what `_UNREACHABLE` is for and why `When.ESCAPE`"
+                 " belongs in it")
+
+
+def rough_ground_that_knows_who_made_it(out: Result) -> None:
+    """"Ignores difficult terrain **related to spider swarms**", and four more.
+
+    Five rows print difficult terrain narrowed by what *made* it rather than
+    what it is, and all five said the engine could not answer:
+
+        What the card narrows by is what made the ground, which is
+        provenance and not a label: `Grid.difficult` holds one word per
+        square and nothing records who put it there.
+
+    **For the half those cards are about, that was false.** A swarm's square
+    is rough because the creature standing in it shares its space, and
+    `World._shared_by` has the occupant in hand -- `rough()` was labelling it
+    the literal `"shared"` and discarding it one line later. #659.
+
+    Two spellings, because the cards print both:
+
+    * a **stat block** -- "difficult terrain that is `m2824`", its own kind;
+    * a **printed type word** -- "related to spider swarms", anybody's.
+
+    Four controls, and the second is the one a single-swarm board cannot
+    pose:
+
+    * the square is rough for a creature with no waiver;
+    * **a waiver naming one block does not waive another block's swarm.**
+      With one swarm standing there, `made_by="m2824"` and a blanket waiver
+      of every shared square are indistinguishable -- and the blanket
+      reading is the wider one, so it is the one that would ship;
+    * the type-word spelling waives **anybody's** of that sort, which is a
+      different claim from the block spelling and has to be shown
+      separately;
+    * **a shared square that is *also* forest stays rough.** `rough()`
+      labels by `setdefault`, so the map's word wins and the waiver must not
+      reach it -- a swarm standing in a wood does not make the wood passable.
+
+    Plus the guard: `made_by=` takes a sort of **creature** and raises on a
+    sort of going. That is the inverse of this family's previous dead call,
+    `c.ignores_difficult("swarm")` -- a creature kind handed to a terrain
+    filter, which matched nothing on every board while four rows read as
+    finished.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies, squares
+    from combat_engine.engine.types import Team
+
+    world, me, _ = _board("m2824a4", 1)
+    foes = sorted(enemies(world, me))
+    out.that(bool(foes), f"the board fields an enemy ({foes})")
+    if not foes:
+        return
+    mover = foes[0]
+
+    # Two swarms of different blocks, side by side, both sharing their space.
+    from combat_engine.content import loader
+
+    here = world.need(mover, Position).square
+    made: dict[str, int] = {}
+    for n, block in enumerate(("m2824", "m3081")):
+        try:
+            eid = loader.spawn(world, block, (here[0] + 2 + n, here[1]), team=Team.ENEMY)
+        except Exception as why:
+            out.skip(f"{block} would not spawn: {why}")
+            return
+        Cast(world=world, me=eid, ref=f"{block}a0").shares_space(
+            difficult=True, until=When.ENCOUNTER)
+        made[block] = eid
+
+    rough = world.difficult(mover, "walk")
+    own = {b: set(squares(world, e)) for b, e in made.items()}
+    out.that(own["m2824"] <= rough and own["m3081"] <= rough,
+             "both swarms' squares cost extra for a creature with no waiver")
+
+    c = Cast(world=world, me=mover, ref="drivers")
+    c.ignores_difficult(made_by="m2824", on=mover, until=When.ENCOUNTER)
+    rough = world.difficult(mover, "walk")
+    out.that(not (own["m2824"] & rough),
+             f"naming m2824 waives its squares ({sorted(own['m2824'] & rough)})")
+    out.that(own["m3081"] <= rough,
+             "and does NOT waive the other block's swarm -- the control a"
+             " board with one swarm cannot pose, and the blanket reading is"
+             " the one that would otherwise ship")
+
+    # The type-word spelling: anybody's of that sort.
+    world2, me2, _ = _board("m190a4", 1)
+    foes2 = sorted(enemies(world2, me2))
+    if foes2:
+        mover2 = foes2[0]
+        spot = world2.need(mover2, Position).square
+        spider = loader.spawn(world2, "m134", (spot[0] + 2, spot[1]), team=Team.ENEMY)
+        Cast(world=world2, me=spider, ref="m134a0").shares_space(
+            difficult=True, until=When.ENCOUNTER)
+        body = set(squares(world2, spider))
+        out.that(body <= world2.difficult(mover2, "walk"),
+                 "a spider's shared square costs extra to begin with")
+        Cast(world=world2, me=mover2, ref="drivers").ignores_difficult(
+            made_by="spider", on=mover2, until=When.ENCOUNTER)
+        out.that(not (body & world2.difficult(mover2, "walk")),
+                 "and a type word waives ANYBODY's of that sort -- m134 is"
+                 " not the block named by any of the five rows")
+
+        # ...and a square that is rough for a second reason stays rough.
+        for sq in body:
+            world2.grid.difficult[sq] = "forest"
+        out.that(body <= world2.difficult(mover2, "walk"),
+                 "a shared square that is ALSO forest stays rough: `rough()`"
+                 " labels by setdefault, so the map's word wins and the"
+                 " waiver must not reach it")
+
+    # The guard: a sort of going is not a sort of creature.
+    world3, me3, _ = _board("m2824a4", 1)
+    guard = Cast(world=world3, me=me3, ref="drivers")
+    for word in ("web", "shallow water", "shared", "nonsense"):
+        try:
+            guard.ignores_difficult(made_by=word, on=me3)
+        except ValueError:
+            out.that(True, f"made_by={word!r} is refused")
+        else:
+            out.that(False,
+                     f"made_by={word!r} was ACCEPTED -- this is the guard that"
+                     " caught the family's last dead call, pointed the other"
+                     " way round")
+    out.that(
+        guard.ignores_difficult(made_by="swarm", on=me3) is not None,
+        "while `swarm` -- a real printed type word -- is accepted, so the"
+        " guard is a vocabulary check and not a blanket refusal",
+    )
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -5970,12 +6249,17 @@ def a_terrain_waiver_names_going_something_can_carry(out: Result) -> None:
         out.that(not REGISTRY[ref].unfinished,
                  f"{ref} says it with `when=` now and carries no marker",
                  f"{REGISTRY[ref].unfinished}")
+    # **The five provenance rows carry no marker any more**, and this
+    # assertion used to lock in the opposite: it asserted they were marked
+    # `c.ignores_difficult(made_by=)`, which was the right verdict for as
+    # long as the engine could not answer. It can now -- see
+    # `rough_ground_that_knows_who_made_it`, which is the evidence that
+    # replaces this. Kept pointing at the same five refs because the pair of
+    # assertions is the history: a dead call, then a marker, then the field.
     for ref in ("m190a4", "m3081a2", "m3080a3", "m4766a4", "m2824a4"):
-        out.that(REGISTRY[ref].unfinished
-                 == ("c.ignores_difficult(made_by=)",),
-                 f"{ref} is marked for provenance instead of making a dead"
-                 f" call -- the square knows its sort of going and not who"
-                 f" made it",
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} says its provenance half with `made_by=` and carries"
+                 f" no marker",
                  f"{REGISTRY[ref].unfinished}")
 
 
@@ -10821,6 +11105,7 @@ def disease(out: Result) -> None:
     from combat_engine.content import loader  # noqa: F401
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Afflictions
+    from combat_engine.engine.events import TurnEnd
     from combat_engine.engine.query import enemies
 
     world, me, _ = _board()
@@ -10848,7 +11133,6 @@ def disease(out: Result) -> None:
 
     # A turn passing does not move the stage. This is the assertion that keeps
     # somebody from "fixing" the track into something the cards do not say.
-    from combat_engine.engine.events import TurnEnd
 
     before = dict(caught.contracted) if caught else {}
     world.bus.emit(TurnEnd(actor=foe, round=world.round))
@@ -17538,6 +17822,12 @@ DRIVERS = {
         either_of_two_printed_alternatives,
         "a target line printing two alternatives that are not the same"
         " field"),
+    "a_hold_that_lasts_until_it_gets_out": (
+        a_hold_that_lasts_until_it_gets_out,
+        "a condition whose clock is the held creature getting free"),
+    "rough_ground_that_knows_who_made_it": (
+        rough_ground_that_knows_who_made_it,
+        "difficult terrain narrowed by what made it, not what it is"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),

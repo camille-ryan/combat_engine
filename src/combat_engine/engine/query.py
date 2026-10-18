@@ -8,6 +8,7 @@ nothing stores it; it is recomputed from the board whenever an attack asks.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from .components import (
@@ -651,6 +652,58 @@ def race_of(world: World, eid: int) -> str:
     return ""
 
 
+def _type_word(raw: str) -> str:
+    """One type word, as a power asks for it.
+
+    The compendium's type line parenthesises its subtypes -- `"(undead)"`,
+    `"spider)"`, `"(mount"` -- and 60 of the 144 distinct words carry a
+    stray bracket on at least one block, `undead` on all 393 of them. So the
+    strip is not cosmetic: without it `c.is_kind("undead")` is False
+    everywhere.
+
+    **Pulled out so `kinds_of` and `printed_kinds` cannot disagree.** They
+    did for one draft: `printed_kinds` read the raw column and reported
+    `spider` absent from a corpus with 33 spiders in it, which nearly got
+    filed as a 393-block ETL bug. The live reader had been right all along.
+    """
+    return raw.strip("() ,.").lower()
+
+
+@lru_cache(maxsize=1)
+def printed_kinds() -> frozenset[str]:
+    """Every type word the corpus prints, from the database.
+
+    The vocabulary `kinds_of` answers *out of*, enumerated for the one
+    caller that has to validate a word before any creature exists to ask
+    about: `c.ignores_difficult(made_by=)`, which takes a sort of creature
+    and must refuse a sort of going.
+
+    **Not a hand-kept set**, and that is the point -- there are 101 of these
+    and they come off `monster.keywords`, `monster.kind` and
+    `monster.origin`, so a literal list here would be wrong by the next
+    import. `DIFFICULT_LABELS` is a closed set because *nothing* writes a
+    sort of going but this engine; type words are data.
+
+    Cached: one query, read at validation time, and the database does not
+    change inside a run.
+    """
+    import json
+
+    from combat_engine.db import game
+
+    out: set[str] = set()
+    with game() as db:
+        for row in db.execute(
+            "SELECT keywords, kind, origin FROM monster"
+        ).fetchall():
+            out |= set(json.loads(row[0] or "[]"))
+            for word in (row[1], row[2]):
+                if word:
+                    out.add(word)
+    # The same strip `kinds_of` applies, through the same function.
+    return frozenset(w for w in (_type_word(w) for w in out) if w)
+
+
 def kinds_of(world: World, eid: int) -> frozenset[str]:
     """A creature's type words: undead, goblin, beast, natural, and so on.
 
@@ -718,9 +771,9 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     # The type line parenthesises its subtypes -- "(undead)" -- and a power
     # asking whether something is undead should not have to know.
     return frozenset(
-        w.strip("() ,.").lower()
-        for w in words
-        if w.strip("() ,.") and w.strip("() ,.").lower() not in gone
+        word
+        for word in (_type_word(w) for w in words)
+        if word and word not in gone
     )
 
 

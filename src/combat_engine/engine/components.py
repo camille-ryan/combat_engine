@@ -246,6 +246,21 @@ class Movement:
     #: square searched. `charge` and `run` are the other two the cards name
     #: and this engine prices both -- `movement.PRICED_KINDS`.
     ignores_when: dict[str, set[str]] = field(default_factory=dict)
+    #: The same exemption asked the other way: not what the going **is** but
+    #: what **made** it. "Ignores difficult terrain that is `m2824`", "ignores
+    #: difficult terrain related to spider swarms" -- five rows, and the only
+    #: rough ground with a maker is a creature whose own square costs to
+    #: enter (`c.shares_space(difficult=True)`).
+    #:
+    #: Holds a **stat-block ref** or a **printed type word**, because the
+    #: cards print both: its own kind by name, or anybody's of a sort.
+    #: `World._made_rough_by_something_waived` is the one reader.
+    #:
+    #: A set beside `ignores` rather than entries inside it, because the two
+    #: are different questions and a square can be rough for both reasons at
+    #: once -- a forest square with a swarm standing in it is still forest.
+    #: #659.
+    ignores_made_by: frozenset[str] = frozenset()
     #: How the creature is moving **right now**, or "" between moves.
     #:
     #: `modes` says what it *can* do and never what it *is* doing, so

@@ -30,6 +30,7 @@ from .events import (
     ConditionEnded,
     EffectApplied,
     EffectExpired,
+    Escaped,
     Note,
     SavingThrow,
     TurnEnd,
@@ -57,6 +58,15 @@ class When(StrEnum):
     ENCOUNTER = "end of encounter"
     STANCE = "stance"
     SUSTAIN = "sustain"
+    #: "Restrained **until escape**", "immobilized and cannot stand (until
+    #: escape)". The clock is the held creature getting out, which is an
+    #: event and not a turn boundary -- four rows print it and all four hung
+    #: the condition on `ENCOUNTER` instead, so it outlasted the grab.
+    #:
+    #: Ended by `_on_escape` on a **successful** `Escaped`, and `Escaped` is
+    #: emitted for a failed attempt too, which is the trap: gating on the
+    #: event alone frees the creature the first time it tries.
+    ESCAPE = "until it escapes"
 
 
 #: Durations whose clock is the creature the effect sits on rather than the
@@ -65,7 +75,12 @@ _TARGET_CLOCKED = {When.EOTNT, When.SOTNT, When.SAVE_ENDS}
 
 #: Durations that no turn boundary will ever end. If the creature holding one
 #: up dies, nothing is coming to clear it, so death has to.
-_UNREACHABLE = {When.ENCOUNTER, When.STANCE, When.SUSTAIN}
+#: `ESCAPE` belongs here and not in `_TARGET_CLOCKED`: that set is about
+#: *whose turn* drives the clock, and no turn is involved in getting out of a
+#: grab. What this set means is that nothing routine will ever end it, so if
+#: the grabber dies, death has to -- which is the right answer for a hold
+#: that only its holder sustains.
+_UNREACHABLE = {When.ENCOUNTER, When.STANCE, When.SUSTAIN, When.ESCAPE}
 
 
 @dataclass
@@ -255,6 +270,33 @@ class Effects:
         # of its ending -- a row reading "if the target ends its next turn
         # ..." had its watch removed before the watch could answer.
         world.bus.on(TurnEnd, self._on_turn_end, late=True)
+        world.bus.on(Escaped, self._on_escape)
+
+    def _on_escape(self, ev: Escaped) -> None:
+        """A `When.ESCAPE` hold ends when its own grab is broken.
+
+        **Both halves of the match are load-bearing.**
+
+        `ev.success` -- `Escaped` is emitted for a failed attempt as well,
+        because "whenever a creature fails an escape attempt against you" is
+        printed as often as the other half. An unguarded subscription frees
+        the creature the first time it struggles.
+
+        `eff.source == ev.holder` -- a creature can be held by two grabbers
+        at once, which `Effect.grab_dc`'s own note states ("one creature can
+        be held by two grabbers with different printed DCs"). Getting out of
+        one grab must not lift a hold hung on the other, and a board with a
+        single grabber cannot tell the two readings apart.
+        """
+        if not ev.success:
+            return
+        for eff in list(self.live.values()):
+            if (
+                eff.when is When.ESCAPE
+                and eff.owner == ev.actor
+                and eff.source == ev.holder
+            ):
+                self.end(eff, "it escaped")
 
     # -- applying ------------------------------------------------------------
 

@@ -528,17 +528,16 @@ def m2619a0(c: Cast) -> None:
         max_size=Size.MEDIUM,
     ),
     attack=Attack(vs=REF, printed=12),
-    dropped=("When.ESCAPE",),
 )
 def m2619a1(c: Cast) -> None:
     """No printed damage number at all -- the Effect is the grab, the pull
     and the ongoing burn, and the attack roll only gates whether they land.
 
     "Medium or smaller" is **not** a gap: `Target(max_size=)` says it, so the
-    marker was re-aimed off the target line entirely. What is missing is the
-    clock: the daze and the burn run "until it escapes the grab" and `When`
-    has no escape-tied member, so both are hung on `When.ENCOUNTER` instead
-    and `When.ESCAPE` is the named gap.
+    marker was re-aimed off the target line entirely. The clock was, and is
+    now `When.ESCAPE` -- the daze and the burn both run "until it escapes
+    the grab", and both were hung on `When.ENCOUNTER`, so a creature that
+    got out stayed dazed and burning for the rest of the fight.
 
     **And the field it pointed at is now actually used.** The marker moved
     off the target line two changes ago and the *body* went on filtering,
@@ -556,8 +555,8 @@ def m2619a1(c: Cast) -> None:
     if not landed:
         return
     c.grab(on=victim)
-    c.dazed(on=victim, until=When.ENCOUNTER)
-    c.ongoing(10, on=victim)
+    c.dazed(on=victim, until=When.ESCAPE)
+    c.ongoing(10, on=victim, until=When.ESCAPE)
 
 
 _M2619_ESCAPED = "a creature escapes the m2619's grab"

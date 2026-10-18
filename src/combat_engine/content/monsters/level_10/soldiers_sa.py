@@ -5049,15 +5049,16 @@ def _m939a0_capped(world: World, eid: int) -> bool:
     damage=Damage("1d6", 5),
     requires=_m939a0_capped,
     requires_text="it cannot use this attack if two creatures are already immobilized by it",
-    dropped=("When.ESCAPE",),
 )
 def m939a0(c: Cast) -> None:
-    """ "Immobilized (until escape)" has no door: `When` has no escape-tied
-    member, so the hold is laid indefinite (`ENCOUNTER`) rather than
-    properly ending on a successful escape attempt."""
+    """ "Immobilized (until escape)" is `When.ESCAPE`. It was laid
+    indefinite, so the hold outlived the grab it describes -- and the
+    printed Requirement counts immobilised creatures, so a hold that never
+    ended also locked the row out of the fight permanently after two
+    uses."""
     if c.strike():
         c.hit()
-        c.condition(Condition.IMMOBILIZED, until=When.ENCOUNTER)
+        c.condition(Condition.IMMOBILIZED, until=When.ESCAPE)
 
 
 @power(

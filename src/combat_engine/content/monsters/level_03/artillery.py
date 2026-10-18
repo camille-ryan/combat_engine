@@ -303,21 +303,33 @@ def m2824a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m2824a4(c: Cast) -> None:
     """"Ignores difficult terrain that is m2824 or shallow water."
 
-    **The shallow water half plays and the first half does not.** The old
-    note said "the map labels those squares the same way", and it does not:
-    `Grid.difficult` holds one word per square and the only words anything
-    writes are `forest`, `ice`, `rubble`, `water` and `web`. A creature's
-    own ref was never among them, so the waiver matched nothing. #598.
+    **Both halves play now.** The old note said "the map labels those
+    squares the same way", and it does not: `Grid.difficult` holds one word
+    per square and a creature's own ref was never among them, so the waiver
+    matched nothing. #598.
 
     What the card narrows by is **what made the ground** -- terrain that is
-    the creature itself, the same provenance question `m4766a4`,
-    `m190a4`, `m3081a2` and `m3080a3` ask about a swarm. Four of those five
-    were making a dead call and one carried the marker.
+    the creature itself, which is `made_by=` and the stat block rather than
+    one of its rows: the square is rough because the creature is standing
+    in it.
+
+    **The provenance half is written now.** A swarm's square is rough
+    because the creature standing in it shares its space
+    (`c.shares_space(difficult=True)`), and `World._shared_by` has the
+    occupant in hand -- `rough()` was labelling it the literal `"shared"`
+    and throwing that away. So the docstrings in this family that said
+    "nothing records who put it there" were describing one line of
+    `rough()`, not the engine. `c.ignores_difficult(made_by=)` reads it.
+    #659.
+
+    `made_by=` takes a sort of **creature**, not a sort of going, and raises
+    on a word that is not one -- which is the guard that caught this
+    family's previous dead call, `c.ignores_difficult("swarm")`, pointed the
+    other way round.
 
     `shallow water` is a label in `DIFFICULT_LABELS` and kept apart from
     `water`, which is the only water the grid has today: aliasing them would
@@ -325,6 +337,7 @@ def m2824a4(c: Cast) -> None:
     card did not say, and `m5808a0`'s rule is to err the other way.
     """
     c.ignores_difficult("shallow water", on=c.me)
+    c.ignores_difficult(made_by="m2824", on=c.me)
 
 
 @power(

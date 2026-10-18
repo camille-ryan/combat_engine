@@ -973,7 +973,6 @@ def m190a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m190a4(c: Cast) -> None:
     """The web half is a terrain word and plays.
@@ -985,12 +984,32 @@ def m190a4(c: Cast) -> None:
     `DIFFICULT_LABELS` refuses the word now rather than accepting it
     silently.
 
-    What the card narrows by is **what made the ground**, which is provenance
-    and not a label: `Grid.difficult` holds one word per square and nothing
-    records who put it there. `m4766a4` carried this marker all along and its
-    twin made the dead call, which is how the pair was found.
+    What the card narrows by is **what made the ground**: not its own kind
+    by name, but *any* spider's -- the card says "related to spider
+    swarms", so the word is a printed type word and not a stat block.
+
+    **The provenance half is written now.** A swarm's square is rough
+    because the creature standing in it shares its space
+    (`c.shares_space(difficult=True)`), and `World._shared_by` has the
+    occupant in hand -- `rough()` was labelling it the literal `"shared"`
+    and throwing that away. So the docstrings in this family that said
+    "nothing records who put it there" were describing one line of
+    `rough()`, not the engine. `c.ignores_difficult(made_by=)` reads it.
+    #659.
+
+    `made_by=` takes a sort of **creature**, not a sort of going, and raises
+    on a word that is not one -- which is the guard that caught this
+    family's previous dead call, `c.ignores_difficult("swarm")`, pointed the
+    other way round.
+
+    The web half stays a bare terrain word and is **wider than the card**,
+    which says *spider* webs. A web zone's label is `web` and a zone's
+    provenance is a separate question from a creature's square, so scoping
+    that half needs the same work one layer over. Left as it was rather
+    than quietly narrowed, and said here.
     """
     c.ignores_difficult("web", until=When.ENCOUNTER)
+    c.ignores_difficult(made_by="spider", until=When.ENCOUNTER)
 
 
 # -- m199 -------------------------------------------------------------------

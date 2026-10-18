@@ -686,7 +686,6 @@ def m1829a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON, Keyword.RANGED],
     attack=Attack(vs=REF, printed=16),
     damage=Damage("1d8", 5, kind=LIMITED),
-    dropped=("When.ESCAPE",),
 )
 def m1829a2(c: Cast) -> None:
     """Floored and tangled.
@@ -698,8 +697,11 @@ def m1829a2(c: Cast) -> None:
     would be three things to shake off where the card prints one. `PINNED` is
     what "cannot stand" is, which is what `c.prone(held=)` hangs on.
 
-    "(until escape)" has no door -- `When` has no escape-tied member -- so
-    the hold is laid indefinite instead. The printed recharge condition rides
+    "(until escape)" is `When.ESCAPE`; the hold was laid indefinite, so a
+    creature that got out stayed prone, pinned and immobilised. The printed
+    recharge condition -- "recharges when no creature is immobilized by this
+    power" -- depends on the hold *ending*, so it could never fire either.
+    It rides
     on the hold rather than on `ConditionEnded`: `Effects.end` drops the
     effect from `live` before it announces anything, so by `on_end` the
     question "is anybody still caught" has a correct answer.
@@ -712,7 +714,7 @@ def m1829a2(c: Cast) -> None:
     held = c.world.effects.apply(
         victim,
         me,
-        When.ENCOUNTER,
+        When.ESCAPE,
         label=ref,
         conditions=(Condition.PRONE, Condition.PINNED, Condition.IMMOBILIZED),
     )

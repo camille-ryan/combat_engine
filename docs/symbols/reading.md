@@ -35,6 +35,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What this creature's level is worth, under the current setting.
 - `query.living(world: 'World', eid: 'int') -> 'bool'`
   - Is this a living creature? Ten rows print the word as a restriction.
+- `query.printed_kinds() -> 'frozenset[str]'`
+  - Every type word the corpus prints, from the database.
 - `query.race_of(world: 'World', eid: 'int') -> 'str'`
   - A character's race, by ref -- `r4` -- or `""` for anything without one.
 - `query.scenery(world: 'World', kind: 'str' = '', *, within: 'int' = 0, of: 'int | None' = None, loose: 'bool' = False) -> 'list[int]'`

@@ -494,8 +494,8 @@ READERS: dict[str, list[str]] = {
     "who, and whose side": [
         "active", "alive", "allies", "combatants", "conscious", "creatures",
         "enemies", "is_", "is_conjuration", "is_trap", "kinds_of",
-        "level_term", "living", "race_of", "scenery", "stat_block",
-        "targetable", "team",
+        "level_term", "living", "printed_kinds", "race_of", "scenery",
+        "stat_block", "targetable", "team",
     ],
     "where, and how far": [
         "adjacent", "distance_between", "leash_of", "line_of_effect",
@@ -551,11 +551,23 @@ def _readers() -> dict[str, Callable[..., object]]:
     # this function hit the same wall -- but here the answer is the honest
     # type rather than a `callable()` guard, because `isfunction` below has
     # already established it.
-    return {
-        n: o for n, o in vars(q).items()
-        if not n.startswith("_") and inspect.isfunction(o)
-        and o.__module__ == "combat_engine.engine.query"
-    }
+    # **A cached reader is not `inspect.isfunction`.**
+    # `functools.lru_cache` returns a `_lru_cache_wrapper`, so
+    # `query.printed_kinds` was invisible to this walk -- and therefore to
+    # *both* gates below it, the orphan one and the stale one. It arrived
+    # documented, was rendered nowhere, and `check.py` stayed green. The
+    # gates were right; this function was not showing them the reader.
+    out: dict[str, Callable[..., object]] = {}
+    for n, o in vars(q).items():
+        if n.startswith("_"):
+            continue
+        fn = inspect.unwrap(o) if hasattr(o, "__wrapped__") else o
+        if inspect.isfunction(fn) and fn.__module__ == "combat_engine.engine.query":
+            # The wrapper, not the unwrapped function: the signature a row
+            # calls is the wrapper's, and `functools.wraps` makes the two
+            # agree anyway.
+            out[n] = o
+    return out
 
 
 def _render_reading(readers: dict[str, Callable[..., object]]) -> str:

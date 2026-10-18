@@ -2336,7 +2336,6 @@ def m4766a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_difficult(made_by=)",),
 )
 def m4766a4(c: Cast) -> None:
     """The web half is a terrain word and plays.
@@ -2347,15 +2346,29 @@ def m4766a4(c: Cast) -> None:
     creature is going. `when="shift"` would answer a sentence this card does
     not say.
 
-    **And not `c.ignores_difficult("swarm")` either**, which is what the
-    twin `m190a4` does and is why this marker was briefly removed.
-    `Grid.difficult` holds one label per square and the only labels any zone
-    writes are `forest`, `ice`, `rubble`, `water` and `web` -- measured
-    across the tree. `"swarm"` is a creature *kind*, read by
-    `query.kinds_of`, and no square ever carries it, so that call matches
-    nothing. Four rows make it; see #598.
+    **And not `c.ignores_difficult("swarm")` either**, which is the dead
+    call four rows in this family used to make: `"swarm"` is a creature kind
+    and no square carries it, so `DIFFICULT_LABELS` refuses it now. #598.
+
+    **The provenance half is written now.** A swarm's square is rough
+    because the creature standing in it shares its space
+    (`c.shares_space(difficult=True)`), and `World._shared_by` has the
+    occupant in hand -- `rough()` was labelling it the literal `"shared"`
+    and throwing that away. So the docstrings in this family that said
+    "nothing records who put it there" were describing one line of
+    `rough()`, not the engine. `c.ignores_difficult(made_by=)` reads it.
+    #659.
+
+    `made_by=` takes a sort of **creature**, not a sort of going, and raises
+    on a word that is not one -- which is the guard that caught this
+    family's previous dead call, `c.ignores_difficult("swarm")`, pointed the
+    other way round.
+
+    Same card as the twin `m190a4`, and the same note applies about the web
+    half being wider than the printed "spider webs".
     """
     c.ignores_difficult("web", on=c.me)
+    c.ignores_difficult(made_by="spider", on=c.me)
 
 
 # --------------------------------------------------------------------------

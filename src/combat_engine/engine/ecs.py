@@ -114,17 +114,54 @@ class World:
 
     def _shared_squares(self) -> set[Any]:
         """Every square a share-space creature is standing in."""
+        return set(self._shared_by())
+
+    def _shared_by(self) -> dict[Any, int]:
+        """Every shared square, **and which creature makes it rough.**
+
+        `rough()` labels these the literal `"shared"` and throws the
+        occupant away, which is what five rows printing "ignores difficult
+        terrain related to <a kind of creature>" were blocked on -- all five
+        docstrings said "nothing records who put it there", and the answer
+        was in hand one line earlier. #659.
+
+        Last writer wins where two share-space creatures overlap, which is
+        unprintable on any card in the corpus and so is not worth a tuple:
+        the waiver is per-creature and a square made rough by two swarms is
+        rough either way for whoever is exempt from only one.
+        """
         from .components import Mods
         from .movement import shares_space
         from .query import squares
 
-        out: set[Any] = set()
+        out: dict[Any, int] = {}
         for eid, mods in self.each(Mods):
             if not mods.items or mods.total("shares_space_rough", {}) <= 0:
                 continue
             if shares_space(self, eid):
-                out |= squares(self, eid)
+                for sq in squares(self, eid):
+                    out[sq] = eid
         return out
+
+    def _made_rough_by_something_waived(
+        self, eid: int | None, wanted: frozenset[str]
+    ) -> bool:
+        """Is this the sort of creature the mover is exempt from?
+
+        Two spellings, because the cards print both: a **stat block ref**
+        ("difficult terrain that is `m2824`" -- its own kind) and a **type
+        word** ("related to spider swarms" -- anybody's). `Ident.ref` is the
+        block and `query.kinds_of` is the words.
+        """
+        if eid is None or not wanted:
+            return False
+        from .components import Ident
+        from .query import kinds_of
+
+        who = self.get(eid, Ident)
+        if who is not None and who.ref in wanted:
+            return True
+        return bool(kinds_of(self, eid) & wanted)
 
     def difficult(self, for_: int | None = None, kind: str = "walk") -> set[Any]:
         """Terrain that costs extra, from the map and from any live zone.
@@ -150,11 +187,29 @@ class World:
         if moves is None:
             return set(rough)
         ignored = moves.ignores | moves.ignores_when.get(kind, set())
-        if not ignored:
-            return set(rough)
         if "*" in ignored:
             return set()
-        return {sq for sq, kind_ in rough.items() if kind_ not in ignored}
+        # **Provenance, which is a different question from the label.** Five
+        # rows print "ignores difficult terrain related to <a sort of
+        # creature>" -- its own kind, or anybody's spider. A shared square
+        # is the only kind of rough ground that has a maker, so the waiver
+        # is scoped to the squares `rough()` labelled `"shared"`: a forest
+        # square that happens to have a swarm standing in it was labelled
+        # `forest` and is still difficult for the forest's reason. #659.
+        made = self._shared_by() if moves.ignores_made_by else {}
+        if not ignored and not made:
+            return set(rough)
+        return {
+            sq
+            for sq, kind_ in rough.items()
+            if kind_ not in ignored
+            and not (
+                kind_ == "shared"
+                and self._made_rough_by_something_waived(
+                    made.get(sq), moves.ignores_made_by
+                )
+            )
+        }
 
     # -- shorthands the rest of the engine and every power body call ---------
 
