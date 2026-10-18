@@ -639,11 +639,21 @@ def f2947(c: Cast) -> None:
 def f2948(c: Cast) -> None:
     """`by_me` is no use on `SurgeSpent` -- it names its subject `actor`.
 
-    Re-aimed at the symbol the other four rows of this shape name:
-    telepathy is not a sense any creature carries, so there is no range
-    to read and the reach is written as the 10 squares the races
-    printing it have."""
-    for friend in _near_allies(c, 10):
+    **The reach was 10 and the races print 5.** This docstring said "the
+    reach is written as the 10 squares the races printing it have", and
+    they do not: `rt:r46-t2` prints "two-way speech within 5 squares",
+    `rt:r49-t4` prints "speech within 5 squares", and `f3395` prints
+    "telepathy 5". Three sources, all 5. So the row handed a free saving
+    throw to allies twice as far out as the card allows -- a working row,
+    wrong by a factor of two, which is the direction `m5808a0`'s rule says
+    to err away from.
+
+    The 5 is still hard-coded and the marker stays for that: the radius
+    belongs on the two racial traits that print it, read back through one
+    reader, which is #665. A number repeated in four rows is how this one
+    came to say 10.
+    """
+    for friend in _near_allies(c, 5):
         c.save(on=friend)
 
 
