@@ -1944,6 +1944,20 @@ def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]
     # in the tree would inherit the opening round's damage and conditions
     # and nothing could ever report SILENT again.
     world.fight_cursor = mark
+    # **The class the board dealt, for the one pass that needs to know.**
+    # `Character.powers` is non-empty here by design -- the board hands the
+    # caster the row under test, the refs it names and its class features,
+    # and nothing else -- so `chargen.loadout` never runs and the caster
+    # knows **no at-will attack of its own class**. That is why every attack
+    # this instrument has ever made is a basic: `mba` is all it has.
+    # `_provoke.class_attack` borrows one from here. #668.
+    # `setattr`/`getattr` rather than a plain write, so the attribute does
+    # not have to be declared on `World` for an instrument's convenience.
+    # The three stashes above it -- `setup_effects`, `armed_effects`,
+    # `fight_cursor` -- are each carried in `types.py`'s baseline for want
+    # of exactly this, and the baseline is not something to add to.
+    setattr(world, "audit_cls",  # noqa: B010
+            "" if MONSTER_ABILITY.match(ref) else cls)
     if pose:
         _pose(world, caster, declared, foe_team)
     return world, caster, armed
@@ -2293,6 +2307,35 @@ def _decisions_are_honoured() -> list[str]:
     return out
 
 
+#: How many of a class's own at-will attacks `_provoke` will borrow.
+#:
+#: Four, because a Requirement can refuse one -- the first by ref for a
+#: fighter is `p1000`, "needs a shield", which the board's fighter does not
+#: hold -- and because this pass is reached only by a row that has already
+#: shown nothing on every other arrangement. The cost is bounded by that,
+#: not by this number.
+_CLASS_SWINGS = 4
+
+
+def _a_class_at_will(row: object) -> bool:
+    """An at-will attack belonging to a class, usable on a standard action.
+
+    **Standard, which is narrower than it looks.** The one at-will class
+    attack a fighter board knows is `p10469`, an *opportunity* attack --
+    usable only inside a window `_provoke` is not in, so swinging it
+    produced no `Hit` at all and the pass found nothing on the very board it
+    was written for.
+    """
+    return bool(
+        row is not None
+        and getattr(row, "cls", "") not in ("", "item")
+        and getattr(row, "attack", None) is not None
+        and getattr(row, "usage", None) is Usage.AT_WILL
+        and getattr(row, "action", None) is ActionType.STANDARD
+        and not getattr(row, "todo", ())
+    )
+
+
 def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     """Make the thing happen that this row triggers off, and see if it fires.
 
@@ -2312,6 +2355,51 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         a monster's basic is one of its own abilities."""
         known = world.get(eid, Powers)
         return known.basic if known else ""
+
+    def class_attacks(eid: int) -> list[str]:
+        """At-will attacks of this creature's **class**, best candidates first.
+
+        **Every attack this harness made was a basic**, and a basic carries
+        `cls=""` -- so any predicate reading the power's class off the event
+        was permanently false here. Counted inside one `audit` run by spying
+        on `Hit` where the attacker is the caster:
+
+            22  ('mba', cls='', critical=False)
+             4  ('mba', cls='', critical=True)
+
+        The criticals are real, which is why rows answering `_i_crit` work;
+        what never happened is a swing with a class on it. `f2470`'s printed
+        trigger is "a critical hit with a `c3` attack power" and it reported
+        UNUSED -- the honest bucket, and a blind one. A floor of 56 trigger
+        predicates in 39 files read a power's class. #668.
+
+        **The board knows none of them, by design**, which is the thing that
+        had to be found before this pass could work: `board` hands the caster
+        the row under test, the refs it names and its class features, so
+        `Character.powers` is non-empty and `chargen.loadout` never runs.
+        Measured -- `loadout("fighter", 1)` deals `p997` and `p9993`, and
+        `f2470`'s board knows neither. So the class's own rows are borrowed,
+        the same bargain `second_wind` and `action_point` strike above and
+        `_grip_for` strikes for a weapon: a character of this class really
+        does know one of these.
+
+        **A list rather than one pick, because a Requirement can refuse
+        it.** The first draft took the first by ref and got `p1000`, which
+        prints "needs a shield" -- and the board's fighter holds none, as
+        three `KNOWN_SILENT` entries already record. One refusal is not an
+        answer about the class.
+        """
+        known = world.get(eid, Powers)
+        if known is None:
+            return []
+        mine = [r for r in known.known if _a_class_at_will(get(r))]
+        dealt = getattr(world, "audit_cls", "")
+        if dealt:
+            borrowed = [r for r in sorted(REGISTRY)
+                        if (lambda row: row is not None and row.cls == dealt
+                            and _a_class_at_will(row))(get(r))]
+            mine += [r for r in borrowed if r not in mine][:_CLASS_SWINGS]
+        return mine
 
     def probe() -> bool:
         """Has the row gone off yet? And re-arm the caster if it has not.
@@ -2440,6 +2528,64 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         _swing_from_reach(world, attacker, target, basic(attacker))
         if probe():
             return True
+
+    # The same pairs again, with a **class** power rather than a basic. See
+    # `class_attacks`: a basic carries `cls=""`, so this is the only pass in
+    # which a predicate reading the power's class can be true at all. #668.
+    #
+    # After the basic loop and not instead of it, for `_attempts`' reason: a
+    # row that can show itself on the plainest provocation must never be
+    # credited by a more elaborate one.
+    #
+    # **Everybody back on their feet first**, which is what made the
+    # difference between this pass working and not. The loop above swings
+    # with a loaded die, and on the critical face the basic *kills* the
+    # target -- `dsl.use` against a corpse then returns True and emits no
+    # `Hit` at all, so a class swing aimed at the same creature announced
+    # nothing and read as "the board cannot swing a class power". Measured:
+    # the foe at `hp -1` after the basic, and the identical swing at a
+    # creature still standing produced `('p10332', critical=True)` which
+    # `f2470`'s own predicate accepts. Same reasoning as the death-throe
+    # pass below, which already reaches for this.
+    _revive_everyone(world, caster)
+    # **Including the caster, which `_revive_everyone` deliberately will
+    # not.** By this point the harness has felled it -- measured at `hp -1`
+    # -- and a dead creature uses no power, so every swing in this pass was
+    # refused for the attacker rather than for the row. Put back to the hit
+    # points the board dealt it, which are bloodied on purpose so that a row
+    # gated on being bloodied can still fire: the same restore the
+    # second-wind pass above makes, and for the same reason.
+    if caster_health is not None and caster_health.hp <= 0:
+        caster_health.hp = was
+    for attacker, target in pairs:
+        if not alive(world, target):
+            continue
+        # **Its own class, or nothing.** `class_attacks` borrows from
+        # `world.audit_cls`, which is the *caster's* class -- so handing the
+        # list to a foe gave a monster a fighter's power to swing. The point
+        # of the pass is a swing with a class on it by somebody who could
+        # have one.
+        if attacker != caster:
+            continue
+        for swung in class_attacks(attacker):
+            known = world.get(attacker, Powers)
+            if known is not None and swung not in known.known:
+                known.known.append(swung)
+            # **The standard action back, first.** The basic-attack loop
+            # above has already spent it, so `dsl.use` refused every class
+            # power here and the pass produced no `Hit` at all -- which read
+            # as "the board cannot swing a class power" when the truth was
+            # "it had no action left to swing one with". Same argument
+            # `probe` makes for the immediate budget: the limit is a
+            # fight's, and this is not a fight -- every row is fired on a
+            # board of its own and the one being measured is the one that
+            # matters.
+            spender = world.get(attacker, Budget)
+            if spender is not None:
+                spender.refresh()
+            _swing_from_reach(world, attacker, target, swung)
+            if probe():
+                return True
 
     # Shoved about. "When you are pushed, pulled or slid" and "when an enemy
     # knocks you prone" are printed triggers, and a harness that only swings
@@ -3544,6 +3690,16 @@ VERDICT_ROWS = (
     "mba",       # the engine's own melee basic
     "rba",       # and the ranged one
     "p1333",     # an attack whose damage rides on the attack ability
+    # **A row that can only be provoked by a swing with a class on it.**
+    # Its printed trigger is "a critical hit with a `c3` attack power", and
+    # every attack this harness made was a basic -- `cls=""` -- so it
+    # reported UNUSED for its whole life. Pinned here because the pass that
+    # reaches it (`_provoke.class_attacks`) has four moving parts, each of
+    # which was wrong once: the board knows no class at-will, the first one
+    # by ref needs a shield, the basic swing kills the target, and the
+    # caster itself is dead by then. Remove any of them and this goes red
+    # in seconds rather than at the next wide sweep. #668.
+    "f2470",
 )
 
 #: Rows that **must** report silent, because the board cannot satisfy them.
@@ -3642,7 +3798,18 @@ def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
             )
         # And the positive half, so the check cannot pass by crediting
         # nothing to anybody.
-        if live.fired and live.silent and ref not in KNOWN_SILENT:
+        #
+        # **Two ways to fail it, and only one was asked.** `live.fired and
+        # live.silent` says nothing at all about a row that never fired --
+        # the `and` short-circuits -- so a pinned row sliding to UNUSED was
+        # waved through. Found by a plant: `f2470` was pinned here *because*
+        # a new pass in `_provoke` is what reaches it, the pass was then
+        # removed, the row went back to UNUSED and this still reported 13 of
+        # 13. A fixture of rows with a known correct answer has to notice
+        # the answer going missing. #668.
+        if not live.fired:
+            wrong.append(f"{ref} could not be used on the board at all")
+        elif live.silent and ref not in KNOWN_SILENT:
             wrong.append(f"{ref} is credited with nothing as written")
     for ref in VERDICT_SILENT:
         if get(ref) is None:
