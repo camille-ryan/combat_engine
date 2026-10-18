@@ -2359,27 +2359,30 @@ def m5310a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.WEAPON],
-    todo=("c.high_crit(ref=)",),
 )
 def m5310a4(c: Cast) -> None:
     """The whole of this row is lending one weapon property to one other row.
 
-    **Re-pointed, and the old note stopped one step short.** It read
-    "`_high_crit` reads `"high crit" in weapon.properties`, so the
+    **The old note stopped one step short and the step was the gap.** It
+    read "`_high_crit` reads `"high crit" in weapon.properties`, so the
     mechanism exists -- what is missing is any way to put the word there for
-    a while". Putting the word there would still pay nothing: that reader
+    a while". Putting the word there would have paid nothing: that reader
     asks `self._swinging()`, and a monster's `Gear.weapons` is **empty**, so
-    `_swinging()` is None and no monster can gain high crit by any route.
-    Probed on this creature's own board. #682.
+    no monster could gain high crit by any route. Probed on this creature's
+    own board. #682.
 
-    The card also attaches the quality to a **row** -- "`m5310a2` gains the
-    high crit quality" -- and not to a weapon, so the grant wants to be
-    row-scoped and read beside `_high_crit` in `Cast.damage` rather than
-    written into a weapon this creature does not hold.
+    So the grant is row-scoped, which is also what the card says -- the
+    quality goes to `m5310a2`, a sibling, and not to the creature. The
+    figure is that row's own printed dice, `1d10`, since a monster has no
+    `[W]`.
+
+    "Until the start of its next turn" is `When.SONT`: the clock is this
+    creature's, which is whose turn the card means.
 
     `c.maximise` is the nearest verb and is a different thing: it maxes the
     dice rather than adding the extra one a high crit pays out.
     """
+    c.high_crit(ref="m5310a2", on=c.me, until=When.SONT)
 
 
 @power(

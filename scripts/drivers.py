@@ -18892,7 +18892,100 @@ def a_permission_to_cross_one_sort_of_creature(out: Result) -> None:
              f"{c2.size_of(far)}")
     _ = theirs
 
+def high_crit_on_a_creature_with_no_weapon(out: Result) -> None:
+    """A monster could not gain high crit by any route, and one card says it
+    does.
+
+    #682. `cast._high_crit` is the only reader of the quality and it asks
+    `self._swinging()`; a monster's `Gear.weapons` is **empty**, so the
+    answer was 0 for every stat block in the tree whatever its card said.
+    `m5310a4`'s whole content is lending the quality to a sibling row, and
+    its old note had the mechanism half right -- "so the mechanism exists --
+    what is missing is any way to put the word there for a while" -- while
+    putting the word there would still have paid nothing.
+
+    **Asserted as damage, not as a flag.** The question is whether the
+    creature's criticals get bigger, and a rule that read the modifier back
+    would pass with nothing consulting it -- which is exactly what was
+    wrong before: the property was readable and the reader could not reach
+    a monster.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+
+    world, me, _ = audit_board("m5310a4", 1)
+    gear = world.get(me, Gear)
+    out.that(gear is not None and not gear.weapons,
+             "the creature holds no weapon, which is why the ordinary"
+             " reader answers 0 for it",
+             f"{gear if gear is None else [w.ref for w in gear.weapons]}")
+
+    def extra(ref: str) -> list[int]:
+        """What `_high_crit` pays that row, twelve times."""
+        asker = Cast(world=world, me=me, ref=ref)
+        return [asker._high_crit() for _ in range(12)]
+
+    out.that(extra("m5310a2") == [0] * 12,
+             "and pays nothing on the bow before the minor action -- the"
+             " control, and the state every monster in the tree was in",
+             f"{sorted(set(extra('m5310a2')))}")
+
+    REGISTRY["m5310a4"].body(Cast(world=world, me=me, ref="m5310a4"))
+    paid = extra("m5310a2")
+    out.that(all(p > 0 for p in paid),
+             "after it, the bow pays an extra die on a critical",
+             f"{paid}")
+    out.that(all(1 <= p <= 10 for p in paid),
+             "one rolled d10 -- the row's own printed dice, since a monster"
+             " has no `[W]`, and rolled rather than maxed",
+             f"{sorted(set(paid))}")
+    out.that(len(set(paid)) > 1,
+             "and it is rolled fresh each time rather than fixed",
+             f"{sorted(set(paid))}")
+
+    # **The negative control: by ref, not by creature.** The card names one
+    # row of this creature's. Another of its attacks must pay nothing, or
+    # the grant is a creature-wide one the card does not print.
+    # **`m5310a1`, and not `m5310a3`.** The first draft asked about `a3`,
+    # which prints no `damage=` at all -- so the reader answers 0 for it
+    # whatever the gate says, and the plant that widened the gate to every
+    # row stayed **green**. A plant that will not go red is a finding about
+    # the rule: the control was passing for the wrong reason. `m5310a1`
+    # prints `1d6 + 3`, so it is a row the grant *could* pay if it were
+    # creature-wide.
+    from combat_engine.engine.dsl import get as _row
+
+    sibling = _row("m5310a1")
+    out.that(sibling is not None and sibling.damage is not None,
+             "the sibling asked about prints dice of its own, so a"
+             " creature-wide grant would show up on it",
+             f"{sibling if sibling is None else sibling.damage}")
+    out.that(extra("m5310a1") == [0] * 12,
+             "a DIFFERENT attack of the same creature pays nothing -- the"
+             " card names `m5310a2` and not the creature",
+             f"{sorted(set(extra('m5310a1')))}")
+
+    # And the clock the card names.
+    mine = [e.label for e in world.effects.of(me)]
+    out.that(any("m5310a4" in label for label in mine),
+             "the grant is an effect of this row's, so it has a duration at"
+             " all",
+             f"{mine}")
+    held = next((e for e in world.effects.of(me) if "m5310a4" in e.label), None)
+    out.that(held is not None and held.when is When.SONT,
+             "and it ends at the start of this creature's next turn, which"
+             " is the clock the card means",
+             f"{held if held is None else held.when}")
+
 DRIVERS = {
+    "monster_high_crit": (
+        high_crit_on_a_creature_with_no_weapon,
+        "a stat block gaining the high crit quality it could never have (#682)",
+    ),
     "may_enter_gate": (
         a_permission_to_cross_one_sort_of_creature,
         "a permission to cross one sort of creature's square (#673)",

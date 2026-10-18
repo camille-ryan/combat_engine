@@ -2003,8 +2003,62 @@ class Cast:
             return 0
         weapon = self._swinging()
         if weapon is None or "high crit" not in weapon.properties:
-            return 0
+            return self._granted_high_crit()
         return self._roll_damage(weapon.damage)
+
+    def _granted_high_crit(self) -> int:
+        """A row told to pay high crit, with no weapon to carry the word.
+
+        **No monster could ever gain the quality**, which is the half the
+        reader above was missing rather than a gap in any row. It asks
+        `self._swinging()`, and a monster's `Gear.weapons` is empty -- so a
+        card reading "the m5310's m5310a2 gains the high crit quality" had
+        nowhere to put the word and nothing to read it off. #682.
+
+        **The figure is the row's own printed dice**, because a monster has
+        no `[W]`: `m5310a2` prints `1d10 + 3`, so the extra die is a `1d10`
+        and not the +3. Rolled rather than maxed, for the reason the weapon
+        branch is careful about -- a critical maxes the power's own dice and
+        the high-crit die is extra damage on top, rolled normally.
+
+        Narrowed by ref, because the card names one row of the creature's
+        and not the creature. `c.high_crit` is the writer.
+        """
+        if self.total("high_crit", self.me, {"power": self.ref}) <= 0:
+            return 0
+        p = self._declared()
+        dice = p.damage.dice if p is not None and p.damage is not None else ""
+        return self._roll_damage(dice) if dice else 0
+
+    def high_crit(
+        self,
+        *,
+        ref: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"<this row> gains the high crit quality until ..."
+
+        The quality is a **weapon property** everywhere else and
+        `cast._high_crit` reads it off the weapon in hand -- which no
+        monster has, so no stat block could gain it by any route. This is
+        the other door: a row named by ref pays an extra die of its own
+        printed damage on a critical. #682.
+
+        `ref` is required in practice and defaults to this row, which is
+        what a card saying "this attack" would mean. `m5310a4` names a
+        *sibling* -- a minor action lending the quality to the creature's
+        bow -- so the argument is the common case rather than the odd one.
+
+        Not `c.gains_property("high crit")`, which edits a held weapon and
+        is right for the three feats that print it: a character has a
+        weapon and a monster does not, and one verb for both would answer
+        0 for half its callers.
+        """
+        return self.bonus(
+            "high_crit", 1, on=on, until=until, kind="untyped",
+            when=lambda ctx: ctx.get("power") == (ref or self.ref),
+        )
 
     def _declared(self):  # noqa: ANN202
         from .dsl import get

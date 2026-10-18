@@ -89,11 +89,17 @@ CATEGORIES: dict[str, dict] = {
         "title": "Damage and healing",
         "blurb": "Points off and points back on, and the dice behind them.",
         "sections": [
+            # `c.high_crit` is here and not under `attacking` for the
+            # reason `c.maximise` is: both are about what the dice pay on a
+            # critical and neither touches the roll. They are also easy to
+            # confuse -- `maximise` maxes the power's own dice, `high_crit`
+            # adds one more and rolls it -- so they belong on one page where
+            # the difference can be read at a glance. #682.
             ("dealing it", [
                 "absorb", "apply_poison", "b", "burns", "cushion", "damage",
-                "deals", "flat", "half_damage", "halve", "maximise",
-                "no_miss_damage", "ongoing", "quarry_damage", "reduce",
-                "sneak_damage", "w",
+                "deals", "flat", "half_damage", "halve", "high_crit",
+                "maximise", "no_miss_damage", "ongoing", "quarry_damage",
+                "reduce", "sneak_damage", "w",
             ]),
             ("undoing it", [
                 "half_healing", "heal", "regen_suppressed",
