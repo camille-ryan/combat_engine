@@ -10670,6 +10670,64 @@ class Cast:
             until=until, kind=self.ref,
         )
 
+    def illuminate(
+        self,
+        *settings: tuple[Light, int] | None,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Bright (10 squares), dim (5 squares), or off" -- one of a printed
+        set of light settings, and only one.
+
+        **Seven rows print a choice of settings and none of them could say
+        it**, because `c.light` and `c.dim` are two independent radii:
+        laying both leaves the creature bright *and* dimming, and
+        `query.light_level` asks the brightening pass first, so the dim
+        setting would simply be invisible. The cards divide two ways and
+        this says both:
+
+            m1587a4  bright 5, or dim 2 instead, as a free action
+            i3466p1  dim 2, bright 10, or no light
+            i2723x1  bright or dim, up to 20, at a range you choose
+
+        `None` is the "off" setting, which is a real choice rather than a
+        formality: dim light conceals, so a party that wants to be seen
+        picks bright and a rogue picks off.
+
+        **Exclusive by construction.** Every setting this row laid before is
+        ended first, so the state matches what was chosen rather than the
+        reader's order happening to agree. That is the same thing
+        `items/wondrous._one_setting` does across `i1062`'s three sibling
+        rows; here the alternatives are inside one row and the clearing can
+        live in the verb.
+
+        **The brightest setting goes first and that matters.** `c.may`'s
+        note states the rule: "an engine with nobody playing takes the first
+        option, so the order is the answer for every fight run headless". A
+        light is the setting a party in the dark wants, so a caller lists
+        bright first and `off` last.
+
+        Returns the effect laid, or `None` for the "off" setting -- which is
+        not a failure, and is why a caller should not test the return value
+        for success. #687.
+        """
+        who = on if on is not None else self.me
+        for eff in list(self.world.effects.of(who)):
+            if eff.label.startswith(self.ref) and not eff.ended:
+                for _, mod in eff.mods:
+                    if mod.what in ("light_radius", "dim_radius"):
+                        self.world.effects.end(eff, "another setting chosen")
+                        break
+        if not settings:
+            return None
+        picked = self.choose(list(settings), f"{self.ref}: light")
+        if picked is None:
+            return None
+        level, radius = picked
+        if level is Light.BRIGHT:
+            return self.light(radius, on=who, until=until)
+        return self.dim(radius, on=who, until=until)
+
     def dim(
         self, radius: int = 2, *, on: int | None = None,
         until: When = When.ENCOUNTER,

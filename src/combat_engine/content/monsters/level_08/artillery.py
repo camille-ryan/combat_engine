@@ -124,6 +124,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import adjacent, distance_between, squares, team
 from combat_engine.engine.triggers import Trigger, about_me, hits_me
+from combat_engine.engine.types import Light
 
 
 def _sapped(
@@ -1265,7 +1266,6 @@ def m655a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.dim(instead_of=)",),
 )
 def m655a1(c: Cast) -> None:
     """Bright light out to 5 squares, dimmable to 2 as a free action.
@@ -1276,10 +1276,11 @@ def m655a1(c: Cast) -> None:
     an invented mechanic", which was the right instinct and is now
     answered by a real one. #686.
 
-    The same card as `m1587a4` two levels up, and the same single dropped
-    clause: the free-action swap to dim 2 is a *replacement* of the bright
-    5, and nothing says one carried radius supersedes another. #687."""
-    c.light(5, on=c.me, until=When.ENCOUNTER)
+    The same card as `m1587a4` two levels up, written the same way: the
+    free-action swap to dim 2 is a *replacement* of the bright 5, which is
+    what `c.illuminate` holds -- one carried level at a time. #687."""
+    c.illuminate((Light.BRIGHT, 5), (Light.DIM, 2),
+                 on=c.me, until=When.ENCOUNTER)
 
 
 @power(

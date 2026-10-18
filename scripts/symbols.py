@@ -222,7 +222,8 @@ CATEGORIES: dict[str, dict] = {
                 # lightens. `i1213x1` is where the ordering comes from --
                 # "bright light within the candle's radius is reduced to
                 # dim light". #687.
-                "dim", "light", "line", "move_zone", "origin", "resize_aura",
+                "dim", "illuminate", "light", "line", "move_zone", "origin",
+                "resize_aura",
                 # Beside `resize_aura` because it is the same question about
                 # another row's area: that one changes a size, this one
                 # changes the shape. #614.

@@ -114,6 +114,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
+from combat_engine.engine.types import Light
 
 ITEM = "item"
 
@@ -2579,7 +2580,6 @@ def i2694p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.dim(control=)",),
 )
 def i2723x1(c: Cast) -> None:
     """Bright light out to 20 squares, or dim light at a range you choose.
@@ -2595,12 +2595,18 @@ def i2723x1(c: Cast) -> None:
     `c.light`'s own stated position, not a reason to declare the row inert.
     The moment anything darkens a square it plays.
 
-    **"You control the brightness and range" is the dropped clause**, and
+    **"You control the brightness and range" is written now** (#687), and
     it is a real choice rather than a formality: dim light conceals, so a
     wielder who wants to be hard to hit would choose it over the bright 20.
-    `c.dim` lays a fixed radius and takes no per-use range, so the choice
-    has nowhere to be made. #687."""
-    c.light(20, on=c.me, until=When.ENCOUNTER)
+
+    The card gives a ceiling -- "up to 20 squares" -- and no steps, so the
+    settings offered are the ones the other cards in this family print: the
+    full 20, a close 5, and off, at each brightness. Offering every integer
+    from 1 to 20 twice over would be a menu nobody reads and no card asks
+    for."""
+    c.illuminate((Light.BRIGHT, 20), (Light.BRIGHT, 5),
+                 (Light.DIM, 20), (Light.DIM, 5), None,
+                 on=c.me, until=When.ENCOUNTER)
 
 
 @power(

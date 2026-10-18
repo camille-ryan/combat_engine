@@ -104,6 +104,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
+from combat_engine.engine.types import Light
 
 ITEM = "item"
 
@@ -438,15 +439,17 @@ def i2180x1(c: Cast) -> None:
 
 
 @power("i2720x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.dim(control=)",))
+       reach=PERSONAL, target=SELF)
 def i2720x1(c: Cast) -> None:
     """Bright or dim light, 5 or 10 squares, or none -- a free action.
 
     **"Light only" was the whole docstring and it stopped being true**
-    (#686). The widest bright setting is written, which is the one a party
-    in the dark wants; the four-way choice is #687's dropped clause, and it
-    is a real choice rather than a formality because dim light conceals."""
-    c.light(10, on=c.me, until=When.ENCOUNTER)
+    (#686), and the four-way choice is written now (#687). All five
+    settings the card prints, brightest first so a headless engine takes
+    the one a party in the dark wants."""
+    c.illuminate((Light.BRIGHT, 10), (Light.BRIGHT, 5),
+                 (Light.DIM, 10), (Light.DIM, 5), None,
+                 on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3005x1", level=1, cls=ITEM, action=ActionType.NONE,
@@ -504,7 +507,6 @@ def i3347p1(c: Cast) -> None:
     Dim light conceals everybody standing in it, the thrower included,
     which is what the card does and is why this is never inert."""
     from combat_engine.engine import Position
-    from combat_engine.engine.types import Light
 
     here = c.world.get(c.me, Position)
     if here is None:
@@ -857,7 +859,7 @@ def i1312x1(c: Cast) -> None:
 
 @power("i1321x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.dim(control=)", "Gear.left_hanging"))
+       dropped=("Gear.left_hanging",))
 def i1321x1(c: Cast) -> None:
     """A lantern that lights 10 squares, hangs where you leave it, and can
     be sent ahead.
@@ -866,13 +868,19 @@ def i1321x1(c: Cast) -> None:
     one-line docstring's "light" -- bright 10, carried, inert on a lit
     board and real on a dark one. #686.
 
-    Two clauses are dropped and they are different gaps. The **settings**
-    -- bright 10, dim 5, or off, by anyone holding or adjacent -- are
-    #687's chosen level. The **floating lantern** is an object left on the
-    board that keeps lighting and can be commanded to move: a conjuration
-    in everything but name, and `Gear` has no notion of an item put down
-    and still working."""
-    c.light(10, on=c.me, until=When.ENCOUNTER)
+    **The settings are written now** -- bright 10, dim 5, or off -- which
+    is `c.illuminate`, one carried level at a time (#687). "By anyone
+    holding or adjacent" is not: the chooser is the holder, and a card that
+    lets a *neighbour* reach into somebody else's gear has no door here.
+    That is folded into the one remaining marker rather than given its own,
+    because it is the same missing idea.
+
+    **The floating lantern** is an object left on the board that keeps
+    lighting and can be commanded to move: a conjuration in everything but
+    name, and `Gear` has no notion of an item put down and still
+    working."""
+    c.illuminate((Light.BRIGHT, 10), (Light.DIM, 5), None,
+                 on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1328x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -1029,13 +1037,19 @@ def i3006x1(c: Cast) -> None:
 
 
 @power("i3006p1", level=3, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, dropped=("c.dim(control=)",))
+       reach=PERSONAL, target=NO_TARGET)
 def i3006p1(c: Cast) -> None:
     """Bright 10, dim 5, or off, while holding the lantern or beside it.
 
     The same card as `i1321x1`'s settings clause, printed as a power of its
-    own here. Bright 10 is written and the three-way choice is #687. #686."""
-    c.light(10, on=c.me, until=When.ENCOUNTER)
+    own here, and written the same way -- `c.illuminate`, one carried level
+    at a time. #686, #687.
+
+    "Or adjacent to it" is the half neither row can say: the chooser is the
+    holder. One lantern, two printings, one missing idea, and `i1321x1`
+    carries the marker for it."""
+    c.illuminate((Light.BRIGHT, 10), (Light.DIM, 5), None,
+                 on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3006p2", level=3, cls=ITEM, usage=AT_WILL, action=MOVE,
@@ -1064,11 +1078,16 @@ def i3466x1(c: Cast) -> None:
 
 
 @power("i3466p1", level=3, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, dropped=("c.dim(control=)",))
+       reach=PERSONAL, target=NO_TARGET)
 def i3466p1(c: Cast) -> None:
-    """Dim 2, bright 10, or no light. Bright 10 is written; the three-way
-    choice is #687. #686."""
-    c.light(10, on=c.me, until=When.ENCOUNTER)
+    """Dim 2, bright 10, or no light -- all three. #686, #687.
+
+    Brightest first, which is not the card's own order: it prints dim
+    first, and `c.may`'s note is the reason to reorder -- "an engine with
+    nobody playing takes the first option", and a lamp a party is carrying
+    in the dark wants to be lit."""
+    c.illuminate((Light.BRIGHT, 10), (Light.DIM, 2), None,
+                 on=c.me, until=When.ENCOUNTER)
 
 
 @power(

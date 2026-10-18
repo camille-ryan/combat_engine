@@ -104,6 +104,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import cover_between, distance_between, team
 from combat_engine.engine.triggers import Trigger, about_me, by_me, targets_me
+from combat_engine.engine.types import Light
 
 # --------------------------------------------------------------------------
 # Shared shapes
@@ -426,7 +427,6 @@ def m1587a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.dim(instead_of=)",),
 )
 def m1587a4(c: Cast) -> None:
     """Bright light out to 5 squares, dimmable to 2 as a free action.
@@ -440,12 +440,16 @@ def m1587a4(c: Cast) -> None:
     position for a light in daylight -- and not a reason to declare the row
     inert, because it plays the moment a square goes dark.
 
-    **The free-action swap to dim 2 is the dropped clause.** It is a
-    *replacement*, not an addition: the creature trades its bright 5 for a
-    dim 2, which would conceal it. `c.dim` and `c.light` are two radii and
-    nothing says one supersedes the other, so the swap has nowhere to be
-    written. #687."""
-    c.light(5, on=c.me, until=When.ENCOUNTER)
+    **The free-action swap to dim 2 is written now** (#687). It is a
+    *replacement*, not an addition -- the creature trades its bright 5 for
+    a dim 2, which conceals it -- and `c.illuminate` holds one carried
+    level at a time, clearing whatever this row laid before.
+
+    Bright first, so a creature with nobody choosing for it lights the
+    board rather than hiding in it: that is the printed default, since the
+    dim 2 costs a free action to switch to."""
+    c.illuminate((Light.BRIGHT, 5), (Light.DIM, 2),
+                 on=c.me, until=When.ENCOUNTER)
 
 
 # ==========================================================================

@@ -19549,7 +19549,138 @@ def one_lamp_three_settings_and_putting_the_lights_out(out: Result) -> None:
              " more -- \"they also vanish if you use this power again\"",
              f"{len(mine)} then {len(use_again.my_zones())}")
 
+def one_carried_light_level_at_a_time(out: Result) -> None:
+    """Seven rows print a choice of light settings, and only one can hold.
+
+    #687. `c.light` and `c.dim` are two independent radii: laying both
+    leaves a creature bright **and** dimming, and `query.light_level` asks
+    the brightening pass first -- so the dim setting is simply invisible.
+    The cards divide two ways and `c.illuminate` says both:
+
+        m1587a4, m655a1   bright 5, or dim 2 instead, as a free action
+        i3466p1           dim 2, bright 10, or no light
+        i2720x1           bright or dim, 5 or 10, or none
+        i3006p1, i1321x1  bright 10, dim 5, or off
+        i2723x1           bright or dim, up to 20, at a range you choose
+
+    **The assertion that matters is the one in the dim-then-bright
+    direction.** Bright-then-dim reads dim whether anything was cleared or
+    not, because a dimmer beats a carried light -- `i1213x1`'s printed
+    rule, and the reason a plant on `i1062p1`'s clearing stayed green in
+    the increment before this. Only the reverse order shows the exclusivity.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import light_level
+    from combat_engine.engine.types import Light
+
+    world, me, _ = audit_board("i3466p1", 1)
+    here = world.get(me, Position)
+    out.that(here is not None, "the holder is on the grid")
+    if here is None:
+        return
+    square = here.square
+
+    def pick(n: int) -> None:
+        """Install a decider that always takes the nth option offered."""
+        world.decider = (
+            lambda actor, kind, options, prompt, _n=n:
+            options[min(_n, len(options) - 1)]
+        )
+
+    def level() -> Light:
+        return light_level(world, square)
+
+    c = Cast(world=world, me=me, ref="drivers:illuminate")
+    SETTINGS = ((Light.BRIGHT, 10), (Light.DIM, 2), None)
+
+    # -- the headless default is the first option -----------------------
+    world.decider = None
+    out.that(level() is Light.BRIGHT, "the board is lit to start with",
+             f"{level()}")
+    c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
+    world.grid.light[square] = Light.DARK
+    out.that(level() is Light.BRIGHT,
+             "with nobody choosing, the FIRST setting is taken -- so a"
+             " caller lists bright first and a dark square still reads"
+             " lit, which is what `c.may`'s note makes the order mean",
+             f"{level()}")
+    del world.grid.light[square]
+
+    # -- dim, then bright: the direction that shows the clearing ---------
+    world, me, _ = audit_board("i3466p1", 1)
+    square = world.get(me, Position).square
+    c = Cast(world=world, me=me, ref="drivers:illuminate")
+    pick(1)
+    c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
+    out.that(level() is Light.DIM,
+             "the second setting is dim 2, and the square reads dim",
+             f"{level()}")
+    pick(0)
+    c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
+    out.that(level() is Light.BRIGHT,
+             "switching to bright 10 reads BRIGHT -- the assertion the"
+             " other order cannot make, since a dimmer beats a carried"
+             " light whether it was cleared or not",
+             f"{level()}")
+
+    # -- off clears and lays nothing -------------------------------------
+    pick(2)
+    c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
+    mine = [e.label for e in world.effects.of(me)
+            if e.label.startswith("drivers:illuminate")]
+    out.that(not mine,
+             "the `None` setting leaves nothing behind -- \"sheds no"
+             " light\" is a setting and not a failure",
+             f"{mine}")
+    world.grid.light[square] = Light.DARK
+    out.that(level() is Light.DARK,
+             "so a dark square stays dark with the lamp off",
+             f"{level()}")
+
+    # -- and only ever one at a time -------------------------------------
+    del world.grid.light[square]
+    pick(0)
+    c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
+    pick(1)
+    c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
+    held = [e for e in world.effects.of(me)
+            if e.label.startswith("drivers:illuminate") and not e.ended]
+    out.that(len(held) == 1,
+             "two calls leave ONE effect, not two -- the whole point, and"
+             " what laying `c.light` and `c.dim` side by side could not do",
+             f"{[e.label for e in held]}")
+
+    # -- the rows themselves ---------------------------------------------
+    for ref, brightest in (("i3466p1", Light.BRIGHT), ("m655a1", Light.BRIGHT),
+                           ("m1587a4", Light.BRIGHT), ("i2723x1", Light.BRIGHT),
+                           ("i2720x1", Light.BRIGHT), ("i3006p1", Light.BRIGHT),
+                           ("i1321x1", Light.BRIGHT)):
+        world, me, _ = audit_board(ref, 1)
+        here = world.get(me, Position)
+        if here is None:
+            continue
+        x, y = here.square
+        world.grid.light[(x + 1, y)] = Light.DARK
+        world.decider = None
+        row = REGISTRY[ref]
+        out.that(not row.dropped or "Gear" in str(row.dropped),
+                 f"{ref} carries no light marker any more",
+                 f"{row.dropped}")
+        row.body(Cast(world=world, me=me, ref=ref))
+        out.that(light_level(world, (x + 1, y)) is brightest,
+                 f"{ref} takes its brightest setting with nobody choosing",
+                 f"{light_level(world, (x + 1, y))}")
+
 DRIVERS = {
+    "illuminate": (
+        one_carried_light_level_at_a_time,
+        "one carried light level at a time, chosen from what the card offers",
+    ),
     "lamp_settings": (
         one_lamp_three_settings_and_putting_the_lights_out,
         "one lamp's three settings, and a row that suppresses a light (#686)",
