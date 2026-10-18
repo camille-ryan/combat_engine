@@ -219,10 +219,22 @@ def p10636(c: Cast) -> None:
     out_of_combat=True,
 )
 def p10637(c: Cast) -> None:
-    """Inert by declaration. Both halves are about the check that keeps a
-    creature hidden -- the penalty for moving, and being given away by an
-    attack -- and the engine rolls no such check: hiding is a state `c.hide`
-    sets and `resolve` clears, with no number in between to modify."""
+    """Inert by declaration, and the two halves are inert for different
+    reasons -- which the old one-sentence reason flattened.
+
+    **"The engine rolls no such check" is false for the second half.** A
+    row rolls its own stealth check before hiding: `p14228` reads the
+    watchers' passive perception and calls `c.check("stealth", dc)`, and
+    `c.boost_check` and a `skill:stealth` modifier both reach it. #691,
+    #677.
+
+    What is actually absent is the **penalty each half waives**. Nothing
+    charges a creature for moving more than two squares while hidden, and
+    nothing gives it away for attacking *from* hiding beyond `resolve`
+    clearing the state outright -- so there is no number for either clause
+    to lift. A waiver of a penalty nobody levies is complete and inert,
+    which is a claim about this engine's rules and not about its
+    arithmetic."""
     c.note("p10637: moving costs nothing to stay unseen, and a miss does not give you away")
 
 

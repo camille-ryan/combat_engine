@@ -67,9 +67,17 @@ def bard_rituals(c: Cast) -> None:
 def bard_versatility(c: Cast) -> None:
     """Permission to take multiclass feats from more than one class.
 
-    Feats are not modelled at all -- `features/__init__` says so in its
-    first paragraph -- so this is a rule about character building with no
-    reading in a fight. Inert on purpose.
+    **"Feats are not modelled at all" was the reason and it is false.** A
+    feat is an ordinary row in `Powers.known`; `c.feat` asks whether a
+    character has one, `c.feats(category=)` counts them by printed
+    category, and `feat.trains` reaches `Skills.trained` through `chargen`.
+    74 heroic feats ask about another feat. #692, #688.
+
+    Inert for a different and sturdier reason: the clause is a permission
+    exercised **at character creation** -- which multiclass feats a
+    character may take -- and nothing in a fight reads how a feat was
+    qualified for. That is a claim about the card rather than about the
+    engine, so it cannot go stale the way the old one did. #677.
     """
 
 

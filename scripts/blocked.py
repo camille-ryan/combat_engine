@@ -2,7 +2,8 @@
 """Rows that are not finished, and what each is waiting for.
 
     uv run scripts/blocked.py                   what is outstanding, and what is ready now
-    uv run scripts/blocked.py --ready           only the ones that have become writable
+    uv run scripts/blocked.py --ready           only the ones that have become writable,
+                                                plus the three shapes the rest are in
     uv run scripts/blocked.py --group           the engine's work queue, ranked by demand
     uv run scripts/blocked.py --refs 'c.deals()'   just the refs waiting on that one
 
@@ -79,6 +80,77 @@ def main() -> int:
 SOURCE_GAP = "compendium."
 
 
+def _head_of(token: str) -> tuple[str, str]:
+    """A want split into the thing named and the arguments asked for."""
+    head, _, rest = token.partition("(")
+    return head.strip(), rest
+
+
+def _named_thing_exists(token: str, have: dict[str, object]) -> bool:
+    """Does **something of that name** exist, ignoring the arguments?
+
+    The other half of `_one`, which answers the whole question. Apart,
+    because the difference is the whole of #677: a want whose head exists
+    and whose argument does not is **one parameter** of work, and a want
+    whose head does not exist is a facility nobody has started. Reported as
+    one four-figure total, the first was buried in the second.
+    """
+    import re as _re
+
+    if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+", token):
+        from combat_engine.content import declared
+
+        return token in declared()
+    head, _ = _head_of(token)
+    if head in have:
+        return True
+    if "." not in head:
+        return False
+    owner, _, attr = head.rpartition(".")
+    thing = have.get(owner)
+    if thing is not None and hasattr(thing, attr):
+        return True
+    # The same fallback `_one` makes, and for the same reason: a marker
+    # written from memory names the wrong module about as often as it names
+    # the wrong thing.
+    pool = _FALLBACK or have
+    engine_owned = owner.split(".")[0] in (_ENGINE_OWNERS or {owner.split(".")[0]})
+    if not (owner.islower() and engine_owned):
+        return False
+    return any(
+        k.endswith(f".{attr}") or k == attr
+        for k in pool
+        if not k.startswith("c.")
+    )
+
+
+def _shape_of(token: str, have: dict[str, object]) -> str:
+    """Which bucket this want is in: `parameter`, `facility` or `source`.
+
+    #677. `--ready` read "0 ready, 1153 still blocked" and the flat total
+    implied the whole of it was waiting on work nobody had started. 285 of
+    them wanted **one argument on a verb that already exists, with its
+    readers** -- the cheapest work in the tree, and invisible.
+
+    A want naming arguments on a thing that exists is `parameter`. Nothing
+    of that name at all is `facility`.
+
+    **A want naming no arguments on a thing that exists answers `ready`**,
+    which in the report is unreachable -- `_one` has already put that row
+    in the ready bucket. It is named rather than folded into `facility`
+    because this function is also the thing a reader calls to ask about one
+    symbol, and answering "facility" for a symbol that exists would be a
+    lie told to be tidy. If it ever shows up in a count, the two halves
+    disagree and that is the finding.
+    """
+    if token.startswith(SOURCE_GAP):
+        return "source"
+    if not _named_thing_exists(token, have):
+        return "facility"
+    _, rest = _head_of(token)
+    return "parameter" if rest.strip(" )") else "ready"
+
+
 def _report(
     marked: list[tuple[str, tuple[str, ...]]],
     entries: dict,
@@ -88,6 +160,8 @@ def _report(
 ) -> int:
     ready = partial = waiting = sourced = capped = 0
     lines: list[str] = []
+    #: Blocked rows by the shape of what they want. See `_shape_of`.
+    shape: dict[str, list[str]] = defaultdict(list)
     for ref, todo in marked:
         arrived = [w for w in todo if _one(w, have)]
         if len(arrived) == len(todo):
@@ -119,6 +193,15 @@ def _report(
                              f"— the page does not print it; nothing to build")
         else:
             waiting += 1
+            # **Which kind of blocked**, which is #677's whole point. A row
+            # wanting one argument on an existing verb is cheap work; a row
+            # wanting a facility is not; and a flat total said neither. A row
+            # with two wants counts in the *dearer* bucket, because that is
+            # what has to land before it can be written.
+            kinds = {_shape_of(w, have) for w in todo}
+            shape["facility" if "facility" in kinds else
+                  "parameter" if "parameter" in kinds else
+                  "ready" if "ready" in kinds else "source"].append(ref)
             # A row wanting the source *and* real work can be worked on and
             # still never clear. Four of them. Counted as waiting, because the
             # work is real, and named so the ceiling is not a surprise.
@@ -176,6 +259,39 @@ def _report(
 
     print(f"\n  tree: {ready} ready, {partial} partial, "
           f"{waiting} still blocked, {sourced} waiting on the compendium")
+    if waiting:
+        # **The headline that matters.** "1,153 still blocked" reads as a
+        # four-figure backlog; a quarter of it is one keyword each. #677.
+        want_arg = len(shape["parameter"])
+        want_new = len(shape["facility"])
+        print(f"  of the {waiting}: {want_arg} want an ARGUMENT on a verb "
+              f"that exists, {want_new} want a facility")
+        # Unreachable unless `_one` and `_shape_of` disagree about the same
+        # symbol, which would be a fault in one of them rather than news
+        # about a row. Printed rather than asserted so it cannot be silent.
+        if shape["ready"]:
+            print(f"  and {len(shape['ready'])} that `_shape_of` calls ready "
+                  f"while `_one` calls blocked -- the two disagree: "
+                  f"{' '.join(sorted(shape['ready'])[:10])}")
+        if want_arg:
+            print("  the cheap queue, by ref:")
+            for line in _in_columns(sorted(shape["parameter"])):
+                print(f"      {line}")
+
+    # **The third bucket, which carries no marker and so was never counted.**
+    # See `_premise_rows`: a reading queue, not a ready list. #677.
+    claims = _premise_rows()
+    if claims:
+        print(f"\n  and {len(claims)} row(s) carry NO marker and rest on a "
+              f"claim about the engine -- a reading queue, not a ready list:")
+        by_phrase: dict[str, list[str]] = defaultdict(list)
+        for ref, phrase in claims:
+            by_phrase[phrase].append(ref)
+        for phrase, refs in sorted(by_phrase.items(),
+                                   key=lambda kv: (-len(kv[1]), kv[0])):
+            print(f"      {phrase!r:28} {len(refs):>3}  "
+                  f"{' '.join(sorted(refs)[:6])}"
+                  f"{' …' if len(refs) > 6 else ''}")
     if capped:
         print(f"  of the {waiting} blocked, {capped} also want something the "
               f"page does not print, so they cannot fully clear")
@@ -192,6 +308,114 @@ def _report(
             print(f"      {ref:<12} {wants[:88]}")
         return 1
     return 0
+
+
+#: Phrases that make a docstring a **claim about the engine** rather than
+#: about the card. Each one has been the whole reason a row was inert, and
+#: each has been false at least once:
+#:
+#: * "light and darkness are not modelled" -- 24 rows, and light had been
+#:   modelled for weeks (#686);
+#: * "no fight rolls a skill check" -- 24 rows, and a fight rolls thirteen
+#:   of them in sixty-three places (#691).
+#:
+#: The claim that survives says something about the **card** instead -- "the
+#: card states no mechanical change either way" -- or about a *circumstance*
+#: no board presents. Those cannot go stale, which is the whole distinction.
+PREMISE = (
+    "not modelled", "no reader", "nothing records", "nothing reads",
+    "no fight rolls", "nothing ever", "cannot be asked", "nothing asks",
+    "nothing in the engine", "no such", "no training model",
+    "no encumbrance", "no inventory",
+)
+
+#: **`"there is no"` was on the list above and came off, with its
+#: measurement.** It matched 52 rows and read 14 of them: most were correct
+#: claims about the *card* or the *circumstance* phrased that way -- "there
+#: is no ritual in a fight", "no creature on a board eats anything", "there
+#: is no combat clause here to write" -- which is precisely the kind of
+#: reason that cannot go stale. Roughly one in ten was an engine claim. A
+#: screen at that precision is a list somebody stops reading, which is worse
+#: than no screen. The two phrases it was there for are named explicitly
+#: instead.
+_REJECTED_PHRASE = "there is no"
+
+#: A docstring that **quotes a premise in order to correct it** contains the
+#: premise. `f1284` reads *"'There is no training model' was the reason and
+#: it stopped being true"* -- a row already fixed, and the first thing this
+#: screen reported. So a correction marker anywhere in the docstring takes
+#: the row out: the claim has been looked at, which is all this queue is
+#: for.
+CORRECTED = (
+    "stopped being true", "was the reason", "is false", "was false",
+    "no longer true", "had stopped", "correction", "corrected",
+    "and that is false", "turned out",
+)
+
+
+def _premise_rows() -> list[tuple[str, str]]:
+    """`out_of_combat=True` rows whose reason is a claim about the engine.
+
+    **The bucket `--ready` cannot see by construction**, and it is the
+    biggest one. A row declared inert carries no marker at all, so
+    `blocked.py` has never counted one -- and two hand screens found **48**
+    of them resting on premises that had stopped being true (#686, #691).
+
+    Returned as `(ref, the phrase that makes it a claim)`. An `ast` walk
+    rather than a grep over the built registry, because the thing being
+    read is the *source* docstring beside the *source* header, and a row
+    whose body is generated by a helper has neither.
+
+    **A reading queue and not a ready list**, which is the one thing to say
+    out loud. Of the 24 in #691: 5 were writable, 8 stayed inert on a
+    circumstance no board presents, 3 wanted a facility and 1 was already
+    right. A false premise does not make a row writable -- the circumstance
+    decides -- so this is a list of claims worth checking, not of work.
+    """
+    import ast
+
+    out: list[tuple[str, str]] = []
+    root = ROOT / "src" / "combat_engine" / "content"
+    for path in sorted(root.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            inert = False
+            ref = ""
+            for deco in node.decorator_list:
+                if not isinstance(deco, ast.Call):
+                    continue
+                for word in deco.args:
+                    if isinstance(word, ast.Constant) and isinstance(
+                        word.value, str
+                    ):
+                        ref = ref or word.value
+                for kw in deco.keywords:
+                    if kw.arg == "out_of_combat" and isinstance(
+                        kw.value, ast.Constant
+                    ):
+                        inert = bool(kw.value.value)
+            if not (inert and ref):
+                continue
+            said = (ast.get_docstring(node) or "").lower()
+            if any(w in said for w in CORRECTED):
+                continue
+            hit = next((w for w in PREMISE if w in said), "")
+            if hit:
+                out.append((ref, hit))
+    return out
+
+
+def _in_columns(refs: list[str], per_line: int = 8) -> list[str]:
+    """Refs wrapped, so a few hundred of them stay readable."""
+    return [
+        " ".join(f"{r:<11}" for r in refs[i: i + per_line]).rstrip()
+        for i in range(0, len(refs), per_line)
+    ]
 
 
 def _queue(

@@ -969,10 +969,18 @@ def m3049a4(c: Cast) -> None:
     out_of_combat=True,
 )
 def m3049a5(c: Cast) -> None:
-    """A disguise and a contest of two skills, and neither is a thing the
-    engine rolls: appearance is not modelled, and there is no Bluff to be
-    beaten by an Insight check. Deliberately inert rather than given an
-    invented combat effect."""
+    """A disguise and a contest of two skills.
+
+    **"There is no Bluff to be beaten by an Insight check" was half the
+    reason and it is false**: the tree contests a bluff against a passive
+    insight in eight rows, and `skills.check` rolls thirteen skills in
+    sixty-three places. #691, found again by the premise screen in #677.
+
+    Inert on the half that survives, which is a **circumstance**: nothing
+    on a board is looking through a disguise, so the contest has no
+    occasion rather than no machinery. Four other disguise rows reached
+    the same verdict independently -- `i1615p1`, `i2075p1`, `i481p1`,
+    `f3674` -- and `f2900` carries it as `narrative=("skill:bluff",)`."""
     c.note("m3049a5: it can appear as any Medium or Large humanoid")
 
 
