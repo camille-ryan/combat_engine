@@ -2918,8 +2918,11 @@ class Cast:
         amount += self._enhancement()
         # A card naming two types has said what it deals, so the weapon's
         # own type gets no vote -- the rule `_typed` already applies to one
-        # named type.
-        dtype = dtype if dtypes else self._typed(dtype)
+        # named type. A *standing* retype of two types answers here, and
+        # `_typed` is the only thing that knows about it. #706.
+        if not dtypes:
+            dtype, *rest = self._typed(dtype)
+            dtypes = (dtype, *rest) if rest else ()
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
             dtypes=dtypes,
@@ -2963,7 +2966,9 @@ class Cast:
             return 0
         full = self._roll_damage(dice) + bonus if dice else bonus
         amount = (full + self._enhancement()) // 2
-        dtype = dtype if dtypes else self._typed(dtype)
+        if not dtypes:
+            dtype, *rest = self._typed(dtype)
+            dtypes = (dtype, *rest) if rest else ()
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
             dtypes=dtypes,
@@ -12979,8 +12984,9 @@ class Cast:
 
     def deals(
         self,
-        dtype: DamageType,
+        dtype: DamageType = DamageType.UNTYPED,
         *,
+        dtypes: Sequence[DamageType] = (),
         until: When = When.ENCOUNTER,
         on: int | None = None,
         implement: bool = False,
@@ -13047,32 +13053,80 @@ class Cast:
         `query.kinds_of` already answers, it goes in the label beside the
         other three, and it cannot reach the wire. See `_retyped`.
 
+        **`dtypes` is a retype to several types at once**, and it is the
+        whole set rather than an addition to `dtype` -- the same convention
+        `c.damage`, `c.half_damage`, `c.flat` and `c.ongoing` already use,
+        so `dtype` is ignored when it is given. "All damage dealt by this
+        weapon is acid damage **and** poison damage" is one blow that is
+        both, which the printed rule resists only as far as the target
+        resists *every* type in it; `resolve.deal_damage` has done that
+        arithmetic since #420 and this was the half that could not reach
+        it. `dtypes[0]` stays the blow's primary type, which is what the
+        events carry.
+
+        Three cards print it and one of them prints it as an **addition to
+        a named type** -- "fire damage dealt by attacks using this is also
+        necrotic damage, and necrotic is also fire" -- which is
+        `from_=FIRE, dtypes=(FIRE, NECROTIC)` and the mirror of it. Two
+        holds, which is why the line below changed.
+
         Held as a labelled effect rather than written onto the `Weapon`,
         because the weapon object is the character's and the change is
         usually for a fight. Yours, so it defaults to the caster.
         """
         who = on if on is not None else self.me
-        for eff in list(self.world.effects.of(who)):
-            if eff.label.startswith("deals:"):
-                self.world.effects.end(eff, "deals another type now")
+        types = tuple(dict.fromkeys(dtypes)) or (dtype,)
         through = Keyword.IMPLEMENT if implement else Keyword.WEAPON
-        # **A fixed five-field key.** The label was `deals:<to>:<through>`
+        # **A fixed six-field key.** The label was `deals:<to>:<through>`
         # and nothing outside this file parses it -- the two other mentions
         # in the tree are docstrings using it as an example of a label that
         # is not a ref (#580). Fields rather than flags so `_retyped` reads
         # it by position and an empty one means "does not narrow".
+        # **`|` between the fields, not `:`, and that is a bug fix rather
+        # than a tidy.** A ref may itself contain a colon -- 321 of the
+        # 23,060 in `REGISTRY` do, every `cf:`, `rt:` and `b:` one -- so a
+        # positional label separated by colons could not hold one in its
+        # `ref` field. `c.deals(ref="cf:invoker-f1c1")` laid a hold
+        # `_retyped` read back as `through="cf"` and skipped, silently, for
+        # as long as the parameter has existed. `f1098` works only because
+        # `p1458` happens to have no colon in it.
+        #
+        # The `deals:` prefix stays: `durations.py`, `dsl.py` and
+        # `audit.py` all test `label.startswith("deals:")`.
+        narrowing = (
+            f"{through.value}|{from_.value if from_ is not None else ''}"
+            f"|{'ranged' if ranged else ''}|{ref}|{vs_kind}"
+        )
+        # **Ends a standing retype only where the two speak for the same
+        # blows**, which is narrower than it was and had to become so.
+        # This ended every `deals:` hold, so only one could stand -- and
+        # `i3343x1` lays two, one for each direction of "fire is also
+        # necrotic and necrotic is also fire". The two narrow on different
+        # `from_`, so no blow can match both and neither should cancel the
+        # other. `_retyped`'s own docstring has anticipated this since it
+        # was written: it skips a hold that does not cover the row rather
+        # than ending the search, "the day a weapon retype and an implement
+        # retype stand at once".
+        #
+        # Unchanged where it matters: two unconditional overrides have the
+        # same narrowing, so a weapon retyped to fire and then to cold
+        # still holds cold alone.
+        for eff in list(self.world.effects.of(who)):
+            if not eff.label.startswith("deals:"):
+                continue
+            parts = [*eff.label.split("|"), "", "", "", "", ""][1:6]
+            if "|".join(parts) == narrowing:
+                self.world.effects.end(eff, "deals another type now")
         return self.world.effects.apply(
             who, self.me, until,
-            label=(f"deals:{dtype.value}:{through.value}"
-                   f":{from_.value if from_ is not None else ''}"
-                   f":{'ranged' if ranged else ''}"
-                   f":{ref}:{vs_kind}"),
+            label=(f"deals:{types[0].value}|{narrowing}"
+                   f"|{','.join(t.value for t in types[1:])}"),
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
 
-    def _typed(self, dtype: DamageType) -> DamageType:
-        """The type this blow really is.
+    def _typed(self, dtype: DamageType) -> tuple[DamageType, ...]:
+        """Every type this blow really is. One of them, usually.
 
         Two different sentences meet here and they are not equally loud.
         A weapon *made* of something -- a silvered blade -- only says what
@@ -13084,6 +13138,11 @@ class Cast:
         spell is not the sword's business. `c.deals(implement=True)` is
         the other half of that gate, for the cards that retype what a
         symbol casts.
+
+        **A tuple rather than one type, because a retype may be of two at
+        once** -- see `c.deals(dtypes=)`. Everything else here answers with
+        a tuple of one, and the two callers pass a longer one straight on
+        to `resolve.deal_damage` as its `dtypes`.
         """
         p = self._declared()
         # `None` is a blow with no row behind it -- a hazard, a fall. It
@@ -13093,16 +13152,16 @@ class Cast:
         if retype is not None:
             return retype
         if dtype is not DamageType.UNTYPED:
-            return dtype
+            return (dtype,)
         if keywords is not None and Keyword.WEAPON not in keywords:
-            return dtype
-        return self._weapon_dtype() or dtype
+            return (dtype,)
+        return (self._weapon_dtype() or dtype,)
 
     def _retyped(
         self,
         keywords: Sequence[Keyword] | None,
         printed: DamageType = DamageType.UNTYPED,
-    ) -> DamageType | None:
+    ) -> tuple[DamageType, ...] | None:
         """The override a `c.deals` laid down, if it covers this row.
 
         Separate from `_weapon_dtype` because the two halves of that
@@ -13123,20 +13182,46 @@ class Cast:
         hit (`vs_kind`). An empty field does not narrow, which is what every
         card saying "all damage" wants.
 
-        **Six fields now, and the padding is what keeps that safe.** A label
-        written before any of them existed is three parts long and must go
-        on meaning exactly what it meant; the split is padded for that, and
-        the precedent is `from_` and `scope`, which were added the same way.
+        **Seven fields now, and the padding is what keeps that safe.** A
+        label written before any of them existed is two parts long and must
+        go on meaning exactly what it meant; the split is padded for that,
+        and the precedent is `from_` and `scope`, which were added the same
+        way. The seventh is the rest of a two-type retype.
+
+        **Separated by `|`, and it used to be `:`.** A ref may contain a
+        colon -- 321 of the 23,060 in `REGISTRY` do -- so the `ref` field
+        could not hold `cf:invoker-f1c1` and the whole label read one place
+        to the left. `c.deals(ref=)` was silently dead for every
+        colon-bearing ref; `f1098` works because `p1458` has none. Found by
+        `drivers.retype_two_types`, which named such a row.
         """
         for eff in self.world.effects.of(self.me):
             if not eff.label.startswith("deals:"):
                 continue
             # Positional, and padded: a label written before the two
-            # narrowing fields existed has three parts and must keep
+            # narrowing fields existed has two parts and must keep
             # meaning exactly what it meant.
-            parts = [*eff.label.split(":"), "", "", "", "", "", ""][1:7]
-            said, through, only, scope, named, kind = parts
-            if through and keywords is not None and Keyword(through) not in keywords:
+            parts = [*eff.label.split("|"), "", "", "", "", "", ""][0:7]
+            said = parts[0].removeprefix("deals:")
+            through, only, scope, named, kind, also = parts[1:7]
+            # **A named row is its own narrowing, and `through` steps
+            # aside for it.** That field scopes "this weapon" or "this
+            # implement" and is one of those two or nothing -- there is no
+            # third value meaning "any row". A card naming **one** row says
+            # something strictly narrower, and `f1488` names a card whose
+            # keywords are neither: it is divine and radiant, so the retype
+            # could not pass either value of `through` and the clause was
+            # unwritable for that reason alone.
+            #
+            # Harmless for the row that already pairs them: `f1098` passes
+            # `ref=` and `implement=True`, and the row it names does carry
+            # `Keyword.IMPLEMENT`, so the answer is unchanged.
+            if (
+                through
+                and not named
+                and keywords is not None
+                and Keyword(through) not in keywords
+            ):
                 continue
             if only and DamageType(only) is not printed:
                 continue
@@ -13151,7 +13236,10 @@ class Cast:
             # reason this is a kind and not a hand-rolled test.
             if kind and not self.is_kind(kind):
                 continue
-            return DamageType(said)
+            return (
+                DamageType(said),
+                *(DamageType(v) for v in also.split(",") if v),
+            )
         return None
 
     def _weapon_dtype(self) -> DamageType | None:

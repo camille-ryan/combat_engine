@@ -20,6 +20,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Cast,
+    DamageType,
     Hit,
     Keyword,
     PowerResolved,
@@ -163,25 +164,39 @@ def f1079(c: Cast) -> None:
 
 
 @power("f1488", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.deals(dtypes=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you use cf:invoker-f1c1",
        on=Trigger(PowerUsed, _used_card_b, "you use that covenant's card"))
 def f1488(c: Cast) -> None:
-    """The save penalty is written; the damage type is dropped, and the
-    reason has narrowed to one word.
+    """Written. Three clauses: the retype, the keyword, and the save
+    penalty that was already here.
 
-    The old note said `c.deals` "rewrites what *this creature's* attacks
-    deal for a duration, and the printed line rewrites one named row's line
-    for good". The first half is answered: `ref=` names a row now. The
-    duration is not the gap either -- an encounter is the span a feat's
-    clause plays over.
+    "Deals fire **and** radiant damage" is `c.deals(dtypes=)` -- one blow
+    of two types, which the target resists only as far as it resists both.
+    `ref=` names the one card it speaks for, and that narrowing is what
+    makes it safe to lay on a creature at all: without it the retype would
+    recolour everything the invoker does.
 
-    What is left is **two types at once**: "deals fire **and** radiant
-    damage". `c.deals` takes one `DamageType` and `_retyped` returns one, so
-    the symbol is the family's existing `c.deals(dtypes=)`, which two item
-    rows also want. The keyword half ("gains the fire keyword") is writable
-    with `c.counts_as_keyword` and lands with it, since a keyword on half a
-    retype would be a card that reads fire and deals none."""
+    **The keyword comes with it, not after it.** "Gains the fire keyword"
+    is `c.counts_as_keyword`, and shipping the retype without it would be a
+    card that reads fire and deals none -- or the reverse, which is worse,
+    since a fire-keyword gate elsewhere would pay on radiant damage.
+
+    **Laid on the trigger although the clause is standing, and that is
+    sound here rather than a compromise.** The card states a permanent
+    property of one power, and a declared `on=` means this body runs only
+    when the trigger fires -- but the trigger *is* the use of that very
+    power, and `PowerUsed` is announced before the card's damage rolls.
+    `f1079` beside this uses `PowerResolved` for the opposite reason and
+    says so. So the retype is in place for every roll it could speak for,
+    and there is no moment at which the card is used without it."""
+    c.deals(
+        dtypes=(DamageType.FIRE, DamageType.RADIANT),
+        ref="cf:invoker-f1c1", on=c.me, until=When.ENCOUNTER,
+    )
+    c.counts_as_keyword(
+        "cf:invoker-f1c1", Keyword.FIRE, on=c.me, until=When.ENCOUNTER,
+    )
     foe = _striker(c.trigger)
     if foe is not None:
         c.penalty("save", 1, on=foe, until=When.EONT)

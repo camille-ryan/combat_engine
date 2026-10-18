@@ -14531,9 +14531,10 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
         return rolling._retyped(None, printed)
 
     out.that(asked(ref="p1458", undead=True, printed=DamageType.FIRE)
-             is DamageType.RADIANT,
+             == (DamageType.RADIANT,),
              "the named row's fire damage against an undead target comes out"
-             " radiant, which is the whole printed clause")
+             " radiant, which is the whole printed clause -- a tuple of one"
+             " since #706, because a retype may now be of two types")
     out.that(asked(ref="p1458", undead=False, printed=DamageType.FIRE) is None,
              "the same row against anything else is untouched -- `vs_kind`")
     out.that(asked(ref="p999", undead=True, printed=DamageType.FIRE) is None,
@@ -14545,11 +14546,17 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
     # **The three rows still waiting want three different things**, which is
     # why one symbol over four could not go green correctly for any of them.
     # Asserted so the symbol cannot quietly collapse back.
+    # `f1488` was here and is written: `c.deals(dtypes=)` landed in #706.
+    # Its two neighbours want different things and are the reason one symbol
+    # over four rows could go green correctly for none of them.
     left = {
-        "f1488": ("c.deals(dtypes=)",),
         "cf:warlock-f1s1": ("c.deals(from_many=)",),
         "f2179": ("c.deals(like=)",),
     }
+    out.that(not REGISTRY["f1488"].unfinished,
+             "f1488 carries no marker: the two-type retype, the fire keyword"
+             " and the save penalty all play (#706)",
+             f"{REGISTRY['f1488'].unfinished}")
     for ref, want in left.items():
         out.that(REGISTRY[ref].unfinished == want,
                  f"{ref} waits on {want[0]} and not on the parameter that"
@@ -22332,10 +22339,242 @@ def a_tome_lends_a_card_and_charges_for_it(out: Result) -> None:
                  f"gained {sorted(set(known.all) - held)} asked {asked}")
 
 
+def a_retype_can_be_of_two_types_at_once(out: Result) -> None:
+    """`c.deals(dtypes=)`, and the two holds one card needs to stand at once.
+
+    Three heroic rows print *"all damage dealt by this is **X and Y**"* and
+    `c.deals` could say one type. #420 had already built everything
+    downstream -- `c.damage(dtypes=)`, `resolve.deal_damage`'s per-type
+    arithmetic, `DamageApplied.dtypes` and `.types()` -- so the standing
+    override was the one half that could not reach it, and `i1890p1` was
+    laid as acid while `i1890p2` on the same card dealt acid **and** poison.
+
+    **The resistance assertions are the ones that matter**, because a blow
+    of two types and a blow of one are indistinguishable on a target that
+    resists neither. The printed rule is that such a blow is reduced only as
+    far as the target resists *every* type in it, so:
+
+    * resisting one of the pair takes it in **full**, where the same
+      resistance stops a single-type retype dead;
+    * resisting both finally reduces it.
+
+    Asserted off `DamageApplied.types()` through `c.damage`, which is where
+    the type is settled -- `_weapon_dtype`'s own note gives the reason it
+    cannot be a listener.
+
+    **And the second change: `c.deals` ended every standing retype before
+    laying a new one.** `i3343x1` lays two, one per direction of "fire is
+    also necrotic and necrotic is also fire", so the second call silently
+    cancelled the first and only one direction would have played. It now
+    ends only a hold whose narrowings match, which leaves two unconditional
+    overrides behaving exactly as before -- asserted below, because that is
+    the half a narrowing could break.
+
+    **Third: `through` steps aside for a named row.** That field is
+    `Keyword.WEAPON` or `Keyword.IMPLEMENT` and has no third value meaning
+    "any row", and `f1488` names a card carrying neither -- so its clause
+    was unwritable for that reason alone, independently of the two types.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType as T
+    from combat_engine.engine.types import Keyword
+
+    def pick(*, kind: str) -> str:
+        """A heroic row that swings with the thing, by keyword and reach."""
+        for ref, p in sorted(REGISTRY.items()):
+            if not ref.startswith("p") or (p.level or 0) > 10 or p.todo:
+                continue
+            if Keyword.WEAPON not in (p.keywords or ()):
+                continue
+            if p.reach_of(0).kind == kind:
+                return ref
+        return ""
+
+    def implement_row() -> str:
+        for ref, p in sorted(REGISTRY.items()):
+            if not ref.startswith("p") or (p.level or 0) > 10 or p.todo:
+                continue
+            if Keyword.IMPLEMENT in (p.keywords or ()):
+                return ref
+        return ""
+
+    melee, wand = pick(kind="melee"), implement_row()
+    out.that(bool(melee) and bool(wand),
+             "there is a heroic weapon power and a heroic implement power, or"
+             " the two halves below prove nothing",
+             f"{melee} / {wand}")
+
+    def dealt(ref, lay, printed, resist=()):  # noqa: ANN001, ANN202
+        """What one blow came out as, and how much of it landed."""
+        world, me, _ = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        if resist:
+            held = world.get(foe, Defences) or world.add(foe, Defences())
+            for kind in resist:
+                held.resist[kind] = 100
+        lay(Cast(world=world, me=me, ref=ref))
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        mark = len(world.bus.log)
+        # A flat 9 on top of 1d1, so "reduced" and "not reduced" are far
+        # apart and no die roll can confuse them.
+        use.damage("1d1", 9, dtype=printed, on=foe)
+        hits = [e for e in world.bus.log[mark:] if isinstance(e, DamageApplied)]
+        return (hits[-1].types(), hits[-1].amount) if hits else ((), -1)
+
+    # -- the regression: one type still answers as one type ---------------
+    out.that(dealt(melee, lambda c: c.deals(T.COLD), T.FIRE)[0] == (T.COLD,),
+             "a single-type retype still answers with exactly that type --"
+             " `_typed` returns a tuple now and both call sites changed, so"
+             " this is the line that catches the change going wrong",
+             f"{dealt(melee, lambda c: c.deals(T.COLD), T.FIRE)}")
+
+    # -- two types, carried all the way to the event ----------------------
+    pair = (T.COLD, T.THUNDER)
+    out.that(dealt(melee, lambda c: c.deals(dtypes=pair), T.FIRE)[0] == pair,
+             "a two-type retype reaches `DamageApplied.types()` as both, in"
+             " the order the card prints them",
+             f"{dealt(melee, lambda c: c.deals(dtypes=pair), T.FIRE)}")
+
+    # -- and it is the SET that resistance reads, which is the whole point -
+    # Against an unresisted blow of the same shape rather than a literal:
+    # the amount carries the weapon's enhancement and a d1, and a number
+    # written in here would be an assertion about the board's gear.
+    base = dealt(melee, lambda c: c.deals(dtypes=pair), T.FIRE)[1]
+    one = dealt(melee, lambda c: c.deals(dtypes=pair), T.FIRE, (T.COLD,))
+    solo = dealt(melee, lambda c: c.deals(T.COLD), T.FIRE, (T.COLD,))
+    both = dealt(melee, lambda c: c.deals(dtypes=pair), T.FIRE, pair)
+    out.that(base > 0 and one[1] == base and solo[1] == 0,
+             "resisting ONE of the pair takes the blow in full, where the"
+             " same resistance stops a single-type retype dead -- the only"
+             " arrangement that can tell the two implementations apart",
+             f"pair {one[1]} vs single {solo[1]}")
+    out.that(both[1] == 0,
+             "and resisting both finally reduces it",
+             f"{both}")
+
+    # -- two holds standing at once, one per direction --------------------
+    def two_ways(c: Cast) -> None:
+        c.deals(dtypes=(T.FIRE, T.NECROTIC), from_=T.FIRE, implement=True)
+        c.deals(dtypes=(T.NECROTIC, T.FIRE), from_=T.NECROTIC, implement=True)
+
+    out.that(dealt(wand, two_ways, T.FIRE)[0] == (T.FIRE, T.NECROTIC),
+             "with both of `i3343x1`'s holds laid, a FIRE blow comes out fire"
+             " and necrotic",
+             f"{dealt(wand, two_ways, T.FIRE)}")
+    out.that(dealt(wand, two_ways, T.NECROTIC)[0] == (T.NECROTIC, T.FIRE),
+             "and a NECROTIC one comes out necrotic and fire -- the second"
+             " hold, which the old `c.deals` cancelled when it laid it",
+             f"{dealt(wand, two_ways, T.NECROTIC)}")
+    out.that(dealt(wand, two_ways, T.COLD)[0] == (T.COLD,),
+             "and a cold blow is untouched by either, because both narrow on"
+             " a `from_` and neither names cold",
+             f"{dealt(wand, two_ways, T.COLD)}")
+
+    # -- but a colliding retype still replaces, which is the half the ----
+    # -- narrowing could have broken -------------------------------------
+    def twice(c: Cast) -> None:
+        c.deals(T.ACID)
+        c.deals(T.COLD)
+
+    out.that(dealt(melee, twice, T.FIRE)[0] == (T.COLD,),
+             "two unconditional overrides still leave only the second"
+             " standing -- `c.deals` ends a hold whose narrowings MATCH, and"
+             " these two narrow identically",
+             f"{dealt(melee, twice, T.FIRE)}")
+
+    # -- `through` steps aside for a named row ---------------------------
+    # `f1488` names `cf:invoker-f1c1`, whose keywords are divine and radiant:
+    # neither value of `through` can pass, so the clause was unwritable for
+    # that reason alone.
+    card = "cf:invoker-f1c1"
+    world, me, _ = _posed("f1488", 1)
+    lay = Cast(world=world, me=me, ref="drivers:f1488")
+    words = lay.keywords_of(REGISTRY[card])
+    out.that(Keyword.WEAPON not in words and Keyword.IMPLEMENT not in words,
+             f"{card} carries neither keyword `through` can hold, so the"
+             " assertion below is not vacuous",
+             f"{sorted(k.value for k in words)}")
+    lay.deals(
+        dtypes=(T.FIRE, T.RADIANT), ref=card, on=me, until=When.ENCOUNTER,
+    )
+    named = Cast(world=world, me=me, ref=card)
+    other = Cast(world=world, me=me, ref=melee)
+    out.that(named._retyped(words, T.RADIANT) == (T.FIRE, T.RADIANT),
+             "the named row is covered although its keywords match no"
+             " `through` -- a card naming ONE row says something stricter",
+             f"{named._retyped(words, T.RADIANT)}")
+    out.that(other._retyped(other.keywords_of(REGISTRY[melee]), T.RADIANT)
+             is None,
+             "and another row of the same caster is untouched, so dropping"
+             " the keyword gate did not drop the `ref` one with it")
+
+    # -- and through the three rows' OWN bodies ---------------------------
+    world, me, _ = _posed("i1890p1", 1)
+    body = Cast(world=world, me=me, ref="i1890p1")
+    REGISTRY["i1890p1"].body(body)
+    out.that(body._retyped((Keyword.WEAPON,), T.FIRE) == (T.ACID, T.POISON),
+             "`i1890p1`'s own body retypes to acid AND poison, which is what"
+             " its sibling `i1890p2` has dealt all along",
+             f"{body._retyped((Keyword.WEAPON,), T.FIRE)}")
+
+    world, me, _ = _posed("i3343x1", 1)
+    prop = Cast(world=world, me=me, ref="i3343x1")
+    REGISTRY["i3343x1"].body(prop)
+    out.that(prop._retyped((Keyword.IMPLEMENT,), T.FIRE) == (T.FIRE, T.NECROTIC)
+             and prop._retyped((Keyword.IMPLEMENT,), T.NECROTIC)
+             == (T.NECROTIC, T.FIRE),
+             "`i3343x1`'s own body lays both directions and both stand",
+             f"{prop._retyped((Keyword.IMPLEMENT,), T.FIRE)} /"
+             f" {prop._retyped((Keyword.IMPLEMENT,), T.NECROTIC)}")
+
+    world, me, _ = _posed("f1488", 1)
+    feat = Cast(world=world, me=me, ref="f1488")
+    REGISTRY["f1488"].body(feat)
+    # **Asked as the card, not as the feat.** `_retyped` compares the label's
+    # `ref` field against `self.ref` -- that is the whole point of the field
+    # -- so asking `feat` whether its own hold covers `f1488` is the wrong
+    # question and answers None for the right reason. The first draft of this
+    # line did exactly that and read as a dead retype.
+    rolling = Cast(world=world, me=me, ref=card)
+    out.that(rolling._retyped(rolling.keywords_of(REGISTRY[card]), T.RADIANT)
+             == (T.FIRE, T.RADIANT),
+             "`f1488`'s own body retypes the card it names to fire and"
+             " radiant",
+             f"{rolling._retyped(rolling.keywords_of(REGISTRY[card]), T.RADIANT)}")
+    out.that(feat._retyped(feat.keywords_of(REGISTRY["f1488"]), T.RADIANT)
+             is None,
+             "and the feat's own ref is not covered, which is `ref=` doing"
+             " its job rather than the hold being dead")
+    known = world.get(me, Powers)
+    out.that(known is not None
+             and Keyword.FIRE in known.granted_keywords.get(card, frozenset()),
+             "and grants it the fire keyword, which has to land in the same"
+             " body: a card reading fire and dealing none is worse than"
+             " neither, and so is the reverse",
+             f"{sorted(k.value for k in (known.granted_keywords.get(card, ()) if known else ()))}")
+
+    for ref in ("i1890p1", "i3343x1", "f1488"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker now",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
         "a tome lending a card and charging for it, as one walk (#704)",
+    ),
+    "retype_two_types": (
+        a_retype_can_be_of_two_types_at_once,
+        "a standing retype of two damage types at once (#706)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

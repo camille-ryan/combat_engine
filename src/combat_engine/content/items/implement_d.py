@@ -2584,11 +2584,36 @@ def i3188p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.deals(dtypes=)",),
 )
 def i3343x1(c: Cast) -> None:
-    """`c.deals` replaces one type with another; a blow that is both fire
-    and necrotic at once is a shape the damage pipeline does not have."""
+    """Written, and it is the card that argued for the two changes behind
+    it. The clause is not a replacement in either direction: fire dealt by
+    this implement **is also** necrotic, and necrotic **is also** fire. So
+    each half is a `from_` naming the type that triggers it and a `dtypes`
+    carrying both -- an addition rather than a swap, which is what the
+    pair `(from_=FIRE, dtypes=(FIRE, NECROTIC))` says.
+
+    **Two holds standing at once**, one per direction, which `c.deals`
+    refused: it ended every `deals:` hold before laying a new one, so the
+    second call silently cancelled the first and only necrotic-becomes-fire
+    would have played. It now ends only a hold whose narrowings match, and
+    these two narrow on different `from_`, so no blow can match both and
+    neither cancels the other. `Cast._retyped` has skipped a non-covering
+    hold rather than stopping the search since it was written, precisely
+    for this.
+
+    `implement=True` because the thing is an implement, not a weapon; the
+    card says "attacks using this"."""
+    c.deals(
+        dtypes=(DamageType.FIRE, DamageType.NECROTIC),
+        from_=DamageType.FIRE, implement=True,
+        on=c.me, until=When.ENCOUNTER,
+    )
+    c.deals(
+        dtypes=(DamageType.NECROTIC, DamageType.FIRE),
+        from_=DamageType.NECROTIC, implement=True,
+        on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power(

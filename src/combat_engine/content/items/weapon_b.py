@@ -5708,13 +5708,25 @@ def i1874p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ACID, Keyword.POISON],
-    dropped=("c.deals(dtypes=)",),
 )
 def i1890p1(c: Cast) -> None:
-    """A blow of two types at once has no spelling: `c.deals` takes one
-    `DamageType` and holds it as a single-valued label. Retyped as the
-    first of the pair; the free action back is `c.endable`."""
-    c.endable(c.deals(DamageType.ACID, on=c.me, until=When.ENCOUNTER), FREE)
+    """Written. The whole clause is one `c.deals(dtypes=)`: "all damage
+    dealt by this weapon is acid damage **and** poison damage" is one blow
+    that is both, not acid with a poison rider, and the printed rule
+    resists it only as far as the target resists *every* type in it.
+    `resolve.deal_damage` has done that arithmetic since #420; the standing
+    retype was the half that could not reach it, and this row was laid as
+    acid alone.
+
+    The free action back is `c.endable` over the hold, which is what
+    `i2595p1` beside it already does."""
+    c.endable(
+        c.deals(
+            dtypes=(DamageType.ACID, DamageType.POISON),
+            on=c.me, until=When.ENCOUNTER,
+        ),
+        FREE,
+    )
 
 
 @power(

@@ -367,6 +367,20 @@ KNOWN_SILENT = {
     # `implement_c._spend_unused`. Silent at every sweep since they were
     # written, and for the same reason as the six above -- now driven, which
     # is what moves them from unexplained to excused. #704.
+    # **A standing retype lays a labelled effect and nothing else**, and the
+    # arming at encounter start spends its own evidence: `board` records
+    # `EffectApplied` in `armed`, so the one event this row class emits is
+    # subtracted as setup noise. `i2339x1`, `i3147x1` and `i3170x1` are
+    # carried silent for exactly this and `i3343x1` joins them the moment it
+    # stops being `todo=`. Admitted here rather than to `silent_refs`, which
+    # may shrink and never grow -- and admitted on evidence, not assumption:
+    # `drivers.retype_two_types` runs this row's own body and reads both
+    # directions of its retype back off `Cast._retyped`. The real fix is for
+    # the harness to credit an effect whose **label** is new rather than
+    # subtracting the event class. Filed.
+    "i3343x1": "lays a standing retype and nothing else; `board` subtracts "
+               "EffectApplied as setup noise. Driven in drivers: fire reads "
+               "back as fire and necrotic, necrotic as necrotic and fire",
     "i1098p1": "needs an unused wizard utility power to expend; the printed cost refuses",
     "i1461p1": "needs an unused wizard daily attack power; the printed cost refuses",
     "m1526a2": "resets an adjacent sprung trap; the board fields none",
