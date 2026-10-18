@@ -20560,6 +20560,137 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_check_called_before_its_die_is_thrown(out: Result) -> None:
+    """`f2804` calls odd or even before an untrained check, and means it.
+
+    #693. `SkillCheck` is announced before the *modifiers* are totalled,
+    which is early enough for "when you would make an Athletics check, gain
+    a bonus" and not early enough for a card that has to name a number
+    before the die: that event carries `natural` already, so a row answering
+    it would be guessing with the face in hand. An always-on bonus that
+    audits green -- the failure `engine/CLAUDE.md` names first.
+
+    `CheckDeclared` is the one moment before the roll, and `natural` in
+    `skills.modifier`'s context is how the row pays afterwards. The call is
+    made in ignorance; the payment is made on the result.
+
+    **The ordering is proved by loading the die from inside the
+    declaration's own listener.** A listener that can still decide the face
+    is a listener that ran before the throw, which is a stronger statement
+    than reading two sequence numbers -- and it is what goes red if the
+    emit is moved below `world.rng.d20()`.
+
+    Three negative controls, each a different way for this to be wrong:
+    an even call on an odd die must pay nothing; a **trained** skill must
+    not offer the row at all; and an *ability* check must not either --
+    the cards print "ability check or skill check" as two things, and
+    `ability_check` announces its declaration under `ability:<name>` for
+    exactly that reason.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine import skills as engine_skills
+    from combat_engine.engine.components import Skills
+    from combat_engine.engine.events import CheckDeclared
+    from combat_engine.engine.types import Ability
+
+    def rolled(skill: str, call: str, face: int, *, ability: bool = False):  # noqa: ANN202
+        """One check on a fresh board, with the row offered and `call` made.
+
+        Returns the result and every question the decider was asked, which
+        is how "the row was never offered" is told from "the row was
+        offered and paid nothing".
+        """
+        world, me, _ = audit_board("f2804", 1)
+        asked: list[tuple[str, tuple[str, ...]]] = []
+
+        def decide(actor, kind, options, prompt=""):  # noqa: ANN001, ANN202
+            asked.append((kind, tuple(options)))
+            return call if call in options else (options[0] if options else None)
+
+        world.decider = decide
+        world.rng.loaded = face
+        if ability:
+            return engine_skills.ability_check(world, me, Ability.CHA, 0), asked
+        return engine_skills.check(world, me, skill, 0), asked
+
+    # -- the row is untrained in this skill, which the clause needs --------
+    world, me, _ = audit_board("f2804", 1)
+    trained = world.get(me, Skills)
+    out.that(trained is not None and "stealth" not in trained.trained
+             and bool(trained.trained),
+             "the board's sorcerer is untrained in stealth and trained in"
+             " something, so both halves of the clause are askable",
+             f"{sorted(trained.trained) if trained else None}")
+    if trained is None or not trained.trained:
+        return
+    a_trained_skill = sorted(trained.trained)[0]
+
+    # -- called even, rolled even: the Charisma modifier --------------------
+    hit, asked = rolled("stealth", "even", 8)
+    miss, _ = rolled("stealth", "even", 7)
+    out.that(("choose", ("even", "odd")) in asked,
+             "the row is offered and the call is a real two-option choice",
+             f"{asked}")
+    out.that(hit.bonus - miss.bonus == 3,
+             "calling even on an even die pays the Charisma modifier, and"
+             " calling even on an odd one pays nothing",
+             f"even die {hit.bonus}, odd die {miss.bonus}, cha mod 3")
+    odd, _ = rolled("stealth", "odd", 7)
+    out.that(odd.bonus == hit.bonus and odd.bonus - miss.bonus == 3,
+             "and calling odd on an odd die pays the same -- the gate is the"
+             " parity matching the call, not one fixed parity",
+             f"odd call {odd.bonus}, even call on an even die {hit.bonus},"
+             f" even call on an odd die {miss.bonus}")
+
+    # -- the declaration precedes the die ----------------------------------
+    world, me, _ = audit_board("f2804", 1)
+    world.decider = lambda actor, kind, options, prompt="": ""
+    world.rng.loaded = 20
+    world.bus.on(CheckDeclared, lambda ev: setattr(world.rng, "loaded", 7))
+    settled = engine_skills.check(world, me, "stealth", 0)
+    out.that(settled.natural == 7,
+             "a listener on the declaration can still decide the face, which"
+             " is what 'before the d20 is rolled' means",
+             f"natural {settled.natural}, wanted 7 and not the 20 loaded"
+             " before the check began")
+
+    # -- a trained skill is not this clause --------------------------------
+    _, on_trained = rolled(a_trained_skill, "even", 8)
+    out.that(on_trained == [],
+             f"a check in {a_trained_skill}, which this character is trained"
+             " in, never offers the row -- the decider is asked nothing",
+             f"{on_trained}")
+
+    # -- and an ability check is not a skill check -------------------------
+    _, on_ability = rolled("", "even", 8, ability=True)
+    out.that(on_ability == [],
+             "nor does a raw ability check, which announces its declaration"
+             " under `ability:<name>` because the cards keep the two apart",
+             f"{on_ability}")
+
+    # -- `once=True`: the gamble is spent on the check it was called for ---
+    # The row is declined on the second check, so the only thing that could
+    # pay it is the bonus laid for the first.
+    world, me, _ = audit_board("f2804", 1)
+    offers: list[int] = []
+
+    def once_only(actor, kind, options, prompt=""):  # noqa: ANN001, ANN202
+        if kind == "trigger":
+            offers.append(1)
+            return "f2804" if len(offers) == 1 else ""
+        return "even"
+
+    world.decider = once_only
+    world.rng.loaded = 8
+    first = engine_skills.check(world, me, "stealth", 0)
+    second = engine_skills.check(world, me, "stealth", 0)
+    out.that(first.bonus - second.bonus == 3,
+             "the bonus is spent on the check it was called for: a second"
+             " even check with the row declined pays nothing",
+             f"{first.bonus} then {second.bonus}")
+
+
 def a_count_of_feats_of_one_printed_category(out: Result) -> None:
     """Four runepriest feats pay a number equal to how many of them you have.
 
@@ -20889,6 +21020,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "check_declared": (
+        a_check_called_before_its_die_is_thrown,
+        "a check announced before its d20, so a row can call it (#693)",
     ),
     "feat_category": (
         a_count_of_feats_of_one_printed_category,

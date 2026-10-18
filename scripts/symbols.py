@@ -470,6 +470,15 @@ CTX_KEYS: dict[str, str] = {
     "label": "the label of the effect being asked about.",
     "mode": "the movement mode in use.",
     "mover": "who is trying to enter a square. `movement.may_enter`.",
+    "natural": (
+        "the d20 face of the check being resolved. Written by "
+        "`skills.check` and `skills.ability_check` from inside their "
+        "resolve callbacks, so it is **absent on a standalone read** of "
+        "`skills.modifier` -- which is the right way round: a gate on the "
+        "face is a contingency on a die that has not been thrown. It is "
+        "the paying half of `CheckDeclared`, where the calling half "
+        "happens. #693."
+    ),
     "occupant": "who is standing in it. The other half of `mover`.",
     "gap": (
         "what sort of hole a blocking square has -- \"door\", \"cracked "

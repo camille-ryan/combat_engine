@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .components import Mods, Skills, Stats
-from .events import SkillCheck
+from .events import CheckDeclared, SkillCheck
 from .types import Ability
 
 if TYPE_CHECKING:
@@ -93,7 +93,11 @@ class CheckResult:
 
 
 def modifier(
-    world: World, eid: int, skill: str, target: int | None = None
+    world: World,
+    eid: int,
+    skill: str,
+    target: int | None = None,
+    natural: int | None = None,
 ) -> int:
     """The fixed part of a creature's check: ability, half level, modifiers.
 
@@ -102,6 +106,20 @@ def modifier(
     to administer first aid **to you**" is a bonus on the ally's roll that
     only applies when the patient is the wearer. Without the key such a
     gate is silently false, which is this component's named failure mode.
+
+    `natural` is **the die face, when this is a real check resolving** --
+    `check()` and `ability_check()` pass it from inside their resolve
+    callbacks and every other caller leaves it None. It is the other half
+    of `CheckDeclared`: a row that called odd or even before the roll lays
+    its bonus then and gates it on the face here, which is the only
+    arrangement where the call is made in ignorance and the payment is
+    made on the result. `f2804` is the row. #693.
+
+    A standalone read -- `drivers.py` measuring what a check would come to,
+    the page showing a skill list -- passes nothing, so a parity gate is
+    **silently false** there rather than silently true. That is the right
+    way round: the bonus is a contingency on a die that has not been
+    thrown.
     """
     stats = world.get(eid, Stats)
     ability = SKILLS.get(skill.lower())
@@ -127,7 +145,11 @@ def modifier(
 
     mods = world.get(eid, Mods)
     if mods is not None:
-        ctx = {"actor": eid, "skill": skill.lower(), "target": target}
+        ctx: dict[str, object] = {
+            "actor": eid, "skill": skill.lower(), "target": target,
+        }
+        if natural is not None:
+            ctx["natural"] = natural
         out += mods.total(f"skill:{skill.lower()}", ctx) + mods.total("skill", ctx)
     return out + _armour_penalty(world, eid, skill)
 
@@ -161,6 +183,10 @@ def ability_check(
     if stats is not None:
         fixed = stats.half_level + stats.mod(ability)
     key = f"ability:{ability.value}"
+    # Announced here too, under the same `ability:<name>` key: a row that
+    # wants "any check you are about to make" must hear this one, and
+    # `f2804`'s own predicate is what narrows to a skill. #693.
+    world.bus.emit(CheckDeclared(actor=eid, skill=key, dc=dc))
     natural = world.rng.d20().total
     announced = SkillCheck(
         actor=eid,
@@ -176,7 +202,8 @@ def ability_check(
         extra = 0
         mods = world.get(eid, Mods)
         if mods is not None:
-            ctx = {"actor": eid, "skill": ev.skill, "ability": ability.value}
+            ctx = {"actor": eid, "skill": ev.skill,
+                   "ability": ability.value, "natural": ev.natural}
             # Both keys are read here, which is what keeps them off
             # `lint.py`'s unread-modifier list: the narrow one for "+2 to
             # Strength checks" and the wide one for "+1 to ability checks".
@@ -259,6 +286,10 @@ def check(
     settled. A listener may also add to `ev.bonus` directly.
     """
     skill = skill.lower()
+    # **Before the die, which is the whole point of the event.** A row that
+    # has to call odd or even cannot be offered the choice by `SkillCheck`:
+    # that one carries `natural` already. #693.
+    world.bus.emit(CheckDeclared(actor=eid, skill=skill, dc=dc, target=target))
     natural = world.rng.d20().total
     announced = SkillCheck(
         actor=eid,
@@ -272,7 +303,7 @@ def check(
     )
 
     def finish(ev: SkillCheck) -> None:
-        ev.bonus += modifier(world, eid, ev.skill, ev.target)
+        ev.bonus += modifier(world, eid, ev.skill, ev.target, ev.natural)
         ev.total = ev.natural + ev.bonus
         ev.success = ev.dc <= 0 or ev.total >= ev.dc
 

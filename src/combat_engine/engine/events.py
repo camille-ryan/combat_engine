@@ -1189,6 +1189,41 @@ class SavingThrow(Decision):
 
 
 @dataclass
+class CheckDeclared(Event):
+    """A skill check about to be made, announced **before its d20 is rolled**.
+
+    `SkillCheck` below is announced before the *modifiers* are totalled,
+    which is early enough for "when you would make an Athletics check, gain
+    a bonus" and not early enough for a row that has to **call the die**.
+    `f2804` prints *"before making an untrained skill check, choose even
+    numbers or odd numbers"*, and `SkillCheck.natural` is already in the
+    event: a row answering that one would be guessing with the face in
+    hand, which turns a 50/50 into an always-on bonus. Green in the audit
+    and wrong in play. #693.
+
+    So this is the one moment before the roll, the way `AttackDeclared`
+    precedes the attack roll.
+
+    **An `Event` and not a `Decision`, deliberately.** `Decision`'s own
+    docstring is the reason: a proposal is refused by a listener and
+    *honoured by the emitter*, and nothing printed in this tier refuses a
+    skill check. Declaring it refusable would advertise a `cancel()` that
+    `skills.check` does not implement -- which is the silence that comment
+    was written about. When a row that forbids a check turns up, this
+    becomes a `Decision` and `check()` honours it in the same commit.
+
+    A row that answers this pays at resolution rather than here: the parity
+    is not known yet. `skills.modifier` puts the die face in its context
+    under `natural`, so the bonus is laid now and gated on the face.
+    """
+
+    actor: int
+    skill: str
+    dc: int
+    target: int | None = None
+
+
+@dataclass
 class SkillCheck(Decision):
     """A skill check, announced **before** its modifiers are totalled.
 

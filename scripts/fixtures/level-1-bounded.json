@@ -1249,6 +1249,7 @@
   "EffectApplied(source=5, target=1, duration='end of encounter', label='m145a0')",
   "PowerResolved(actor=5, power='m145a0', targets=[1], rolls=[AttackResult(hit=True, critical=False, natural=19, total=25, target_defence=18, advantage=False, cancelled=False, forced=False, target=1, treated='', rolls=[19], rerolled_by=[])])",
   "ActionSpent(actor=5, cost=<ActionType.MINOR: 'minor'>)",
+  "CheckDeclared(actor=5, skill='stealth', dc=14)",
   "SkillCheck(actor=5, skill='stealth', dc=14, natural=17, bonus=2, total=19, success=True)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=5, target=1)",
   "RelationSet(kind_=<Relation.HIDDEN_FROM: 'hidden_from'>, source=5, target=2)",

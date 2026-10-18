@@ -83,6 +83,7 @@ from .events import (
     AttackRolled,
     Bloodied,
     Bus,
+    CheckDeclared,
     ConditionApplied,
     ConditionEnded,
     DamageApplied,

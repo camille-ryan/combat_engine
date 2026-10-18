@@ -49,13 +49,19 @@ from combat_engine.engine import (
     Hit,
     Keyword,
     Miss,
+    Skills,
     Trigger,
     When,
     after_forced_reroll,
     power,
 )
 from combat_engine.engine.dsl import get
-from combat_engine.engine.events import AttackRolled, Bloodied, ForcedMove
+from combat_engine.engine.events import (
+    AttackRolled,
+    Bloodied,
+    CheckDeclared,
+    ForcedMove,
+)
 from combat_engine.engine.types import Usage
 
 #: The cosmic cycle and the Guild-Training-shaped features arrive as
@@ -351,29 +357,72 @@ def f2808(c: Cast) -> None:
     )
 
 
-# -- narrative only ---------------------------------------------------------
+def _untrained_check(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """This creature is about to roll a skill it is not trained in.
+
+    Two narrowings, and the second is the one a reader would miss.
+    `Skills.trained` is the training set (#565), so "untrained" is one
+    membership test. And `ability_check` announces its declaration under
+    `ability:<name>`, which is **not a skill check** -- the cards print
+    "ability check or skill check" as two things -- so the prefix is
+    checked rather than the key being taken for a skill.
+    """
+    if ev.actor != me or ev.skill.startswith("ability:"):
+        return False
+    trained = world.get(me, Skills)
+    return trained is None or ev.skill not in trained.trained
 
 
 @power("f2804", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.CheckDeclared",))
+       reach=PERSONAL, target=SELF,
+       trigger="before making an untrained skill check",
+       on=Trigger(CheckDeclared, _untrained_check,
+                  "you are about to make an untrained skill check"))
 def f2804(c: Cast) -> None:
     """Call odd or even before an untrained check; a d20 that matches pays a
     feat bonus equal to your Charisma modifier.
 
-    **Both halves of the old reason have now gone.** The first was "no
-    training model to tell a trained check from an untrained one", answered
-    by `Skills.trained` and the +5 in #565. The second was "no fight turns on
-    one", and a fight rolls 13 different skills in 63 places in this tree.
-    #691.
+    **All three halves of the old reason are gone.** "No training model"
+    was answered by `Skills.trained` and the +5 in #565. "No fight turns on
+    one" was answered by the tree rolling 13 skills in 63 places (#691).
+    And the moment -- the one thing the card is precise about -- is
+    `CheckDeclared`, which is announced before the d20 rather than before
+    the modifiers. #693.
 
-    What blocks it is the **moment**, which is the one thing the card is
-    precise about: the call is made *before* the roll, and `SkillCheck` is
-    announced with `natural` already in it. A row answering that event would
-    be choosing odd or even with the die face in hand, which turns a 50/50
-    gamble into an always-on bonus -- green in the audit and wrong in play,
-    the failure mode `engine/CLAUDE.md` names first. So this waits for a
-    check to be *declared*, the way `AttackDeclared` precedes the attack
-    roll. #693."""
+    **The call is made in ignorance and the payment is made on the result**,
+    which is the whole reason this needed an event. `c.choose` is handed two
+    options at a moment when no die has been thrown, so a decider cannot
+    guess with the face in hand -- the failure that would have made this an
+    always-on bonus. The bonus is then laid here and gated on `natural`,
+    which `skills.modifier` only puts in its context when a real check is
+    resolving.
+
+    `once=True` so the gamble is spent on the check it was called for: the
+    gate would otherwise match every later check of the same parity for as
+    long as the effect lasts.
+
+    Compare `f2808` above, which calls odd or even on an **attack** roll and
+    reads `AttackRolled.natural`. That one is answered after its die is
+    down, and it is defensible for the reason its own docstring gives: the
+    options handed to the decider are two strings. This card is not written
+    that way on purpose -- the issue that filed the gap is explicit that
+    choosing with the face available is the thing to avoid."""
+    want = c.choose(["even", "odd"], f"{c.ref}: even or odd")
+    if want is None:
+        return
+    even = want == "even"
+    skill = c.trigger.skill
+    c.bonus(
+        f"skill:{skill}", c.cha_mod, kind="feat", on=c.me, until=When.EOT,
+        once=True,
+        when=lambda ctx: (
+            ctx.get("natural") is not None
+            and (ctx["natural"] % 2 == 0) is even
+        ),
+    )
+
+
+# -- narrative only ---------------------------------------------------------
 
 
 # -- features named in prose ------------------------------------------------
