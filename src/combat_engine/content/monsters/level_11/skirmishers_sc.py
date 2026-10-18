@@ -3142,13 +3142,18 @@ def m997a4(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.TELEPORTATION],
-    dropped=("c.teleport(into=)",),
 )
 def m997a5(c: Cast) -> None:
-    """The blink plays; where it has to end does not. Nothing on a square
-    says how brightly it is lit, so "must end in dim light or darkness" has
-    nothing to ask -- the same gap ten other rows wait on."""
-    c.teleport(20)
+    """A blink of 20 squares that must end in dim light or darkness.
+
+    **"Nothing on a square says how brightly it is lit" was the reason and
+    it is false** -- `query.light_level` reads `Grid.light` and every
+    darkening zone, and `c.teleport(into=)` is the door the three rows
+    printing this clause were waiting on. #685.
+
+    No unlit square in range means no teleport, because `into=` filters the
+    options rather than ordering them. That is the printed rule."""
+    c.teleport(20, into=lambda sq: c.unlit(square=sq))
 
 
 @power(

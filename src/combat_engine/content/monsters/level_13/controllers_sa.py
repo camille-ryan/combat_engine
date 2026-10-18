@@ -5272,19 +5272,25 @@ def m6276a4(c: Cast) -> None:
     target=SELF,
     keywords=[Keyword.TELEPORTATION],
     requires_text="she must be in a square of dim light or darkness",
-    dropped=("c.teleport(into=)",),
 )
 def m6276a5(c: Cast) -> None:
-    """The near end of the Requirement is written: she must be standing in
-    dim light or darkness, which `c.unlit` asks at the moment the row runs.
-    Deliberately not a `requires=` gate -- that is evaluated once when the
-    row arms, and the light she stands in changes as she moves.
+    """Teleport 10, from an unlit square to an unlit square.
 
-    Still dropped: the far end, that she must *land* somewhere unlit.
-    `c.teleport` picks its own destination and takes no filter."""
+    The near end of the Requirement is `c.unlit`, asked at the moment the
+    row runs. Deliberately not a `requires=` gate -- that is evaluated once
+    when the row arms, and the light she stands in changes as she moves.
+
+    **The far end is written now.** It read "still dropped: `c.teleport`
+    picks its own destination and takes no filter", and `into=` is that
+    filter (#685). It narrows the options rather than sorting them, so with
+    no unlit square in range the teleport does not happen -- which is what
+    the card means and not a failure to report.
+
+    The predicate is the row's own, as `c.teleport`'s note says it must be:
+    a square is unlit when its light is anything but bright."""
     if not c.unlit():
         return
-    c.teleport(10)
+    c.teleport(10, into=lambda sq: c.unlit(square=sq))
 
 
 @power(

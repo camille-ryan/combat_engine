@@ -550,9 +550,9 @@ def i685x1(c: Cast) -> None:
 #: bright 20 reads dim whether it cleared or not. A plant removing its
 #: clearing stays **green** for that reason. `i1062p2` and `i1062p3` are
 #: the ones the state depends on, and `drivers.lamp_settings` plants
-#: against `p2`. `p1` keeps the call so the three rows read alike and so
-#: the stored state matches what the player chose rather than only the
-#: answer happening to be right.
+#: against the second of them. The first keeps the call so the three rows
+#: read alike and so the stored state matches what the player chose rather
+#: than only the answer happening to be right.
 _LAMP_SETTINGS = ("i1062p1", "i1062p2", "i1062p3")
 
 

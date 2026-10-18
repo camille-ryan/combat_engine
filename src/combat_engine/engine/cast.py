@@ -10758,9 +10758,16 @@ class Cast:
             until=until, kind=self.ref,
         )
 
-    def unlit(self, *, on: int | None = None) -> bool:
+    def unlit(self, *, on: int | None = None, square: Square | None = None) -> bool:
         """Is this creature standing in dim light or darkness? Defaults to the
         **caster**, because every row that asks is about itself.
+
+        **`square=` asks about a square instead**, for the three rows that
+        print "you teleport to any square containing dim light or darkness":
+        `c.teleport(into=)` takes a predicate over squares, and those rows
+        would each have written the `light_level` read by hand. That is the
+        one thing the paragraph below is against, so the parameter lives here
+        rather than in the rows. #685.
 
         Nineteen rows print "while you are in dim light or darkness" as a gate
         -- a saving-throw bonus, a defence bonus, ignoring difficult terrain,
@@ -10777,6 +10784,8 @@ class Cast:
         """
         from .query import light_level, squares
 
+        if square is not None:
+            return light_level(self.world, square) is not Light.BRIGHT
         who = on if on is not None else self.me
         return any(
             light_level(self.world, sq) is not Light.BRIGHT

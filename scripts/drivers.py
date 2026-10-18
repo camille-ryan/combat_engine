@@ -19353,19 +19353,54 @@ def what_a_carried_light_does_and_what_a_dimmer_does(out: Result) -> None:
              " work",
              f"{light_level(world, (x + 12, y))}")
 
-    # -- the markers say what is left ------------------------------------
-    for ref, want in (("i2723x1", "c.dim(control=)"),
-                      ("m1587a4", "c.dim(instead_of=)"),
-                      ("m655a1", "c.dim(instead_of=)")):
+    # -- the three rows that print a swap, and carry no marker for it -----
+    #
+    # **This block used to assert the opposite and was stale.** It read
+    # `want in row.dropped` for `c.dim(control=)` and `c.dim(instead_of=)`,
+    # written while the swap looked unsayable -- and then `c.illuminate`
+    # landed in the same session and said it, so the markers came off and
+    # three assertions were left insisting they were still there. A stale
+    # assertion about a *marker* is the cheapest kind to leave behind,
+    # because nothing about the row's behaviour contradicts it. #687.
+    #
+    # So it asserts the swap instead, which is the thing the marker was
+    # standing in for: with a decider that takes the second option, each row
+    # must reach its *dim* setting rather than its bright one.
+    for ref in ("i2723x1", "m1587a4", "m655a1"):
         row = REGISTRY[ref]
-        out.that(want in row.dropped,
-                 f"{ref} keeps one dropped clause, {want} -- the swap or the"
-                 " chosen range, which one carried level at a time cannot"
-                 " say",
-                 f"{row.dropped}")
+        out.that(not row.dropped and not row.todo,
+                 f"{ref} carries no marker: `c.illuminate` says the swap",
+                 f"todo={row.todo} dropped={row.dropped}")
         out.that(not getattr(row, "out_of_combat", False),
                  f"and {ref} is no longer declared inert, which is the"
                  " premise that was false")
+        world, me, _ = audit_board(ref, 1)
+        here = world.get(me, Position)
+        if here is None:
+            continue
+        x, y = here.square
+        # **This square is deliberately left lit.** The first draft painted
+        # it `DARK`, copied from the bright assertions above where a dark
+        # square is what shows a light doing work -- and the dim reading came
+        # back `dark`, because a dimmer is a reduction and not a level. This
+        # rule asserts exactly that twenty lines up. A dim setting is visible
+        # only against a square that was lit.
+        #
+        # **By what the option *is*, not by its index.** The first draft
+        # took option 1 and `i2723x1` offers bright 20, bright 5, dim 20,
+        # dim 5, off -- so index 1 is still bright and the assertion failed
+        # on a row that works. The decider picks the first dim setting the
+        # row actually offers, which is the question being asked.
+        world.decider = lambda actor, kind, options, prompt: next(
+            (o for o in options if isinstance(o, tuple) and o[0] is Light.DIM),
+            options[0],
+        )
+        row.body(Cast(world=world, me=me, ref=ref))
+        out.that(light_level(world, (x + 1, y)) is Light.DIM,
+                 f"{ref} reaches its DIM setting when the chooser asks for"
+                 " one -- the swap the stale marker named, and the half"
+                 " `c.light` and `c.dim` side by side could not reach",
+                 f"{light_level(world, (x + 1, y))}")
 
 def one_lamp_three_settings_and_putting_the_lights_out(out: Result) -> None:
     """The rest of #686: a lamp with settings, and a row that suppresses.
