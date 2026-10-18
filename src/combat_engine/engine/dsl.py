@@ -581,6 +581,46 @@ class Target:
     #: then hit somebody else: `policy/` chose a target it did not get and
     #: the page listed a menu the card forbids. #654.
     only_grabbed: bool = False
+    #: **The general disjunction: a target line printing two alternatives
+    #: that are not the same field.** "One bloodied **or** prone creature",
+    #: "one creature it is flanking **or** one prone creature", "one
+    #: immobilized creature **or** one grabbed by it".
+    #:
+    #: Each entry is a whole `Target`, and a creature stands right if it
+    #: satisfies **any one of them** -- plus whatever this `Target`'s own
+    #: clauses say, which still compound. So the printed sentence "one
+    #: Medium or smaller creature that is bloodied or prone" is
+    #: `max_size=MEDIUM, any_of=(Target(bloodied=True),
+    #: Target(conditions={PRONE}))` and reads in that order.
+    #:
+    #: **Whole `Target`s rather than a list of field names**, because three
+    #: of the five rows that want this pair fields from different places --
+    #: `bloodied` with `conditions`, `flanked` with `conditions`,
+    #: `conditions` with `relation` -- and because an alternative is
+    #: sometimes itself a conjunction. Nothing new has to be taught about
+    #: how a clause is tested: `_stands_right` recurses.
+    #:
+    #: **`kind_or_ident` stays, and is not this.** It is the narrow
+    #: "`kinds` or `ident`" reading that nine rows print as one sentence,
+    #: and its own note records that it deliberately refused *this* name so
+    #: that `any_of` would not go green for the rows wanting the general
+    #: thing. Both exist; neither is a spelling of the other.
+    #:
+    #: **`side` is not part of an alternative.** `candidates` builds the
+    #: pool from the outer `side` before any of this runs, so two
+    #: alternatives cannot be on different sides -- which is exactly what
+    #: `m4766a3` prints ("an adjacent allied beast … or any creature with a
+    #: type word"), and why that row is **still** marked and now names a
+    #: narrower gap. Widening the outer side to `"any"` and testing the
+    #: side per alternative would work and has not been built, because one
+    #: row is not the evidence for putting a pool test inside a predicate
+    #: that has never had one.
+    #:
+    #: **Not a general "any of these filters".** Every *other* clause on a
+    #: printed target line compounds -- a Medium and unheld object, a
+    #: bloodied and adjacent enemy -- and OR-ing those would widen pools no
+    #: card widens. This field is only for the cards that print the word.
+    any_of: tuple[Target, ...] = ()
 
     def __str__(self) -> str:
         if self.label:
@@ -2467,15 +2507,17 @@ def candidates(
         "team": [*allies(world, actor), actor],
         # Not a creature at all, and not in any of the pools above: scenery
         # has no `Side`, so every one of them is empty for it.
+        # `loose=` is passed here as well as tested in `_stands_right`, and
+        # that is not a duplicate: it decides *which scenery exists* for
+        # this pool, where the predicate decides whether one handed in is
+        # allowed. The second is the half that was missing.
         "object": scenery(world, "object", loose=aim.loose),
     }[aim.side]
-    if aim.holding:
-        from .query import holding
-
-        pool = [c for c in pool if holding(world, c, aim.holding)]
-    if aim.max_size is not None:
-        cap = aim.max_size.order
-        pool = [c for c in pool if _size_of(world, c).order <= cap]
+    # **`holding` and `max_size` used to be filtered here and nowhere else**,
+    # which made them the exact disagreement `_stands_right` exists to
+    # prevent: 24 rows refused an oversized creature on the menu and struck
+    # one handed in explicitly by another row's `c.command`. Moved into the
+    # predicate and named in the guard list below. #658.
     if (
         aim.relation is not None
         or aim.grants_ca
@@ -2502,6 +2544,10 @@ def candidates(
         or aim.missed_by_me_this_turn
         or aim.affected_by
         or aim.only_grabbed
+        or aim.holding
+        or aim.max_size is not None
+        or aim.loose
+        or aim.any_of
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2818,6 +2864,32 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # real state, and a creature whose snare is suspended is not held by
         # it -- the sickle row would otherwise finish something that is free.
         return False
+    if aim.any_of and not any(
+        _stands_right(world, actor, alt, target, ref) for alt in aim.any_of
+    ):
+        # **The disjunction is asked first and the rest of this predicate is
+        # still asked after it**, because that is what the cards print: "one
+        # Medium or smaller creature that is bloodied or prone" is one
+        # restriction compounding with a choice of two. An alternative that
+        # also fails its own clauses is simply not one of the ways in.
+        return False
+    if aim.max_size is not None and _size_of(world, target).order > aim.max_size.order:
+        return False
+    if aim.holding:
+        from .query import holding
+
+        if not holding(world, target, aim.holding):
+            return False
+    if aim.loose:
+        from .components import Scenery
+
+        thing = world.get(target, Scenery)
+        # A creature is never fastened down and never in somebody's hands,
+        # so the clause is about scenery and passes for anything else --
+        # which is the pool's reading too: `loose=` only ever reaches
+        # `scenery()`.
+        if thing is not None and (thing.fastened or thing.by):
+            return False
     if aim.only_grabbed:
         # **Asked only when something is held.** An empty grip narrows
         # nothing, which is the field and not a shortcut: the three bites

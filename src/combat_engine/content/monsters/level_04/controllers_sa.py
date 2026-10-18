@@ -2270,7 +2270,7 @@ def _dull_beast(c: Cast, who: int) -> bool:
         label="one adjacent dull beast or spider ally",
         kinds=frozenset({"beast", "spider"}),
     ),
-    dropped=("Target.any_of",),
+    dropped=("Target.any_of(side=)", "Target.ability_at_most"),
 )
 def m4766a3(c: Cast) -> None:
     """Three printed benefits and the chooser picks one, which is what the
@@ -2280,9 +2280,25 @@ def m4766a3(c: Cast) -> None:
     "recharges and the target uses it immediately".
 
     `kinds=` narrows the pool to the two type words and refuses nothing the
-    card allows. What is left is a disjunction and not a narrowing: the first
-    branch wants an ability score as well, so the two printed handles are two
-    target specs and `_dull_beast` still asks which one applies."""
+    card allows. What is left is two target specs, and the general
+    `Target.any_of` that landed with #656 does **not** reach them -- so the
+    marker is re-spelled into the two things that actually block it rather
+    than left naming a symbol that now exists:
+
+    * **`Target.any_of(side=)`.** The first printed handle is an *allied*
+      beast and the second is **any** creature with the type word, so the
+      two alternatives are on different sides. `candidates` builds the pool
+      from the outer `side` before `_stands_right` runs at all, so an
+      alternative cannot carry one; widening the outer to `"any"` would
+      offer an enemy beast, which the card refuses.
+    * **`Target.ability_at_most`.** "An Intelligence score of 1" is a test
+      on `Stats` and no target field says it. `_dull_beast` below is where
+      it lives, and it is the only such test in the tree, so it is named
+      here rather than built for one row.
+
+    Either one alone leaves the row wrong, which is why there are two
+    symbols: a marker naming one would report ready with the other
+    missing."""
     mate = c.target
     if mate is None or not _dull_beast(c, mate):
         return

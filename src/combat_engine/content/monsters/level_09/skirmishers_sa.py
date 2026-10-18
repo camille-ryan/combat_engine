@@ -3377,34 +3377,35 @@ def m6172a1(c: Cast) -> None:
     recharge=0,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature it is flanking or one prone creature",
+        any_of=(
+            Target("enemy", 1, flanked=True),
+            Target("enemy", 1, conditions=frozenset({Condition.PRONE})),
+        ),
+    ),
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=14),
     damage=Damage("3d6", 5, kind=LIMITED),
-    dropped=("Target.any_of",),
 )
 def m6172a2(c: Cast) -> None:
     """"One creature it is flanking, **or** one prone creature" is a
-    disjunction, and the disjunction is now the whole gap: `Target.flanked`
-    says the first half and `Target.conditions` says the second, but every
-    field on a target line **narrows**, so declaring both would demand a
-    prone creature it is also flanking -- refusing most of what the card
-    allows. Until `Target.any_of` can hold two alternatives the pick stays in
-    the body, where a qualifying creature in reach is found rather than the
-    row thrown away. The marker named `Target.condition` as well until that
-    field landed; the earlier spelling was `Target.flanked_by`, a symbol that
-    could never arrive."""
-    from combat_engine.engine.query import flanked_by as _flanked_by
+    disjunction, and it is the row that said so: its marker read *"until
+    `Target.any_of` can hold two alternatives the pick stays in the body"*.
+    It can now. `Target.flanked` says the first half, `Target.conditions` the
+    second, and `any_of` is what stops the pair from compounding into "a
+    prone creature it is also flanking" -- which would refuse most of what
+    the card allows.
 
-    def qualifies(f: int) -> bool:
-        return _flanked_by(c.world, f, c.me) or c.is_(Condition.PRONE, on=f)
-
-    victim = _restricted_to(c, 1, qualifies)
-    if victim is None:
+    The marker had been re-spelled twice before this: `Target.flanked_by`,
+    a symbol that could never arrive, then `Target.condition` as well until
+    that field landed. #656."""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.ongoing(10, on=victim)
+    if c.strike():
+        c.hit()
+        c.ongoing(10)
 
 
 @power(

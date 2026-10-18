@@ -1604,30 +1604,30 @@ def m5302a3(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=Target(
-        side="enemy", count=1, label="one immobilized creature or one creature grabbed by it",
+        side="enemy", count=1,
+        label="one immobilized creature or one creature grabbed by it",
+        any_of=(
+            Target("enemy", 1, conditions=frozenset({Condition.IMMOBILIZED})),
+            Target("enemy", 1, relation=Relation.GRABBED_BY),
+        ),
     ),
     attack=Attack(vs=FORT, printed=8),
     damage=Damage("2d8", 6),
-    dropped=("Target.any_of",),
 )
 def m5302a4(c: Cast) -> None:
-    """**Deliberately not moved onto `Target.conditions` either.** The printed
-    line is a *disjunction across two kinds* -- immobilized (a condition) or
-    grabbed by it (a relation) -- and every target field narrows the pool, so
-    setting one of them throws away the other branch of the same sentence. The
-    condition filter now exists; the one remaining gap is a way to say "either
-    of these", so the re-pick stays in the body. #401.
+    """**The disjunction across two kinds**, which is what this row has been
+    waiting on: immobilized is a condition and "grabbed by it" is a
+    relation, and every target field narrows, so setting either one throws
+    away the other branch of the same sentence. `Target.any_of` is the way
+    to say "either of these" that its marker asked for. #401, #656.
+
+    The re-pick that used to be here walked `c.enemies()` and ignored reach,
+    so it could hand the row a creature across the room -- `_within_reach`
+    then refused the swing and the row did nothing, which is the failure
+    mode of picking a target outside the offer.
     """
     victim = c.target
-    held_already = victim is not None and (
-        c.is_(Condition.IMMOBILIZED, on=victim) or victim in c.grabbing()
-    )
-    if not held_already:
-        victim = next(
-            (f for f in c.enemies() if c.is_(Condition.IMMOBILIZED, on=f) or f in c.grabbing()),
-            None,
-        )
-    if victim is None or not c.strike(on=victim):
+    if victim is None or not c.strike():
         return
     c.hit(on=victim)
     held = c.condition(

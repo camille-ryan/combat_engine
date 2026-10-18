@@ -47,7 +47,6 @@ from combat_engine.content.monsters.level_01.artillery_sa import (
 from combat_engine.content.monsters.level_02.artillery_sa import _saves_off_prone
 from combat_engine.content.monsters.level_02.soldiers_sa import _crit_drops_it
 from combat_engine.content.monsters.level_03.brutes import _squeezes_freely
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_06.brutes import _recharge_on
 from combat_engine.content.monsters.level_06.brutes_sa import _grabbing_count, _mobbed_by
@@ -1945,32 +1944,47 @@ def m5373a2(c: Cast) -> None:
     recharge=5,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one bloodied or prone creature",
+        any_of=(
+            Target("enemy", 1, bloodied=True),
+            Target("enemy", 1, conditions=frozenset({Condition.PRONE})),
+        ),
+    ),
 )
 def m5373a3(c: Cast) -> None:
     """Twice against a bloodied or prone creature.
 
-    **Aimed rather than abandoned.** `Target` filters on side, count and size
-    and not on what a creature is suffering, so the chooser hands this row
-    whoever is nearest -- and returning when that one does not qualify threw the
-    row away while somebody else in reach did. `_restricted_to` is the settled
-    answer to that across the tree, and `Target.kind` is the gap in every case.
+    **"Bloodied or prone" is a disjunction across two different fields**, so
+    declaring both would demand a creature that is bloodied *and* prone --
+    which is why this sat in the body. `Target.any_of` holds the two
+    alternatives and `candidates` offers the union, so the restriction is
+    read off the header by the page and by `policy/`. #656.
 
-    **Aimed twice, not once.** m5373a2 pushes what it hits 2 squares, so the
-    second claw was being swung at something no longer in reach -- and
+    **Aimed twice, not once.** `m5373a2` pushes what it hits 2 squares, so
+    the second claw was being swung at something no longer in reach -- and
     `toward=` is no help, because it is the target that moved and not the
-    claw. So the second swing asks again: whoever still qualifies *and* is
-    still in reach, which is often the same creature when the first claw
-    missed. With nobody in reach the second claw is not swung.
-    """
-    def qualifies(f: int) -> bool:
-        return (c.bloodied(on=f) or c.is_(Condition.PRONE, on=f)) and c.distance(f) <= 1
+    claw. So the second swing asks the offer again: whoever still qualifies
+    *and* is still in reach, which is often the same creature when the first
+    claw missed. With nobody in reach the second claw is not swung.
 
-    victim = _restricted_to(c, 1, qualifies)
+    That second ask is the one place a body still chooses, and it is **not**
+    the fault this change is about: there is only one printed target line and
+    it has already been spent. So the test stays here, in the one spot where
+    a body choosing is what the card describes -- and it is written as the
+    header's two alternatives rather than re-derived, so the two cannot
+    drift.
+    """
+    victim = c.target
     if victim is None:
         return
+
+    def still_qualifies(f: int) -> bool:
+        return (c.bloodied(on=f) or c.is_(Condition.PRONE, on=f)) and c.distance(f) <= 1
+
     c.use_power("m5373a2", on=victim)
-    again = _restricted_to(c, 1, qualifies)
+    again = next((f for f in c.enemies() if still_qualifies(f)), None)
     if again is not None:
         c.use_power("m5373a2", on=again)
 
@@ -2017,19 +2031,25 @@ def m5373a4(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one bloodied or prone creature",
+        any_of=(
+            Target("enemy", 1, bloodied=True),
+            Target("enemy", 1, conditions=frozenset({Condition.PRONE})),
+        ),
+    ),
     keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=12),
     damage=Damage("1d4", 5),
 )
 def m5373a5(c: Cast) -> None:
-    """Aimed rather than abandoned -- see `m5373a3`. `Target.kind` is the gap."""
-    victim = _restricted_to(
-        c, 1, lambda f: c.bloodied(on=f) or c.is_(Condition.PRONE, on=f)
-    )
+    """The same printed line as `m5373a3` and the same two alternatives.
+    #656."""
+    victim = c.target
     if victim is None:
         return
-    if not c.strike(on=victim):
+    if not c.strike():
         return
     c.hit()
     if c.is_(Condition.SLOWED, on=victim):

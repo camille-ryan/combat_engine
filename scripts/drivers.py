@@ -2762,6 +2762,159 @@ def a_target_line_naming_what_it_is_suffering(out: Result) -> None:
                      " is not waived by the relation half")
 
 
+def either_of_two_printed_alternatives(out: Result) -> None:
+    """"One **bloodied or prone** creature", and the three siblings of it.
+
+    Five heroic rows print a target line with two alternatives that are not
+    the same field, so no single field can say it: every field on a target
+    line **narrows**, and declaring both would demand a creature that is
+    bloodied *and* prone -- refusing most of what the card allows. Four of
+    the five had the choice in their bodies and two had been carrying
+    `dropped=("Target.any_of",)` since #401.
+
+    `Target.any_of` is a tuple of whole `Target`s and `_stands_right`
+    recurses into them, so nothing new has to be taught about how a clause is
+    tested. The outer `Target`'s own clauses still compound with the
+    disjunction, which is what the cards print.
+
+    **The pairs are deliberately different fields**, and that is the evidence
+    a general disjunction was needed rather than a second `kind_or_ident`:
+
+    | row | one way in | the other |
+    |---|---|---|
+    | `m5373a3`, `m5373a5` | `bloodied` | `conditions` |
+    | `m6172a2` | `flanked` | `conditions` |
+    | `m5302a4` | `conditions` | `relation` |
+
+    Each is asserted **both ways round** -- satisfy the first alternative and
+    the creature is offered, satisfy only the second and it is offered too --
+    because a reading that silently honoured one and dropped the other passes
+    half of these and that is the half a hand-built board gives you.
+
+    And the **compounding** control: the outer clause is not waived. A row
+    whose outer `Target` narrows as well must still refuse a creature that
+    satisfies an alternative and fails the outer line.
+
+    #656, #658.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import candidates, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition, Size
+
+    def bloodied(c: Cast, world, who: int) -> None:  # noqa: ANN001
+        hp = world.need(who, Health)
+        hp.hp = max(1, hp.max_hp // 2 - 1)
+
+    def prone(c: Cast, world, who: int) -> None:  # noqa: ANN001
+        c.prone(on=who)
+
+    def flanked(c: Cast, world, who: int) -> None:  # noqa: ANN001
+        """**Real geometry, not the relation.** `Target.flanked` reads
+        `query.flanked_by`, and its field note says outright that this is
+        "narrower than `grants_ca` and not a spelling of it" -- a prone or
+        dazed creature grants combat advantage without being flanked. The
+        first draft of this armed `Relation.GRANTS_CA_TO` and the assertion
+        failed, which is the field being right and the rule being wrong.
+        """
+        from combat_engine.engine.components import Position
+        from combat_engine.engine.query import allies
+        from combat_engine.engine.query import squares as body
+
+        spot = world.need(who, Position).square
+        for eid, where in ((c.me, (spot[0] - 1, spot[1])),):
+            world.need(eid, Position).square = where
+        mate = next((a for a in allies(world, c.me) if a != c.me), None)
+        if mate is not None:
+            world.need(mate, Position).square = (spot[0] + 1, spot[1])
+        # `Position.square` alone leaves the grid's occupancy stale, and a
+        # reader that walks occupants sees an empty board. `flanked_by` reads
+        # geometry, so this is belt and braces rather than load-bearing --
+        # and cheaper than finding out which.
+        for eid in (c.me, mate, who):
+            if eid is not None:
+                world.grid.place(eid, frozenset(body(world, eid)))
+
+    def immobilised(c: Cast, world, who: int) -> None:  # noqa: ANN001
+        c.condition(Condition.IMMOBILIZED, until=When.ENCOUNTER, on=who)
+
+    def grabbed(c: Cast, world, who: int) -> None:  # noqa: ANN001
+        c.grab(on=who)
+
+    WANTS = [
+        ("m5373a3", bloodied, "bloodied", prone, "prone"),
+        ("m5373a5", bloodied, "bloodied", prone, "prone"),
+        ("m6172a2", flanked, "flanked by it, by real geometry", prone, "prone"),
+        ("m5302a4", immobilised, "immobilized", grabbed, "grabbed by it"),
+    ]
+
+    for ref, first, says_a, second, says_b in WANTS:
+        for arm, says in ((first, says_a), (second, says_b)):
+            world, me, _ = _board(ref, 1)
+            p = get(ref)
+            out.that(p is not None, f"{ref} is declared")
+            if p is None:
+                continue
+            c = Cast(world=world, me=me, ref=ref)
+            before = set(candidates(world, me, p))
+            reach = [f for f in sorted(enemies(world, me)) if c.distance(f) <= 2]
+            who = next((f for f in reach if f not in before), None)
+            out.that(who is not None,
+                     f"{ref}: the board has a non-qualifying enemy in reach"
+                     f" ({reach} against {sorted(before)})")
+            if who is None:
+                continue
+            arm(c, world, who)
+            got = set(candidates(world, me, p))
+            out.that(got == before | {who},
+                     f"{ref}: {says} ALONE is a way in -- exactly that"
+                     f" creature joins the offer ({sorted(got)} from"
+                     f" {sorted(before)})")
+
+    # ------------------------------------------------- the outer still binds
+    world, me, _ = _board("m5373a5", 1)
+    p = get("m5373a5")
+    if p is not None:
+        c = Cast(world=world, me=me, ref="m5373a5")
+        tight = replace(p, target=replace(p.target, max_size=Size.TINY))
+        reach = [f for f in sorted(enemies(world, me)) if c.distance(f) <= 1]
+        who = next((f for f in reach if f not in set(candidates(world, me, p))), None)
+        out.that(who is not None, f"a non-qualifying enemy is in reach ({reach})")
+        if who is not None:
+            c.prone(on=who)
+            out.that(who in candidates(world, me, p),
+                     "prone alone puts it in the plain row's offer")
+            out.that(who not in candidates(world, me, tight),
+                     "and the SAME row with an outer max_size of Tiny refuses"
+                     " it -- the disjunction does not waive the rest of the"
+                     " target line, which is what every card prints")
+
+    # ------------------- #658: max_size reaches the explicit-target arm too
+    world, me, _ = _board("m2619a1", 1)
+    p = get("m2619a1")
+    if p is not None:
+        from combat_engine.engine.components import Position
+        from combat_engine.engine.dsl import _stands_right
+
+        c = Cast(world=world, me=me, ref="m2619a1")
+        reach = [f for f in sorted(enemies(world, me)) if c.distance(f) <= 1]
+        out.that(bool(reach), f"m2619a1 has somebody in reach ({reach})")
+        if reach:
+            who = reach[0]
+            out.that(_stands_right(world, me, p.target, who, p.ref),
+                     "a Medium creature stands right for a max_size line")
+            world.need(who, Position).size = Size.HUGE
+            out.that(not _stands_right(world, me, p.target, who, p.ref),
+                     "and a Huge one does NOT -- `max_size` was filtered in"
+                     " `candidates` and nowhere else, so a target handed in"
+                     " explicitly by another row's `c.command` skipped it"
+                     " entirely. 24 rows, 18 heroic. #658")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -17381,6 +17534,10 @@ DRIVERS = {
         a_target_line_naming_what_it_is_suffering,
         "a target line narrowed by what the creature is suffering, or"
         " carrying, or how big it is"),
+    "either_of_two_printed_alternatives": (
+        either_of_two_printed_alternatives,
+        "a target line printing two alternatives that are not the same"
+        " field"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),

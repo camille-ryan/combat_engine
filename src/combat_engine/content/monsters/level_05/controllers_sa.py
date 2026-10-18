@@ -2682,13 +2682,28 @@ def m6344a3(c: Cast) -> None:
         label="one nonminion plant ally or two minion plant allies",
         kinds=frozenset({"plant"}),
     ),
-    dropped=("Target.any_of",),
+    dropped=("Target.any_of(count=)", "Target.minion"),
 )
 def m6344a4(c: Cast) -> None:
     """The type word is common to both printed lines, so `kinds=` refuses
-    nothing the card allows. What is left is not a narrowing: the two lines
-    differ in *count* -- one nonminion or two minions -- which is one target
-    spec or the other."""
+    nothing the card allows. What is left is not a narrowing, and the general
+    `Target.any_of` from #656 does not reach it either -- so the marker names
+    the two gaps instead of a symbol that now exists:
+
+    * **`Target.any_of(count=)`.** The two printed lines differ in *how
+      many* -- one nonminion or **two** minions. An `any_of` entry is a
+      whole `Target` and so does carry a `count`, but `candidates` caps the
+      pool with the **outer** count and nothing reads an alternative's. A
+      disjunction that changes the number of targets is a different
+      mechanism from one that changes the predicate.
+    * **`Target.minion`.** No target field asks it. `c.is_minion` is the
+      reader and it is a `Cast` method, so only a body can ask -- the same
+      shape `query.kinds_of` had before #477 lifted it off `Cast` for
+      exactly this reason.
+
+    Both are needed: honouring the count without the minion test would
+    offer two nonminions, and the minion test without the count would offer
+    one minion."""
     mate = c.target
     if mate is None:
         return
