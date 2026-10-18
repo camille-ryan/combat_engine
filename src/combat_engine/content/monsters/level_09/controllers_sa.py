@@ -98,7 +98,6 @@ from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_08.brutes_sa import _two_turns
@@ -3696,12 +3695,8 @@ def m6092a2(c: Cast) -> None:
     on a dead owner and the creature would otherwise sit unreachable and
     unable to act for the rest of the fight.
     """
-    victim = _restricted_to(
-        c,
-        1,
-        lambda f: f in c.grabbing(of=c.me) and c.is_kind("humanoid", on=f),
-    )
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if victim is None or not c.strike():
         return
     me, ref = c.me, c.ref
     hold = c.dominate(on=victim)
