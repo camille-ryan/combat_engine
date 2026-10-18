@@ -743,7 +743,7 @@ def extended_rest(world: World) -> None:
 
 
 def _uncommanded(world: World, owner: int) -> None:
-    """Run the instinctive effect of every summon left to its own devices.
+    """Run what every companion left to its own devices does.
 
     **Every summon block prints this and none of them could reach it.**
     "If you haven't given it any commands by the end of your turn, it
@@ -753,6 +753,15 @@ def _uncommanded(world: World, owner: int) -> None:
 
     Before `TurnEnd`, so a row answering the end of a turn sees what the
     summon did rather than the board as the owner left it.
+
+    **A beast has no printed Instinctive Effect, and it was the summons'
+    behaviour standing in for a rule it does not have.** `Cast.instinctive`
+    reads `Powers.summon`, which a beast block does not carry, so it
+    returned False and an uncommanded beast did nothing. The printed rule
+    for one is that it moves adjacent to its owner and takes no other
+    action, so that is what `_follows_its_owner` does -- and eight ranger
+    feats waive exactly that half, which is why it has to exist before they
+    can say so. #661.
     """
     from .cast import Cast
     from .components import Companion
@@ -761,5 +770,40 @@ def _uncommanded(world: World, owner: int) -> None:
         mine = world.get(eid, Companion)
         if mine is None or mine.owner != owner or mine.commanded == world.round:
             continue
-        Cast(world=world, me=owner, ref=mine.ref).instinctive(eid)
+        if Cast(world=world, me=owner, ref=mine.ref).instinctive(eid):
+            continue
+        # **Beasts only, and this is the narrowing that matters.** The
+        # follow-your-owner default is the *beast companion's* printed rule.
+        # A shaman's spirit stays where it was put and a familiar has its
+        # own movement sentence, so a default applied to every
+        # instinctive-less companion would walk two other kinds of creature
+        # around the board -- wider than any card, which is the direction
+        # `m5808a0`'s rule says to err away from.
+        if mine.kind == "beast":
+            _follows_its_owner(world, owner, eid)
+
+
+def _follows_its_owner(world: World, owner: int, pet: int) -> None:
+    """An uncommanded companion with no printed effect walks to its owner.
+
+    `c.walk_toward` rather than `c.move(toward=)`, because this is a
+    compulsion and not a choice: the mover has no say, which is the
+    distinction that verb's own docstring draws.
+
+    **Waived by `c.beast_independent`.** Eight feats print "it need not move
+    adjacent to you but must remain within 10 squares", and the waiver is a
+    modifier rather than a flag on `Companion` so that it can expire with
+    the effect that granted it. The leash half is `c.leash` and is laid by
+    the feat; this function only stops pulling.
+    """
+    from .cast import Cast
+    from .components import Mods
+    from .query import adjacent
+
+    held = world.get(pet, Mods)
+    if held is not None and held.items and held.total("roams_free", {}) > 0:
+        return
+    if adjacent(world, pet, owner):
+        return
+    Cast(world=world, me=owner, ref="").walk_toward(owner, on=pet)
 

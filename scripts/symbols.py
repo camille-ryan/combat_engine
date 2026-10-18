@@ -212,8 +212,8 @@ CATEGORIES: dict[str, dict] = {
                 "transfer",
             ]),
             ("summoning and companions", [
-                "call_beast", "call_companion", "dismiss_companion", "summon",
-                "summon_inline",
+                "beast_independent", "call_beast", "call_companion",
+                "dismiss_companion", "summon", "summon_inline",
             ]),
             ("size", ["contract", "grow", "resize"]),
             ("ending, suspending, watching", [
@@ -523,7 +523,10 @@ READERS: dict[str, list[str]] = {
         "my_hits_this_turn", "my_misses_this_turn", "shifted",
         "since_turn_began", "surge_value", "taking_ongoing",
     ],
-    "the companion": ["familiar_active", "familiar_echoes", "familiar_of"],
+    "the companion": [
+        "acting_independently", "familiar_active", "familiar_echoes",
+        "familiar_of",
+    ],
 }
 
 READING_BLURB = (

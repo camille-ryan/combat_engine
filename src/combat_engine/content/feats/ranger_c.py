@@ -631,7 +631,12 @@ def f2473(c: Cast) -> None:
 #: need not move adjacent to you but must remain within 10 squares".
 #: There is no independent mode and no leash to lengthen -- the beast
 #: takes no turn of its own -- so the sentence has nowhere to land.
-LEASH = ("c.beast_independent()",)
+#: **Gone.** The eight rows below print "while your beast companion acts
+#: independently, it need not move adjacent to you but must remain within 10
+#: squares of you", and this named the mode as the gap. The mode was always
+#: there -- `Companion.commanded` is "the round its owner last spent an
+#: action on it" and `turns._uncommanded` already read it. What was missing
+#: was the *default* the sentence waives. #661.
 
 
 def _by_the_beast(c: Cast, ev: Any, *, charge: bool) -> int | None:
@@ -657,13 +662,16 @@ def _leash(ref: str, what: str, rider: Any, *, charge: bool = False) -> None:
     rider on its attack."""
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF, dropped=LEASH)
+           reach=PERSONAL, target=SELF)
     def feat(c: Cast) -> None:
         pet = c.beast()
         if pet is None:
             return
         # Untyped: the card prints no word in front of "bonus".
         c.bonus("save", 2, on=pet, until=When.ENCOUNTER)
+        # "It need not move adjacent to you but must remain within 10
+        # squares of you" -- both halves, and `within=` is the leash.
+        c.beast_independent(within=10, on=pet, until=When.ENCOUNTER)
         busy = []
 
         def landed(ev: Hit) -> None:
@@ -682,15 +690,20 @@ def _leash(ref: str, what: str, rider: Any, *, charge: bool = False) -> None:
 
     feat.__name__ = ref
     feat.__doc__ = (
-        f"{what}\n\n    Dropped: the sentence is conditional on the beast "
-        "**acting\n    independently**, and there is no such mode. "
-        "`c.instinctive` is not\n    it -- that runs a *summon's* printed "
-        "Instinctive Effect, read off\n    `Powers.summon`, which a beast "
-        "block does not carry.\n\n    Re-pointed off `c.leash()`, which "
-        "landed and finishes none of\n    these. The tether is half of one "
-        "clause; the other half waives a\n    default -- moving adjacent to "
-        "its owner -- that does not exist\n    either, and neither half "
-        "means anything until the mode does."
+        f"{what}\n\n    All three clauses now. The one that was dropped is "
+        "conditional on the\n    beast **acting independently**, and this "
+        "helper's note said there was\n    no such mode. Half right: "
+        "`c.instinctive` is indeed not it -- that\n    runs a *summon's* "
+        "printed Instinctive Effect, read off `Powers.summon`,\n    which a "
+        "beast block does not carry. But `Companion.commanded` has\n    "
+        "recorded the round its owner last spent an action on it all along, "
+        "and\n    `turns._uncommanded` already read it.\n\n    What was "
+        "missing was the *default* the sentence waives: an uncommanded\n    "
+        "beast is pulled adjacent to its owner by "
+        "`turns._follows_its_owner`.\n    `c.beast_independent(within=10)` "
+        "stops the pull and leashes it to 10\n    instead -- both halves of "
+        "one sentence, and the reason the default had\n    to be written "
+        "before the waiver could mean anything. #661."
     )
 
 

@@ -777,6 +777,25 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     )
 
 
+def acting_independently(world: World, eid: int) -> bool:
+    """Is this companion acting on its own this round?
+
+    **The state was on the board and a docstring said it was not.** Eight
+    ranger feats print "while your beast companion acts independently" and
+    all eight were marked for a mode that "does not exist" -- while
+    `Companion.commanded` has recorded "the round its owner last spent an
+    action on it" since summons were written, and `turns._uncommanded`
+    already reads it to run a summon's Instinctive Effect. #661.
+
+    False for anything that is not a companion: a creature taking its own
+    turn is not acting independently of anybody.
+    """
+    from .components import Companion
+
+    mine = world.get(eid, Companion)
+    return mine is not None and mine.commanded != world.round
+
+
 def on_the_ground(world: World, eid: int) -> bool:
     """Is this creature in contact with the floor?
 

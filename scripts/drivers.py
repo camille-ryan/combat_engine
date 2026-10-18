@@ -3468,6 +3468,131 @@ def a_reach_that_changes_with_the_creature_s_state(out: Result) -> None:
                  f"ForcedMove squares seen: {seen}")
 
 
+def a_companion_left_to_its_own_devices(out: Result) -> None:
+    """An uncommanded beast walks to its owner, and eight feats waive it.
+
+    `turns._uncommanded` has run at the end of every owner's turn since
+    summons were written, and for a **beast** it did nothing: it calls
+    `Cast.instinctive`, which reads `Powers.summon`, and a beast block
+    carries none. So the printed rule -- an uncommanded beast moves adjacent
+    to its owner and takes no other action -- was not in the engine, and the
+    eight ranger feats that *waive* that half were marked for a mode their
+    helper said did not exist.
+
+    **It did exist.** `Companion.commanded` is "the round its owner last
+    spent an action on it" and `_uncommanded` already gated on it;
+    `query.acting_independently` is the reader now. #661.
+
+    Four controls:
+
+    * an uncommanded beast standing off is **pulled adjacent**;
+    * a **commanded** one is not -- the state the eight feats hang on, and
+      the half that distinguishes "acts independently" from "is a
+      companion";
+    * with `c.beast_independent()` in force it stays where it is, which is
+      the printed waiver;
+    * and it is **leashed to 10** instead, which is the other half of the
+      same sentence. Asserted by walking it out past the leash and watching
+      the tether refuse -- not by reading the modifier back, which would
+      test that a number was stored rather than that anything honours it.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Companion, Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import acting_independently, adjacent, squares
+    from combat_engine.engine.turns import _uncommanded
+
+    world, me, _ = _board("m145a0", 1)
+    here = world.need(me, Position).square
+
+    pet = Cast(world=world, me=me, ref="drivers").call_companion(
+        "m145", (here[0] + 5, here[1]), kind="beast")
+    out.that(bool(pet), f"a beast is on the board ({pet})")
+    if not pet:
+        return
+
+    def park(away: int) -> None:
+        world.need(pet, Position).square = (here[0] + away, here[1])
+        world.grid.place(pet, frozenset(squares(world, pet)))
+
+    def run_turn() -> None:
+        world.turn = me
+        _uncommanded(world, me)
+
+    # ---- uncommanded: it follows
+    park(5)
+    out.that(acting_independently(world, pet),
+             "nobody has commanded it this round, so it is acting"
+             " independently -- `Companion.commanded` answers it")
+    out.that(not adjacent(world, pet, me), "and it is standing off")
+    run_turn()
+    out.that(adjacent(world, pet, me),
+             "an uncommanded beast walks to its owner, which is the printed"
+             " rule and did nothing before: `Cast.instinctive` reads"
+             " `Powers.summon` and a beast block carries none")
+
+    # ---- commanded: it does not
+    park(5)
+    world.need(pet, Companion).commanded = world.round
+    out.that(not acting_independently(world, pet),
+             "a commanded beast is NOT acting independently")
+    run_turn()
+    out.that(not adjacent(world, pet, me),
+             "and is left where its owner put it -- the control, and the"
+             " state the eight feats hang on")
+
+    # ---- the waiver
+    world.need(pet, Companion).commanded = -1
+    park(5)
+    Cast(world=world, me=me, ref="f2402").beast_independent(
+        within=10, on=pet, until=When.ENCOUNTER)
+    run_turn()
+    out.that(not adjacent(world, pet, me),
+             "with the waiver in force it stays where it is, uncommanded:"
+             " it need not move adjacent to you")
+
+    # ---- and the leash is the other half
+    from combat_engine.engine.movement import reachable
+
+    park(9)
+    spots = reachable(world, pet, 6)
+    far = [sq for sq in spots
+           if max(abs(sq[0] - here[0]), abs(sq[1] - here[1])) > 10]
+    out.that(not far,
+             "and it may not step past 10 squares from its owner -- the"
+             " leash, asserted by asking where it may go rather than by"
+             f" reading the modifier back ({sorted(far)[:4]})")
+    near = [sq for sq in spots
+            if max(abs(sq[0] - here[0]), abs(sq[1] - here[1])) <= 10]
+    out.that(bool(near),
+             "while squares inside the tether are still open, so the leash"
+             " is a tether and not a freeze",
+             f"{len(near)} square(s)")
+
+    # ---- a spirit is not a beast, and the default must not move it
+    #
+    # **The narrowing that matters.** `_uncommanded` runs for every
+    # companion, and a follow-your-owner default applied to all of them
+    # would walk a shaman's spirit and a wizard's familiar around the board
+    # -- neither card says so. Its own board, because `call_companion`
+    # replaces the one already out: the first draft reused the beast's
+    # world and the beast lost its `Companion` row mid-rule.
+    world, me, _ = _board("m145a0", 1)
+    here = world.need(me, Position).square
+    ghost = Cast(world=world, me=me, ref="drivers").call_companion(
+        "m145", (here[0] + 5, here[1]), kind="spirit")
+    out.that(bool(ghost), f"a spirit is on the board ({ghost})")
+    if ghost:
+        out.that(acting_independently(world, ghost),
+                 "uncommanded, so the default would reach it if it applied")
+        out.that(not adjacent(world, ghost, me), "and standing off")
+        world.turn = me
+        _uncommanded(world, me)
+        out.that(not adjacent(world, ghost, me),
+                 "a SPIRIT is left where it was put -- the follow is the"
+                 " beast's printed rule and nobody else's")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -17890,6 +18015,9 @@ DRIVERS = {
     "a_reach_that_changes_with_the_creature_s_state": (
         a_reach_that_changes_with_the_creature_s_state,
         "a printed range whose size a state decides"),
+    "a_companion_left_to_its_own_devices": (
+        a_companion_left_to_its_own_devices,
+        "what an uncommanded beast does, and the feats that waive it"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),

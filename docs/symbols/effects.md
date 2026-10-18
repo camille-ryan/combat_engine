@@ -67,6 +67,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
 
 ## summoning and companions
 
+- `c.beast_independent(self, *, within: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "While it acts independently it need not move adjacent to you."
 - `c.call_beast(self, at: 'Square | None' = None) -> 'int'`
   - Put the ranger's beast on the board, the category off its build.
 - `c.call_companion(self, ref: 'str' = '', at: 'Square | None' = None, *, kind: 'str' = 'spirit', speed: 'int' = 6, damage: 'str' = '', second: 'bool' = False) -> 'int'`

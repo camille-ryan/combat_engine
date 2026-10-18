@@ -175,6 +175,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 ## the companion
 
+- `query.acting_independently(world: 'World', eid: 'int') -> 'bool'`
+  - Is this companion acting on its own this round?
 - `query.familiar_active(world: 'World', eid: 'int') -> 'int | None'`
   - The familiar, if the printed cards would call it active.
 - `query.familiar_echoes(world: 'World', eid: 'int') -> 'bool'`

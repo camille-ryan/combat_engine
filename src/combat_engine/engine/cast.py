@@ -6928,6 +6928,41 @@ class Cast:
         act(replace(self, ref=mine.ref, targets=[], target=None, result=None), who)
         return True
 
+    def beast_independent(
+        self,
+        *,
+        within: int = 0,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"While it acts independently it need not move adjacent to you."
+
+        Eight level-1 ranger feats print it, and all eight were marked for a
+        mode that `Companion.commanded` has answered all along -- see
+        `query.acting_independently`. What was missing was the *default* the
+        sentence waives: an uncommanded companion with no printed Instinctive
+        Effect is pulled to its owner by `turns._follows_its_owner`, and this
+        stops that pull. #661.
+
+        `within` leashes it instead, which is the other half of the same
+        sentence -- "but must remain within 10 squares of you" -- and is
+        `c.leash` with the owner as the anchor. Passing nothing waives the
+        default and tethers it to nothing, which no card prints; the
+        parameter is not optional in practice and is a keyword so the number
+        is named at every call.
+
+        **Defaults to the caster's beast, not to the caster.** Every printed
+        line of this shape is a ranger talking about its companion, and
+        `c.beast()` is how the row finds it -- so a bare call lands on the
+        beast and `on=` is for the rare row naming another companion.
+        """
+        who = on if on is not None else self.beast()
+        if who is None:
+            return None
+        if within:
+            self.leash(within, to=self.me, on=who, until=until)
+        return self.bonus("roams_free", 1, on=who, until=until, kind=self.ref)
+
     def dismiss_companion(self) -> bool:
         """"Your spirit companion disappears." An Effect line on ~20 rows."""
         standing = self.companion()
