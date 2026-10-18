@@ -2861,7 +2861,50 @@ def _area_rows(world, caster: int, exclude: str) -> list[str]:  # noqa: ANN001
 BY_NAME = {"EffectApplied", "ConditionEnded"}
 
 
-def _claimed(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
+def _used_inside(slice_: list | None) -> tuple[str, ...]:
+    """The rows this row used, from inside its own slice.
+
+    A row whose printed Effect is "<this creature> uses <another row>" --
+    `m5527a5` is one, and 566 functions call `c.use_power` -- was credited
+    with nothing, because the nested row stamps **its own** ref in
+    `DamageApplied.detail` and in the label of everything it lays. So
+    `"m5527a3"` did not start with `"m5527a5"` and the caller's whole content
+    went unattributed. Measured on the baseline before #668: **108 of the
+    1,020 silent rows call `c.use_power`**, which is the largest single
+    explanation found for that set. #697.
+
+    **The provocation cannot come in this way**, which is the property that
+    makes it safe where the unbounded window of #690 was not: every
+    `PowerUsed` left in the slice is *deeper* than the row's own --
+    `_its_own_slice` stops at one at or above its depth -- so a sibling's or
+    the harness's use is never collected.
+
+    A row that uses another row is making a choice the card prints. Crediting
+    it with the consequence is not borrowed evidence; it is the row's own
+    doing, one level down.
+    """
+    if not slice_:
+        return ()
+    return tuple(
+        str(getattr(e, "power", "") or "")
+        for e in slice_
+        if e.kind == "PowerUsed" and getattr(e, "power", "")
+    )
+
+
+def _dealt_by(world, refs: tuple[str, ...], cursor: int) -> bool:  # noqa: ANN001
+    """Did any of `refs` deal damage in the window? See `_used_inside`."""
+    if not refs:
+        return False
+    return any(
+        str(getattr(e, "detail", "") or "").startswith(refs)
+        for e in world.bus.log[cursor:]
+        if e.kind in ("DamageRolled", "DamageApplied")
+    )
+
+
+def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
+             also: tuple[str, ...] = ()) -> set[str]:
     """The `BY_NAME` kinds this row can be shown to have caused.
 
     **Why these are needed at all.** `DID_SOMETHING` had `EffectExpired` and
@@ -2889,12 +2932,15 @@ def _claimed(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
     direction; over-crediting is what #216 was.
     """
     out: set[str] = set()
+    # The row's own ref, plus any row it used from inside its own slice --
+    # whose label and `why` carry *that* ref. See `_used_inside`. #697.
+    names = (ref, *also)
     for e in world.bus.log[cursor:]:
-        if e.kind == "EffectApplied" and str(getattr(e, "label", "") or "").startswith(ref):
+        if e.kind == "EffectApplied" and str(getattr(e, "label", "") or "").startswith(names):
             out.add("EffectApplied")
         # `ConditionEnded.why` is the ref for a cure: `c.cure` and
         # `Effects.end` both pass the caller's ref as the reason.
-        elif e.kind == "ConditionEnded" and str(getattr(e, "why", "") or "").startswith(ref):
+        elif e.kind == "ConditionEnded" and str(getattr(e, "why", "") or "").startswith(names):
             out.add("ConditionEnded")
     return out
 
@@ -2961,8 +3007,40 @@ def _its_own_slice(world, ref: str, cursor: int) -> list | None:  # noqa: ANN001
     for i, e in enumerate(log):
         if e.kind == "PowerUsed" and getattr(e, "power", None) == ref:
             mine = getattr(e, "depth", 0)
+            rest = log[i + 1:]
+            # **The row's own `PowerResolved` closes it, and that is a
+            # better bound than the depth rules above could express.**
+            # `use` announces `PowerUsed`, runs the body, then announces
+            # `PowerResolved` -- so the body does **not** run inside its own
+            # announcement, and a row that uses another row emits the nested
+            # `PowerUsed` at the **same** depth. The paragraph above claims a
+            # nested use "emits deeper"; it does not, so `PowerUsed at <=
+            # mine` ended the slice at the nested use and the caller was
+            # credited with nothing.
+            #
+            # Measured on `m5527a5`, whose whole printed Effect is "uses
+            # m5527a3 against the triggering enemy": its slice came back
+            # **empty** while the bus showed the nested row attacking and
+            # hitting. **108 of the 1,020 silent rows call `c.use_power`.**
+            # #697.
+            #
+            # Between the two announcements only this row's body runs -- the
+            # engine is synchronous -- so nothing of the provocation's can be
+            # in here: the provocation happened before `PowerUsed`, which is
+            # the property #216 and #690 both turn on. A trigger answering
+            # this row's own attack *is* inside, and is this row's doing.
+            closed = next(
+                (j for j, x in enumerate(rest)
+                 if x.kind == "PowerResolved" and getattr(x, "power", None) == ref),
+                None,
+            )
+            if closed is not None:
+                return rest[:closed]
+            # No resolution announced -- a path that raised, or a row used
+            # by something that does not go through `dsl.use`. The depth
+            # rules are the fallback, exactly as before.
             out: list = []
-            for x in log[i + 1:]:
+            for x in rest:
                 at = getattr(x, "depth", 0)
                 if at < mine:
                     break
@@ -3899,14 +3977,13 @@ def audit(ref: str) -> Result:
                 # while arming, so there is a mark to find.
                 own_now = _its_own_slice(world, ref, world.fight_cursor)
                 mine_now = {e.kind for e in own_now} if own_now is not None else set()
-                dealt_now = any(
-                    str(getattr(e, "detail", "") or "").startswith(ref)
-                    for e in world.bus.log[world.fight_cursor:]
-                    if e.kind in ("DamageRolled", "DamageApplied")
-                )
+                nested_now = _used_inside(own_now)
+                dealt_now = _dealt_by(world, (ref, *nested_now),
+                                      world.fight_cursor)
                 out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
-                ) | _claimed(world, ref, world.fight_cursor) | _own_unbinding(
+                ) | _claimed(world, ref, world.fight_cursor,
+                             nested_now) | _own_unbinding(
                     own_now if own_now is not None
                     else world.bus.log[world.fight_cursor:]
                 )
@@ -3959,11 +4036,8 @@ def audit(ref: str) -> Result:
                 # **Prefix, not equality.** `half_damage` stamps
                 # `"<ref> (half)"`, `absorb` `"<ref> (absorbed)"` and a zone
                 # burn `"<ref> zone"`, so `== ref` missed every one of them.
-                dealt = any(
-                    str(getattr(e, "detail", "") or "").startswith(ref)
-                    for e in world.bus.log[cursor:]
-                    if e.kind in ("DamageRolled", "DamageApplied")
-                )
+                nested = _used_inside(own)
+                dealt = _dealt_by(world, (ref, *nested), cursor)
                 # Parenthesised. `-` binds tighter than `|`, so the old
                 # `mine - PROVOKE_NOISE | (mine & {"DamageApplied"})` read as
                 # `(mine - PROVOKE_NOISE) | (mine & {"DamageApplied"})` --
@@ -3973,7 +4047,7 @@ def audit(ref: str) -> Result:
                 # `ok  ConditionApplied, DamageApplied` with its gate false.
                 out.events |= (mine - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt else set()
-                ) | _claimed(world, ref, cursor)
+                ) | _claimed(world, ref, cursor, nested)
                 # **All three of these read the whole window and credited
                 # the provocation**, which for a row triggered by "you kill
                 # an adjacent creature" is the *caster* walking over and
