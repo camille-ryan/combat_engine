@@ -1372,7 +1372,7 @@ def p15931(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.DIVINE, Keyword.WEAPON],
-    dropped=("c.as_basic(charge=)",),
+    instead_of_basic="charge",
 )
 def p15932(c: Cast) -> None:
     """"You can draw a weapon before making the attack."
@@ -1382,9 +1382,19 @@ def p15932(c: Cast) -> None:
     taking-up on its own, with `actions._wielding` charging the minor at
     the other door.
 
-    Still carries `c.as_basic(charge=)`: the printed Special puts this row
-    in place of a melee basic attack **on a charge**, and `c.as_basic`
-    cannot narrow a standing substitution to one window.
+    **The printed Special is `instead_of_basic="charge"`, and the old reason
+    was wrong twice.** `c.as_basic` *can* narrow to one window --
+    `window="charge"` has always been one of the four it lists -- and the
+    parameter was never the gap. What was wrong was the **door**: that verb
+    files the substitution from a *body*, which runs when the row is used,
+    after `Cast.charge_at` has already built the menu off
+    `dsl.basic_options`. A clause the row's own card prints about itself is
+    header data, the same shape `basic=` is in. #677.
+
+    The second half of the Special -- "if you have actions remaining, you
+    can use your flurry power after the charge" -- is a different clause
+    and is not written; it needs the flurry row, which this theme does not
+    declare.
     """
     c.draw()
     c.attack(_best(c), vs=AC)

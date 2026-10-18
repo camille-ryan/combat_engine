@@ -1152,6 +1152,27 @@ class Power:
     #: `basic_options`, so a granted swing offers the row, and
     #: `resolve._is_basic`, so `ctx["basic"]` lets a modifier ask.
     basic: str = ""
+    #: **A standing "in place of a basic attack", declared rather than laid.**
+    #: The window the row stands in for -- `"charge"`, `"opportunity"`,
+    #: `"challenge"`, `"ranged"`, or `"*"` for every melee one -- and `""`
+    #: for the great majority that stand in for nothing.
+    #:
+    #: `c.as_basic` is the verb and does the same filing, and it is the right
+    #: door for a row that *grants* the substitution to somebody -- a feat
+    #: armed at the start of a fight, which is all 14 of its callers. It is
+    #: the wrong door for a row whose **own card** says it: "When charging,
+    #: it can use this power in place of a melee basic attack" is a property
+    #: of the row, and a body that files it runs only when the row is used,
+    #: which is after the charge menu has already been built. Three rows
+    #: carried `c.as_basic(charge=)` for that, and the parameter was never
+    #: the gap -- `window="charge"` has always existed. The gap was a *body*
+    #: where a header was wanted, the same shape `basic=` above is in. #677.
+    #:
+    #: `basics_of` deliberately does **not** read this, and that is #522's
+    #: distinction: a row swung *in place of* a basic attack is not one, so
+    #: it must not pick up a basic-attack modifier. Only `basic_options`
+    #: reads it, which is the offer and nothing else.
+    instead_of_basic: str = ""
     #: The second branch's Requirement. A dual row's printed one is usually
     #: the two joined by "or" -- "two melee weapons **or** a ranged weapon"
     #: is the melee branch's requirement and the ranged branch's, and
@@ -1742,6 +1763,7 @@ def power(
     charges: bool = False,
     thrown_by_hand: bool = False,
     basic: str = "",
+    instead_of_basic: str = "",
     requires_alt: Callable[[World, int], bool] | None = None,
     trigger: str = "",
     on: Trigger | Sequence[Trigger] | None = None,
@@ -1915,6 +1937,7 @@ def power(
         charges=charges,
         thrown_by_hand=thrown_by_hand,
         basic=basic,
+            instead_of_basic=instead_of_basic,
             requires_alt=requires_alt,
             trigger=trigger,
             on=on,
@@ -2631,7 +2654,29 @@ def basic_options(world: World, actor: int, window: str, own: str = "") -> list[
     # already covers; the dedupe at the end is what keeps it from appearing
     # twice.
     designated = basics_of(world, actor, "ranged" if window == "ranged" else "melee")
-    for ref in dict.fromkeys((*known.instead_of_basic(window), *designated)):
+    # **And the rows that declare the substitution in their own header.**
+    # `Powers.instead` holds what somebody else *granted*; this is the row
+    # whose card says it about itself, which a body cannot file in time --
+    # it runs when the row is used, and the menu is built first. Scanned off
+    # `Powers.all` for the reason `basics_of` gives: a row the creature does
+    # not hold is not its stand-in however the card reads. #677.
+    # **The empty declaration must not match the empty window**, and the
+    # first version of this let it: `c.basic` asks with `window=""`, so
+    # `"" in (window, "*")` was true of every row the creature knows and the
+    # first at-will among them was swung in place of the basic attack.
+    # `drivers.lent_basic` caught it -- "returned True; declared []" -- which
+    # is a rule written for a different fault in the same function.
+    declared = [
+        ref
+        for ref in known.all
+        if (row := get(ref)) is not None
+        and row.instead_of_basic
+        and row.instead_of_basic in (window, "*")
+        and not (window == "ranged" and row.instead_of_basic == "*")
+    ]
+    for ref in dict.fromkeys(
+        (*known.instead_of_basic(window), *declared, *designated)
+    ):
         p = get(ref)
         # An associated-powers list names rows the character may not
         # possess, and `usable` is what says so -- along with refusing a

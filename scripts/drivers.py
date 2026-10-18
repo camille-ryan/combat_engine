@@ -20564,6 +20564,94 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
+    """Three rows said `c.as_basic` had "no word for the charge's own".
+
+    It has had one all along -- `window="charge"` is one of the four its
+    docstring lists, and `Cast.charge_at` asks
+    `dsl.basic_options(world, runner, "charge", ref)`. #677's split surfaced
+    all three in the "wants an ARGUMENT on a verb that exists" bucket, and
+    the parameter was not the gap either.
+
+    **The gap was the door.** `c.as_basic` files the substitution from a
+    *body*, which is right for its 14 callers -- every one a feat or a
+    trait armed at the start of a fight, *granting* the substitution. It is
+    wrong for a row whose **own card** says it: "When charging, it can use
+    this power in place of a melee basic attack" is a property of the row,
+    and a body that files it runs when the row is used, after the charge
+    menu has already been built. So the row never reaches its own menu.
+
+    `Power.instead_of_basic` is the header twin, the same shape `basic=` is
+    in and read by the same function off the registry.
+
+    **`basics_of` deliberately does not read it**, which is #522's
+    distinction and the negative half that matters: a row swung *in place
+    of* a basic attack is not one, so it must not pick up a basic-attack
+    modifier. Asserted below by asking the opportunity window, which the
+    declaration must not answer.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.dsl import REGISTRY, basic_options, basics_of
+
+    for ref in ("m3566a2", "p15932"):
+        world, me, _ = audit_board(ref, 1)
+        charge = basic_options(world, me, "charge")
+        out.that(ref in charge,
+                 f"{ref} is offered on the charge menu off its header alone,"
+                 " with no body having run -- which is the whole of what the"
+                 " marker was for",
+                 f"{charge}")
+        opening = basic_options(world, me, "opportunity")
+        out.that(ref not in opening,
+                 "and not on the opportunity menu: the declaration names one"
+                 " window and the card names one window",
+                 f"{opening}")
+        out.that(ref not in basics_of(world, me),
+                 "and it is still not a basic *attack* -- `basics_of` does"
+                 " not read this field, so the row picks up no"
+                 " basic-attack modifier. #522's distinction, and the half"
+                 " an implementation that conflated the two would fail",
+                 f"{basics_of(world, me)}")
+
+    # -- the third row is correct and unobservable, which is said ---------
+    # `m3547a1` carries the same declaration. Its stat block is **defective**
+    # -- `m3547a2`'s printed attack line names no defence -- so `usable`
+    # refuses every row of the creature and `basic_options` drops it before
+    # the field is consulted. That is a fact about the compendium entry and
+    # not about this field, and asserting the row's absence here would be
+    # asserting the defect.
+    out.that(REGISTRY["m3547a1"].instead_of_basic == "charge",
+             "the third row of the family declares it too, and is refused in"
+             " play for an unrelated reason: its stat block is defective, so"
+             " the menu never reaches the field",
+             f"{REGISTRY['m3547a1'].instead_of_basic!r}")
+
+    # -- and the empty declaration must not answer the empty window -------
+    # **The first version of this let it**, and the cost was large: `c.basic`
+    # asks with `window=""`, so `"" in (window, "*")` was true of every row
+    # the creature knows and the first at-will among them was swung in place
+    # of the basic attack. `drivers.lent_basic` reddened at "returned True;
+    # declared []" and four replay fixtures diverged. Asserted here as well,
+    # because that rule is about a different fault and could be re-aimed.
+    # **On a board whose caster HOLDS a declaring row**, which the first
+    # draft of this assertion did not: asked on `mba`'s board it was
+    # vacuous -- nobody there declares a window, so the plant left it green
+    # while `lent_basic` went red.
+    world, me, _ = audit_board("p15932", 1)
+    plain = basic_options(world, me, "")
+    out.that("p15932" not in plain,
+             "a windowless ask offers no row that declared a window: the"
+             " empty declaration is 'stands in for nothing', not 'stands in"
+             " everywhere' -- and the row that declares one is on this"
+             " board, so the question is real",
+             f"{plain}")
+    out.that(len(plain) <= 2,
+             "and the windowless menu stays the basic attack and whatever"
+             " was *granted*, not every at-will the creature knows",
+             f"{plain}")
+
+
 def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
     """Eight rows, five symbols, one mechanism -- and one copied line.
 
@@ -21841,6 +21929,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "stands_in_on_a_charge": (
+        a_row_that_stands_in_for_a_basic_on_its_own_card,
+        "a row that stands in for a basic attack on its own card (#677)",
     ),
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,

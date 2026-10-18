@@ -804,14 +804,29 @@ def m3547a0(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d12", 3),
-    dropped=("c.as_basic(charge=)", "Power.standing"),
+    instead_of_basic="charge",
+    dropped=("Power.standing",),
 )
 def m3547a1(c: Cast) -> None:
-    """The swing is exact. Two clauses are not.
+    """The swing is exact, and one of the two loose clauses is written.
 
-    "It can use this in place of a melee basic attack when charging" wants a
-    stand-in filed for the charge window specifically; `c.as_basic` files one
-    for a window but takes no charge.
+    **`c.as_basic(charge=)` was never the gap, and the parameter was not
+    either.** `c.as_basic(window="charge")` has always existed and
+    `Cast.charge_at` asks `dsl.basic_options(world, runner, "charge", ref)`,
+    so the filing works. What was wrong was the **door**: the verb files the
+    substitution from a *body*, which runs when the row is used -- after the
+    charge menu has been built -- and this clause is a standing property of
+    the row's own card. `instead_of_basic="charge"` is the header twin, the
+    same shape `basic=` is in, read by `basic_options` off the registry.
+    Three rows carried the marker; #677's split is what surfaced them.
+
+    **`c.as_basic(charge=)` was never a gap.** `c.as_basic(window=)` is the
+    parameter, `"charge"` is one of the four words its own docstring lists,
+    and `Cast.charge_at` asks `dsl.basic_options(world, runner, "charge",
+    ref)` -- so a stand-in filed under that window is offered on the charge
+    menu and nowhere else. Three rows carried the marker; found by #677's
+    split, which put all three in the "wants an ARGUMENT on a verb that
+    exists" bucket.
 
     "While bloodied its movement during a charge does not provoke" is sayable
     now -- `c.no_provoke(when=)` is handed `ctx["move_kind"]`, `"charge"`

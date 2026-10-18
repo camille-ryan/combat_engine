@@ -1097,12 +1097,22 @@ def m3566a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=9),
     damage=Damage("1d10", 7, kind=LIMITED),
-    dropped=("c.as_basic(charge=)",),
+    instead_of_basic="charge",
 )
 def m3566a2(c: Cast) -> None:
-    """The Special -- "when charging it can use this in place of a melee basic
-    attack" -- is the named gap: `c.as_basic` files a stand-in for a window and
-    has no word for the charge's own."""
+    """The Special -- "when charging it can use this in place of a melee
+    basic attack" -- is `instead_of_basic="charge"` in the header.
+
+    **`c.as_basic(charge=)` was never the gap, and the parameter was not
+    either.** `c.as_basic(window="charge")` has always existed and
+    `Cast.charge_at` asks `dsl.basic_options(world, runner, "charge", ref)`,
+    so the filing works. What was wrong was the **door**: the verb files the
+    substitution from a *body*, which runs when the row is used -- after the
+    charge menu has been built -- and this clause is a standing property of
+    the row's own card. `instead_of_basic="charge"` is the header twin, the
+    same shape `basic=` is in, read by `basic_options` off the registry.
+    Three rows carried the marker; #677's split is what surfaced them.
+    """
     if c.strike():
         c.hit()
         c.mark(until=When.EONT)
