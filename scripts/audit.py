@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import inspect
 import re
 import traceback
 from dataclasses import dataclass, field
@@ -544,7 +545,13 @@ KNOWN_SILENT = {
     "m4032a2": "grants its rider a bonus; the board sets up no rider",
     # A target state the board does not produce. `_provoke` makes an attack, not
     # a condition of the harness's choosing.
-    "m937a2": "targets prone enemies; nothing on the board is prone",
+    #
+    # **Narrower than it was, and the three left are the narrowing.** #707
+    # poses whatever `Target.conditions` declares, so every row whose target
+    # *line* names a state is now served and 30 entries went with it. What
+    # is left here restricts some other way: a **mark**, which is a relation
+    # rather than a condition, and **ongoing damage**, which is an effect on
+    # the victim and not in the condition set at all.
     "m3465a1": "ends a mark on itself; nobody here marks",
     "m1741a1": "affects only creatures taking ongoing poison; none are",
     "m3473a1": "affects only creatures taking ongoing poison; none are",
@@ -561,11 +568,6 @@ KNOWN_SILENT = {
     #
     # A target state `_provoke` does not produce. It makes an attack; it does not
     # daze, immobilise, knock prone or bring anybody to dying.
-    "m1950a1": "targets an immobilized creature; nothing here is",
-    "m1192a2": "targets an immobilized creature; nothing here is",
-    "m5504a1": "targets a prone creature; nothing here is",
-    "m5576a1": "its Requirement is an immobilized, stunned or unconscious target",
-    "m5577a2": "its Requirement is an immobilized, stunned or unconscious target",
     "m5825a4": "finishes a dying humanoid; nobody here is dying",
     # A sibling's grab. The harness fires each row once on a fresh board, so the
     # row that does the grabbing never ran -- `m467a2`'s family again.
@@ -582,18 +584,19 @@ KNOWN_SILENT = {
                "only one",
     # **Round 9's sixteen, and one row that looked like these and was not.**
     # `m4296a1` returned when the chooser aimed it at a creature its target line
-    # forbids; it redirects with `_restricted_to` now. It is still here, because
-    # nothing on this board is slowed or immobilized for the redirect to find --
-    # but the shape is right for a real fight either way.
+    # forbids; it redirects with `_restricted_to` now. It stayed here because
+    # nothing on the board was slowed or immobilized for the redirect to find
+    # -- **and that is no longer true**: #707 poses what the target line
+    # declares, the row fires, and its entry is gone.
     #
     # A grab a sibling row lays, which the harness never runs. `m467a2`'s family,
     # now the largest of these groups by some distance.
     "m5128a4": "sustains a grab; there is none to sustain",
     # A target state `_provoke` does not produce. It makes an attack; it does not
-    # slow, immobilise, stun or mark.
-    "m4296a1": "targets a slowed or immobilized creature; nothing here is either",
-    "m5571a1": "redirects to an immobilized, stunned or unconscious creature; "
-               "the board has none",
+    # slow, immobilise, stun or mark -- and where the row's *target line*
+    # declares the state, #707's pose now does. These three ask about a state
+    # **this creature itself** caused or is carrying, which no target filter
+    # can express and so no pose can be read off.
     "m5738a2": "redirects to a creature it has already slowed; it has not",
     "m4508a4": "cures a mark on itself; nobody here marks",
     "m6429a4": "answers a condition it starts its turn carrying; it carries none",
@@ -612,10 +615,6 @@ KNOWN_SILENT = {
     # the body runs once per ally and the return is correct filtering.
     #
     # A target state `_provoke` does not produce.
-    "m1812a4": "targets a prone creature; nothing here is",
-    "m2245a2": "targets an unconscious creature; nothing here is",
-    "m5574a2": "targets an immobilized, stunned or unconscious creature; "
-               "the board has none of the three",
     "m5466a3": "ends an ongoing effect or condition; the target carries neither",
     "m5494a5": "needs a bloodied creature it has already clawed this turn",
     "m115865a2": "attacks a creature grabbed by it; nothing here is grabbed",
@@ -652,25 +651,11 @@ KNOWN_SILENT = {
                "copy of itself",
     "m5625a2": "slides an allied minion of one kind; the board spawns none",
     # A target state `_provoke` does not produce.
-    "m5779a4": "targets a slowed creature; nothing here is slowed",
-    "m5926a2": "targets a prone creature; nothing here is prone",
     # **Round 13's ten, over 507 rows at level 11.** Nine of the ten are the
     # same shape this section already records -- the printed target carries a
     # condition `_provoke` never applies -- and every one was driven by hand
     # with the state set before it was admitted here, so each is a row proven
     # to work rather than a row assumed to.
-    "m1600a2": "immobilized targets only; nothing here is immobilized. Driven "
-               "with the target immobilized: emits DamageApplied and "
-               "EffectApplied",
-    "m1600a3": "immobilized targets only; nothing here is immobilized. Driven "
-               "with the target immobilized: emits DamageApplied and "
-               "EffectApplied",
-    "m1978a2": "needs an immobilized enemy. Driven with one: hits, damages, "
-               "spends the victim's surge and heals 5",
-    "m2549a1": "affects an immobilized target only, so `_restricted_to` "
-               "correctly finds nobody on this board",
-    "m6055a1": "its printed target is one prone enemy; the board holds three "
-               "foes and none is prone",
     "m115868a3": "needs a stunned enemy. Driven with one: 31 damage",
     "m1565a2": "restrains whoever stands in its own roots; the board grows "
                "none. Driven with them: restrains two creatures",
@@ -681,10 +666,10 @@ KNOWN_SILENT = {
                "closer\", and the body appears in the caster's own space, so "
                "returning nothing is the card. Driven after the summon: the "
                "gate is what stops it",
-    # **Round 14's five, over 376 rows at levels 11 and 12.** Four are the
-    # grab-or-condition family again; each was driven with the state set.
-    "m1617a1": "needs an immobilized enemy within 5. Driven with one: hits "
-               "for 13 necrotic and heals 10",
+    # **Round 14's five, over 376 rows at levels 11 and 12.** Four were the
+    # grab-or-condition family; each was driven with the state set. Three of
+    # those four are gone -- #707 poses the condition their target line
+    # declares -- and the grab one is left, because a grab is a relation.
     "m5124a4": "affects a creature it is grabbing. Driven with the relation "
                "set: hits, 10 damage, shares its space, restrained save-ends "
                "with ongoing 10",
@@ -723,8 +708,6 @@ KNOWN_SILENT = {
                "never does. Driven after the bond: it fires",
     "m4727a1": "the same card as m3275a1 at a second ref, and silent for the "
                "same reason -- its bond is never laid here",
-    "m5335a2": "its printed target must be blinded; nothing here is. Driven "
-               "with a blinded victim: it fires",
     "m2011a3": "needs an adjacent corpse to inhabit, and nothing here is dead "
                "beside it. Driven with one: it fires, and so do the rows the "
                "possession then grants",
@@ -745,10 +728,6 @@ KNOWN_SILENT = {
     # the final rows the board cannot stage. Every one needs a target in a
     # state `_provoke` does not produce, and every one was driven by hand with
     # that state set before it was admitted.
-    "m2073a1": "its printed target must be prone; nothing here is. Driven "
-               "with one: hits for 13",
-    "m4484a3": "its printed target must be blinded; nothing here is. Driven "
-               "with one: hits for 20",
     "m6162a3": "needs a dominated creature adjacent, which the board never "
                "arranges. Driven with one: shifts, then slides the thrall "
                "back to adjacent",
@@ -770,8 +749,6 @@ KNOWN_SILENT = {
     # seen; it cannot be exercised here.
     "m5906a5": "a Gargantuan caster's overrun finds nobody under it, because "
                "the board puts foes inside its own footprint",
-    "m1828a1": "its target must be prone; nothing here is",
-    "m5336a5": "pulls a creature its own sibling immobilized; nothing is",
     # #366's family: the target must be wearing or wielding an item, and
     # `loader.spawn` gives every stat block an empty `Gear()`.
     "m3448a1": "targets a creature wielding a magic item; no monster carries gear",
@@ -798,17 +775,11 @@ KNOWN_SILENT = {
     "m4014a1": "attacks or acts on a creature it has grabbed; nothing here is grabbed",
     # A target state `_provoke` does not produce. It makes an attack; it does not
     # daze, slow, immobilise, stun, knock prone or mark.
-    "m1101a1": "its target must carry a condition the board never applies",
     "m2092a2": "its target must carry a condition the board never applies",
     "m6365a1": "its target must carry a condition the board never applies",
-    "m939a1": "its target must carry a condition the board never applies",
-    "m1062a2": "its target must carry a condition the board never applies",
     "m1172a4": "its target must carry a condition the board never applies",
     "m1173a3": "its target must carry a condition the board never applies",
-    "m2596a1": "its target must carry a condition the board never applies",
-    "m5578a1": "its target must carry a condition the board never applies",
     "m5543a4": "its target must carry a condition the board never applies",
-    "m5418a3": "its target must carry a condition the board never applies",
     "m5596a2": "its target must carry a condition the board never applies",
     "m3253a5": "its target must carry a condition the board never applies",
     # **Not board limits -- #375's family.** Each of these changes real state by
@@ -2096,9 +2067,92 @@ _WANTS = (
         r"|Light\.DIM|Light\.DARK")),
 )
 
+#: A row whose **body** asks whether somebody is on the floor, for the cases
+#: `_WANTED_CONDITIONS` cannot see: the restriction is in the code rather
+#: than in the target line.
+#:
+#: **Matched on the read, never on the write.** `c.prone(` appears at 1,381
+#: sites -- every row that *knocks* somebody down -- and posing a floored
+#: enemy for those is collateral the other knobs are built to avoid. So this
+#: looks for `is_(Condition.…`, which is exactly the 152 reader sites, plus
+#: the printed phrases for a row that states the requirement without reading
+#: it yet. The same care the dark knob needed, which had to look for
+#: `light_level` rather than for the word.
+_READS_FLOORED = re.compile(
+    r"is_\(Condition\.(?:PRONE|IMMOBILIZED)"
+    r"|\bprone or immobiliz|\bimmobilized or prone"
+    r"|\balready prone\b|\bis prone\b|\bprone target\b"
+    r"|\bimmobilized target\b"
+)
+
 #: A printed Requirement that wants the state *absent*. Posing it for one of
 #: these refuses the row rather than arming it. See `_pose`.
 _NEGATED = re.compile(r"\bmust not\b|\bno longer\b|\bwithout\b|\bis not\b", re.I)
+
+
+def _pose_conditions(world, caster: int, declared, src: str) -> None:  # noqa: ANN001
+    """Put one enemy into whatever state the row needs somebody to be in.
+
+    **Read off the declaration, not matched out of the source.**
+    `dsl.Target.conditions` is a frozenset the header carries and
+    `dsl._restricted_to` filters the target pool on it -- *"any of them, not
+    all of them"*, its own docstring says -- so there is nothing to guess
+    and nothing to keep in step with a rewrite.
+
+    **71 rows declare one and no board poses any of them.** 20 entries in
+    `KNOWN_SILENT` are that sentence written out by hand -- "targets a prone
+    creature; nothing here is prone", "needs an immobilized enemy within 5",
+    "its Requirement is an immobilized, stunned or unconscious target" --
+    and they span nine different conditions, which is why the first draft of
+    this, a regex for two of them, reached only 4 of the 20.
+
+    `Condition.DEAD` is left out. `_restricted_to` special-cases it already
+    (#399), and killing a board creature to prove a coup de grace changes
+    the fight rather than the target.
+
+    The body-read half is narrower and needs `_READS_FLOORED`, because a
+    restriction written in code has no field to read. `_NEGATED` applies to
+    that half only: `Target.conditions` is always "must have one of these"
+    -- `Target.without` inverts `relation`, not this -- so a declared
+    condition cannot be a prohibition, while a printed Requirement can.
+
+    One `c.condition` call rather than one per state: the conditions are a
+    set the creature is in, and a single hold is what a card lays.
+    """
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.query import enemies as _enemies
+    from combat_engine.engine.types import Condition as _Cond
+
+    aim = getattr(declared, "target", None)
+    wanted = set(getattr(aim, "conditions", ()) or ()) - {_Cond.DEAD}
+    if _READS_FLOORED.search(src) and not _NEGATED.search(
+        getattr(declared, "requires_text", "") or ""
+    ):
+        wanted |= {_Cond.PRONE, _Cond.IMMOBILIZED}
+    if not wanted:
+        return
+    # **An enemy already on the board, not a spawned dummy.** The recipe
+    # fields four or five in reach, so posing one of them cannot collide
+    # with a placement -- which is what cost the grab knob 11 rows when its
+    # dummy landed on the chargen ally's square. Read from the **caster's**
+    # side, so it is the character's foe for a feat and the party for a
+    # monster ability, which is the direction every one of these reads.
+    #
+    # Laid through `c.condition` rather than onto the component: the state is
+    # written the way a card writes it, and a creature the recipe spawned may
+    # lack `Conditions` entirely, in which case a direct write is a silent
+    # no-op.
+    #
+    # `When.ENCOUNTER`, not `EONT`: `_pose` runs after `Encounter.start()`,
+    # and a duration that can lapse on somebody's turn is a pose that is
+    # sometimes not posed.
+    floored = next(iter(sorted(_enemies(world, caster))), None)
+    if floored is None:
+        return
+    _Cast(world=world, me=caster, ref="audit:pose").condition(
+        *sorted(wanted, key=lambda c: c.value),
+        on=floored, until=When.ENCOUNTER,
+    )
 
 
 def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
@@ -2118,6 +2172,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     src = _source_of(declared.body, getattr(declared, 'ref', ''))
     asking = f"{src} {getattr(declared, 'requires_text', '') or ''} " \
              f"{getattr(declared, 'target', '')}"
+    _pose_conditions(world, caster, declared, src)
     for what, pattern in _WANTS:
         if not pattern.search(asking):
             continue
@@ -3229,13 +3284,63 @@ _WANTED_WEAPON: dict[str, tuple[str, ...]] = {}
 _WEAPON_REF = re.compile(r'"(w[0-9]+|w:[a-z-]+)"')
 
 
+def _required_weapon(row: object) -> list[str]:
+    """Weapon refs the row's `requires=` closure holds. #708.
+
+    **13 rows name their weapon in the header rather than in the body** --
+    `requires=_wielding("w3711")` -- and every one of them is refused before
+    its body runs, so the body-source walk below cannot see them at all:
+
+        usable: (False, 'wielding the weapon this chain names')
+
+    `_wielding` is a factory, so `inspect.getsource` on what it returns gives
+    the *inner* function, where the ref is a closure variable and not a
+    literal. A regex over that source finds 9 of the 13 and misses the four
+    that asked for this. The cells hold it, so the cells are what to read --
+    a read of structured state instead of of source text, which is the same
+    correction #707 needed on the same afternoon.
+
+    Cells hold strings and tuples both, since a row may name a group.
+
+    **And the callable's own source as well**, which is the other four:
+    `f3485b`'s family and the `p134xx` run write the gate inline, so the ref
+    is a literal where `_wielding`'s is a cell. Reading one and not the other
+    found 9 of 13 either way round -- a different 9 each time.
+    """
+    req = getattr(row, "requires", None)
+    if not callable(req):
+        return []
+    out: list[str] = []
+    with contextlib.suppress(OSError, TypeError):
+        out.extend(_WEAPON_REF.findall(inspect.getsource(req)))
+    for cell in getattr(req, "__closure__", None) or ():
+        try:
+            held = cell.cell_contents
+        except ValueError:          # an empty cell, mid-definition
+            continue
+        words = (
+            [held] if isinstance(held, str)
+            else list(held) if isinstance(held, (tuple, list, set, frozenset))
+            else []
+        )
+        for word in words:
+            if isinstance(word, str) and _WEAPON_REF.fullmatch(f'"{word}"'):
+                out.append(word)
+    return out
+
+
 def _wanted_weapon(ref: str) -> tuple[str, ...]:
-    """Weapon refs this row's body names, in source order. Cached."""
+    """Weapon refs this row names, in source order. Cached.
+
+    The body first, then the `requires=` closure -- see `_required_weapon`
+    for why the header half cannot be read off the source.
+    """
     if ref in _WANTED_WEAPON:
         return _WANTED_WEAPON[ref]
     row = get(ref)
     seen: list[str] = []
-    for found in _WEAPON_REF.findall(_source_of(getattr(row, "body", None), ref)):
+    named = _WEAPON_REF.findall(_source_of(getattr(row, "body", None), ref))
+    for found in [*named, *_required_weapon(row)]:
         if found not in seen and found in chargen.PRINTED:
             seen.append(found)
     _WANTED_WEAPON[ref] = tuple(seen)
@@ -3844,12 +3949,19 @@ def _attempts(out: Result):  # noqa: ANN202
     # because the reader walks `Gear.weapons` and finds no match. Paid only
     # by a row that has already shown nothing through every arrangement
     # above, so it is free of collateral by construction -- #663.
+    #
+    # **Unposed first here too, then posed, and the pair is not optional.**
+    # `f3184b` wants a weapon its header names *and* a target on the floor,
+    # and with the weapon pass pinned to `posed=False` it stayed silent with
+    # both halves of its answer built and neither meeting the other. Two
+    # axes that each run alone compose for nobody. #708.
     for held in _wanted_weapon(out.ref):
-        for face in LOADED:
-            for seed in range(1, TRIES + 1):
-                if out.fired and (out.events & DID_SOMETHING):
-                    return
-                yield seed, face, False, held
+        for posed in (False, True):
+            for face in LOADED:
+                for seed in range(1, TRIES + 1):
+                    if out.fired and (out.events & DID_SOMETHING):
+                        return
+                    yield seed, face, posed, held
 
 
 @contextlib.contextmanager
