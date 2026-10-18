@@ -2155,9 +2155,24 @@ def m5527a2(c: Cast) -> None:
     attack=Attack(vs=FORT, printed=11), damage=Damage("2d8", 7),
 )
 def m5527a3(c: Cast) -> None:
-    """"Falls prone if it moves more than half its speed" is a window
-    rather than a condition -- watched on the move itself, for the rest of
-    this creature's own next turn."""
+    """"Falls prone if it moves more than half its speed **as part of a move
+    action**" is a window rather than a condition -- watched on the move
+    itself, for the rest of this creature's own next turn.
+
+    **Counted per square, because no event carries the total.** This read
+    `ev.squares` off a `Moved`, which has `actor`, `from_` and `to` and no
+    such field -- so the watcher raised `AttributeError` the moment anything
+    moved, which is this component's named failure mode and the one number
+    the audit treats as inviolable. `squares` lives on `ForcedMove` and
+    `Fell`; a shove knows how far it shoves and a walk does not announce it.
+    The monk's `p12189` reads the real one, off a `ForcedMove`.
+    #668 found it: the row had never been provoked before.
+
+    So the count is kept here: `MoveStart` opens a move and zeroes it, each
+    `Moved` by the victim adds one, and crossing half its speed puts it
+    down. That also survives #684 -- a shift walks its squares now, so one
+    `Moved` is one square for every kind of going rather than only for a
+    walk."""
     if not c.strike():
         return
     c.hit()
@@ -2166,13 +2181,22 @@ def m5527a3(c: Cast) -> None:
         return
     me = c.me
     threshold = max(1, c.speed_of(victim) // 2)
+    walked = [0]
+
+    def opened(ev: MoveStart) -> None:
+        if ev.actor == victim:
+            walked[0] = 0
 
     def overextended(ev: Moved) -> None:
         if ev.actor != victim:
             return
-        if getattr(ev, "kind_", "") in ("walk", "run", "shift") and ev.squares > threshold:
+        if getattr(ev, "kind_", "") not in ("walk", "run", "shift"):
+            return
+        walked[0] += 1
+        if walked[0] > threshold:
             c.prone(on=victim)
 
+    c.watch(MoveStart, opened, until=When.EONT, on=me, label="m5527a3")
     c.watch(Moved, overextended, until=When.EONT, on=me, label="m5527a3")
 
 
