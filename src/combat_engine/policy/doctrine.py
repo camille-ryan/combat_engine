@@ -1497,6 +1497,30 @@ def doctrine_features(
         gaining = [e for e in foes(world, actor) if alive(world, e)]
         if gaining:
             f["ca_conceded"] = conceded(world, actor, gaining) * 0.1
+        # **The other printed cost, and it is no longer a constant.**
+        # `WEIGHTS["is_run"]` was -1.0 standing for "the -5 to the runner's
+        # attack rolls", which was the right thing to price and the wrong
+        # shape to price it in: the -5 is a live modifier since #669, and
+        # `i1695x1` softens it to -2 while `f2165` waives it. A flat figure
+        # scores a character holding either as paying full price, which is
+        # backwards for an item whose whole purpose is to make running
+        # cheaper.
+        #
+        # 1.0 at the printed figure, so an ordinary creature is scored
+        # exactly as before and only the rows that change the penalty move.
+        # The same reasoning that replaced the flat -5.0 provocation with
+        # `threat_conceded`, one step smaller: this scales with the
+        # *penalty* and not yet with the runner. #683.
+        from combat_engine.engine.actions import RUN_PENALTY
+        from combat_engine.engine.resolve import _mods as read_mods
+
+        paid = max(0, RUN_PENALTY - read_mods(world, actor, "run_softened", {}))
+        # **Always set when running, not only when it differs.** Setting it
+        # conditionally was the first version and it deleted the price
+        # altogether for the ordinary creature -- the feature was absent, so
+        # the weight multiplied nothing and a run became free. The whole
+        # point is that 1.0 reproduces the old constant.
+        f["run_penalty"] = paid / RUN_PENALTY
 
     # **The other way a swing is conceded, and the commoner one.** A ranged or area
     # row used with somebody standing over you hands *each* of them an attack, and

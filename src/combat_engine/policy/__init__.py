@@ -652,10 +652,21 @@ WEIGHTS: dict[str, float] = {
     # every enemy combat advantage until your next turn. Worth it only
     # when `closes_distance` is large enough to pay for that.
     # **Was -3.0, standing in for the combat advantage a run concedes.** That is
-    # `ca_conceded` now, which scales with how many enemies gain it (#314). What is
-    # left here is the run's *own* cost -- the printed -5 to the runner's attack
-    # rolls -- which is real and is not about the enemies at all.
-    "is_run": -1.0,
+    # `ca_conceded` now, which scales with how many enemies gain it (#314). What
+    # was left here was the run's *own* cost -- the printed -5 to the runner's
+    # attack rolls -- which is real and is not about the enemies at all.
+    #
+    # **And that is `run_penalty` now, for the same reason again.** The -5 is a
+    # live modifier since #669: `i1695x1` softens it to -2 and `f2165` waives it
+    # against one creature. A flat figure here scored a character holding either
+    # as paying the full price. `doctrine` emits the fraction actually paid --
+    # 1.0 at the printed figure, so an ordinary creature is priced exactly as
+    # this was and only those rows move. #683.
+    #
+    # `is_run` itself stays a feature and is deliberately unpriced, the way
+    # `features` already leaves seven of its 44: it says what shape the action
+    # is, which is worth carrying for `weighed` without being worth a number.
+    "run_penalty": -1.0,
     # A whole extra action for a free one, and it is only offered when the
     # turn has nothing left -- so the alternative really is ending. Worth
     # more than ending a turn and less than a good attack, because the

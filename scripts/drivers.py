@@ -18981,7 +18981,108 @@ def high_crit_on_a_creature_with_no_weapon(out: Result) -> None:
              " is the clock the card means",
              f"{held if held is None else held.when}")
 
+def the_price_the_policy_puts_on_running(out: Result) -> None:
+    """The run's own cost is a live figure now, not a constant.
+
+    #683. `WEIGHTS["is_run"] = -1.0` was the printed -5 to the runner's
+    attack rolls, and its comment said so -- the right thing to price in
+    the wrong shape. Since #669 the -5 is a modifier: `i1695x1` softens it
+    to -2 and `f2165` waives it against one creature, and a flat figure
+    scored a character holding either as paying full price. Backwards for
+    an item whose whole purpose is to make running cheaper.
+
+    The same correction `conceded` made for the other direction, one step
+    smaller. That one replaced a flat -5.0 provocation with a figure that
+    moves with the *hitter*; this moves with the **penalty** and not yet
+    with the runner, which is the remaining half and is noted on the issue
+    rather than guessed at.
+
+    **1.0 at the printed figure is the whole safety argument**: an ordinary
+    creature is priced exactly as the constant priced it, so nothing moves
+    except for the two rows that change the penalty. That is the first
+    assertion here, and the first draft of the change failed it -- setting
+    the feature only when it *differed* from the printed figure deleted the
+    price altogether for everybody else, and a run became free.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.policy import WEIGHTS
+    from combat_engine.policy.doctrine import doctrine_features
+
+    world, me, _ = audit_board("m145a0", 1)
+    enc = world.encounter
+    if enc is None:
+        out.skip("the board has no encounter, so nothing is offered")
+        return
+    runs = [a for a in legal(world, enc, me) if a.kind == "run"]
+    # `kind == "move"`, not `"walk"`: `actions._movement` offers the
+    # ordinary walk under that name and only the run is called a run.
+    walks = [a for a in legal(world, enc, me) if a.kind == "move"]
+    out.that(bool(runs) and bool(walks),
+             "a run and a walk on the menu to compare",
+             f"{len(runs)} runs, {len(walks)} moves")
+    if not runs or not walks:
+        return
+
+    out.that("is_run" not in WEIGHTS,
+             "`is_run` carries no price any more -- it says what shape the"
+             " action is, which is worth carrying and not worth a number")
+    out.that(WEIGHTS.get("run_penalty") == -1.0,
+             "and `run_penalty` carries the one the constant did, so an"
+             " ordinary creature is scored as before",
+             f"{WEIGHTS.get('run_penalty')}")
+
+    def paid(action) -> float | None:  # noqa: ANN001
+        return doctrine_features(world, enc, me, action).get("run_penalty")
+
+    out.that(paid(runs[0]) == 1.0,
+             "an ordinary runner pays the printed figure in full -- the"
+             " assertion the first draft of this failed, by setting the"
+             " feature only when it differed and so making a run free",
+             f"{paid(runs[0])}")
+    out.that(paid(walks[0]) is None,
+             "and an ordinary MOVE is not priced for it at all, which is"
+             " the control a flat weight on `is_run` also gave",
+             f"{paid(walks[0])}")
+
+    # -- the two rows that move it ---------------------------------------
+    Cast(world=world, me=me, ref="drivers:runprice").run_penalty(
+        2, on=me, until=When.ENCOUNTER)
+    out.that(paid(runs[0]) == 0.4,
+             "`c.run_penalty(2)` makes the run two fifths as dear, which is"
+             " `i1695x1`'s whole point and what the constant could not say",
+             f"{paid(runs[0])}")
+
+    Cast(world=world, me=me, ref="drivers:runprice2").run_penalty(
+        0, on=me, until=When.ENCOUNTER)
+    out.that(paid(runs[0]) == 0.0,
+             "and a penalty softened to nothing costs nothing",
+             f"{paid(runs[0])}")
+
+    # -- the half this does NOT do, asserted so nobody reads it as done --
+    # The figure moves with the penalty and not with the runner: a wizard
+    # and a fighter giving up the same round of attacks are still the same
+    # number. Said out loud here because the docstring above claims it.
+    world2, me2, _ = audit_board("m145a0", 1)
+    enc2 = world2.encounter
+    if enc2 is None:
+        return
+    other = next((a for a in legal(world2, enc2, me2) if a.kind == "run"), None)
+    out.that(other is not None and paid(runs[0]) == 0.0
+             and doctrine_features(world2, enc2, me2, other).get(
+                 "run_penalty") == 1.0,
+             "two creatures with different offence pay the same fraction --"
+             " this scales with the penalty, not with the runner, and #683"
+             " records that as the remaining half")
+
 DRIVERS = {
+    "run_price": (
+        the_price_the_policy_puts_on_running,
+        "what the policy charges for a run, now that two rows can change it",
+    ),
     "monster_high_crit": (
         high_crit_on_a_creature_with_no_weapon,
         "a stat block gaining the high crit quality it could never have (#682)",
