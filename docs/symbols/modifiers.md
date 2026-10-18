@@ -15,7 +15,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - A numeric modifier with a duration.
 - `c.boost_check(self, bonus: 'int') -> 'bool'`
   - Add to the triggering skill check, after the die is already down.
-- `c.boost_roll(self, amount: 'int', *, kind: 'str' = '') -> 'bool'`
+- `c.boost_roll(self, amount: 'int', *, kind: 'str' = '', ev: 'Any' = None) -> 'bool'`
   - Add to the triggering roll **without rolling it again**.
 - `c.change_amount(self, ref: 'str', amount: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Make a named mechanic hand out a different number.

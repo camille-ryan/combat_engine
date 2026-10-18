@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.martial_leaders import BANKED_LABEL
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -1042,75 +1043,27 @@ def f3040(c: Cast) -> None:
 
 
 # -- the four that ride on the charge banked in a weapon --------------------
-
-
-#: Both halves of the charge `cf:artificer-f0s0` banks, which is what the
-#: four rows riding on it have no subject without. The feature's own row
-#: names the same two, so the group holds together.
-#: The boost half landed in #495 -- `c.boost_roll` now spends a bonus into a
-#: roll already made, which is the second sentence of every one of these. What
-#: is left is the first: the charge is laid during a short rest and nothing
-#: announces one, so there is no charge to spend and these rows have no
-#: subject. One symbol, one gap, which is what the pair could not say.
-BANKED = ("events.ShortRested",)
+#
+# **Three of the four are written and the fourth is inert on a moment that
+# does not occur** -- see `f3036` below. The `BANKED` symbol they shared is
+# gone with them: it named "nothing announces a short rest", which stopped
+# being true, and then `c.empower(on=ally)` replaced it, which stopped being
+# true in #679. Four separate blockers landed over the three issues and the
+# group's own docstring was the last thing describing any of them.
 
 #: What `cf:artificer-f0s0` banks, printed on its card as +2. A constant
 #: because `f2110` doubles it and two rows writing `2` would drift.
 _BANKED_BONUS = 2
+
+#: The option that banks the reservoir. Named once here because three rows
+#: in this file compare an event's `by` against it.
+EMPOWER_RESERVOIR = "cf:artificer-f0s0"
 
 #: The key `f2110` adds to and `cf:artificer-f0s0` reads. A modifier rather
 #: than an override, so a second feat touching the same number would add
 #: rather than overwrite -- which is what `Mods.total` is for.
 #: Must match `features.martial_leaders.BANKED_CHARGE_KEY`.
 _BANKED_KEY = "artificer:banked-charge"
-
-
-def _banked(ref: str, what: str) -> None:
-    """All three of this family's old blockers landed, and a fourth appeared.
-
-    The docstring here used to name two, and both are gone: the charge is
-    laid at a rest and `events.ShortRested` announces one, and a landed roll
-    can be added to -- `c.boost_roll` (#495) does exactly that, and
-    `events.Boosted` now says when it happened and which row paid.
-
-    **What is left is whose hand the charge is in.** Every one of these four
-    is about an *ally* or a *wielder*: "when an ally hits with an attack
-    benefiting from", "a creature wielding an implement benefiting from".
-    `cf:artificer-f0s0` lays the reservoir on the artificer itself, which is
-    narrower than its own card -- choosing which item is empowered belongs to
-    `cf:artificer-f0`'s allowance and is not written -- so there is no ally
-    holding a charge for these to find.
-
-    Narrower and honest: the subject exists now, the *other* holder does
-    not -- `c.empower(on=ally)` is the gap, which is `cf:artificer-f0s0`
-    being able to lay its reservoir on somebody else's weapon.
-
-    Checked again and the marker stands, with a second half worth writing
-    down: even once the reservoir can be laid elsewhere, **nothing reads
-    back who is holding one**. Both of `cf:artificer-f0s0`'s watches take
-    `c.watch`'s default label, which is `"<ref> trigger"`, so the outer
-    watch for the rest and the inner one for the banked roll are
-    indistinguishable to `c.suffering` -- an artificer with no charge at
-    all looks exactly like one carrying it. A distinct label on the inner
-    watch, or a component field, is what these three would read.
-
-    `f3036` has a third obstacle on top of both, and it is the one that
-    would still refuse the row: the bonus is to an **initiative check**,
-    `Encounter.start` rolls initiative and *then* arms traits, and the
-    reservoir is banked at a rest. `RaceLine.initiative`'s own note is
-    this gap, and `c.initiative` moves a count rather than laying a
-    standing bonus on a roll that has not happened.
-
-    `f2110` is out of this family for that reason: it changes the size of
-    the bonus rather than asking who carries it, so it is written.
-    """
-    @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-           reach=PERSONAL, target=SELF,
-           todo=("c.empower(on=ally)",))
-    def feat(c: Cast) -> None: ...
-
-    feat.__name__ = ref
-    feat.__doc__ = f"{what} {_banked.__doc__}"
 
 
 #: `cf:artificer-f0` is a declared row, so this is not a naming gap -- the
@@ -1121,10 +1074,12 @@ def _banked(ref: str, what: str) -> None:
 def f2110(c: Cast) -> None:
     """Doubles the attack bonus `cf:artificer-f0s0` banks in a weapon.
 
-    **Written, and it is out of the `_banked` family deliberately.** The
-    other three ask *who carries the charge*, which is still narrower than
-    the cards (see `_banked`). This one only changes how big the bonus is,
-    and the artificer carrying its own charge is enough for that.
+    **Written long before its three siblings, and for a reason worth
+    keeping.** They all asked *who carries the charge*, which was narrower
+    than the cards until #679; this one only changes how big the bonus is,
+    and the artificer carrying its own charge was enough for that. The
+    `_banked` helper that grouped the other three is gone -- two of them
+    are written and `f3036` is inert on a moment that does not occur.
 
     A modifier on a named key, which `cf:artificer-f0s0` reads when it
     spends the charge. **Not `c.change_dice`**: that store holds dice
@@ -1137,6 +1092,197 @@ def f2110(c: Cast) -> None:
     """
     c.bonus(_BANKED_KEY, _BANKED_BONUS, on=c.me, until=When.ENCOUNTER,
             kind="untyped")
-_banked("f3029", "Damage to an enemy beside an ally that charge helped.")
-_banked("f3036", "An initiative bonus for whoever carries the banked charge.")
-_banked("f3044", "Lends a racial power's benefit to the charge's wielder.")
+
+
+@power("f3036", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF, out_of_combat=True)
+def f3036(c: Cast) -> None:
+    """"A creature wielding an implement or weapon benefiting from
+    cf:artificer-f0s0 gains a +2 power bonus to initiative checks."
+
+    **Inert, and the reason is a circumstance rather than a missing
+    facility** -- which is the distinction #691 was about. Four of this
+    family's five blockers landed in #679: the charge is banked at a rest
+    (`events.ShortRested`), a landed roll can be added to (`c.boost_roll`,
+    #495) and says so (`events.Boosted`), the reservoir can be banked in
+    somebody else's hand, and the hold that is one carries `BANKED_LABEL`
+    so a row can ask who holds it. Its three siblings are written.
+
+    What this one needs is **a moment that does not occur**. An initiative
+    check happens once, at the top of a fight, and the reservoir is banked
+    at a rest -- which in this engine is an event *inside* an encounter,
+    after initiative is settled. So the wielder is never carrying a charge
+    at the one instant the bonus could apply, whoever the wielder is. The
+    card's benefit is really about the fight *after* the rest, and
+    `chargen` says persistence does not exist.
+
+    Not a gap in `c.initiative`, which does exist and moves a creature in
+    the order -- that would be a different sentence, and `m790a5` waits on
+    a different member of it again. `RaceLine.initiative`'s own note is the
+    same shape from the other side: a race's +2 is laid in `spawn` because
+    a trait armed after the roll cannot reach it.
+
+    `out_of_combat=True` rather than a symbol, so `audit.py`'s AWAKE gate
+    (#633) goes red the day this row does anything -- which is what the
+    claim above should be checked by."""
+
+
+
+@power("f3029", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3029(c: Cast) -> None:
+    """"When an ally hits with an attack benefiting from your
+    cf:artificer-f0s0 class feature, one enemy adjacent to that ally takes
+    damage equal to your Constitution modifier of a damage type matching
+    the type you chose for your p1448 power."
+
+    **Written**, and `f3046` three files over is the shape: `events.Boosted`
+    is what "benefiting from" reads, `by` is the ref that paid so another
+    row's boost is ignored, and `kind` tells a boosted attack from a boosted
+    save -- the same feature pays for both.
+
+    **The damage hangs on the `Hit` that follows, not on the `Boosted`.**
+    The boost lands on a roll and the card pays out on a hit, which are two
+    moments, and a roll boosted into a miss must pay nothing.
+
+    *An ally*, so a boost the artificer spent on its own attack pays
+    nothing. That half could not be reached at all until #679: the feature
+    banked every charge in the artificer's own weapon, so the only creature
+    this could ever have fired for was the one it excludes.
+
+    **One enemy adjacent to that ally, chosen.** The card says "one", and
+    an ally with two enemies beside it is the common case, so a real choice
+    rather than the first by entity id. Nothing happens when nobody is
+    adjacent -- which is the printed reading and not a shortfall.
+
+    The damage type is read the way `p1448` reads its own: `c.element`, and
+    untyped for a character who never bound one. A racial choice has
+    nowhere to be recorded -- `p1448` carries `c.race_option(damage_type=)`
+    for that -- so this is the nearest standing reading and it is the same
+    one the power itself uses, which is what keeps the two from disagreeing.
+    """
+    from combat_engine.engine.events import Boosted
+
+    me = c.me
+
+    def boosted(ev: Any) -> None:
+        if getattr(ev, "by", "") != EMPOWER_RESERVOIR:
+            return
+        if getattr(ev, "kind", "") != "attack":
+            return
+
+        def landed(hit: Any) -> None:
+            mate = getattr(hit, "attacker", None)
+            if mate is None or mate == me:
+                return
+            beside = [e for e in c.enemies() if c.adjacent_to(mate, e)]
+            victim = c.choose(beside, f"{c.ref}: which enemy beside the ally")
+            if victim is None:
+                return
+            # `c.flat`, not `c.damage`: the card's amount is a modifier and
+            # no dice, and this is a rider on somebody else's blow rather
+            # than a blow of its own.
+            c.flat(c.con_mod,
+                   dtype=c.element(on=me) or DamageType.UNTYPED,
+                   on=victim)
+
+        c.watch(Hit, landed, until=When.EOT, once=True)
+
+    c.watch(Boosted, boosted, until=When.ENCOUNTER)
+
+
+#: The shifter's two racial powers, either of which this character has one
+#: of. Both are declared and both lay their benefits as named modifiers, so
+#: "the power's benefits" is a list rather than a facility.
+_SHIFTINGS = ("p2483", "p2484")
+
+
+def _shifted(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """This character used its own shifter racial power."""
+    return ev.actor == me and ev.power in _SHIFTINGS
+
+
+@power("f3044", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use your shifter racial power",
+       on=Trigger(PowerUsed, _shifted, "you use your shifter racial power"))
+def f3044(c: Cast) -> None:
+    """"When you use your shifter racial power, the power's benefits extend
+    to one ally wielding a weapon or implement affected by your
+    cf:artificer-f0s0. The effect ends when the ally uses the +2 bonus to
+    the attack roll."
+
+    **Written, and the two things it needed both landed in #679**: the
+    reservoir can be banked in an ally's hand, and the hold that *is* a
+    reservoir carries `BANKED_LABEL`, so "an ally wielding a weapon
+    affected by" is one `c.lingers_label` per ally.
+
+    **"The power's benefits" is written out, not borrowed.** Both candidate
+    powers are declared and both lay their whole benefit as named
+    modifiers -- `p2483` is +2 damage and regeneration 2 while bloodied,
+    `p2484` is speed +2 and +1 to AC and Reflex -- so this re-lays the same
+    modifiers on the ally rather than re-running the power's body on it.
+    Re-running would be wrong twice over: those rows are `target=SELF` with
+    a bloodied Requirement, so the ally would have to be bloodied too, and
+    `p2483`'s healing keyword would attach to a second creature's hold.
+
+    `c.trigger.power` decides which set, read off the event rather than
+    off `c.knows`, because a character holding both -- which no printed
+    race does, but nothing forbids -- must get the one it actually used.
+
+    **"Ends when the ally uses the +2" is the reservoir's own spending.**
+    The lent hold is given the same `until` as the powers' own
+    (`When.ENCOUNTER`) and then ended early by a watch on `events.Boosted`
+    for that ally, which is the moment `cf:artificer-f0s0` pays out. Any
+    other reading would leave the loan standing after the thing it was
+    attached to was gone.
+    """
+    from combat_engine.engine.events import Boosted
+
+    used = getattr(c.trigger, "power", "")
+    # **Which power, asked of the event, and refused when there is none.**
+    # The first draft fell through to `p2484`'s branch on an empty string,
+    # so a body run with no trigger lent the wrong power's benefits -- and
+    # a declared-trigger row *is* run without one by anything that calls it
+    # directly. Neither branch is a safe default when the card says "the
+    # power's benefits" and there are two powers.
+    if used not in _SHIFTINGS:
+        return
+    mine = [
+        mate for mate in c.allies()
+        if c.lingers_label(BANKED_LABEL, on=mate)
+    ]
+    mate = c.choose(mine, f"{c.ref}: which ally carrying your charge")
+    if mate is None:
+        return
+    lent = [
+        c.effect(f"{c.ref} lends {used}", until=When.ENCOUNTER, on=mate),
+    ]
+    if used == "p2483":
+        lent.append(c.bonus("damage", 2, on=mate, until=When.ENCOUNTER))
+        # Collected like the rest: the regeneration is part of the loan and
+        # ends with it. Left out of the list first, and the probe showed
+        # `f3044 regeneration` still standing after the ally had spent the
+        # charge -- half a loan that never comes back.
+        lent.append(
+            c.regeneration(2, on=mate, until=When.ENCOUNTER,
+                           while_bloodied=True)
+        )
+    else:
+        lent.append(c.bonus("speed", 2, on=mate, until=When.ENCOUNTER))
+        lent.append(c.bonus(AC, 1, on=mate, until=When.ENCOUNTER))
+        lent.append(c.bonus(REF, 1, on=mate, until=When.ENCOUNTER))
+
+    def spent(ev: Any) -> None:
+        if getattr(ev, "by", "") != EMPOWER_RESERVOIR:
+            return
+        # `rolled_by`, not `actor`: `actor` on this event is whoever
+        # *paid* for the boost, which is the artificer. The card ends the
+        # loan when the **ally** uses the bonus. #679.
+        if getattr(ev, "rolled_by", -1) != mate:
+            return
+        for hold in lent:
+            if hold is not None and not hold.ended:
+                c.world.effects.end(hold, f"{c.ref}: the charge was spent")
+
+    c.watch(Boosted, spent, until=When.ENCOUNTER, once=True)

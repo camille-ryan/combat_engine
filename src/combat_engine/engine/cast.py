@@ -3873,7 +3873,8 @@ class Cast:
         said.result = getattr(self.trigger, "result", None)
         self.world.bus.emit(said)
 
-    def boost_roll(self, amount: int, *, kind: str = "") -> bool:
+    def boost_roll(self, amount: int, *, kind: str = "",
+                   ev: Any = None) -> bool:
         """Add to the triggering roll **without rolling it again**.
 
         "Add 4 to the roll", where the roll has already been made and the
@@ -3897,10 +3898,20 @@ class Cast:
         boost can turn a miss into a hit and can never manufacture a
         critical or rescue a natural 1 -- the same distinction
         `AttackResult.treated` records for "treat the roll as odd". #495.
+
+        **`ev=` names the roll when it is not `c.trigger`**, the way
+        `c.reroll_check` already takes one. This read `self.trigger` only,
+        which is right for a row whose declared `Trigger` *is* the attack
+        roll -- and `None` inside a `c.watch` callback, where the watched
+        event is handed to the handler and never to the `Cast`. So a row
+        built out of `c.watch(AttackRolled, ...)` called this, got False,
+        and boosted nothing: `cf:artificer-f0s0`'s whole reservoir had
+        never paid out once. #679.
         """
         from .events import SkillCheck
 
-        ev = self.trigger
+        if ev is None:
+            ev = self.trigger
         if ev is None or not amount:
             return False
 
@@ -3931,31 +3942,47 @@ class Cast:
                 or result.natural >= floor
                 or (result.natural != 1 and result.total >= result.target_defence)
             )
-            return self._boosted(amount, kind)
+            # **The announced kind is what was boosted, not what the caller
+            # was willing to boost.** `kind=` on the way in is a filter -- a
+            # row refusing to fire on the wrong sort of roll -- and passing
+            # it through meant a caller that filtered nothing announced
+            # `kind=""`, so `f3046`'s and `f3029`'s "benefiting from an
+            # *attack*" test could not be satisfied by the one feature that
+            # pays for both. #679.
+            return self._boosted(amount, "attack",
+                                 getattr(ev, "attacker", self.me))
 
         if hasattr(ev, "saved") and kind in ("", "save"):
             ev.bonus += amount
             # 10 is the printed threshold and `c.reroll_save` uses the same
             # literal; there is one saving throw DC in the game.
             ev.saved = ev.natural + ev.bonus >= 10
-            return self._boosted(amount, kind)
+            return self._boosted(amount, "save",
+                                 getattr(ev, "actor", self.me))
 
         if isinstance(ev, SkillCheck) and kind in ("", "check"):
             self.boost_check(amount)
-            return self._boosted(amount, kind)
+            return self._boosted(amount, "check",
+                                 getattr(ev, "actor", self.me))
 
         return False
 
-    def _boosted(self, amount: int, kind: str) -> bool:
+    def _boosted(self, amount: int, kind: str, whose: int) -> bool:
         """Say that a roll already made was added to, and return True.
 
         All three of `boost_roll`'s paths come through here -- an attack, a
         saving throw, a skill check -- because a rider on "an attack
         benefiting from" a charge must not fire on a boosted save, and the
         only way to tell them apart afterwards is to say which it was.
+
+        `whose` is read off the event each branch already has, because each
+        names its subject differently: an attack roll says `attacker` and
+        the other two say `actor`. `actor` on the event emitted stays the
+        **payer**, which is what a rider keyed to its own caster reads.
         """
         self.world.bus.emit(
-            Boosted(actor=self.me, amount=amount, by=self.ref, kind=kind)
+            Boosted(actor=self.me, amount=amount, by=self.ref, kind=kind,
+                    rolled_by=whose)
         )
         return True
 

@@ -1010,12 +1010,26 @@ class Boosted(Event):
     `by` is the ref of the row that paid for the boost, which is what lets a
     rider keyed to one feature ignore a boost somebody else's row bought.
     `amount` is what went on, after the row decided it.
+
+    **`actor` is who *paid*; `rolled_by` is whose roll it was**, and they
+    are different creatures whenever a row helps somebody else -- which is
+    the common case for this event, since every row that emits it is a
+    rider on an ally. The two were one field and `actor` carried the payer,
+    so "the effect ends when the **ally** uses the bonus" could not be
+    asked: `f3044` watched for the ally and saw the artificer. #679.
+
+    `kind` is `attack`, `save` or `check`, and it says what was boosted
+    rather than what the caller was willing to boost -- see
+    `Cast.boost_roll`, where the same word is a filter on the way in.
     """
 
     actor: int = 0
     amount: int = 0
     by: str = ""
     kind: str = ""
+    #: Whose roll was added to. Last because it has a default and because it
+    #: arrived after the other four.
+    rolled_by: int = -1
 
 
 @dataclass

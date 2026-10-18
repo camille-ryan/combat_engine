@@ -20560,6 +20560,197 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def a_charge_banked_in_somebody_elses_weapon(out: Result) -> None:
+    """The artificer's reservoir, and the three things wrong with it.
+
+    #679. `cf:artificer-f0s0` banks a +2 in a weapon at a rest, and the card
+    says *"the wielder of the implement or the weapon"*. The row read
+    `holder = me`, so every artificer banked it in its own hand -- and
+    `f3046`, already written, pays out only when an **ally** hits with a
+    boosted attack, so it could not fire once.
+
+    Two more faults were underneath that one and neither was in the issue:
+
+    * **`AttackRolled` names its subject `attacker`, and the watcher read
+      `actor`.** `getattr(roll, "actor", None)` is `None` on every one of
+      those events, so it never matched the holder. The reservoir had
+      never paid out on *anybody*.
+    * **`c.boost_roll` read `c.trigger` only**, which a `c.watch` handler
+      never has -- the watched event is handed to the handler, not to the
+      `Cast`. So the call returned False and added nothing. It takes `ev=`
+      now, the way `c.reroll_check` already did.
+
+    And two things the readers could not say, both found by driving the
+    chain rather than by reading it:
+
+    * `_boosted` announced the caller's `kind=` filter rather than what was
+      boosted, so a feature that filtered nothing announced `kind=""` and
+      the "benefiting from an **attack**" test could never be satisfied.
+    * `Boosted.actor` is who *paid*. Whose roll it was had no field at all,
+      so "the effect ends when the **ally** uses the bonus" watched for the
+      ally and saw the artificer. `rolled_by` is that field.
+
+    So the rule drives the whole chain: rest, choice, label, boost, hit,
+    and the two riders. The negative controls are the halves that must
+    **not** fire -- a boost on the artificer's own attack pays `f3029`
+    nothing, and the loan `f3044` lends must end on the charge being spent
+    rather than outlive it.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.content.features.martial_leaders import BANKED_LABEL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Mods, Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import Boosted, DamageApplied, ShortRested
+    from combat_engine.engine.query import adjacent, allies, enemies
+
+    RESERVOIR = "cf:artificer-f0s0"
+
+    def rested(extra: tuple[str, ...], *, to_ally: bool = True):  # noqa: ANN202
+        """An artificer, a rest, and the charge put where `to_ally` says.
+
+        `extra` goes into `Powers.known` so the dispatcher offers those rows.
+        The decider answers the holder question and every other one with the
+        first option, which is what an unattended board does anyway.
+        """
+        world, me, _ = audit_board(RESERVOIR, 1)
+        mate = next(iter(allies(world, me)), None)
+        known = world.get(me, Powers)
+        if known is not None:
+            for ref in extra:
+                if ref not in known.known:
+                    known.known.append(ref)
+        want = mate if (to_ally and mate is not None) else me
+
+        def decide(actor, kind, options, prompt=""):  # noqa: ANN001, ANN202
+            if want in options:
+                return want
+            return options[0] if options else None
+
+        world.decider = decide
+        world.bus.emit(ShortRested(actor=me))
+        return world, me, mate
+
+    # -- the charge goes where the artificer says, and says where it is ----
+    world, me, mate = rested(())
+    out.that(mate is not None, "the board gives the artificer an ally",
+             f"{mate}")
+    if mate is None:
+        return
+    ask = Cast(world, me, "drivers")
+    out.that(ask.lingers_label(BANKED_LABEL, on=mate),
+             "the reservoir is banked in the ally's hand, which is what"
+             " \"the wielder of the implement or the weapon\" says and what"
+             " `holder = me` could never do",
+             f"{[e.label for e in world.effects.of(mate)][-3:]}")
+    out.that(not ask.lingers_label(BANKED_LABEL, on=me),
+             "and not in the artificer's -- one charge, in one hand, so a"
+             " reader can tell a carrier from a non-carrier",
+             "the artificer carries one too")
+
+    # -- it pays out, which it had never done -----------------------------
+    world, me, mate = rested(())
+    boosts: list[tuple[str, int, int, str]] = []
+    world.bus.on(Boosted, lambda ev: boosts.append(
+        (ev.by, ev.actor, ev.rolled_by, ev.kind)))
+    foe = next((f for f in enemies(world, me) if adjacent(world, mate, f)), None)
+    out.that(foe is not None, "and an enemy standing next to that ally",
+             f"{sorted(enemies(world, me))}")
+    if foe is None:
+        return
+    world.rng.loaded = 15
+    use(world, mate, "mba", targets=[foe])
+    out.that(boosts == [(RESERVOIR, me, mate, "attack")],
+             "the ally's attack roll is boosted by the feature: `by` is the"
+             " row that paid, `actor` is the artificer that paid it, and"
+             " `rolled_by` is whose roll it was",
+             f"{boosts}")
+
+    # -- f3046 and f3029, the two riders on an ally's boosted hit ---------
+    world, me, mate = rested(("f3046", "f3029"))
+    use(world, me, "f3046")
+    use(world, me, "f3029")
+    dealt: list[tuple[int, int, str]] = []
+    world.bus.on(DamageApplied, lambda ev: dealt.append(
+        (ev.target, ev.amount, ev.detail)))
+    foe = next((f for f in enemies(world, me) if adjacent(world, mate, f)), None)
+    if foe is None:
+        return
+    world.rng.loaded = 15
+    use(world, mate, "mba", targets=[foe])
+    out.that(any(d[2] == "f3046" for d in dealt),
+             "f3046 pays its extra poison on the ally's boosted hit -- a"
+             " written row that could not have fired once while the"
+             " artificer banked every charge in its own weapon",
+             f"{dealt}")
+    mine = [d for d in dealt if d[2] == "f3029"]
+    out.that(len(mine) == 1 and mine[0][0] != foe,
+             "and f3029 pays its Constitution modifier to an enemy"
+             " *beside* that ally, which is a different creature from the"
+             " one the ally hit",
+             f"{dealt}, the ally hit {foe}")
+
+    # -- the control: the artificer's own boosted hit pays f3029 nothing --
+    world, me, mate = rested(("f3029",), to_ally=False)
+    use(world, me, "f3029")
+    dealt = []
+    world.bus.on(DamageApplied, lambda ev: dealt.append(
+        (ev.target, ev.amount, ev.detail)))
+    foe = next((f for f in enemies(world, me) if adjacent(world, me, f)), None)
+    if foe is None:
+        return
+    world.rng.loaded = 15
+    use(world, me, "mba", targets=[foe])
+    out.that(not any(d[2] == "f3029" for d in dealt),
+             "while a boost the artificer spends on its own attack pays"
+             " f3029 nothing: the card says *an ally* hits, and the old"
+             " behaviour made that the only case this could never see",
+             f"{dealt}")
+
+    # -- f3044: a racial power's benefits lent, and taken back ------------
+    world, me, mate = rested(("f3044", "p2483"))
+    health = world.get(me, Health)
+    if health is not None:
+        health.hp = health.max_hp // 2 - 1
+    out.that(use(world, me, "p2483"),
+             "the artificer uses its shifter racial power, which the feat"
+             " triggers on",
+             "the power was refused")
+
+    def lent() -> list[tuple[str, int]]:
+        held = world.get(mate, Mods)
+        return [] if held is None else [
+            (m.what, m.value) for m in held.items if m.label == "f3044"
+        ]
+
+    out.that(("damage", 2) in lent(),
+             "f3044 lends that power's own benefit to the ally carrying the"
+             " charge -- the modifiers written out, not the power re-run on"
+             " a creature its Requirement would refuse",
+             f"{lent()}")
+    standing = [e.label for e in world.effects.of(mate)
+                if (e.label or "").startswith("f3044")]
+    out.that(len(standing) == 3,
+             "all three of its holds, the regeneration included -- left out"
+             " of the loan's list first, and half a loan never comes back",
+             f"{standing}")
+    foe = next((f for f in enemies(world, me) if adjacent(world, mate, f)), None)
+    if foe is None:
+        return
+    world.rng.loaded = 15
+    use(world, mate, "mba", targets=[foe])
+    out.that(lent() == [],
+             "and the loan ends when the ally spends the +2, which is the"
+             " card's own condition and needs `Boosted.rolled_by` to ask:"
+             " `actor` on that event is the artificer that paid",
+             f"{lent()}")
+    out.that([e.label for e in world.effects.of(mate)
+              if (e.label or "").startswith("f3044")] == [],
+             "with nothing of it left standing",
+             f"{[e.label for e in world.effects.of(mate)]}")
+
+
 def a_race_that_trains_a_skill(out: Result) -> None:
     """Three racial traits print skill training and none of it was recorded.
 
@@ -21261,6 +21452,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "artificer_charge": (
+        a_charge_banked_in_somebody_elses_weapon,
+        "a reservoir banked in an ally's weapon, and paid out (#679)",
     ),
     "race_training": (
         a_race_that_trains_a_skill,

@@ -101,6 +101,15 @@ def empowerments(c: Cast) -> int:
 BANKED_CHARGE = 2
 BANKED_CHARGE_KEY = "artificer:banked-charge"
 
+#: The label on the hold that **is** a banked reservoir, so a row can ask who
+#: is carrying one. `c.lingers_label(BANKED_LABEL, on=ally)`.
+#:
+#: Both of `cf:artificer-f0s0`'s watches took `c.watch`'s default label --
+#: `"<ref> trigger"` -- so the outer watch for the rest and the inner one for
+#: the charge were indistinguishable, and an artificer with no charge at all
+#: looked exactly like one carrying it. Three feats read this. #679.
+BANKED_LABEL = "cf:artificer-f0s0 charge"
+
 
 # -- artificer --------------------------------------------------------------
 
@@ -177,6 +186,23 @@ def artificer_empower_reservoir(c: Cast) -> None:
     "Or until it is expended" is why the hold ends with its own spending:
     one roll, not one per attack. `once=True` is the whole of that rule.
 
+    **The wielder is chosen, and it was not.** This read `holder = me` with
+    a comment saying somebody else's weapon "would want
+    `cf:artificer-f0`'s allowance to say which item was chosen" -- which
+    was wrong about where the decision lives: that row holds the day's
+    *count* and knows nothing about hands. So every artificer banked the
+    charge in its own weapon, the feature audited green, and it was
+    narrower than its card in a way nothing reported. Worse, it made
+    `f3046` -- written, and whose whole subject is *an ally* hitting with a
+    boosted attack -- unable to pay out once. #679.
+
+    `c.choose` over the artificer and its allies is the offer. **A creature
+    and not an item**, which is a simplification worth stating: the card
+    empowers "an implement or a weapon", and this engine banks the charge
+    against a *roll* rather than against a thing in a hand, so there is no
+    finer grain to choose at. The holder is the whole of what any reader of
+    this needs.
+
     `until=When.ENCOUNTER` where the page says "until the end of your next
     extended rest". That is this engine's horizon rather than a reading of
     the card -- `chargen` says persistence does not exist -- and it is the
@@ -193,24 +219,45 @@ def artificer_empower_reservoir(c: Cast) -> None:
         # answers False when the day is out, and then nothing is banked.
         if not c.spend_per_day(EMPOWERMENTS_REF, empowerments(c)):
             return
-        # The thing empowered is what this artificer is holding. A party
-        # member's weapon would want `cf:artificer-f0`'s allowance to say
-        # which item was chosen, and that row is still marked.
-        holder = me
+        # **Who is holding the empowered thing.** The artificer by
+        # default, because `c.choose` falls back to the first option when
+        # nothing is deciding -- so a board with no decider behaves as it
+        # always did, and a party with one can put the charge in an ally's
+        # hand, which is what the card says.
+        holder = c.choose([me, *c.allies()],
+                          f"{c.ref}: whose weapon to empower")
+        if holder is None:
+            return
 
         def spend(roll: Any) -> None:
-            if getattr(roll, "actor", None) != holder:
+            # **`attacker`, not `actor`, and the reservoir had never paid
+            # out once.** `AttackRolled` names its subject `attacker` -- the
+            # same trap `triggers.about_me` warns about from the other side
+            # -- so `getattr(roll, "actor", None)` was `None` on every
+            # event, never equalled the holder, and the charge was banked
+            # and never spent. On *anybody*: this was not the ally bug, it
+            # was underneath it, and it is why `f3046` could not have paid
+            # out even with the holder fixed. #679.
+            if getattr(roll, "attacker", None) != holder:
                 return
             # The printed +2, plus whatever a feat has added to it -- `f2110`
             # doubles it and lays the difference on this key. Read here
             # rather than closed over, so the feat can arrive after the
             # charge is banked.
             extra = c.total(BANKED_CHARGE_KEY, holder, {"actor": holder})
-            c.boost_roll(BANKED_CHARGE + extra)
+            # **`ev=roll`, because this is a watcher and not a declared
+            # trigger.** `c.boost_roll` read `c.trigger` only, which a
+            # `c.watch` handler never has, so every call from here returned
+            # False and the reservoir paid out nothing -- on the artificer
+            # or on anybody. #679.
+            c.boost_roll(BANKED_CHARGE + extra, ev=roll)
 
         from combat_engine.engine.events import AttackRolled
 
-        c.watch(AttackRolled, spend, until=When.ENCOUNTER, on=holder, once=True)
+        # **Labelled**, so `c.lingers_label(BANKED_LABEL, on=who)` answers
+        # "is this creature carrying a reservoir". Three feats ask it.
+        c.watch(AttackRolled, spend, until=When.ENCOUNTER, on=holder,
+                once=True, label=BANKED_LABEL)
 
     from combat_engine.engine.events import ShortRested
 

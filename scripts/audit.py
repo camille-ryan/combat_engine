@@ -156,6 +156,26 @@ KNOWN_SILENT = {
     # bloodying this wielder did, which was wider than the card.
     "i1688p1": "needs the blow to come through its own weapon; the board's"
                " weapon carries another item and the bloodying blow is a rider's",
+    # "When you use your shifter racial power, the power's benefits extend to
+    # one ally wielding a weapon affected by your `cf:artificer-f0s0`." Three
+    # board facts have to line up at once and the board gives none of them:
+    #
+    # * the caster must be an **artificer of a shifter race** -- the prereq
+    #   pairs a class with `p2483`/`p2484`, so the row needs a creature
+    #   holding one race's power and another class's feature;
+    # * an **ally** must be carrying the banked charge, which takes a
+    #   `ShortRested` the board never emits;
+    # * and the trigger must name one of those two powers. The row refuses
+    #   any other `PowerUsed` on purpose -- neither branch is a safe default
+    #   when the card says "the power's benefits" and there are two powers --
+    #   so it fires and returns, which is this bucket.
+    #
+    # **Driven by hand, which is what this dict is for.**
+    # `drivers.artificer_charge` rests the artificer, puts the charge in an
+    # ally's hand, uses `p2483` and asserts all three of the lent holds, then
+    # asserts they end when the ally spends the +2. #679.
+    "f3044": "needs an artificer of a shifter race, a rest, and an ally"
+             " carrying the charge; the board emits no ShortRested",
     # An immediate interrupt that rerolls an **ally's** bluff, diplomacy or
     # intimidate check. The board never makes an ally roll one: `_provoke`
     # makes an attack, and nothing in the harness asks an ally for a social
