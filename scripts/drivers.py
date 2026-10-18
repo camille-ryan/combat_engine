@@ -92,6 +92,27 @@ class Result:
         print(f"    skip  {why}")
 
 
+def _at(world, eid: int) -> tuple[int, int]:  # noqa: ANN001
+    """Where a creature is standing, insisting that it is standing somewhere.
+
+    `world.get(eid, Position)` is `Position | None`, and twenty-three
+    assertions in this file read `.square` straight off it. Every one is
+    about a creature the board has just placed, so the `None` is unreachable
+    -- and `types.py` was right to report all twenty-three anyway, because
+    *unreachable* is a claim about the board and not about the type.
+
+    One guard that **raises** rather than twenty-three `if here is None:
+    return` blocks: a rule that silently returns has stopped asserting
+    anything, which is the failure mode `Result.skip` exists to prevent.
+    """
+    from combat_engine.engine.components import Position
+
+    here = world.get(eid, Position)
+    if here is None:
+        raise AssertionError(f"{eid} is not on the grid; the board is wrong")
+    return here.square
+
+
 def _board(ref: str = "m145a0", seed: int = 1):  # noqa: ANN202
     """A legal world, borrowed from the auditor rather than built again."""
     from audit import board
@@ -17869,7 +17890,6 @@ def a_radius_two_races_print(out: Result) -> None:
     """
     from audit import board as audit_board
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Position
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import Hit
     from combat_engine.engine.movement import place
@@ -17914,7 +17934,7 @@ def a_radius_two_races_print(out: Result) -> None:
     # -- the reader counts by distance, both sides ------------------------
     world, me, _ = audit_board("rt:r46-t2", 1)
     c = Cast(world=world, me=me, ref="drivers:telepathy")
-    here = world.get(me, Position).square
+    here = _at(world, me)
     friends = sorted(allies(world, me))
     foes = sorted(enemies(world, me))
     out.that(bool(friends) and bool(foes),
@@ -17978,7 +17998,7 @@ def a_radius_two_races_print(out: Result) -> None:
     # card names.
     ref470 = "f2470"
     world, me, _ = audit_board(ref470, 1)
-    here = world.get(me, Position).square
+    here = _at(world, me)
     foes = sorted(enemies(world, me))
     out.that(len(foes) >= 2, "two enemies to tell near from far",
              f"{foes}")
@@ -18007,7 +18027,7 @@ def a_radius_two_races_print(out: Result) -> None:
     # standing trap here; the label is this row's own signature.
     mine = f"{ref470} mark"
 
-    def marked_by_the_row(who: int, w: object = None) -> bool:
+    def marked_by_the_row(who: int, w=None) -> bool:  # noqa: ANN001
         board = world if w is None else w
         return any(e.label == mine for e in board.effects.of(who))
 
@@ -18030,8 +18050,8 @@ def a_radius_two_races_print(out: Result) -> None:
     # that only fired the real thing would pass with either dropped.
     world2, me2, _ = audit_board(ref470, 1)
     foe2 = sorted(enemies(world2, me2))[0]
-    place(world2, foe2, (world2.get(me2, Position).square[0] + 2,
-                         world2.get(me2, Position).square[1]))
+    place(world2, foe2, (_at(world2, me2)[0] + 2,
+                         _at(world2, me2)[1]))
     world2.bus.emit(Hit(attacker=me2, target=foe2,
                         power=fighter_attack, critical=False))
     out.that(not marked_by_the_row(foe2, world2),
@@ -18173,7 +18193,8 @@ def once_during_each_of_your_turns(out: Result) -> None:
         ))
 
     def grants() -> list[str]:
-        return [e.by for e in world.effects.of(foe) if e.by == ref]
+        return [getattr(e, "by", "") for e in world.effects.of(foe)
+                if getattr(e, "by", "") == ref]
 
     world.turn = me
     out.that(not grants(), "nothing granted before the first swing")
@@ -18876,8 +18897,8 @@ def a_permission_to_cross_one_sort_of_creature(out: Result) -> None:
     from combat_engine.engine.types import Size
 
     world2, me2, _ = audit_board("i591p1", 1)
-    pos2 = world2.get(me2, Position)
-    far = loader.spawn(world2, "m6277", (pos2.square[0] + 1, pos2.square[1]),
+    pos2 = _at(world2, me2)
+    far = loader.spawn(world2, "m6277", (pos2[0] + 1, pos2[1]),
                        team=Team.ENEMY)
     c2 = Cast(world=world2, me=me2, ref="drivers:may_enter")
     theirs = squares_of  # same reader, different world
@@ -19103,7 +19124,6 @@ def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
     import combat_engine.content  # noqa: F401
     from audit import board as audit_board
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Position
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.durations import When
     from combat_engine.engine.query import light_level
@@ -19111,20 +19131,19 @@ def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
 
     # -- the unlit board: the requirement cannot be met ------------------
     world, me, _ = audit_board("f3066b", 1)
-    was = world.get(me, Position).square
+    was = _at(world, me)
     out.that(light_level(world, was) is Light.BRIGHT,
              "the board is lit, which is the default and the control",
              f"{light_level(world, was)}")
     REGISTRY["f3066b"].body(Cast(world=world, me=me, ref="f3066b"))
-    out.that(world.get(me, Position).square == was,
+    out.that(_at(world, me) == was,
              "so the teleport does not happen at all -- the printed"
              " requirement, not a failure",
-             f"{was} -> {world.get(me, Position).square}")
+             f"{was} -> {_at(world, me)}")
 
     # -- a darkened board: it lands in the dark and nowhere else ---------
     world, me, _ = audit_board("f3066b", 1)
-    here = world.get(me, Position)
-    x, y = here.square
+    x, y = _at(world, me)
     # A patch of darkness a few squares off, laid by somebody else so the
     # row under test is not the thing that made its own destination.
     dark = [(x + 3, y), (x + 3, y + 1)]
@@ -19142,7 +19161,7 @@ def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
              "while the square the caster is standing in is not")
 
     REGISTRY["f3066b"].body(Cast(world=world, me=me, ref="f3066b"))
-    landed = world.get(me, Position).square
+    landed = _at(world, me)
     out.that(landed in dark,
              "the teleport lands in the darkness",
              f"{(x, y)} -> {landed}")
@@ -19154,8 +19173,7 @@ def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
 
     # -- f3462b takes the long hop when it can, the short one when it cannot
     world, me, _ = audit_board("f3462b", 1)
-    here = world.get(me, Position)
-    x, y = here.square
+    x, y = _at(world, me)
     # **Found rather than assumed.** `(x + 8, y)` was the first draft and the
     # board had something in it, so the long hop had no legal destination,
     # the row fell back to its plain five, and the rule read like the
@@ -19181,15 +19199,15 @@ def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
              "and the reader agrees it is dark",
              f"{light_level(world, far[0])}")
     REGISTRY["f3462b"].body(Cast(world=world, me=me, ref="f3462b"))
-    out.that(world.get(me, Position).square in far,
+    out.that(_at(world, me) in far,
              "f3462b takes the ten-square hop to the dark square, which is"
              " the printed `instead` and is out of reach of its plain five",
-             f"{(x, y)} -> {world.get(me, Position).square}")
+             f"{(x, y)} -> {_at(world, me)}")
 
     world, me, _ = audit_board("f3462b", 1)
-    was = world.get(me, Position).square
+    was = _at(world, me)
     REGISTRY["f3462b"].body(Cast(world=world, me=me, ref="f3462b"))
-    now = world.get(me, Position).square
+    now = _at(world, me)
     out.that(now != was,
              "and on a lit board it still takes its plain five -- the"
              " fallback, without which the row would do nothing at all",
@@ -19287,8 +19305,7 @@ def what_a_carried_light_does_and_what_a_dimmer_does(out: Result) -> None:
 
     # -- a carried light raises, and beats a dark square -----------------
     world, me, _ = audit_board("m655a1", 1)
-    here = world.get(me, Position)
-    x, y = here.square
+    x, y = _at(world, me)
     world.grid.light[(x + 1, y)] = Light.DARK
     # Armed by the board, like the property above, so the comparison is
     # again against the effect lifted rather than against "before".
@@ -19330,8 +19347,7 @@ def what_a_carried_light_does_and_what_a_dimmer_does(out: Result) -> None:
 
     # -- but it never LIGHTENS a square that is already dark -------------
     world, me, _ = audit_board("i1444x1", 1)
-    here = world.get(me, Position)
-    x, y = here.square
+    x, y = _at(world, me)
     world.grid.light[(x + 1, y)] = Light.DARK
     REGISTRY["i1444x1"].body(Cast(world=world, me=me, ref="i1444x1"))
     out.that(light_level(world, (x + 1, y)) is Light.DARK,
@@ -19341,8 +19357,7 @@ def what_a_carried_light_does_and_what_a_dimmer_does(out: Result) -> None:
 
     # -- the dimming zone is an area, not a carried radius ---------------
     world, me, _ = audit_board("i3347p1", 1)
-    here = world.get(me, Position)
-    x, y = here.square
+    x, y = _at(world, me)
     REGISTRY["i3347p1"].body(Cast(world=world, me=me, ref="i3347p1"))
     out.that(light_level(world, (x + 8, y)) is Light.DIM,
              "i3347p1 dims eight squares out, which a two-square carried"
@@ -19501,7 +19516,7 @@ def one_lamp_three_settings_and_putting_the_lights_out(out: Result) -> None:
         return
 
     def level() -> Light:
-        return light_level(world, here.square)
+        return light_level(world, _at(world, me))
 
     def use(ref: str) -> None:
         REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
@@ -19549,7 +19564,7 @@ def one_lamp_three_settings_and_putting_the_lights_out(out: Result) -> None:
     # -- p16032's four forms --------------------------------------------
     world, me, _ = audit_board("p16032", 1)
     c = Cast(world=world, me=me, ref="p16032")
-    c.origin = world.get(me, Position).square
+    c.origin = _at(world, me)
     REGISTRY["p16032"].body(c)
     mine = list(c.my_zones())
     out.that(1 <= len(mine) <= 4,
@@ -19648,7 +19663,7 @@ def one_carried_light_level_at_a_time(out: Result) -> None:
 
     # -- dim, then bright: the direction that shows the clearing ---------
     world, me, _ = audit_board("i3466p1", 1)
-    square = world.get(me, Position).square
+    square = _at(world, me)
     c = Cast(world=world, me=me, ref="drivers:illuminate")
     pick(1)
     c.illuminate(*SETTINGS, on=me, until=When.ENCOUNTER)
@@ -19736,7 +19751,7 @@ def drawing_stowing_and_a_running_jump(out: Result) -> None:
     from audit import board as audit_board
     from combat_engine.engine.actions import legal, perform
     from combat_engine.engine.cast import Cast
-    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.components import Gear
     from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.events import SkillCheck, WeaponHeld
 
@@ -19839,7 +19854,7 @@ def drawing_stowing_and_a_running_jump(out: Result) -> None:
     from combat_engine.engine.grid import distance
 
     world, me, _ = audit_board("p3958", 1)
-    was = world.get(me, Position).square
+    was = _at(world, me)
     rolls: list[SkillCheck] = []
     world.bus.on(SkillCheck, rolls.append)
     world.rng.loaded = 20
@@ -19864,7 +19879,7 @@ def drawing_stowing_and_a_running_jump(out: Result) -> None:
     if not rolls:
         return
     total = rolls[-1].total
-    now = world.get(me, Position).square
+    now = _at(world, me)
     out.that(now != was, "and jumps", f"{was} -> {now}")
     moved = distance(was, now)
     out.that(moved <= max(0, total // 5),
