@@ -2208,7 +2208,7 @@ def f3784(c: Cast) -> None:
     anything."""
     c.bonus("attack", 2, kind="proficiency", on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: _holding(c, "unarmed"))
-    c.weapon_dice("1d6", ref="w:unarmed", on=c.me)
+    c.weapon_dice("1d6", ref="w3678", on=c.me)
 
 
 @power("f3785", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2224,9 +2224,13 @@ def f3785(c: Cast) -> None:
     would have lowered the monk strike's d8; a property only adds, so the
     group is the honest read of "your unarmed attack" for whichever unarmed
     weapon the character is actually holding. The ref is named too, for the
-    plain fist.
+    plain fist -- and `w3678` is the plain fist. This said `"w:unarmed"`, which is what
+    somebody expected it to be called and which no weapon carries -- so
+    the call walked `Gear.weapons`, matched nothing and fired for nobody.
+    Two other rows already named `w3678` correctly. `lint.py` refuses a
+    dead weapon ref now, which is how these three were found. #664.
     """
-    c.gains_property("high crit", group="unarmed", ref="w:unarmed")
+    c.gains_property("high crit", group="unarmed", ref="w3678")
 
 
 @power("f3786", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

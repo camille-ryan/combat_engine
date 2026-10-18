@@ -98,6 +98,14 @@ def main() -> int:
         )
         faults += 1
 
+    for where, kind, name in _dead_weapon_refs():
+        print(
+            f"{where}: {kind}={name!r} names no weapon in the tables, so the"
+            f" clause walks `Gear.weapons`, matches nothing and fires for"
+            f" nobody. The fist is `w3678`."
+        )
+        faults += 1
+
     for where, key in _unread_modifiers():
         print(
             f"{where}: c.bonus({key!r}, ...) -- nothing reads that key,"
@@ -799,6 +807,92 @@ UNREAD_MODIFIER_KEYS = {
     "initiative": "c.initiative(amount, on=)",
     **_bare_skill_keys(),
 }
+
+
+def _weapon_vocabulary() -> tuple[frozenset[str], frozenset[str]]:
+    """Every weapon ref and group a call may name, and where they come from.
+
+    **Two sources, and a database-only check would refuse live calls.**
+    `game.db` holds 117 weapons; `chargen.IMPLEMENTS` mints the ones no page
+    prints -- `w:rod`, `w:ki-focus` -- and a row may legitimately name one.
+    So both, unioned.
+
+    Read here rather than enforced in `cast.py`, and the reason is the seam:
+    the vocabulary lives in `chargen`, `chargen` imports `engine`, so a
+    runtime guard in `Cast` would have to reach across a cycle. A static
+    walk over `content/` catches the measured case -- a **literal** ref
+    nobody carries -- and `scripts/` may import anything. The cost is the
+    three computed `ref=own.ref` call sites, which this cannot see and
+    which are a real weapon by construction. #664.
+    """
+    import json
+    import sys
+
+    sys.path.insert(0, str(ROOT / "src"))
+    from combat_engine import chargen
+    from combat_engine.db import game
+
+    refs: set[str] = set(chargen.PRINTED) | set(chargen.IMPLEMENTS)
+    groups: set[str] = {
+        getattr(w, "group", "") for w in
+        (*chargen.PRINTED.values(), *chargen.IMPLEMENTS.values())
+    } - {""}
+    with game() as db:
+        for row in db.execute("SELECT ref, grp FROM weapon").fetchall():
+            refs.add(row["ref"])
+            if row["grp"]:
+                groups.add(str(row["grp"]).lower())
+    del json
+    return frozenset(refs), frozenset(groups)
+
+
+#: The three verbs that take a weapon `ref=`/`group=`. Checked against the
+#: signatures rather than guessed: `c.counts_as(satisfies, holding=)` takes
+#: weapon *words*, `c.destroy(weapon=)` takes a `Weapon` object, and
+#: `c.silvered`/`c.reload` are not `Cast` methods at all -- all four were in
+#: this check's first draft and all four would have been refused live calls.
+_WEAPON_VERBS = ("weapon_range", "gains_property", "weapon_dice")
+
+
+def _dead_weapon_refs() -> list[tuple[str, str, str]]:
+    """A `ref=`/`group=` naming a weapon nothing in the tables carries.
+
+    The same failure `c.ignores_difficult(kind=)` had before #598 put a
+    raise on it: all three verbs walk `Gear.weapons` for a match and
+    **return 0** when there is none, so a misspelling is a clause that
+    never fires on a row that reads as finished. #598's guard found 29 of
+    them on its first run.
+
+    Measured before building this: one dead ref across the whole tree --
+    `"w:unarmed"` in `f2400`, `f3784` and `f3785`, where the fist is
+    `w3678` and two other rows already name it correctly. Zero dead groups.
+    So this is a guard against the next one rather than a fix for a
+    backlog, which is the honest reason it is cheap.
+    """
+    refs, groups = _weapon_vocabulary()
+    out: list[tuple[str, str, str]] = []
+    for path in _asked_for():
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            if not isinstance(fn, ast.Attribute) or fn.attr not in _WEAPON_VERBS:
+                continue
+            for kw in node.keywords:
+                if kw.arg not in ("ref", "group"):
+                    continue
+                if not isinstance(kw.value, ast.Constant):
+                    continue          # computed -- checked at call time
+                name = str(kw.value.value)
+                known = refs if kw.arg == "ref" else groups
+                if name and name not in known:
+                    rel = path.relative_to(ROOT)
+                    out.append((f"{rel}:{node.lineno}", kw.arg, name))
+    return out
 
 
 def _unread_modifiers() -> list[tuple[str, str]]:

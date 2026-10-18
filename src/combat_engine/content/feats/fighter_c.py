@@ -613,7 +613,7 @@ def f2400(c: Cast) -> None:
     strike and the gauntlet alone. By ref, never by group, for exactly the
     reason above."""
     c.weapon_dice("1d8", ref="w3635", on=c.me)
-    c.weapon_dice("1d6", ref="w:unarmed", on=c.me)
+    c.weapon_dice("1d6", ref="w3678", on=c.me)
 
 
 @power("f2427", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
