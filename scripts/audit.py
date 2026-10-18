@@ -184,18 +184,18 @@ KNOWN_SILENT = {
     # shape against *any* check and is on the silent list for the same
     # reason.
     #
-    # **Driven by hand rather than argued**, which is what this dict is for.
-    # `drivers.skill_checks` makes an ally roll both kinds and asserts the
-    # row's own declared `Trigger` predicate on each:
+    # **`f635b` was here and its excuse was false.** It read "needs an ally
+    # to roll a social check; the board never does", and `_rolls_checks` has
+    # rolled seventeen skills for an ally since it was written -- so the
+    # board posed it every time. What the harness could not see was the
+    # *reroll*: `DID_SOMETHING` had no `Rerolled`, and a row whose whole
+    # output is a changed number emitted nothing it recognised. Admitting
+    # the event moved ten rows out of this bucket's neighbourhood and this
+    # entry out of it altogether. #700.
     #
-    #     ok  the declared Trigger refuses an ally's athletics check
-    #     ok  and accepts an ally's bluff check
-    #     ok  used against that check, f635b rerolls it
-    #     ok  and the printed +5 power bonus is in the check's own total
-    #
-    # So the clause works and the board cannot pose it, which is the
-    # distinction #629 is about. #691.
-    "f635b": "needs an ally to roll a social check; the board never does",
+    # Kept as a comment because the lesson is the shape, not the row: an
+    # excuse that names a board limitation should be checked against the
+    # harness before it is written, and this one was argued from the card.
     # Its printed Requirement is **one** weapon -- `w3594` -- and `chargen`
     # deals this sorcerer `w3596`, a different blade from the same group. So
     # the gate correctly declines and the row lays nothing.
@@ -983,8 +983,26 @@ DID_SOMETHING = {
     "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
-    "EffectSuspended", "WeaponHeld",
+    "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted",
 }  # fmt: skip
+# `Rerolled` and `Boosted` are the **sixth** class of correct row admitted
+# here one at a time, and they arrived the way the note below predicts --
+# except the shape to watch for turns out to be wider than "a verb that is a
+# negation". It is **a verb that changes a number already on the table.**
+#
+# `c.reroll_attack`, `c.reroll_check`, `c.reroll_save`, `c.boost_roll` and
+# `c.boost_check` all mutate a result in place; the only trace is the event
+# that says so. A row whose whole printed Effect is one of those emitted
+# nothing this set recognised, so it fired its 48 attempts and reported
+# SILENT while working perfectly. `f635b` is the worked case: its excuse here
+# read "needs an ally to roll a social check; the board never does", and
+# `_rolls_checks` has rolled seventeen skills for an ally all along -- the
+# board posed it, the row rerolled, and the harness could not see a reroll.
+#
+# **Attributable, which is what `Note` is not.** Both carry `by`, the ref
+# that paid, and both are collected from the row's own slice -- bracketed by
+# its `PowerUsed`/`PowerResolved` -- so a sibling's reroll is never counted.
+# #700.
 # `EffectSuspended` is the **fifth** class of correct row admitted here one at
 # a time, and it arrived the way the note below predicts: a card whose verb is
 # a negation. `i1014p1` puts out every light within 10 squares -- suppressed,
@@ -3128,13 +3146,21 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
     in the tree would be most of the audit's time.
     """
     from combat_engine.engine import Movement
-    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.events import CheckDeclared, SkillCheck
     from combat_engine.engine.skills import SKILLS
     from combat_engine.engine.skills import check as roll
 
     declared = get(ref)
+    # **`CheckDeclared` as well as `SkillCheck`, and the gate did not know
+    # it.** That event is the moment *before* the d20, added in #693 so
+    # `f2804` can call odd or even without the face in hand -- and a row
+    # triggered on it was excluded here, so it reported UNUSED while the
+    # harness rolled 68 checks a few lines further down. A gate listing
+    # event classes by name goes stale the day one is added; this is that
+    # day. #700.
+    watched = (SkillCheck, CheckDeclared)
     if declared is None or not any(
-        t.event is SkillCheck for t in declared.triggers
+        t.event in watched for t in declared.triggers
     ):
         return False
 
