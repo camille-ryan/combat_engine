@@ -775,6 +775,26 @@ def _bare_skill_keys() -> dict[str, str]:
     }
 
 
+#: **Hand-kept, and a static census cannot replace it.** `engine/CLAUDE.md`
+#: calls a modifier nothing consults "the commonest bug in this component's
+#: history", so a measured list looks like the obvious upgrade over this
+#: dictionary. It was tried twice and both attempts were invalid, for two
+#: different reasons worth writing down so nobody walks it a third time:
+#:
+#: * **Matching the read site.** A census pairing `c.bonus("<key>")` against
+#:   `mods.total("<key>")` reported `'attack'` (406 files) and `'damage'`
+#:   (304) as unread, which is absurd on its face. The engine reads through
+#:   helpers -- `escape._mods`, `resolve`'s `defence()` and `speed()` -- so
+#:   the call shape is not the reader.
+#: * **Matching the key at all.** Loosening it to "the key appears somewhere
+#:   outside `content/`" then reported every `skill:<name>` as unread, and
+#:   those are read: `skills.modifier` builds the key as `f"skill:{skill}"`,
+#:   so the literal never appears anywhere.
+#:
+#: The honest instrument is a runtime one -- lay each key on a creature and
+#: see whether any read path moves -- which is real work and not a grep. So
+#: this stays a list of rules somebody established by reading, and the two
+#: dead ends above are recorded rather than the measurement.
 UNREAD_MODIFIER_KEYS = {
     "initiative": "c.initiative(amount, on=)",
     **_bare_skill_keys(),
