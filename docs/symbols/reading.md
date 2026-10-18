@@ -72,6 +72,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - How far this creature moves, for the kind of move it is making.
 - `query.squares(world: 'World', eid: 'int') -> 'frozenset[Square]'`
   - (no docstring)
+- `query.telepathy_of(world: 'World', eid: 'int') -> 'int'`
+  - How far this creature's telepathy reaches, in squares. 0 for none.
 
 ## seeing and being seen
 

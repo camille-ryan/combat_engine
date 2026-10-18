@@ -17844,7 +17844,386 @@ def a_tome_charges_before_it_lends(out: Result) -> None:
              f"used went from {before} to {dict(known.used)}")
 
 
+def a_radius_two_races_print(out: Result) -> None:
+    """Telepathy is a number on the board, and three rows measure in it.
+
+    #665. Five rows print telepathy and the shape divides cleanly: two
+    racial traits and a feat **set** a radius, three more rows **count
+    creatures inside it**, and three further rows mean it as a way of
+    talking and want nothing. Both halves were missing, so the counting
+    rows carried markers and `f2948` hard-coded the 5 -- after a stretch
+    of hard-coding 10, which is the version this rule exists to stop
+    coming back.
+
+    **The clamp is the assertion that matters.** `query.telepathy_of`
+    answers 0 for every creature but the two races, and 0 has to make the
+    readers return nobody. A missing radius read as "unbounded" would mark
+    every enemy on the map, which is the direction this fails in if it
+    fails -- so a caster with no telepathy is asked as well as one with
+    it, and `f2955`'s caster is the control.
+
+    **Both sides are asked.** `f2470` counts *enemies* within the range
+    and the other two count allies, so `c.in_telepathy` takes `side=` and
+    a rule that only asked about allies would pass while a third of the
+    rows it exists for were wrong.
+    """
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import allies, enemies, telepathy_of
+
+    # -- the writers ------------------------------------------------------
+    # Asked through `audit.board`, which starts the fight and arms traits,
+    # rather than by calling `c.telepathy` here: the question is whether a
+    # character of these races *arrives* with the radius, and a rule that
+    # laid it itself would stay green with both traits deleted.
+    for ref in ("rt:r46-t2", "rt:r49-t4", "f3395"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker",
+                 f"{row.unfinished}")
+        world, me, _ = audit_board(ref, 1)
+        out.that(telepathy_of(world, me) == 5,
+                 f"{ref} arms a telepathy of 5 squares -- the number all"
+                 " three print, and the only number any of them print",
+                 f"{telepathy_of(world, me)}")
+        # **The control, on the same board.** Nobody else has it. A
+        # board-wide radius would satisfy every assertion below.
+        others = [e for e in world.entities if e != me]
+        out.that(all(telepathy_of(world, e) == 0 for e in others),
+                 f"and nobody else on {ref}'s board has any",
+                 f"{[(e, telepathy_of(world, e)) for e in others][:6]}")
+
+    # -- a creature with none reads zero, and the readers return nobody ---
+    plain, nobody, _ = audit_board("f2955", 1)
+    out.that(telepathy_of(plain, nobody) == 0,
+             "a caster of no telepathic race reads 0, not a default",
+             f"{telepathy_of(plain, nobody)}")
+    blank = Cast(world=plain, me=nobody, ref="drivers:telepathy")
+    out.that(blank.in_telepathy() == [],
+             "so `c.in_telepathy()` returns NOBODY rather than the board --"
+             " the one direction this family breaks the game in",
+             f"{blank.in_telepathy()}")
+    out.that(blank.in_telepathy(side="enemy") == [],
+             "and the enemy side of it is empty too, which is `f2470`'s"
+             " question and the expensive one to get wrong",
+             f"{blank.in_telepathy(side='enemy')}")
+
+    # -- the reader counts by distance, both sides ------------------------
+    world, me, _ = audit_board("rt:r46-t2", 1)
+    c = Cast(world=world, me=me, ref="drivers:telepathy")
+    here = world.get(me, Position).square
+    friends = sorted(allies(world, me))
+    foes = sorted(enemies(world, me))
+    out.that(bool(friends) and bool(foes),
+             "the board has somebody on each side to measure",
+             f"allies {friends} enemies {foes}")
+    if not friends or not foes:
+        return
+
+    near_friend, far_friend = friends[0], friends[-1]
+    near_foe, far_foe = foes[0], foes[-1]
+    out.that(near_friend != far_friend and near_foe != far_foe,
+             "two of each, so in-range and out-of-range are different"
+             " creatures rather than the same one moved twice",
+             f"allies {friends} enemies {foes}")
+
+    # `movement.place` and not `Position.square = ...`: setting the field
+    # leaves `Grid` occupants stale, and a probe that does it measures an
+    # empty board.
+    for who, dx in ((near_friend, 3), (far_friend, 9),
+                    (near_foe, 2), (far_foe, 9)):
+        place(world, who, (here[0] + dx, here[1]))
+
+    inside = c.in_telepathy()
+    out.that(near_friend in inside,
+             "an ally 3 squares off is within a telepathy of 5",
+             f"{inside}")
+    out.that(far_friend not in inside,
+             "and one 9 squares off is NOT -- the negative control, without"
+             " which 'every ally' would pass this rule",
+             f"{inside}")
+    out.that(me not in inside,
+             "the telepath is not its own ally, which is `c.within`'s word"
+             " for 'ally' and what `f2948`'s saving throws depend on",
+             f"{inside}")
+
+    hostile = c.in_telepathy(side="enemy")
+    out.that(near_foe in hostile and far_foe not in hostile,
+             "the enemy side measures with the same radius",
+             f"{hostile}")
+    out.that(not (set(hostile) & set(inside)),
+             "and the two sides do not overlap",
+             f"allies {inside} enemies {hostile}")
+
+    # -- f2948: the saving throws go to the allies in range --------------
+    # Through `audit.audit`, the real verdict, because the row's whole
+    # body is a loop over this reader.
+    import audit as A
+
+    got = A.audit("f2948")
+    out.that("SavingThrow" in got.events,
+             "f2948 still hands its allies a saving throw with the radius"
+             " read off the trait instead of typed into the row",
+             f"{sorted(got.events)}")
+
+    # -- f2470: a crit with a class power marks the enemies in range -----
+    # **Not through the auditor**, which swings `mba` and nothing else --
+    # 22 hits and 4 crits in one audit, every one of them a basic attack --
+    # so a row gated on "a critical hit with a c3 attack power" can never
+    # fire there and reads UNUSED. That is #668, an instrument gap and not a
+    # fault in the row; the row is provable here by emitting the hit the
+    # card names.
+    ref470 = "f2470"
+    world, me, _ = audit_board(ref470, 1)
+    here = world.get(me, Position).square
+    foes = sorted(enemies(world, me))
+    out.that(len(foes) >= 2, "two enemies to tell near from far",
+             f"{foes}")
+    if len(foes) < 2:
+        return
+    near_foe, far_foe = foes[0], foes[-1]
+    place(world, near_foe, (here[0] + 2, here[1]))
+    place(world, far_foe, (here[0] + 9, here[1]))
+
+    fighter_attack = next(
+        (r for r, p in sorted(REGISTRY.items())
+         if p.cls == "fighter" and p.attack is not None),
+        "",
+    )
+    out.that(bool(fighter_attack),
+             "the tree holds a fighter attack power to crit with",
+             f"{fighter_attack}")
+    if not fighter_attack:
+        return
+
+    # **Asked by effect label, not by `c.marked`.** The board arms the
+    # fighter's own class feature, which marks the neighbours before this
+    # rule gets a word in -- so `c.marked` is already True of the near
+    # enemy and the first draft of this rule failed on its own control.
+    # `audit.board` pre-setting the number you came to measure is the
+    # standing trap here; the label is this row's own signature.
+    mine = f"{ref470} mark"
+
+    def marked_by_the_row(who: int, w: object = None) -> bool:
+        board = world if w is None else w
+        return any(e.label == mine for e in board.effects.of(who))
+
+    out.that(not marked_by_the_row(near_foe),
+             "neither enemy carries THIS row's mark before the crit --"
+             " the fighter's own class feature has already laid one, which"
+             " is why the question is by label",
+             f"{[e.label for e in world.effects.of(near_foe)]}")
+    world.bus.emit(Hit(attacker=me, target=near_foe,
+                       power=fighter_attack, critical=True))
+    out.that(marked_by_the_row(near_foe),
+             "a crit with a c3 attack power marks the enemy 2 squares off",
+             f"{[e.label for e in world.effects.of(near_foe)]}")
+    out.that(not marked_by_the_row(far_foe),
+             "and NOT the one 9 squares off -- the radius is doing the work,"
+             " not 'every enemy'",
+             f"{[e.label for e in world.effects.of(far_foe)]}")
+
+    # And the two halves of the predicate, each on its own, because a rule
+    # that only fired the real thing would pass with either dropped.
+    world2, me2, _ = audit_board(ref470, 1)
+    foe2 = sorted(enemies(world2, me2))[0]
+    place(world2, foe2, (world2.get(me2, Position).square[0] + 2,
+                         world2.get(me2, Position).square[1]))
+    world2.bus.emit(Hit(attacker=me2, target=foe2,
+                        power=fighter_attack, critical=False))
+    out.that(not marked_by_the_row(foe2, world2),
+             "an ordinary HIT with the same power marks nobody -- the card"
+             " says critical",
+             f"{[e.label for e in world2.effects.of(foe2)]}")
+    world2.bus.emit(Hit(attacker=me2, target=foe2, power="mba", critical=True))
+    out.that(not marked_by_the_row(foe2, world2),
+             "and a crit with a basic attack marks nobody either -- 'a c3"
+             " attack power' is the other half, and the half the auditor's"
+             " own swing can never satisfy",
+             f"{[e.label for e in world2.effects.of(foe2)]}")
+
+
+def a_one_shot_grant_spent_by_its_beneficiary(out: Result) -> None:
+    """"The next attack against it" means the next attack *by the ally*.
+
+    `c.grants_advantage(once=True)` ended its grant on any `AttackRolled`
+    at the creature. 45 rows pass `once=True` and most of them name one
+    beneficiary -- `to=friend`, `to=mate`, `to=pet`, `to=chosen`,
+    `to="ally"` -- so an unrelated attacker swinging first spent a grant
+    that had never been usable by them, and the ally the card names got
+    nothing at all. #667.
+
+    Found while writing `f3317`, whose whole benefit is one such grant.
+
+    **The negative control is the rule.** Asserting only that the ally's
+    own swing spends it passes on the broken code, which spent it on
+    everybody's. So a third creature swings first and the grant has to
+    survive that.
+    """
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import allies, enemies, has_combat_advantage
+    from combat_engine.engine.types import Defense
+
+    world, me, _ = audit_board("f2955", 1)
+    c = Cast(world=world, me=me, ref="drivers:oneshot")
+    friends = sorted(allies(world, me))
+    foes = sorted(enemies(world, me))
+    out.that(len(friends) >= 2 and bool(foes),
+             "two allies and an enemy: one beneficiary and one bystander",
+             f"allies {friends} enemies {foes}")
+    if len(friends) < 2 or not foes:
+        return
+    chosen, bystander, foe = friends[0], friends[1], foes[0]
+
+    def swing(attacker: int, target: int) -> None:
+        world.bus.emit(AttackRolled(
+            attacker=attacker, target=target, power="mba", vs=Defense.AC,
+            natural=10, bonus=5, total=15, defence=14, advantage=False,
+        ))
+
+    granted = c.grants_advantage(on=foe, to=chosen, until=When.SONT,
+                                 once=True)
+    out.that(granted is not None, "the grant is laid on the enemy")
+    if granted is None:
+        return
+    out.that(has_combat_advantage(world, chosen, foe),
+             "the chosen ally has combat advantage against it",
+             f"{chosen} -> {foe}")
+    out.that(not has_combat_advantage(world, bystander, foe),
+             "and the other ally does not -- the grant names one creature",
+             f"{bystander} -> {foe}")
+
+    # **The bystander swings first.** This is what used to spend it.
+    swing(bystander, foe)
+    out.that(not granted.ended,
+             "somebody else's swing does NOT spend a grant they never had",
+             "the grant ended on an attack by a creature outside it")
+    out.that(has_combat_advantage(world, chosen, foe),
+             "so the ally the card names still has it",
+             f"{chosen} -> {foe}")
+
+    # A swing at a different creature does not spend it either.
+    swing(chosen, me)
+    out.that(not granted.ended,
+             "nor does the beneficiary attacking somebody ELSE")
+
+    # And the real thing does.
+    swing(chosen, foe)
+    out.that(granted.ended,
+             "the beneficiary's own swing at the target spends it, which is"
+             " what `once=True` is for",
+             "the grant survived the attack it exists to answer")
+    out.that(not has_combat_advantage(world, chosen, foe),
+             "and the advantage is gone afterwards",
+             f"{chosen} -> {foe}")
+
+
+def once_during_each_of_your_turns(out: Result) -> None:
+    """`f3317`'s budget: one grant per turn of the telepath's, not per swing.
+
+    #665's last row. The card is "once during each of your turns, when you
+    attack an enemy you have combat advantage against" -- a per-turn latch
+    on a trigger that fires on every swing, which is `c.latched(
+    per_turn=True)`.
+
+    **`ev.advantage` is read off the event** rather than re-asking
+    `has_combat_advantage` after the fact, which is the note
+    `artificer_b` leaves about `AttackRolled`: the recomputed answer is
+    about the board a moment later.
+
+    So this rule drives the row through its declared trigger and counts
+    grants, and the second swing in the same turn is the assertion.
+    """
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Defense
+
+    ref = "f3317"
+    row = REGISTRY[ref]
+    out.that(not row.unfinished, f"{ref} carries no marker",
+             f"{row.unfinished}")
+    out.that(row.on is not None,
+             "and declares the trigger the card prints, so the board's own"
+             " arming is what fires it")
+
+    world, me, _ = audit_board(ref, 1)
+    c = Cast(world=world, me=me, ref=ref)
+    foes = sorted(enemies(world, me))
+    friends = sorted(allies(world, me))
+    out.that(bool(foes) and bool(friends),
+             "an enemy to swing at and an ally to hand the advantage to",
+             f"allies {friends} enemies {foes}")
+    if not foes or not friends:
+        return
+    foe = foes[0]
+
+    def swing(advantage: bool) -> None:
+        world.bus.emit(AttackRolled(
+            attacker=me, target=foe, power="mba", vs=Defense.AC,
+            natural=10, bonus=5, total=15, defence=14, advantage=advantage,
+        ))
+
+    def grants() -> list[str]:
+        return [e.by for e in world.effects.of(foe) if e.by == ref]
+
+    world.turn = me
+    out.that(not grants(), "nothing granted before the first swing")
+
+    # A swing WITHOUT combat advantage pays nothing -- the printed gate.
+    swing(False)
+    out.that(not grants(),
+             "a swing without combat advantage grants nothing, which is the"
+             " card's own condition",
+             f"{grants()}")
+    out.that(not c.latched(ref, per_turn=True),
+             "and does not spend the turn's one use either")
+
+    swing(True)
+    out.that(len(grants()) == 1,
+             "a swing WITH combat advantage hands out one grant",
+             f"{grants()}")
+    out.that(c.latched(ref, per_turn=True),
+             "and the turn's use is spent")
+
+    swing(True)
+    out.that(len(grants()) == 1,
+             "a second qualifying swing in the same turn grants nothing --"
+             " 'once during each of your turns', and the assertion a rule"
+             " counting one swing would never make",
+             f"{grants()}")
+
+    # **A creature with no telepathy grants nothing**, which is the clamp
+    # again and the reason the latch is spent only when there is somebody
+    # to give it to.
+    plain, nobody, _ = audit_board("f2955", 1)
+    blank = Cast(world=plain, me=nobody, ref=ref)
+    out.that(blank.in_telepathy() == [],
+             "and a telepath-less character has nobody to choose from, so"
+             " the row is a no-op rather than a board-wide grant",
+             f"{blank.in_telepathy()}")
+
 DRIVERS = {
+    "telepathy_radius": (
+        a_radius_two_races_print,
+        "telepathy is a radius two races print, and three rows measure in it",
+    ),
+    "one_shot_grant": (
+        a_one_shot_grant_spent_by_its_beneficiary,
+        "a one-shot grant is spent by the ally it names, not by anybody",
+    ),
+    "once_each_turn": (
+        once_during_each_of_your_turns,
+        "a per-turn budget on a trigger that fires on every swing",
+    ),
     "shaman_spirits": (
         shaman_spirits,
         "each Companion Spirit keeps its own powers and loses the others'",

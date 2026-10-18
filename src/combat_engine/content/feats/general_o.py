@@ -634,8 +634,7 @@ def f2947(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you spend a healing surge",
        on=Trigger(SurgeSpent, lambda w, me, ev: ev.actor == me,
-                  "you spend a healing surge"),
-       dropped=("c.telepathy()",))
+                  "you spend a healing surge"))
 def f2948(c: Cast) -> None:
     """`by_me` is no use on `SurgeSpent` -- it names its subject `actor`.
 
@@ -648,12 +647,15 @@ def f2948(c: Cast) -> None:
     wrong by a factor of two, which is the direction `m5808a0`'s rule says
     to err away from.
 
-    The 5 is still hard-coded and the marker stays for that: the radius
-    belongs on the two racial traits that print it, read back through one
-    reader, which is #665. A number repeated in four rows is how this one
-    came to say 10.
+    **The 5 is no longer here.** It is on the two racial traits that
+    print it, and `c.in_telepathy()` reads it back -- which is what the
+    marker was waiting for. A number repeated in four rows is how this
+    one came to say 10, and now it is written in one place.
+
+    A character with no telepathy gets no allies out of that, which is
+    the right answer: the feat's gate is a race that has it.
     """
-    for friend in _near_allies(c, 5):
+    for friend in c.in_telepathy():
         c.save(on=friend)
 
 

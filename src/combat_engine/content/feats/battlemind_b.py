@@ -520,13 +520,16 @@ def f3304(c: Cast) -> None:
 
 @power("f3322", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       todo=(*POINTS, "c.telepathy()"))
+       todo=POINTS)
 def f3322(c: Cast) -> None:
-    """Two gaps and the feature is neither.
+    """One gap now, and it is the pool rather than the range.
 
     Spending power points emits a `Note` and no event, so "the first
-    time you drop to 0" has nothing to watch. The range is the race's
-    telepathy: `rt:r46-t2` is a declared row and it is declared
-    `out_of_combat` -- deliberately inert, because the trait is a way of
-    talking -- so the radius this sentence measures in is not a number
-    anything on the board carries."""
+    time you drop to 0" has nothing to watch.
+
+    The range used to be the second gap, on the reasoning that
+    `rt:r46-t2` is declared `out_of_combat` -- "deliberately inert,
+    because the trait is a way of talking" -- so the radius was not a
+    number anything on the board carried. The talking half of that was
+    right and the radius half was not: the trait lays `c.telepathy(5)`
+    now and `c.in_telepathy()` is the read. #665."""

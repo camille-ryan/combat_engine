@@ -6963,6 +6963,59 @@ class Cast:
             self.leash(within, to=self.me, on=who, until=until)
         return self.bonus("roams_free", 1, on=who, until=until, kind=self.ref)
 
+    def telepathy(
+        self,
+        squares_: int,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"Telepathy 5" -- a radius, and the only writer of one.
+
+        Three rows measure creatures inside it and two racial traits set
+        it. Read back through `query.telepathy_of`, which answers 0 for
+        everybody else -- and 0 has to make those three no-ops rather than
+        board-wide, which is why the reader clamps rather than treating a
+        missing radius as unbounded. #665.
+
+        **Not a sense.** Nothing asks whether a telepath perceives
+        anything; every printed use is "within range of your telepathy",
+        measured with `c.in_telepathy`.
+
+        Defaults to the caster, as every printed line of this shape says
+        "you gain".
+        **One shared `kind`, deliberately.** Bonuses bucket by type and
+        two of a kind do not add -- the larger applies -- which is what a
+        *radius* wants. Keyed by this row's ref instead, a character with
+        both the racial trait and `f3395` would read telepathy 10 from two
+        sources that each print 5.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("telepathy", squares_, on=who, until=until,
+                          kind="telepathy")
+
+    def in_telepathy(
+        self, *, side: str = "ally", of: int | None = None
+    ) -> list[int]:
+        """Creatures inside this creature's telepathy, or none if it has none.
+
+        **`side` is not defaulted away**: `f2470` marks each *enemy* within
+        the range and the other two name allies, so a helper that only
+        answered allies would be wrong for a third of the rows it exists
+        for. `"ally"` is the majority and so the default, and `f2470` says
+        `side="enemy"` out loud.
+
+        A helper rather than each row writing
+        `c.within(telepathy_of(...), side=...)`, because the 0-means-none
+        clamp has to live in one place: a row that forgot it would mark
+        every enemy on the board.
+        """
+        from .query import telepathy_of
+
+        who = self.me if of is None else of
+        reach = telepathy_of(self.world, who)
+        return self.within(reach, of=who, side=side) if reach else []
+
     def dismiss_companion(self) -> bool:
         """"Your spirit companion disappears." An Effect line on ~20 rows."""
         standing = self.companion()
@@ -8796,10 +8849,26 @@ class Cast:
             # "Grants combat advantage to the *next* attack against it."
             # `c.bonus` has had `once` all along and this had no equivalent,
             # so rows wanting it hand-rolled the watch that spends it.
+            #
+            # **Spent by a beneficiary's swing, not by anybody's.** This used
+            # to end on any `AttackRolled` at the creature, which is only
+            # right when everyone benefits. 45 rows pass `once=True` and most
+            # name one creature -- `to=friend`, `to=mate`, `to=pet`,
+            # `to=chosen`, `to="ally"` -- so an unrelated attacker swinging
+            # first spent a grant that had never been usable by them, and the
+            # ally the card names got nothing. The printed sentence is "the
+            # next attack against it **by that ally**"; narrowing to the
+            # beneficiary set says it and is a no-op for `to="team"`. #667.
             from .events import AttackRolled
 
+            spenders = frozenset(beneficiaries)
+
             def spend(ev: AttackRolled) -> None:
-                if ev.target == who and not granted.ended:
+                if (
+                    ev.target == who
+                    and ev.attacker in spenders
+                    and not granted.ended
+                ):
                     self.world.effects.end(granted, "spent")
 
             granted.subs.append(

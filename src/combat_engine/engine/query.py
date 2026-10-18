@@ -777,6 +777,30 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     )
 
 
+def telepathy_of(world: World, eid: int) -> int:
+    """How far this creature's telepathy reaches, in squares. 0 for none.
+
+    **A radius, not a sense.** Five rows print it and four use it only to
+    measure creatures within it -- "mark each enemy within the range of
+    your telepathy", "each ally within your telepathy range". None asks
+    whether anything is perceived, so this is deliberately not a
+    `Senses`/`has_sense` entry: three further rows mention telepathy as
+    *communication* ("communication, not a fight") and want nothing from
+    it.
+
+    **Zero is the answer for every creature but two races**, and that has
+    to make the readers no-ops rather than board-wide. A missing radius
+    must not mark every enemy on the map, which is the direction a `None`
+    meaning "unbounded" would fail in. #665.
+    """
+    from .components import Mods
+
+    held = world.get(eid, Mods)
+    if held is None or not held.items:
+        return 0
+    return max(0, held.total("telepathy", {}))
+
+
 def sheltered_from(world: World, actor: int, target: int) -> bool:
     """Does this creature have cover or concealment against that one?
 

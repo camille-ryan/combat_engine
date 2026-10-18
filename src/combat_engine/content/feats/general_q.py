@@ -2071,12 +2071,44 @@ def f3313(c: Cast) -> None:
         c.heal(5, on=c.me)
 
 
-@power("f3317", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.telepathy()",))
+@power("f3317", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you attack an enemy you have combat advantage against",
+       on=Trigger(AttackRolled,
+                  lambda w, me, ev: ev.attacker == me and ev.advantage,
+                  "you swing with combat advantage"))
 def f3317(c: Cast) -> None:
     """The ally is chosen from within the radius of a telepathy the
-    character has, and nothing records a telepathy range -- "one ally
-    you can see" would be a different and much larger feat."""
+    character has. That radius is on the board now -- `rt:r49-t4` lays
+    it, which is the race this feat's gate names -- so the row no longer
+    has to guess, and "one ally you can see" is still not what the card
+    says. #665.
+
+    **`ev.advantage` rather than asking `has_combat_advantage`.** The
+    engine computed it for this swing and put it on the event; recomputing
+    it afterwards answers a question about the board a moment later, which
+    is the mistake `artificer_b`'s note records about `AttackRolled`.
+
+    "Once during each of your turns" is `c.latched(per_turn=True)`, which
+    is the standing door for that clause. `usage=AT_WILL` with the latch,
+    not `ENCOUNTER`: the card's budget is per turn, not per fight, and the
+    row was declared `ENCOUNTER` while it had no body.
+
+    "His or her next attack against that enemy made before the start of
+    your next turn" is both halves of one grant: `once=True` spends it on
+    the ally's own swing, `until=When.SONT` is the deadline. The grant is
+    laid **on the enemy** because that is the creature granting it.
+
+    The ally is the first in range rather than a choice: nothing asks a
+    player here, and the AI policy has no question to put."""
+    if c.latched("f3317", per_turn=True):
+        return
+    friends = c.in_telepathy()
+    if not friends:
+        return
+    c.latch("f3317", per_turn=True)
+    c.grants_advantage(on=c.trigger.target, to=friends[0],
+                       until=When.SONT, once=True)
 
 
 @power("f3323", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2212,13 +2244,15 @@ def f3394(c: Cast) -> None:
 
 
 @power("f3395", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.telepathy()",))
+       reach=PERSONAL, target=SELF)
 def f3395(c: Cast) -> None:
-    """The card is the combat half and it is handed over. Dropped: the
-    telepathy range, which is a fact about the sheet that no verb
-    writes."""
+    """All three clauses now. The telepathy range was `dropped=` on the
+    grounds that it is "a fact about the sheet that no verb writes" --
+    true of the speech and false of the number, which three other rows
+    measure creatures in. It is a radius, `c.telepathy` writes it, and
+    `query.telepathy_of` reads it back. #665."""
     c.set_origin("immortal", until=When.ENCOUNTER)
+    c.telepathy(5, until=When.ENCOUNTER)
     c.grant_row("f3395b", on=c.me, until=When.ENCOUNTER)
 
 

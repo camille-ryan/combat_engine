@@ -51,6 +51,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Is that creature standing inside an aura of mine?
 - `c.in_squares(self, area: 'Iterable[Square]', *, side: 'str' = 'any') -> 'list[int]'`
   - Whoever stands in these squares. `side` reads as it does on
+- `c.in_telepathy(self, *, side: 'str' = 'ally', of: 'int | None' = None) -> 'list[int]'`
+  - Creatures inside this creature's telepathy, or none if it has none.
 - `c.last`
   - (no docstring)
 - `c.level_of(self, who: 'int | None' = None) -> 'int'`
@@ -188,7 +190,7 @@ Readers. None of these change anything, so a row whose whole body is one of them
 - `c.wounded(self, on: 'int | None' = None) -> 'bool'`
   - Has lost any hit points at all. What a healing power looks for.
 
-## senses
+## senses, and one radius that is not one
 
 - `c.blindsight(self, radius: 'int' = 0, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Blindsight 5". Light is irrelevant to you entirely.
@@ -204,6 +206,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Trade one sight for the other: the unseen are seen and the rest
 - `c.sight_range(self, squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target has no line of sight to any creature more than 3
+- `c.telepathy(self, squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "Telepathy 5" -- a radius, and the only writer of one.
 - `c.tremorsense(self, radius: 'int' = 0, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Tremorsense 10". Senses through the ground, so light is irrelevant.
 - `c.truesight(self, radius: 'int' = 0, *, of: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

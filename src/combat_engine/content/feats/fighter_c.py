@@ -211,6 +211,24 @@ def _i_used_a_fighter_row(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and p is not None and p.cls == "fighter"
 
 
+def _i_crit_with_a_fighter_attack(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """"A critical hit with a c3 attack power" -- c3 is this file's class,
+    which the feat's own gate reads as "class fighter".
+
+    `p.attack is not None` is the "attack power" half and it is not
+    redundant: `p.cls == "fighter"` is true of the utility rows too, and
+    one of them could in principle be the power a crit is credited to
+    through a grant."""
+    p = get(ev.power)
+    return (
+        ev.attacker == me
+        and ev.critical
+        and p is not None
+        and p.cls == "fighter"
+        and p.attack is not None
+    )
+
+
 def _missed_me_in_melee(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     p = get(ev.power)
     return ev.target == me and p is not None and p.reach.kind == "melee"
@@ -816,13 +834,30 @@ def f2421(c: Cast) -> None:
     )
 
 
-@power("f2470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.telepathy()",))
+@power("f2470", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you score a critical hit with a c3 attack power",
+       on=Trigger(Hit, _i_crit_with_a_fighter_attack, "you crit with c3"))
 def f2470(c: Cast) -> None:
-    """Marks every enemy within the range of a racial telepathy. The
-    crit and the mark are both ordinary; the radius is a racial trait
-    the engine does not carry, and guessing a number would be a feat of
-    whatever size I picked."""
+    """Marks every enemy within the range of a racial telepathy.
+
+    The marker said "the radius is a racial trait the engine does not
+    carry, and guessing a number would be a feat of whatever size I
+    picked" -- right not to guess, and the radius is carried now:
+    `rt:r46-t2` lays it and `c.in_telepathy` reads it. The gate is race
+    r46, which is the race that prints it, so the number always arrives
+    from the trait rather than from here. #665.
+
+    `usage=AT_WILL` rather than the `ENCOUNTER` the row was declared
+    with: the card puts no budget on it and `ENCOUNTER` would have
+    refused every crit after the first. The row was never fired before,
+    so the wrong usage cost nothing until now.
+
+    "You can mark" is taken as marking. A mark on an enemy is never
+    worse for the fighter, and the alternative is a decision point the
+    AI policy has no question to ask at."""
+    for foe in c.in_telepathy(side="enemy"):
+        c.mark(on=foe, until=When.EONT)
 
 
 @power("f2476", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

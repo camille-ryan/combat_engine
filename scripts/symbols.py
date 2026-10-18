@@ -298,7 +298,8 @@ CATEGORIES: dict[str, dict] = {
                 "conjurations", "distance", "enemies", "fallen", "familiar",
                 "familiar_active", "familiar_mode", "first", "height",
                 "held", "here",
-                "in_my_aura", "in_squares", "last", "level_of", "living",
+                "in_my_aura", "in_squares", "in_telepathy", "last",
+                "level_of", "living",
                 "master", "my_aura", "my_weapon", "my_zones", "servants",
                 "size_of", "there", "threatens", "within",
             ]),
@@ -317,10 +318,17 @@ CATEGORIES: dict[str, dict] = {
                 "passive", "quarry", "race_of", "reach", "result", "turn_of",
                 "wounded",
             ]),
-            ("senses", [
+            # `c.telepathy` is the odd one here and is here on purpose.
+            # It is **not** a sense -- nothing asks whether a telepath
+            # perceives anything, and it is deliberately not a
+            # `has_sense` entry -- but it is a radius a creature carries
+            # and this is the section somebody looking for one reads. The
+            # question it answers is `c.in_telepathy`, under "who and
+            # where" beside `c.within`. #665.
+            ("senses, and one radius that is not one", [
                 "blindsight", "darkvision", "has_sense", "low_light",
-                "see_invisible", "see_unseen", "sight_range", "tremorsense",
-                "truesight",
+                "see_invisible", "see_unseen", "sight_range", "telepathy",
+                "tremorsense", "truesight",
             ]),
             ("what the call already knows -- state, not calls", [
                 "declared_feats", "me", "ref", "targets", "world",
@@ -500,7 +508,7 @@ READERS: dict[str, list[str]] = {
     "where, and how far": [
         "adjacent", "distance_between", "leash_of", "line_of_effect",
         "moving_as", "on_the_ground", "prefers_range", "range_profile",
-        "sealed", "speed", "squares",
+        "sealed", "speed", "squares", "telepathy_of",
     ],
     "seeing and being seen": [
         "blinded", "concealment_of", "cover_between", "cover_granters",

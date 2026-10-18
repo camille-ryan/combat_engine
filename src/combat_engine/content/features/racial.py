@@ -1153,9 +1153,23 @@ def rt_r44_t1(c: Cast) -> None:
 
 # -- r46 ---------------------------------------------------------------
 
-_inert("rt:r46-t2",
-       "Two-way speech within 5 squares. Nothing in a fight turns on "
-       "whether a creature can talk.")
+@power("rt:r46-t2", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r46_t2(c: Cast) -> None:
+    """Two-way speech within 5 squares -- and the 5 is the half that is
+    read in a fight.
+
+    **This was `_inert`, and the reason given was right about the talking
+    and wrong about the radius.** "Nothing in a fight turns on whether a
+    creature can talk" is true; three feats then measure *this* radius in
+    a fight -- "each enemy within the range of your telepathy", "each ally
+    within your telepathy range" -- so the number is combat-relevant even
+    though the speech is not. `f3322`'s docstring quotes the old reasoning
+    and is where it came from.
+
+    So the trait lays the radius and nothing else. The speech stays
+    unmodelled, which is still correct. #665."""
+    c.telepathy(5, on=c.me, until=_HOLDS)
 
 
 @power("rt:r46-t1", level=0, cls="", usage=AT_WILL,
@@ -1234,7 +1248,13 @@ def rt_r47_t3(c: Cast) -> None:
 
 _inert("rt:r49-t2",
        "No eating, drinking, breathing or sleeping; none is modelled.")
-_inert("rt:r49-t4", "Speech within 5 squares.")
+@power("rt:r49-t4", level=0, cls="", usage=AT_WILL,
+       action=ActionType.NONE, reach=PERSONAL, target=SELF)
+def rt_r49_t4(c: Cast) -> None:
+    """Speech within 5 squares, and the radius is read in a fight -- see
+    `rt:r46-t2`, which prints the same number and carried the same
+    `_inert` reasoning. #665."""
+    c.telepathy(5, on=c.me, until=_HOLDS)
 _origin("r49", "immortal", instead_of="natural")
 
 
