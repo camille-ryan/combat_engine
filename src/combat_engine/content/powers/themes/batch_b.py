@@ -103,7 +103,9 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Defences
 from combat_engine.engine.grid import Square, spread
+from combat_engine.engine.query import light_level
 from combat_engine.engine.skills import SKILLS
+from combat_engine.engine.types import Light
 
 #: The unnamed attack ability. See the module docstring.
 ABILITY = ("c.ability_for(ref)",)
@@ -1169,14 +1171,24 @@ def p14214(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("c.grant_action('teleport')", "c.teleport(into=)"),
+    dropped=("c.grant_action('teleport')",),
 )
 def p14216(c: Cast) -> None:
-    """The opening teleport is exact. The standing once-a-round 3-square
-    teleport is an action `actions.legal` does not know -- `c.grant_action`
-    silently eats the word -- and the dim-light restriction on both has no
-    lighting to read."""
-    c.teleport(6, who=c.me)
+    """The opening teleport, with the printed requirement on it.
+
+    **"The dim-light restriction has no lighting to read" was the note and
+    is wrong**: `query.light_level` reads `Grid.light` and any darkening
+    zone. `c.teleport(into=)` carries it. #685.
+
+    The standing once-a-round 3-square teleport is the marker that stays --
+    it is an action `actions.legal` does not know and `c.grant_action`
+    silently eats the word. When that lands it will want the same
+    requirement, which is the half of this clause the restriction is
+    "on both" of."""
+    c.teleport(
+        6, who=c.me,
+        into=lambda sq: light_level(c.world, sq) is not Light.BRIGHT,
+    )
 
 
 # ==========================================================================

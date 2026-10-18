@@ -3905,6 +3905,7 @@ class Cast:
         to: Square | None = None,
         toward: int | None = None,
         away_from: int | None = None,
+        into: Callable[[Square], bool] | None = None,
         share: bool = False,
     ) -> bool:
         """Blink somewhere. `to` names the square, as `c.shift` already allowed.
@@ -3919,6 +3920,20 @@ class Cast:
         blinks and then swings has a square to pick and no way to say which,
         so it blinked out of its own reach. `away_from` is the mirror. See
         `_nearest_first`.
+
+        **`into` narrows what counts as a destination at all**, which is a
+        different thing from preferring one: three rows print "you teleport
+        10 squares to any square containing dim light or darkness", and if
+        no such square is in range the teleport does not happen. So this
+        filters `options` rather than sorting them, and an empty result
+        returns False the way an unreachable board already does.
+
+        All three of those rows read the light, and all three said the
+        board does not record it -- "lighting is not on the board", "how
+        brightly a square is lit is not something the board records". It
+        does: `query.light_level` reads `Grid.light` and any darkening
+        zone, and its own docstring counts 13 rows waiting on it. The
+        predicate is theirs to write; this is the door. #685.
         """
         mover = self.me if who is None else who
         # See `c.shift`: the print before anything lengthens it, so the
@@ -3946,6 +3961,8 @@ class Cast:
             )
 
         options = [sq for sq in spread(origin, squares_) if fits(sq)]
+        if into is not None:
+            options = [sq for sq in options if into(sq)]
         if to is not None:
             # `share` arrives into an occupied square, which a row landing
             # somebody in a dying creature's space needs: `resolve._die`

@@ -1065,12 +1065,22 @@ _granted("f3066", "f3066b", swap=Swap(6, utility=True))
 @power("f3066b", level=6, cls="", usage=ENCOUNTER, action=MINOR,
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-       dropped=("c.teleport(into=)",))
+       )
 def f3066b(c: Cast) -> None:
-    """The destination must contain dim light or darkness. Lighting is
-    not on the board, so the teleport is unrestricted and the
-    restriction is named."""
-    c.teleport(10)
+    """The destination must contain dim light or darkness, and it does.
+
+    **"Lighting is not on the board" was the note and is not true** --
+    `query.light_level` reads `Grid.light` and any darkening zone, and
+    `_in_dim_light` a few hundred lines above this uses it. Another row in
+    this same file already carries the correction ("lighting is on the
+    board now"); this one did not get it. `c.teleport(into=)` is the door.
+    #685.
+
+    **An unlit board offers no destination and the teleport does not
+    happen**, which is the printed requirement rather than a failure: every
+    square is `BRIGHT` unless something says otherwise. `c.teleport`
+    returns False and nothing moves."""
+    c.teleport(10, into=lambda sq: light_level(c.world, sq) is not Light.BRIGHT)
 
 
 _granted("f3067", "f3067b", swap=Swap(9, Usage.DAILY))

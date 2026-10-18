@@ -102,6 +102,8 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.dsl import get
 from combat_engine.engine.durations import keywords_of
+from combat_engine.engine.query import light_level
+from combat_engine.engine.types import Light
 
 #: **Retired. `c.augment_with(resource)` never named a gap**, and this
 #: comment argued for it three times -- first as `dsl.use(augment=)`,
@@ -932,11 +934,26 @@ def f3462(c: Cast) -> None:
 
 @power("f3462b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
        reach=PERSONAL, target=SELF, keywords=[Keyword.TELEPORTATION],
-       dropped=("c.teleport(into=)",))
+)
 def f3462b(c: Cast) -> None:
-    """The longer hop to a dark square is dropped: how brightly a square is
-    lit is not something the board records."""
-    c.teleport(5)
+    """Five squares, or ten to a square that is dim or dark.
+
+    **"How brightly a square is lit is not something the board records"
+    was the note and is wrong** -- `query.light_level` reads `Grid.light`
+    and any darkening zone. `c.teleport(into=)` carries the requirement.
+    #685.
+
+    **The longer hop is tried first and the plain one is the fallback**,
+    which is what "you can **instead** teleport to that square" means in
+    play: the choice is only ever offered when a qualifying square is in
+    range, and taking it is never worse -- it is the same action for twice
+    the distance. `c.teleport` returns False when nothing qualifies, which
+    makes the fallback one line rather than a scan of its own."""
+    dark = light_level
+    if not c.teleport(
+        10, into=lambda sq: dark(c.world, sq) is not Light.BRIGHT
+    ):
+        c.teleport(5)
 
 
 def _f3463_vanish(using: Cast) -> None:

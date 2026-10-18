@@ -19078,7 +19078,134 @@ def the_price_the_policy_puts_on_running(out: Result) -> None:
              " this scales with the penalty, not with the runner, and #683"
              " records that as the remaining half")
 
+def a_teleport_that_must_land_somewhere_dark(out: Result) -> None:
+    """Three rows teleport only to a square that is dim or dark.
+
+    #685. All three carried `c.teleport(into=)` and all three said the
+    information was not there -- "lighting is not on the board", "how
+    brightly a square is lit is not something the board records", "the
+    dim-light restriction has no lighting to read". `query.light_level`
+    reads `Grid.light` and any darkening zone, and its own docstring
+    counts 13 rows waiting on it; a row in the same file as `f3066b`
+    already carried the correction.
+
+    **`into` is a requirement and not a preference**, which is the thing
+    to get right: if no qualifying square is in range the teleport does not
+    happen. So it filters the destination set rather than sorting it, and
+    the rule asserts both directions -- an unlit board moves nobody, and a
+    darkened one moves them into the dark and nowhere else.
+
+    **Posed with a darkening zone**, because every square is `BRIGHT`
+    unless something says otherwise. So these rows do nothing on an
+    ordinary board, which is correct and means they read silent in a
+    sweep.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import light_level
+    from combat_engine.engine.types import Light
+
+    # -- the unlit board: the requirement cannot be met ------------------
+    world, me, _ = audit_board("f3066b", 1)
+    was = world.get(me, Position).square
+    out.that(light_level(world, was) is Light.BRIGHT,
+             "the board is lit, which is the default and the control",
+             f"{light_level(world, was)}")
+    REGISTRY["f3066b"].body(Cast(world=world, me=me, ref="f3066b"))
+    out.that(world.get(me, Position).square == was,
+             "so the teleport does not happen at all -- the printed"
+             " requirement, not a failure",
+             f"{was} -> {world.get(me, Position).square}")
+
+    # -- a darkened board: it lands in the dark and nowhere else ---------
+    world, me, _ = audit_board("f3066b", 1)
+    here = world.get(me, Position)
+    x, y = here.square
+    # A patch of darkness a few squares off, laid by somebody else so the
+    # row under test is not the thing that made its own destination.
+    dark = [(x + 3, y), (x + 3, y + 1)]
+    laid = Cast(world=world, me=me, ref="drivers:darkness").zone(
+        dark, label="drivers:dark", until=When.ENCOUNTER, obscured=Light.DARK)
+    # `c.zone` returns the zone's **id**, not an effect -- 0 for a zone it
+    # could not lay.
+    out.that(bool(laid), "a darkened zone on the board", f"{laid}")
+    if not laid:
+        return
+    out.that(all(light_level(world, sq) is Light.DARK for sq in dark),
+             "and the reader agrees those squares are dark",
+             f"{[str(light_level(world, sq)) for sq in dark]}")
+    out.that(light_level(world, (x, y)) is Light.BRIGHT,
+             "while the square the caster is standing in is not")
+
+    REGISTRY["f3066b"].body(Cast(world=world, me=me, ref="f3066b"))
+    landed = world.get(me, Position).square
+    out.that(landed in dark,
+             "the teleport lands in the darkness",
+             f"{(x, y)} -> {landed}")
+    out.that(light_level(world, landed) is not Light.BRIGHT,
+             "which is to say: in a square that is not lit, and there were"
+             " far more lit squares in range than dark ones -- so this is"
+             " the filter and not luck",
+             f"{light_level(world, landed)}")
+
+    # -- f3462b takes the long hop when it can, the short one when it cannot
+    world, me, _ = audit_board("f3462b", 1)
+    here = world.get(me, Position)
+    x, y = here.square
+    # **Found rather than assumed.** `(x + 8, y)` was the first draft and the
+    # board had something in it, so the long hop had no legal destination,
+    # the row fell back to its plain five, and the rule read like the
+    # `instead` not working. The square has to be passable, empty, and
+    # genuinely beyond five.
+    from combat_engine.engine.grid import distance as _far
+
+    far = [
+        sq for dx in range(6, 10) for dy in (0, 1, -1)
+        if (sq := (x + dx, y + dy))
+        and world.grid.passable(sq)
+        and world.grid.occupant(sq) is None
+        and 5 < _far((x, y), sq) <= 10
+    ][:1]
+    out.that(bool(far),
+             "an empty square beyond the plain five and inside the dark ten",
+             f"{far}")
+    if not far:
+        return
+    Cast(world=world, me=me, ref="drivers:darkness").zone(
+        far, label="drivers:dark", until=When.ENCOUNTER, obscured=Light.DARK)
+    out.that(light_level(world, far[0]) is Light.DARK,
+             "and the reader agrees it is dark",
+             f"{light_level(world, far[0])}")
+    REGISTRY["f3462b"].body(Cast(world=world, me=me, ref="f3462b"))
+    out.that(world.get(me, Position).square in far,
+             "f3462b takes the ten-square hop to the dark square, which is"
+             " the printed `instead` and is out of reach of its plain five",
+             f"{(x, y)} -> {world.get(me, Position).square}")
+
+    world, me, _ = audit_board("f3462b", 1)
+    was = world.get(me, Position).square
+    REGISTRY["f3462b"].body(Cast(world=world, me=me, ref="f3462b"))
+    now = world.get(me, Position).square
+    out.that(now != was,
+             "and on a lit board it still takes its plain five -- the"
+             " fallback, without which the row would do nothing at all",
+             f"{was} -> {now}")
+    from combat_engine.engine.grid import distance
+
+    out.that(distance(was, now) <= 5,
+             "no further than five, since the longer hop needs a dark"
+             " square and there is none",
+             f"{distance(was, now)}")
+
 DRIVERS = {
+    "teleport_into": (
+        a_teleport_that_must_land_somewhere_dark,
+        "a teleport whose destination must be dim or dark (#685)",
+    ),
     "run_price": (
         the_price_the_policy_puts_on_running,
         "what the policy charges for a run, now that two rows can change it",

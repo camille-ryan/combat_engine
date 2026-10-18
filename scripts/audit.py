@@ -1927,8 +1927,29 @@ def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]
 #: Derived, not tabulated: **57 of those 63 name a grab in their own body**
 #: and 35 again in their target line, so the harness can read what to pose.
 #: A 63-entry table would go stale the first time a row was rewritten.
+#: **A second knob: darkness.** `query.light_level` answers `BRIGHT` for
+#: every square of a board that never mentions light, which is the right
+#: default and means a row whose destination *must* be dim or dark has
+#: nowhere legal to go. `f3066b` and `p14216` teleport only into darkness
+#: and so correctly do nothing here -- 48 and 42 attempts, both silent, both
+#: right. `query.light_level`'s own docstring counts 13 rows waiting on the
+#: light model, so this is not two refs' worth of knob.
+#:
+#: Aimed by the row's own text like the grab. **`light_level` is the pattern
+#: that matters** -- a row that reads the light is a row that wants a lit and
+#: a dark square to tell apart, whichever way round its own test runs.
+#: `p14216` is the case that settled it: it asks
+#: `light_level(...) is not Light.BRIGHT`, so a pattern looking for `DIM` or
+#: `DARK` missed it and it went on reporting silent while `f3066b` beside it
+#: started firing. The printed phrases are kept as well, for a row that
+#: states the requirement without reading it yet.
+#:
+#: "Dark" alone is deliberately not in here: it would catch every shadow
+#: keyword in the tree.
 _WANTS = (
     ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
+    ("dark", re.compile(
+        r"light_level|dim light|darkness|Light\.DIM|Light\.DARK")),
 )
 
 #: A printed Requirement that wants the state *absent*. Posing it for one of
@@ -1946,6 +1967,7 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     built fresh per `(ref, seed)` and nothing else sees it.
     """
     from combat_engine.engine import Health
+    from combat_engine.engine.types import Light
 
     if declared is None:
         return
@@ -1979,6 +2001,34 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
                 square=(6, 7), team=foe_team, grabbed_by=caster,
             )
             world.need(held, Health).hp -= 5
+        if what == "dark":
+            # **Painted into the terrain, not laid as a zone.** A zone is an
+            # effect with an owner and a duration, so it would show up in
+            # the row's own credit and in everybody else's reckoning of what
+            # is on the board. `Grid.light` is the map, which is what a
+            # board *being* dark means, and `light_level` reads it first.
+            #
+            # A patch rather than the whole board: a row that must land in
+            # darkness has to be able to tell the dark squares from the lit
+            # ones, and a uniformly dark board proves nothing about the
+            # filter -- the same reason `drivers.phasing` records for its
+            # own destination sets.
+            #
+            # Three squares out **from wherever the caster actually
+            # stands**, so it is inside every printed range in the family (5
+            # and up) and outside the caster's own square. The first version
+            # hardcoded `(6, 8)`, which is where `board` puts a *monster*:
+            # `f3066b` started firing and `p14216` stayed silent, because a
+            # character is fielded somewhere else and the patch was out of
+            # its six squares.
+            from combat_engine.engine.components import Position as _Pos
+
+            here = world.get(caster, _Pos)
+            if here is not None:
+                cx, cy = here.square
+                for dx in (3, 4):
+                    for dy in (0, 1):
+                        world.grid.light[(cx + dx, cy + dy)] = Light.DARK
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what
