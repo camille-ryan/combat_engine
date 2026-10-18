@@ -982,7 +982,7 @@ DID_SOMETHING = {
 # hold -- because the engine says those by clearing.
 # **`Note` is deliberately not here**, and used to be. Its own docstring says
 # "engine commentary, carries no rules meaning", and it holds `text` and
-# nothing else -- no actor, no source, no target -- so `_after_its_own_use`
+# nothing else -- no actor, no source, no target -- so `_its_own_slice`
 # has nothing to attribute it with and credits whichever note lands in the
 # window. Five of the rows pinned in `--verdicts` were credited with
 # `8 carries f336 (1 left)`, emitted by another creature arming its own feat,
@@ -2164,11 +2164,19 @@ PROVOKE_NOISE = {
 #: Needed for the reason `_own_movement` is needed: clearing a relation is the
 #: *whole content* of several rows -- "it dismounts", "the grab ends", "the
 #: guard is released" -- so suppressing the name outright makes those rows
-#: unprovable, and admitting it outright credits every hidden attacker. The
-#: engine's own housekeeping is the one that says `why="attacked"`; anything
-#: else was asked for by a row.
-def _own_unbinding(world, cursor: int) -> set[str]:  # noqa: ANN001
-    for e in world.bus.log[cursor:]:
+#: unprovable, and admitting it outright credits every hidden attacker.
+#:
+#: **Takes the row's own slice, not the window from the top of the fight**, and
+#: this comment used to end "the engine's own housekeeping is the one that says
+#: `why="attacked"`; anything else was asked for by a row." That was false
+#: twice. `durations.py:587` clears an effect's relations with **the effect's
+#: own `why`**, so `"died"`, `"start of turn"`, `"end of turn"` and `"saved"`
+#: are housekeeping too -- and `f775`, a feat whose body is a docstring and
+#: nothing else, was credited `RelationCleared why='start of turn'`. Worse, the
+#: provocation can be a kill, which clears five relations with `why="died"`
+#: before the row runs at all. #690.
+def _own_unbinding(slice_: list) -> set[str]:
+    for e in slice_:
         if e.kind == "RelationCleared" and getattr(e, "why", "") != "attacked":
             return {"RelationCleared"}
     return set()
@@ -2177,12 +2185,18 @@ def _own_unbinding(world, cursor: int) -> set[str]:  # noqa: ANN001
 #: square" is what four of them do. Subtracting movement as provocation
 #: noise therefore made it impossible for any of them to be credited with
 #: anything, and they reported SILENT while firing correctly twelve times
-#: out of eight. The provocation this harness makes is an attack and a
-#: shift by somebody *else*, so movement by the row's own owner is not
-#: noise: it is the answer.
-def _own_movement(world, ref: str, cursor: int, owner: int) -> set[str]:  # noqa: ANN001
+#: out of eight. So movement by the row's own owner is not noise: it is the
+#: answer.
+#:
+#: **Inside the row's own slice, though.** The old form read the whole window
+#: from the top of the fight on the argument that "the provocation this harness
+#: makes is an attack and a shift by somebody *else*" -- and for a row whose
+#: trigger is "you kill an adjacent creature" the provocation is the **caster**
+#: walking over and killing one. `p13813`, whose body is a single `c.note`, was
+#: credited `Moved, MoveStart, MoveEnd` for that walk. #690.
+def _own_movement(slice_: list, owner: int) -> set[str]:
     kinds = set()
-    for e in world.bus.log[cursor:]:
+    for e in slice_:
         if e.kind in ("Moved", "MoveStart", "MoveEnd") and getattr(e, "actor", None) == owner:
             kinds.add(e.kind)
     return kinds
@@ -2719,8 +2733,8 @@ def _claimed(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
     return out
 
 
-def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN001
-    """Event kinds this row emitted, bounded at both ends.
+def _its_own_slice(world, ref: str, cursor: int) -> list | None:  # noqa: ANN001
+    """The events in the row's own window, or `None` if it never ran.
 
     A triggered row is fired by provoking it, and the provocation is an
     attack -- which drops creatures, applies conditions and expires effects
@@ -2766,21 +2780,31 @@ def _after_its_own_use(world, ref: str, cursor: int) -> set[str]:  # noqa: ANN00
     `use()` nested inside this row's own body emits *deeper* and is still
     this row's doing, so `PowerUsed` at a greater depth does not stop it --
     only a sibling or a shallower one does.
+    **One bound, read by everything that asks "did this row do it".** This was
+    `_after_its_own_use`, returning the kinds -- and three terms beside it read
+    the raw window instead and credited the row with the provocation's work
+    (`_own_movement`, `_own_unbinding`, and a diff of live effects). So it
+    returns the events now and the kinds are taken off it. #690.
+
+    `None` rather than `[]` for "no mark found", because the two want different
+    treatment: a caller that found no `PowerUsed` for this ref has no slice to
+    narrow to and should keep whatever window it had, rather than silently
+    crediting nothing.
     """
     log = world.bus.log[cursor:]
     for i, e in enumerate(log):
         if e.kind == "PowerUsed" and getattr(e, "power", None) == ref:
             mine = getattr(e, "depth", 0)
-            out: set[str] = set()
+            out: list = []
             for x in log[i + 1:]:
                 at = getattr(x, "depth", 0)
                 if at < mine:
                     break
                 if x.kind == "PowerUsed" and at <= mine:
                     break
-                out.add(x.kind)
+                out.append(x)
             return out
-    return set()
+    return None
 
 
 def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
@@ -3393,6 +3417,22 @@ def _run_all(refs: list[str], jobs: int = 0) -> list[Result]:
     return out
 
 
+#: **One board for a row declared inert, not the full 48.** #633: the marker
+#: "is a claim the audit can never contradict" -- the row was never run at
+#: all, so all 814 carrying it were unexamined and one that grew a firing
+#: body stayed in the inert bucket silently.
+#:
+#: Running them through `_attempts` would be honest and unaffordable: a row
+#: that shows nothing pays every attempt, and an inert row shows nothing by
+#: definition, so all 814 would pay 48 boards each -- about a 59% rise in
+#: the tail that is already most of the sweep's cost.
+#:
+#: One board is enough for the question actually being asked. The claim is
+#: *"this row has nothing to say in a fight"*; a single board cannot prove
+#: it and can refuse it, which is the asymmetry #633 is about. A row that
+#: does something will almost always do it on the first board, because an
+#: inert-but-firing row is one that lays an effect unconditionally -- that
+#: is what being mis-declared looks like.
 def _attempts(out: Result):  # noqa: ANN202
     """`(seed, face, posed)`, giving up once the row has shown itself.
 
@@ -3410,6 +3450,13 @@ def _attempts(out: Result):  # noqa: ANN202
     that never show anything"* -- 1,374 of 21,270. The posed pass is paid by
     the same few.
     """
+    # Read off the row rather than from a set the caller fills, because
+    # `_run_all` hands each ref to a **separate process** and a module
+    # global would not travel. The header is data and every worker reads it.
+    claimed = get(out.ref)
+    if claimed is not None and claimed.out_of_combat:
+        yield 1, None, False
+        return
     for posed in (False, True):
         for face in LOADED:
             for seed in range(1, TRIES + 1):
@@ -3491,6 +3538,27 @@ VERDICT_ROWS = (
 VERDICT_SILENT = (
     "f172",
     "f139",
+    # **Two rows whose bodies do nothing observable anywhere**, which is a
+    # stronger control than the pair above and was wanted for a reason. #204's
+    # two install nothing *on this board* -- they are gated on a two-weapon
+    # build the audit never deals -- so a widened window only shows up on them
+    # if the board happens to be carrying the noise. These two would report
+    # credit on any board at all.
+    #
+    # `f775`'s body is a docstring and nothing else. `p13813`'s is a single
+    # `c.note`, and `Note` is deliberately outside `DID_SOMETHING` because it
+    # has no actor to attribute.
+    #
+    # Both reported `ok` until #690: `f775` was credited
+    # `RelationCleared why='start of turn'` -- an effect expiring, by the
+    # engine's own housekeeping -- and `p13813` was credited `Moved`,
+    # `RelationCleared` and `ConditionApplied` for the **caster's own walk to
+    # the kill that provoked it**, the five relations the corpse dropped, and
+    # the grab the provoking row laid. Found by #633's inert gate, which is
+    # what a declared-inert row is good for: a control group for this
+    # attribution.
+    "f775",
+    "p13813",
 )
 
 #: Pinned rows that do **not** verdict correctly, named so the rest can be a
@@ -3530,7 +3598,7 @@ def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
 
     Against a pinned list that hazard is answerable by reading the result,
     which is why the control lives here. The attribution fixes in
-    `_after_its_own_use` and the trait branch are what make the ordinary
+    `_its_own_slice` and the trait branch are what make the ordinary
     verdict honest; this is what stops them being quietly widened again.
     """
     wrong: list[str] = []
@@ -3642,7 +3710,8 @@ def audit(ref: str) -> Result:
                 # The same depth-bounded slice the triggered branch uses,
                 # from this trait's own `use()`. `dsl.use` emits `PowerUsed`
                 # while arming, so there is a mark to find.
-                mine_now = _after_its_own_use(world, ref, world.fight_cursor)
+                own_now = _its_own_slice(world, ref, world.fight_cursor)
+                mine_now = {e.kind for e in own_now} if own_now is not None else set()
                 dealt_now = any(
                     str(getattr(e, "detail", "") or "").startswith(ref)
                     for e in world.bus.log[world.fight_cursor:]
@@ -3651,7 +3720,8 @@ def audit(ref: str) -> Result:
                 out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
                 ) | _claimed(world, ref, world.fight_cursor) | _own_unbinding(
-                    world, world.fight_cursor
+                    own_now if own_now is not None
+                    else world.bus.log[world.fight_cursor:]
                 )
                 # A trait's effect was installed by arming, so it is measured
                 # against the board before that.
@@ -3691,7 +3761,8 @@ def audit(ref: str) -> Result:
                 # provocation's damage is not: `PROVOKE_NOISE` drops both
                 # kinds wholesale, so a triggered row whose *whole content*
                 # is damage reported silent however well it worked.
-                mine = _after_its_own_use(world, ref, cursor)
+                own = _its_own_slice(world, ref, cursor)
+                mine = {e.kind for e in own} if own is not None else set()
                 # **Damage this row dealt, by name.** `PROVOKE_NOISE` drops
                 # both damage kinds wholesale -- it has to, the provocation
                 # is an attack -- so a triggered row whose whole content is
@@ -3716,9 +3787,28 @@ def audit(ref: str) -> Result:
                 out.events |= (mine - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt else set()
                 ) | _claimed(world, ref, cursor)
-                out.events |= _own_movement(world, ref, cursor, caster)
-                out.events |= _own_unbinding(world, cursor)
-                if set(world.effects.live) - had:
+                # **All three of these read the whole window and credited
+                # the provocation**, which for a row triggered by "you kill
+                # an adjacent creature" is the *caster* walking over and
+                # killing one. `p13813`, whose entire body is a `c.note`, was
+                # credited `Moved`, `RelationCleared` and `ConditionApplied`
+                # for that walk, the five relations the corpse dropped, and
+                # the grab the provoking row laid. #690, and it is #216
+                # arriving a fourth time by the one route the depth bound
+                # had been left out of.
+                window = own if own is not None else world.bus.log[cursor:]
+                out.events |= _own_movement(window, caster)
+                out.events |= _own_unbinding(window)
+                # **By `Effect.by`, not by a diff of what is live.** The diff
+                # counted any effect anybody laid, so the provocation's own
+                # modifiers answered for the row. `Effect.by` is the laying
+                # ref outright (#580) and the last-resort branch below
+                # already uses it, for this exact fault on `p14262`.
+                mine_eff = {
+                    i for i, e in world.effects.live.items()
+                    if getattr(e, "by", "") == ref
+                }
+                if mine_eff - had:
                     out.events.add("ConditionApplied")
                 continue
             if not _use_with_any_grip(world, caster, ref):
@@ -3754,7 +3844,9 @@ def audit(ref: str) -> Result:
             out.events |= (
                 {e.kind for e in world.bus.log[cursor:]}
                 - {"RelationCleared", "EffectApplied"}
-            ) | _own_unbinding(world, cursor)
+            ) | _own_unbinding(
+                _its_own_slice(world, ref, cursor) or world.bus.log[cursor:]
+            )
             if laid:
                 out.events |= {"ConditionApplied", "EffectApplied"}
         except Exception:  # the traceback is the finding
@@ -4081,6 +4173,18 @@ def main() -> int:
         if p.out_of_combat:
             # Declared inert. A cantrip that lights a torch is not a silent
             # power, it is a power with nothing to say in a fight.
+            #
+            # **And the claim is checked now rather than taken.** #633:
+            # `out_of_combat=True` was "a claim the audit can never
+            # contradict" -- the row was skipped, so 814 of them were
+            # unexamined and one that grew a firing body stayed quietly in
+            # this bucket. One board each, because the
+            # question is whether the claim can be *refused*.
+            #
+            # Worth it because the claim goes stale in bulk: 29 rows were
+            # found by hand in one session, 24 of them declaring that the
+            # light model did not exist after it landed. A gate finds the
+            # next 29 without anybody grepping docstrings.
             inert.append(ref)
             continue
         chosen.append(ref)
@@ -4100,6 +4204,20 @@ def main() -> int:
     ]
     for line in refused:
         print(f"  IGNORED {line}")
+
+    # **The inert claim, checked rather than taken.** #633: `out_of_combat=
+    # True` was a claim "the audit can never contradict", so 814 rows were
+    # unexamined. One board each -- see `_attempts` for why falsifying is
+    # affordable where auditing is not -- and a row that *does* something
+    # is reported as AWAKE, which is the inert twin of `OUTGROWN`.
+    #
+    # Red, for `OUTGROWN`'s reason: a claim that has stopped being true is
+    # a loosening already in place. 29 such rows were found by hand in one
+    # session, 24 of them declaring the light model absent after it landed.
+    awake = [
+        r for r in _run_all(inert, args.jobs)
+        if not r.error and (r.events & DID_SOMETHING)
+    ]
 
     broken, silent, never, known_quiet, outgrown = [], [], [], [], []
     for r in _run_all(chosen, args.jobs):
@@ -4188,6 +4306,11 @@ def main() -> int:
     for r in outgrown:
         print(f"  OUTGROWN {r.ref:<9} does something now -- delete its KNOWN_SILENT entry")
         print(f"      the entry still argues: {KNOWN_SILENT[r.ref]}")
+    for r in awake:
+        print(f"  AWAKE   {r.ref:<10} declared `out_of_combat=True` and does"
+              f" something: {', '.join(sorted(r.events & DID_SOMETHING))}")
+        print("      the claim is that it has nothing to say in a fight."
+              " Either the body or the marker is wrong -- #633")
     # One line each, where `inert` gets a single summary line. Being
     # deliberately inert is a finished state; being unfinished is a debt,
     # and the length of the list is the pressure. A count would hide a
@@ -4257,10 +4380,18 @@ def main() -> int:
     if reached == len(_corpus()):
         full = True
     if not chosen:
-        print("\n  SKIPPED -- no row was in scope, so nothing was checked")
-        print("  (`--changed` reads `git status`; on a clean tree use `--since` "
-              "for everything touched since the last full sweep)")
-        return 0
+        # **Unless the inert rows were the scope.** A selection that is
+        # entirely `out_of_combat` rows -- which is how #633's census is
+        # taken -- checked something, and an AWAKE row in it must still
+        # fail. The skip message was returning 0 over the top of four of
+        # them. #633.
+        if inert:
+            print(f"\n  {len(inert)} inert rows checked and no live row in scope")
+        else:
+            print("\n  SKIPPED -- no row was in scope, so nothing was checked")
+            print("  (`--changed` reads `git status`; on a clean tree use `--since` "
+                  "for everything touched since the last full sweep)")
+        return 1 if awake else 0
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     # **Fires and does something is not the same as finished.** A `dropped=`
     # row is fired and lands in this total, which is honest about what it did
@@ -4271,7 +4402,11 @@ def main() -> int:
         print(f"  {playing} of those play with a clause missing -- "
               f"counted here because they fire, not because they are done")
     if inert:
-        print(f"  {len(inert)} declared out of combat, not fired: {', '.join(inert[:6])}"
+        # **"not fired" was the old wording and it is no longer true.** Every
+        # one of these gets a board now; what is reported is that none of
+        # them did anything, which is the claim. #633.
+        print(f"  {len(inert)} declared out of combat, {len(inert) - len(awake)}"
+              f" of them silent on a board as claimed: {', '.join(inert[:6])}"
               + (" ..." if len(inert) > 6 else ""))
     if partial:
         # **Not all of them were skipped.** A `todo` row is refused in play
@@ -4422,7 +4557,10 @@ def main() -> int:
     # it is the one that has been silent four times.
     # `fresh` rather than `silent`: a carried row is the recorded baseline,
     # and `healed` fails because a stale entry is a loosening already in place.
-    return 1 if (broken or fresh or healed or refused or outgrown) else 0
+    # `awake` fails for `outgrown`'s reason and #633's: a row that declares
+    # it has nothing to say in a fight and then does something has excused
+    # itself from the audit on a claim that is no longer true.
+    return 1 if (broken or fresh or healed or refused or outgrown or awake) else 0
 
 
 if __name__ == "__main__":
