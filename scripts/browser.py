@@ -157,7 +157,16 @@ def main() -> int:
         page = browser.new_page(viewport={"width": 1500, "height": 1000})
 
         problems: list[str] = []
-        page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
+        def console_error(m) -> None:  # noqa: ANN001
+            """Collect it unless it is a stream the page was told to leave."""
+            if m.type != "error":
+                return
+            where = str((m.location or {}).get("url", ""))
+            if _dropped_stream(m.text, where):
+                return
+            problems.append(m.text)
+
+        page.on("console", console_error)
         page.on("pageerror", lambda e: problems.append(str(e)))
 
         def failed_request(response) -> None:  # noqa: ANN001
@@ -761,6 +770,41 @@ def _set_speed(page, name: str) -> None:  # noqa: ANN001
         "(el, v) => { el.value = v; el.dispatchEvent(new Event('change')); }",
         name,
     )
+
+
+#: An abandoned **event stream**, which is not a page fault.
+#:
+#: The page holds one `GET /api/encounter/<id>/events` open for as long as a
+#: fight lasts. Start another fight -- which `_restart` does on four seeds --
+#: or navigate, and the old one is dropped; Chromium logs the cut response to
+#: the console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`, the listener
+#: collects it as an error, and "still no script errors after playing" fails
+#: on the suite's own restarts.
+#:
+#: **Keyed on the request, not on a moment.** The first attempt wrapped each
+#: navigation and dropped aborts logged inside its window; it left one abort
+#: every run, because the message arrives a beat *after* the navigation
+#: resolves and because the restarts -- not the reloads -- are where most of
+#: them come from. Instrumenting the listener showed both:
+#:
+#:     >>> CONSOLE ...ERR_INCOMPLETE_CHUNKED_ENCODING @ /api/encounter/cfe52.../events?from=0
+#:     >>> CONSOLE ...ERR_INCOMPLETE_CHUNKED_ENCODING @ /api/encounter/24eda.../events?from=0
+#:
+#: each landing between checks, on a *different* encounter id -- the fight
+#: the page had just left.
+#:
+#: Narrow in both halves, which is what stops it being a waiver: the message
+#: has to be one of these two codes **and** name the stream endpoint. An
+#: abort on any other URL is still a finding, and any other console error on
+#: the stream is still a finding -- including the page throwing while it
+#: reconnects, which is the thing worth catching here.
+_ABORTED = ("net::ERR_INCOMPLETE_CHUNKED_ENCODING", "net::ERR_ABORTED")
+
+
+def _dropped_stream(text: str, where: str) -> bool:
+    """Is this console error an abandoned event stream? See `_ABORTED`."""
+    return (any(word in text for word in _ABORTED)
+            and "/events" in where and "/api/encounter/" in where)
 
 
 def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
