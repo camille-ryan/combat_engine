@@ -1042,9 +1042,20 @@ def i2026x1(c: Cast) -> None:
 
 
 @power("i2026p1", level=3, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET)
 def i2026p1(c: Cast) -> None:
-    """Light only."""
+    """Bright light in a 5-square radius, stoppable as a minor action.
+
+    **"Light only" was the whole docstring and it stopped being true**
+    (#686). Inert on a board nothing has darkened, which is what bright
+    light is -- and it plays the moment a square goes dark, which is what
+    `out_of_combat` denied.
+
+    "As a minor action you can stop emitting light" is `c.endable`, the
+    standing verb for a hold its owner may drop."""
+    held = c.light(5, on=c.me, until=When.ENCOUNTER)
+    if held is not None:
+        c.endable(held, ActionType.MINOR)
 
 
 @power("i2026p2", level=3, cls=ITEM, usage=DAILY, action=MINOR,
@@ -1238,8 +1249,16 @@ def i3333p1(c: Cast) -> None:
 @power("i3362p1", level=3, cls=ITEM, usage=ENCOUNTER, action=MINOR,
        reach=Melee(1), target=NO_TARGET, out_of_combat=True)
 def i3362p1(c: Cast) -> None:
-    """Carrying a flame about. Light only, and the fire it picks up is
-    scenery the printed effect explicitly cannot aim at a creature."""
+    """Carrying a flame about, and the fire it picks up is scenery the
+    printed effect explicitly cannot aim at a creature.
+
+    **Still inert, and for a reason the light model does not touch.** The
+    old note said "light only", which was the premise #686 corrected
+    everywhere else -- but this card prints **no radius**. "It can be as
+    large as a torch flame" is a size, not an illumination clause, and
+    inventing a radius from it would be writing a number the page does not
+    give. The rest is an object moved from one square to another with no
+    combat consequence stated."""
 
 
 @power("i3366p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,

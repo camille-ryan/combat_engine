@@ -19367,7 +19367,193 @@ def what_a_carried_light_does_and_what_a_dimmer_does(out: Result) -> None:
                  f"and {ref} is no longer declared inert, which is the"
                  " premise that was false")
 
+def one_lamp_three_settings_and_putting_the_lights_out(out: Result) -> None:
+    """The rest of #686: a lamp with settings, and a row that suppresses.
+
+    Fifteen more of the twenty-four rows that were `out_of_combat=True` on
+    "light is not modelled". Two shapes here are new and neither is a
+    radius:
+
+    * **Settings of one lamp.** `i1062` prints dim 20, bright 20 and "no
+      light" as three free actions. They are settings, not three effects to
+      hold at once -- `query.light_level` asks the brightening pass first,
+      so a bright 20 would silently swallow a dim 20 the player had just
+      chosen. Each row clears its siblings first.
+    * **Putting the lights out.** `i1014p1` suppresses every active light
+      source within 10 squares. *Suspended*, not ended, which is what the
+      word means and what #470 built -- and the card's own next sentence is
+      the proof: "light sources activated after you use this power function
+      normally."
+
+    **That row is why `EffectSuspended` exists.** It fired 48 times with a
+    lit carrier beside it and read SILENT, correctly: `Effects.suspend` set
+    a flag and called `_lift`, which announces what a condition leaving
+    needs and nothing for a modifier. So suspension was an unobservable
+    state change. The event is the fix and the harness learning to diff
+    state would have been the wrong one -- the same correction
+    `c.resize_aura` got.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import EffectSuspended
+    from combat_engine.engine.query import light_level
+    from combat_engine.engine.types import Light
+
+    # -- suspension announces itself, both ways --------------------------
+    world, me, _ = audit_board("i1014p1", 1)
+    seen: list[EffectSuspended] = []
+    world.bus.on(EffectSuspended, seen.append)
+    held = Cast(world=world, me=me, ref="drivers:lamp").light(3, on=me)
+    out.that(held is not None, "a carried light to suspend")
+    if held is None:
+        return
+    out.that(world.effects.suspend(held),
+             "`Effects.suspend` lifts it")
+    out.that(bool(seen) and not seen[-1].back,
+             "and says so -- an `EffectSuspended` with `back` False, which"
+             " is what `i1014p1` fired 48 times without",
+             f"{seen}")
+    out.that(world.effects.resume(held),
+             "and `resume` puts it back")
+    out.that(len(seen) == 2 and seen[-1].back,
+             "announcing that too, with `back` True -- one event for both"
+             " halves, so a listener can tell them apart",
+             f"{[(e.why, e.back) for e in seen]}")
+
+    # -- i1014p1 puts out what is near and leaves what is far ------------
+    world, me, _ = audit_board("i1014p1", 1)
+    here = world.get(me, Position)
+    if here is None:
+        return
+    x, y = here.square
+    others = [o for o in sorted(world.entities) if o != me
+              and world.get(o, Position) is not None]
+    out.that(len(others) >= 2, "two other creatures to carry lamps",
+             f"{others}")
+    if len(others) < 2:
+        return
+    near, far = others[0], others[-1]
+    from combat_engine.engine.movement import place
+
+    place(world, near, (x + 2, y))
+    place(world, far, (x + 14, y))
+    lit_near = Cast(world=world, me=near, ref="drivers:lamp").light(1, on=near)
+    lit_far = Cast(world=world, me=far, ref="drivers:lamp").light(1, on=far)
+    out.that(lit_near is not None and lit_far is not None,
+             "both carrying a light")
+    if lit_near is None or lit_far is None:
+        return
+    out.that(not lit_near.suspended and not lit_far.suspended,
+             "and neither suppressed to start with -- the control")
+
+    REGISTRY["i1014p1"].body(Cast(world=world, me=me, ref="i1014p1"))
+    out.that(lit_near.suspended,
+             "the lamp two squares off is suppressed")
+    out.that(not lit_far.suspended,
+             "and the one fourteen squares off is NOT -- the ten is doing"
+             " the work, which a sweep of the whole board would not show")
+    out.that(not lit_near.ended,
+             "suppressed and not ended, which is the printed word and the"
+             " reason this is `suspend` rather than `end`")
+
+    # -- the three settings of one lamp ----------------------------------
+    world, me, _ = audit_board("i1062p2", 1)
+    here = world.get(me, Position)
+    if here is None:
+        return
+
+    def level() -> Light:
+        return light_level(world, here.square)
+
+    def use(ref: str) -> None:
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+
+    use("i1062p1")
+    out.that(level() is Light.DIM, "dim 20 sets the lamp to dim",
+             f"{level()}")
+    use("i1062p2")
+    out.that(level() is Light.BRIGHT,
+             "bright 20 after it sets it bright -- and that is only"
+             " observable because the dim one was cleared: the brightening"
+             " pass is asked first, so an uncleared dim 20 would read"
+             " bright either way",
+             f"{level()}")
+    use("i1062p1")
+    out.that(level() is Light.DIM,
+             "and dim again goes back, which is the assertion that proves"
+             " the clearing rather than the reader's order",
+             f"{level()}")
+    use("i1062p3")
+    out.that(level() is Light.BRIGHT,
+             "\"sheds no light\" clears the family and lays nothing, so the"
+             " square reads its own level again",
+             f"{level()}")
+
+    # -- the plain radii -------------------------------------------------
+    for ref, radius, lit in (("i3553p1", 10, Light.BRIGHT),
+                             ("i3482p1", 5, Light.BRIGHT)):
+        world, me, _ = audit_board(ref, 1)
+        here = world.get(me, Position)
+        if here is None:
+            continue
+        x, y = here.square
+        world.grid.light[(x + radius, y)] = Light.DARK
+        world.grid.light[(x + radius + 3, y)] = Light.DARK
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        out.that(light_level(world, (x + radius, y)) is lit,
+                 f"{ref} lights a dark square {radius} out",
+                 f"{light_level(world, (x + radius, y))}")
+        out.that(light_level(world, (x + radius + 3, y)) is Light.DARK,
+                 f"and leaves one {radius + 3} out dark -- the radius, not"
+                 " the board",
+                 f"{light_level(world, (x + radius + 3, y))}")
+
+    # -- p16032's four forms --------------------------------------------
+    world, me, _ = audit_board("p16032", 1)
+    c = Cast(world=world, me=me, ref="p16032")
+    c.origin = world.get(me, Position).square
+    REGISTRY["p16032"].body(c)
+    mine = list(c.my_zones())
+    out.that(1 <= len(mine) <= 4,
+             "p16032 leaves between one and four zones behind, and no"
+             " creatures -- the card says four, in **unoccupied** squares,"
+             " so a crowded burst yields fewer and that is the card",
+             f"{len(mine)} zones")
+    # **Every one of them dims**, which is the clause. Asked of the reader
+    # rather than of the zone's own field, for the reason the first
+    # increment records: a level read back proves nothing about whether
+    # anything consults it.
+    from combat_engine.engine.zones import Zone as _Zone
+
+    squares_dimmed = [
+        sq
+        for eid in mine
+        if (z := world.get(eid, _Zone)) is not None and z.label == "p16032"
+        for sq in z.squares
+    ]
+    out.that(bool(squares_dimmed),
+             "and they cover squares", f"{len(squares_dimmed)}")
+    out.that(all(light_level(world, sq) is Light.DIM
+                 for sq in squares_dimmed),
+             "every square they cover reads dim -- the forms' whole"
+             " printed content",
+             f"{sorted({str(light_level(world, sq)) for sq in squares_dimmed})}")
+    use_again = Cast(world=world, me=me, ref="p16032")
+    use_again.origin = c.origin
+    REGISTRY["p16032"].body(use_again)
+    out.that(len(use_again.my_zones()) <= len(mine),
+             "and using it again replaces them rather than adding four"
+             " more -- \"they also vanish if you use this power again\"",
+             f"{len(mine)} then {len(use_again.my_zones())}")
+
 DRIVERS = {
+    "lamp_settings": (
+        one_lamp_three_settings_and_putting_the_lights_out,
+        "one lamp's three settings, and a row that suppresses a light (#686)",
+    ),
     "light_and_dim": (
         what_a_carried_light_does_and_what_a_dimmer_does,
         "a carried light raises, a carried dimmer lowers, and dim conceals",

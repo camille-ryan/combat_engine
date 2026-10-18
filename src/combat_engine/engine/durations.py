@@ -30,6 +30,7 @@ from .events import (
     ConditionEnded,
     EffectApplied,
     EffectExpired,
+    EffectSuspended,
     Escaped,
     Note,
     SavingThrow,
@@ -605,6 +606,13 @@ class Effects:
             return False
         eff.suspended = True
         self._lift(eff, why)
+        # **Announced, because a lifted modifier is otherwise invisible.**
+        # `_lift` emits what a condition leaving needs and nothing for a
+        # modifier, so a row whose whole content is suspension did its work
+        # and read silent. See `EffectSuspended`.
+        self.world.bus.emit(
+            EffectSuspended(actor=eff.owner, what=str(eff), why=why)
+        )
         return True
 
     def resume(self, eff: Effect) -> bool:
@@ -616,6 +624,10 @@ class Effects:
         self._install_conditions(eff, eff.source, eff.when.value)
         for fn in eff.on_resume:
             fn()
+        self.world.bus.emit(
+            EffectSuspended(actor=eff.owner, what=str(eff), why="resumed",
+                            back=True)
+        )
         return True
 
     # -- ending --------------------------------------------------------------

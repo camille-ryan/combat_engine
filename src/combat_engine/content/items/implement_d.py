@@ -478,12 +478,23 @@ def i3028p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
+    dropped=("Dropped.was_held",),
 )
 def i3166p1(c: Cast) -> None:
-    """Lighting the candle. Bright light in a radius is the lamp case: no
-    combat consequence of its own, and the block beside it carries the
-    whole mechanical half."""
+    """Bright light out to 4 squares, until extinguished or dropped.
+
+    **"Bright light in a radius is the lamp case: no combat consequence of
+    its own" was the reason and it stopped being true** -- bright light
+    removes the concealment a dark square confers, which is a real
+    consequence on any board that has one. #686.
+
+    "Until you extinguish it as a minor action" is `c.endable`. "Or until
+    you are no longer holding the candle" is the dropped clause: `Dropped`
+    is announced for a creature, not for an item leaving a hand, so there
+    is no moment to hang it on."""
+    held = c.light(4, on=c.me, until=When.ENCOUNTER)
+    if held is not None:
+        c.endable(held, ActionType.MINOR)
 
 
 @power(
@@ -2653,10 +2664,14 @@ def i3553x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
 )
 def i3553p1(c: Cast) -> None:
-    """Bright light, and nothing else."""
+    """Bright light out to 10 squares.
+
+    **"Bright light, and nothing else" was the whole docstring and it
+    stopped being true** (#686). The simplest row of the family: one call,
+    no choice, no clock beyond the encounter."""
+    c.light(10, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

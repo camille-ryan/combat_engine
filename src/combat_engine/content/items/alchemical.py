@@ -340,9 +340,17 @@ def i3323p1(c: Cast) -> None:
 
 
 @power("i3482p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET)
 def i3482p1(c: Cast) -> None:
-    """Light only."""
+    """Bright light in a 5-square radius.
+
+    **"Light only" was the whole docstring and it stopped being true**
+    (#686).
+
+    "The light lasts up to 4 hours" is past this engine's horizon, so it
+    holds for the encounter -- the same substitution `c.contract` documents
+    for a disease stage and `cf:artificer-f0s0` for an extended rest."""
+    c.light(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i470p1", level=1, cls=ITEM, usage=DAILY, action=STANDARD,

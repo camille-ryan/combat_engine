@@ -438,9 +438,15 @@ def i2180x1(c: Cast) -> None:
 
 
 @power("i2720x1", level=1, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF, dropped=("c.dim(control=)",))
 def i2720x1(c: Cast) -> None:
-    """Light only."""
+    """Bright or dim light, 5 or 10 squares, or none -- a free action.
+
+    **"Light only" was the whole docstring and it stopped being true**
+    (#686). The widest bright setting is written, which is the one a party
+    in the dark wants; the four-way choice is #687's dropped clause, and it
+    is a real choice rather than a formality because dim light conceals."""
+    c.light(10, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3005x1", level=1, cls=ITEM, action=ActionType.NONE,
@@ -522,30 +528,94 @@ def i685x1(c: Cast) -> None:
 # -- level 2 ----------------------------------------------------------------
 
 
+#: The three settings of one lamp, and the two rows that share the trick.
+#:
+#: `i1062` prints dim 20, bright 20 and "no light" as three separate free
+#: actions, which are **settings** rather than three effects to hold at
+#: once. Laying two would leave the reader's order to decide which won --
+#: `query.light_level` asks the brightening pass first -- so a bright 20
+#: would silently swallow a dim 20 the player had just chosen.
+#:
+#: So each row clears its siblings before laying its own. A row ending
+#: another row's effect is ordinary (`c.dispel` and `Effects.end` are the
+#: machinery); what makes it right here is that the card says these are one
+#: lamp. #686, #687.
+#:
+#: **Only two of the three clearings are observable, and that is worth
+#: knowing before somebody "simplifies" it.** A dimmer already beats a
+#: carried light -- `query._dimmed` runs after the brightening pass, which
+#: is `i1213x1`'s printed rule -- so `i1062p1` laying dim over a live
+#: bright 20 reads dim whether it cleared or not. A plant removing its
+#: clearing stays **green** for that reason. `i1062p2` and `i1062p3` are
+#: the ones the state depends on, and `drivers.lamp_settings` plants
+#: against `p2`. `p1` keeps the call so the three rows read alike and so
+#: the stored state matches what the player chose rather than only the
+#: answer happening to be right.
+_LAMP_SETTINGS = ("i1062p1", "i1062p2", "i1062p3")
+
+
+def _one_setting(c: Cast, *family: str) -> None:
+    """Clear every setting of this lamp, so the next one laid is the only one."""
+    for eff in list(c.world.effects.of(c.me)):
+        if any(eff.label.startswith(ref) for ref in family):
+            c.world.effects.end(eff, "another setting chosen")
+
+
 @power("i1062x1", level=2, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i1062x1(c: Cast) -> None:
     """`spec.py` prints this property with no text at all -- see the report.
-    Its three powers are all light, so an inert property is the only
-    reading that does not invent one."""
+
+    **Still inert, and for the reason it always was rather than the one
+    beside it.** The other rows of this item were inert on "light only",
+    which stopped being true (#686); this one has no printed text to write
+    from at all, which is a different thing and is unchanged.
+
+    Not `defect=`: that marker drops the **whole compendium entry**, and
+    this item's three light settings are written and play. A property with
+    no text is a gap in the printing of one block, not a reason to take the
+    lamp off the board."""
 
 
 @power("i1062p1", level=2, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET)
 def i1062p1(c: Cast) -> None:
-    """Light only."""
+    """Dim light, 20 squares -- one of this lamp's three settings.
+
+    **"Light only" was the whole docstring and it stopped being true.**
+    Dim light conceals, which `query.light_concealment` turns into a
+    `Cover` the attack path takes the larger of, so a lamp set to dim
+    conceals everybody within twenty squares of it. #686.
+
+    `c.dim` and not `c.light`: this *lowers* the level. See `_one_setting`
+    for why it clears its siblings first."""
+    _one_setting(c, *_LAMP_SETTINGS)
+    c.dim(20, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1062p2", level=2, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET)
 def i1062p2(c: Cast) -> None:
-    """Light only."""
+    """Bright light, 20 squares -- the second of this lamp's settings.
+
+    Inert on a board nothing has darkened, which is what bright light is
+    and is `c.light`'s own stated position -- not a reason to declare the
+    row inert, because it plays the moment a square goes dark. #686."""
+    _one_setting(c, *_LAMP_SETTINGS)
+    c.light(20, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1062p3", level=2, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET)
 def i1062p3(c: Cast) -> None:
-    """Light only."""
+    """"The i1062 sheds no light" -- the third setting, and it is the one
+    that makes the other two mean anything.
+
+    Turning the lamp off is a real choice on a board where dim light
+    conceals: a party that wants to be seen puts it on bright, a rogue
+    turns it off. So this clears the family and lays nothing, which is
+    exactly what the card prints. #686."""
+    _one_setting(c, *_LAMP_SETTINGS)
 
 
 @power("i1106x1", level=2, cls=ITEM, action=ActionType.NONE,
@@ -786,9 +856,23 @@ def i1312x1(c: Cast) -> None:
 
 
 @power("i1321x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF,
+       dropped=("c.dim(control=)", "Gear.left_hanging"))
 def i1321x1(c: Cast) -> None:
-    """Light, and a lantern that hangs in the air and can be walked about."""
+    """A lantern that lights 10 squares, hangs where you leave it, and can
+    be sent ahead.
+
+    **The light is the half that plays** and it was the whole of the old
+    one-line docstring's "light" -- bright 10, carried, inert on a lit
+    board and real on a dark one. #686.
+
+    Two clauses are dropped and they are different gaps. The **settings**
+    -- bright 10, dim 5, or off, by anyone holding or adjacent -- are
+    #687's chosen level. The **floating lantern** is an object left on the
+    board that keeps lighting and can be commanded to move: a conjuration
+    in everything but name, and `Gear` has no notion of an item put down
+    and still working."""
+    c.light(10, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i1328x1", level=3, cls=ITEM, action=ActionType.NONE,
@@ -945,9 +1029,13 @@ def i3006x1(c: Cast) -> None:
 
 
 @power("i3006p1", level=3, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET, dropped=("c.dim(control=)",))
 def i3006p1(c: Cast) -> None:
-    """Light only."""
+    """Bright 10, dim 5, or off, while holding the lantern or beside it.
+
+    The same card as `i1321x1`'s settings clause, printed as a power of its
+    own here. Bright 10 is written and the three-way choice is #687. #686."""
+    c.light(10, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i3006p2", level=3, cls=ITEM, usage=AT_WILL, action=MOVE,
@@ -976,9 +1064,11 @@ def i3466x1(c: Cast) -> None:
 
 
 @power("i3466p1", level=3, cls=ITEM, usage=AT_WILL, action=MINOR,
-       reach=PERSONAL, target=NO_TARGET, out_of_combat=True)
+       reach=PERSONAL, target=NO_TARGET, dropped=("c.dim(control=)",))
 def i3466p1(c: Cast) -> None:
-    """Light only."""
+    """Dim 2, bright 10, or no light. Bright 10 is written; the three-way
+    choice is #687. #686."""
+    c.light(10, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -2629,10 +2719,29 @@ def i999x1(c: Cast) -> None:
 
 
 @power("i1014p1", level=9, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(10), target=NO_TARGET, keywords=[Keyword.ILLUSION],
-       out_of_combat=True)
+       reach=CloseBurst(10), target=NO_TARGET, keywords=[Keyword.ILLUSION])
 def i1014p1(c: Cast) -> None:
-    """Light level only, in the other direction."""
+    """Every active light source within 10 squares is suppressed.
+
+    **"Light level only, in the other direction" was the whole docstring**,
+    and the other direction is the one that matters: putting the lights out
+    *creates* concealment where turning them on only removes it. #686.
+
+    **Suspended, not ended**, which is what "suppressed" means and is why
+    `Effects.suspend` exists (#470): the lamp is not destroyed and comes
+    back when the encounter does. The card's own next sentence is the
+    proof -- "light sources activated after you use this power function
+    normally" -- so this is a one-time sweep of what is burning now and not
+    a standing ban.
+
+    Found by looking at the effect's **mods** rather than its label: a
+    carried light is a `light_radius` entry whatever row laid it, and this
+    card does not care which."""
+    for who in [c.me, *c.within(10, side="any")]:
+        for eff in list(c.world.effects.of(who)):
+            # `Effect.mods` is `[(eid, Mod)]`, not `[Mod]`.
+            if any(m.what == "light_radius" for _, m in eff.mods):
+                c.world.effects.suspend(eff)
 
 
 @power("i1109x1", level=9, cls=ITEM, action=ActionType.NONE,

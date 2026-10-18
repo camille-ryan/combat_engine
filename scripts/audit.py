@@ -950,7 +950,22 @@ DID_SOMETHING = {
     "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
+    "EffectSuspended",
 }  # fmt: skip
+# `EffectSuspended` is the **fifth** class of correct row admitted here one at
+# a time, and it arrived the way the note below predicts: a card whose verb is
+# a negation. `i1014p1` puts out every light within 10 squares -- suppressed,
+# not destroyed, which is what `Effects.suspend` is for (#470) -- and it fired
+# 48 times with a lit carrier standing beside it and reported SILENT.
+#
+# **The engine was the first half of that and is fixed too.** `suspend` set a
+# flag and called `_lift`, which announces what a *condition* leaving needs
+# and nothing for a modifier, so suspension was an unobservable state change
+# and there was no event for this set to recognise. It emits
+# `EffectSuspended` now, both ways -- `back=True` on a resume -- which is the
+# same correction `c.resize_aura` got when resizing a zone "announced
+# nothing". Teaching the harness to diff state would have been the wrong fix
+# for both. #686.
 # `RelationCleared` for the same reason `ConditionEnded` is here and
 # `RelationSet` already was: **taking a relation off is as much a thing as
 # putting one on.** `RelationSet` was admitted and its mirror was not, so a row
@@ -1949,7 +1964,8 @@ def board(ref: str, seed: int, pose: bool = False) -> tuple[World, int, set[str]
 _WANTS = (
     ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
     ("dark", re.compile(
-        r"light_level|dim light|darkness|Light\.DIM|Light\.DARK")),
+        r"light_level|light_radius|dim light|darkness"
+        r"|Light\.DIM|Light\.DARK")),
 )
 
 #: A printed Requirement that wants the state *absent*. Posing it for one of
@@ -2024,11 +2040,39 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
             from combat_engine.engine.components import Position as _Pos
 
             here = world.get(caster, _Pos)
-            if here is not None:
-                cx, cy = here.square
-                for dx in (3, 4):
-                    for dy in (0, 1):
-                        world.grid.light[(cx + dx, cy + dy)] = Light.DARK
+            if here is None:
+                continue
+            cx, cy = here.square
+            for dx in (3, 4):
+                for dy in (0, 1):
+                    world.grid.light[(cx + dx, cy + dy)] = Light.DARK
+            # **And somebody carrying a light, well away from the patch.**
+            # A row that *reads* the light wants a dark square; a row that
+            # puts lights **out** wants one burning, and `i1014p1`
+            # -- "all active light sources within 10 squares are
+            # suppressed" -- fired 48 times on a board where nothing was
+            # lit. Laid as an effect rather than as a bare `Mods` entry,
+            # because that is what a carried light is and what a row
+            # looking for one will find: `c.light` is the writer and the
+            # pose uses it rather than keeping its own copy.
+            #
+            # On the far side of the caster from the dark squares, so the
+            # two knobs do not cancel: a light within 2 of the patch would
+            # brighten it again.
+            from combat_engine.engine.cast import Cast as _Cast
+            from combat_engine.engine.query import creatures as _creatures
+
+            lit = next(
+                (
+                    o for o in sorted(_creatures(world))
+                    if o != caster
+                    and (pos := world.get(o, _Pos)) is not None
+                    and pos.square[0] < cx
+                ),
+                None,
+            )
+            if lit is not None:
+                _Cast(world=world, me=lit, ref="audit:pose").light(2, on=lit)
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what

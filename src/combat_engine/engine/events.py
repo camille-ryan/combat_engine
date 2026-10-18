@@ -1218,6 +1218,33 @@ class EffectExpired(Event):
     why: str
 
 
+@dataclass
+class EffectSuspended(Event):
+    """An effect was lifted without being ended, or put back.
+
+    **Suspension announced nothing at all.** `Effects.suspend` sets a flag
+    and calls `_lift`, and `_lift` emits only what a *condition* leaving
+    needs -- so a suspended modifier was an unobservable state change.
+    `Effects.end` has announced itself since it existed; this is the same
+    courtesy for the thing #470 added beside it.
+
+    Found by a row whose whole content is suspension: `i1014p1` puts out
+    every light within 10 squares, fired 48 times with a lit carrier right
+    beside it, and read **silent** -- correctly, because nothing it did was
+    visible to anything. Teaching the harness to diff state is the wrong
+    fix; the event is the right one.
+
+    `back` is False for a suspension and True for a resume, so one event
+    covers both halves and a listener can tell them apart -- the same shape
+    `Rerolled` uses for `old`/`new` rather than two events.
+    """
+
+    actor: int
+    what: str
+    why: str
+    back: bool = False
+
+
 # -- areas ------------------------------------------------------------------
 
 

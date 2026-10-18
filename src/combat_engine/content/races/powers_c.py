@@ -537,11 +537,39 @@ def p2473(c: Cast) -> None:
     reach=AreaBurst(1, 10),
     target=NO_TARGET,
     keywords=[Keyword.ILLUSION],
-    out_of_combat=True,
 )
 def p16032(c: Cast) -> None:
-    """Dim light and nothing else: the forms have no hit points, block
-    nothing and are not creatures."""
+    """Four glowing forms, each dimming two squares, until the end of your
+    next turn.
+
+    **"Dim light and nothing else" was the reason and the "nothing else" is
+    the half that held.** The forms do have no hit points, block nothing
+    and are not creatures -- and the dim light they shed conceals whoever
+    stands in it, which `query.light_concealment` turns into a `Cover` the
+    attack path reads. #686.
+
+    **Four zones and not four conjurations**, because the only thing the
+    forms do is dim: a conjuration would put four bodies on the board that
+    block nothing and can be attacked for no reason. `c.zone(obscured=)` is
+    the area form of dimming, where `c.dim` is the carried one.
+
+    "They also vanish if you use this power again" comes free: each use
+    lays its zones under this row's own label and ends the previous ones
+    first."""
+    from combat_engine.engine.types import Light
+    from combat_engine.engine.zones import Zone
+
+    # `Zones.end` takes the **entity id**, not the `Zone` -- passing the
+    # component raised `unhashable type: 'Zone'` from the store lookup.
+    for eid in c.my_zones():
+        zone = c.world.get(eid, Zone)
+        if zone is not None and zone.label == c.ref:
+            c.world.zones.end(eid, "this power used again")
+    spots = [sq for sq in sorted(c.area())
+             if c.world.grid.occupant(sq) is None][:4]
+    for sq in spots:
+        c.zone(spread({sq}, 2), label=c.ref, until=When.EONT,
+               obscured=Light.DIM)
 
 
 @power(
