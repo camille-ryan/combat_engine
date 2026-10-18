@@ -2026,7 +2026,7 @@ def _by_me_attack_roll(world: World, me: int, ev: AttackRolled) -> bool:
     target=NO_TARGET,
     trigger=_M6361_ROLL,
     on=Trigger(AttackRolled, _by_me_attack_roll, _M6361_ROLL),
-    dropped=("c.reroll_damage_once()",),
+    dropped=("events.DamageRolled.dice",),
 )
 def m6361a4(c: Cast) -> None:
     """Only the attack-roll half of "an attack roll or a damage roll" is
@@ -2036,7 +2036,18 @@ def m6361a4(c: Cast) -> None:
     cast.py` shows only the standing form, and `vocab.py --brief` lists no
     other. "Cannot be reduced in any way" is why this reaches for
     `c.flat`, which does not run the resistance pipeline `c.damage` does.
-    """
+    
+    **Re-pointed, and the symbol was the bug.** Five spellings were filed
+    across eight rows for one printed mechanism (#703) and the verb is
+    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
+    now. What stops this one is **the moment, not the dice**: its clause
+    answers a damage roll that has already happened, and
+    `events.DamageRolled` carries a total with no dice behind it. The hold
+    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
+    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
+    names for an attack roll, where the event does carry its live
+    `AttackResult`.
+"""
     _recharge_when_bloodied(c)
     c.reroll_attack(keep="new")
     for mate in c.allies():

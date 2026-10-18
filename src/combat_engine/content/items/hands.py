@@ -736,10 +736,21 @@ def i1698p1(c: Cast) -> None:
 
 
 @power("i1756p1", level=6, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_damage_dice()",))
+       reach=PERSONAL, target=SELF, todo=("events.DamageRolled.dice",))
 def i1756p1(c: Cast) -> None:
     """`c.reroll_damage` rolls the whole expression again and keeps the
-    higher; this rerolls one die and keeps the second result."""
+    higher; this rerolls one die and keeps the second result.
+    **Re-pointed, and the symbol was the bug.** Five spellings were filed
+    across eight rows for one printed mechanism (#703) and the verb is
+    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
+    now. What stops this one is **the moment, not the dice**: its clause
+    answers a damage roll that has already happened, and
+    `events.DamageRolled` carries a total with no dice behind it. The hold
+    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
+    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
+    names for an attack roll, where the event does carry its live
+    `AttackResult`.
+"""
 
 
 @power("i2134x1", level=6, cls=ITEM, action=ActionType.NONE,

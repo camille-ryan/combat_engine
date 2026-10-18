@@ -11424,6 +11424,14 @@ class Cast:
         which is what almost every card prints, and 3 is the one that says
         "a 1 or a 2".
 
+        **`below=ANY_FACE` is the card that prints no threshold at all** --
+        "reroll as many of the damage dice as you like, but you must use the
+        second result". It is above every die the game has, so every face
+        qualifies, and it only means anything with a `pick`: the loop would
+        never terminate against it and `_rolled_above` refuses it for that
+        reason. Eight rows print this shape and five different symbols were
+        filed for it. #703.
+
         `keyword` and `ref` narrow it to what the card names -- the curse
         damage, one racial power, weapon dice only. Unqualified is every
         damage roll the creature makes, which only a couple of cards mean.
@@ -11434,6 +11442,15 @@ class Cast:
         and the new face stands even if it is another 1. `pick=1` is that;
         `pick=0`, the default, is the loop in the first line of this
         docstring.
+
+        **`pick=EVERY_DIE` is "each of them, once each"**, which is the
+        commonest of the no-threshold cards and is not the loop: the loop
+        rerolls a low die *until* it is not low, and these say the second
+        result stands whatever it is. A plain large number rather than a
+        sentinel, because the hold is read with `total()` and that takes a
+        `max` -- so a creature holding "pick one" and "pick every" comes out
+        with every, which is what both cards together mean, where a negative
+        sentinel would lose to the 1.
 
         It lays **its own holds** rather than adding a parameter to the
         loop's, which is the whole design decision here. The holds are read
@@ -11561,11 +11578,41 @@ class Cast:
         in the kernel, which is normally wrong; it is here because the
         alternative is asking the AI to choose between dice, and no card
         makes the choice matter beyond "the lowest is best to replace".
+
+        **`floor > faces` was a guard here and it was a line copied from the
+        looping case.** `_rolled_above` must refuse a floor above the die
+        size or it never terminates; this function says so about itself two
+        paragraphs up -- *"there is no termination hazard here and none of
+        the paired guards that one needs"* -- and then carried one of them
+        anyway. The cost: a floor above every face is exactly how a card
+        printing **no threshold** is said ("reroll any die you like, using
+        the second result"), and eight rows print that. With the guard,
+        `pick=1, below=ANY_FACE` read like a working clause and rerolled
+        nothing. #703.
+
+        `faces <= 1` stays: a flat damage line has no dice to pick from.
+
+        **`ANY_FACE` does not mean "reroll them all", and measuring it is
+        what settled that.** A card saying "reroll as many of the damage dice
+        as you like" is a *choice*, and rerolling a 6 blind throws away a 6:
+        over 400 rolls of 3d6, rerolling every die came to 10.77 against a
+        plain 10.59, while rerolling only the worst came to 12.08. Blind
+        rerolling of everything is worth nothing, which is not what the card
+        is offering.
+
+        So a floor of `ANY_FACE` is read as the die's **own break-even** --
+        reroll a face the average beats, which is `faces // 2 + 1` (4 on a
+        d6, 6 on a d10) -- and `pick` still says how many. That is the same
+        policy decision the paragraph above makes and no larger: the kernel
+        chooses which dice, because the alternative is asking the AI to
+        compare die faces and no card makes the answer interesting.
         """
         rolled = self.world.rng.roll(dice)
         faces = _faces_of(dice)
-        if faces <= 1 or floor > faces:
+        if faces <= 1:
             return rolled.total
+        if floor >= ANY_FACE:
+            floor = faces // 2 + 1
         low = sorted(
             (face, i) for i, face in enumerate(rolled.dice) if face < floor
         )
@@ -13717,6 +13764,26 @@ def _weapon_is(weapon: Any, word: str) -> bool:
             or weapon.slug == word
         )
     )
+
+
+#: A reroll floor above every die the game prints, for the cards that give
+#: a reroll with **no threshold**: "reroll any damage die", "as many of the
+#: damage dice as you like". Above a d20 because that is the largest die any
+#: printed expression uses, and `_rolled_pick` compares faces against it.
+#:
+#: Only meaningful with a `pick`. `Cast._rolled_above`'s loop refuses a floor
+#: at or above the die size and must: "until it shows a different number"
+#: against a floor nothing can satisfy is an infinite loop inside a damage
+#: roll. #703.
+ANY_FACE = 21
+
+#: A `pick` count standing for every die of the expression -- "reroll any
+#: damage die but must use the second result", which four of the eight rows
+#: in #703 print. Larger than any heroic damage line (the biggest is 6d10)
+#: and deliberately a plain number: the hold is read with `total()`, which
+#: takes a `max`, so this beats a card offering one die and that is what
+#: holding both should mean.
+EVERY_DIE = 99
 
 
 def _faces_of(dice: str | int) -> int:

@@ -20564,6 +20564,98 @@ def a_blocker_with_a_gap_in_it(out: Result) -> None:
                  f"{sorted(squares(world, me))}")
 
 
+def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
+    """Eight rows, five symbols, one mechanism -- and one copied line.
+
+    #703, found by #677's "wants an ARGUMENT on a verb that exists" bucket.
+    `c.reroll_damage(keep=)`, `c.reroll_damage(dice=)`,
+    `c.reroll_damage_dice()` and `c.reroll_damage_once()` were four
+    spellings of *"reroll some of the damage dice and keep the new
+    result"*. Rows disagreeing about what is missing is the tell that the
+    **symbol** is the bug.
+
+    `c.reroll_ones(below=, pick=)` is the verb. What stood in the way was
+    `_rolled_pick`'s `floor > faces` guard -- a line copied from
+    `_rolled_above`, where it is necessary (a floor above every face makes
+    "until it shows a different number" an infinite loop) and where this
+    function's own docstring says it is not needed.
+
+    **`ANY_FACE` is not "reroll them all", and the measurement is the
+    reason.** A card saying "as many of the damage dice as you like" is a
+    *choice*, and rerolling a 6 blind throws away a 6. Over 400 rolls of
+    3d6: plain 10.59, rerolling every die 10.77, rerolling only the worst
+    12.08. So a floor of `ANY_FACE` is read as the die's own break-even and
+    `pick` says how many -- which is why the arithmetic below is asserted on
+    a **mean over many rolls** rather than on one roll's face.
+
+    Four rows written, four re-pointed at `events.DamageRolled.dice`: their
+    clauses answer a roll already made, and that event carries a total with
+    no dice behind it.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import ANY_FACE, EVERY_DIE, Cast
+
+    def mean(dice: str, lay, tries: int = 600) -> float:  # noqa: ANN001
+        """The average of `tries` damage rolls with `lay` applied first.
+
+        A mean and not a roll, because a reroll changes a distribution and
+        not a number: one roll of 1d6 is 1..6 either way. 600 is enough to
+        separate 3.5 from 4.25 and cheap enough to run per commit.
+        """
+        world, me, _ = audit_board("f1378b", 1)
+        c = Cast(world=world, me=me, ref="drivers:reroll")
+        c.target = me
+        if lay is not None:
+            lay(c, me)
+        return sum(c._roll_damage(dice) for _ in range(tries)) / tries
+
+    plain = mean("3d6", None)
+    out.that(9.5 < plain < 11.5,
+             "3d6 unmodified averages about 10.5, which is the baseline the"
+             " two figures below are read against",
+             f"{plain:.2f}")
+    worst = mean("3d6", lambda c, me: c.reroll_ones(
+        below=ANY_FACE, pick=1, on=me))
+    out.that(worst - plain > 0.8,
+             "`pick=1` with no printed threshold rerolls the **worst** die"
+             " and is worth more than a point on 3d6 -- the guard copied"
+             " from the looping case made this exactly zero",
+             f"{plain:.2f} -> {worst:.2f}")
+    every = mean("3d6", lambda c, me: c.reroll_ones(
+        below=ANY_FACE, pick=EVERY_DIE, on=me))
+    out.that(every > worst,
+             "and `pick=EVERY_DIE` is worth more again, which is the"
+             " ordering two cards of the family depend on",
+             f"one die {worst:.2f}, every die {every:.2f}")
+
+    # **The control that says `ANY_FACE` is read as a break-even and not as
+    # "all of them".** Rerolling every die blind is worth nothing; if this
+    # figure matched `every` above, the constant would be doing the naive
+    # thing and four rows would be weaker than their cards.
+    naive = mean("3d6", lambda c, me: c.reroll_ones(
+        below=7, pick=EVERY_DIE, on=me))
+    out.that(every - naive > 1.0,
+             "a floor of 7 on a d6 -- every face, taken blind -- is worth"
+             " much less, so `ANY_FACE` is being read as the die's"
+             " break-even rather than as 'reroll everything'",
+             f"blind {naive:.2f} against break-even {every:.2f}")
+
+    # -- and the loop still wins when a creature holds both ---------------
+    both = mean("3d6", lambda c, me: (
+        c.reroll_ones(below=2, pick=0, on=me),
+        c.reroll_ones(below=ANY_FACE, pick=1, on=me),
+    ))
+    loop_only = mean("3d6", lambda c, me: c.reroll_ones(
+        below=2, pick=0, on=me))
+    out.that(abs(both - loop_only) < 0.6,
+             "a creature holding a loop card and a pick card comes out with"
+             " the loop, which `_roll_damage` orders deliberately -- the"
+             " alternative mixed one card's count into the other's floor and"
+             " came out weaker than either alone",
+             f"loop alone {loop_only:.2f}, both {both:.2f}")
+
+
 def a_reroll_handed_to_somebody_else(out: Result) -> None:
     """Three rows marked on `c.reroll_attack(on=)`, which was never the gap.
 
@@ -21749,6 +21841,10 @@ DRIVERS = {
     "swung_weapon": (
         which_weapon_the_blow_came_through,
         "which weapon a blow came through, which no event carried (#653)",
+    ),
+    "reroll_dice": (
+        dice_rerolled_where_the_card_prints_no_threshold,
+        "dice rerolled where the card prints no threshold (#703)",
     ),
     "lent_reroll": (
         a_reroll_handed_to_somebody_else,

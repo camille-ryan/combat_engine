@@ -7,7 +7,7 @@ One import for anyone writing content:
 
 from .actions import Action, legal, perform
 from .basic import MELEE, RANGED  # registers the basic attacks
-from .cast import Cast
+from .cast import ANY_FACE, EVERY_DIE, Cast
 from .components import (
     ActionPoints,
     Budget,

@@ -60,6 +60,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.features.strikers import extra_damage
 from combat_engine.engine import (
     AC,
+    ANY_FACE,
     AREA_OR_CLOSE,
     DAILY,
     ENCOUNTER,
@@ -1089,19 +1090,41 @@ def i2605p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.reroll_damage_dice()",),
 )
 def i2606p1(c: Cast) -> None:
-    """Re-aimed from a `todo` to a `dropped`: `c.reroll_damage(keyword=)`
-    is a real reroll narrowed to the printed keyword, so refusing the
-    whole row threw away the half the engine can say.
+    """"After rolling damage, you can reroll a number of damage dice equal
+    to or less than the staff's enhancement bonus. You must keep the new
+    results, and you can't reroll any die more than once."
 
-    Two clauses go. It rolls the whole expression twice and keeps the
-    higher, where the card rerolls a counted number of dice and makes
-    you keep the new result even when it is worse -- so this is the
-    generous reading. And there is no `once=`, so it stands for the rest
-    of the turn rather than for the one power the free action answers."""
-    c.reroll_damage(keyword=Keyword.FIRE, on=c.me, until=When.EOT)
+    **`c.reroll_ones(below=ANY_FACE, pick=…)` is the verb**, and five
+    symbols were filed for it across eight rows (#703). `c.reroll_damage`
+    is a different and stronger rule -- the whole expression twice, keeping
+    the higher -- and none of the eight prints that. What was in the way was
+    one line: `_rolled_pick` carried `floor > faces`, copied from the
+    looping case where it is necessary, so a floor above every face returned
+    the roll untouched.
+
+    **Both of the clauses the old reading gave away are back.** It used
+    `c.reroll_damage`, which rolls the whole expression twice and keeps the
+    higher -- a better deal than the card, which makes you keep the new
+    result even when it is worse. And "you can't reroll any die more than
+    once" is `_rolled_pick`'s own contract, where the loop's would reroll a
+    low die until it stopped being low.
+
+    The count is the **staff's own enhancement**, read off the thing in
+    hand rather than written as a number: an item's bonus is a column and a
+    character may be holding any tier of this staff.
+
+    `until=When.EOT` stands, and the old note that it "stands for the rest
+    of the turn rather than for the one power the free action answers" is
+    still true -- the card ties the free action to one power's damage roll
+    and the hold cannot be spent by one roll. Narrower than the turn would
+    want `once=`, which `c.reroll_ones` does not take; wider than the card
+    by one turn's worth of fire powers, and said rather than hidden."""
+    held = c.my_weapon()
+    reach = getattr(held, "enhancement", 0) if held is not None else 0
+    c.reroll_ones(below=ANY_FACE, pick=max(1, reach), keyword=Keyword.FIRE,
+                  on=c.me, until=When.EOT)
 
 
 @power(

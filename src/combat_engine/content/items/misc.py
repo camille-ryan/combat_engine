@@ -54,6 +54,7 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    ANY_FACE,
     AT_WILL,
     DAILY,
     EACH_ALLY,
@@ -1134,14 +1135,32 @@ def i2858p1(c: Cast) -> None:
 
 
 @power("i2864p1", level=3, cls=ITEM, usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(10), target=ONE_CREATURE,
-       dropped=("c.reroll_damage(dice=)",))
+       reach=Ranged(10), target=ONE_CREATURE)
 def i2864p1(c: Cast) -> None:
-    """The mark is a named hold so `i2864p2` can find its bearer.
-    Re-aimed: `c.reroll_damage` exists and rerolls the whole roll, where
-    the card rerolls **one die** and says outright that the rest of an
-    area attack keeps its numbers, so the gap is the count."""
+    """A mark, and one damage die rerolled against whoever carries it.
+
+    **`c.reroll_ones(below=ANY_FACE, pick=…)` is the verb**, and five
+    symbols were filed for it across eight rows (#703). `c.reroll_damage`
+    is a different and stronger rule -- the whole expression twice, keeping
+    the higher -- and none of the eight prints that. What was in the way was
+    one line: `_rolled_pick` carried `floor > faces`, copied from the
+    looping case where it is necessary, so a floor above every face returned
+    the roll untouched.
+
+    `pick=1` is the card's "one damage die", and the `when=` is what makes
+    the last sentence true: *"this reroll does not alter the damage for
+    other targets hit by an area or close attack."* `_reroll_ctx` carries
+    `target`, so the hold is asked per creature the blow is landing on and
+    an area attack's other victims keep their numbers -- which a hold
+    without the gate would not have done, and the card says so outright.
+
+    The mark stays a named hold so `i2864p2` can find its bearer."""
+    foe = c.target
+    if foe is None:
+        return
     c.effect(c.ref, until=When.ENCOUNTER)
+    c.reroll_ones(below=ANY_FACE, pick=1, on=c.me, until=When.ENCOUNTER,
+                  when=lambda ctx: ctx.get("target") == foe)
 
 
 @power("i2864p2", level=3, cls=ITEM, usage=DAILY, action=MINOR,

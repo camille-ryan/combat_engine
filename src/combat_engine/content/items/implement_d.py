@@ -51,9 +51,11 @@ from typing import Any
 
 from combat_engine.engine import (
     AC,
+    ANY_FACE,
     AT_WILL,
     DAILY,
     ENCOUNTER,
+    EVERY_DIE,
     FORT,
     FREE,
     INTERRUPT,
@@ -546,13 +548,34 @@ def i3172p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.reroll_damage(keep=)", "c.death_save_failure()"),
+    dropped=("c.death_save_failure()",),
 )
 def i3180x1(c: Cast) -> None:
-    """`c.reroll_damage` keeps the higher of the two rolls; this one must
-    keep the new result whatever it is. The price -- a death saving throw
-    failure, counted against the three since the last rest -- has no
-    counter anywhere."""
+    """A reroll of the whole damage roll, bought with a death saving throw
+    failure.
+
+    **The reroll half is written.** `c.reroll_ones(below=ANY_FACE,
+    pick=EVERY_DIE)` is it -- five symbols were filed for this mechanism
+    across eight rows and one line was in the way, `_rolled_pick`'s
+    `floor > faces` guard copied from the looping case. #703.
+    `c.reroll_damage` was never the verb: it keeps the higher of two whole
+    rolls and this card makes you keep the new result whatever it is.
+
+    **The price is still missing and is the whole of what is left.** "If you
+    make the reroll, you are considered to have failed a death saving
+    throw", counted against the three since the last rest -- and nothing
+    counts those. So the row is `dropped=` on that alone, where it used to
+    be `todo=` on both and refused in play: the reroll is a real benefit and
+    withholding it because the cost is unsayable makes the item worse than
+    the card rather than merely incomplete.
+
+    **That direction matters and it is the wrong one to err in**, so it is
+    said out loud: an item whose benefit lands and whose cost does not is
+    stronger than printed. It is kept this way because the alternative --
+    refusing the row -- was the state it was in, and `blocked.py` counted it
+    as unstarted work when seven eighths of it was writable."""
+    c.reroll_ones(below=ANY_FACE, pick=EVERY_DIE, on=c.me,
+                  until=When.ENCOUNTER)
 
 
 @power(

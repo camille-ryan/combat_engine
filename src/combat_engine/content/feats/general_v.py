@@ -43,11 +43,13 @@ from typing import Any
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
+    ANY_FACE,
     AREA_OR_CLOSE,
     AT_WILL,
     DAILY,
     DEX,
     ENCOUNTER,
+    EVERY_DIE,
     FORT,
     FREE,
     MINOR,
@@ -1982,8 +1984,38 @@ def f3559(c: Cast) -> None:
 
 
 @power("f3561", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_damage_dice()",))
+       reach=PERSONAL, target=SELF)
 def f3561(c: Cast) -> None:
-    """`c.reroll_damage` rolls the whole expression twice and keeps the
-    higher, which is a better deal than the card gives: this one rerolls
-    one die and makes you take the second result whichever way it falls."""
+    """"Whenever you make a weapon attack using an axe or a heavy blade
+    against an undead creature, you can reroll any damage die but must use
+    the second result."
+
+    **`c.reroll_ones(below=ANY_FACE, pick=…)` is the verb**, and five
+    different symbols were filed for it across eight rows (#703).
+    `c.reroll_damage` is a different and stronger rule -- the whole
+    expression twice, keeping the higher -- and none of the eight prints
+    that. What was actually in the way was one line: `_rolled_pick` carried
+    `floor > faces` as a guard, copied from the looping case where it is
+    necessary, so a floor above every face returned the roll untouched.
+
+    `pick=EVERY_DIE` is "any damage die", and `ANY_FACE` is the card
+    printing no threshold -- read as the die's own break-even, because
+    rerolling a 6 blind throws away a 6 and the card is offering a choice.
+    `_rolled_pick` has the measurement.
+
+    **Two gates, both on the `when=`**, because neither is a property of the
+    creature: the weapon group is whatever is in hand at the moment of the
+    roll, and the victim is whichever creature this blow is landing on.
+    `_reroll_ctx` carries `target` for exactly the second one.
+    """
+    def swung_at_undead(ctx: dict[str, Any]) -> bool:
+        # `c.wielding` takes the printed group word and answers for whatever
+        # is in hand, which is the only way to ask this: the group is a fact
+        # about the weapon and the weapon can change mid-fight.
+        if not (c.wielding("axe") or c.wielding("heavy blade")):
+            return False
+        foe = ctx.get("target")
+        return foe is not None and c.is_kind("undead", on=foe)
+
+    c.reroll_ones(below=ANY_FACE, pick=EVERY_DIE, on=c.me,
+                  until=When.ENCOUNTER, when=swung_at_undead)

@@ -1407,14 +1407,25 @@ def i1761x1(c: Cast) -> None:
     target=SELF,
     trigger="you make a damage roll and dislike the result",
     on=Trigger(Hit, by_me, "you hit with this weapon"),
-    dropped=("c.reroll_damage(dice=)",),
+    dropped=("events.DamageRolled.dice",),
 )
 def i1761p1(c: Cast) -> None:
     """`c.reroll_damage` rolls the whole damage twice and keeps the better,
     which is the printed effect for a weapon whose damage is mostly [W];
     confining the reroll to the [W] dice and the critical dice is the part
     that cannot be said. Declared on the hit so the effect is standing when
-    the damage is rolled -- afterwards is too late."""
+    the damage is rolled -- afterwards is too late.
+    **Re-pointed, and the symbol was the bug.** Five spellings were filed
+    across eight rows for one printed mechanism (#703) and the verb is
+    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
+    now. What stops this one is **the moment, not the dice**: its clause
+    answers a damage roll that has already happened, and
+    `events.DamageRolled` carries a total with no dice behind it. The hold
+    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
+    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
+    names for an attack roll, where the event does carry its live
+    `AttackResult`.
+"""
     c.reroll_damage(on=c.me, until=When.EOT)
 
 

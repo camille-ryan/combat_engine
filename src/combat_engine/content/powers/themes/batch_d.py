@@ -1610,7 +1610,7 @@ def p16372(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     trigger="you roll damage for an arcane attack power and dislike the result",
     on=Trigger(DamageRolled, by_me, "you roll damage"),
-    todo=("c.reroll_damage(keep=)",),
+    todo=("events.DamageRolled.dice",),
 )
 def p16373(c: Cast) -> None:
     """"As many of the damage dice as you like, and you must use the second
