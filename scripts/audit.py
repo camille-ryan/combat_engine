@@ -176,27 +176,26 @@ KNOWN_SILENT = {
     # asserts they end when the ally spends the +2. #679.
     "f3044": "needs an artificer of a shifter race, a rest, and an ally"
              " carrying the charge; the board emits no ShortRested",
-    # An immediate interrupt that rerolls an **ally's** bluff, diplomacy or
-    # intimidate check. The board never makes an ally roll one: `_provoke`
-    # makes an attack, and nothing in the harness asks an ally for a social
-    # check -- so the trigger has no occasion and the row correctly does
-    # nothing. `f608b`, four rows below it in the same file, is the same
-    # shape against *any* check and is on the silent list for the same
-    # reason.
+    # **Two entries were here and both excuses were false**, which is worth
+    # keeping where the next excuse gets written rather than in a commit
+    # message.
     #
-    # **`f635b` was here and its excuse was false.** It read "needs an ally
-    # to roll a social check; the board never does", and `_rolls_checks` has
-    # rolled seventeen skills for an ally since it was written -- so the
-    # board posed it every time. What the harness could not see was the
-    # *reroll*: `DID_SOMETHING` had no `Rerolled`, and a row whose whole
-    # output is a changed number emitted nothing it recognised. Admitting
-    # the event moved ten rows out of this bucket's neighbourhood and this
-    # entry out of it altogether. #700.
+    # `f635b` read "needs an ally to roll a social check; the board never
+    # does", and said of `f608b` beside it that it "is on the silent list
+    # for the same reason". `_rolls_checks` has rolled seventeen skills for
+    # an ally since it was written -- the board posed it every time. What
+    # the harness could not see was the **reroll**: `DID_SOMETHING` had no
+    # `Rerolled`, so a row whose whole output is a changed number emitted
+    # nothing it recognised. Admitting the event moved 105 rows out of the
+    # silent set across `--calls 'c.reroll_'`, these two among them. #700.
     #
-    # Kept as a comment because the lesson is the shape, not the row: an
-    # excuse that names a board limitation should be checked against the
-    # harness before it is written, and this one was argued from the card.
-    # Its printed Requirement is **one** weapon -- `w3594` -- and `chargen`
+    # The lesson is the shape and not the rows: **an excuse that names a
+    # board limitation has to be checked against the harness**, and this one
+    # was argued from the card. Both of them were written by reading what
+    # the row needed and never by grepping `audit.py` for the pass that
+    # provides it.
+    # ------------------------------------------------------------------
+    # `f1028`: its printed Requirement is **one** weapon -- `w3594` -- and `chargen`
     # deals this sorcerer `w3596`, a different blade from the same group. So
     # the gate correctly declines and the row lays nothing.
     #
