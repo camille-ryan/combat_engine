@@ -305,13 +305,20 @@ def p13057b(c: Cast) -> None:
     keywords=[Keyword.PSIONIC, Keyword.FORCE, Keyword.STANCE],
     requires=active("p12426"),
     requires_text="the p12426 power must be active",
-    dropped=("c.shift(path=)", "c.phasing(through=)"),
+    dropped=("c.shift(path=)",),
 )
 def p12426b(c: Cast) -> None:
-    """The shift is exact. Passing **through** the space of an enemy marked by
-    you is not: `movement.shift` is one step to the destination, so no square
-    between the two is ever entered and nothing announces one -- the force
-    damage the first such entry charges has no moment to happen in.
-    `c.phasing` would open everybody's space, not one named creature's.
+    """The shift is exact. Passing **through** the space of an enemy marked
+    by you is not: `movement.shift` is one step to the destination, so no
+    square between the two is ever entered and nothing announces one -- the
+    force damage the first such entry charges has no moment to happen in.
+
+    **One marker now, not two.** The second was `c.phasing(through=)`, on
+    the grounds that "`c.phasing` would open everybody's space, not one
+    named creature's" -- true of that verb and not of the gap:
+    `c.may_enter(when=)` names one creature, or a relation, since #673. So
+    the permission exists and the path does not, and the path is the one
+    thing both halves of this clause wait on. `f2105b` is the other row
+    with the same sentence and the same single blocker.
     """
     c.shift(3)

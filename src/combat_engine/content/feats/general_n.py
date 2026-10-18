@@ -762,13 +762,21 @@ _granted("f2105", "f2105b", swap=Swap(9, Usage.DAILY))
 @power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(REF, vs=AC),
-       dropped=("c.phasing(through=)", "c.pick_pocket()"))
+       dropped=("c.shift(path=)", "c.pick_pocket()"))
 def f2105b(c: Cast) -> None:
     """The Effect runs first, as printed: the shift is what brings you
-    into reach. Moving through the target's space on the way is the
-    dropped clause -- `c.phasing` goes through terrain and has no way to
-    name one creature -- and so is the free-action Thievery check, which
-    was going unsaid here while f2103b named it.
+    into reach. The free-action Thievery check is dropped, and was going
+    unsaid here while f2103b named it.
+
+    **Re-pointed, and the permission was never the blocker.**
+    `c.may_enter(when=)` says "through the target's space" exactly -- the
+    gate reads `ctx["occupant"]` and the mover's own `Cast` is in scope.
+    What there is no moment for is the *passing*: `movement.shift` is a
+    single `step` to the destination, so a four-square shift enters no
+    square between the two and "during this shift can move through the
+    target's space" has nothing to happen in. The gap is a shift that walks
+    its squares, which `p12426b` names with the same symbol and for the
+    same reason. #673.
 
     The secondary attack is rolled by hand with `c.attack`, because a
     header carries one attack line and this card prints two.

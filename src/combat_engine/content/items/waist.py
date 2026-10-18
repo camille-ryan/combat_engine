@@ -691,14 +691,29 @@ def i591x1(c: Cast) -> None:
 
 
 @power("i591p1", level=7, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, dropped=("c.phasing(through=)",))
+       reach=PERSONAL, target=SELF)
 def i591p1(c: Cast) -> None:
-    """Phasing is broader than the printed line -- it walks through walls
-    and through everybody, not only through minions -- but it is the only
-    verb that lets a creature cross an occupied square, and ending in one is
-    refused by the grid either way. What is missing is the narrowing, not
-    the reading: `_minion` answers which squares were meant."""
-    c.phasing(on=c.me, until=When.EONT)
+    """Move through squares occupied by minions, until the end of your next
+    turn.
+
+    **The narrowing is written now and `c.phasing` was the wrong verb.**
+    The old note had it exactly: "phasing is broader than the printed line
+    -- it walks through walls and through everybody, not only through
+    minions". `c.may_enter` is the mover's own permission to cross an
+    occupied square, which is the printed sentence, and it takes a `when=`
+    gate since #673 -- so `c.is_minion` is the whole of the narrowing.
+
+    The two clauses the card spells out need nothing written. "Your
+    movement provokes opportunity attacks as normal" is the default, since
+    this is not a shift; "you cannot end your move in an occupied space" is
+    `movement._can_stop`, which refuses one whatever the permission says --
+    the two halves #392 is about.
+
+    The Level 27 line is out of scope."""
+    c.may_enter(
+        when=lambda ctx: c.is_minion(on=ctx.get("occupant")),
+        on=c.me, until=When.EONT,
+    )
 
 
 @power("i642p1", level=7, cls=ITEM, usage=DAILY, action=INTERRUPT,

@@ -5073,6 +5073,7 @@ class Cast:
         *,
         sizes: Sequence[Size] = (),
         side: str = "",
+        when: Callable[[dict[str, Any]], bool] | None = None,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -5094,6 +5095,18 @@ class Cast:
         carries just the two participants.
 
         Empty means every creature, which is what the other two cards print.
+
+        **`when=` is the third narrowing and the note above understated the
+        context.** It said a gate "sees the context alone", which is true
+        and not the objection it was taken for: the context carries
+        `mover` and `occupant`, and a content gate closes over its own
+        `Cast` the way `f2278`'s does -- so "the target's space", "the
+        spaces of enemies marked by you" and "squares occupied by minions"
+        are all one predicate each. Three heroic rows print those and none
+        of them is a size or a side. #673.
+
+        `sizes`, `side` and `when` compound: every one given has to hold,
+        which is what a card printing two of them would mean.
         """
         from .query import enemies
 
@@ -5116,7 +5129,7 @@ class Cast:
                     return False
                 if want_side == "ally" and foe:
                     return False
-            return True
+            return when is None or bool(when(ctx))
 
         return self.bonus("may_enter", 1, on=who, until=until, when=allowed)
 

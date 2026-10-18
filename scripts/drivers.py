@@ -18758,7 +18758,145 @@ def what_a_saving_throw_says_about_itself(out: Result) -> None:
              " `ctx['dtype'] is None` alone would have taken")
     _ = Keyword  # the keyword selectors are exercised through i499x1 above
 
+def a_permission_to_cross_one_sort_of_creature(out: Result) -> None:
+    """"You can move through squares occupied by minions" -- and only those.
+
+    #673. Three rows carried `c.phasing(through=)` and none of them wanted
+    phasing: that verb walks through earth and rock and through everybody,
+    where every one of these names a narrow set of creatures. `c.may_enter`
+    is the mover's own permission to cross an occupied square and it was
+    already there -- what it could not say was *which* creatures, because
+    `sizes` and `side` are the only two narrowings printed on the rows it
+    was built for.
+
+    **The note it was built with understated its own context**, which is
+    why this took a parameter rather than a verb. It said a `when=` gate
+    "sees the context alone"; the context carries `mover` and `occupant`,
+    and a content gate closes over its own `Cast` the way `f2278`'s does.
+    So "squares occupied by minions" is one predicate.
+
+    **Two of the three rows are re-pointed rather than written, and that is
+    the finding.** `f2105b` and `p12426b` both print "during this shift you
+    can move through X's space", and `movement.shift` is a single `step` to
+    the destination: a four-square shift enters no square between the two,
+    so there is no moment for the passing *or* for the force damage
+    `p12426b` charges on it. The permission was never their blocker; a
+    shift that walks its squares is, which `p12426b` already named
+    `c.shift(path=)`.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.content import loader
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.grid import footprint
+    from combat_engine.engine.movement import _can_stop, _clear
+    from combat_engine.engine.types import Team
+
+    world, me, _ = audit_board("i591p1", 1)
+    here = world.get(me, Position)
+    out.that(here is not None, "the wearer is on the grid")
+    if here is None:
+        return
+    x, y = here.square
+
+    # A minion and a non-minion, both standing where the wearer would walk.
+    #
+    # **On squares the board has left empty, which took finding.** The first
+    # draft put the minion at `(x + 1, y)`, where the board already had a
+    # creature: `grid.occupant` answered that entity instead, `_clear` was
+    # asked about the wrong creature, and the permission looked broken.
+    #
+    # **The engine is not at fault and says so out loud** --
+    # `movement.place` refuses to overwrite an indexed square and emits
+    # `Note("<eid> placed on an occupied square ...")` for exactly this,
+    # because "overwriting *unindexes* the sitting tenant". The probe was
+    # not reading the bus. Recorded because the symptom is indistinguishable
+    # from a broken gate.
+    def free(start: int) -> tuple[int, int] | None:
+        for dx in range(start, start + 8):
+            for dy in (0, 1, -1, 2, -2):
+                sq = (x + dx, y + dy)
+                if world.grid.passable(sq) and world.grid.occupant(sq) is None:
+                    return sq
+        return None
+
+    one, two = free(1), None
+    if one is not None:
+        two = free(one[0] - x + 1)
+    out.that(one is not None and two is not None,
+             "two empty squares in front of the wearer to stand them in",
+             f"{one} {two}")
+    if one is None or two is None:
+        return
+    minion = loader.spawn(world, "m4228", one, team=Team.ENEMY)
+    ordinary = loader.spawn(world, "m6277", two, team=Team.ENEMY)
+    out.that(world.grid.occupant(one) == minion
+             and world.grid.occupant(two) == ordinary,
+             "and the grid agrees they are the ones standing there",
+             f"{world.grid.occupant(one)} {world.grid.occupant(two)}"
+             f" vs {minion} {ordinary}")
+    c = Cast(world=world, me=me, ref="drivers:may_enter")
+    out.that(c.is_minion(on=minion) and not c.is_minion(on=ordinary),
+             "one minion and one ordinary creature in the way",
+             f"minion={c.is_minion(on=minion)}"
+             f" other={c.is_minion(on=ordinary)}")
+
+    def squares_of(who: int) -> frozenset:
+        pos = world.get(who, Position)
+        return footprint(pos.square, pos.size) if pos else frozenset()
+
+    small, big = squares_of(minion), squares_of(ordinary)
+
+    # -- the control: neither square is crossable to start with ----------
+    out.that(not _clear(world, me, small),
+             "the minion's square is closed before the item is used --"
+             " without this the whole rule is vacuous")
+    out.that(not _clear(world, me, big),
+             "and so is the other creature's")
+
+    REGISTRY["i591p1"].body(c)
+    out.that(_clear(world, me, small),
+             "after the item, the wearer may cross the MINION's square")
+    out.that(not _clear(world, me, big),
+             "and still not the other creature's -- the negative control,"
+             " and the whole of what the `when=` gate is for")
+
+    # -- and it is a crossing, not a standing place ----------------------
+    # `_clear` waives occupancy on the way past; `_can_stop` must not. Both
+    # halves of #392, and the card spells the second one out: "you cannot
+    # end your move in an occupied space".
+    out.that(not _can_stop(world, me, small),
+             "but may not END its move there, which the card says and"
+             " `_can_stop` enforces whatever the permission allows")
+
+    # -- the two older narrowings still compound with the new one --------
+    from combat_engine.engine.types import Size
+
+    world2, me2, _ = audit_board("i591p1", 1)
+    pos2 = world2.get(me2, Position)
+    far = loader.spawn(world2, "m6277", (pos2.square[0] + 1, pos2.square[1]),
+                       team=Team.ENEMY)
+    c2 = Cast(world=world2, me=me2, ref="drivers:may_enter")
+    theirs = squares_of  # same reader, different world
+    pos_far = world2.get(far, Position)
+    far_squares = footprint(pos_far.square, pos_far.size) if pos_far else frozenset()
+    c2.may_enter(sizes=(Size.TINY,), when=lambda ctx: True,
+                 on=me2, until=When.ENCOUNTER)
+    out.that(not _clear(world2, me2, far_squares),
+             "`sizes=` still refuses a creature of the wrong size even with"
+             " a `when=` that says yes to everything -- the two compound,"
+             " which is what a card printing both would mean",
+             f"{c2.size_of(far)}")
+    _ = theirs
+
 DRIVERS = {
+    "may_enter_gate": (
+        a_permission_to_cross_one_sort_of_creature,
+        "a permission to cross one sort of creature's square (#673)",
+    ),
     "save_timing": (
         what_a_saving_throw_says_about_itself,
         "a saving throw says when it happened and what granted it (#671, #672)",
