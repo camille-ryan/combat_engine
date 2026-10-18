@@ -682,9 +682,14 @@ def m6552a3(c: Cast) -> None:
     out_of_combat=True,
 )
 def m6552a4(c: Cast) -> None:
-    """A noise from somewhere else, and an Insight check to disbelieve it. No
-    attack, no hold, no movement -- nothing in a fight turns on where a sound
-    came from, so this is deliberately inert rather than unwritten."""
+    """A noise from a chosen square, and a DC 12 Insight check to disbelieve
+    it.
+
+    Inert because **what a creature believes about the sound changes nothing
+    the card names** -- no attack, no hold, no movement, no penalty. Not
+    because the check is unrollable: insight is rolled in this tree and
+    contested against a bluff in eight rows, which is the correction #691
+    made to this sentence."""
 
 
 @power(

@@ -2813,8 +2813,16 @@ def i3443p1(c: Cast) -> None:
 @power("i455x1", level=7, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i455x1(c: Cast) -> None:
-    """Traps, foraging and navigating underground. No fight rolls Thievery
-    or Dungeoneering, so the whole property is narrative."""
+    """+2 to disable a trap, +2 to forage or navigate underground.
+
+    Inert, and **not** for the reason this said. "No fight rolls Thievery or
+    Dungeoneering" is false -- thievery is rolled three times in this tree
+    and `i455p1`, the very next row, is an encounter free action triggered by
+    one. #691.
+
+    The claim that holds is the one `dsl.narrative` states: *the circumstance,
+    never the skill*. Both bonuses are gated on disabling a trap and on
+    foraging or navigating, and a board presents neither."""
 
 
 @power("i455p1", level=7, cls=ITEM, usage=ENCOUNTER, action=FREE,

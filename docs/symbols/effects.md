@@ -45,7 +45,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Push one square of ground up, or pull it down.
 - `c.terrain(self, word: 'str') -> 'bool'`
   - Is the fight being had in that sort of place? `c.terrain("aquatic")`.
-- `c.unlit(self, *, on: 'int | None' = None) -> 'bool'`
+- `c.unlit(self, *, on: 'int | None' = None, square: 'Square | None' = None) -> 'bool'`
   - Is this creature standing in dim light or darkness? Defaults to the
 - `c.wall(self, size: 'int' = 0, *, at: 'Square | None' = None, hp: 'int' = 0, blocks_sight: 'bool' = False, solid: 'bool' = True, difficult: 'bool | str' = False, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None, label: 'str' = '') -> 'int'`
   - Raise a barrier: `size` contiguous squares that stop a creature.

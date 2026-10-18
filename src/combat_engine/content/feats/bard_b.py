@@ -437,9 +437,46 @@ def f2091(c: Cast) -> None:
     operation would have named it a third way."""
 
 
+#: The four the card lists.
+_FEY_SOCIAL = ("bluff", "diplomacy", "intimidate", "streetwise")
+
+
 @power("f2973", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF)
 def f2973(c: Cast) -> None:
-    """A language and a reroll on four social skills against one sort of
-    creature. No combat consequence at all: `c.reroll_check` answers a
-    `SkillCheck` the board never rolls."""
+    """Roll twice and keep the higher on four social checks against a fey
+    creature.
+
+    **"`c.reroll_check` answers a `SkillCheck` the board never rolls" was the
+    reason and it is false** -- `bluff` is rolled 18 times in this tree and
+    `diplomacy` four. #691.
+
+    **Both halves of the printed gate are reads that already exist**, which
+    is why this needed no new facility: `SkillCheck.target` is "who the check
+    was made against", put there for "the seven rows whose printed line is
+    about a creature rather than a number", and `c.is_kind` answers off the
+    type line. A check about a fact leaves `target` None, and those are the
+    ones this must not touch.
+
+    "You **can** roll twice" is a choice, so it goes through `c.may` rather
+    than firing itself.
+
+    The language clause is narrative and stays unwritten: nothing in a fight
+    asks what anybody speaks."""
+    # Imported here rather than at the top of the file: this is the only row
+    # in the batch that answers a check, and `general_i.py` keeps `Window`
+    # the same way for the same reason.
+    from combat_engine.engine.events import SkillCheck
+
+    def twice(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        if getattr(ev, "skill", "") not in _FEY_SOCIAL:
+            return
+        who = getattr(ev, "target", None)
+        if who is None or not c.is_kind("fey", on=who):
+            return
+        if c.may("roll twice and use the higher result"):
+            c.reroll_check(keep="best", ev=ev)
+
+    c.watch(SkillCheck, twice, until=When.ENCOUNTER)

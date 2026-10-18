@@ -963,10 +963,13 @@ def p16110(c: Cast) -> None:
        reach=PERSONAL, target=SELF,
        keywords=[Keyword.ELEMENTAL, Keyword.POLYMORPH], out_of_combat=True)
 def p16111(c: Cast) -> None:
-    """A disguise: the card says outright that the statistics do not
-    change, and the only roll it names is somebody's Insight against the
-    ruse. Nothing in a fight is different -- a finished row that does
-    nothing."""
+    """A disguise the card says outright changes no statistic.
+
+    Inert because **the card states the absence itself**, which is the
+    strongest kind of reason a row can carry. The Insight check against the
+    ruse is rollable -- insight is rolled in this tree and contested against
+    a bluff in eight rows -- and succeeding at it changes nothing the card
+    names either. #691."""
 
 
 @power("p16112", level=10, cls="x7_951", usage=DAILY, action=MINOR,

@@ -1544,9 +1544,13 @@ def m3505a2(c: Cast) -> None:
     out_of_combat=True,
 )
 def m3505a3(c: Cast) -> None:
-    """The whole printed line is how the creature looks and one Insight check
-    to see through it. Nothing in a fight rolls against an appearance, so the
-    row is complete and deliberately inert rather than unwritten."""
+    """How the creature looks, and a DC 13 Insight check that pierces it.
+
+    Inert because **the card states no mechanical change either way** -- not
+    because insight is unrolled. Insight is rolled twice in this tree and
+    contested against a bluff in eight rows, so "nothing in a fight rolls
+    against an appearance" was false and the conclusion was still right.
+    #691."""
 
 
 # --------------------------------------------------------------------------

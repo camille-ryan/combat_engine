@@ -1003,12 +1003,19 @@ def p14159(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=MARTIAL,
-    out_of_combat=True,
 )
 def p14160(c: Cast) -> None:
-    """The bonus is laid because it can be, but the row is inert: no
-    Intimidate check is rolled on a board, and standing in for a Bluff or a
-    Diplomacy check is the same claim twice over."""
+    """+5 to an Intimidate check until the end of the encounter.
+
+    **"The bonus is laid because it can be, but the row is inert: no
+    Intimidate check is rolled on a board" -- and one is.** `p16414`
+    triggers on exactly that check, so the bonus has a reader and the reader
+    can fire in a fight. Found by #633's gate, which caught this row laying
+    an effect while declaring it had nothing to say.
+
+    Standing in for a Bluff or a Diplomacy check is still the narrative part
+    and is still not written: the card offers the substitution and nothing
+    in a fight asks for either, so there is no moment to hang it on."""
     c.bonus("skill:intimidate", 5, kind="power", on=c.me, until=When.ENCOUNTER)
 
 

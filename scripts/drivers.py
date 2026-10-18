@@ -19886,6 +19886,223 @@ def drawing_stowing_and_a_running_jump(out: Result) -> None:
              " assertion the upper bound above could not make",
              f"moved {moved}, over-10 would allow {total // 10}")
 
+
+def a_fight_rolls_skill_checks_and_these_rows_change_them(out: Result) -> None:
+    """Five rows that said a fight rolls no skill check, and it does.
+
+    #691. A screen of every `out_of_combat=True` row whose docstring states a
+    premise found 45, and **24 said in some spelling that no fight rolls a
+    skill check**. The tree rolls thirteen of them in sixty-three places,
+    watches them in thirty triggers, and contests a bluff against a passive
+    insight in eight rows -- `p14228` is the measurement:
+
+        dc = max((c.passive("perception", of=e) for e in seekers), default=0)
+        if c.check("stealth", dc):
+            c.hide(until=When.ENCOUNTER)
+
+    Five of the 24 were writable and this is their evidence. The other 19 are
+    either inert on a **circumstance** no board presents -- which is the claim
+    that survives -- or blocked on a facility (#692, #693, #694).
+
+    **Asserted through `skills.modifier`, which is what a check actually
+    reads**, rather than by reading the effect back. A modifier nothing
+    consults is this project's commonest bug, and three of these rows are
+    nothing but a modifier.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, use
+    from combat_engine.engine.events import Rerolled, SkillCheck
+    from combat_engine.engine.query import enemies, team
+    from combat_engine.engine.skills import modifier
+
+    KNOWLEDGE = ("arcana", "dungeoneering", "history", "nature", "religion")
+
+    # -- m4882a0: a flat +10 to one skill, and only that skill -------------
+    # **Through `dsl.use`, not `row.body`.** A row's `on=`/`target=` are read
+    # by `use`, which is what sets `c.target` -- and `Cast._who` defaults
+    # `on=` through it. Calling the body directly leaves `c.target` None, so
+    # every `c.bonus` with no `on=` lands on nobody and the assertion fails
+    # against a row that works. Three of the five here failed that way first.
+    # **Measured by LIFTING it, because the board armed it already.**
+    # `audit.board` arms every `action=NONE` row before a rule looks, so
+    # using the trait again is a no-op and the "before" reading already
+    # contains the +10 -- which is how this assertion first failed at
+    # 17 -> 17 against a row that works. Ending the row's own effect and
+    # reading the difference asks the same question from the other side.
+    world, me, _ = audit_board("m4882a0", 1)
+    with_it = {s: modifier(world, me, s) for s in ("stealth", "athletics")}
+    # **`effects.of(me)`, not every effect in the world.** The board spawns
+    # a second creature of the same kind, so filtering on `by == ref` alone
+    # found two identical effects -- one of them the other creature's -- and
+    # the assertion failed on a row that is correct. The two did not sum,
+    # which is the only reason the figure below was right anyway.
+    mine = [e for e in world.effects.of(me)
+            if getattr(e, "by", "") == "m4882a0" and not e.ended]
+    out.that(len(mine) == 1,
+             "the creature carries exactly one of its own, laid when the"
+             " board armed the trait",
+             f"{[(e.label, getattr(e, 'by', '')) for e in mine]}")
+    for eff in mine:
+        world.effects.end(eff, "drivers: lifted to measure it")
+    without = {s: modifier(world, me, s) for s in ("stealth", "athletics")}
+    out.that(with_it["stealth"] - without["stealth"] == 10,
+             "and it is worth +10 on a stealth check, read off"
+             " `skills.modifier` where a check reads it",
+             f"{without['stealth']} with it lifted, {with_it['stealth']} with it")
+    out.that(with_it["athletics"] == without["athletics"],
+             "and nothing on an athletics check -- the key is one skill, not"
+             " the blanket `skill` an armour penalty would use",
+             f"{without['athletics']} -> {with_it['athletics']}")
+
+    # -- f617b: +10 to all five knowledge skills, and nothing else ---------
+    world, me, _ = audit_board("f617b", 1)
+    was = {s: modifier(world, me, s) for s in (*KNOWLEDGE, "stealth")}
+    use(world, me, "f617b")
+    now = {s: modifier(world, me, s) for s in (*KNOWLEDGE, "stealth")}
+    for skill in KNOWLEDGE:
+        out.that(now[skill] - was[skill] == 10,
+                 f"f617b pays +10 on {skill}, which the card lists by name",
+                 f"{was[skill]} -> {now[skill]}")
+    out.that(now["stealth"] == was["stealth"],
+             "and pays nothing on stealth, which it does not -- five keys"
+             " and not the blanket one",
+             f"{was['stealth']} -> {now['stealth']}")
+
+    # -- f1376b: two rolls and the higher, on those five only --------------
+    world, me, _ = audit_board("f1376b", 1)
+    said: list[Rerolled] = []
+    world.bus.on(Rerolled, said.append)
+    use(world, me, "f1376b")
+    probe = Cast(world=world, me=me, ref="drivers:checks")
+    probe.check("athletics", 10)
+    out.that(not said,
+             "an athletics check is not rerolled -- the control, and the one"
+             " the card's list is for",
+             f"{[(e.by, e.roll) for e in said]}")
+    probe.check("history", 10)
+    out.that(len(said) == 1 and said[0].by == "f1376b" and said[0].roll == "check",
+             "a history check is, and the announcement names f1376b as the"
+             " row that did it",
+             f"{[(e.by, e.roll, e.old, e.new) for e in said]}")
+    out.that(said[0].new >= min(said[0].old, said[0].new),
+             "keeping the better of the two, which is what `keep=\"best\"`"
+             " means and is the printed 'use the higher result'",
+             f"old={said[0].old} new={said[0].new}")
+
+    # -- f635b: an ALLY's social check, rerolled with +5 -------------------
+    world, me, _ = audit_board("f635b", 1)
+    mate = next((o for o in sorted(world.entities)
+                 if o != me and team(world, o) is team(world, me)), None)
+    out.that(mate is not None, "an ally to answer for", f"{mate}")
+    if mate is not None:
+        heard: list[Rerolled] = []
+        world.bus.on(Rerolled, heard.append)
+        row = REGISTRY["f635b"]
+        # `Power.on` is a `Trigger`, a sequence of them, or None, so the
+        # predicate is reached through `getattr` rather than by assuming
+        # which -- `f608b` beside this row declares two.
+        gate = getattr(row.on, "when", None)
+        out.that(gate is not None,
+                 "f635b declares one Trigger, so there is one predicate to"
+                 " ask",
+                 f"{type(row.on).__name__}")
+        if gate is None:
+            return
+        # **The row's own predicate, not a re-implementation of it.** The
+        # first draft armed the body against every `SkillCheck` by the ally
+        # and asserted the narrowing, which tested the lambda in this file
+        # rather than the `Trigger` in the header -- so "an athletics check
+        # is left alone" failed against a row that narrows correctly.
+        ally = Cast(world=world, me=mate, ref="drivers:ally")
+        plain = ally.check("athletics", 10)
+        # **The real event, not a constructed lookalike.** A predicate is
+        # handed the event, and `skills.check` fills `bonus`, `total` and
+        # `success` in a resolve callback -- a hand-built `SkillCheck` would
+        # have none of them and the gate would read a different thing than
+        # the dispatcher reads.
+        rolled_ev = next(e for e in reversed(world.bus.log)
+                         if isinstance(e, SkillCheck))
+        out.that(not gate(world, me, rolled_ev),
+                 "the declared Trigger refuses an ally's athletics check:"
+                 " the card lists three social skills and this is not one",
+                 f"{plain.skill}")
+        out.that(not heard, "so nothing was rerolled", f"{[e.by for e in heard]}")
+        rolled = ally.check("bluff", 10)
+        ev = next(e for e in reversed(world.bus.log)
+                  if isinstance(e, SkillCheck))
+        out.that(gate(world, me, ev),
+                 "and accepts an ally's bluff check, which is the printed"
+                 " line",
+                 f"{ev.skill} by {ev.actor}, ally of {me}")
+        use(world, me, "f635b", targets=[mate], trigger=ev)
+        out.that(len(heard) == 1 and heard[0].by == "f635b",
+                 "used against that check, f635b rerolls it",
+                 f"{[(e.by, e.old, e.new) for e in heard]}")
+        out.that(ev.bonus >= 5,
+                 "and the printed +5 power bonus is in the check's own"
+                 " total, which is how `c.boost_check` pays a roll that has"
+                 " already been made",
+                 f"bonus={ev.bonus} total={ev.total}")
+        out.that(rolled is not None, "the first result object still exists")
+
+    # -- f2973: the same, gated on what the check was made AGAINST ---------
+    world, me, _ = audit_board("f2973", 1)
+    foe = next(iter(enemies(world, me)), None)
+    out.that(foe is not None, "somebody to make the check against", f"{foe}")
+    if foe is not None:
+        seen: list[Rerolled] = []
+        world.bus.on(Rerolled, seen.append)
+        # **Not armed here.** `audit.board` arms every `action=NONE` row
+        # before a rule looks, and this is one -- arming it again installed a
+        # second `c.watch` and one check came back rerolled *twice*, which
+        # read like a double-reroll bug in a row that is correct.
+        mine = Cast(world=world, me=me, ref="drivers:fey")
+        out.that(not mine.is_kind("fey", on=foe),
+                 "the target is not fey to start with -- the control",
+                 f"{sorted(mine.kinds_of(foe))}")
+        mine.check("bluff", 10, against=foe)
+        out.that(not seen,
+                 "so a bluff against it is NOT rerolled: the card's gate is"
+                 " the creature, and `SkillCheck.target` is how it is read",
+                 f"{[(e.by,) for e in seen]}")
+        Cast(world=world, me=me, ref="drivers:fey").set_origin("fey", on=foe)
+        out.that(mine.is_kind("fey", on=foe), "now it is fey")
+        mine.check("bluff", 10, against=foe)
+        out.that(len(seen) == 1 and seen[0].by == "f2973",
+                 "and the same check against the same creature is rerolled,"
+                 " which is the whole content of the row",
+                 f"{[(e.by, e.old, e.new) for e in seen]}")
+        mine.check("bluff", 10)
+        out.that(len(seen) == 1,
+                 "a bluff about nobody leaves it alone -- `target` is None"
+                 " for a check about a fact, and most checks are",
+                 f"{[(e.by,) for e in seen]}")
+
+    # -- p14160 and i2867p1: the two #633's inert gate caught --------------
+    world, me, _ = audit_board("p14160", 1)
+    was_i = modifier(world, me, "intimidate")
+    use(world, me, "p14160")
+    out.that(modifier(world, me, "intimidate") - was_i == 5,
+             "p14160's +5 reaches an intimidate check, which is what"
+             " `p16414` triggers on and what its `out_of_combat=True`"
+             " denied",
+             f"{was_i} -> {modifier(world, me, 'intimidate')}")
+
+    world, me, _ = audit_board("i2867p1", 1)
+    rolls: list[SkillCheck] = []
+    world.bus.on(SkillCheck, rolls.append)
+    victim = next(iter(enemies(world, me)), None)
+    use(world, me, "i2867p1", targets=[victim] if victim is not None else None)
+    out.that(len(rolls) == 1 and rolls[0].skill == "thievery",
+             "i2867p1 rolls the thievery check its body always rolled --"
+             " the event that contradicted its own marker",
+             f"{[(e.skill, e.total) for e in rolls]}")
+
+
+
+
 DRIVERS = {
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
@@ -19898,6 +20115,10 @@ DRIVERS = {
     "lamp_settings": (
         one_lamp_three_settings_and_putting_the_lights_out,
         "one lamp's three settings, and a row that suppresses a light (#686)",
+    ),
+    "skill_checks": (
+        a_fight_rolls_skill_checks_and_these_rows_change_them,
+        "five rows that said a fight rolls no skill check (#691)",
     ),
     "light_and_dim": (
         what_a_carried_light_does_and_what_a_dimmer_does,

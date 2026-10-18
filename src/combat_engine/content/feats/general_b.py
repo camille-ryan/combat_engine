@@ -340,11 +340,43 @@ def f614b(c: Cast) -> None:
 _granted("f635", "f635b")
 
 
-@power("f635b", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+#: The three the card lists. `f608b` beside this one rerolls **any** check,
+#: so the predicate there cannot be shared.
+_SOCIAL = ("bluff", "diplomacy", "intimidate")
+
+
+def _ally_social_check(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    return _ally_checked(world, me, ev) and getattr(ev, "skill", "") in _SOCIAL
+
+
+@power("f635b", level=1, cls="", usage=ENCOUNTER,
+    action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(10), target=ONE_ALLY, keywords=DIVINE,
-    group=CHANNEL_DIVINITY, out_of_combat=True)
+    group=CHANNEL_DIVINITY,
+    trigger="an ally in the burst makes one of three social checks",
+    on=Trigger(SkillCheck, _ally_social_check,
+               "an ally makes a social skill check"))
 def f635b(c: Cast) -> None:
-    """Rerolls a social skill check. Nothing in a fight turns on one."""
+    """An ally rerolls one of three social checks with a +5 power bonus, and
+    keeps the new result.
+
+    **"Rerolls a social skill check. Nothing in a fight turns on one" was the
+    whole reason and it is false** -- `bluff` is rolled 18 times in this tree
+    and `diplomacy` four. #691.
+
+    **The header was wrong too, and only because the row was marked**: it
+    stood as `action=NONE` with no trigger while the card prints an Immediate
+    Interrupt. `lint.py` only checks the headers of finished rows, so the
+    marker was hiding it -- the same way two feats sat ENCOUNTER-not-AT_WILL
+    for as long as theirs did.
+
+    `keep="new"` is the printed "he uses the new result, even if it is lower
+    than the original", and `bonus=5` is the one clause that rides with the
+    reroll. `f608b` four rows down is the same shape against any check at
+    all, and its note has the window argument: an immediate interrupt lands
+    in `Window.BEFORE`, which for a `SkillCheck` is before `skills.check`
+    totals the modifiers."""
+    c.reroll_check(keep="new", bonus=5)
 
 
 _granted("f608", "f608b")

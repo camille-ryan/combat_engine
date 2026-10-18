@@ -128,11 +128,32 @@ def f598b(c: Cast) -> None:
 _granted("f617", "f617b")
 
 
+#: The five skills the card lists behind the words "knowledge checks".
+#: Spelled out because the engine has no group of them -- `skills.SKILLS` is
+#: a flat table of seventeen -- and `items/head.py` keeps the same tuple for
+#: the same reason.
+_KNOWLEDGE = ("arcana", "dungeoneering", "history", "nature", "religion")
+
+
 @power("f617b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       out_of_combat=True)
+       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY)
 def f617b(c: Cast) -> None:
-    """A bonus to knowledge checks. Nothing in a fight turns on one."""
+    """+10 power bonus to every knowledge check until the end of your next
+    turn.
+
+    **"A bonus to knowledge checks. Nothing in a fight turns on one" was the
+    whole reason and it is false.** A fight rolls `arcana` three times and
+    `history` three times in this tree, `p14228` runs a stealth check against
+    a passive perception, and eight rows contest a bluff against a passive
+    insight -- `engine/skills.py` is a finished model with the ability table,
+    `TRAINING = 5`, the `Skills` component chargen fills from `game.db`, and
+    the `skill:<name>` modifier key. #691.
+
+    One `c.bonus` per listed skill rather than the blanket `skill` key: the
+    blanket one is what an armour penalty or a racial bonus to *all*
+    seventeen would be, and this card names five."""
+    for skill in _KNOWLEDGE:
+        c.bonus(f"skill:{skill}", 10, kind="power", until=When.EONT)
 
 
 _granted("f723", "f723b")

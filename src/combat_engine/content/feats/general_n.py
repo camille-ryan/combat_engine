@@ -2364,6 +2364,21 @@ def f2898(c: Cast) -> None:
 
 
 @power("f2900", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF, todo=("c.race_skills()",))
 def f2900(c: Cast) -> None:
-    """A language, a skill bonus and a disguise check. No fight in it."""
+    """A language, +2 to one skill the chosen race is good at, and +5 to
+    avoid detection while imitating it.
+
+    **"No fight in it" was the whole reason and the middle third is false**
+    -- a +2 racial bonus to a skill is `c.bonus("skill:<name>", 2,
+    kind="racial")`, and a fight rolls these. #691.
+
+    What is missing is the **pool**: nothing records which skills a race
+    gains a bonus to. `game.db` has `class_skill` and no racial twin, and
+    `query.race_of` answers which race and nothing about what it is good at.
+    #694.
+
+    A partial write would be wrong rather than incomplete here: the card's
+    human clause is "any skill of your choice", so a row that cannot tell
+    which race was chosen cannot tell whether it applies. The +5 to avoid
+    detection is a second gap and belongs to `p2472`'s disguise."""

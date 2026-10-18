@@ -842,14 +842,44 @@ declare a weapon, a weapon group or a suit of armour.
 ## A row with no combat consequence at all
 
 Some utility powers are **narrative only**: the whole printed Effect is a
-bonus to a skill check, or a ritual, or lighting a lamp. Those are not
-failures to write and they are not yours to invent a combat effect for.
+ritual, or an hour of knowing where something is. Those are not failures to
+write and they are not yours to invent a combat effect for.
 
 Declare them with `out_of_combat=True` and an empty-ish body -- see
 `content/powers/wizard/level_0.py`, where all four cantrips do this. The
 flag is the difference between *deliberately inert* and *not written yet*:
-`audit.py` stops expecting the row to do anything, `actions.legal` stops
-offering it in a fight, and `coverage.py` still counts it as done.
+`actions.legal` stops offering it in a fight and `coverage.py` still counts
+it as done.
+
+**"A bonus to a skill check" used to head that list and it was wrong.** It
+was the single most expensive sentence in this file: a screen of every
+`out_of_combat=True` row whose docstring states a premise found 45 of them,
+and **24 said in some spelling that a fight rolls no skill check** (#691).
+A fight rolls thirteen of them in sixty-three places in this tree, watches
+them in thirty triggers, and contests a bluff against a passive insight in
+eight rows. `engine/skills.py` is finished -- the ability table,
+`TRAINING = 5`, `Skills` filled from `game.db`'s 205 `class_skill` rows, the
+`skill:<name>` modifier key and `passive`.
+
+So the test is not the skill, it is the **circumstance**:
+
+| printed | write it |
+|---|---|
+| "+2 to Stealth checks" | `c.bonus("skill:stealth", 2)` -- a real modifier with a reader |
+| "+2 to Thievery checks **to disable traps**" | inert: no board presents a trap |
+| "roll twice on a knowledge check" | `c.reroll_check(keep="best")` on a `SkillCheck` watch |
+| "+4 to Perception **to follow tracks**" | inert: no board presents a trail |
+
+If your reason for a marker is a sentence about what the engine cannot do,
+**check it against the engine before writing it down**. Nine of those 24 said
+"no fight rolls <skill>" and every one was false; the ones that survived said
+something about the *card* instead -- "the card states no mechanical change
+either way", which is a claim about the page and cannot go stale.
+
+And the claim is checked now. `audit.py` gives every `out_of_combat` row one
+board and reports it **AWAKE** if it does anything, which fails the run
+(#633). Two rows were caught by that on its first run: one declared itself
+inert and rolled a skill check in the same body.
 
 `out_of_combat` and `todo=` are opposites and setting both is refused at
 import: one says "finished, and deliberately does nothing", the other says
@@ -1029,10 +1059,17 @@ Still put it in your final report, naming the symbol and what it should do.
 
 `dropped=` says "this clause is absent and here is the symbol it waits on".
 Some clauses are not waiting on anything. An item that gives a real bonus to
-Will against illusions **and** +5 to picking locks has a second half that is
-not a gap: nothing in a fight ever rolls Thievery, so a verb to hold the
-bonus would be a mechanism nobody ever passes a purpose to — and a marker
-naming a symbol that must never be built sits in the queue forever.
+Will against illusions **and** +5 to picking a lock has a second half that is
+not a gap: no board presents a lock, so a verb to hold the bonus would be a
+mechanism nobody ever passes a purpose to — and a marker naming a symbol that
+must never be built sits in the queue forever.
+
+**This paragraph used to say "nothing in a fight ever rolls Thievery", and
+that is false** — thievery is rolled three times in this tree and `i455p1` is
+an encounter free action triggered by one. The claim that holds is the narrow
+one: *picking a lock* is a circumstance no board presents. Reaching for the
+wide version of it left 24 rows inert on a premise about the engine instead
+of one about the card (#691), so say the circumstance and never the skill.
 
 That is a third field:
 
@@ -1040,8 +1077,8 @@ That is a third field:
 @power("i1", ..., narrative=("skill:thievery",))
 def i1(c: Cast) -> None:
     """The Will half is exact. Opening a lock is the other clause, and no
-    thievery check is rolled on a board, so the bonus has nowhere to go
-    and nothing is missing."""
+    board presents a lock, so the bonus has nowhere to go and nothing is
+    missing."""
     c.bonus(WILL, 2, ...)
 ```
 

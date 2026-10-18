@@ -647,11 +647,41 @@ def f1375b(c: Cast) -> None:
 _granted("f1376", "f1376b")
 
 
+#: See `general_c._KNOWLEDGE`: the five skills the card means by the word.
+_KNOWLEDGE = ("arcana", "dungeoneering", "history", "nature", "religion")
+
+
 @power("f1376b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY,
-       out_of_combat=True)
+       reach=PERSONAL, target=SELF, keywords=DIVINE, group=CHANNEL_DIVINITY)
 def f1376b(c: Cast) -> None:
-    """Two rolls on a knowledge check. Nothing in a fight turns on one."""
+    """Two rolls and the higher on every knowledge check, until the end of
+    your next turn.
+
+    **"Two rolls on a knowledge check. Nothing in a fight turns on one" was
+    the whole reason and it is false** -- see `f617b`, and #691 for the
+    census. A fight rolls these.
+
+    **A watch, not a modifier**, because the clause is about *how* a later
+    roll is made rather than what it adds, and the rolls it applies to have
+    not happened yet. `c.reroll_check(keep="best")` is "roll twice and use
+    the higher result" exactly: the second die is rolled and the better of
+    the two is kept, which is the same arithmetic as rolling two at once.
+    The subscription expires with the effect, so the clock is the duration
+    and nothing has to remember it.
+
+    `ev=` is required here and is the whole reason `c.reroll_check` takes it
+    -- a watch handler closes over this row's `Cast`, whose `trigger` is not
+    the roll being watched.
+
+    The default `Window.AFTER` is right and not an oversight:
+    `c.boost_check`'s own note records that "`skills.check` builds its result
+    from the event **after** the bus has finished with it", so a row answering
+    in the after-window still decides what the check came to."""
+    def twice(ev: Any) -> None:
+        if getattr(ev, "skill", "") in _KNOWLEDGE:
+            c.reroll_check(keep="best", ev=ev)
+
+    c.watch(SkillCheck, twice, until=When.EONT)
 
 
 _granted("f1377", "f1377b")

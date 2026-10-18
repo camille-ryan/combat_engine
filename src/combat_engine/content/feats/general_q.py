@@ -1916,8 +1916,13 @@ def f3308(c: Cast) -> None:
     The point-spend half is unchanged: `ActionSpent` names the cost, so a
     move action is announced and the bonus is laid inside the turn it
     belongs to."""
-    c.bonus("run", 1, on=c.me, until=When.ENCOUNTER, kind="feat")
-    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
+    # **Untyped, because the card prints no type.** `bonuses.py` caught both
+    # of these as `kind="feat"` against a card that says only "+1 bonus to
+    # speed" -- and the type is not decoration: an untyped bonus stacks with
+    # the feat bonus another row lays, and a mislabelled one silently does
+    # not. The card is the authority and it names none.
+    c.bonus("run", 1, on=c.me, until=When.ENCOUNTER)
+    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER,
             when=lambda ctx: bool(ctx.get("charge", False)))
 
     def hustle(ev: Any) -> None:

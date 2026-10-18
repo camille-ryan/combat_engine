@@ -355,18 +355,25 @@ def f2808(c: Cast) -> None:
 
 
 @power("f2804", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF, todo=("events.CheckDeclared",))
 def f2804(c: Cast) -> None:
-    """Untrained skill checks and nothing else. Deliberately inert rather
-    than unwritten: no fight turns on one.
+    """Call odd or even before an untrained check; a d20 that matches pays a
+    feat bonus equal to your Charisma modifier.
 
-    **The second half of the old reason stopped being true.** It read
-    "`engine/skills.py` has no training model to tell a trained check from
-    an untrained one even if a fight did"; `Skills.trained` and the +5
-    landed in #565, and this file's own `f2803` note is where that
-    convention is written down. So the engine *can* tell. The row is inert
-    because the clause has no combat weight, which is the reason that
-    holds."""
+    **Both halves of the old reason have now gone.** The first was "no
+    training model to tell a trained check from an untrained one", answered
+    by `Skills.trained` and the +5 in #565. The second was "no fight turns on
+    one", and a fight rolls 13 different skills in 63 places in this tree.
+    #691.
+
+    What blocks it is the **moment**, which is the one thing the card is
+    precise about: the call is made *before* the roll, and `SkillCheck` is
+    announced with `natural` already in it. A row answering that event would
+    be choosing odd or even with the die face in hand, which turns a 50/50
+    gamble into an always-on bonus -- green in the audit and wrong in play,
+    the failure mode `engine/CLAUDE.md` names first. So this waits for a
+    check to be *declared*, the way `AttackDeclared` precedes the attack
+    roll. #693."""
 
 
 # -- features named in prose ------------------------------------------------

@@ -1242,11 +1242,19 @@ class Power:
     #: at all. The per-clause form of `out_of_combat`.
     #:
     #: `dropped` was being used for this and is wrong about *why*. "+5 to
-    #: pick a lock" is not waiting on `c.skill_circumstance()`; nothing
-    #: ever rolls Thievery in a fight, so that verb would be a mechanism
-    #: nobody passes a purpose to, and a marker naming a symbol that must
-    #: never be built sits in the queue forever. The marker grammar exists
-    #: to stop exactly that.
+    #: pick a lock" is not waiting on `c.skill_circumstance()`; no board
+    #: presents a lock, so that verb would be a mechanism nobody passes a
+    #: purpose to, and a marker naming a symbol that must never be built
+    #: sits in the queue forever. The marker grammar exists to stop exactly
+    #: that.
+    #:
+    #: **This read "nothing ever rolls Thievery in a fight", and that is
+    #: false** -- thievery is rolled three times in the tree and `i455p1`
+    #: is an encounter free action triggered by one. The wide version of the
+    #: claim is what 24 rows were inert on, each of them arguing about the
+    #: *engine* where the honest argument is about the *card*. #691. The
+    #: paragraph below already says the right thing and says it twice: the
+    #: claim is about the circumstance, never about the skill.
     #:
     #: **Not a symbol, because there is no symbol.** An element is
     #: `skill:<name>` for one of the seventeen skills -- the same key

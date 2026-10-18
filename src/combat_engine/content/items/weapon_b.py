@@ -4209,12 +4209,25 @@ def i2866p1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    out_of_combat=True,
 )
 def i2867p1(c: Cast) -> None:
-    """Picking a pocket has no combat consequence, so the row is
-    deliberately inert -- but the check is still rolled, because the bonus
-    is the whole of what the item adds."""
+    """A Thievery check against an adjacent creature, at this weapon's
+    enhancement bonus.
+
+    **It said "picking a pocket has no combat consequence, so the row is
+    deliberately inert -- but the check is still rolled", and those two
+    halves contradict each other.** #633's gate is what made that visible:
+    the row declared `out_of_combat=True` and emitted a `SkillCheck`, which
+    is the one thing the claim denies.
+
+    The marker was the wrong half. **A skill check is a moment other rows
+    watch**: `i455p1` is an encounter free action triggered by a thievery or
+    dungeoneering check -- four rows below this one -- and `p16414` by an
+    intimidate one, so rolling one in a fight has reach whatever the pocket
+    is worth. `narrative=("skill:thievery",)` would have
+    been the other candidate and is wrong for the same reason -- its own
+    note is that "nothing ever rolls Thievery in a fight", and something
+    does."""
     c.check("thievery", bonus=c.enhancement)
 
 

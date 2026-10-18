@@ -439,7 +439,12 @@ def i2061p2(c: Cast) -> None:
 @power("i2673x1", level=4, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i2673x1(c: Cast) -> None:
-    """Handling animals, and no fight rolls Nature."""
+    """+1 to a Nature check to handle an animal.
+
+    Inert on the **circumstance** and not on the skill, which is the
+    correction #691 made: nature is watched by two triggers in this tree, so
+    "no fight rolls Nature" was false. Handling an animal is what a board
+    never asks."""
 
 
 @power("i2673p1", level=4, cls=ITEM, usage=DAILY, action=INTERRUPT,

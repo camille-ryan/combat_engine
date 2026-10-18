@@ -733,8 +733,13 @@ def f3447(c: Cast) -> None:
 @power("f3448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def f3448(c: Cast) -> None:
-    """Social checks in a named sort of place and against a named sort of
-    person. No combat consequence at all."""
+    """+4 in one sort of settlement, +2 against one sort of person.
+
+    Inert on the **circumstance**: both bonuses are gated on where the check
+    is made and on who it is made against, and a board is neither a
+    settlement nor populated by that sort of person. The skills themselves
+    are rolled -- `bluff` 18 times in this tree -- so "no combat consequence
+    at all" was the right verdict reached through a false premise. #691."""
 
 
 @power("f3449", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

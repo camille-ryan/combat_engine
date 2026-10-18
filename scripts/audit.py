@@ -136,6 +136,26 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # An immediate interrupt that rerolls an **ally's** bluff, diplomacy or
+    # intimidate check. The board never makes an ally roll one: `_provoke`
+    # makes an attack, and nothing in the harness asks an ally for a social
+    # check -- so the trigger has no occasion and the row correctly does
+    # nothing. `f608b`, four rows below it in the same file, is the same
+    # shape against *any* check and is on the silent list for the same
+    # reason.
+    #
+    # **Driven by hand rather than argued**, which is what this dict is for.
+    # `drivers.skill_checks` makes an ally roll both kinds and asserts the
+    # row's own declared `Trigger` predicate on each:
+    #
+    #     ok  the declared Trigger refuses an ally's athletics check
+    #     ok  and accepts an ally's bluff check
+    #     ok  used against that check, f635b rerolls it
+    #     ok  and the printed +5 power bonus is in the check's own total
+    #
+    # So the clause works and the board cannot pose it, which is the
+    # distinction #629 is about. #691.
+    "f635b": "needs an ally to roll a social check; the board never does",
     # Its printed Requirement is **one** weapon -- `w3594` -- and `chargen`
     # deals this sorcerer `w3596`, a different blade from the same group. So
     # the gate correctly declines and the row lays nothing.

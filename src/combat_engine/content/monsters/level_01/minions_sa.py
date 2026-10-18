@@ -1100,8 +1100,11 @@ def m5897a0(c: Cast) -> None:
     out_of_combat=True,
 )
 def m5898a0(c: Cast) -> None:
-    """A Perception bonus for finding and following tracks. No fight rolls
-    that check, so the whole row is inert rather than partly missing."""
+    """+4 to its master's Perception, for finding and following tracks.
+
+    Inert on the **circumstance**. "No fight rolls that check" was false --
+    `p14228` reads a passive perception and a row rolls one -- and tracking
+    is what a board never asks. #691."""
 
 
 @power(
@@ -1156,8 +1159,11 @@ def m5900a0(c: Cast) -> None:
     out_of_combat=True,
 )
 def m5901a0(c: Cast) -> None:
-    """As m5900a0: a Thievery check made on command, and no fight rolls
-    one."""
+    """As m5900a0: a Thievery check made on command, for sleight of hand.
+
+    Inert on the **circumstance** and not on the skill: thievery is rolled
+    three times in this tree and `i455p1` triggers on one. Sleight of hand
+    is the part no board asks. #691."""
 
 
 # --------------------------------------------------------------------------

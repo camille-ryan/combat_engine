@@ -1480,13 +1480,30 @@ def m4780a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    out_of_combat=True,
 )
 def m4882a0(c: Cast) -> None:
-    """A Stealth bonus against a passive number, and nothing else -- there are
-    no skill checks in the engine and no combat consequence to invent, so it
-    is declared inert rather than approximated."""
-    c.note("m4882a0: +10 to Stealth against an enemy's passive Perception")
+    """+10 to Stealth against an enemy's passive Perception.
+
+    **"There are no skill checks in the engine and no combat consequence to
+    invent" was the reason, and both halves are false.** `engine/skills.py`
+    is a finished model -- the seventeen-skill ability table, `TRAINING = 5`,
+    the `Skills` component chargen fills from `game.db`'s 205 `class_skill`
+    rows, the `skill:<name>` modifier key and `passive` -- and `p14228` is
+    the consequence written out:
+
+        dc = max((c.passive("perception", of=e) for e in seekers), default=0)
+        if c.check("stealth", dc):
+            c.hide(until=When.ENCOUNTER)
+
+    which is exactly the roll this trait says it gains +10 to. #691.
+
+    **Not gated on the passive, even though the card says "against enemies'
+    passive Perception".** That phrase names which roll the stealth check is
+    opposed by, not a circumstance narrowing the bonus: a stealth check in
+    this engine is always against somebody's passive perception, so a `when=`
+    would be a gate that is either always true or an invitation to get it
+    wrong."""
+    c.bonus("skill:stealth", 10, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

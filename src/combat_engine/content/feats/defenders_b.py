@@ -685,11 +685,20 @@ def f2619(c: Cast) -> None:
 
 
 @power("f2613", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, out_of_combat=True)
+       reach=PERSONAL, target=SELF, todo=RUNE_FEATS)
 def f2613(c: Cast) -> None:
-    """Two skill bonuses and nothing else. Deliberately inert rather than
-    blocked on counting rune feats: the count would only ever size a
-    number no fight reads."""
+    """A feat bonus to two social checks, the size of it being how many rune
+    feats you have.
+
+    **It read "deliberately inert rather than blocked on counting rune feats:
+    the count would only ever size a number no fight reads", and the second
+    half is false** -- bluff is rolled 18 times in this tree and diplomacy
+    four. So the row *is* blocked on the count, which is what `f2614` and
+    `f2615` beside it already say: `RUNE_FEATS` is the marker they carry and
+    this is the third row on it. #691, #692.
+
+    The bonus itself needs nothing new. `c.bonus("skill:bluff", n,
+    kind="feat")` is one line the moment `n` can be asked for."""
 
 
 @power("f2614", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
