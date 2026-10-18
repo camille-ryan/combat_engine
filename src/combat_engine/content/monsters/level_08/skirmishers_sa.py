@@ -51,7 +51,6 @@ from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_03.brutes import _taking_ongoing
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers import (
     _free_square_beside,
     _is_bloodied,
@@ -135,7 +134,6 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     allies,
     concealment_of,
-    cover_between,
     defence,
     distance_between,
     enemies,
@@ -1942,14 +1940,20 @@ def m3675a1(c: Cast) -> None:
     recharge=5,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature in the burst it has concealment or cover against",
+        sheltered_from=True,
+    ),
 )
 def m3675a2(c: Cast) -> None:
-    def hidden_from(f: int) -> bool:
-        mine = concealment_of(c.world, c.me) is not Cover.NONE
-        return mine or cover_between(c.world, f, c.me) is not Cover.NONE
-
-    victim = _restricted_to(c, 5, hidden_from)
+    """"One creature in the burst the m3675 has concealment or cover
+    against" is `Target.sheltered_from`, which reads
+    `query.sheltered_from` -- both halves of the printed "or" in one
+    reader, because concealment does not vary by candidate and cover does.
+    It was a body filter that *redirected*, so the menu offered every enemy
+    in the burst and the advantage landed on somebody else. #656."""
+    victim = c.target
     if victim is None:
         return
     c.gains_advantage(lambda ctx, v=victim: ctx.get("target") == v, on=c.me, until=When.EOT)

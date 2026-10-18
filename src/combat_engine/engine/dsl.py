@@ -752,6 +752,17 @@ class Target:
     #: Five rows asked it in their bodies and spelled it four different ways
     #: between them, one of them with the wrong notion of airborne. #660.
     on_the_ground: bool | None = None
+    #: "One creature in the burst the m3675 has **concealment or cover
+    #: against**." One row, and it is a field rather than a body check for
+    #: the usual reason: the page and `policy/` read the header.
+    #:
+    #: **Reads `query.sheltered_from`, one reader over both halves of the
+    #: printed "or".** Not `any_of` over two fields, because concealment is
+    #: a property of the caster alone and does not vary by candidate -- a
+    #: field that answers the same for every creature in the pool is a
+    #: Requirement in a target line's clothing, and OR-ing it with a real
+    #: per-target test inside `any_of` would read as though both narrowed.
+    sheltered_from: bool = False
 
     def __str__(self) -> str:
         if self.label:
@@ -2694,6 +2705,7 @@ def candidates(
         or aim.loose
         or aim.any_of
         or aim.on_the_ground is not None
+        or aim.sheltered_from
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -3036,6 +3048,11 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # which is the pool's reading too: `loose=` only ever reaches
         # `scenery()`.
         if thing is not None and (thing.fastened or thing.by):
+            return False
+    if aim.sheltered_from:
+        from .query import sheltered_from
+
+        if not sheltered_from(world, actor, target):
             return False
     if aim.on_the_ground is not None:
         from .query import on_the_ground

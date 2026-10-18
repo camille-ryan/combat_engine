@@ -506,7 +506,7 @@ READERS: dict[str, list[str]] = {
         "blinded", "concealment_of", "cover_between", "cover_granters",
         "cover_waived", "has_sense", "hidden_from", "light_concealment",
         "light_level", "sees_in", "sees_invisible", "sees_through",
-        "sight_capped", "unseen_by",
+        "sheltered_from", "sight_capped", "unseen_by",
     ],
     "attacking and defending": [
         "attack_penalty", "can_flank", "deals_half", "defence", "flanked_by",

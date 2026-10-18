@@ -99,6 +99,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Does this creature see what is hidden from everybody else?
 - `query.sees_through(world: 'World', watcher: 'int', who: 'int') -> 'bool'`
   - Can this watcher see that creature whatever it is hiding behind?
+- `query.sheltered_from(world: 'World', actor: 'int', target: 'int') -> 'bool'`
+  - Does this creature have cover or concealment against that one?
 - `query.sight_capped(world: 'World', watcher: 'int', who: 'int') -> 'bool'`
   - Is that creature simply too far off for this watcher to see?
 - `query.unseen_by(world: 'World', watcher: 'int', who: 'int') -> 'bool'`

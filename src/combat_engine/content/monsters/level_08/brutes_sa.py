@@ -47,7 +47,6 @@ from combat_engine.content.monsters.forms import _not_in, _shapechange, _shapes
 from combat_engine.content.monsters.level_01.artillery_sa import (
     _recharge_when_bloodied,
 )
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_06.skirmishers import _in_heavy_armour
 from combat_engine.content.monsters.level_07.brutes_sa import _ridden_by_seventh_level
@@ -558,12 +557,38 @@ def _rust(c: Cast, who: int, what: str | Defense, tally: str) -> None:
         what, 1, until=When.ENCOUNTER, on=who, label=f"{tally}{len(carried)}"
     )
     if hold is not None:
+        # **The label is overwritten and `by` is not, which is what lets
+        # `m115879a2` declare its target line.** The label becomes the
+        # shared tally so the count is per item; `Effect.by` was set to the
+        # laying row's ref when the hold was created and this does not
+        # disturb it. So `Target.affected_by` can read who rusted what even
+        # though the label says nothing about it.
+        #
+        # `m115879a2`'s note said "rust is a tally of holds and no `Target`
+        # field reads one". It was reasoning from `label`, which is true of
+        # `label` -- and `by` was already right. Measured both ways round:
+        # the ref is there with or without an explicit stamp. #656.
         hold.label = tally
 
 
+#: The three rows of this block that lay rust, which is what
+#: `m115879a2`'s target line asks about: `m115879a0` rusts a weapon that
+#: strikes the creature, `m115879a1` rusts heavy armour it hits, and
+#: `m115879a3` rusts both.
+#:
+#: A **disjunction over three refs** rather than one, because the card says
+#: "a rusting item" without caring which row made it rust. `Target.any_of`
+#: is what holds that; `affected_by` names one ref each.
+_M115879_RUSTERS = ("m115879a0", "m115879a1", "m115879a3")
+
+
 def _rusting(c: Cast, who: int) -> bool:
-    """"Wearing or wielding a rusting item" -- the printed target line of
-    m115879a2, which is the only row that asks."""
+    """"Wearing or wielding a rusting item", kept for the one body that
+    still asks: `m115879a2`'s *hit* line has to know which item to destroy,
+    which the target line does not say.
+
+    The target line itself is `Target.any_of` over `_M115879_RUSTERS` now.
+    """
     return any(
         e.label in (_M115879_WEAPON_RUST, _M115879_ARMOUR_RUST)
         for e in c.world.effects.of(who)
@@ -631,7 +656,13 @@ def m115879a1(c: Cast) -> None:
     recharge=6,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature wearing or wielding a rusting item",
+        any_of=tuple(
+            Target("enemy", 1, affected_by=ref) for ref in _M115879_RUSTERS
+        ),
+    ),
     attack=Attack(vs=REF, printed=11),
     dropped=("c.destroy(armour=)",),
 )
@@ -640,8 +671,18 @@ def m115879a2(c: Cast) -> None:
     database files, the way `_recharge_on` puts every other printed recharge
     sentence.
 
-    The target line is restricted here rather than in the header: rust is a
-    tally of holds and no `Target` field reads one.
+    **The target line is in the header now, and it needed nothing built.**
+    It said "rust is a tally of holds and no `Target` field reads one" --
+    true of `Effect.label`, which `_rust` overwrites with the shared tally,
+    and false of `Effect.by`, which was already the laying row's ref and
+    which `Target.affected_by` reads. `Target.any_of` holds the block's
+    three rusting rows, because the card says "a rusting item" without
+    caring which row made it rust.
+
+    Found by planting: an explicit `hold.by = c.ref` in `_rust` turned out
+    to change nothing, which is how the claim got checked rather than
+    repeated. The body's filter *redirected*, so the menu offered any enemy
+    in reach and the attack destroyed somebody else's gear. #656.
 
     **The armour half is dropped.** "The rusting item is destroyed" is
     whichever item the rust is on, and `c.destroy` only removes a `Weapon`
@@ -652,8 +693,8 @@ def m115879a2(c: Cast) -> None:
     """
     me, ref = c.me, c.ref
     _recharge_on(c, Miss, lambda ev: ev.attacker == me and ev.power == ref)
-    victim = _restricted_to(c, 1, lambda f: _rusting(c, f))
-    if victim is None:
+    victim = c.target
+    if victim is None or not _rusting(c, victim):
         return
     if c.strike(on=victim):
         gear = c.world.get(victim, Gear)

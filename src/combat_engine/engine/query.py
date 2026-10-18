@@ -777,6 +777,31 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     )
 
 
+def sheltered_from(world: World, actor: int, target: int) -> bool:
+    """Does this creature have cover or concealment against that one?
+
+    `m3675a2`'s printed target line: "one creature in the burst the m3675
+    has concealment or cover against". One reader rather than a `Target`
+    field each, because **the two halves are not the same kind of
+    question** -- concealment is a property of the creature alone and does
+    not vary by who is looking, while cover is traced between two squares.
+    So the disjunction cannot be `Target.any_of` over two fields: one of
+    them would be constant across the pool, and a field that answers the
+    same for every candidate is a Requirement wearing a target line's
+    clothes.
+
+    Asked **outward from the actor**, like every relational half of
+    `dsl._stands_right`: `cover_between(world, target, actor)` is the cover
+    the target faces when shooting back, which is the actor's cover from it.
+    Getting that round the wrong way reads as "the target has cover", which
+    is a different card. #656.
+    """
+    return (
+        concealment_of(world, actor) is not Cover.NONE
+        or cover_between(world, target, actor) is not Cover.NONE
+    )
+
+
 def acting_independently(world: World, eid: int) -> bool:
     """Is this companion acting on its own this round?
 

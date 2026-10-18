@@ -3593,6 +3593,126 @@ def a_companion_left_to_its_own_devices(out: Result) -> None:
                  " beast's printed rule and nobody else's")
 
 
+def the_last_two_target_lines_of_that_census(out: Result) -> None:
+    """The two rows #656 left behind, and neither wanted a new idea.
+
+    * `m3675a2` prints "one creature in the burst the m3675 has
+      **concealment or cover against**". `Target.sheltered_from` reads
+      `query.sheltered_from`, one reader over both halves of the printed
+      "or" -- and **not `any_of` over two fields**, because concealment is
+      a property of the caster alone and answers the same for every
+      candidate. A field like that is a Requirement in a target line's
+      clothing, and OR-ing it with a real per-target test would read as
+      though both narrowed.
+    * `m115879a2` prints "one creature **wearing or wielding a rusting
+      item**". Its docstring said "rust is a tally of holds and no `Target`
+      field reads one" -- true of `Effect.label`, which `_rust` overwrites
+      with a shared tally, and false of `Effect.by`, which was already the
+      laying row's ref. So nothing had to be built: `Target.any_of` over the
+      block's three rusting rows is the printed "a rusting item", which does
+      not care which row made it rust.
+
+      **A plant is what established that.** Adding an explicit
+      `hold.by = c.ref` to `_rust` and then removing it again left this rule
+      green both ways, which is the plant finding that the line was dead
+      rather than the rule being blind -- the probe below lays the rust
+      through `_rust` itself, so it would have seen the difference.
+
+    Four controls, and the second and fourth are the ones with teeth:
+
+    * sheltered: nobody is offered from the open, and a creature behind
+      cover is;
+    * **the concealment half alone offers the whole pool**, which is the
+      asymmetry that made this one reader instead of two fields -- if it
+      were a `Target` field it would narrow nothing and look like a bug;
+    * rust: nobody is offered clean, and a rusted creature is;
+    * **rust laid by a different row still counts**, which is what `any_of`
+      over three refs buys -- a single `affected_by` would serve one of the
+      three and silently refuse the other two.
+    """
+    from combat_engine.content.monsters.level_08.brutes_sa import (
+        _M115879_WEAPON_RUST,
+        _rust,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import candidates, get
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import cover_between, enemies, squares
+    from combat_engine.engine.types import Cover
+
+    # ------------------------------------------------ m3675a2
+    world, me, _ = _board("m3675a2", 1)
+    p = get("m3675a2")
+    out.that(p is not None, "m3675a2 is declared")
+    if p is not None:
+        c = Cast(world=world, me=me, ref="m3675a2")
+        out.that(not candidates(world, me, p),
+                 "standing in the open against everybody, nothing is"
+                 " offered -- the control, and what the body used to"
+                 " redirect around")
+        # One pillar in the line, and the enemy three squares past it.
+        #
+        # **The cover is asserted before the offer is.** The first draft put
+        # two blockers diagonally off the line, read an empty pool and could
+        # not say whether that was the field refusing or the arrangement
+        # giving no cover at all. Measured: one square directly in the line
+        # is `Cover.PARTIAL`, which is what the card's "has cover against"
+        # means and leaves line of effect intact.
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(me, Position).square
+        world.need(foe, Position).square = (here[0] + 3, here[1])
+        world.grid.place(foe, frozenset(squares(world, foe)))
+        world.grid.blocking.add((here[0] + 1, here[1]))
+        out.that(cover_between(world, foe, me) is not Cover.NONE,
+                 "the caster now has cover against that enemy",
+                 f"{cover_between(world, foe, me)}")
+        got = set(candidates(world, me, p))
+        out.that(foe in got,
+                 "and it IS offered -- a creature the caster is sheltered"
+                 f" from ({sorted(got)})")
+
+        # The concealment half: constant across the pool, which is the point.
+        world, me, _ = _board("m3675a2", 1)
+        c = Cast(world=world, me=me, ref="m3675a2")
+        everyone = set(enemies(world, me))
+        c.conceal(until=When.ENCOUNTER, on=me)
+        got = set(candidates(world, me, p))
+        out.that(got and got <= everyone and len(got) > 1,
+                 "with concealment the caster has it against EVERYBODY, so"
+                 " the whole reachable pool is offered -- the half that"
+                 " cannot be a `Target` field, because a field answering the"
+                 f" same for every candidate narrows nothing ({len(got)})")
+
+    # ------------------------------------------------ m115879a2
+    for layer in ("m115879a0", "m115879a1", "m115879a3"):
+        world, me, _ = _board("m115879a2", 1)
+        p = get("m115879a2")
+        if p is None:
+            continue
+        out.that(not candidates(world, me, p),
+                 f"m115879a2 offers nobody with no rust about ({layer}'s"
+                 " turn to lay it)")
+        reach = [f for f in sorted(enemies(world, me))
+                 if Cast(world=world, me=me, ref="x").distance(f) <= 1]
+        if not reach:
+            out.skip("nobody in reach to rust")
+            continue
+        who = reach[0]
+        # **Through the row's own helper, not `c.penalty` plus a hand-set
+        # `by`.** The first draft laid the hold itself and stamped
+        # `rust.by = layer`, which tested the probe's own stamp. `_rust` is
+        # what all three rows call, so this reads what they produce.
+        _rust(Cast(world=world, me=me, ref=layer), who, "attack",
+              _M115879_WEAPON_RUST)
+        out.that(any(e.by == layer for e in world.effects.of(who)),
+                 f"{layer} lays a hold stamped with its own ref")
+        out.that(list(candidates(world, me, p)) == [who],
+                 f"rust laid by {layer} makes exactly that creature a"
+                 " target -- `any_of` over all three rusting rows, where a"
+                 " single `affected_by` would serve one and refuse two")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -18018,6 +18138,9 @@ DRIVERS = {
     "a_companion_left_to_its_own_devices": (
         a_companion_left_to_its_own_devices,
         "what an uncommanded beast does, and the feats that waive it"),
+    "the_last_two_target_lines_of_that_census": (
+        the_last_two_target_lines_of_that_census,
+        "cover-or-concealment-against, and a rusting item"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),
