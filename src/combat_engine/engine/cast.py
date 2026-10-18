@@ -1998,13 +1998,30 @@ class Cast:
         Only for a row carrying the weapon keyword. A wizard's implement power
         is not a weapon attack, and a held weapon must not lend it anything.
         """
+        dice = self._high_crit_dice()
+        return self._roll_damage(dice) if dice else 0
+
+    def _high_crit_dice(self) -> str | int:
+        """The extra dice, without rolling them.
+
+        Split out of `_high_crit` so the **expectation model can price the
+        term**: `expect.worth` needs the mean of these dice and the roller
+        above needs the roll, and two readings of "which dice" would drift.
+        `engine/expect.py`'s header said for a year that "high crit
+        contributes nothing because the kernel reads it nowhere", which was
+        true when #240 was open and false from the day it closed -- so the
+        scorer under-paid every one of the 18 weapons carrying the property.
+        #678.
+
+        `0` for "none", which is what every caller tests.
+        """
         p = self._declared()
         if p is None or Keyword.WEAPON not in self.keywords_of(p):
             return 0
         weapon = self._swinging()
         if weapon is None or "high crit" not in weapon.properties:
-            return self._granted_high_crit()
-        return self._roll_damage(weapon.damage)
+            return self._granted_high_crit_dice()
+        return weapon.damage
 
     def _granted_high_crit(self) -> int:
         """A row told to pay high crit, with no weapon to carry the word.
@@ -2024,11 +2041,15 @@ class Cast:
         Narrowed by ref, because the card names one row of the creature's
         and not the creature. `c.high_crit` is the writer.
         """
+        dice = self._granted_high_crit_dice()
+        return self._roll_damage(dice) if dice else 0
+
+    def _granted_high_crit_dice(self) -> str | int:
+        """The granted dice, without rolling them. See `_high_crit_dice`."""
         if self.total("high_crit", self.me, {"power": self.ref}) <= 0:
             return 0
         p = self._declared()
-        dice = p.damage.dice if p is not None and p.damage is not None else ""
-        return self._roll_damage(dice) if dice else 0
+        return p.damage.dice if p is not None and p.damage is not None else 0
 
     def high_crit(
         self,

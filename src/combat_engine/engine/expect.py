@@ -39,7 +39,13 @@ counts the kernel differs and the scorer must score what actually happens:
   enhancement (#241). The flooring is why this needs a distribution rather than
   a mean: halving the average is not the average of the halves.
 
-`high crit` contributes nothing because the kernel reads it nowhere (#240).
+* `Cast._high_crit` -- a critical through a **high crit** weapon pays one extra
+  `[W]`, *rolled* rather than maxed, and only to a row carrying the weapon
+  keyword. This line read "high crit contributes nothing because the kernel
+  reads it nowhere (#240)" for the eleven months after #240 closed and made it
+  read something, so the scorer under-paid all 18 weapons that print the
+  property -- the exact fault #240 was filed about, in the other direction.
+  #678.
 
 **Riders are counted now, and were not -- #249.** `Ledger.attack` built an
 `AttackResult` without going through `resolve.attack`, so no `Hit` was emitted and
@@ -202,8 +208,8 @@ class Ledger(Cast):
     def _setup(self, prefix: list[tuple[bool, bool, int]]) -> None:
         self._prefix = prefix
         self._at = 0
-        #: (kind, dice, bonus, enhancement, was_a_crit)
-        self.lines: list[tuple[str, str | int, int, int, bool]] = []
+        #: (kind, dice, bonus, enhancement, was_a_crit, high_crit_dice)
+        self.lines: list[tuple[str, str | int, int, int, bool, str | int]] = []
 
     # -- the attack roll, dictated -------------------------------------------
 
@@ -323,7 +329,13 @@ class Ledger(Cast):
                on: int | None = None, **kw: Any) -> int:
         if self._who(on) is None:
             return 0
-        self.lines.append(("full", dice, bonus, self._enhancement(), self.crit))
+        # **Asked at record time and not in `worth`.** The dice depend on the
+        # weapon in hand and the row's keywords, which `worth` is handed none
+        # of -- and asking the `Cast` is what keeps one reading of "which
+        # dice" rather than two. Only on a critical, because that is the only
+        # branch `Cast.damage` adds it on. #678.
+        self.lines.append(("full", dice, bonus, self._enhancement(), self.crit,
+                           self._high_crit_dice() if self.crit else 0))
         # A body writing `if c.damage(...):` is asking whether damage landed,
         # so this has to come back truthy.
         return int(mean(dice)) + bonus + 1
@@ -332,13 +344,15 @@ class Ledger(Cast):
                     on: int | None = None, **kw: Any) -> int:
         if self._who(on) is None:
             return 0
-        self.lines.append(("half", dice, bonus, 0, False))
+        # No high crit: `Cast.half_damage` does not add it, and a halved
+        # critical is not a thing the kernel produces anyway.
+        self.lines.append(("half", dice, bonus, 0, False, 0))
         return int(mean(dice)) + bonus
 
     def flat(self, amount: int, *, on: int | None = None, **kw: Any) -> int:
         if self._who(on) is None:
             return 0
-        self.lines.append(("flat", 0, amount, 0, False))
+        self.lines.append(("flat", 0, amount, 0, False, 0))
         return amount
 
     def hit(self, *, on: int | None = None, half: bool = False) -> int:
@@ -355,16 +369,21 @@ class Ledger(Cast):
         return self.damage(dice, bonus, on=on)
 
 
-def worth(lines: list[tuple[str, str | int, int, int, bool]]) -> Fraction:
+def worth(lines: list[tuple[str, str | int, int, int, bool, str | int]]) -> Fraction:
     """Expected damage of one recorded path, exactly."""
     total = Fraction(0)
-    for kind, dice, bonus, enh, crit in lines:
+    for kind, dice, bonus, enh, crit, hc in lines:
         if kind == "half":
             total += halved(dice, bonus)
         elif kind == "flat":
             total += bonus
         elif crit:
-            total += most(dice) + bonus + enh
+            # `most` for the power's own dice and `mean` for the high-crit
+            # ones, which is not a slip: a critical maximises the dice the
+            # row prints and the extra `[W]` is ordinary damage on top of
+            # that. Maxing both "would pay a greataxe 12 where the rule pays
+            # it an average of 6.5" -- `_high_crit`'s own note. #678.
+            total += most(dice) + bonus + enh + mean(hc)
         else:
             total += mean(dice) + bonus + enh
     return total

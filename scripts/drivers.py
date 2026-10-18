@@ -20118,6 +20118,129 @@ def a_fight_rolls_skill_checks_and_these_rows_change_them(out: Result) -> None:
 
 
 
+
+def the_expectation_model_prices_high_crit(out: Result) -> None:
+    """A high-crit weapon is worth more, and the model said it was worth the same.
+
+    #678. `engine/expect.py`'s header enumerated every term it accounts for
+    and ended "high crit contributes nothing because the kernel reads it
+    nowhere (#240)". #240 closed on 2026-10-02 and made the kernel read it:
+    `Cast.damage` adds `self._high_crit()` on a critical. So the scorer
+    under-paid every one of the 18 weapons printing the property -- the
+    mirror of the fault #240 was filed about, which was `choices.py`
+    "scoring a benefit the engine did not grant".
+
+    **Each figure comes off its own board, and that is not fussiness.**
+    `Ledger`'s own docstring says it: "the caller's world accumulates the
+    marks of every path explored, so hand this a board kept for measuring
+    and not one being played". Two `expected()` calls on one world are
+    therefore not comparable -- measured, the second came back **5.3 lower**
+    than the first with the property added, which reads exactly like a
+    high-crit weapon making a row worse.
+
+    **Asserted as an exact figure, not as "it went up".** The term is one
+    rolled `[W]` on the critical branch only, so the expectation moves by
+    `P(crit) x mean(weapon dice)` and nothing else. A `> 0` assertion would
+    pass for a model that *maxed* the extra dice, which is the one wrong
+    answer `_high_crit`'s own docstring warns about: maxing "would pay a
+    greataxe 12 where the rule pays it an average of 6.5".
+    """
+    from fractions import Fraction
+
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.expect import expected, mean
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import _mods
+
+    def priced(ref: str, high_crit: bool) -> tuple:
+        """What the model pays for `ref`, on a board of its own."""
+        world, me, _ = audit_board(ref, 1)
+        foe = next(iter(enemies(world, me)), None)
+        gear = world.get(me, Gear)
+        if foe is None or gear is None or not gear.weapons:
+            return None, None, None
+        blow = gear.weapons[0]
+        if high_crit:
+            blow.properties = blow.properties | {"high crit"}
+        window = _mods(world, me, "crit_range", {"power": ref})
+        return expected(world, me, ref, foe), blow, window
+
+    ref = "mba"
+    plain, blow, window = priced(ref, high_crit=False)
+    out.that(blow is not None,
+             "a weapon in hand and somebody to swing it at -- the board this"
+             " is measured on", f"{blow}")
+    if blow is None:
+        return
+    out.that("high crit" not in blow.properties,
+             "and the weapon does not print high crit -- the control",
+             f"{sorted(blow.properties)}")
+    keen, _blow2, _w2 = priced(ref, high_crit=True)
+    out.that(keen > plain,
+             "the same row is worth more through a high-crit weapon",
+             f"{float(plain):.4f} -> {float(keen):.4f}")
+
+    # The exact figure. One rolled `[W]` on the critical branch, and on this
+    # board the crit window is the natural 20 alone -- asserted, because a
+    # widened window would change the arithmetic without changing the rule.
+    out.that(window == 0,
+             "the crit window on this board is the natural 20 alone, so the"
+             " weight is 1/20",
+             f"crit_range={window}")
+    want = Fraction(1, 20) * mean(blow.damage)
+    out.that(keen - plain == want,
+             f"and it is worth exactly P(crit) x mean({blow.damage}) ="
+             f" {float(want):.4f} -- rolled, not maxed, which is the one"
+             " wrong answer `_high_crit` warns about",
+             f"{float(keen - plain):.4f} wanted {float(want):.4f}")
+
+    # -- the negative control: the keyword, not the weapon in hand ----------
+    #
+    # `_high_crit_dice` answers 0 for a row that is not a weapon attack, so
+    # an implement power must not move at all while the character holds the
+    # very same high-crit weapon. Without this the rule would pass for a
+    # model that paid the extra die to every row alike.
+    other = _an_implement_row()
+    out.that(other != "", "an implement attack to use as the control",
+             f"{other}")
+    if other:
+        bare, held, _w3 = priced(other, high_crit=False)
+        armed, _h4, _w4 = priced(other, high_crit=True)
+        out.that(held is not None,
+                 f"{other}'s board hands its caster a weapon, so the control"
+                 " can be posed at all", f"{held}")
+        if held is not None:
+            out.that(bare == armed,
+                     f"{other} is not a weapon attack, so a high-crit weapon"
+                     " in the same hand lends it nothing",
+                     f"{float(bare):.4f} -> {float(armed):.4f}")
+
+
+def _an_implement_row() -> str:
+    """A level-1 **character** implement attack, not a weapon one.
+
+    `cls` has to be a class and not an item, and `damage=` must *not* be
+    required: the first draft asked for it and got six monster abilities,
+    because a character's damage is rolled in the body while a monster
+    prints it in the header. A monster carries no weapon at all, so the
+    control it gave could not be posed and passed by saying nothing --
+    which is the shape `Result.skip` exists to make visible.
+    """
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Keyword
+
+    for ref, p in sorted(REGISTRY.items()):
+        if p.attack is None or p.todo or p.dropped or not p.cls or p.cls == "item":
+            continue
+        words = set(p.keywords or ())
+        if Keyword.WEAPON in words or Keyword.IMPLEMENT not in words:
+            continue
+        if p.level == 1:
+            return ref
+    return ""
+
 DRIVERS = {
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
@@ -20130,6 +20253,10 @@ DRIVERS = {
     "lamp_settings": (
         one_lamp_three_settings_and_putting_the_lights_out,
         "one lamp's three settings, and a row that suppresses a light (#686)",
+    ),
+    "high_crit_price": (
+        the_expectation_model_prices_high_crit,
+        "the expectation model pays for a high-crit weapon (#678)",
     ),
     "skill_checks": (
         a_fight_rolls_skill_checks_and_these_rows_change_them,
