@@ -1202,7 +1202,7 @@ def _shifted(world, me: int, ev: Any) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power in _SHIFTINGS
 
 
-@power("f3044", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3044", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        trigger="you use your shifter racial power",
        on=Trigger(PowerUsed, _shifted, "you use your shifter racial power"))
@@ -1236,6 +1236,14 @@ def f3044(c: Cast) -> None:
     for that ally, which is the moment `cf:artificer-f0s0` pays out. Any
     other reading would leave the loan standing after the thing it was
     attached to was gone.
+
+    **`AT_WILL`, not `ENCOUNTER`, and `lint.py` was right to say so.** With
+    a declared trigger `arm_traits` leaves the row alone and the usage is a
+    real limit on firing, so `ENCOUNTER` asserts a once-per-fight cap this
+    card does not print. The cap happens to be unobservable here -- the
+    racial power that triggers it is itself an encounter power -- but a
+    header that is accidentally harmless still says the wrong thing, and
+    nothing guarantees the next shifter power is an encounter one.
     """
     from combat_engine.engine.events import Boosted
 
