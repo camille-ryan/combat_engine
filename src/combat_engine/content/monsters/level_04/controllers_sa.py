@@ -303,15 +303,22 @@ def m1401a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=AreaBurst(1, 5),
-    target=Target("any", everyone=True, label="creatures in contact with the ground"),
+    target=Target(
+        "any", everyone=True,
+        label="creatures in contact with the ground",
+        on_the_ground=True,
+    ),
     attack=Attack(vs=REF, printed=7),
 )
 def m1401a1(c: Cast) -> None:
-    """"Affects only creatures in contact with the ground" is height off the
-    floor, which `c.height` answers in full. The burst takes everyone in it
-    and a flier is targeted and then left alone, which is what the printed
-    line says -- so nothing is missing and the row carries no marker."""
-    if c.height(on=c.target):
+    """"Affects only creatures in contact with the ground" is
+    `Target.on_the_ground`.
+
+    This docstring said a flier "is targeted and then left alone, which is
+    what the printed line says". The card says *affects only* -- a flier is
+    not a target, and the difference is visible: the page listed it and the
+    AI spent an area burst expecting to catch it. #660."""
+    if c.target is None:
         return
     if c.strike():
         c.immobilized(until=When.SAVE_ENDS)

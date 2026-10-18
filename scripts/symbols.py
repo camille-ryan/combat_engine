@@ -499,8 +499,8 @@ READERS: dict[str, list[str]] = {
     ],
     "where, and how far": [
         "adjacent", "distance_between", "leash_of", "line_of_effect",
-        "moving_as", "prefers_range", "range_profile", "sealed", "speed",
-        "squares",
+        "moving_as", "on_the_ground", "prefers_range", "range_profile",
+        "sealed", "speed", "squares",
     ],
     "seeing and being seen": [
         "blinded", "concealment_of", "cover_between", "cover_granters",

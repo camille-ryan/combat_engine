@@ -535,15 +535,22 @@ def m1184a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature in the burst touching the ground",
+        on_the_ground=True,
+    ),
     attack=Attack(vs=FORT, printed=13),
 )
 def m1184a2(c: Cast) -> None:
-    victim = _restricted_to(c, 2, lambda f: c.height(on=f) == 0)
-    if victim is None:
+    """"One creature in the burst that is touching the ground" is
+    `Target.on_the_ground`. It was a body filter that *redirected*: the menu
+    offered every enemy in the burst and the swing went to whoever happened
+    to be on the floor. #656, #660."""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.prone(on=victim)
+    if c.strike():
+        c.prone()
 
 
 @power(

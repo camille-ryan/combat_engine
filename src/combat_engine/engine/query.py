@@ -777,6 +777,35 @@ def kinds_of(world: World, eid: int) -> frozenset[str]:
     )
 
 
+def on_the_ground(world: World, eid: int) -> bool:
+    """Is this creature in contact with the floor?
+
+    What five rows' target lines ask: "targets enemies in the burst touching
+    the ground", "affects only creatures in contact with the ground", and
+    `m5741a5`'s negative, "a nonflying creature's space".
+
+    **Two inputs, and neither alone is the printed test.** `falling.height`
+    is the altitude and `falling.airborne` is how the creature is moving
+    right now -- a *hovering* creature at height 0 is not touching the
+    ground, and a *climbing* one is holding on to a wall, which is why
+    `falling.AIRBORNE` counts climbing and says so.
+
+    **Not the content `_airborne` in `level_05/skirmishers.py`**, which asks
+    whether the creature *has* a fly speed. That is a different question and
+    a deliberate one where it is used -- flight can be taken away, so having
+    the mode is the whole of the question for a row about what a creature
+    can do. It is the wrong half for a target line about where the creature
+    is, and `m216a2` was using it for exactly that. #660.
+
+    Lifted into `query` for the reason `kinds_of` was: while the test lives
+    in a body, the only place to ask is the body, so the row is offered
+    against creatures it then declines.
+    """
+    from .falling import airborne, height
+
+    return height(world, eid) == 0 and not airborne(world, eid)
+
+
 def living(world: World, eid: int) -> bool:
     """Is this a living creature? Ten rows print the word as a restriction.
 

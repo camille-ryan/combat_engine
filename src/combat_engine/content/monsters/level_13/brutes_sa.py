@@ -1713,17 +1713,32 @@ def m5741a5(c: Cast) -> None:
     square and say who was under it -- `c.move` refuses the square and reports
     nothing about what it passed.
 
-    "Nonflying" is read off how far off the ground the creature is, and the
-    fall happens whether the blow lands or not, which is what both printed
-    lines say. "For the first time during this movement" is the set, so a
-    creature crossed twice is only struck once.
+    **"Nonflying" is `query.on_the_ground`, not `c.height() > 0`.** This read
+    the height alone, so a *hovering* creature at height 0 was trampled --
+    and hovering is flying. The reader asks the altitude and how the
+    creature is moving right now, which is the printed test and is the same
+    one `Target.on_the_ground` uses for the four rows that narrow their
+    target line by it. #660.
+
+    The fall happens whether the blow lands or not, which is what both
+    printed lines say. "For the first time during this movement" is the set,
+    so a creature crossed twice is only struck once.
+
+    No `Target`: the creature struck is whoever is under the trample, found
+    by `c.overrun` as the move happens, so there is no pool to narrow.
 
     On a huge creature the generated boards can leave nobody beneath it, in
     which case the row fires and reports nothing; that is the board.
     """
+    from combat_engine.engine.query import on_the_ground
+
     seen: set[int] = set()
     for victim in c.overrun():
-        if victim in seen or not alive(c.world, victim) or c.height(on=victim) > 0:
+        if (
+            victim in seen
+            or not alive(c.world, victim)
+            or not on_the_ground(c.world, victim)
+        ):
             continue
         seen.add(victim)
         if c.strike(on=victim):

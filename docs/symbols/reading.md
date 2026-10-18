@@ -60,6 +60,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.moving_as(world: 'World', eid: 'int', mode: 'str') -> 'bool'`
   - Is this creature moving that way right now?
+- `query.on_the_ground(world: 'World', eid: 'int') -> 'bool'`
+  - Is this creature in contact with the floor?
 - `query.prefers_range(world: 'World', eid: 'int') -> 'bool'`
   - Does this creature want to be *out* of melee?
 - `query.range_profile(world: 'World', eid: 'int') -> 'str'`

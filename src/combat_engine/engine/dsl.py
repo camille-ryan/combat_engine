@@ -621,6 +621,22 @@ class Target:
     #: bloodied and adjacent enemy -- and OR-ing those would widen pools no
     #: card widens. This field is only for the cards that print the word.
     any_of: tuple[Target, ...] = ()
+    #: "Targets enemies in the burst **touching the ground**", "affects only
+    #: creatures **in contact with the ground**", and the row printing the
+    #: negative -- "a **nonflying** creature's space".
+    #:
+    #: **Tri-state, for `bloodied`'s reason**: the field has to tell "must be
+    #: on the floor" from "must not be" from "the card does not say", and a
+    #: bool holds two of those. `m5741a5` prints the negation, so with a bool
+    #: it would be unwritable or written as its own opposite.
+    #:
+    #: Reads `query.on_the_ground`, which is **two** inputs -- height and how
+    #: the creature is moving. A hovering creature at height 0 is not
+    #: touching the ground and a climbing one is holding a wall, so neither
+    #: `falling.height` nor `falling.airborne` alone is the printed test.
+    #: Five rows asked it in their bodies and spelled it four different ways
+    #: between them, one of them with the wrong notion of airborne. #660.
+    on_the_ground: bool | None = None
 
     def __str__(self) -> str:
         if self.label:
@@ -2548,6 +2564,7 @@ def candidates(
         or aim.max_size is not None
         or aim.loose
         or aim.any_of
+        or aim.on_the_ground is not None
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2889,6 +2906,11 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # which is the pool's reading too: `loose=` only ever reaches
         # `scenery()`.
         if thing is not None and (thing.fastened or thing.by):
+            return False
+    if aim.on_the_ground is not None:
+        from .query import on_the_ground
+
+        if on_the_ground(world, target) is not aim.on_the_ground:
             return False
     if aim.only_grabbed:
         # **Asked only when something is held.** An empty grip narrows

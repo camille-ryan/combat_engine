@@ -60,7 +60,7 @@ from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.monsters.level_05.brutes import _is_bloodied
-from combat_engine.content.monsters.level_05.skirmishers import _airborne, _reach_kind
+from combat_engine.content.monsters.level_05.skirmishers import _reach_kind
 from combat_engine.content.monsters.level_07.brutes import _crit_line
 from combat_engine.content.monsters.level_07.soldiers import _recharge_on
 from combat_engine.content.monsters.level_08.lurkers import _sweep
@@ -108,6 +108,7 @@ from combat_engine.engine import (
     Mod,
     Powers,
     Ranged,
+    Target,
     TurnEnd,
     TurnStart,
     UpTo,
@@ -273,25 +274,32 @@ def m216a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(10),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature in direct contact with the ground",
+        on_the_ground=True,
+    ),
     attack=Attack(vs=FORT, printed=14),
 )
 def m216a2(c: Cast) -> None:
     """A fist of earth, and only one of them at a time.
 
-    No damage line at all: the hold is the whole of the hit. "In direct
-    contact with the ground" is the flight question asked the other way
-    round, and a creature in the air is the only way the engine can say a
-    creature is not standing on anything.
+    No damage line at all: the hold is the whole of the hit.
+
+    **"In direct contact with the ground" was asked with the wrong notion of
+    airborne.** The body read `_airborne`, a content helper that asks
+    whether the creature *has* a fly speed -- a deliberate reading where it
+    is used, since flight can be taken away, and the wrong half here: a
+    grounded dragon has the speed and is standing on the floor. Declared as
+    `Target.on_the_ground` now, which reads `query.on_the_ground` -- height
+    *and* how the creature is moving right now. #660.
 
     The previous fist is let go as the new one closes rather than when the
     row is chosen, so a miss leaves the first victim held -- which is what
     "only against one creature at a time" comes to.
     """
     victim = c.target
-    if victim is None or _airborne(c.world, victim):
-        return
-    if not c.strike(on=victim):
+    if victim is None or not c.strike():
         return
     _sweep(c, c.ref, "the other fist crumbled")
     c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)

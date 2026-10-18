@@ -1224,19 +1224,25 @@ def m4593a4(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(1),
     target=Target(
-        side="enemy", count=99, everyone=True, label="Each enemy in the burst on the ground"
+        side="enemy", count=99, everyone=True,
+        label="Each enemy in the burst touching the ground",
+        on_the_ground=True,
     ),
     attack=Attack(vs=FORT, printed=7),
 )
 def m4593a5(c: Cast) -> None:
-    """"Enemies in the burst touching the ground" is a target line about where
-    the creature is rather than which side it is on, so it is a label and a
-    check in the body -- `c.height` answers it in full and the burst takes
-    everyone in it anyway, so nothing is missing and the row carries no
-    marker. No entry gate: the row is a minor action against everything in
-    reach and is worth taking even if one flier is exempt."""
-    victim = c.target
-    if victim is None or c.height(on=victim) > 0:
+    """"Enemies in the burst touching the ground" is `Target.on_the_ground`
+    and is declared.
+
+    This docstring argued the other way -- that a label plus a body check
+    was enough because "the burst takes everyone in it anyway". It is not:
+    the page and `policy/` read the header without running the body, so a
+    flier in the burst was listed as a target and then skipped. #660.
+
+    `c.height` alone was also not the whole test. A hovering creature at
+    height 0 is not touching the ground, which is why `query.on_the_ground`
+    asks `falling.airborne` as well."""
+    if c.target is None:
         return
     if c.strike():
         c.prone()

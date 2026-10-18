@@ -3194,6 +3194,108 @@ def rough_ground_that_knows_who_made_it(out: Result) -> None:
     )
 
 
+def a_target_line_about_standing_on_the_floor(out: Result) -> None:
+    """"Targets enemies in the burst **touching the ground**", and three more.
+
+    Five rows turn on whether the creature is on the floor and all five asked
+    in their bodies, in four different spellings -- one of them with the
+    wrong notion of airborne. #660.
+
+    **Two of the four docstrings argued that a body check was enough**, and
+    both arguments were wrong in the same way:
+
+        a label and a check in the body -- `c.height` answers it in full and
+        the burst takes everyone in it anyway, so nothing is missing
+
+        a flier is targeted and then left alone, which is what the printed
+        line says
+
+    The card says *affects only*. A flier is not a target, and the
+    difference shows: the page lists it and `policy/` spends an area burst
+    expecting to catch it.
+
+    Four controls, and the last two are the ones a height test alone cannot
+    pass:
+
+    * a creature on the floor is offered;
+    * **lifted off it, the same creature is not** -- and `m4593a5`'s whole
+      pool is the burst, so this is the assertion its docstring said was
+      unnecessary;
+    * **a hovering creature at height 0 is not touching the ground.** That is
+      the case `c.height(on=f) == 0` gets wrong, and four rows had it;
+    * **a climbing creature is not either** -- `falling.AIRBORNE` counts
+      climbing because "a creature on a wall is holding on", and its own
+      comment says so.
+
+    Plus the negative: `m5741a5` prints "nonflying" and the field is
+    tri-state for that reason, the same reason `bloodied` is.
+    """
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.dsl import Target, _stands_right, candidates, get
+    from combat_engine.engine.falling import lift
+    from combat_engine.engine.query import enemies, on_the_ground
+
+    for ref in ("m4593a5", "m1401a1", "m1184a2", "m216a2"):
+        world, me, _ = _board(ref, 1)
+        p = get(ref)
+        out.that(p is not None, f"{ref} is declared")
+        if p is None:
+            continue
+        pool = set(candidates(world, me, p))
+        who = next(iter(sorted(pool)), None)
+        out.that(who is not None, f"{ref} offers somebody on the floor ({pool})")
+        if who is None:
+            continue
+        lift(world, who, 3)
+        out.that(who not in candidates(world, me, p),
+                 f"{ref}: lifted three squares up, that creature is no longer"
+                 " offered -- which two of these rows' docstrings said was"
+                 " unnecessary because the burst takes everyone anyway")
+        lift(world, who, 0)
+        out.that(who in candidates(world, me, p),
+                 f"{ref}: and back on the floor it is offered again")
+
+    # ---- the two cases a height test alone gets wrong
+    world, me, _ = _board("m1184a2", 1)
+    p = get("m1184a2")
+    if p is not None:
+        foe = next(iter(sorted(candidates(world, me, p))), None)
+        out.that(foe is not None, "m1184a2 has somebody to lean on")
+        if foe is not None:
+            moves = world.need(foe, Movement)
+            out.that(world.need(foe, Position).height
+                     == world.grid.floor(world.need(foe, Position).square),
+                     "that creature is at ground level")
+            for how in ("hover", "climb"):
+                moves.using = how
+                out.that(not on_the_ground(world, foe),
+                         f"a {how}ing creature at height 0 is NOT touching the"
+                         " ground -- the case `c.height(on=f) == 0` gets"
+                         " wrong, and four rows had it")
+                out.that(foe not in candidates(world, me, p),
+                         f"so a {how}ing creature is not offered either")
+            moves.using = ""
+            out.that(foe in candidates(world, me, p),
+                     "and back on its feet it is offered")
+
+    # ---- the negative half of the tri-state
+    world, me, _ = _board("m1184a2", 1)
+    foes = sorted(enemies(world, me))
+    if foes:
+        aim = Target("enemy", 1, on_the_ground=False)
+        out.that(not _stands_right(world, me, aim, foes[0]),
+                 "`on_the_ground=False` refuses a creature on the floor")
+        lift(world, foes[0], 2)
+        out.that(_stands_right(world, me, aim, foes[0]),
+                 "and accepts one in the air -- the negation `m5741a5`"
+                 " prints, and why the field is tri-state")
+        silent = Target("enemy", 1)
+        out.that(_stands_right(world, me, silent, foes[0]),
+                 "while a line that says nothing about the ground accepts a"
+                 " creature in the air -- the third state a bool cannot"
+                 " hold, and the one `None` carries")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -17828,6 +17930,9 @@ DRIVERS = {
     "rough_ground_that_knows_who_made_it": (
         rough_ground_that_knows_who_made_it,
         "difficult terrain narrowed by what made it, not what it is"),
+    "a_target_line_about_standing_on_the_floor": (
+        a_target_line_about_standing_on_the_floor,
+        "a target line narrowed by whether the creature is on the floor"),
     "grabbed_targets_only": (grabbed_targets_only,
                             "a target line allowing only what the caster"
                             " already holds, and its negation"),
