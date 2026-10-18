@@ -69,7 +69,6 @@ from combat_engine.content.monsters.level_02.soldiers_sa import (
 )
 from combat_engine.content.monsters.level_03.artillery_sa import _death_throe
 from combat_engine.content.monsters.level_03.brutes_sa import _both_hit
-from combat_engine.content.monsters.level_03.lurkers_sa import _restricted_to
 from combat_engine.content.monsters.level_03.skirmishers_sa import (
     _step_beside,
 )
@@ -1886,33 +1885,33 @@ def m5429a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature, or the creature it is holding if it holds one",
+        only_grabbed=True,
+    ),
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d4", 0),
-    dropped=("Target.only_grabbed",),
 )
 def m5429a1(c: Cast) -> None:
     """Both of the card's second numbers are the same question asked twice --
     +11 instead of +9 and 2d4+10 instead of 2d4 -- so the attack takes a `plus`
     and the damage takes a flat rider, and the base stays in the header.
 
-    The printed target line is "one creature" and the narrowing is *conditional*:
-    only while it holds somebody is it restricted to that one. `Target.relation`
-    is unconditional, so declaring it here would refuse the row whenever nothing
-    is grabbed -- which is the row's ordinary use -- so this is the same gap
-    `m6346a2` names, and the swing is redirected in the body instead."""
-    held = _grabbing(c)
+    The narrowing is `Target.only_grabbed` and is now declared, so the pool is
+    narrowed before anything is offered. It used to be redirected here: the body
+    read the grip, threw `c.target` away and swung at whoever was held, which
+    meant the row was offered against the whole board and then hit somebody
+    else. #654."""
     foe = c.target
-    if held and foe not in held:
-        foe = _restricted_to(c, 1, lambda f: f in held)
     if foe is None:
         return
-    gripped = foe in held
-    if c.strike(on=foe, plus=2 if gripped else 0):
-        c.hit(on=foe)
+    gripped = foe in _grabbing(c)
+    if c.strike(plus=2 if gripped else 0):
+        c.hit()
         if gripped:
-            c.flat(10, on=foe)
-        c.grab(on=foe)
+            c.flat(10)
+        c.grab()
 
 
 @power(
@@ -2491,25 +2490,24 @@ def m6346a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature, or the creature it is holding if it holds one",
+        only_grabbed=True,
+    ),
     attack=Attack(vs=AC, printed=9),
     damage=Damage("2d6", 5),
-    dropped=("Target.only_grabbed",),
 )
 def m6346a2(c: Cast) -> None:
-    """"While it has a target grabbed it can bite only that target" is a target
-    restriction with nowhere in `Target` to live -- a relation to the caster,
-    so `Target.relation` -- and the swing is redirected to the creature it is
-    holding rather than refused."""
-    held = _grabbing(c)
-    foe = c.target
-    if held and foe not in held:
-        foe = _restricted_to(c, 1, lambda f: f in held)
-    if foe is None:
+    """"While it has a target grabbed it can use this only against that target"
+    is `Target.only_grabbed` and is declared. The body used to redirect the
+    swing to whoever was held, which offered the row against the whole board
+    and then hit a creature nobody chose. #654."""
+    if c.target is None:
         return
-    if c.strike(on=foe):
-        c.hit(on=foe)
-        c.grab(on=foe, dc=14)
+    if c.strike():
+        c.hit()
+        c.grab(dc=14)
 
 
 @power(

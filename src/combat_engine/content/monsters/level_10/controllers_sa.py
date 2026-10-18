@@ -110,6 +110,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SkillCheck,
+    Target,
     Team,
     UpTo,
     Usage,
@@ -537,17 +538,21 @@ def m1089a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.MELEE],
     attack=Attack(vs=AC, printed=17),
     damage=Damage("2d6", 6),
 )
 def m1089a1(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """The printed line is grabbed targets only, which is
+    `Target.relation`. It was enforced in the body, so the menu offered
+    every enemy and the swing went to whoever happened to be held. #656."""
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -556,16 +561,18 @@ def m1089a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     keywords=[Keyword.MELEE],
     attack=Attack(vs=FORT, printed=15),
 )
 def m1089a2(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.pull(2, on=victim)
+    """Grabbed targets only, declared. See `m1089a1`. #656."""
+    if c.strike():
+        c.pull(2)
 
 
 @power(
@@ -774,18 +781,24 @@ def m1163a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("2d8", 5, half_on_miss=True),
 )
 def m1163a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
+    """"Targets a creature grabbed by it" is `Target.relation` and was
+    enforced in the body. The Miss line is half damage, so the `else` is the
+    card. #656."""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
     else:
-        c.hit(on=victim, half=True)
+        c.hit(half=True)
 
 
 @power(
@@ -3609,16 +3622,22 @@ def m5814a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(4),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature not grabbed by it",
+        relation=Relation.GRABBED_BY,
+        without=True,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d10", 7),
 )
 def m5814a1(c: Cast) -> None:
-    victim = _restricted_to(c, 4, lambda f: f not in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    """**The negative, and the field that says it is `without=`** -- the
+    card prints "one creature **not** grabbed by it", and a row written as
+    the positive would be its own opposite. Enforced in the body before.
+    #656."""
+    if c.strike():
+        c.hit()
 
 
 @power(
@@ -3660,17 +3679,20 @@ def m5814a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=AC, printed=15),
     damage=Damage("2d8", 9),
 )
 def m5814a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
-        return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.no_healing(on=victim, until=When.SONT)
+    """Grabbed targets only, declared. `m5814a1` is the same block's
+    negative and the pair is why the two fields are separate. #656."""
+    if c.strike():
+        c.hit()
+        c.no_healing(until=When.SONT)
 
 
 @power(
@@ -4416,7 +4438,11 @@ def m6109a2(c: Cast) -> None:
     recharge=5,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=13),
     dropped=("c.waive(cannot_act)", "Effect.drop_cost(by=)"),
 )
@@ -4436,10 +4462,14 @@ def m6109a3(c: Cast) -> None:
     raising a `KeyError` on anything else, deliberately. And "the m6109 can
     end the effect as a free action" is not `drop_cost`: `actions._dropping`
     offers a droppable effect to the creature it is **on**, which here is
-    the victim, so declaring it would hand the prisoner its own release."""
+    the victim, so declaring it would hand the prisoner its own release.
+
+    The target line -- "one creature grabbed by it" -- is `Target.relation`
+    now; it was a body filter, so the row was offered against any enemy in
+    reach and then swallowed whoever happened to be held. #656."""
     me = c.me
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing(of=me))
-    if victim is None or not c.strike(on=victim):
+    victim = c.target
+    if victim is None or not c.strike():
         return
     inside = c.world.effects.apply(
         victim, me, When.ENCOUNTER, label=c.ref,

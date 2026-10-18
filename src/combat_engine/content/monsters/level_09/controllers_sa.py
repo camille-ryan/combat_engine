@@ -145,6 +145,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Ranged,
+    Relation,
     Target,
     UpTo,
     Usage,
@@ -1571,20 +1572,26 @@ def m3474a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("1d8", 6),
 )
 def m3474a3(c: Cast) -> None:
-    victim = _restricted_to(c, 2, lambda f: f in c.grabbing(of=c.me))
-    if victim is None:
+    """The printed line is "a creature it has grabbed", which is
+    `Target.relation` and was enforced in the body. The Miss line is a push
+    of 2, so the `else` is the card and not a fallback. #656."""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        c.push(6, on=victim)
-        c.prone(on=victim)
+    if c.strike():
+        c.hit()
+        c.push(6)
+        c.prone()
     else:
-        c.push(2, on=victim)
+        c.push(2)
 
 
 @power(

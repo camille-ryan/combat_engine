@@ -107,6 +107,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     Stats,
+    Target,
     UpTo,
     Usage,
     When,
@@ -3059,17 +3060,29 @@ def m6436a2(c: Cast) -> None:
 
 
 @power(
-    "m6436a3", level=8, usage=AT_WILL, action=MINOR, reach=Melee(1), target=ONE_CREATURE,
+    "m6436a3", level=8, usage=AT_WILL, action=MINOR, reach=Melee(1),
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     once_per_round=True, keywords=[Keyword.POISON],
     attack=Attack(vs=AC, printed=13), damage=Damage("2d6", 9),
 )
 def m6436a3(c: Cast) -> None:
-    victim = _restricted_to(c, 1, lambda f: f in c.grabbing())
+    """The printed line is "one creature grabbed by it" and is declared;
+    it used to be enforced in the body, which offered the row against every
+    enemy and then swung at whoever happened to be held. #656.
+
+    The watcher below is the *second* printed clause -- "the effect also ends
+    if it is no longer grabbing the target" -- and is a different question
+    from the target line, so it stays."""
+    victim = c.target
     if victim is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
-        hold = c.weakened(on=victim, until=When.SAVE_ENDS)
+    if c.strike():
+        c.hit()
+        hold = c.weakened(until=When.SAVE_ENDS)
         if hold is not None:
             victim_id = victim
 

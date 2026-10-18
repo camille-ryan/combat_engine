@@ -58,6 +58,7 @@ from __future__ import annotations
 from combat_engine.content.monsters.level_02.soldiers_sa import (
     _HELPLESS,
     _armed,
+    _holding_nobody,
     _is_attack,
     _recharge_when_bloodied,
     _ref_of,
@@ -2940,11 +2941,21 @@ def m5331a4(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature, or the creature it is holding if it holds one",
+        only_grabbed=True,
+    ),
     damage=Damage("2d10", 6),
     attack=Attack(vs=AC, printed=15),
 )
 def m5434a0(c: Cast) -> None:
+    """**The restriction the block prints belongs here**, and it was on
+    `m5434a1` instead. That card says: while the creature has somebody
+    grabbed, it can attack only with *this* row, which it must use against the
+    grabbed creature. Both halves were on the wrong row -- `m5434a1` narrowed
+    *itself* to the held creature, while this one, the row the sentence is
+    actually about, took any target on the board. #655."""
     victim = c.target
     bonus = 10 if (victim is not None and victim in _holding(c)) else 6
     if c.strike():
@@ -2960,30 +2971,38 @@ def m5434a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=13),
     damage=Damage("4d6", 5),
-    dropped=("Target.only_grabbed",),
+    requires=_holding_nobody,
+    requires_text="it must not already have a creature grabbed",
 )
 def m5434a1(c: Cast) -> None:
-    """ "While it has a creature grabbed, it can attack only with bite,
+    """ "While it has a creature grabbed, it can attack only with `m5434a0`,
     which it must use against the grabbed creature."
 
-    **Conditional, so `relation=` is the wrong field.** That filter is
-    unconditional: it would empty the pool whenever nothing is held, and this
-    row is the bite that *establishes* the grab, so it would be refused in
-    exactly the situation it is printed for. Re-aimed from `Target.relation`,
-    which now resolves and would have reported this finished. #401."""
-    held = _holding(c)
-    victim = (
-        c.target if not held else (c.target if c.target in held else next(iter(sorted(held)), None))
-    )
+    **That sentence is about the creature, not about the row it is printed
+    on**, and reading it the other way is what the tree had. This row used to
+    narrow *itself* to whoever was held -- discarding `c.target` for
+    `sorted(held)[0]` -- which is the opposite of the card twice over: while
+    something is grabbed this row may not be used at all, and `m5434a0` is the
+    one that must take the held creature.
+
+    So the clause splits. The target restriction moved to `m5434a0` as
+    `only_grabbed=True`; what stays here is the half that was never written,
+    a `requires=` standing the row down while the grip holds. #655.
+
+    The release loop below is the printed "it can grab only one creature at a
+    time", and it survives the gate: with the requirement in force this row
+    only ever runs holding nobody, so the loop now frees nobody and is kept
+    because `c.grab` is not the only way a grip can arrive."""
+    victim = c.target
     if victim is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
         _drag_beside(c, victim, c.me, 2)
         for prev in _holding(c):
             if prev != victim:
                 _release(c, prev)
-        c.grab(on=victim)
+        c.grab()
 
 
 def _ridden_by_qualified(world: World, eid: int) -> bool:

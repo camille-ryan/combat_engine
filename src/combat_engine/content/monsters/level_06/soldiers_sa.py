@@ -1860,21 +1860,27 @@ def m5857a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature, or the creature it is grabbing if it grabs one",
+        only_grabbed=True,
+    ),
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 3),
-    dropped=("Target.only_grabbed",),
 )
 def m5857a2(c: Cast) -> None:
-    held = c.grabbing()
-    victim = held[0] if held else c.target
-    if victim is None:
+    """"If it is grabbing a creature, it can make this attack only against that
+    creature" is `Target.only_grabbed`, declared rather than redirected: this
+    body used to take `c.grabbing()[0]` over whatever was chosen. The charge
+    line is `3d8+3` against the header's `2d8+3`, so the extra die rides a
+    `c.charge` test and the base stays declared."""
+    if c.target is None:
         return
-    if c.strike(on=victim):
-        c.hit(on=victim)
+    if c.strike():
+        c.hit()
         if c.charge:
-            c.damage("1d8", 0, on=victim)
-        c.grab(on=victim)
+            c.damage("1d8", 0)
+        c.grab()
 
 
 @power(

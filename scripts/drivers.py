@@ -2372,6 +2372,204 @@ def targets_what_my_other_row_caught(out: Result) -> None:
              " it names one ref, not any effect the monster ever laid")
 
 
+def only_what_it_is_already_holding(out: Result) -> None:
+    """"While it has a creature grabbed, it can use this only against that one."
+
+    Four heroic rows print it, and `Target.relation=GRABBED_BY` is the
+    plausible spelling and is wrong, because the restriction is
+    **conditional**: holding nobody it narrows nothing, and three of the four
+    are the bite that *takes* the grab, so an unconditional filter would
+    refuse the row in exactly the situation it is printed for.
+
+    **So the empty-grip case is the whole rule.** The two readings give the
+    same answer on every board where something is held, which is the board a
+    hand-built rule naturally produces -- the trap `cover_granters` is on
+    record for. Asserting only the grabbing state measures nothing.
+
+    Five controls:
+
+    * **nothing held offers the whole pool** -- `relation=` offers zero here;
+    * **holding one creature offers exactly that one**, not the pool;
+    * **letting go restores the pool**, so the narrowing is a state and not a
+      latch;
+    * **somebody else's grab does not count.** The field is asked outward from
+      the caster, so an ally holding an enemy must not narrow my menu -- the
+      direction every relational half of `_stands_right` is stored in, and the
+      easy one to get backwards;
+    * **`m5434`'s split**: `m5434a0` is the row that must take the held
+      creature and `m5434a1` is the row that may not be used at all while the
+      grip holds. Both were on the wrong row -- `m5434a1` narrowed *itself*
+      and `m5434a0` took anybody. #655.
+
+    Asserted through `dsl.candidates`, the offer path, because what changed is
+    what the menu contains. `candidates` keeps a hand-written list of "is any
+    relational field set" and warns in its own words that a new field missing
+    from it leaves the explicit-target arm honouring it and the offer not.
+    """
+    from dataclasses import replace
+
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import candidates, get, usable
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Relation
+
+    for row in ("m5429a1", "m6346a2", "m5857a2", "m5434a0"):
+        world, me, _ = _board(row, 1)
+        p = get(row)
+        out.that(p is not None, f"{row} is declared")
+        if p is None:
+            continue
+        foes = sorted(enemies(world, me))
+        out.that(len(foes) >= 2, f"{row}'s board has two enemies")
+        if len(foes) < 2:
+            continue
+
+        c = Cast(world=world, me=me, ref=row)
+
+        # **The control, and the only arrangement that tells the two readings
+        # apart.** An unconditional `relation=GRABBED_BY` offers nothing at
+        # all here, and this row is how the grab gets taken in the first
+        # place.
+        #
+        # Compared against *the same row with the field cleared* rather than
+        # against the enemy list: every one of these is a melee row, so reach
+        # has already narrowed the pool and asserting "every enemy" would fail
+        # for a reason that has nothing to do with the field. 5 of 7 on the
+        # first run, which is the adjacency.
+        bare = replace(p, target=replace(p.target, only_grabbed=False))
+        free = candidates(world, me, p)
+        out.that(set(free) == set(candidates(world, me, bare)),
+                 f"{row}: holding nobody narrows NOTHING -- the pool is the"
+                 " same as with the field off, where `relation=` would offer"
+                 f" zero ({len(free)})")
+        out.that(len(free) >= 2,
+                 f"{row}: and that pool has two in it, so the narrowing below"
+                 f" is a real narrowing ({len(free)})")
+        if not free:
+            # Reported above; carrying on would only raise. The plant that
+            # makes the field unconditional lands here.
+            continue
+
+        grabbed = sorted(free)[0]
+        c.grab(on=grabbed)
+        held = candidates(world, me, p)
+        out.that(list(held) == [grabbed],
+                 f"{row}: holding one creature offers exactly it ({held})")
+
+        world.relations.clear(Relation.GRABBED_BY, me, grabbed, "drivers")
+        out.that(set(candidates(world, me, p)) == set(free),
+                 f"{row}: letting go restores the pool -- a state, not a latch")
+
+    # Somebody else's grip is not mine. Asked on the board of the row whose
+    # whole card is the restriction, with another creature doing the holding.
+    world, me, _ = _board("m6346a2", 1)
+    p = get("m6346a2")
+    free = set(candidates(world, me, p)) if p is not None else set()
+    if p is not None and len(free) >= 2:
+        two = sorted(free)[:2]
+        Cast(world=world, me=two[1], ref="drivers").grab(on=two[0])
+        got = candidates(world, me, p)
+        out.that(set(got) == free,
+                 "SOMEBODY ELSE's grab narrows nothing for me -- the field is"
+                 f" asked outward from the caster ({sorted(got)})")
+
+    # m5434's two halves, which were each on the wrong row.
+    world, me, _ = _board("m5434a1", 1)
+    lash, bite = get("m5434a1"), get("m5434a0")
+    if lash is not None and bite is not None:
+        reach = sorted(candidates(world, me, bite))
+        out.that(len(reach) >= 1, f"m5434a0 can reach somebody ({reach})")
+        # **`usable` returns `(bool, reason)`.** Asserted bare it is a
+        # two-tuple and always truthy, which is how the first draft of this
+        # passed the "may be used" half and then could not fail the refusal
+        # half either -- `not (False, "...")` is False.
+        allowed, _ = usable(world, me, lash)
+        out.that(allowed,
+                 "m5434a1 is usable holding nobody -- it is how the grab"
+                 " arrives, and the gate must not refuse it then")
+        if reach:
+            Cast(world=world, me=me, ref="m5434a0").grab(on=reach[0])
+            allowed, why = usable(world, me, lash)
+            out.that(not allowed,
+                     "and refused while the grip holds: the card says it can"
+                     f" attack only with m5434a0 then ({why or 'allowed'})")
+            out.that(list(candidates(world, me, bite)) == [reach[0]],
+                     "while m5434a0 -- the row the sentence is about -- is"
+                     " narrowed to the held creature, which it never was")
+
+
+def grabbed_targets_only(out: Result) -> None:
+    """"Targets a creature grabbed by it" -- **unconditional**, unlike #654.
+
+    Nine heroic rows print it and all nine filtered in the body, against a
+    `Target.relation` that has existed since long before them. So the menu
+    offered every enemy in reach, `policy/` chose one, and
+    `_restricted_to` then swung at whoever happened to be held -- the
+    chooser's decision discarded in silence. #656.
+
+    **The pair with `only_what_it_is_already_holding` is the point.** The two
+    printings look alike and mean opposite things on an empty grip:
+
+    * *grabbed targets only* -- holding nobody, the row is **unusable**;
+    * *while it has a creature grabbed, only that one* -- holding nobody, the
+      row is aimed at **anybody**.
+
+    Writing either as the other is a row that is its own opposite in the
+    situation it is printed for, so the empty-grip assertion below is the
+    whole control. `m5814a1` is a third printing on the same stat block as
+    `m5814a3` -- "one creature **not** grabbed by it" -- and `without=`
+    carries it; both are asserted here because a block printing the
+    restriction and its negation is where a single field would be caught.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import candidates, get
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Relation
+
+    HELD = ("m3300a2", "m6436a3", "m3474a3", "m1089a1", "m1089a2",
+            "m1163a3", "m5814a3", "m6109a3")
+    for row in HELD:
+        world, me, _ = _board(row, 1)
+        p = get(row)
+        out.that(p is not None, f"{row} is declared")
+        if p is None:
+            continue
+        out.that(not candidates(world, me, p),
+                 f"{row}: holding nobody, nothing is offered -- the card says"
+                 " grabbed targets only, and this is where it differs from"
+                 " the conditional printing")
+        foes = [f for f in sorted(enemies(world, me))
+                if Cast(world=world, me=me, ref=row).distance(f) <= 4]
+        out.that(len(foes) >= 2, f"{row}'s board has two enemies in reach")
+        if len(foes) < 2:
+            continue
+        Cast(world=world, me=me, ref=row).grab(on=foes[0])
+        got = candidates(world, me, p)
+        out.that(list(got) == [foes[0]],
+                 f"{row}: the held creature, and only it ({got})")
+        world.relations.clear(Relation.GRABBED_BY, me, foes[0], "drivers")
+        out.that(not candidates(world, me, p),
+                 f"{row}: letting go makes it unusable again")
+
+    # The negation, on a block that prints both.
+    world, me, _ = _board("m5814a1", 1)
+    free, held = get("m5814a1"), get("m5814a3")
+    if free is not None and held is not None:
+        everyone = set(candidates(world, me, free))
+        out.that(len(everyone) >= 2,
+                 f"m5814a1 offers the pool while nothing is held ({len(everyone)})")
+        if len(everyone) >= 2:
+            one = sorted(everyone)[0]
+            Cast(world=world, me=me, ref="m5814a3").grab(on=one)
+            out.that(set(candidates(world, me, free)) == everyone - {one},
+                     "m5814a1 offers everyone EXCEPT the held creature --"
+                     " `without=` inverts the relation, and the same stat"
+                     " block's m5814a3 is the positive")
+            out.that(list(candidates(world, me, held)) == [one],
+                     "while m5814a3 offers exactly that one. One block, the"
+                     " restriction and its negation, both from one field")
+
+
 def the_clause_that_applied_it(out: Result) -> None:
     """"Whenever you daze or stun an enemy **with a primal power**."
 
@@ -16984,6 +17182,12 @@ DRIVERS = {
     "targets_what_my_other_row_caught": (targets_what_my_other_row_caught,
                                         "a target restricted to what a"
                                         " sibling row caught"),
+    "only_what_it_is_already_holding": (only_what_it_is_already_holding,
+                                       "a target narrowed to the creature the"
+                                       " caster already holds"),
+    "grabbed_targets_only": (grabbed_targets_only,
+                            "a target line allowing only what the caster"
+                            " already holds, and its negation"),
     "the_clause_that_applied_it": (the_clause_that_applied_it,
                                   "the row that laid a condition"),
     "the_blow_that_bloodied": (the_blow_that_bloodied,

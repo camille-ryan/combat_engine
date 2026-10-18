@@ -111,6 +111,7 @@ from combat_engine.engine import (
     Melee,
     MeleeOrRanged,
     Ranged,
+    Relation,
     Target,
     UpTo,
     Usage,
@@ -1958,14 +1959,19 @@ def m3300a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=ONE_CREATURE,
+    target=Target(
+        "enemy", 1,
+        label="one creature grabbed by it",
+        relation=Relation.GRABBED_BY,
+    ),
     attack=Attack(vs=FORT, printed=12),
 )
 def m3300a2(c: Cast) -> None:
-    victim = _restricted_to(c, 2, lambda f: f in c.grabbing(of=c.me))
-    if victim is None or not c.strike(on=victim):
+    """The printed line is "a creature grabbed by it", which is
+    `Target.relation` and was enforced in the body. #656."""
+    if not c.strike():
         return
-    c.slide(2, on=victim)
+    c.slide(2)
 
 
 @power(

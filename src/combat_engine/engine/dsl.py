@@ -556,6 +556,31 @@ class Target:
     #: nothing for those. Narrowing `suffering` to `by` would change a verb
     #: with live callers and is not done here.
     affected_by: str = ""
+    #: "While it has a creature grabbed, it can use this only against the
+    #: grabbed creature."
+    #:
+    #: **Conditional, and that is the entire content of the field.** Holding
+    #: nobody, the line is whatever the rest of the target says and nothing
+    #: is narrowed; holding somebody, the pool is exactly those creatures.
+    #:
+    #: `relation=Relation.GRABBED_BY` is the plausible spelling and is
+    #: wrong, which all four of the rows that wanted this said in their
+    #: docstrings before it existed. That filter is unconditional, so it
+    #: empties the pool whenever nothing is held -- and three of the four
+    #: are the attack that *takes* the grab, so the row would be refused in
+    #: exactly the situation it is printed for.
+    #:
+    #: The two readings are told apart on a board with nothing grabbed:
+    #: `relation=` offers zero candidates there and this offers the whole
+    #: pool. A rule asserting only the grabbing state cannot see the
+    #: difference, which is the trap recorded against `cover_granters`.
+    #:
+    #: **Four rows narrowed in their bodies and that is not the same
+    #: thing.** Each discarded `c.target` and swung at whoever was held
+    #: instead, so the row was offered against anybody on the board and
+    #: then hit somebody else: `policy/` chose a target it did not get and
+    #: the page listed a menu the card forbids. #654.
+    only_grabbed: bool = False
 
     def __str__(self) -> str:
         if self.label:
@@ -2476,6 +2501,7 @@ def candidates(
         or aim.hit_by_me_this_turn
         or aim.missed_by_me_this_turn
         or aim.affected_by
+        or aim.only_grabbed
     ):
         pool = [c for c in pool if _stands_right(world, actor, aim, c, p.ref)]
 
@@ -2792,6 +2818,18 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         # real state, and a creature whose snare is suspended is not held by
         # it -- the sickle row would otherwise finish something that is free.
         return False
+    if aim.only_grabbed:
+        # **Asked only when something is held.** An empty grip narrows
+        # nothing, which is the field and not a shortcut: the three bites
+        # that carry this are what establish the grab, so refusing them
+        # here would refuse the row in its ordinary use.
+        #
+        # Outward from the caster, like the relational block below -- what
+        # *it* is holding, never what is holding the target. A creature in
+        # somebody else's grip is not this one's business.
+        held = world.relations.targets(Relation.GRABBED_BY, actor)
+        if held and target not in held:
+            return False
     if aim.relation is Relation.HIDDEN_FROM:
         # **Sight is never the bare relation.** `query.unseen_by` subtracts
         # `sees_through` and folds in a capped sight range, and its own
