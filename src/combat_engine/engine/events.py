@@ -311,6 +311,31 @@ class Fell(Decision):
 
 
 @dataclass
+class Cushioned(Event):
+    """A fall was softened, and by which row.
+
+    `Cast.cushion` writes `Fell.soften` on the event it is answering and
+    said nothing, so **four rows whose whole content is that write looked
+    inert**: `f1979`, `i840p1`, `p1213` and `p13143` each call it and
+    nothing else, and all four reported silent the moment #755 taught the
+    harness to make a creature fall. The same shape `WeaponChanged` and
+    `WeaponHeld` were added for, and `audit.py` states the rule in its own
+    words -- *"the real fix is an event, not an excuse"*.
+
+    `amount` is what came off and `all_of_it` is the printed "takes no
+    damage from the fall, and consequently does not fall prone" -- one
+    sentence whose two halves are `soften` and `prone`, so a listener can
+    tell a partial reduction from a negated fall without re-reading the
+    `Fell` it answered. #756.
+    """
+
+    actor: int
+    by: str
+    amount: int
+    all_of_it: bool = False
+
+
+@dataclass
 class OpportunityWindow(Decision):
     """`actor` may take an opportunity action against `provoker`.
 

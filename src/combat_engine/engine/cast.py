@@ -14394,7 +14394,7 @@ class Cast:
         fall prone" is one sentence and both halves are this. A number is
         the other printing -- "reduce the damage by 5 + half your level".
         """
-        from .events import Fell
+        from .events import Cushioned, Fell
 
         ev = self.trigger
         if not isinstance(ev, Fell):
@@ -14404,6 +14404,14 @@ class Cast:
         else:
             ev.soften += 10 * max(1, ev.squares)
             ev.prone = False
+        # **Announced, for the reason `WeaponHeld` is.** This writes a field
+        # on an event already in flight, so four rows whose whole content is
+        # this call were correct and invisible. #756.
+        self.world.bus.emit(
+            Cushioned(actor=ev.actor, by=self.ref,
+                      amount=amount if amount > 0 else 10 * max(1, ev.squares),
+                      all_of_it=amount <= 0)
+        )
         return True
 
     def made_by(self, thing: int) -> int | None:

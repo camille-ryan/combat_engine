@@ -1014,6 +1014,23 @@ KNOWN_SILENT = {
     "i1252x1": "the same -- and its recall is gated on the class feature "
                "besides. Driven: the thrown columns are written and the "
                "recall fetches at any distance",
+    # **Three rows #755 made reachable, and then showed doing nothing.**
+    # Each was UNUSED before the total-defence and escape poses existed --
+    # "this row cannot work" -- and each is now fired and judged. Two of the
+    # three are the board declining to meet a printed gate, measured rather
+    # than argued from the card; the third is unexplained and says so.
+    "f2158": "its gate is \"while you have any concealment\" and "
+             "`concealment_of` answers `Cover.NONE` on this board -- "
+             "measured, so the row correctly declines. #755",
+    "f2630": "it returns unless `Gear.shield` is set and this board's "
+             "character holds none -- the same board fact three other "
+             "entries here already record. #755",
+    "m5466a2": "**unexplained, and #754 is the row.** Fired by hand with "
+               "the foe adjacent and a failed escape handed in, its body "
+               "deals 31 damage; offered 48 times by the harness it shows "
+               "nothing. The trigger, the predicate, the adjacency and the "
+               "immediate-action budget were each ruled out and measured. "
+               "This entry names an observation, not a reason",
     "cf:wizard-arcanist-f0s4": "the board's wizard holds no encounter attack "
                                "power to pay with. Driven on a chargen "
                                "wizard: it borrows one and expends another",
@@ -1036,7 +1053,7 @@ DID_SOMETHING = {
     "EffectExpired", "EffectApplied", "ConditionEnded",
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
-    "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted",
+    "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
 }  # fmt: skip
 # `Rerolled` and `Boosted` are the **sixth** class of correct row admitted
 # here one at a time, and they arrived the way the note below predicts --
@@ -2691,6 +2708,9 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     if _rolls_saves(world, caster, ref, cursor):
         return True
 
+    if _does_the_ordinary_things(world, caster, ref, cursor):
+        return True
+
     # Bloodied as a **crossing**, not as a state. The board starts the
     # caster below half so that a row *gated* on being bloodied can fire --
     # which means the threshold is already behind it and `Bloodied` is
@@ -3270,6 +3290,214 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
         if conds is not None:
             for cond in (Condition.DYING, Condition.UNCONSCIOUS, Condition.PRONE):
                 conds.counts.pop(cond, None)
+
+
+#: The event a row watches, against the thing that makes it happen. Gated
+#: like `_rolls_checks` and `_rolls_saves`: each of these is cheap on its own
+#: and running all four for every triggered row in the tree is not.
+#:
+#: **Each one was measured UNUSED before it was added** -- "could not be used
+#: on the test board at all", which reads as *this row cannot work* and meant
+#: *the board never asked*. The counts are rows whose declared trigger names
+#: the event, heroic only:
+#:
+#:     TotalDefence   8    somebody takes the total defence action
+#:     Fell          11    somebody falls
+#:     Escaped        8    somebody escapes a grab
+#:     WeaponHeld     1    somebody draws a weapon
+#:
+#: #755, and #753 is the same shape for a saving throw.
+_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld")
+
+
+def _does_the_ordinary_things(
+    world,  # noqa: ANN001
+    caster: int,
+    ref: str,
+    cursor: int,
+) -> bool:
+    """Four things any creature can do that nothing here ever did.
+
+    The siblings of the second wind and the action point two hundred lines
+    up, found the same way and for the same reason: *"Ninety-odd rows for
+    two lines, and every one of them had reported UNUSED -- 'this row cannot
+    work' -- for want of being asked."*
+
+    **Everything is put back.** A fall moves the creature and costs it hit
+    points, a grab hangs a relation, and the board's arrangement is load
+    bearing for every later pass -- the caster is deliberately bloodied so a
+    gated row can fire, and deliberately placed so a reach row can swing.
+    Leaving any of that changed would quietly break the passes below rather
+    than this one.
+    """
+    from combat_engine.engine import Health, Position
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.query import enemies as _foes
+
+    declared = get(ref)
+    if declared is None:
+        return False
+    wants = {t.event.__name__ for t in declared.triggers} & set(_ORDINARY)
+    if not wants:
+        return False
+
+    hand = _Cast(world=world, me=caster, ref="audit:ordinary")
+    foes = [f for f in sorted(_foes(world, caster)) if alive(world, f)]
+
+    def rearm() -> None:
+        """Give the immediate action back between poses.
+
+        **Each pose below is tried more than once** -- two rollers, two
+        outcomes, two faces -- and one immediate action per round is the
+        printed rule, so the first pose spends it and every later one is
+        refused however well the row works. `probe()` in `_provoke` says
+        why that is the instrument getting out of its own way rather than
+        a rule being broken: every row is fired on a board of its own, in
+        isolation, and the one being measured is the one that matters.
+
+        Found by `m5466a2`, which wants a **failed** escape: the success
+        pose ran first, its predicate refused it, and the failure pose
+        could not be offered. Its body deals 31 damage when fired by hand.
+        """
+        from combat_engine.engine import Budget
+
+        budget = world.get(caster, Budget)
+        if budget is not None:
+            budget.immediate_round = -1
+            budget.opportunity_turn = -1
+
+    # -- the total defence action ----------------------------------------
+    #
+    # Its own verb, which announces: "eight rows print 'when you take the
+    # total defense action' and this was the one implementation saying
+    # nothing". Both the caster and an ally, since "when an ally takes the
+    # total defense action" is a printed trigger too.
+    if "TotalDefence" in wants:
+        for who in (caster, *_allies_of(world, caster)[:1]):
+            if alive(world, who):
+                rearm()
+                hand.total_defence(on=who)
+                if _fired(world, ref, cursor):
+                    return True
+
+    # -- a fall ----------------------------------------------------------
+    #
+    # `falling.drop` with the distance named rather than read off `height`:
+    # nothing on this board is ever airborne, so the default is zero and the
+    # function returns without announcing anything. Three squares is past
+    # the one-square threshold that makes a fall a fall.
+    if "Fell" in wants:
+        from combat_engine.engine.falling import drop
+
+        for who in (caster, *foes[:1], *_allies_of(world, caster)[:1]):
+            health = world.get(who, Health)
+            spot = world.get(who, Position)
+            if health is None or spot is None or not alive(world, who):
+                continue
+            was_hp, was_at = health.hp, spot.square
+            rearm()
+            drop(world, who, 3)
+            health.hp = was_hp
+            # **Through the grid, not just `Position`.** A fall moves the
+            # creature, and writing the old square back without re-indexing
+            # leaves `Grid`'s occupant map naming where it landed -- so
+            # every pass below this one reads a board where the creature is
+            # in two places. `place` refuses to overwrite somebody else, so
+            # the lift comes first.
+            if spot.square != was_at:
+                world.grid.lift(who)
+                spot.square = was_at
+                world.grid.place(who, frozenset({was_at}))
+            if _fired(world, ref, cursor):
+                return True
+
+    # -- getting out of a grab -------------------------------------------
+    #
+    # Grabbed by a foe and then escaping, because `Escaped` is announced by
+    # the attempt and there is nothing to attempt without a hold. The grab
+    # is ended whether the escape succeeds or not, so no later pass runs
+    # against a creature this one left held.
+    if "Escaped" in wants and foes:
+        from combat_engine.engine import Position as _Pos
+        from combat_engine.engine.escape import attempt
+
+        # **The caster is the GRABBER, which is what the cards say.** All
+        # five heroic rows here read "a creature escapes *its* grab", "an
+        # adjacent enemy fails to escape its grab", "a creature it is
+        # grabbing attempts to escape" -- so grabbing the caster and having
+        # *it* escape poses the mirror of the printed line and leaves every
+        # one of them UNUSED. Measured that way round first, and all five
+        # stayed unusable.
+        #
+        # Both outcomes, because the family splits on them: one row wants a
+        # **failed** escape and two want the attempt either way. A 20 beats
+        # a grabber's defence and a 1 does not.
+        # **Adjacent, because two of these five say so.** "An enemy
+        # adjacent to it attempts to escape its grab and fails" is an
+        # attack on the triggering enemy, and a grab laid across the board
+        # fires the trigger and then has nothing in reach to swing at -- so
+        # the row showed as silent rather than as working. `place` is the
+        # same lift-and-index the fall pass uses, and the square goes back.
+        here = world.get(caster, _Pos)
+        for victim in foes[:2]:
+            for face in (20, 1):
+                if not alive(world, victim):
+                    continue
+                spot = world.get(victim, _Pos)
+                was_at = spot.square if spot is not None else None
+                if spot is not None and here is not None:
+                    beside = (here.square[0] + 1, here.square[1])
+                    if spot.square != beside:
+                        world.grid.lift(victim)
+                        spot.square = beside
+                        world.grid.place(victim, frozenset({beside}))
+                held = hand.grab(on=victim, by=caster)
+                if held is None:
+                    continue
+                was = getattr(world.rng, "loaded", None)
+                world.rng.loaded = face
+                rearm()
+                try:
+                    attempt(world, victim)
+                finally:
+                    world.rng.loaded = was
+                # Ended through the effect this pass laid, not by clearing
+                # the relation: the hold *is* the effect, and a failed
+                # escape leaves it standing for every pass below.
+                if not held.ended:
+                    world.effects.end(held, "audit: letting go again")
+                fired = _fired(world, ref, cursor)
+                if spot is not None and was_at is not None \
+                        and spot.square != was_at:
+                    world.grid.lift(victim)
+                    spot.square = was_at
+                    world.grid.place(victim, frozenset({was_at}))
+                if fired:
+                    return True
+
+    # -- taking a weapon in hand -----------------------------------------
+    #
+    # **A catch, not a draw**, and the difference is the whole of it. The
+    # one row answering `WeaponHeld` is a free swing with a weapon just
+    # caught out of the air, and it reads `caught=` to tell that from an
+    # ordinary draw (#745). Drawing would announce the event and leave the
+    # row refusing it, which is worse than UNUSED: it would look posed.
+    #
+    # The victim is whoever on the board is holding something -- the
+    # caster is usually a monster, and `loader.spawn` hands those `Gear()`
+    # with an empty `weapons`, so there is nothing of its own to take.
+    if "WeaponHeld" in wants:
+        from combat_engine.engine import Gear
+
+        for victim in (*foes, *_allies_of(world, caster)):
+            gear = world.get(victim, Gear)
+            if gear is None or not gear.held:
+                continue
+            rearm()
+            hand.disarm(on=victim, catch=True)
+            if _fired(world, ref, cursor):
+                return True
+    return False
 
 
 def _rolls_saves(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
