@@ -556,6 +556,16 @@ class Item:
     owner: int = 0
     #: Who created it, so the payout can read their numbers.
     by: int = 0
+    #: **Whose it was before it hit the floor**, which is not `by`. For a
+    #: disarmed weapon `by` is the creature that *did* the disarming, and
+    #: three rows print "call **your** weapon back to your hand" -- so the
+    #: one fact they need was the one nothing recorded. `i1252x1`'s note is
+    #: the statement of it: a dropped weapon has "no record of whose it
+    #: was, so 'call your blade back' cannot pick it out".
+    #:
+    #: 0 for anything that never belonged to anybody -- a seed, a scroll,
+    #: the four berries. Only `Cast.disarm` sets it today. #736.
+    was: int = 0
     uses: int = 1
     #: What spending it does. Takes the eid of whoever spent it.
     spend: Callable[[int], None] | None = None

@@ -1001,6 +1001,19 @@ KNOWN_SILENT = {
     # measured; `drivers.stored_power` drives the row on one and asserts the
     # borrow, the expend, that the two are different rows, and that the
     # price is of the taken card's level or higher.
+    # **Two recall rows, silent because nothing on the board is on the
+    # floor.** `c.recall_weapon` fetches a weapon whose `Item.was` is the
+    # caller, and a disarm is the only thing that puts one there -- which
+    # the board never does to the creature under test. Driven in
+    # `drivers.recall_weapon`: a foe disarms the caster, the item records
+    # `was=caster` and `by=foe`, and the weapon comes back from nine squares
+    # at `within=20` and not at `within=5`. #736.
+    "f612": "nothing is on the floor to call back; a disarm is the only "
+            "thing that drops a weapon and the board never does one. "
+            "Driven: it fetches from nine squares at the printed twenty",
+    "i1252x1": "the same -- and its recall is gated on the class feature "
+               "besides. Driven: the thrown columns are written and the "
+               "recall fetches at any distance",
     "cf:wizard-arcanist-f0s4": "the board's wizard holds no encounter attack "
                                "power to pay with. Driven on a chargen "
                                "wizard: it borrows one and expends another",

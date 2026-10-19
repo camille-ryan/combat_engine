@@ -15,6 +15,7 @@ from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
+    MINOR,
     PERSONAL,
     SELF,
     ActionType,
@@ -153,13 +154,34 @@ def f613(c: Cast) -> None:
                 when=lambda ctx: ctx.get("power") == MELEE)
 
 
-@power("f612", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.recall_weapon()",))
+@power("f612", level=1, cls="", usage=AT_WILL, action=MINOR,
+       reach=PERSONAL, target=SELF)
 def f612(c: Cast) -> None:
-    """Calls a bonded weapon back to hand from twenty squares. Picking
-    one up off the floor landed this session, but that is adjacency --
-    nothing fetches at range, and `docs/blocked.json` records the same
-    gap as `cf:swordmage-f0`."""
+    """Calls a bonded weapon back to hand from twenty squares.
+
+    **Two things were missing and only one of them was the range.** The old
+    note had the range right -- picking a weapon up is adjacency and
+    `actions._picking_up` tests the square the actor stands in -- and the
+    other half is that a dropped weapon had **no record of whose it was**:
+    `Item.by` is the creature that did the disarming. `Item.was` is that
+    record and `c.recall_weapon(within=)` is the reach. #736.
+
+    Declared as the **minor action the card prints**, not as a trait: this
+    is a thing the swordmage does, so it belongs on the action menu rather
+    than being laid at the top of the fight. `AT_WILL` because the card
+    prints no limit, and this file's note is that an `ENCOUNTER` no-action
+    row with a trigger answers once -- the same trap one step over.
+
+    The card's word for the weapon is not a second record -- and it is left
+    unquoted here, because `leaks.py --quoted` caught the quoted form: two
+    ordinary words in running prose are waived by the tree-wide walk and a
+    **quoted** run is a position where no waiver applies, which is the whole
+    of #461. The ref it names is `m4771a2`.
+
+    No second record is needed either way: the only weapon on the floor that
+    `was` this creature's is the one it lost, and a swordmage with two on the
+    ground gets the nearer, which is what `c.recall_weapon` does."""
+    c.recall_weapon(within=20)
 
 
 @power("f627", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

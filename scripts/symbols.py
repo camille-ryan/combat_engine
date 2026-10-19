@@ -406,8 +406,13 @@ CATEGORIES: dict[str, dict] = {
                 "extra_turn", "grant_action", "grant_action_point",
                 "initiative", "payment_window", "swap_initiative",
             ]),
+            # `c.recall_weapon` sits with `draw` and `stow` rather than
+            # under movement, which is the other plausible shelf: it is
+            # about where a weapon is, not where a creature is, and
+            # `actions._picking_up` -- the adjacency version of the same
+            # question -- is what it was written against. #736.
             ("cards and carried things", [
-                "draw", "draws_free", "give", "stow",
+                "draw", "draws_free", "give", "recall_weapon", "stow",
             ]),
         ],
     },

@@ -552,16 +552,29 @@ def i1168x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.recall_weapon()",),
 )
 def i1252x1(c: Cast) -> None:
     """The thrown half is a write onto the weapon's own columns -- see
-    `_make_thrown`. The recall stays dropped and is the same gap `f612`
-    carries: a weapon on the floor is an `Item` with `owner=0` and no
-    record of whose it was, so "call **your** blade back" cannot pick it
-    out, and `actions._picking_up` tests the square the actor is standing
-    in rather than a distance."""
+    `_make_thrown` -- and the recall is written.
+
+    The old note stated the gap exactly and both halves of it are closed:
+    `Item.was` records whose the weapon was, where `Item.by` is the creature
+    that did the disarming, and `c.recall_weapon(within=)` reaches past the
+    square `actions._picking_up` tests. #736.
+
+    **`within=0`, which is any distance.** The card says "from up to a mile
+    away"; the board is 24 squares wide, so a mile and no limit are the same
+    thing here and inventing a number the card does not print would be
+    worse. `f612`'s twenty is a real number and stays one.
+
+    Gated on the class feature the card names, which `c.feat` answers --
+    without it the item is a thrown weapon and nothing more. A **free
+    action** rather than the minor `f612` prints: this is the item's own
+    sentence and it names no cost, and `c.recall_weapon` is the same call
+    either way."""
     _make_thrown(c, 5, 10)
+    if c.feat("cf:swordmage-f0"):
+        c.recall_weapon(within=0)
 
 
 @power(

@@ -437,7 +437,7 @@ _M4198_DOWN = "the m4198 drops to 0 hit points"
     trigger=_M4198_DOWN,
     on=Trigger(Dropped, about_me, _M4198_DOWN),
     attack=Attack(vs=REF, printed=12),
-    dropped=("c.recall_weapon()",),
+    dropped=("actions._picking_up(cost=)",),
 )
 def m4198a1(c: Cast) -> None:
     """The disarm is written. The marker read `c.disarm`'s *default* as its
@@ -450,9 +450,24 @@ def m4198a1(c: Cast) -> None:
     `c.cover_in` is the verb that makes it one. `side="any"`, since the card
     offers the statue to whoever stands behind it.
 
-    Dropped: "an adjacent creature can yank out the weapon by spending a
-    standard action". The disarmed weapon is on the floor with no record of
-    where, which is the same gap `f612` and `i1252x1` carry -- nothing in
+    Dropped, and **re-pointed**: "an adjacent creature can yank out the
+    weapon by spending a standard action" is not the recall `f612` and
+    `i1252x1` wanted, and both of those are written now. Two things this
+    note had wrong: the disarmed weapon **does** record where it is --
+    `c.disarm` spawns the `Item` with the victim's `Position`, which is how
+    `actions._picking_up` offers it at all -- and whose it was is recorded
+    too, as `Item.was`, since #736.
+
+    What is left is the **cost**. `_picking_up` writes `ActionType.MINOR` as
+    a constant, and this card charges a *standard* action to pull the blade
+    out of the body. That is the shape `_recovery` already fixed for
+    standing up, where the cost used to be a constant too and
+    `c.grant_action` is what made it movable -- so this wants the same door
+    pointed the other way: a cost a row can raise rather than lower. Which
+    is also why it is **not** `c.grant_action`: that makes an action
+    cheaper, and nothing makes one dearer.
+
+    The old note continued -- nothing in
     `Cast` fetches a weapon back to a hand."""
     me = c.me
     zid = c.zone(

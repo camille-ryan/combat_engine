@@ -13911,11 +13911,91 @@ class Cast:
         gear.weapons.remove(arm)
         gear.stowed.discard(arm.ref)
         here = self.world.get(who, Position)
-        parts: list[Any] = [Item(ref=arm.ref, owner=0, by=self.me, uses=0, weapon=arm)]
+        # `was=who` and `by=self.me` are **different creatures**: the
+        # weapon belonged to the victim and the disarm was done by the
+        # caster. `by` is read by the consumable rows for whose numbers a
+        # payout uses, so it could not be repurposed. #736.
+        parts: list[Any] = [
+            Item(ref=arm.ref, owner=0, by=self.me, uses=0, weapon=arm,
+                 was=who)
+        ]
         if here is not None:
             parts.append(Position(square=here.square))
         self.world.spawn(*parts)
         self.world.bus.emit(Note(text=f"{who} drops {arm.ref}"))
+        return True
+
+    def recall_weapon(
+        self,
+        *,
+        within: int = 0,
+        on: int | None = None,
+    ) -> bool:
+        """Call a weapon that was yours back into your hand from a distance.
+
+        *"You can call your bonded weapon to your hand from up to 20 squares
+        away with a minor action"*; *"from up to a mile away"* on the item
+        that extends it. Three rows print a line of this shape and none
+        could be written, for two reasons that are not the same:
+
+        * **the range.** `actions._picking_up` offers a dropped weapon only
+          to a creature standing in its square -- `where.square not in
+          here` -- so picking one up worked and reaching for one did not;
+        * **whose it was.** `Item.by` is the creature that did the
+          disarming, so it could not answer "**your** weapon". `Item.was`
+          is the new half and `Cast.disarm` is the one writer.
+
+        `within=0` is **any distance**, which is what "a mile away" means on
+        a board 24 squares wide -- rather than inventing a number the card
+        does not print.
+
+        Takes the nearest if several are lying about, and returns whether a
+        weapon came back, so a row can tell. The state change is the one
+        `actions`' `pick_up` branch makes: append to `Gear.weapons`, wield
+        it, despawn the item on the floor.
+
+        **`on=` defaults to the CASTER, not to `c.target`**, which is the
+        one place this parts company with almost everything else on `Cast`.
+        Every card is "call **your** weapon", so the subject is the creature
+        reaching. Taking the usual default made the first probe answer False
+        for a weapon nine squares away: `_who(None)` is `c.target`, and a
+        minor-action row that targets itself has none. The exception is
+        named here because the convention is strong enough that breaking it
+        silently would be worse than the default being wrong. #736.
+        """
+        from .components import Gear, Item, Position
+        from .grid import distance as grid_distance
+
+        who = self.me if on is None else on
+        if who is None:
+            return False
+        gear = self.world.get(who, Gear)
+        at = self.world.get(who, Position)
+        if gear is None or at is None:
+            return False
+        found: list[tuple[int, int]] = []
+        for eid, item in sorted(self.world.each(Item)):
+            if item.owner or item.weapon is None or item.was != who:
+                continue
+            where = self.world.get(eid, Position)
+            if where is None:
+                continue
+            gap = grid_distance(at.square, where.square)
+            if within and gap > within:
+                continue
+            found.append((gap, eid))
+        if not found:
+            return False
+        _gap, chosen = min(found)
+        item = self.world.need(chosen, Item)
+        if item.weapon is None:
+            return False
+        gear.weapons.append(item.weapon)
+        gear.wield(item.weapon)
+        self.world.despawn(chosen)
+        self.world.bus.emit(
+            Note(text=f"{who} calls {item.weapon.ref} back to hand")
+        )
         return True
 
     def give(

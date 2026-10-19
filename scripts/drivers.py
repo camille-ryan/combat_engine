@@ -25185,6 +25185,118 @@ def three_creatures_the_sun_hurts(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_weapon_called_back_to_the_hand(out: Result) -> None:
+    """*"You can call your bonded weapon to your hand from up to 20 squares
+    away with a minor action."*
+
+    Three rows print a recall and none could be written. The notes blamed
+    the range, and the range was only half of it:
+
+    * `actions._picking_up` offers a dropped weapon to a creature standing
+      **in its square** -- `where.square not in here` -- so picking one up
+      worked and reaching for one did not;
+    * **a dropped weapon had no record of whose it was.** `Item.by` is the
+      creature that did the *disarming*, which is exactly the wrong one, and
+      `i1252x1`'s note is the statement of it: *"no record of whose it was,
+      so 'call **your** blade back' cannot pick it out."*
+
+    So the assertion that matters is the pair of ids on one item: `was` is
+    the victim and `by` is the disarmer, and they are different creatures.
+    A single-creature probe would have passed for either field.
+
+    **The range control is the other one worth having.** Nine squares away,
+    `within=5` must refuse and `within=20` must fetch -- a verb that
+    ignored the distance would pass the second alone.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Item, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+
+    def disarmed(ref: str, gap: int = 9):  # noqa: ANN202
+        """That row's board with the caster's weapon on the floor `gap` off.
+
+        **The foe does the disarming**, because that is the case the record
+        is for: `by` ends up the foe and `was` the caster.
+        """
+        world, me, _ = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        Cast(world=world, me=foe, ref="drivers:thief").disarm(on=me)
+        here = world.need(me, Position).square
+        for eid, item in list(world.each(Item)):
+            if item.weapon is None:
+                continue
+            spot = world.get(eid, Position)
+            if spot is not None:
+                spot.square = (here[0] + gap, here[1])
+        return world, me, foe, Cast(world=world, me=me, ref=ref)
+
+    world, me, foe, c = disarmed("f612")
+    gear = world.need(me, Gear)
+    floor = [(eid, it) for eid, it in world.each(Item) if it.weapon is not None]
+    out.that(len(floor) == 1,
+             "the disarm puts exactly one weapon on the floor",
+             f"{[e for e, _ in floor]}")
+    eid, item = floor[0]
+    out.that(item.was == me and item.by == foe and me != foe,
+             "and the item remembers BOTH creatures, and they are different"
+             " ones -- `was` is whose it was, `by` is who took it. A probe"
+             " where one creature disarmed itself would have passed for"
+             " either field",
+             f"was={item.was} by={item.by} me={me} foe={foe}")
+    out.that(item.weapon is not None and item.weapon.ref not in
+             {w.ref for w in gear.weapons},
+             "and it is out of the hand",
+             f"{[w.ref for w in gear.weapons]}")
+
+    out.that(not c.recall_weapon(within=5),
+             "a recall that does not reach nine squares fetches nothing --"
+             " the control, and without it a verb ignoring the distance"
+             " would pass")
+    out.that(c.recall_weapon(within=20),
+             "and one that does reach brings it back")
+    out.that(item.weapon is not None and item.weapon.ref in
+             {w.ref for w in world.need(me, Gear).weapons},
+             "into the hand",
+             f"{[w.ref for w in world.need(me, Gear).weapons]}")
+    out.that(world.get(eid, Item) is None,
+             "and the thing on the floor is gone, not duplicated",
+             f"{world.get(eid, Item)}")
+
+    # -- somebody else's weapon is not yours -----------------------------
+    world, me, foe, c = disarmed("f612")
+    thief = Cast(world=world, me=me, ref="drivers:thief")
+    out.that(not thief.recall_weapon(on=foe),
+             "the foe cannot call back a weapon that was never its own --"
+             " `was` is the whole of the narrowing and this is what it buys",
+             f"{[ (i.was, i.by) for _e, i in world.each(Item) if i.weapon ]}")
+
+    # -- the two rows' own bodies ----------------------------------------
+    world, me, foe, _c = disarmed("f612")
+    REGISTRY["f612"].body(Cast(world=world, me=me, ref="f612"))
+    # The `or True` line that used to sit here is gone: it could not fail,
+    # which is the one thing an assertion must be able to do.
+    out.that(not [i for _e, i in world.each(Item) if i.weapon is not None],
+             "f612's body fetches the weapon off the floor -- twenty squares"
+             " is the number its card prints and nine is inside it",
+             f"{[(e, i.weapon.ref) for e, i in world.each(Item) if i.weapon]}")
+
+    world, me, foe, _c = disarmed("f612", gap=22)
+    REGISTRY["f612"].body(Cast(world=world, me=me, ref="f612"))
+    out.that(bool([i for _e, i in world.each(Item) if i.weapon is not None]),
+             "and leaves it lying at twenty-two, which is outside the"
+             " printed twenty -- the number is the card's and not a"
+             " stand-in for 'anywhere'",
+             f"{[(e, i.weapon.ref) for e, i in world.each(Item) if i.weapon]}")
+
+    for ref in ("f612", "i1252x1"):
+        out.that("recall" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} waits on no recall symbol",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25265,6 +25377,11 @@ DRIVERS = {
         three_creatures_the_sun_hurts,
         "three creatures the sun hurts, and the eight rows that already"
         " asked (#734)",
+    ),
+    "recall_weapon": (
+        a_weapon_called_back_to_the_hand,
+        "a weapon called back to the hand, and the two ids a dropped one"
+        " has to carry (#736)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
