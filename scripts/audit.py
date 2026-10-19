@@ -4076,7 +4076,28 @@ def _calls(symbols: list[str]) -> list[str]:
     return sorted(set(out))
 
 
-def _changed() -> list[str]:
+def _narrowed(symbols: list[str], changed: bool) -> list[str]:
+    """`--calls` plus, if asked, the content rows `--changed` would pick.
+
+    **Composed rather than exclusive, because the two miss different rows.**
+    `--calls` alone drops a content file edited in the same commit -- and a
+    commit that adds a verb almost always edits the rows that use it, so the
+    exclusive version audited the verb and not the rows written against it.
+    Measured on last night's commits: four of seven touched `engine/` and
+    `content/` together.
+
+    The `--changed` half runs with `widen=False`, so the engine files that
+    would have pulled in all 21,000 rows contribute none. That is the trade
+    `--calls` exists to make and `_calls`' docstring states its limit:
+    evidence a verb works, never evidence that nothing else broke.
+    """
+    rows = set(_calls(symbols))
+    if changed:
+        rows |= set(_changed(widen=False))
+    return sorted(rows)
+
+
+def _changed(widen: bool = True) -> list[str]:
     """Rows declared in files that differ from HEAD.
 
     At about 160ms a row, auditing all 12,197 is **half an hour serial
@@ -4123,9 +4144,16 @@ def _changed() -> list[str]:
     if done.returncode != 0:
         return _corpus()
     files = [line[3:].strip() for line in done.stdout.splitlines() if line[3:].strip()]
-    if any(f.startswith(WIDE) and not f.startswith(NARROW) for f in files):
+    engine = [f for f in files
+              if f.startswith(WIDE) and not f.startswith(NARROW)]
+    if engine and widen:
         return _corpus()
-    if _database_moved():
+    # **`widen=False` is `--calls` asking for the content half only.** The
+    # engine files are still changed and still unaudited; what the caller has
+    # undertaken to do is name the verbs instead, and to say so. Suppressing
+    # the widen without that undertaking would be loosening the instrument,
+    # which is why nothing but `main`'s `--calls` branch passes False. #761.
+    if _database_moved() and widen:
         return _corpus()
 
     refs: list[str] = []
@@ -5016,7 +5044,7 @@ def main() -> int:
         print("# no full sweep on record. A bare `audit.py` writes one.\n")
 
     wanted = args.refs or (
-        _calls(args.calls) if args.calls
+        _narrowed(args.calls, args.changed) if args.calls
         else _changed() if args.changed
         else _since(mark["sha"]) if args.since and mark.get("sha")
         else _corpus()

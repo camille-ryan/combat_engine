@@ -193,6 +193,136 @@ CHECKS = (
 )
 
 
+#: Engine files whose public functions content calls **by name**, so a change
+#: to one is narrowable by `audit.py --calls`. Everything else under
+#: `engine/` changes what an existing verb *means* rather than adding one,
+#: which is precisely the case `_calls`' docstring says to pay the wide run
+#: for. Two files, deliberately: the list is short because the claim is
+#: strong. #761.
+NARROWABLE = {
+    "src/combat_engine/engine/cast.py": "c.",
+    "src/combat_engine/engine/query.py": "",
+}
+
+
+def _verbs_from_diff() -> tuple[list[str], list[str]]:
+    """The verbs this working tree touches, and the reasons it cannot say.
+
+    Derived rather than typed, for the reason `audit._ctx_forwarders` gives
+    about itself: a flag you have to remember is a flag that gets forgotten,
+    and the one time it is forgotten is the time the wide run mattered.
+
+    Returns `(needles, refusals)`. **A non-empty `refusals` is a refusal** --
+    the caller must not narrow -- because every entry is a change this cannot
+    bound: a file whose functions content does not call by name, a private
+    helper every verb routes through, or an edit at module level that could
+    change anything.
+
+    The needle for a `Cast` method is `c.<name>`, which is how a row spells
+    it. For a `query` reader it is the bare name, because content imports
+    those and calls them unqualified -- and a bare name over-matches, which
+    is the safe direction for something whose job is to *narrow*.
+    """
+    import ast
+
+    done = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if done.returncode != 0:
+        return [], ["git status failed, so the diff cannot be read"]
+    files = [ln[3:].strip() for ln in done.stdout.splitlines() if ln[3:].strip()]
+    engine = [f for f in files if f.startswith("src/combat_engine/engine/")]
+    if not engine:
+        return [], ["nothing under engine/ has changed, so there is nothing "
+                    "to narrow -- plain `check.py` is already narrow here"]
+
+    needles: list[str] = []
+    refusals: list[str] = []
+    for name in engine:
+        prefix = NARROWABLE.get(name)
+        if prefix is None:
+            refusals.append(f"{name} -- content does not call its functions by "
+                            f"name, so a change here is not bounded by any "
+                            f"verb")
+            continue
+        path = ROOT / name
+        if not path.exists():
+            refusals.append(f"{name} -- gone from the tree")
+            continue
+        base = subprocess.run(
+            ["git", "show", f"HEAD:{name}"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        if base.returncode != 0:
+            refusals.append(f"{name} -- no committed version to compare with")
+            continue
+        now, was = path.read_text(), base.stdout
+        moved = _moved_lines(was, now)
+        try:
+            tree = ast.parse(now)
+        except SyntaxError as exc:
+            refusals.append(f"{name} -- will not parse: {exc}")
+            continue
+        spans = [
+            (fn.name, fn.lineno, fn.end_lineno or fn.lineno)
+            for fn in ast.walk(tree)
+            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        text = now.splitlines()
+        for line in sorted(moved):
+            inside = [n for n, lo, hi in spans if lo <= line <= hi]
+            if not inside:
+                # **Blank and comment-only lines are forgiven, and nothing
+                # else is.** Inserting a method moves the blank line that
+                # separates it from the next one, which belongs to no
+                # function -- and refusing on that made the derivation
+                # refuse every additive change, which is the one case it
+                # exists for. A module-level *statement* outside a function
+                # still refuses: a constant can change any verb at once.
+                body = text[line - 1].strip() if line - 1 < len(text) else ""
+                if not body or body.startswith("#"):
+                    continue
+                refusals.append(f"{name}:{line} -- changed outside any "
+                                f"function, so it could change anything")
+                continue
+            # The innermost enclosing def is last by line number; the
+            # outermost is the one content can name.
+            outer = min(
+                (n for n, lo, hi in spans if lo <= line <= hi),
+                key=lambda n: next(lo for m, lo, _h in spans if m == n),
+            )
+            if outer.startswith("_"):
+                refusals.append(f"{name}:{line} -- inside `{outer}`, a private "
+                                f"helper, so what it changes is not one verb")
+                continue
+            needle = f"{prefix}{outer}"
+            if needle not in needles:
+                needles.append(needle)
+    return needles, refusals
+
+
+def _moved_lines(was: str, now: str) -> set[int]:
+    """Line numbers in `now` that differ from `was`.
+
+    `difflib` rather than `git diff -U0` parsing, so the hunk arithmetic is
+    somebody else's. Only the new side matters: a deleted line changes a
+    verb that is still named by the lines around it.
+    """
+    import difflib
+
+    out: set[int] = set()
+    sm = difflib.SequenceMatcher(
+        a=was.splitlines(), b=now.splitlines(), autojunk=False
+    )
+    for tag, _i1, _i2, j1, j2 in sm.get_opcodes():
+        if tag in ("replace", "insert"):
+            out |= set(range(j1 + 1, j2 + 1))
+        elif tag == "delete":
+            out.add(j1 + 1)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -205,6 +335,12 @@ def main() -> int:
     ap.add_argument("--only", help="run just these, comma separated")
     ap.add_argument("--all", action="store_true",
                     help="audit every row, not only the ones in changed files")
+    ap.add_argument("--calls", nargs="*", metavar="SYMBOL", default=None,
+                    help="an ADDITIVE engine change: audit the rows that name "
+                         "these verbs instead of all 21,000. Bare `--calls` "
+                         "derives them from the diff. Refuses when the change "
+                         "is not narrowable, and never claims to be the wide "
+                         "sweep")
     args = ap.parse_args()
 
     if args.history:
@@ -224,6 +360,32 @@ def main() -> int:
                        c.catches, c.heavy)
             for c in wanted
         ]
+    narrowed: list[str] = []
+    if args.calls is not None:
+        if args.all:
+            print("--calls and --all ask for opposite things", file=sys.stderr)
+            return 2
+        narrowed, refusals = (args.calls, []) if args.calls \
+            else _verbs_from_diff()
+        if refusals:
+            print("this change is not narrowable, so the wide audit stands:",
+                  file=sys.stderr)
+            for why in refusals:
+                print(f"  {why}", file=sys.stderr)
+            print("\nRun plain `check.py` and pay for it, or name the verbs "
+                  "outright with `--calls c.foo`.", file=sys.stderr)
+            return 2
+        print(f"narrowing the audit to {len(narrowed)} verb(s): "
+              f"{', '.join(narrowed)}")
+        wanted = [
+            Instrument(
+                c.name,
+                c.argv + tuple(a for n in narrowed for a in ("--calls", n))
+                if c.name == "audit" else c.argv,
+                c.catches, c.heavy)
+            for c in wanted
+        ]
+
     if args.only:
         keep = {n.strip() for n in args.only.split(",")}
         # **A name that matches nothing is a typo, said so.** `--only lint`
@@ -338,13 +500,24 @@ def main() -> int:
     for line in _nightly_state():
         print(line)
     owed = _sweep_owed()
+    if narrowed and not failed:
+        # **Said even when every instrument is green, and before the verdict
+        # line.** A narrowed audit is evidence the named verbs work and is
+        # blind to a row that changes behaviour without naming one -- which
+        # is `audit._calls`' own caveat. Printing it here and withholding
+        # "all clean" below is the same arrangement the wide-sweep debt
+        # already uses: every instrument still ran, only the claim narrows.
+        print(f"the audit was narrowed to {', '.join(narrowed)} -- evidence "
+              f"those verbs work, not that nothing else broke")
     if failed:
         print(f"{len(failed)} unhappy: {', '.join(failed)}")
-    elif owed:
+    elif owed or narrowed:
         # **The one sentence that means "nothing is outstanding" is withheld
         # while something is.** Every instrument still ran and still reported;
         # the verdict is not narrowed, only the claim.
-        print(f"{len(wanted)} instruments clean, {owed}")
+        print(f"{len(wanted)} instruments clean"
+              + (f", {owed}" if owed else "")
+              + (", and the audit was narrow" if narrowed else ""))
     else:
         print(f"all {len(wanted)} instruments clean")
     for line in _clear_red(args.all, bool(failed), at, began_clean):
