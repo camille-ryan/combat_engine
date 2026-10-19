@@ -24946,6 +24946,105 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def it_can_attack_with_only_one_row(out: Result) -> None:
+    """*"When it attacks, the target can only make a melee basic attack."*
+
+    Two rows print that sentence and both carried a symbol shared with two
+    other clauses at other grains -- an action word (`m6511a1`) and a bar
+    with a hole in it (`i3560p1`). Split apart, this one turned out to be a
+    **parameter** on a verb that already had four of them: `c.forbid` took
+    `ref=`, `keyword=`, `lacking=`, `usage=` and `attacks_only=`, and none
+    of them could say **"all but this one"**. #733.
+
+    **The assertion that matters is the one about what is NOT barred.**
+    `Condition.SHAPED` is the near miss and would have passed a careless
+    test: it is `no_standard=True`, which takes away the melee basic attack
+    this card explicitly *leaves*, and every other standard action besides.
+    So the rule checks that a heal or a buff is still reachable, not only
+    that the attacks are gone -- 17 non-attack rows, before and after.
+
+    And the refusal is read with its **reason**, because `dsl.usable`
+    returns `(bool, str)` and a row refused for "not known" would otherwise
+    pass for a row refused by the restriction. That mistake was made twice
+    tonight on another rule.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.query import allies
+
+    # A board whose caster is a character, so the victim knows `mba` and has
+    # rows of both kinds. A monster's own board has neither.
+    world, me, _ = _posed("i3560p1", 1)
+    victim = next((a for a in allies(world, me) if a != me), me)
+    known = world.need(victim, Powers)
+    rows = [r for r in known.all if r in REGISTRY]
+    attacks = [r for r in rows if REGISTRY[r].attack is not None
+               and usable(world, victim, REGISTRY[r])[0] and r != "mba"]
+    plain = [r for r in rows if REGISTRY[r].attack is None
+             and usable(world, victim, REGISTRY[r])[0]]
+    out.that(len(attacks) >= 3 and len(plain) >= 3,
+             "the victim can reach several attack rows and several that are"
+             " not attacks -- the board for everything below",
+             f"{len(attacks)} attacks, {len(plain)} others")
+    out.that(usable(world, victim, REGISTRY["mba"])[0],
+             "and its melee basic attack, which is the one the card leaves")
+
+    c = Cast(world=world, me=me, ref="drivers:only")
+    held = c.forbid(only="mba", on=victim, until=When.EOTNT)
+    out.that(held is not None, "the restriction lands",
+             f"{held.label if held else None}")
+
+    refused = {r: usable(world, victim, REGISTRY[r]) for r in attacks}
+    out.that(all(not ok for ok, _why in refused.values()),
+             "every other attack row is refused",
+             f"{ {r: w for r, (ok, w) in refused.items() if ok} }")
+    out.that(all("only attack" in why for _ok, why in refused.values()),
+             "and refused BY THE RESTRICTION, not for something else --"
+             " `usable` answers `(bool, reason)` and a row refused for 'not"
+             " known' would otherwise pass for this",
+             f"{sorted({w for _o, w in refused.values()})}")
+    out.that(usable(world, victim, REGISTRY["mba"])[0],
+             "the named row is still reachable")
+    kept = [r for r in plain if usable(world, victim, REGISTRY[r])[0]]
+    out.that(len(kept) == len(plain),
+             "and NOT ONE of the rows that are not attacks is touched --"
+             " which is where `Condition.SHAPED` would have been wrong, and"
+             " is what the card narrows",
+             f"{len(kept)} of {len(plain)}")
+
+    if held is not None:
+        world.effects.end(held, "drivers: the hold ends")
+    back = [r for r in attacks if usable(world, victim, REGISTRY[r])[0]]
+    out.that(len(back) == len(attacks),
+             "and every attack comes back when the hold ends -- forbidding"
+             " is not spending",
+             f"{len(back)} of {len(attacks)}")
+
+    # -- the two rows' own bodies ----------------------------------------
+    world, me, _ = _posed("m4312a2", 1)
+    from combat_engine.engine.query import enemies
+
+    foe = sorted(enemies(world, me))[0]
+    use = Cast(world=world, me=me, ref="m4312a2", targets=[foe])
+    use.target = foe
+    world.rng.loaded = 20
+    REGISTRY["m4312a2"].body(use)
+    theirs = world.need(foe, Powers)
+    out.that(bool(theirs.only_attacks),
+             "m4312a2's own body lays the restriction once its secondary"
+             " attack lands",
+             f"{sorted(theirs.only_attacks)}")
+
+    for ref in ("m4312a2", "m3645a3"):
+        out.that("only=" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} waits on no `only=` symbol",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25016,6 +25115,11 @@ DRIVERS = {
         a_creature_in_the_middle_of_a_charge,
         "a creature in the middle of a charge, which is not the same as a"
         " charge's attack (#732)",
+    ),
+    "only_one_attack": (
+        it_can_attack_with_only_one_row,
+        "a creature that may attack with only one named row, and the heals"
+        " that are not touched (#733)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

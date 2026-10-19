@@ -944,6 +944,28 @@ class Powers:
     #: encounter powers until the end of its next turn"* -- a whole category
     #: rather than one ref, which `forbidden` could not say.
     forbidden_usages: set[Usage] = field(default_factory=set)
+    #: **The only attack rows this creature may reach**, by ref, when it is
+    #: not empty. *"When it attacks, the target can only make a melee basic
+    #: attack"* and *"dominated … but can use only basic attacks"* are the
+    #: two printed shapes, and neither could be said: `forbidden` names what
+    #: is taken away and there is no number of refs that spells "everything
+    #: else".
+    #:
+    #: **Attack rows only.** Both cards narrow what the creature may *attack*
+    #: with; a heal or a buff is not an attack and is left alone, which is
+    #: what "can only make a melee basic attack" says and not a word more.
+    #:
+    #: A plain `set[str]`, which is what `forbidden` above is and for the
+    #: same reason: `Counted` is typed for `Keyword` and these are refs.
+    #: The cancel hazard `Counted` exists for is handled the way
+    #: `forbidden_usages` handles it -- the undo discards only what its own
+    #: call added.
+    #:
+    #: Two holds naming **different** refs would leave both reachable, which
+    #: is weaker than either alone. Accepted rather than engineered around:
+    #: it needs one creature under two such cards, and the tree holds two
+    #: rows, on two different monsters.
+    only_attacks: set[str] = field(default_factory=set)
     #: The same, narrowed to **attack** powers: *"the target cannot use
     #: encounter or daily ATTACK powers"*. Kept as a second set rather than
     #: a flag beside the first, for the reason `required_keywords` gives

@@ -2949,6 +2949,13 @@ def usable(
     if powers is not None:
         if p.ref not in powers.all:
             return False, "not known"
+        # **"Can only make a melee basic attack."** Checked before the
+        # `forbidden` list below because it is the same kind of answer and
+        # the narrower one: a creature under this may reach exactly the rows
+        # named, and only where the row is an attack at all.
+        if (powers.only_attacks and p.attack is not None
+                and p.ref not in powers.only_attacks):
+            return False, "it can only attack with another power"
         if p.ref in powers.forbidden:
             return False, "cannot be used right now"
         # **Two keyword prohibitions, and they point opposite ways.** Read

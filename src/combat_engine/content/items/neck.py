@@ -1775,7 +1775,7 @@ def i3560x1(c: Cast) -> None:
 
 @power("i3560p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-       dropped=("c.restrict_action()",))
+       dropped=("c.only_action(word)",))
 def i3560p1(c: Cast) -> None:
     """`c.form` holds the shape and gives back the minor action that ends
     it. The tremorsense is written at the printed 10.
@@ -1794,7 +1794,13 @@ def i3560p1(c: Cast) -> None:
 
     Still dropped: the move actions and the *other* minor actions. The card
     allows exactly two things, and a bar is per action cost -- there is no
-    way to leave one minor action open and close the rest."""
+    way to leave one minor action open and close the rest.
+
+    **Re-pointed to `c.only_action(word)`**, which is what a bar with a hole
+    in it is: a whitelist rather than a prohibition. `Rules.cannot_move`
+    exists and would close the move half on its own; the minor-action hole
+    is the part nothing can say, and it is a different mechanism from both
+    of the other two rows that shared the old symbol. #733."""
     shape = c.form(until=When.ENCOUNTER, revert=MINOR, label="statue",
                    conditions=(Condition.SHAPED,))
 

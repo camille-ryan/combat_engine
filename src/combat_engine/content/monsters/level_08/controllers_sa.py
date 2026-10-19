@@ -2820,13 +2820,19 @@ def m3645a2(c: Cast) -> None:
     keywords=[Keyword.POISON, Keyword.ZONE, Keyword.AREA],
     attack=Attack(vs=FORT, printed=10),
     damage=Damage("1d8", 4, dtype=DamageType.POISON),
-    dropped=("c.restrict_actions()",),
 )
 def m3645a3(c: Cast) -> None:
     """"Can move the cloud 3 squares as a move action" is this same row
     used again once the burst already stands -- the shape
     `level_07/controllers.py`'s `m2294a3` uses. The burn, the cover, and the
     crit die all play.
+
+    **Re-pointed to `c.forbid(only=)`**, which `m4312a2` wants for the same
+    sentence: *"can use only basic attacks"*. `c.forbid` already takes
+    `ref=`, `keyword=`, `lacking=`, `usage=` and `attacks_only=`, and none of
+    them says **"all but this one"** -- a parameter, not a mechanism. The old
+    symbol lumped it with "only a single standard action", which is a budget
+    and not a menu. #733.
 
     **The rise is written, and `c.reanimate(dominated=)` was a false
     marker.** Nothing had to be able to raise a creature *and* charm it in
@@ -2898,6 +2904,16 @@ def m3645a3(c: Cast) -> None:
             hold = c.dominate(on=who, by=me, until=When.ENCOUNTER)
             if hold is None:
                 return
+            # **"But can use only basic attacks."** `c.forbid(only=)` bars
+            # every other attack row and leaves a heal or a buff alone, which
+            # is what the card narrows. Clocked on the domination's own end
+            # so the two lift together -- the printed "(no save)" is the
+            # encounter and the healing exception ends both.
+            barred = c.forbid(only="mba", on=who, until=When.ENCOUNTER)
+            if barred is not None:
+                hold.on_end.append(
+                    lambda e=barred: c.world.effects.end(e, "the hold ended")
+                )
 
             def mended(heal: Healed) -> None:
                 if heal.target == who and heal.amount > 0:

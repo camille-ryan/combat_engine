@@ -8420,6 +8420,7 @@ class Cast:
         keyword: Keyword | None = None,
         lacking: Keyword | None = None,
         usage: Usage | Sequence[Usage] | None = None,
+        only: str | Sequence[str] = (),
         attacks_only: bool = False,
         on: int | None = None,
         until: When = When.SAVE_ENDS,
@@ -8470,6 +8471,19 @@ class Cast:
         from standard actions may still use a minor-action encounter power.
         That row keeps its own marker.
 
+        **A fifth sentence is the inverse of `ref=` and no number of refs
+        could spell it**: *"when it attacks, the target can only make a melee
+        basic attack"* (`m4312a2`) and *"dominated … but can use only basic
+        attacks"* (`m3645a3`). `only=` takes the ref or refs that stay
+        reachable and bars every other **attack** row -- a heal or a buff is
+        not an attack and is untouched, which is what the cards say and not a
+        word more.
+
+        Those two rows shared one symbol with "only a single standard action"
+        and "cannot use the escape action", which are a budget and an action
+        word -- three grains under one name, so none of them could go green
+        correctly. #733.
+
         #487, #613.
         """
         from .components import Powers
@@ -8484,12 +8498,17 @@ class Cast:
             () if usage is None else
             (usage,) if isinstance(usage, Usage) else tuple(usage)
         )
-        if not ref and keyword is None and lacking is None and not usages:
+        kept = (only,) if isinstance(only, str) and only else tuple(only)
+        if (not ref and keyword is None and lacking is None
+                and not usages and not kept):
             return None
 
         undo: list[Callable[[], None]] = []
         label = (f"{self.ref} forbids "
-                 f"{ref or keyword or lacking or usages[0].value}")
+                 f"{ref or keyword or lacking or (usages[0].value if usages else '')}"
+                 f"{'' if not kept else 'all but ' + ','.join(kept)}")
+        if kept:
+            undo.append(lambda: [known.only_attacks.discard(r) for r in kept])
         if ref:
             undo.append(lambda: known.forbidden.discard(ref))
         if keyword is not None:
@@ -8525,6 +8544,8 @@ class Cast:
         )
         if effect is None:
             return None
+        for keep in kept:
+            known.only_attacks.add(keep)
         if ref:
             known.forbidden.add(ref)
         if keyword is not None:

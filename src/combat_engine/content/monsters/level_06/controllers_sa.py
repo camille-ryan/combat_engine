@@ -1124,12 +1124,24 @@ def m1426a6(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.restrict_actions()",),
+    dropped=("c.one_action_only()",),
 )
 def m1426a7(c: Cast) -> None:
     """The end-of-turn burn is exact. Limiting it to a single standard
     action while it starts its turn in sunlight has no verb that holds down
-    which actions a turn may spend."""
+    which actions a turn may spend.
+
+    **Re-pointed, and the rule it wants half-exists.** `Rules.one_action` is
+    *"one action per turn instead of the full budget"* and `turns._one_action`
+    reads it -- but only off **conditions**: `any(rules(c).one_action for c in
+    active(...))`, so it is reachable through `DAZED` or `DOMINATED` and
+    nowhere else. Laying a daze instead would be wrong twice: the card grants
+    no combat advantage and bars no reactions.
+
+    The card is also narrower than `one_action` -- *"only a single **standard**
+    action"* -- so the symbol names the clause rather than the field. Split
+    off `c.restrict_actions()`, which was carrying this and "can use only
+    basic attacks", two different grains. #733."""
     me = c.me
 
     def burn(ev: TurnEnd) -> None:

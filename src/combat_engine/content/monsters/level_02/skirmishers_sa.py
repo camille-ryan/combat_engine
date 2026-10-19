@@ -2863,12 +2863,25 @@ def m6511a0(c: Cast) -> None:
     ),
     attack=Attack(vs=REF, printed=5),
     damage=Damage("2d10", 4, kind=LIMITED),
-    dropped=("c.restrict_action()",),
+    dropped=("c.forbid_action(word)",),
 )
 def m6511a1(c: Cast) -> None:
-    """"The target cannot use the escape action" is the one absence: actions
-    can be *granted* (`c.grant_action` knows the word) and nothing takes one
-    away, so the hold is not actually harder to get out of.
+    """"The target cannot use the escape action" is the one absence, and it
+    is the **mirror** of a verb that exists: actions can be *granted*
+    (`c.grant_action` knows `shift`, `stand`, `escape`, `second_wind` and
+    `move_zone`) and nothing takes one away, so the hold is not actually
+    harder to get out of.
+
+    **Re-pointed off `c.restrict_action()`**, which was carrying three rows
+    at three different grains -- a forbidden action *word* here, "can only
+    make a basic attack" on `m4312a2`, and a bar with a hole in it on
+    `i3560p1`. One symbol cannot go green correctly for three. #733.
+
+    `actions.legal` offers the escape at `ActionType.MOVE` plus whatever
+    `_granted` adds, so the prohibition reads at the same place -- and at
+    every other action site too, or it is `c.grant_action`'s own warning
+    pointed the other way: *"anything else is carried, costs nothing and
+    does nothing."*
     """
     if c.strike():
         c.hit()

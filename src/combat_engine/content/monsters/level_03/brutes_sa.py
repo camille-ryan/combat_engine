@@ -1156,22 +1156,31 @@ def m4312a1(c: Cast) -> None:
     keywords=[Keyword.WEAPON],
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d10", 3),
-    dropped=("c.restrict_action()",),
 )
 def m4312a2(c: Cast) -> None:
     """The secondary attack is rolled with the level taken back out by hand --
-    only the primary line fits in the header. What it would do if it landed is
-    the gap: nothing narrows a creature's attacks down to a basic one.
+    only the primary line fits in the header -- and its payload is written.
 
-    `Condition.SHAPED` is not it. That is `no_standard=True` and nothing else,
-    so it takes away the melee basic attack this card explicitly leaves and
-    every other standard action besides. Nor is refusing at `AttackDeclared`
-    the way `c.cannot_attack` does: the printed line narrows the *choice* and
-    a veto there spends the action and throws it away. The bar belongs in
-    `actions.legal`, where the menu is built."""
+    **It was a parameter rather than a mechanism, which the old shared
+    symbol hid.** `c.forbid` already took `ref=`, `keyword=`, `lacking=`,
+    `usage=` and `attacks_only=`; *"the target can only make a melee basic
+    attack"* needs **"all but this one"**, which none of them said.
+    `only=` is that, and it bars every other **attack** row while leaving a
+    heal or a buff alone -- which is what the card says and not a word more.
+
+    `Condition.SHAPED` is not it, and it is the near miss: that is
+    `no_standard=True` and nothing else, so it would take away the melee
+    basic attack this card explicitly leaves. Nor is a veto at
+    `AttackDeclared` -- the printed line narrows the *choice*, and refusing
+    after the fact spends the action and throws it away. The bar belongs
+    where the menu is built, which is `dsl.usable`.
+
+    "Until the end of its next turn" is the target's clock, so
+    `When.EOTNT`. #733."""
     if c.strike():
         c.hit()
-        c.attack(c.world.scaling.trim(5, c.level), WILL)
+        if c.attack(c.world.scaling.trim(5, c.level), WILL):
+            c.forbid(only="mba", until=When.EOTNT)
 
 
 @power(

@@ -122,7 +122,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You can use a warhammer with any power that requires a light blade."
 - `c.counts_as_keyword(self, ref: 'str', keyword: 'Keyword', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Your <row> is considered an arcane attack power."
-- `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, attacks_only: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
+- `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Take a row away for a while. "Loses the ability to use ..."
 - `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Lay a printed weapon property on that creature's weapons. Returns how many.
