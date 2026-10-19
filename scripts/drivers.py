@@ -24633,6 +24633,108 @@ def a_creature_that_may_not_come_closer(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def darkvision_sees_through_the_cloud(out: Result) -> None:
+    """*"Creatures with darkvision ignore this effect."*
+
+    `m1504a2` lays a sight-blocking zone and dropped that clause with **no
+    marker**, on the written ground that *"there is no darkvision concept in
+    this engine"*. There are two: `c.darkvision` grants the sense and
+    `query.has_sense` asks whether a creature has one -- and that reader's
+    own docstring quotes this clause's sibling, *"creatures without
+    darkvision are blinded while in the area"*, as one of the three rows it
+    was built for. This is the fourth and nothing counted it, because the
+    gap lived in a docstring and a docstring does not reach `blocked.py`.
+    #729, which measures 369 rows of the same shape.
+
+    `c.zone(exempt=)` is the other half and also already there: *"who the
+    sight-blocking does not apply to"*.
+
+    **Asserted through `query.cover_between` and not off `Zone.exempt`.**
+    The set being right is the easy half; what matters is that the exempt
+    creature can actually see, and `_blinding_squares` is reached through
+    the cover path -- whose comment records that this flag *"was stored and
+    nothing ever read it, so such a zone blocked nothing"*. An assertion on
+    the field would have passed for that version too.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import cover_between, enemies
+
+    def fogged(grant: bool, lay: bool = True):  # noqa: ANN202
+        """One board, two lookers on the far side of the cloud from a third.
+
+        The lookers stand **opposite** the target, because
+        `_blinding_squares` subtracts the squares either party occupies -- a
+        creature standing in the fog is not sheltered by it, so a pair
+        inside the cloud reads nothing and the assertion would be vacuous.
+
+        `lay=False` is the same board without the zone, and it is needed:
+        **the cover between these two is already 2 before any zone exists**,
+        because the monster itself stands between them. The first draft
+        asserted the exempt looker sees at `Cover.NONE` and failed on that
+        2 -- a number that had nothing to do with the clause under test. The
+        question is what the *zone* adds, so it is asked by difference.
+        """
+        world, me, _ = _posed("m1504a2", 1)
+        foes = sorted(enemies(world, me))
+        seer, other = foes[0], foes[1]
+        here = world.need(me, Position).square
+        place(world, seer, (here[0] - 6, here[1]))
+        place(world, other, (here[0] - 6, here[1] + 1))
+        if grant:
+            Cast(world=world, me=seer, ref="drivers:dark").darkvision(on=seer)
+        target = foes[2] if len(foes) > 2 else me
+        place(world, target, (here[0] + 6, here[1]))
+        if lay:
+            REGISTRY["m1504a2"].body(Cast(world=world, me=me, ref="m1504a2"))
+        zone = next((z for _e, z in world.zones.all() if z.blocks_sight), None)
+        return world, seer, other, target, zone
+
+    world, seer, other, target, zone = fogged(grant=False)
+    out.that(zone is not None,
+             "the row lays a sight-blocking zone",
+             f"{zone.squares and len(zone.squares)}")
+    out.that(zone is not None and not zone.exempt,
+             "and with nobody able to see in the dark it exempts nobody --"
+             " the control",
+             f"{sorted(zone.exempt) if zone else None}")
+    bare, _b_seer, b_other, b_target, b_zone = fogged(grant=False, lay=False)
+    base = int(cover_between(bare, b_other, b_target))
+    out.that(b_zone is None,
+             "the same board without the zone, for the comparison",
+             f"{b_zone}")
+    blind = int(cover_between(world, other, target))
+    out.that(blind > base,
+             "so laying the cloud costs a looker MORE cover than the board"
+             " already charged it -- asked by difference, because the"
+             " monster itself stands between the two and the baseline is"
+             " not zero",
+             f"{base} -> {blind}")
+
+    world, seer, other, target, zone = fogged(grant=True)
+    out.that(zone is not None and sorted(zone.exempt) == [seer],
+             "granting darkvision to one enemy puts exactly that one in the"
+             " zone's exempt set",
+             f"{sorted(zone.exempt) if zone else None} seer={seer}")
+    seen = int(cover_between(world, seer, target))
+    out.that(seen == base,
+             "and the cloud adds NOTHING to what the exempt looker pays --"
+             " asserted through `cover_between` rather than off the exempt"
+             " set, because that flag was once stored and read by nothing"
+             " and an assertion on the set would have passed for that too",
+             f"{base} -> {seen}")
+    beside = int(cover_between(world, other, target))
+    out.that(beside > base,
+             "while the enemy standing beside it, which cannot see in the"
+             " dark, pays more through the same cloud -- so the waiver is"
+             " the sense and not the zone",
+             f"{base} -> {beside}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -24693,6 +24795,11 @@ DRIVERS = {
         a_creature_that_may_not_come_closer,
         "a creature that may not come closer, and the push that still"
         " drags it (#728)",
+    ),
+    "darkvision_cloud": (
+        darkvision_sees_through_the_cloud,
+        "a cloud that darkvision sees through, dropped with no marker"
+        " (#729)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

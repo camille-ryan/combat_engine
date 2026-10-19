@@ -105,7 +105,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import adjacent, team
+from combat_engine.engine.query import adjacent, creatures, has_sense, team
 from combat_engine.engine.triggers import Trigger, about_me, both, by_power, targets_me
 
 # --------------------------------------------------------------------------
@@ -196,11 +196,34 @@ def m1504a1(c: Cast) -> None:
     uses=1,
 )
 def m1504a2(c: Cast) -> None:
-    """"Creatures with darkvision ignore this effect" has nowhere to go --
-    there is no darkvision concept in this engine -- but the zone itself is
-    exact."""
+    """The zone was exact and the waiver is written now.
+
+    **The old note said "there is no darkvision concept in this engine"**,
+    and there are two: `c.darkvision` grants the sense and
+    `query.has_sense(world, eid, "darkvision")` asks whether a creature has
+    it -- whose own docstring quotes the sibling of this very clause,
+    *"creatures without darkvision are blinded while in the area"*, as one of
+    the three rows it was built for. This is the fourth and was not counted,
+    because it declared no marker: the gap lived in prose, and prose does not
+    reach `blocked.py`. #729.
+
+    `c.zone(exempt=)` is the other half and needed no finding either -- it is
+    *"who the sight-blocking does not apply to"*, written for the eight cards
+    that exempt their own caster. Here it is everybody who can see in the
+    dark.
+
+    **The set is frozen when the zone is laid**, which is what `Zone.exempt`
+    is: a creature that gains darkvision afterwards is not exempt. The card
+    reads as a property of the creature rather than a moment, so this is a
+    simplification -- an acceptable one for a sustained encounter zone, and
+    named rather than left to be discovered."""
     area = spread({c.here}, 4)
-    c.zone(area, blocks_sight=True, until=When.SUSTAIN, sustain=ActionType.MINOR, label=c.ref)
+    seers = frozenset(
+        eid for eid in creatures(c.world)
+        if has_sense(c.world, eid, "darkvision")
+    )
+    c.zone(area, blocks_sight=True, until=When.SUSTAIN,
+           sustain=ActionType.MINOR, label=c.ref, exempt=seers)
 
 
 @power(
