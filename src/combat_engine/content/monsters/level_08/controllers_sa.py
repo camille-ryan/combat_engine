@@ -122,7 +122,7 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.components import Health, Movement, Powers
+from combat_engine.engine.components import Movement, Powers
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackRolled,
@@ -145,6 +145,7 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     adjacent,
     allies,
+    bloodied,
     distance_between,
     enemies,
     is_,
@@ -1472,7 +1473,7 @@ def m2783a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.HEALING, Keyword.WEAPON],
-    requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m2783a1(c: Cast) -> None:
@@ -3259,7 +3260,7 @@ def m4244a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=11),
     damage=Damage("2d8", 6, kind=LIMITED),
-    requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m4244a1(c: Cast) -> None:
@@ -3276,7 +3277,7 @@ def m4244a1(c: Cast) -> None:
     reach=CloseBurst(1),
     target=EACH_ENEMY,
     keywords=[Keyword.POISON, Keyword.CLOSE],
-    requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
     defect="the printed attack line has neither of its two defences",
 )
@@ -3501,7 +3502,7 @@ def m4294a1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=10),
-    requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m4294a2(c: Cast) -> None:

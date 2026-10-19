@@ -1929,11 +1929,21 @@ def i567p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.considered_bloodied()",),
 )
 def i691p1(c: Cast) -> None:
-    """"Bloodied for all purposes" without losing hit points. Being
-    bloodied is read off `Health` everywhere, and nothing pretends."""
+    """Written. "Bloodied for all purposes" is a state now rather than an
+    arithmetic result: `c.considered_bloodied` lays a hold and
+    `query.bloodied` is the question that reads it.
+
+    **"All purposes" is the part that needed the work, and it is true.**
+    The old note said being bloodied is read off `Health` everywhere, which
+    it was -- 62 sites in `content/` asked the component directly, in five
+    spellings. All 62 go through `query.bloodied` now, so a card that says
+    the creature counts as bloodied is answered the same way by every row
+    that asks, including the beneficial ones the card names.
+
+    `When.EONT` is the printed window."""
+    c.considered_bloodied(on=c.me, until=When.EONT)
 
 
 @power(
@@ -3646,17 +3656,20 @@ def i625x1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.considered_bloodied()",),
 )
 def i625p1(c: Cast) -> None:
-    """The self-harm lands; resistance still eats it, which the card says
-    it should not. Being bloodied without having lost the hit points has no
-    spelling, so a wielder who does not cross the line gets the cut and
-    none of the benefit."""
+    """Written. The self-harm was always the half that landed; the state it
+    buys is `c.considered_bloodied` now, so a wielder who does not cross
+    the line by cutting itself gets the benefit anyway -- which is the
+    whole point of a card that charges you half your level for it.
+
+    The card names its own Property among the beneficial effects, and that
+    Property asks `c.bloodied`, so it is one of the readers this answers."""
     # "ignoring any resistances" is the printed clause, and the point of
     # it: the cost is elected and resisting it would be keeping what it
     # bought for free.
     c.flat(c.level // 2, on=c.me, unpreventable=True)
+    c.considered_bloodied(on=c.me, until=When.EONT)
 
 
 @power(
@@ -3813,12 +3826,25 @@ def i1306p2(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with the weapon",
     on=Trigger(Hit, by_me, "you hit with the weapon"),
-    dropped=("c.considered_bloodied()",),
 )
 def i1317p1(c: Cast) -> None:
-    """Being bloodied is read off hit points everywhere, so pretending at
-    it has no spelling; the burn is the half that lands."""
-    c.ongoing(5)
+    """Written, and this is the one of the three that aims the state at
+    somebody else: "**the target** is considered bloodied even if it has
+    more hit points than its bloodied value (save ends)".
+
+    `c.considered_bloodied` defaults to the caster, because the other two
+    cards in the family are about the creature using them -- so this one
+    passes `on=` explicitly. Both halves share the printed save, which is
+    one duration and not two: the burn and the state end together.
+
+    The target is read off the trigger rather than from `c.target`: the
+    card is a free action used *when you hit*, so the creature struck is
+    the one `Hit` carries."""
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    c.ongoing(5, on=foe)
+    c.considered_bloodied(on=foe, until=When.SAVE_ENDS)
 
 
 @power(

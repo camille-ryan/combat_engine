@@ -93,6 +93,7 @@ from combat_engine.engine.grid import distance, spread
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.movement import walk
 from combat_engine.engine.query import (
+    bloodied,
     distance_between,
     enemies,
     has_combat_advantage,
@@ -119,8 +120,7 @@ DEFENCES = (Defense.AC, Defense.FORT, Defense.REF, Defense.WILL)
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _holding(c: Cast) -> list[int]:

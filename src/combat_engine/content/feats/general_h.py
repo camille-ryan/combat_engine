@@ -121,7 +121,7 @@ from combat_engine.engine import (
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.grid import Square
-from combat_engine.engine.query import allies, distance_between
+from combat_engine.engine.query import allies, bloodied, distance_between
 
 #: The racial zone `p2473` lays, by the label it carries.
 CLOUD = "p2473"
@@ -2068,7 +2068,5 @@ def f1347b(c: Cast) -> None:
 
 
 def _is_bloodied(world, eid: int) -> bool:  # noqa: ANN001
-    from combat_engine.engine.components import Health
 
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)

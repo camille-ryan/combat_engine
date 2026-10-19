@@ -95,6 +95,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
+from combat_engine.engine.query import bloodied
 
 if TYPE_CHECKING:
     from combat_engine.engine import Square, World
@@ -114,10 +115,8 @@ def _best_of(c: Cast, *mods: int) -> int:
 
 def _hit_me_bloodied(world: World, me: int, ev: Any) -> bool:
     """"You are hit by an attack while bloodied."""
-    from combat_engine.engine.components import Health
 
-    health = world.get(me, Health)
-    return ev.target == me and health is not None and health.bloodied
+    return ev.target == me and bloodied(world, me)
 
 
 def _dominate_or_stun(world: World, me: int, ev: ConditionApplied) -> bool:

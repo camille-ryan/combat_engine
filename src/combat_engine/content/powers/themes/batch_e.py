@@ -96,7 +96,7 @@ from combat_engine.engine import (
     power,
     targets_me,
 )
-from combat_engine.engine.query import allies, distance_between, enemies, flanked_by
+from combat_engine.engine.query import allies, bloodied, distance_between, enemies, flanked_by
 from combat_engine.engine.triggers import Trigger
 
 DEFENCES = (AC, FORT, REF, WILL)
@@ -193,10 +193,8 @@ def _vs_my_will(world: Any, me: int, ev: Any) -> bool:
 
 def _hurt_while_bloodied(world: Any, me: int, ev: Any) -> bool:
     """The second half of "bloodied by an attack, or damaged while bloodied"."""
-    from combat_engine.engine.components import Health
 
-    health = world.get(me, Health)
-    return ev.target == me and health is not None and health.bloodied
+    return ev.target == me and bloodied(world, me)
 
 
 def _ally_within(squares: int) -> Any:

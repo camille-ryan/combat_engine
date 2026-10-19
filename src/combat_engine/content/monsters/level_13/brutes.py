@@ -103,7 +103,7 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import alive, team
+from combat_engine.engine.query import alive, bloodied, team
 from combat_engine.engine.triggers import Trigger, about_me
 
 _M3034_SHAPES = ("humanoid", "wolf")
@@ -154,10 +154,13 @@ def m254a0(c: Cast) -> None:
             return
         if team(c.world, ev.target) is team(c.world, me):
             return
-        health = c.world.get(ev.target, Health)
-        if health is None or not health.bloodied:
+        if not bloodied(c.world, ev.target):
             return
-        if ev.hp + ev.amount > health.max_hp // 2:
+        # The component is still wanted, for `max_hp`: "bloodied **by** this
+        # hit" is the half that needs the threshold the blow crossed, and
+        # `bloodied()` answers only the state.
+        health = c.world.get(ev.target, Health)
+        if health is not None and ev.hp + ev.amount > health.max_hp // 2:
             c.temp_hp(10, on=me)
 
     c.watch(DamageApplied, drew_blood, until=When.ENCOUNTER, on=me, label=ref)
@@ -202,7 +205,7 @@ def _a_bloodied_enemy(world: Any, eid: int) -> bool:
 
     for foe in enemies(world, eid):
         health = world.get(foe, Health)
-        if health is not None and health.bloodied and health.hp > 0:
+        if bloodied(world, foe) and health is not None and health.hp > 0:
             return True
     return False
 

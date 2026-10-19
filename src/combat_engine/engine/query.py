@@ -351,6 +351,35 @@ def targetable(world: World, eid: int) -> bool:
     return alive(world, eid) or world.get(eid, Scenery) is not None
 
 
+#: The label a `c.considered_bloodied` hold carries. One string, read in
+#: two places, so neither can drift from the other.
+COUNTS_AS_BLOODIED = "counts-as-bloodied"
+
+
+def bloodied(world: World, eid: int) -> bool:
+    """Is this creature bloodied -- by its hit points, or by a card saying so.
+
+    **`Health.bloodied` is the arithmetic and not the whole question.** Four
+    printed rows make a creature count as bloodied *without* taking it
+    there -- "bloodied for all purposes" -- and a property on the component
+    has no `world` in scope, so it cannot see an effect. The arithmetic
+    stays where it is and this is the question.
+
+    A module-level function as well as `Cast.bloodied`, because a
+    `requires=` gate is handed `(world, eid)` and no `Cast` -- which is why
+    eleven of the hand-rolled reads in `content/` are walrus expressions
+    inside a lambda. There was nothing to call. #716.
+    """
+    from .components import Health
+
+    health = world.get(eid, Health)
+    if health is not None and health.bloodied:
+        return True
+    return any(
+        eff.label == COUNTS_AS_BLOODIED for eff in world.effects.of(eid)
+    )
+
+
 def conscious(world: World, eid: int) -> bool:
     return alive(world, eid) and not is_(world, eid, Condition.UNCONSCIOUS)
 

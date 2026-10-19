@@ -127,7 +127,6 @@ from combat_engine.engine import (
     Effect,
     EnterSquare,
     Healed,
-    Health,
     Hit,
     Initiative,
     Keyword,
@@ -166,6 +165,7 @@ from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     distance_between,
     flanked_by,
     squares,
@@ -5053,8 +5053,7 @@ def m4374a6(c: Cast) -> None:
         who = ctx.get("target")
         if who is None:
             return False
-        health = world.get(who, Health)
-        if health is not None and health.bloodied:
+        if bloodied(world, who):
             return True
         return any(
             eff.ongoing is not None

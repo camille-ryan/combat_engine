@@ -65,6 +65,7 @@ from combat_engine.engine import (
 from combat_engine.engine.events import MoveStart
 from combat_engine.engine.query import (
     adjacent,
+    bloodied,
     distance_between,
     enemies,
     squares,
@@ -90,11 +91,7 @@ def _simple_weapon(world: World, eid: int) -> bool:
 
 
 def _a_bloodied_enemy(world: World, eid: int) -> bool:
-    for foe in enemies(world, eid):
-        health = world.get(foe, Health)
-        if health is not None and health.bloodied:
-            return True
-    return False
+    return any(bloodied(world, foe) for foe in enemies(world, eid))
 
 
 def _flankers_from(c: Cast, stand: tuple[int, int], victim: int) -> list[int]:

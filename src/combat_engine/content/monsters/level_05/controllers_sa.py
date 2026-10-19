@@ -124,7 +124,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import bloodied, distance_between, team
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -144,8 +144,7 @@ from combat_engine.engine.zones import Zone
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _defs_vs_traps(c: Cast) -> None:

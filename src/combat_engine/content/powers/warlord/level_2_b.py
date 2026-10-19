@@ -61,7 +61,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import EffectApplied, InitiativeRolled
-from combat_engine.engine.query import creatures, is_, level_term
+from combat_engine.engine.query import bloodied, creatures, is_, level_term
 
 MARTIAL = [Keyword.MARTIAL]
 MARTIAL_WEAPON = [Keyword.MARTIAL, Keyword.WEAPON]
@@ -358,10 +358,8 @@ def p4549(c: Cast) -> None:
 
 
 def _bloodied(world: World, eid: int) -> bool:
-    from combat_engine.engine import Health
 
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 @power(

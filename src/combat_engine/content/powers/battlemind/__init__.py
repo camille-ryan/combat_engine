@@ -24,6 +24,7 @@ from combat_engine.engine import (
     World,
     spread,
 )
+from combat_engine.engine.query import bloodied as _bloodied
 
 PSIONIC = [Keyword.PSIONIC]
 PSIONIC_WEAPON = [Keyword.PSIONIC, Keyword.WEAPON]
@@ -31,8 +32,7 @@ PSIONIC_WEAPON = [Keyword.PSIONIC, Keyword.WEAPON]
 
 def bloodied(world: World, eid: int) -> bool:
     """"Requirement: You must be bloodied"."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return _bloodied(world, eid)
 
 
 def square_of(c: Cast, who: int) -> Square | None:

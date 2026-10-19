@@ -724,9 +724,46 @@ class Cast:
         return who is not None and is_(self.world, who, condition)
 
     def bloodied(self, on: int | None = None) -> bool:
+        """Is this creature bloodied -- by its hit points, or by a card.
+
+        One line over `query.bloodied`, and the hop is the point: 585 rows
+        call this and 62 read `Health.bloodied` by hand, so putting the
+        second half of the question in `query` is what lets both agree.
+        See `c.considered_bloodied`.
+        """
+        from .query import bloodied as _bloodied
+
         who = self._who(on)
-        health = self.world.get(who, Health) if who else None
-        return health is not None and health.bloodied
+        return who is not None and _bloodied(self.world, who)
+
+    def considered_bloodied(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You are considered bloodied for all purposes."
+
+        Three rows print it and each said the same thing: *"being bloodied
+        is read off `Health` everywhere, and nothing pretends"*. True, and
+        the fix is not a hit point taken away -- the cards are explicit
+        that none is -- but a hold that the *question* reads.
+
+        `query.bloodied` is that question and `Health.bloodied` is still
+        the arithmetic. **Not every reader asks through either of them
+        yet**: 62 sites in `content/` read the component directly, in five
+        different spellings, and until those are converted this is true of
+        the 585 that call `c.bloodied` and false of the rest. That is why
+        `i691p1` keeps a marker.
+
+        Defaults to the **caster**, like `c.second_wind` and
+        `c.spend_surge` beside it: every card printing this is about the
+        creature using it, and one of the three deliberately hurts itself
+        to get there.
+        """
+        from .query import COUNTS_AS_BLOODIED
+
+        who = on if on is not None else self.me
+        return self.world.effects.apply(
+            who, self.me, until, label=COUNTS_AS_BLOODIED, by=self.ref,
+        )
 
     def wounded(self, on: int | None = None) -> bool:
         """Has lost any hit points at all. What a healing power looks for."""

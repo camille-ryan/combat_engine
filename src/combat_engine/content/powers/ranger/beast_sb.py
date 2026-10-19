@@ -54,6 +54,7 @@ from combat_engine.engine import (
     CloseBurst,
     Condition,
     DamageType,
+    Health,
     Keyword,
     Melee,
     UpTo,
@@ -61,9 +62,9 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.components import Companion, Health
+from combat_engine.engine.components import Companion
 from combat_engine.engine.events import AttackDeclared, DamageApplied, Moved
-from combat_engine.engine.query import squares
+from combat_engine.engine.query import bloodied, squares
 from combat_engine.engine.triggers import Trigger, by_melee
 
 MARTIAL = [Keyword.MARTIAL]
@@ -86,7 +87,7 @@ def _has_beast(world: World, eid: int) -> bool:
 
 
 def _bloodied_beast(world: World, eid: int) -> bool:
-    return _has_beast(world, eid) and world.need(eid, Health).bloodied
+    return _has_beast(world, eid) and bloodied(world, eid)
 
 
 def _bloodied_by(world: World, me: int, ev: DamageApplied) -> bool:
@@ -97,10 +98,13 @@ def _bloodied_by(world: World, me: int, ev: DamageApplied) -> bool:
     `Bloodied` itself carries only who it happened to, and this row's target
     is whoever did it.
     """
-    victim = world.get(ev.target, Health)
-    if victim is None or not victim.bloodied:
+    if not bloodied(world, ev.target):
         return False
-    if victim.hp + ev.amount <= victim.max_hp // 2:
+    # The component is still wanted, for the threshold: "bloodied **by**
+    # this hit" needs the line the blow crossed, which the state alone
+    # cannot say.
+    victim = world.get(ev.target, Health)
+    if victim is None or victim.hp + ev.amount <= victim.max_hp // 2:
         return False  # it was already bloodied before this one landed
     mine = world.get(ev.target, Companion)
     return ev.target == me or (mine is not None and mine.owner == me)

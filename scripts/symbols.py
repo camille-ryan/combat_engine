@@ -339,7 +339,8 @@ CATEGORIES: dict[str, dict] = {
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
             ("state and identity", [
-                "bloodied", "build", "element", "feat", "feats", "granted_by",
+                "bloodied", "build", "considered_bloodied", "element",
+                "feat", "feats", "granted_by",
                 "granted_via", "healed_by", "index", "instinctive", "is_",
                 "is_hidden", "is_kind", "is_minion", "is_quarry", "is_trap",
                 "keywords_of", "kinds_of", "knows", "made_by", "missing",
@@ -617,7 +618,7 @@ READERS: dict[str, list[str]] = {
         "immune_to",
     ],
     "what has already happened": [
-        "hit_me_this_turn", "in_form", "granted_amount", "lingers",
+        "bloodied", "hit_me_this_turn", "in_form", "granted_amount", "lingers",
         "my_hits_this_turn", "my_misses_this_turn", "shifted",
         "since_turn_began", "surge_value", "taking_ongoing",
     ],

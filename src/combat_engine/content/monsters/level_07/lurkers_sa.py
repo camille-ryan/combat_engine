@@ -91,6 +91,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
+    bloodied,
     distance_between,
     has_combat_advantage,
     hidden_from,
@@ -786,10 +787,8 @@ def m2614a4(c: Cast) -> None:
 
 
 def _not_bloodied(world: World, eid: int) -> bool:
-    from combat_engine.engine.components import Health
 
-    h = world.get(eid, Health)
-    return not (h is not None and h.bloodied)
+    return not bloodied(world, eid)
 
 
 @power(

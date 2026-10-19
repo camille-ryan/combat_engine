@@ -90,6 +90,7 @@ from combat_engine.engine.grid import distance
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     distance_between,
     enemies,
     flanked_by,
@@ -122,8 +123,7 @@ LIFELESS = ("undead", "construct")
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _living(c: Cast, who: int) -> bool:

@@ -36,7 +36,6 @@ from combat_engine.engine import (
     Condition,
     DamageType,
     Effect,
-    Health,
     Hit,
     Keyword,
     Melee,
@@ -49,7 +48,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.events import ZoneExited
-from combat_engine.engine.query import adjacent, hidden_from
+from combat_engine.engine.query import adjacent, bloodied, hidden_from
 from combat_engine.engine.zones import Zone
 
 DIVINE_IMPLEMENT = [Keyword.DIVINE, Keyword.IMPLEMENT]
@@ -57,8 +56,7 @@ DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
 
 
 def _bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _melee_row(ctx: dict[str, Any]) -> bool:

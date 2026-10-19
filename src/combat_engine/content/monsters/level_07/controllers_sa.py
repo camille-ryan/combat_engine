@@ -113,6 +113,7 @@ from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
     adjacent,
     allies,
+    bloodied,
     distance_between,
     enemies,
     flanked_by,
@@ -1392,7 +1393,7 @@ def m2781a0(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.HEALING, Keyword.WEAPON, Keyword.MELEE],
-    requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m2781a1(c: Cast) -> None:
@@ -2406,7 +2407,7 @@ def m3987a0(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    requires=lambda world, eid: bool((h := world.get(eid, Health)) and h.bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m3987a1(c: Cast) -> None:
@@ -4079,7 +4080,7 @@ def m5833a5(c: Cast) -> None:
 
 
 def _hit_while_bloodied(world: World, me: int, ev: Any) -> bool:
-    return getattr(ev, "target", None) == me and bool((h := world.get(me, Health)) and h.bloodied)
+    return getattr(ev, "target", None) == me and bloodied(world, me)
 
 
 @power(
@@ -4524,7 +4525,7 @@ def m6021a3(c: Cast) -> None:
 
 
 def _hits_bloodied_me(world: World, me: int, ev: Any) -> bool:
-    return getattr(ev, "target", None) == me and bool((h := world.get(me, Health)) and h.bloodied)
+    return getattr(ev, "target", None) == me and bloodied(world, me)
 
 
 @power(

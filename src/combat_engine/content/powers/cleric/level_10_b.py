@@ -57,7 +57,6 @@ from combat_engine.engine import (
     Condition,
     Effect,
     Event,
-    Health,
     Keyword,
     Melee,
     MoveEnd,
@@ -72,7 +71,7 @@ from combat_engine.engine import (
     spread,
 )
 from combat_engine.engine.events import DamageRolled
-from combat_engine.engine.query import distance_between, team
+from combat_engine.engine.query import bloodied, distance_between, team
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.zones import Zone
 
@@ -128,8 +127,7 @@ def _my_side_hurt(
 
 
 def _not_bloodied(world: World, me: int) -> bool:
-    health = world.get(me, Health)
-    return health is not None and not health.bloodied
+    return not bloodied(world, me)
 
 
 @power(

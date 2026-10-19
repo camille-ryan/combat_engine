@@ -162,6 +162,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     creatures,
     distance_between,
     has_combat_advantage,
@@ -1802,7 +1803,7 @@ def m2784a1(c: Cast) -> None:
     reach=Melee(1),
     target=ONE_CREATURE,
     keywords=[Keyword.HEALING, Keyword.WEAPON],
-    requires=lambda world, eid: (lambda h: h is not None and h.bloodied)(world.get(eid, Health)),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m2784a2(c: Cast) -> None:

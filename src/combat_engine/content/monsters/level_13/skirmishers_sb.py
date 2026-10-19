@@ -123,7 +123,6 @@ from combat_engine.engine import (
     DamageType,
     Effect,
     EffectApplied,
-    Health,
     Hit,
     Initiative,
     Keyword,
@@ -151,6 +150,7 @@ from combat_engine.engine.query import (
     adjacent,
     alive,
     allies,
+    bloodied,
     distance_between,
     enemies,
     flanked_by,
@@ -3075,9 +3075,7 @@ def m5651a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.CHARM],
     attack=Attack(vs=WILL, printed=16),
-    requires=lambda world, eid: not (
-        (h := world.get(eid, Health)) is not None and h.bloodied
-    ),
+    requires=lambda world, eid: not bloodied(world, eid),
     requires_text="usable only while it is not bloodied",
 )
 def m5651a1(c: Cast) -> None:
@@ -3142,8 +3140,7 @@ _M5651_STRUCK = "it is hit by an attack while it is not bloodied"
 
 
 def _hit_while_whole(world: World, me: int, ev: Hit) -> bool:
-    health = world.get(me, Health)
-    return ev.target == me and health is not None and not health.bloodied
+    return ev.target == me and not bloodied(world, me)
 
 
 @power(

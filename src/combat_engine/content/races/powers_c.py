@@ -84,7 +84,7 @@ from combat_engine.engine.cast import (
     MANOEUVRE_BULL_RUSH,
     MANOEUVRE_BULL_RUSH_FOLLOW,
 )
-from combat_engine.engine.query import line_of_effect, squares, unseen_by
+from combat_engine.engine.query import bloodied, line_of_effect, squares, unseen_by
 from combat_engine.engine.skills import modifier
 
 if TYPE_CHECKING:
@@ -92,8 +92,7 @@ if TYPE_CHECKING:
 
 def _bloodied(world: World, eid: int) -> bool:
     """"Requirement: you must be bloodied", asked of a creature on a board."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _storm(ctx: dict[str, Any]) -> bool:

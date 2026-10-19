@@ -108,6 +108,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     distance_between,
     flanked_by,
     team,
@@ -131,8 +132,7 @@ SMALL_ENOUGH = (Size.TINY, Size.SMALL, Size.MEDIUM)
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _melee_ctx(ctx: dict[str, Any]) -> bool:

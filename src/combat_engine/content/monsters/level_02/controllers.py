@@ -48,7 +48,6 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Effect,
-    Health,
     Keyword,
     Melee,
     Ranged,
@@ -62,7 +61,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import Dropped, Hit, TurnEnd
 from combat_engine.engine.monster_math import MINION
-from combat_engine.engine.query import alive, team
+from combat_engine.engine.query import alive, bloodied, team
 from combat_engine.engine.triggers import Trigger, about_me
 
 #: The three conditions m4787a0 pays its larger number against. Written out
@@ -73,8 +72,7 @@ HELD_FAST = (Condition.IMMOBILIZED, Condition.RESTRAINED, Condition.HELPLESS)
 def _bloodied(world: World, eid: int) -> bool:
     """A printed Requirement line wants a predicate on the caster, and
     `Cast.bloodied` is only reachable once the body is already running."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _hit_by_cold(world: World, me: int, ev: Hit) -> bool:

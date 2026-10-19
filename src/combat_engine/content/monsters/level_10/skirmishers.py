@@ -126,6 +126,7 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     adjacent,
     alive,
+    bloodied,
     distance_between,
     flanked_by,
     moving_as,
@@ -1109,8 +1110,7 @@ def m82a1(c: Cast) -> None:
 
 
 def _unbloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and not health.bloodied
+    return not bloodied(world, eid)
 
 
 @power(

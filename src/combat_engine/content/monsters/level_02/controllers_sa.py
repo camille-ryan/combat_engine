@@ -83,7 +83,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import distance_between, enemies, team
+from combat_engine.engine.query import bloodied, distance_between, enemies, team
 from combat_engine.engine.triggers import Trigger, about_me, by_me, targets_me
 
 # -- what the blocks in this file share -------------------------------------
@@ -1063,10 +1063,8 @@ def _beside_a_bloodied_enemy(world: World, eid: int) -> bool:
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    from combat_engine.engine import Health
 
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 @power(

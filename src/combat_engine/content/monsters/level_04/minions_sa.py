@@ -63,7 +63,7 @@ from combat_engine.engine.events import (
     RelationCleared,
 )
 from combat_engine.engine.monster_math import MINION
-from combat_engine.engine.query import adjacent, enemies, team
+from combat_engine.engine.query import adjacent, bloodied, enemies, team
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -136,15 +136,13 @@ def _bloodied_neighbour_shifts(world: World, me: int, ev: MoveStart) -> bool:
     and `adjacent` is false precisely when the row should fire. `kind_` is set
     on every emission even though the dataclass does not declare it.
     """
-    from combat_engine.engine.components import Health
 
     who = getattr(ev, "actor", None)
     if who is None or who == me or getattr(ev, "kind_", "") != "shift":
         return False
     if who not in enemies(world, me) or not adjacent(world, me, who):
         return False
-    hp = world.get(who, Health)
-    return hp is not None and hp.bloodied
+    return bloodied(world, who)
 
 
 # --------------------------------------------------------------------------

@@ -87,6 +87,7 @@ from combat_engine.engine.query import (
     adjacent,
     alive,
     allies,
+    bloodied,
     enemies,
     has_combat_advantage,
 )
@@ -653,10 +654,8 @@ def m3112a3(c: Cast) -> None:
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    from combat_engine.engine import Health
 
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 @power(

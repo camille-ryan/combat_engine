@@ -23376,6 +23376,125 @@ def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
              f"{REGISTRY['f1398'].unfinished}")
 
 
+def counting_as_bloodied(out: Result) -> None:
+    """`c.considered_bloodied`, and the 62 readers that had to be converted.
+
+    Three cards print *"you are considered bloodied for all purposes"* and
+    each said the same thing in its docstring: *"being bloodied is read off
+    `Health` everywhere, and nothing pretends"*. True, and measured:
+
+        585  c.bloodied(...)
+         62  Health.bloodied read by hand, across 46 files, in five
+             spellings -- a walrus inside a `requires=` lambda, a lambda
+             inside a lambda, two `world.get` calls where one would do,
+             nine negations, and body-local reads
+
+    So "all purposes" could not be honoured by a verb alone. `Health`
+    keeps the arithmetic -- it is a property with no `world` in scope and
+    cannot see an effect -- `query.bloodied` is the question, and all 62
+    hand-rolled sites go through it.
+
+    **The assertion that matters is a reader nobody touched for these
+    cards.** `powers.battlemind.bloodied` is a `requires=` gate for "you
+    must be bloodied", written for a different class and converted in the
+    same pass; if it disagrees with `c.bloodied`, "all purposes" is a lie
+    and no row would look wrong. Asserted, along with a negation, because
+    nine of the 62 were negations and a wrong conversion there inverts the
+    clause in silence.
+
+    And the arithmetic is asserted **unchanged**: the creature is at full
+    hit points throughout. A card that says "without losing hit points"
+    must not take any.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.powers.battlemind import bloodied as _gate
+    from combat_engine.content.powers.cleric.level_10_b import _not_bloodied
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import bloodied, enemies
+
+    def whole(ref: str):  # noqa: ANN202
+        """That row's board, with the caster at full hit points."""
+        world, me, _ = _posed(ref, 1)
+        health = world.need(me, Health)
+        health.hp = health.max_hp
+        return world, me, health
+
+    # -- the state, and the arithmetic left alone -------------------------
+    world, me, health = whole("i691p1")
+    out.that(not bloodied(world, me) and not health.bloodied,
+             "a creature at full hit points is not bloodied -- the control",
+             f"hp {health.hp}/{health.max_hp}")
+    Cast(world=world, me=me, ref="drivers:bloodied").considered_bloodied(
+        on=me, until=When.EONT,
+    )
+    out.that(bloodied(world, me),
+             "with the hold laid, `query.bloodied` says it is")
+    out.that(not health.bloodied and health.hp == health.max_hp,
+             "and `Health` has not changed by a point -- the card says"
+             " \"without losing hit points\" and the arithmetic is still"
+             " the arithmetic",
+             f"hp {health.hp}/{health.max_hp} arithmetic={health.bloodied}")
+    out.that(Cast(world=world, me=me, ref="drivers:ask").bloodied(on=me),
+             "`c.bloodied` agrees, which is the 585 call sites")
+    out.that(_gate(world, me),
+             "and so does `powers.battlemind.bloodied` -- a `requires=` gate"
+             " written for another class and converted in the same pass. If"
+             " this disagreed, \"for all purposes\" would be a lie and no row"
+             " would look wrong")
+    out.that(not _not_bloodied(world, me),
+             "and a NEGATED reader says not-bloodied is false -- nine of the"
+             " 62 were negations, where a wrong conversion inverts the clause"
+             " in silence")
+
+    # -- the control: no hold, and all four disagree again ---------------
+    world, me, health = whole("i691p1")
+    out.that(not bloodied(world, me)
+             and not Cast(world=world, me=me, ref="drivers:ask").bloodied(on=me)
+             and not _gate(world, me)
+             and _not_bloodied(world, me),
+             "without the hold every one of the four answers the other way,"
+             " so none of them is answering True by accident")
+
+    # -- the three rows' own bodies ---------------------------------------
+    world, me, health = whole("i691p1")
+    REGISTRY["i691p1"].body(Cast(world=world, me=me, ref="i691p1"))
+    out.that(bloodied(world, me) and health.hp == health.max_hp,
+             "`i691p1`'s own body makes its wielder count as bloodied at"
+             " full hit points",
+             f"hp {health.hp}/{health.max_hp}")
+
+    world, me, health = whole("i625p1")
+    before = health.hp
+    REGISTRY["i625p1"].body(Cast(world=world, me=me, ref="i625p1"))
+    out.that(bloodied(world, me) and before - health.hp > 0,
+             "`i625p1` cuts its wielder for half its level AND makes it"
+             " count as bloodied -- the cut alone was all this row did,"
+             " which is the cost without the thing it buys",
+             f"hp {before} -> {health.hp}")
+
+    world, me, _ = whole("i1317p1")
+    foe = sorted(enemies(world, me))[0]
+    hurt = world.need(foe, Health)
+    hurt.hp = hurt.max_hp
+    use = Cast(world=world, me=me, ref="i1317p1")
+    use.trigger = type("Struck", (), {"target": foe, "attacker": me})()
+    REGISTRY["i1317p1"].body(use)
+    out.that(bloodied(world, foe) and not bloodied(world, me),
+             "`i1317p1` aims the state at the TARGET and not at the"
+             " wielder -- the only one of the three that does, and the"
+             " reason the verb takes `on=` rather than assuming",
+             f"foe={bloodied(world, foe)} me={bloodied(world, me)}")
+
+    for ref in ("i691p1", "i625p1", "i1317p1"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker now",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -23402,6 +23521,10 @@ DRIVERS = {
         an_item_deepens_a_number_another_body_laid,
         "an item deepening a number another body laid, and the order it"
         " has to happen in (#715)",
+    ),
+    "counts_as_bloodied": (
+        counting_as_bloodied,
+        "counting as bloodied, and the 62 readers that had to agree (#716)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

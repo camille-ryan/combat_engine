@@ -148,6 +148,7 @@ from combat_engine.engine.grid import distance
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     distance_between,
     flanked_by,
     squares,
@@ -362,8 +363,7 @@ def _next_blow_of_mine_crits(c: Cast, victim: int, plus: int) -> None:
 
 
 def _bloodied_gate(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return bool(health is not None and health.bloodied)
+    return bloodied(world, eid)
 
 
 # ==========================================================================

@@ -107,6 +107,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
+    bloodied,
     distance_between,
     enemies,
     has_combat_advantage,
@@ -883,7 +884,7 @@ def m115822a3(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=9),
     damage=Damage("1d6", 0),
-    requires=lambda world, eid: bool(world.get(eid, Health) and world.get(eid, Health).bloodied),
+    requires=lambda world, eid: bloodied(world, eid),
     requires_text="usable only while bloodied",
 )
 def m115822a4(c: Cast) -> None:
@@ -3982,7 +3983,7 @@ def m6470a2(c: Cast) -> None:
     damage=Damage("1d6", 4, dtype=DamageType.RADIANT, kind=LIMITED),
     requires=lambda world, eid: (
         _m6470_shape(world, eid) != "wolf"
-        and bool(world.get(eid, Health) and world.get(eid, Health).bloodied)
+        and bloodied(world, eid)
     ),
     requires_text="usable only while bloodied and in humanoid or hybrid form",
 )

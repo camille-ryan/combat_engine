@@ -128,6 +128,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
+    bloodied,
     cover_between,
     creatures,
     distance_between,
@@ -1514,8 +1515,7 @@ def m4782a3(c: Cast) -> None:
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _not_bloodied(world: World, eid: int) -> bool:

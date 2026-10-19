@@ -141,7 +141,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.grid import between
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import adjacent, allies, distance_between, enemies
+from combat_engine.engine.query import adjacent, allies, bloodied, distance_between, enemies
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -185,8 +185,7 @@ def _sunlit(c: Cast, amount: int) -> None:
 def _hit_while_bloodied(world: World, me: int, ev: Any) -> bool:
     if getattr(ev, "target", None) != me:
         return False
-    health = world.get(me, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, me)
 
 
 def _aura_penalty(c: Cast, radius: int, what: str, amount: int) -> None:
@@ -4343,7 +4342,7 @@ def m6070a5(c: Cast) -> None:
         # two separate `world.get` calls, so nothing tied them together.
         lambda world, me, ev: (
             ev.target == me
-            and bool((hurt := world.get(me, Health)) and hurt.bloodied)
+            and bloodied(world, me)
         ),
         "an attack hits it while it is bloodied",
     ),

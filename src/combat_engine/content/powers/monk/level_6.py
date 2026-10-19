@@ -20,7 +20,6 @@ from combat_engine.engine import (
     WILL,
     Cast,
     Effect,
-    Health,
     Keyword,
     Position,
     Square,
@@ -36,13 +35,13 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.events import ForcedMove, Hit, Miss, MoveEnd, MoveStart
+from combat_engine.engine.query import bloodied
 
 STANCE_KW = [Keyword.STANCE]
 
 
 def _bloodied(world: World, eid: int) -> bool:
-    pool = world.get(eid, Health)
-    return pool is not None and pool.bloodied
+    return bloodied(world, eid)
 
 
 def _beside(c: Cast, who: int) -> Square | None:

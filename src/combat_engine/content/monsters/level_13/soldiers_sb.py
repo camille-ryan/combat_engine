@@ -115,7 +115,6 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     Effect,
-    Health,
     Hit,
     Keyword,
     Melee,
@@ -147,6 +146,7 @@ from combat_engine.engine.events import AdjacencyLost, MoveEnd
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     distance_between,
     has_combat_advantage,
     team,
@@ -167,8 +167,7 @@ EVERY_DEFENCE = (AC, FORT, REF, WILL)
 
 
 def _bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return bool(health and health.bloodied)
+    return bloodied(world, eid)
 
 
 def _not_bloodied(world: World, eid: int) -> bool:

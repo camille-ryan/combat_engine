@@ -166,6 +166,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 ## what has already happened
 
+- `query.bloodied(world: 'World', eid: 'int') -> 'bool'`
+  - Is this creature bloodied -- by its hit points, or by a card saying so.
 - `query.granted_amount(world: 'World', eid: 'int', ref: 'str', default: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How big a number a named mechanic hands out, for this creature.
 - `query.hit_me_this_turn(world: 'World', eid: 'int') -> 'set[int]'`

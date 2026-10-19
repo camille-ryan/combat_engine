@@ -88,7 +88,6 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Effect,
-    Health,
     Keyword,
     Melee,
     Mod,
@@ -120,7 +119,7 @@ from combat_engine.engine.events import (
     ZoneEntered,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import adjacent, alive, is_
+from combat_engine.engine.query import adjacent, alive, bloodied, is_
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.triggers import (
     Trigger,
@@ -358,8 +357,7 @@ def m2851a2(c: Cast) -> None:
 
 def _m2851_bloodied(world: World, eid: int) -> bool:
     """A printed "usable only while bloodied", asked of the creature."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 @power(
@@ -946,11 +944,10 @@ def _has_a_bloodied_ally(world: World, eid: int) -> bool:
     as m346a2: a requirement, so the row is not offered when there is
     nobody to heal, and a guard in the body so it never heals anybody else.
     """
-    from combat_engine.engine.components import Health
     from combat_engine.engine.query import allies
 
     return any(
-        alive(world, friend) and (held := world.get(friend, Health)) and held.bloodied
+        alive(world, friend) and bloodied(world, friend)
         for friend in allies(world, eid)
     )
 

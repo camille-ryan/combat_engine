@@ -53,7 +53,7 @@ from combat_engine.engine.events import (
     DamageRolled,
     Healed,
 )
-from combat_engine.engine.query import enemies, team
+from combat_engine.engine.query import bloodied, enemies, team
 
 DIVINE = [Keyword.DIVINE]
 ARCANE = [Keyword.ARCANE]
@@ -168,10 +168,8 @@ def _bloodied_now(world, eid: int) -> bool:  # noqa: ANN001
     fire at all (#426). Taken as a condition on acting, which is what a
     printed Trigger on an action you choose to take means.
     """
-    from combat_engine.engine import Health
 
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 @power("f723b", level=1, cls="", usage=ENCOUNTER, action=MINOR,

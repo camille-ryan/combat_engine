@@ -64,7 +64,6 @@ from combat_engine.engine import (
     DamageType,
     Dropped,
     ForcedMove,
-    Health,
     Hit,
     Initiative,
     InitiativeRolled,
@@ -103,7 +102,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Defences
 from combat_engine.engine.grid import Square, spread
-from combat_engine.engine.query import light_level
+from combat_engine.engine.query import bloodied, light_level
 from combat_engine.engine.skills import SKILLS
 from combat_engine.engine.types import Light
 
@@ -141,8 +140,7 @@ def _half_speed(c: Cast, who: int) -> int:
 
 def _bloodied(world: World, eid: int) -> bool:
     """"Requirement: You must be bloodied"."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _rolled(world: World, eid: int) -> int:

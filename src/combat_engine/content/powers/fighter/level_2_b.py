@@ -64,7 +64,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.events import DamageApplied, ForcedMove, Hit, Miss, SurgeSpent, TurnStart
 from combat_engine.engine.movement import walk
-from combat_engine.engine.query import adjacent, team
+from combat_engine.engine.query import adjacent, bloodied, team
 from combat_engine.engine.query import squares as squares_of
 
 from .footwork import beside_me, close_by_shift, close_by_walk
@@ -88,8 +88,7 @@ def _weapon_attack(ctx: dict[str, Any]) -> bool:
 
 
 def _bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _something_holds_me(world: World, eid: int) -> bool:

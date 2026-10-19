@@ -38,7 +38,6 @@ from combat_engine.engine import (
     CloseBurst,
     Dropped,
     Event,
-    Health,
     Hit,
     Keyword,
     Miss,
@@ -53,7 +52,7 @@ from combat_engine.engine import (
     hits_me,
     power,
 )
-from combat_engine.engine.query import adjacent, squares
+from combat_engine.engine.query import adjacent, bloodied, squares
 
 from .oath import swear, sworn
 
@@ -71,8 +70,7 @@ def _oath_ended_apart(world: World, me: int, ev: Event) -> bool:
 
 def _bloodied(world: World, eid: int) -> bool:
     """"Requirement: you must be bloodied"."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _nearest_step(c: Cast, foe: int, steps: int) -> Square | None:

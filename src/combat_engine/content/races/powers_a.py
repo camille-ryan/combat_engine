@@ -100,8 +100,8 @@ from combat_engine.engine import (
     rerolled_by,
     targets_me,
 )
-from combat_engine.engine.components import Health, Position
-from combat_engine.engine.query import allies, distance_between, team
+from combat_engine.engine.components import Position
+from combat_engine.engine.query import allies, bloodied, distance_between, team
 from combat_engine.engine.query import squares as squares_of
 from combat_engine.engine.zones import Zone
 
@@ -117,8 +117,7 @@ SHADOW = [Keyword.SHADOW]
 
 def _bloodied(world: Any, eid: int) -> bool:
     """"Requirement: You must be bloodied"."""
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _beside_ally(world: Any, eid: int) -> bool:
@@ -203,8 +202,7 @@ def _bloodied_foe_attacks_us(world: Any, me: int, ev: Any) -> bool:
     foe = ev.attacker
     if not _is_enemy(world, me, foe):
         return False
-    health = world.get(foe, Health)
-    if health is None or not health.bloodied:
+    if not bloodied(world, foe):
         return False
     who = ev.target
     if who == me:

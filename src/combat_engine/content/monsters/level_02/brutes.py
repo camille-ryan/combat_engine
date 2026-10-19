@@ -67,7 +67,7 @@ from combat_engine.engine.events import (
     ZoneEntered,
 )
 from combat_engine.engine.monster_math import LIMITED
-from combat_engine.engine.query import adjacent, holds_somebody, team
+from combat_engine.engine.query import adjacent, bloodied, holds_somebody, team
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -1115,8 +1115,7 @@ def _bloodied_enemy_swings(world: World, me: int, ev: AttackDeclared) -> bool:
     health, and being bloodied is half of this printed sentence."""
     if team(world, ev.attacker) is team(world, me):
         return False
-    health = world.get(ev.attacker, Health)
-    if health is None or not health.bloodied:
+    if not bloodied(world, ev.attacker):
         return False
     if ev.target == me:
         return True

@@ -59,7 +59,6 @@ from combat_engine.engine import (
     DamageType,
     Effect,
     Event,
-    Health,
     Keyword,
     Melee,
     Powers,
@@ -91,6 +90,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     adjacent,
+    bloodied,
     cover_between,
     distance_between,
     enemies,
@@ -192,8 +192,7 @@ def _not_grabbing(world: World, eid: int) -> bool:
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _vanish_until_it_swings(c: Cast, until: When) -> None:

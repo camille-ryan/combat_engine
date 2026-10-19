@@ -138,9 +138,11 @@ Readers. None of these change anything, so a row whose whole body is one of them
 ## state and identity
 
 - `c.bloodied(self, on: 'int | None' = None) -> 'bool'`
-  - (no docstring)
+  - Is this creature bloodied -- by its hit points, or by a card.
 - `c.build(self, choice: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Did this character take that build? `c.build("infernal")`.
+- `c.considered_bloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You are considered bloodied for all purposes."
 - `c.element(self, *, on: 'int | None' = None) -> 'DamageType | None'`
   - The damage type this character's build is bound to, if any.
 - `c.feat(self, ref: 'str', *, on: 'int | None' = None) -> 'bool'`

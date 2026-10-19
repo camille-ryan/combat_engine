@@ -140,7 +140,7 @@ from combat_engine.engine import (
     use,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import alive, squares, team
+from combat_engine.engine.query import alive, bloodied, squares, team
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -168,8 +168,7 @@ def _bloodied_gate(world: World, eid: int) -> bool:
     Safe as a `requires=` on a chooseable row, unlike one on a trait: the row
     is offered or refused afresh every turn, and nothing arms it once.
     """
-    health = world.get(eid, Health)
-    return bool(health and health.bloodied)
+    return bloodied(world, eid)
 
 
 def _elemental(world: World, me: int, ev: Event) -> bool:
@@ -1177,10 +1176,15 @@ def m5118a0(c: Cast) -> None:
             return
         if team(c.world, ev.target) is team(c.world, me):
             return
-        health = c.world.get(ev.target, Health)
-        if health is None or not health.bloodied:
+        if not bloodied(c.world, ev.target):
             return
-        if ev.hp + ev.amount > health.max_hp // 2 and c.action_points(of=me) < 1:
+        # The component is still wanted, for `max_hp` -- see `m254a0`.
+        health = c.world.get(ev.target, Health)
+        if (
+            health is not None
+            and ev.hp + ev.amount > health.max_hp // 2
+            and c.action_points(of=me) < 1
+        ):
             c.grant_action_point(1, on=me)
 
     c.watch(DamageApplied, drew_blood, until=When.ENCOUNTER, on=me, label=ref)
@@ -1664,8 +1668,7 @@ def m5741a3(c: Cast) -> None:
         if ev.actor == me:
             slow()
 
-    health = c.world.get(me, Health)
-    if health is not None and health.bloodied:
+    if bloodied(c.world, me):
         slow()
     c.watch(Bloodied, bled, until=When.ENCOUNTER, on=me, label=ref)
 

@@ -54,7 +54,6 @@ from combat_engine.engine import (
     Damage,
     DamageType,
     Effect,
-    Health,
     Keyword,
     Melee,
     Ranged,
@@ -76,7 +75,7 @@ from combat_engine.engine.events import (
     TurnStart,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import cover_between, enemies, is_
+from combat_engine.engine.query import bloodied, cover_between, enemies, is_
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -91,8 +90,7 @@ from combat_engine.engine.triggers import (
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _recharge_when_bloodied(c: Cast) -> None:

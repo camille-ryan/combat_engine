@@ -41,7 +41,6 @@ from combat_engine.engine import (
     ConditionApplied,
     DamageType,
     Effect,
-    Health,
     Keyword,
     Melee,
     Relation,
@@ -63,7 +62,7 @@ from combat_engine.engine.events import (
     Hit,
     SurgeSpent,
 )
-from combat_engine.engine.query import defence
+from combat_engine.engine.query import bloodied, defence
 
 from .footwork import aura_ring, close_by_shift
 from .grips import hand_free, has_shield
@@ -83,8 +82,7 @@ _IGNORED = (Condition.DAZED, Condition.IMMOBILIZED, Condition.SLOWED, Condition.
 
 
 def _bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _hit_me(world: World, me: int, ev: Any) -> bool:

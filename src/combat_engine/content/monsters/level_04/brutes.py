@@ -46,7 +46,6 @@ from combat_engine.engine import (
     DamageType,
     Defense,
     Effect,
-    Health,
     Ident,
     Keyword,
     Melee,
@@ -79,6 +78,7 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
+    bloodied,
     distance_between,
     enemies,
     flanked_by,
@@ -174,8 +174,7 @@ def _has_hold(world: World, eid: int) -> bool:
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _crit_line(c: Cast, dice: str, bonus: int) -> None:
@@ -1102,8 +1101,7 @@ def _bloodied_neighbour_shifts(world: World, me: int, ev: MoveStart) -> bool:
         return False
     if who not in enemies(world, me):
         return False
-    health = world.get(who, Health)
-    if health is None or not health.bloodied:
+    if not bloodied(world, who):
         return False
     return distance_between(world, me, who) <= 1
 

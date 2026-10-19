@@ -56,7 +56,6 @@ from combat_engine.engine import (
     Defense,
     Effect,
     Event,
-    Health,
     Keyword,
     Melee,
     Powers,
@@ -85,6 +84,7 @@ from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.movement import walk
 from combat_engine.engine.query import (
     alive,
+    bloodied,
     creatures,
     distance_between,
     enemies,
@@ -108,8 +108,7 @@ LIFELESS = ("undead", "construct")
 
 
 def _is_bloodied(world: World, eid: int) -> bool:
-    health = world.get(eid, Health)
-    return health is not None and health.bloodied
+    return bloodied(world, eid)
 
 
 def _living(c: Cast, who: int) -> bool:
