@@ -24026,6 +24026,157 @@ def a_weapon_the_build_chose(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_power_held_ready_and_paid_for_in_kind(out: Result) -> None:
+    """*"That power is now stored… use it by expending another unused wizard
+    attack power of its level or higher."*
+
+    `c.stored_row()` was holding four rows and two mechanisms. This is the
+    one that was already writable, and its own note said so and then marked
+    the row anyway -- it called `c.borrow_row` *"precisely 'the card names a
+    set and asks the character to take one of it'"* and argued the row was
+    still blocked because *"there is nowhere to record a power that is
+    stored rather than known."* `c.borrow_row` **is** that record: it
+    appends to `Powers.known` through `c.grant_row`, with the printed
+    once-per-encounter as `uses=1`.
+
+    The three assertions that matter are the three traps
+    `items/implement_b._tome_trade` paid for first, and they are asserted
+    here because this row hand-writes the same walk rather than calling it:
+
+    * **the borrowed card must not pay for itself** -- `c.borrow_row` grants
+      a fresh wizard power of exactly the right class and level, so a price
+      read after the borrow can pick the thing it is paying for;
+    * **the price's floor is the rung the card came from**, not the
+      character's level, because the card says "of **its** level or higher";
+    * **nothing is charged on a rung with no card to lend** -- the
+      expensive kind of wrong, where a row burns a character's power for no
+      benefit and reads as working.
+
+    **The third one is not asserted, because it cannot be built here, and
+    that is worth writing down rather than faking.** A plant that moved the
+    charge before the borrow stayed green. The reason is the shape of the
+    rungs: a price pool at rung N is non-empty only when the wizard holds a
+    power of level >= N, and every level the class list stocks with
+    borrowable encounter attacks (1, 3, 7) is a level a wizard holds one
+    at -- so the first rung with a price always has a card. `_tome_trade`'s
+    version of this trap was reachable because a tome narrows its
+    borrowable set by **keyword** and two tomes have an empty one; this card
+    names the whole class list and never does. The ordering is kept the
+    right way round anyway: it costs nothing and the day a level stocks no
+    attack power, the walk is already correct.
+
+    **Driven on a `chargen` wizard and not on `audit.board`**, which is the
+    finding that came with writing it. The board's wizard holds only
+    `level=0` rows and none of them carries a header `Attack`, so
+    `c.unspent(cls="wizard", usage=ENCOUNTER, attacks=True)` is empty there
+    and the row has nothing to pay with -- it will read SILENT on its own
+    board forever, and that is the board rather than the row. A real
+    level-1 wizard holds `p1424`, measured:
+
+        L1: unspent(cls=wizard, usage=ENC, attacks=True) -> ['p1424']
+        L3:                                             -> ['p1424', 'p173']
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.engine import ENCOUNTER, Bus, Rng, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import Grid as _Grid
+
+    REF = "cf:wizard-arcanist-f0s4"
+    out.that(not REGISTRY[REF].unfinished,
+             f"{REF} carries no marker now",
+             f"{REGISTRY[REF].unfinished}")
+
+    def wizard(level: int = 1, seed: int = 5):  # noqa: ANN202
+        """A real wizard, for the reason in the docstring."""
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = True
+        try:
+            world = World(_Grid(24, 16), Rng(seed), Bus())
+            who = chargen.Character(cls="wizard", level=level)
+            me = chargen.spawn(world, who, (5, 5))
+        finally:
+            chargen.SCORED_CHOICES = was
+        return world, me, Cast(world=world, me=me, ref=REF)
+
+    # -- the trade -------------------------------------------------------
+    #
+    # **Level 5, and the level is the assertion.** `c.unspent`'s `level` is a
+    # floor, so a level-5 wizard's rungs read
+    #
+    #     rung5=[]  rung4=[]  rung3=['p173']  rung2=['p173']  rung1=[...]
+    #
+    # -- the walk has to come **down** to find a price. At level 3 it does
+    # not (rung 3 is already non-empty), so a version using `c.level` as the
+    # floor instead of the rung it reached passes there and fails here. That
+    # was a plant staying green, and the plant was right: the board was
+    # wrong, not the implementation.
+    world, me, c = wizard(5)
+    before_known = set(world.need(me, Powers).known)
+    before_spent = set(c.expended())
+    candidates = c.unspent(cls="wizard", usage=ENCOUNTER, attacks=True)
+    out.that(bool(candidates),
+             "the wizard has an unused encounter attack power to pay with,"
+             " so nothing below is vacuous",
+             f"{candidates}")
+
+    REGISTRY[REF].body(c)
+    gained = set(world.need(me, Powers).known) - before_known
+    spent = set(c.expended()) - before_spent
+    out.that(len(gained) == 1,
+             "it stores exactly one power the wizard did not know",
+             f"{sorted(gained)}")
+    out.that(len(spent) == 1,
+             "and expends exactly one it did",
+             f"{sorted(spent)}")
+    if gained and spent:
+        took, paid = next(iter(gained)), next(iter(spent))
+        out.that(took != paid,
+                 "and the two are different rows -- `c.borrow_row` grants a"
+                 " wizard power of exactly the class and level the price is"
+                 " read for, so a price read AFTER the borrow can pick the"
+                 " card it is paying for and the trade costs nothing",
+                 f"took {took} paid {paid}")
+        lv_took = REGISTRY[took].level if took in REGISTRY else -1
+        lv_paid = REGISTRY[paid].level if paid in REGISTRY else -1
+        out.that(lv_paid >= lv_took,
+                 "and the price is of the taken card's level or higher,"
+                 " which is what the card says -- the floor is the rung the"
+                 " walk reached and not the character's level",
+                 f"took L{lv_took} paid L{lv_paid}")
+        out.that(REGISTRY[took].usage is ENCOUNTER
+                 and REGISTRY[took].attack is not None,
+                 "and what was stored is an encounter ATTACK power",
+                 f"{REGISTRY[took].usage} attack="
+                 f"{REGISTRY[took].attack is not None}")
+        out.that(took not in before_known,
+                 "and one the wizard did not already know, which is the"
+                 " printed narrowing and what `c.prepare` could not do --"
+                 " that swaps a row the spellbook already holds")
+
+    # -- the control: nothing to pay with, so nothing is taken -----------
+    world, me, bare = wizard(5)
+    for ref in bare.unspent(cls="wizard", usage=ENCOUNTER, attacks=True):
+        bare.expend_row(ref)
+    out.that(not bare.unspent(cls="wizard", usage=ENCOUNTER, attacks=True),
+             "with every encounter attack power spent there is no price left",
+             f"{bare.unspent(cls='wizard', usage=ENCOUNTER, attacks=True)}")
+    held = set(world.need(me, Powers).known)
+    spent_now = set(bare.expended())
+    REGISTRY[REF].body(bare)
+    out.that(set(world.need(me, Powers).known) == held,
+             "and the row takes nothing -- there is no rung with both a card"
+             " to lend and a price the bearer can pay",
+             f"gained {sorted(set(world.need(me, Powers).known) - held)}")
+    out.that(set(bare.expended()) == spent_now,
+             "and charges nothing. **This is weaker than it looks and the"
+             " comment above the docstring says why**: it proves the"
+             " no-price case, not the ordering, because a rung with a price"
+             " and no card to lend cannot be built in this tree")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -24066,6 +24217,11 @@ DRIVERS = {
         a_weapon_the_build_chose,
         "a weapon the build chose, and a class feature's grant that never"
         " landed (#718, #719)",
+    ),
+    "stored_power": (
+        a_power_held_ready_and_paid_for_in_kind,
+        "a power held ready and paid for in kind, and the three traps the"
+        " trade has (#720)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

@@ -987,6 +987,33 @@ KNOWN_SILENT = {
     # Here the row is still executed every sweep and still has to say
     # nothing. #633 is the grammar gap.
     "f3725": "its only board clause is a chargen-time power swap, spent before the fight",
+    # **Two rows the board decides, and it decides them differently.** Both
+    # are silent here and both do real work on a character `chargen` built,
+    # which is the distinction this list exists to record -- see the note at
+    # the top of the file about a row and the board it is handed.
+    #
+    # `cf:wizard-arcanist-f0s4` trades a stored power for an unused one, and
+    # the board's wizard has nothing to trade: it holds only `level=0` rows
+    # and not one of them carries a header `Attack`, so
+    # `c.unspent(cls="wizard", usage=ENCOUNTER, attacks=True)` is `[]` and
+    # the walk finds no rung with both a card to lend and a price. A real
+    # level-1 wizard holds `p1424` and a level-3 one `p1424` and `p173`,
+    # measured; `drivers.stored_power` drives the row on one and asserts the
+    # borrow, the expend, that the two are different rows, and that the
+    # price is of the taken card's level or higher.
+    "cf:wizard-arcanist-f0s4": "the board's wizard holds no encounter attack "
+                               "power to pay with. Driven on a chargen "
+                               "wizard: it borrows one and expends another",
+    # `i2127p1` is **right to be silent at a +1**, and says so itself --
+    # "half of a +1 is nothing, which is what the card says at heroic." Its
+    # whole body is `extra = c.enhancement // 2; if extra: c.shift(extra)`.
+    # So whether it shows depends on which magic item the board's draw hands
+    # it, and nothing about the row: it reported `EffectExpired, Moved` at
+    # `b0ed304` and went silent at `1096e3d`, which moved the draw and
+    # touched neither the row nor the shift. Excused rather than driven,
+    # because the thing to assert is arithmetic the card states.
+    "i2127p1": "half of a +1 enhancement is nothing, which is what the card "
+               "says at heroic; whether it shows is the board's magic draw",
 }
 
 

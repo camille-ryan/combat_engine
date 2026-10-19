@@ -408,34 +408,78 @@ def wizard_tome_mastery_binding(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT],
-    todo=("c.stored_row()",),
 )
 def wizard_tome_mastery_readiness(c: Cast) -> None:
     """A power the wizard does not know, held ready and paid for in kind.
 
-    Re-aimed off `c.expend_row()`: that verb exists now and spends a use
-    of a row from outside it, which is exactly "expend another unused
-    wizard encounter attack power" -- so the cost is writable and the
-    row is still nothing without the rest. There is nowhere to record a
-    power that is stored rather than known -- `Powers` holds known,
-    prepared and expended, and a stored row is a fourth state the tome
-    owns.
+    **Written, and the note below it was already pointing at the answer.**
+    It said `c.borrow_row(cls=, level=, usage=, attacks=)` is *"precisely
+    'the card names a set and asks the character to take one of it'"* and
+    then marked the row anyway, on the ground that *"there is nowhere to
+    record a power that is stored rather than known."* `c.borrow_row` is
+    that record: it hands the chosen row over through `c.grant_row`, with
+    the printed once-per-encounter as `uses=1`, which is a power the
+    character may use and does not know -- the fourth state the old note
+    wanted.
 
-    **`c.tome_powers()` came off, and it was aimed at the wrong half of the
-    card.** The choice this row makes is from the *class* list -- "an attack
-    power of your level or lower that you don't already know" -- and
-    `c.borrow_row(cls=, level=, usage=, attacks=)` is precisely "the card
-    names a set and asks the character to take one of it", reading the set
-    off the registry by class, level and usage and recording the pick. The
-    implement that must be held is a Requirement and not a list, so no
-    second power list was ever owed here. The other ten rows carrying that
-    symbol are item blocks whose own page stocks the powers, which is a
-    different gap and keeps the symbol.
+    The price landed separately and is the other half: *"expending another
+    unused wizard attack power of its level or higher"* is
+    `c.unspent(cls="wizard", level=<floor>, usage=ENCOUNTER, attacks=True)`
+    for the candidates and `c.expend_row` for the one chosen.
+    `c.unspent`'s own docstring names this sentence -- *"'and expend an
+    unused wizard attack power of an equal or higher level' is printed on
+    three tomes"* -- and this is the fourth card with it, which was not in
+    that count.
 
-    `c.prepare` is the near miss and it is the wrong tool: it swaps a row
-    out of the spellbook for one that is in it, and the stored power is by
-    definition one the wizard does not know.
+    **The shape is `items/implement_b._tome_trade`'s and so are its three
+    traps**, which is why the loop is one walk rather than two statements:
+    the ladder is walked downwards so the price's floor is *the rung the
+    card was taken from* and not the character's level; the candidates are
+    read **before** the borrow, because `c.borrow_row` grants a fresh
+    wizard power of exactly the right class and level and a price read
+    afterwards could pick the borrowed card and make the trade free; and
+    nothing is charged on a rung with no card to lend.
+
+    Hand-written rather than calling that helper: it lives in `items/` and
+    hard-codes a tome's keyword narrowing, and this card names the whole
+    class list instead.
+
+    **Which power is stored is settled here rather than at character
+    creation**, which is the call `c.borrow_row` already makes and states:
+    *"inside one encounter a choice made at arming and a choice made at
+    character creation are the same choice."* The printed "replace the
+    stored power each time you gain an encounter power" is a between-fights
+    clause and there is no persistence to hold it.
+
+    `usage=ENCOUNTER` on both halves. The card as imported says "attack
+    power", and the replace clause -- "each time you reach a level that
+    lets you choose an **encounter** power" -- is what says which kind;
+    a daily traded for a daily is not what the rest of the card describes.
+
+    No Requirement, which is this file's standing convention for the
+    mastery rows: the mastery *is* the implement. The comment that states
+    it argues from *"`chargen` gives a wizard no implement to hold at all
+    -- `Gear.weapons` is empty for the class"*, and that premise is stale
+    -- a wizard is dealt an orb now -- but the conclusion holds, because
+    an orb is not a tome and the gate would refuse the row forever.
     """
+    for lvl in range(c.level, 0, -1):
+        # Read before the borrow, so the borrowed card cannot pay for
+        # itself -- `_tome_trade`'s second trap, in its own words.
+        pool = c.unspent(
+            cls="wizard", level=lvl, usage=ENCOUNTER, attacks=True,
+        )
+        if not pool:
+            continue
+        taken = c.borrow_row(
+            cls="wizard", level=lvl, usage=ENCOUNTER, attacks=True, uses=1,
+        )
+        if not taken:
+            continue
+        pick = c.choose(pool, c.ref)
+        if pick:
+            c.expend_row(pick)
+        return
 
 
 @power(
