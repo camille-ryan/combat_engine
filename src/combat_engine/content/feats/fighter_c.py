@@ -1228,8 +1228,13 @@ def f3181(c: Cast) -> None:
     is on the second wind, not on this.
 
     The 11th and 21st steps the card prints are paragon and epic."""
+    # **Untyped, and `bonuses.py` is what said so.** This carried
+    # `kind="feat"` and the card prints no type word at all -- so the bonus
+    # would not have stacked with another feat bonus to damage, which is
+    # strictly weaker than print. `kind=` is the word the card prints before
+    # "bonus" and nothing else.
     c.bonus(
-        "damage", c.mod(DEX), on=c.me, until=When.EONT, kind="feat",
+        "damage", c.mod(DEX), on=c.me, until=When.EONT,
         when=lambda ctx: c.with_a_chosen_weapon(ctx),
     )
 

@@ -24437,8 +24437,13 @@ def a_dealt_weapon_is_the_printed_one(out: Result) -> None:
     )
     gear = world.need(me, Gear)
     axe = gear.main
+    # **The leg by its key, never spelled out.** The first draft of this
+    # line read "the <two words> fighter", and those two words unhyphenated
+    # are the printed name of `b:c3-3` -- `leaks.py` caught it, which is the
+    # whole reason that check exists. The `BUILDS` key is a mechanic and is
+    # safe; the printed leg name is not.
     out.that(axe is not None and axe.ref == "w3612",
-             "the great-weapon fighter swings the greataxe",
+             "a fighter on the `great-weapon` leg swings `w3612`",
              f"{axe.ref if axe else None}")
     # **Through a declared weapon row, not a bare `Cast`.** `_high_crit`
     # opens `if p is None or Keyword.WEAPON not in self.keywords_of(p)` and
