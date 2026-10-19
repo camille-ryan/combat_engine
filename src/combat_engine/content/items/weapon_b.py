@@ -4117,12 +4117,27 @@ def i2367x1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION],
     trigger="you slay a living creature with an attack using this weapon",
     on=Trigger(Dropped, _killed_by_me, "you drop an enemy with this weapon"),
-    dropped=("c.conjure(defences=)",),
 )
 def i2437p1(c: Cast) -> None:
-    """A conjuration that can be moved is `c.conjure(speed=)`; what cannot
-    be said is a body with defences of 10 and no hit points that any
-    damaging hit destroys."""
+    """Written. The card's whole second paragraph is one parameter now:
+
+    > The shade can be attacked, and all of its defenses are 10. It has no
+    > hit points, but if it is hit by an attack that deals damage, it is
+    > destroyed. It is otherwise immune to attacks' effects.
+
+    `defences=10` gives it those four numbers, a side so its creator's
+    enemies may aim at it, and **one hit point** -- which is the printed
+    sentence rather than an approximation of it, because a hit dealing any
+    damage destroys it and an attack with no damage line leaves it standing.
+    See `c.conjure`.
+
+    "Otherwise immune to attacks' effects" needs nothing: a conjuration has
+    no `Conditions`, so a condition laid on it lands nowhere.
+
+    The old note said a body with defences and no hit points "cannot be
+    said". `c.wall(hp=)` had been saying it for walls the whole time -- the
+    shape is a `Side` without a turn, and `query.allies` spells out why a
+    wall gets one."""
     slain = getattr(c.trigger, "actor", None)
     if slain is None:
         return
@@ -4134,6 +4149,7 @@ def i2437p1(c: Cast) -> None:
         sustain=None,
         speed=5,
         solid=True,
+        defences=10,
     )
 
 

@@ -23034,6 +23034,204 @@ def what_a_creature_is_wearing(out: Result) -> None:
                  f"{before} -> {racial.speed_of()}")
 
 
+def a_conjuration_a_creature_can_attack(out: Result) -> None:
+    """`c.conjure(defences=)`, and the four things it must NOT become.
+
+    Four rows conjure a thing an enemy can swing at -- *"The shade can be
+    attacked, and all of its defenses are 10. It has no hit points, but if
+    it is hit by an attack that deals damage, it is destroyed."* --
+    and `Conjuration`'s own docstring said no such row existed:
+
+        Un-attackable, deliberately: neither printed row that needs a
+        conjuration gives the thing hit points.
+
+    **The shape it wants already existed and I built a second one first.**
+    The first draft was a `query.targetable` special case plus a `Hit`
+    watcher, and then `query.allies` turned out to say:
+
+        A wall you raised stands on your side so that your enemies may
+        attack it. It is not an ally: "each ally in the burst" would heal
+        the masonry.
+
+    So `Barrier` is the pattern -- `Health` + `Position` + `Side`,
+    subtracted out of `query.combatants` -- and `combatants`' docstring
+    asks for exactly this extension: *"anything later that is
+    targetable-but-not-a-combatant lands here by adding itself to one
+    list."* The draft was reverted and this is the `Barrier`-shaped
+    version.
+
+    **One hit point is the printed sentence, not an approximation.** "No
+    hit points, but destroyed by a hit that deals damage" is one point and
+    `dies_at_zero`: any damage at all kills it, an attack with no damage
+    line leaves it, and a miss leaves it -- all three through the ordinary
+    damage path. The watcher in the draft existed only because
+    `resolve.deal_damage` returns 0 before emitting anything for a target
+    with no `Health`, which stops being a problem the moment it has one.
+
+    The four negatives are the assertions that matter, because every one of
+    them is a way this could have gone wrong quietly:
+
+    * **not a combatant** -- no initiative slot, no turn, no vote on
+      whether the fight is over;
+    * **not an ally** -- "each ally in the burst" must not heal it;
+    * **in its creator's enemies' target pool**, which is the whole point;
+    * **a conjuration without defences stays un-aimable**, because
+      `query.defence` reaches for `world.need(eid, Defenses)` and a
+      spectral hound has none.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import (
+        Conditions,
+        Conjuration,
+        Health,
+        Position,
+        Powers,
+    )
+    from combat_engine.engine.dsl import REGISTRY, get, use
+    from combat_engine.engine.query import (
+        alive,
+        allies,
+        combatants,
+        creatures,
+        defence,
+        distance_between,
+        enemies,
+        targetable,
+    )
+    from combat_engine.engine.types import DEFENCES
+
+    world, me, _ = _posed("i2437p1", 1)
+    c = Cast(world=world, me=me, ref="drivers:conjure")
+    foe = sorted(enemies(world, me))[0]
+
+    plain = c.conjure(label="plain", until=When.ENCOUNTER, sustain=None)
+    out.that(plain and not targetable(world, plain),
+             "a conjuration with no printed defences stays un-aimable --"
+             " `query.defence` would reach for a `Defenses` it has not got,"
+             " and the spectral hounds must keep their old behaviour",
+             f"{plain} targetable={targetable(world, plain) if plain else '-'}")
+
+    # The shade, beside the enemy, as the card puts it.
+    where = world.need(foe, Position).square
+    shade = c.conjure(at=(where[0] + 1, where[1]), label="shade",
+                      until=When.ENCOUNTER, sustain=None, defences=10,
+                      solid=True)
+    out.that(bool(shade) and distance_between(world, foe, shade) == 1,
+             "the shade stands beside the enemy",
+             f"{shade} at {distance_between(world, foe, shade) if shade else '-'}")
+    # `query.defence`, not `c.total_defence` -- that one is the
+    # total-defence *action* and a false friend of exactly this question.
+    got = {d: defence(world, shade, d) for d in DEFENCES}
+    out.that(targetable(world, shade) and set(got.values()) == {10},
+             "it is aimable and ALL FOUR of its defences are the printed 10"
+             " -- all four, because one card prints one number for them and"
+             " a single AC read cannot tell that from a default",
+             f"{ {d.value: n for d, n in got.items()} }")
+    out.that(shade in creatures(world) and shade not in combatants(world),
+             "it is in the target pool and NOT a combatant -- no initiative"
+             " slot, no turn, no vote on whether the fight is over",
+             f"creature={shade in creatures(world)}"
+             f" combatant={shade in combatants(world)}")
+    out.that(shade not in allies(world, me),
+             "and not an ally of the creature that made it, so \"each ally"
+             " in the burst\" does not heal it -- the reason `query.allies`"
+             " already carves the wall out",
+             f"{sorted(allies(world, me))}")
+    out.that(shade in enemies(world, foe),
+             "it IS in its creator's enemy's target pool, which is the"
+             " whole of \"the shade can be attacked\"")
+    out.that(world.get(shade, Conditions) is None,
+             "and it carries no `Conditions`, so \"otherwise immune to"
+             " attacks' effects\" is true by construction rather than by a"
+             " rule somebody has to remember")
+
+    # -- and the enemy's own attack destroys it ---------------------------
+    known = world.get(foe, Powers)
+    swings = [
+        r for r in (known.all if known is not None else [])
+        if (p := get(r)) is not None and p.attack is not None
+        and p.damage is not None
+    ]
+    out.that(bool(swings),
+             "the enemy has an attack with a damage line to swing with, or"
+             " the destruction half proves nothing",
+             f"{swings[:3]}")
+    if swings:
+        world.rng.loaded = 20
+        out.that(use(world, foe, swings[0], targets=[shade]),
+                 f"the enemy can aim {swings[0]} at the shade and it lands")
+        out.that(not alive(world, shade)
+                 and world.get(shade, Conjuration) is None,
+                 "and the shade is destroyed and off the board -- one hit"
+                 " point taken through the ordinary damage path, which is"
+                 " what \"no hit points, destroyed by a damaging hit\" is",
+                 f"alive={alive(world, shade)}"
+                 f" hp={(world.get(shade, Health) or Health(0)).hp}")
+
+    # -- the fight is still decided by creatures alone -------------------
+    world, me, _ = _posed("i2437p1", 1)
+    c = Cast(world=world, me=me, ref="drivers:conjure")
+    before = set(combatants(world))
+    c.conjure(label="crowd", until=When.ENCOUNTER, sustain=None, defences=10)
+    out.that(set(combatants(world)) == before,
+             "conjuring an attackable thing adds nobody to the roster, so"
+             " the win condition and the initiative order are untouched",
+             f"{len(before)} -> {len(combatants(world))}")
+
+    # -- and through the two rows' OWN BODIES ----------------------------
+    # **Both of these are here because a plant stayed green.** Reverting
+    # each row to conjure without defences reddened nothing: the block
+    # below asserted their markers, which is a statement about the header,
+    # and ran neither body. The same lesson as
+    # `assert-through-the-caller-not-the-helper`, on my own rule.
+    from combat_engine.engine.events import Dropped as _Dropped
+
+    for ref, arm in (("i2437p1", True), ("i2208p2", False)):
+        world, me, _ = _posed(ref, 1)
+        body = Cast(world=world, me=me, ref=ref)
+        if arm:
+            # Its trigger is "you slay a living creature with this weapon",
+            # and the slain creature is where the shade appears.
+            victim = sorted(enemies(world, me))[0]
+            body.trigger = _Dropped(actor=victim)
+        known = set(world.having(Conjuration))
+        REGISTRY[ref].body(body)
+        made = sorted(set(world.having(Conjuration)) - known)
+        out.that(len(made) == 1,
+                 f"{ref}'s own body puts one conjuration on the board",
+                 f"{made}")
+        if not made:
+            continue
+        theirs = made[0]
+        four = {d: defence(world, theirs, d) for d in DEFENCES}
+        out.that(targetable(world, theirs) and set(four.values()) == {10},
+                 f"and what {ref} conjured is aimable with all four"
+                 " defences at the printed 10 -- asserted off the body,"
+                 " because asserting the marker passes with the defences"
+                 " taken straight back out",
+                 f"{ {d.value: n for d, n in four.items()} }")
+        out.that(theirs not in combatants(world)
+                 and theirs not in allies(world, me),
+                 f"and {ref}'s conjuration is neither a combatant nor an"
+                 " ally, on its own row's board rather than a planted one")
+
+    for ref in ("i2437p1", "i2208p2"):
+        out.that("c.conjure(defences=)" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} no longer waits on the defences",
+                 f"{REGISTRY[ref].unfinished}")
+    out.that(not REGISTRY["i2437p1"].unfinished,
+             "i2437p1 carries no marker at all now: the card's whole second"
+             " paragraph is one parameter",
+             f"{REGISTRY['i2437p1'].unfinished}")
+    out.that(REGISTRY["i2208p2"].unfinished == ("c.zone(ends_on=)",),
+             "and i2208p2 keeps the one marker it still earns -- the other"
+             " way its illusion pops, which is a creature touching it",
+             f"{REGISTRY['i2208p2'].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -23050,6 +23248,11 @@ DRIVERS = {
     "wearing": (
         what_a_creature_is_wearing,
         "what a creature is wearing, and two rows that forgot chain (#713)",
+    ),
+    "attackable_conjuration": (
+        a_conjuration_a_creature_can_attack,
+        "a conjuration a creature can attack, and the four things it is"
+        " not (#714)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

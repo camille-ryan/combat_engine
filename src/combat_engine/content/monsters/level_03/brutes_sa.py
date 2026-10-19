@@ -556,12 +556,24 @@ def m1659a1(c: Cast) -> None:
     attack=Attack(vs=REF, printed=4),
     damage=Damage("2d8", 1, dtype=DamageType.COLD),
     no_provoke=True,
-    dropped=("c.conjure(defences=)",),
+    dropped=("c.conjure(defences_of=)",),
 )
 def m1659a2(c: Cast) -> None:
     """The range is measured from an object with defences of its own, which is
     the same object the block's last row is bound to and which nothing puts on
-    the board -- so the distance is measured from the creature instead."""
+    the board -- so the distance is measured from the creature instead.
+
+    **Re-pointed off `c.conjure(defences=)`, which exists now (#714).** An
+    attackable conjuration is writable; what is absent is an object whose
+    four defences are **the creature's own**, which is what this card
+    measures a range from and what `m1659a5` would put there. `defences=`
+    takes one flat number for all four, so both rows wait on the same
+    narrowing and carry the same symbol.
+
+    Marking this with the sibling's ref was tried first and is wrong:
+    `todo.py` reads a declared ref as a symbol that has **arrived**, and
+    `m1659a5` is declared -- as a `todo=` row. The convention only works
+    for a ref nobody has declared yet."""
     if c.strike():
         c.hit()
 
@@ -611,16 +623,24 @@ def m1659a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.conjure(defences=)", "c.pass_on(attack=)"),
+    todo=("c.conjure(defences_of=)", "c.pass_on(attack=)"),
 )
 def m1659a5(c: Cast) -> None:
     """The creature shares its hit points with an object: attacking either hurts
     the creature, the object's defences copy the creature's, it resists 5 of
     everything, and it is destroyed when the creature falls.
 
-    Nothing puts a thing with its own defences on the board, and nothing routes
-    an attack that landed on one creature into another's `Health`. Both halves
-    are named; neither has a stand-in worth writing."""
+    **One of the three is writable now and two are not, which is why the
+    marker moved.** `c.conjure(defences=)` puts an attackable thing on the
+    board (#714) and `c.resist` gives it the 5 -- but `defences=` takes one
+    flat number for all four, and this card copies the **creature's** four,
+    which differ from each other. That is `defences_of=`, a distinct symbol
+    because `blocked.py` resolves a parameter name it can see on the
+    signature as existing and would report this row ready.
+
+    The other is unchanged: nothing routes an attack that landed on one
+    creature into another's `Health`, which is the shared-hit-points half
+    and the reason the whole thing is `todo=` rather than `dropped=`."""
 
 
 # --------------------------------------------------------------------------

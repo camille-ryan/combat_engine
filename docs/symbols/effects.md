@@ -13,7 +13,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - An aura around a creature -- or around anything with a position.
 - `c.barrier(self, zone: 'int') -> 'int | None'`
   - The attackable body of a wall, given the zone `c.wall` returned.
-- `c.conjure(self, at: 'Square | None' = None, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>, speed: 'int' = 0, aura: 'int' = 0, burn: 'tuple[int, DamageType] | None' = None, solid: 'bool' = False) -> 'int'`
+- `c.conjure(self, at: 'Square | None' = None, *, label: 'str' = '', until: 'When' = <When.SUSTAIN: 'sustain'>, sustain: 'ActionType | None' = <ActionType.MINOR: 'minor'>, speed: 'int' = 0, aura: 'int' = 0, burn: 'tuple[int, DamageType] | None' = None, solid: 'bool' = False, defences: 'int' = 0) -> 'int'`
   - Put a conjuration on the board and return its entity id.
 - `c.dim(self, radius: 'int' = 2, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "This candle sheds dim light in a 2-square radius."

@@ -16,6 +16,7 @@ from .components import (
     Build,
     Companion,
     Conditions,
+    Conjuration,
     # Two spellings, two different components, and this is the one holding
     # resistance. `Defenses` above is AC/Fortitude/Reflex/Will.
     Defences,
@@ -171,7 +172,14 @@ def combatants(world: World) -> list[int]:
     return [
         e
         for e in creatures(world)
-        if world.get(e, Companion) is None and world.get(e, Barrier) is None
+        if world.get(e, Companion) is None
+        and world.get(e, Barrier) is None
+        # An attackable conjuration -- a shade, an illusory double. It has
+        # `Health` so that it can be aimed at and killed, and that is the
+        # only reason; it takes no turn and does not decide the fight.
+        # Added here rather than tested at every call site, which is what
+        # the paragraph above asks for. #714.
+        and world.get(e, Conjuration) is None
     ]
 
 
@@ -209,6 +217,11 @@ def allies(world: World, eid: int, *, companions: bool = False) -> list[int]:
         # attack it. It is not an ally: "each ally in the burst" would heal
         # the masonry.
         and world.get(o, Barrier) is None
+        # And a shade you conjured, for the same reason and with the same
+        # consequence if it were left in: it stands on your side so that
+        # your enemies may attack it, and "each ally within 5" must not
+        # heal it or buff it. #714.
+        and world.get(o, Conjuration) is None
     ]
 
 

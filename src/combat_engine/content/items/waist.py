@@ -1187,7 +1187,7 @@ def i2208p1(c: Cast) -> None:
 
 @power("i2208p2", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(40), target=NO_TARGET, keywords=[Keyword.ILLUSION],
-       dropped=("c.conjure(defences=)", "c.zone(ends_on=)"))
+       dropped=("c.zone(ends_on=)",))
 def i2208p2(c: Cast) -> None:
     """The illusion stands on the board as a conjuration, sustained by a
     minor.
@@ -1205,14 +1205,23 @@ def i2208p2(c: Cast) -> None:
     not grant -- the illusion "moves within its space" and otherwise only
     when sustained.
 
-    Still dropped: its flat defences of 10, and the two ways it pops -- an
-    attack hitting it, or a creature touching it or entering its space.
+    **Its defences are written now, and one of the two ways it pops with
+    them.** `defences=10` makes the illusion attackable -- four flat
+    numbers, a side so the caster's enemies may aim at it, and one hit
+    point, so an attack that hits and deals damage ends it. That is the
+    first of the two printed pops, and it is the one that needed an engine
+    change (#714).
+
+    Still dropped: the other pop, a creature touching it or entering its
+    space. That is `c.zone(ends_on=)` and a different mechanism -- the
+    illusion occupies no square it could be entered through until a zone
+    is laid over it.
     """
     where = _free_near(c, of=c.me)
     if where is None:
         return
     illusion = c.conjure(at=where, label=c.ref, until=When.SUSTAIN,
-                         sustain=MINOR)
+                         sustain=MINOR, defences=10)
     if not illusion:
         return
 

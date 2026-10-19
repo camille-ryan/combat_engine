@@ -5162,6 +5162,7 @@ class Cast:
         aura: int = 0,
         burn: tuple[int, DamageType] | None = None,
         solid: bool = False,
+        defences: int = 0,
     ) -> int:
         """Put a conjuration on the board and return its entity id.
 
@@ -5176,6 +5177,37 @@ class Cast:
         targeted, and its aura follows it. `speed` is how far its creator
         may move it with a move action; `aura` gives it a footprint, which
         is what "each creature adjacent to it" reads off.
+
+        **`defences` makes it attackable, and takes the shape `c.wall`
+        already uses.** Four printed rows conjure a thing an enemy can
+        swing at -- *"The shade can be attacked, and all of its defenses
+        are 10. It has no hit points, but if it is hit by an attack that
+        deals damage, it is destroyed."* -- and this docstring used to say
+        no such row existed.
+
+        The thing gets `Defenses` at that flat number with `scale="none"`
+        (the 10 is the whole number; no level term belongs in it), a `Side`
+        matching its creator's, and **one hit point**. That last is the
+        card's own sentence rather than an approximation of it: a hit
+        dealing any damage at all destroys the thing, and an attack with no
+        damage line leaves it standing, which is exactly what one hit point
+        and `dies_at_zero` do through the ordinary damage path. Nothing
+        here watches for a `Hit`: `resolve.deal_damage` returns 0 before
+        emitting anything for a target with no `Health`, so a watcher was
+        the only option *until* the hit point made the real pipeline work.
+
+        **Side without turn, which is the whole trick and is not new.**
+        `query.allies` already says it about a wall: *"A wall you raised
+        stands on your side so that your enemies may attack it. It is not
+        an ally: 'each ally in the burst' would heal the masonry."* A
+        conjuration is excluded from `allies` and from `combatants` for
+        both of those reasons -- no initiative slot, no turn, no vote on
+        whether the fight is over, and no healing from a burst meant for
+        the party.
+
+        It still has no `Conditions`, so the printed "it is otherwise
+        immune to attacks' effects" is true by construction: a condition
+        laid on it lands nowhere.
 
         It rolls its creator's attacks. `c.from_(sphere)` is how a body
         makes it swing.
@@ -5193,12 +5225,26 @@ class Cast:
         if where is None:
             return 0
         name = label or self.ref
-        eid = self.world.spawn(
+        from .components import Defenses, Health, Side
+        from .query import team as _side_of
+        from .types import DEFENCES, Team
+
+        parts: list[object] = [
             Ident(ref=f"c:{name}"),
             Position(square=where, size=Size.MEDIUM),
             Movement(speed=speed),
             Conjuration(ref=name, by=self.me),
-        )
+        ]
+        if defences:
+            parts += [
+                Defenses(values=dict.fromkeys(DEFENCES, defences),
+                         scale="none"),
+                Side(team=_side_of(self.world, self.me) or Team.ALLY),
+                # One hit point, which **is** the printed "no hit points,
+                # destroyed by a damaging hit" -- see the docstring.
+                Health(hp=1, max_hp=1, dies_at_zero=True),
+            ]
+        eid = self.world.spawn(*parts)
         if solid:
             place(self.world, eid, where)
         else:
