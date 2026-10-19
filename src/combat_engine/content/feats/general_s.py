@@ -2007,12 +2007,14 @@ def f3773(c: Cast) -> None:
 def f3774(c: Cast) -> None:
     """+2 to the damage of the shape rows, which is the heroic number.
 
-    There is no keyword to wait for and there did not need to be:
-    `forms.beast_row` is the gate those rows are already recognised by, and
-    it reads `ctx["power"]` -- the ref of whatever is rolling, which the
-    attack and the damage context both carry -- then asks whether that row's
-    Requirement is being in the form. So the narrowing the old note called
-    impossible is the one the shape rows themselves use.
+    `forms.beast_row` is the reading those rows are recognised by, and it
+    reads `ctx["power"]` -- the ref of whatever is rolling, which the attack
+    and the damage context both carry.
+
+    An earlier note here said there is no keyword to wait for. There is:
+    `Keyword.BEAST_FORM`, declared on 68 rows, and `beast_row` reads it now
+    as well as the Requirement -- which moved three printed beast form
+    attacks from paying nothing to paying this. #744.
 
     "Feat bonus", printed, so `kind="feat"`. Not a companion: the word means
     the druid's own shape-changing rows and no creature is involved."""

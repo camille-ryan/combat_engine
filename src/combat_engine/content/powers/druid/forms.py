@@ -3,14 +3,23 @@
 The class's own shape-change is `p5032` at the foot of this file; the other
 doors into beast form are the nine rows printing "you assume the <shape>"
 and the two at level 2 printing "you use wild shape".
-Everything carrying the printed Beast Form keyword is gated on being in one
--- that is what the keyword means -- and the gate is `requires=`, so the
-interface refuses the row rather than the body quietly doing nothing.
+Most rows carrying the printed Beast Form keyword are gated on being in one,
+and the gate is `requires=`, so the interface refuses the row rather than the
+body quietly doing nothing.
 
-`Keyword` has no member for Beast Form, so "with beast form powers" is
-asked as **"is the row that is rolling gated on `in_beast_form`"**. The
-gate is the only place the fact is recorded, and reading it back keeps one
-truth where a second list of refs would fall out of step with it.
+**Not all of them, and this file used to say otherwise.** It read "everything
+carrying the keyword is gated on being in one -- that is what the keyword
+means", and that premise is false: 21 rows carry the keyword with no gate, 0
+carry the gate with no keyword, and three of the 21 roll an attack whose card
+prints no Requirement at all. So the keyword is the wider and truer fact and
+the gate is a subset of it. #744.
+
+`Keyword.BEAST_FORM` exists -- this file claimed it did not, and so did two
+rows that copied the claim -- so "with beast form powers" is asked as **"does
+the row that is rolling print the keyword, or is it gated on
+`in_beast_form`"**. Both, because #486 records 2,916 headers omitting a
+keyword the database names: a row whose header lost it is still caught by its
+gate.
 
 Every form wears the same label. Each printed line ends the last one --
 "until you use wild shape again" -- and `c.form` does not displace a
@@ -84,14 +93,48 @@ def in_form(ref: str) -> Callable[[World, int], bool]:
 def beast_row(ctx: dict[str, Any]) -> bool:
     """Is the row rolling this one of the beast form ones?
 
-    Read off the gate rather than off a keyword, because there is no
-    keyword. `ctx["power"]` is the ref of whatever is rolling -- the attack
-    context spells it `power` and `Cast.damage` puts the same ref on the
-    damage context, so one gate serves both.
+    `ctx["power"]` is the ref of whatever is rolling -- the attack context
+    spells it `power` and `Cast.damage` puts the same ref on the damage
+    context, so one question serves both.
+
+    **The printed keyword first, and the gate as well.** This used to read
+    the gate alone, "because there is no keyword", and `Keyword.BEAST_FORM`
+    has been in `types.py` all along with 68 rows declaring it. Measured:
+
+    | | rows |
+    |---|---|
+    | keyword and gate | 47 |
+    | keyword, no gate | 21 |
+    | gate, no keyword | 0 |
+
+    So the gate was a strict subset and **three printed beast form attacks
+    were invisible to all five readings** -- `p16525b`, `p16530b` and
+    `p16535b`, level 0, whose cards print no Requirement, so they were not
+    merely missing a header their siblings carry. They under-paid the +1 and
+    +2 damage riders silently. The other 18 are shape-assuming rows that
+    roll nothing, so the damage gates never read them either way; they do
+    now answer True to the two *use*-event readings, which is right -- a
+    beast form stance is a beast form power by its own printed keyword.
+
+    **The gate stays, and deleting it leaves the driver green.** 0 rows
+    carry it without the keyword, so nothing in the tree needs it today --
+    planting it away reddens nothing, which is the state a reader should
+    know about before reading it as dead code. It is here for the header
+    that loses its keyword: #486 records 2,916 headers omitting one the
+    database names. The same arrangement, and the same warning,
+    `Cast._rolled_above` writes down about its own pair of guards.
+
+    **What this does not reach is a keyword granted per character.**
+    `c.counts_as_keyword` writes `Powers.granted_keywords` and
+    `dsl.keywords_of` reads it, but that needs the creature and two of the
+    five callers build a ctx holding only `power`. f2880 wants exactly that
+    and is still marked. #744.
     """
     p = get(ctx.get("power", "") or "")
     if p is None:
         return False
+    if Keyword.BEAST_FORM in p.keywords:
+        return True
     return p.requires is in_beast_form or getattr(p.requires, "beast_form", False)
 
 

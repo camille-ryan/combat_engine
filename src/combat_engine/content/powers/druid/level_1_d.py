@@ -151,8 +151,12 @@ def p10838(c: Cast) -> None:
     keywords=[*PRIMAL_IMPLEMENT, Keyword.BEAST_FORM],
 )
 def p10840(c: Cast) -> None:
-    """"With beast form powers" is read off the gate of whichever row is
-    rolling, because `Keyword` has no member for Beast Form."""
+    """"With beast form powers" is `forms.beast_row`, which reads the printed
+    keyword of whichever row is rolling and its gate as well.
+
+    This note used to say `Keyword` has no member for Beast Form. It has one
+    and 68 rows declare it; the reader was the thing that did not look. #744.
+    """
     shape = take_beast_form(c)
     ends_with(
         c, shape,

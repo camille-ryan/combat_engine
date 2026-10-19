@@ -25614,6 +25614,131 @@ def resistance_instead_of_the_extra_hit_points(out: Result) -> None:
              f"{REGISTRY['f2005'].unfinished}")
 
 
+def a_beast_form_row_is_known_by_its_keyword(out: Result) -> None:
+    """*"You gain a +1 bonus to damage rolls with beast form powers."*
+
+    Five sites ask "is the row rolling this a beast form one" through
+    `forms.beast_row`, and it read the row's **Requirement** -- on the
+    stated grounds that `Keyword` has no member for Beast Form. It has one,
+    and 68 rows declare it. Three docstrings carried the claim and the data
+    refutes all three. #744.
+
+    **The assertion that matters is the three rows that were getting
+    nothing.** `p16525b`, `p16530b` and `p16535b` print the keyword, roll an
+    attack, and print *no* Requirement -- so they are not rows missing a
+    header their siblings carry, and the gate could never have found them.
+    A rule that only checked a gated row would have passed the old reading
+    unchanged.
+
+    **And the negative control is a row with neither**, because a reader
+    that answered True for everything would satisfy every other line here.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine.content.powers.druid.forms import (
+        beast_row,
+        in_beast_form,
+    )
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.types import Keyword
+
+    def gated(p) -> bool:  # noqa: ANN001
+        return (p.requires is in_beast_form
+                or getattr(p.requires, "beast_form", False))
+
+    keyword = {r for r, d in REGISTRY.items()
+               if Keyword.BEAST_FORM in d.keywords}
+    gate = {r for r, d in REGISTRY.items() if gated(d)}
+
+    out.that(len(keyword) >= 60,
+             "the printed keyword is on a real population of rows, not one"
+             " or two -- the claim three docstrings made was that it does"
+             " not exist at all",
+             f"{len(keyword)} rows declare it")
+    out.that(not (gate - keyword),
+             "and every gated row also prints it, so the gate is a SUBSET"
+             " and reading the keyword can only widen -- which is what says"
+             " this change takes nothing away",
+             f"{sorted(gate - keyword)[:5]}")
+    only = sorted(keyword - gate)
+    out.that(len(only) >= 15,
+             "while rows print it WITHOUT the gate, which is the gap",
+             f"{len(only)} rows")
+
+    rolling = sorted(r for r in only if REGISTRY[r].attack is not None)
+    out.that(len(rolling) == 3,
+             "three of them roll an attack -- the rows that were actually"
+             " under-paying. The other 18 assume a shape and roll nothing,"
+             " so the damage gates never read them either way",
+             f"{rolling}")
+    for ref in rolling:
+        p = REGISTRY[ref]
+        out.that(not gated(p),
+                 f"{ref} prints no Requirement, so a `requires=` reading"
+                 " could never have found it -- it is not a header missing"
+                 " what its siblings carry",
+                 f"requires={p.requires}")
+        out.that(beast_row({"power": ref}),
+                 f"and {ref} is recognised as a beast form row now",
+                 f"{beast_row({'power': ref})}")
+
+    a_gated = next(iter(sorted(gate)))
+    out.that(beast_row({"power": a_gated}),
+             "a gated row is still recognised -- the Requirement reading is"
+             " kept, because #486 records 2,916 headers omitting a keyword"
+             " the database names",
+             f"{a_gated}")
+
+    neither = next(r for r, d in REGISTRY.items()
+                   if Keyword.BEAST_FORM not in d.keywords and not gated(d))
+    out.that(not beast_row({"power": neither}),
+             "and a row with neither the keyword nor the gate is NOT -- the"
+             " negative control, and the one a reader answering True for"
+             " everything would fail",
+             f"{neither}")
+    out.that(not beast_row({"power": ""}) and not beast_row({}),
+             "an absent or empty ref is False rather than an error")
+
+    # -- and a row's body, not only the reader ---------------------------
+    #
+    # **The verb answering right proves the mechanism, not the row.** f3774
+    # is one of the five callers; what matters is that its +2 reaches one of
+    # the three rows that were getting nothing. Scoped to f3774's own label,
+    # because a pooled `Mods.total` credits every source to whoever is
+    # asking -- which broke another rule outright earlier today.
+    from audit import board as _posed
+    from combat_engine.engine.components import Mods
+
+    # **The board arms it; the rule must not arm it again.**
+    # `audit.board` runs every `action=NONE` row the character holds, so
+    # calling the body here laid a second +2 under the same label and the
+    # read came out 4. The count below is what says there is exactly one.
+    world, me, _ = _posed("f3774", 1)
+    mods = world.need(me, Mods)
+    laid = [m for m in mods.items
+            if m.what == "damage" and m.label == "f3774"]
+    out.that(len(laid) == 1,
+             "f3774 is standing exactly once on its own board -- armed by"
+             " the board rather than by this rule, which would double it",
+             f"{len(laid)} modifier(s)")
+
+    def mine(power: str) -> int:
+        ctx = {"power": power}
+        return sum(m.amount() for m in mods.items
+                   if m.what == "damage" and m.label == "f3774"
+                   and m.applies(ctx))
+
+    out.that(mine(rolling[0]) == 2,
+             f"f3774's printed +2 reaches {rolling[0]}, which is one of the"
+             " three that were paid nothing -- the row, not the reader",
+             f"{mine(rolling[0])}")
+    out.that(mine(a_gated) == 2,
+             "and still reaches a gated row", f"{mine(a_gated)}")
+    out.that(mine(neither) == 0,
+             "and not a row that is neither -- the control, through the"
+             " caller rather than through the helper",
+             f"{mine(neither)}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25708,6 +25833,11 @@ DRIVERS = {
         resistance_instead_of_the_extra_hit_points,
         "resistance instead of a heal's extra hit points, and the surge that"
         " is still spent (#739)",
+    ),
+    "beast_keyword": (
+        a_beast_form_row_is_known_by_its_keyword,
+        "a beast form row known by its printed keyword, and the three that"
+        " print no requirement (#744)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
