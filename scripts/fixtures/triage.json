@@ -153,11 +153,11 @@
  },
  "DamageApplied.from_attack": {
   "by": "slice5",
-  "found": "resolve.deal_damage's from_attack argument",
+  "found": "resolve.deal_damage's from_attack argument -- which is about modifier eligibility, not provenance",
   "refused_rows": 1,
   "rows": 3,
-  "verdict": "mis-marked",
-  "why": "p15844 says it itself: from_attack is already an argument to resolve.deal_damage and simply reaches nothing. The value is in hand at the emit, so this is the one-field widening SurgeSpent got four of at once rather than a missing mechanism."
+  "verdict": "real",
+  "why": "CORRECTED from mis-marked, #731. The old verdict was right that from_attack is an argument reaching nothing, and wrong that widening the event would close the gap. Only two call sites in the engine pass False -- Cast.absorb and falling.py -- so c.flat, c.damage and World.damage (the ongoing-damage path, called from Effects._on_turn_start for every burn) all leave it True; probed. Inside deal_damage it gates _add_mods(\"damage\") and the deals_half halving -- arithmetic, not provenance -- and f3166 and f2589 argue that reading explicitly for five feature cards, so flipping c.flat would drop their riders. The three rows want a different fact, and two of them want opposite VALUES of it: p15844 needs 'damage from an attack that hits it', f2195 and i1826x1 need the half of p1458 that is not an attack's damage. DamageApplied.weapon is the precedent for carrying it as an attribute rather than a field, which costs no replay re-record."
  },
  "Defences.immune": {
   "by": "singleton-sweep",
