@@ -1101,7 +1101,7 @@ def deal_damage(
     # the types it actually carries.
     blow_types = frozenset(kind for kinds, _ in parts for kind in kinds)
     if (
-        takes_half(world, target, blow_types)
+        takes_half(world, target, blow_types, dmg_ctx)
         and not unpreventable
         and not _mods(world, source, "ignore insubstantial", dmg_ctx)
     ):
@@ -1251,7 +1251,12 @@ def deal_damage(
     # minion clause, printed on anything standing at one hit point. Nothing
     # in the damage context could say whether the blow landed, so `miss` is
     # handed in; only a miss pays for the lookup.
-    if miss and amount and _mods(world, target, "no_miss_damage", {"power": detail}):
+    # `source` as well as the row, so the clause can be scoped to one
+    # attacker -- "no damage from **its** attacks that deal damage on a
+    # miss". #747.
+    if miss and amount and _mods(
+        world, target, "no_miss_damage", {"power": detail, "source": source}
+    ):
         amount = 0
 
     absorbed = min(health.temp, amount)

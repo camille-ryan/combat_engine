@@ -349,7 +349,21 @@ _CONTEXT_OF = {
 #: where `ranged` is present, so a resist gate reading it passed. It was
 #: *not* present in the context the gate actually got (#380), which is the
 #: exact miss this check exists to prevent, happening to the check itself.
-_GATE_CONTEXT = {"resist": "damage"}
+_GATE_CONTEXT = {
+    "resist": "damage",
+    # **Added in the same commit as the verbs.** #747 gave
+    # `c.insubstantial` and `c.no_miss_damage` a `when=`, and a verb with
+    # a gate that is not listed here is outside this check entirely -- the
+    # gate falls back to the wide union, where a key the real context does
+    # not carry reads as present. That is the #380 miss this dict exists
+    # to prevent, and a new gated verb is exactly when it recurs.
+    #
+    # Both are read against the damage context: `takes_half` is handed
+    # `dmg_ctx` by `resolve`, and the no-miss-damage lookup is one `_mods`
+    # call further down the same function.
+    "insubstantial": "damage",
+    "no_miss_damage": "damage",
+}
 
 
 @cache

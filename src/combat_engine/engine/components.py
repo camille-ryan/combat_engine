@@ -385,6 +385,30 @@ class Defences:
     #: one trait's exception would wrongly narrow another's. `query.takes_half`
     #: says so where it reads this.
     half_except: dict[DamageType, int] = field(default_factory=dict)
+    #: Gates on the creature's insubstantial trait -- "while you have total
+    #: concealment **from a creature**, you are insubstantial to that
+    #: creature's attacks". Each is asked the damage context, which has
+    #: carried `source` since #302, so "from that attacker" is sayable.
+    #:
+    #: A **list**, for the reason `half_except` above is a counted dict: two
+    #: effects can lay the trait and the first to expire must not take the
+    #: other's narrowing with it. Lifted on `on_suspend` the same way.
+    #:
+    #: `query.takes_half` answers True when **any** source applies: an
+    #: ungated one always, a gated one when its gate accepts the blow. So
+    #: `half_always` below is counted rather than the gate list being read
+    #: as "unconditional when empty" -- the first draft did that and got the
+    #: common case backwards, because a creature carrying a gated trait had
+    #: a non-empty list and an ungated trait laid beside it left no mark at
+    #: all, so the gate suppressed it. The driver's ungated control is what
+    #: caught it. #747.
+    half_when: list[Callable[[dict[str, Any]], bool]] = field(
+        default_factory=list
+    )
+    #: How many **ungated** insubstantial sources this creature has, counted
+    #: for the reason `half_except` is a counted dict: two effects can lay
+    #: the trait and the first to expire must not take the other's with it.
+    half_always: int = 0
 
 
 @dataclass

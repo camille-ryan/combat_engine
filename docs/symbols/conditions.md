@@ -15,7 +15,7 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - (no docstring)
 - `c.immobilized(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
-- `c.insubstantial(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, except_: 'tuple[DamageType, ...]' = ()) -> 'Effect | None'`
+- `c.insubstantial(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, except_: 'tuple[DamageType, ...]' = (), when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Halves all damage taken. A property of the creature, not the damage.
 - `c.prone(self, *, on: 'int | None' = None, held: 'When | None' = None) -> 'Effect | None'`
   - Knocked prone. It lasts until the creature stands up, not until a

@@ -31,7 +31,7 @@ Points off and points back on, and the dice behind them.
   - "<this row> gains the high crit quality until ..."
 - `c.maximise(self, *, on: 'int | None' = None, ref: 'str' = '', until: 'When' = <When.EONT: "end of source's next turn">, critical: 'bool' = False) -> 'Effect | None'`
   - The next damage this creature rolls comes out maximum.
-- `c.no_miss_damage(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.no_miss_damage(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The creature takes no damage from an attack that misses."
 - `c.ongoing(self, amount: 'int', dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, dtypes: 'Sequence[DamageType]' = (), on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Ongoing damage. **Of one type, only the highest applies.**

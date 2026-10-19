@@ -817,7 +817,19 @@ def forced(
         nonlocal agreed
         from .resolve import _mods
 
-        ctx = {"how": how.value, "power": power}
+        # **`target` and `source`, not only `how` and `power`.** Neither
+        # side could ask *who*, so "when you push an undead creature, one
+        # extra square" lengthened every shove the character made --
+        # `i3169x1`, written, firing, and stronger than print. `target` is
+        # the conventional key every content gate reads; `source` is here
+        # for symmetry, since the `"forced"` side has the same blindness
+        # about who is doing the shoving and no row needs that today. #748.
+        ctx = {
+            "how": how.value,
+            "power": power,
+            "target": ev.target,
+            "source": ev.source,
+        }
         # Two sides to a shove, and only the shoved one was read. The
         # creature resisting shortens it with `"forced"`; the creature
         # doing it lengthens it with `"forcing"` -- "your pushes move the

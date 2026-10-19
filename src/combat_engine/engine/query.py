@@ -1216,7 +1216,10 @@ def shifted(world: World, eid: int) -> bool:
 
 
 def takes_half(
-    world: World, eid: int, dtypes: frozenset[DamageType] = frozenset()
+    world: World,
+    eid: int,
+    dtypes: frozenset[DamageType] = frozenset(),
+    ctx: dict[str, Any] | None = None,
 ) -> bool:
     """Insubstantial: everything that reaches this creature is halved.
 
@@ -1233,10 +1236,31 @@ def takes_half(
 
     Called with no `dtypes` it answers the old question, which is what every
     caller asking about the creature rather than a blow wants.
+
+    **`ctx` is for a trait scoped to one attacker** -- `Defences.half_when`,
+    #747. **Any** source applying is enough: `half_always` counts the
+    ungated ones and each gate is asked about this blow. Reading an empty
+    gate list as "unconditional" instead was the first draft's mistake and
+    got the common case backwards -- a creature with a gated trait has a
+    non-empty list, and an ungated trait laid beside it left no mark, so the
+    gate silently suppressed it.
+
+    **A caller with no blow in hand needs no special case.** The drivers
+    suite and the policy readers ask `takes_half(world, eid)`, and handing
+    the predicate `{}` makes a gate that reads `ctx["source"]` answer False
+    -- the conservative answer to "is this creature hard to hurt" asked in
+    the abstract, and the one that keeps a gated trait from reading as a
+    blanket one.
     """
     if not any(rules(c).insubstantial for c in active(world, eid)):
         return False
     held = world.get(eid, Defences)
+    if held is not None and (held.half_when or held.half_always):
+        applies = held.half_always > 0 or any(
+            gate(ctx or {}) for gate in list(held.half_when)
+        )
+        if not applies:
+            return False
     if held is None or not held.half_except:
         return True
     # "Except those that deal force damage" excepts the *source*, not the

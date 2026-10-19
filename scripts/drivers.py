@@ -26064,6 +26064,292 @@ def a_feats_three_riders_on_three_named_rows(out: Result) -> None:
              f"{REGISTRY['f1097'].unfinished}")
 
 
+def insubstantial_to_one_attacker(out: Result) -> None:
+    """*"If a creature cannot see you, you take half damage from its attacks
+    that hit you and no damage from its attacks that deal damage on a miss";
+    "while you have total concealment from a creature, you are insubstantial
+    to that creature's attacks."*
+
+    Two reward rows, and the two notes had already found half the answer:
+    the damage context has carried `source` since #302, so the attacker was
+    always askable. What was missing is that **halving is not a modifier** --
+    #471 gave modifiers a `when=` and insubstantial is a condition plus a
+    `Defences` field, so it was left out of that pass. #747.
+
+    **Three assertions carry this and the rest is scaffolding.**
+
+    * **The same blow, two attackers.** One that cannot see the holder is
+      halved; one that can is not. A gate that ignored its ctx would halve
+      both, and a gate that never fired would halve neither -- only the pair
+      separates the card from either.
+    * **An ungated trait still halves everything.** `half_when` empty means
+      unconditional, which is every printed stat block, and this is the
+      assertion that says the change took nothing away.
+    * **`takes_half` with no blow in hand answers False for a gated trait.**
+      The policy readers and half this suite ask that way, and a gated trait
+      reading as a blanket one would make the AI treat a creature as hard to
+      hurt by everybody.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, takes_half
+    from combat_engine.engine.types import DamageType
+
+    def posed(_ref: str = ""):  # noqa: ANN202
+        """A board whose holder is **not already insubstantial**.
+
+        Not `i2426x1`'s own board: `audit.board` arms every `action=NONE`
+        row the character holds, and that character also holds `p2482` --
+        which lays a **blanket** insubstantial. So the holder was halving
+        everything before the rule laid anything, and the first run of this
+        read the baseline as a failure.
+
+        Worth more than the inconvenience: that board is what caught the
+        **model** being wrong. The first draft read an empty gate list as
+        "unconditional", which meant a creature carrying a gated trait had a
+        non-empty list and a blanket trait laid beside it left no mark -- so
+        `p2482` was silently suppressed by `i2426x1`. `Defences.half_always`
+        counts the ungated sources for exactly that reason.
+        """
+        world, me, _ = _posed("mba", 1)
+        foes = sorted(e for e in enemies(world, me) if world.get(e, Health))
+        return world, me, foes
+
+    def dealt(world, hitter: int, victim: int, amount: int = 10) -> int:  # noqa: ANN001
+        """What that creature's blow actually takes off."""
+        health = world.need(victim, Health)
+        health.hp = health.max_hp
+        before = health.hp
+        Cast(world=world, me=hitter, ref="drivers:swing").flat(
+            amount, dtype=DamageType.UNTYPED, on=victim
+        )
+        return before - health.hp
+
+    # -- i2426x1: a creature that cannot see you -------------------------
+    world, me, foes = posed("i2426x1")
+    if len(foes) < 2:
+        out.skip("the board does not hold two enemies with hit points")
+        return
+    blind, seeing = foes[0], foes[1]
+    plain = dealt(world, blind, me)
+    out.that(plain == 10,
+             "with nothing standing, a 10 takes 10 -- the baseline the two"
+             " lines below are measured against",
+             f"{plain}")
+
+    Cast(world=world, me=me, ref="drivers:hide").hide(from_=blind)
+    REGISTRY["i2426x1"].body(Cast(world=world, me=me, ref="i2426x1"))
+
+    out.that(dealt(world, blind, me) == 5,
+             "a blow from the creature that cannot see the holder is halved",
+             f"{dealt(world, blind, me)}")
+    out.that(dealt(world, seeing, me) == 10,
+             "and a blow from one that CAN see is not -- the same holder,"
+             " the same trait, two attackers. A gate ignoring its context"
+             " would halve both and a gate never firing would halve"
+             " neither",
+             f"{dealt(world, seeing, me)}")
+    out.that(not takes_half(world, me),
+             "and `takes_half` with no blow in hand answers False for a"
+             " gated trait -- the conservative answer the policy readers"
+             " want, and it falls out of handing the gate an empty context"
+             " rather than from a special case")
+
+    # -- the miss half ---------------------------------------------------
+    world, me, foes = posed("i2426x1")
+    blind, seeing = foes[0], foes[1]
+    Cast(world=world, me=me, ref="drivers:hide").hide(from_=blind)
+    REGISTRY["i2426x1"].body(Cast(world=world, me=me, ref="i2426x1"))
+
+    def missed(hitter: int) -> int:
+        """What a blow that MISSED still takes off.
+
+        `resolve.deal_damage` directly, because `miss=` is its parameter and
+        `World.damage` does not take one -- the flag is handed in rather than
+        read off the context, which `c.no_miss_damage`'s docstring explains.
+        """
+        from combat_engine.engine.resolve import deal_damage
+
+        health = world.need(me, Health)
+        health.hp = health.max_hp
+        before = health.hp
+        deal_damage(world, hitter, me, 6, DamageType.UNTYPED, "drivers:miss",
+                    miss=True)
+        return before - health.hp
+
+    out.that(missed(blind) == 0,
+             "miss damage from the creature that cannot see the holder is"
+             " refused -- the second printed clause, and a second verb:"
+             " `c.no_miss_damage` existed and took no gate",
+             f"{missed(blind)}")
+    out.that(missed(seeing) == 6,
+             "and miss damage from one that can see is paid in full -- the"
+             " control that says the gate reads the attacker and not the"
+             " flag",
+             f"{missed(seeing)}")
+
+    # -- an ungated trait is unchanged -----------------------------------
+    world, me, foes = posed("i2426x1")
+    Cast(world=world, me=me, ref="drivers:flat").insubstantial(
+        on=me, until=When.ENCOUNTER)
+    out.that(takes_half(world, me),
+             "an UNGATED insubstantial answers True with no context -- every"
+             " printed stat block is one, and this is what says #747 took"
+             " nothing away")
+    out.that(dealt(world, foes[0], me) == 5 and dealt(world, foes[1], me) == 5,
+             "and halves both attackers' blows",
+             f"{dealt(world, foes[0], me)}, {dealt(world, foes[1], me)}")
+
+    # -- a blanket trait BESIDE a gated one, which is the real board -----
+    #
+    # `i2426x1`'s own board is this: the character also holds `p2482`, whose
+    # insubstantial is unconditional. The first draft of `half_when` read an
+    # empty list as "unconditional", so a gated trait gave the creature a
+    # non-empty list and the blanket one left no mark -- the gate silently
+    # suppressed `p2482` and halved nothing against an attacker that could
+    # see. This is the assertion that says it does not.
+    world, me, foes = posed()
+    blind, seeing = foes[0], foes[1]
+    Cast(world=world, me=me, ref="drivers:flat").insubstantial(
+        on=me, until=When.ENCOUNTER)
+    REGISTRY["i2426x1"].body(Cast(world=world, me=me, ref="i2426x1"))
+    out.that(dealt(world, seeing, me) == 5,
+             "a blanket trait and a gated one on one creature: the blanket"
+             " one still halves a blow the gate would refuse. A gate that"
+             " narrowed the creature rather than its own source would read"
+             " 10 here, and nothing else in this rule would notice",
+             f"{dealt(world, seeing, me)}")
+    out.that(dealt(world, blind, me) == 5,
+             "and the gated one is not doubled onto it either -- halving is"
+             " a property, not a stack",
+             f"{dealt(world, blind, me)}")
+
+    # -- i3401x1: total concealment, which is a different question -------
+    world, me, foes = posed("i3401x1")
+    if len(foes) < 2:
+        out.skip("the i3401x1 board does not hold two enemies with hit points")
+    else:
+        hidden_from, other = foes[0], foes[1]
+        REGISTRY["i3401x1"].body(Cast(world=world, me=me, ref="i3401x1"))
+        out.that(dealt(world, hidden_from, me) == 10,
+                 "with no concealment standing, the row does nothing -- the"
+                 " negative control, and the one that catches a gate that"
+                 " answers True by default",
+                 f"{dealt(world, hidden_from, me)}")
+
+        shade = Cast(world=world, me=me, ref="drivers:shade")
+        shade.conceal(on=me, total=True, until=When.ENCOUNTER,
+                      when=lambda ctx: ctx.get("attacker") == hidden_from)
+        out.that(dealt(world, hidden_from, me) == 5,
+                 "total concealment from one creature makes the holder"
+                 " insubstantial to that creature",
+                 f"{dealt(world, hidden_from, me)}")
+        out.that(dealt(world, other, me) == 10,
+                 "and not to the other one -- the concealment is gated on"
+                 " the attacker and so is the trait, and the two agree",
+                 f"{dealt(world, other, me)}")
+
+    for ref in ("i2426x1", "i3401x1"):
+        out.that(not str(REGISTRY[ref].unfinished)
+                 or str(REGISTRY[ref].unfinished) == "()",
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
+def an_extra_square_only_against_the_named_kind(out: Result) -> None:
+    """*"When you pull, push, or slide an undead creature with an attack
+    using this implement, you can increase the distance of the forced
+    movement by 1 square."*
+
+    This was **written and wrong**, not absent. `movement`'s shove built the
+    context both sides are read against as `{"how": ..., "power": ...}` and
+    nothing in it said *who was being moved*, so a square printed for one
+    kind of creature lengthened every push, pull and slide the character
+    made. Stronger than print, firing, and green on every board. #748.
+
+    **The assertion is the pair.** One foe given the printed word travels
+    further; one without it travels the printed distance. Either line alone
+    passes for the bug: the first for a gate that ignores its context, the
+    second for a gate that never fires.
+
+    **And the distance is read off the board, not off the return value.**
+    `c.push` answers how far it moved, which is the same number the bug
+    would have reported -- so the squares are counted between the two
+    positions instead.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import distance as grid_distance
+    from combat_engine.engine.query import enemies, kinds_of
+
+    # **Not i3169x1's own board**, twice over: `audit.board` arms every
+    # `action=NONE` row, so the row under test is already standing there and
+    # the baseline push already reads 2 -- and that board's enemies are
+    # *both* undead, so it has no control creature in it at all.
+    world, me, _ = _posed("mba", 1)
+    foes = sorted(e for e in enemies(world, me) if world.get(e, Health)
+                  and world.get(e, Position))
+    plain = next((e for e in foes if "undead" not in kinds_of(world, e)), None)
+    marked = next((e for e in foes if e != plain), None)
+    if plain is None or marked is None:
+        out.skip("the board holds no pair of enemies to tell apart")
+        return
+
+    # The board's creatures are whatever it dealt, so the word is laid here
+    # rather than hoped for. `c.set_origin` is the verb nineteen racial
+    # lines already use for exactly this.
+    Cast(world=world, me=me, ref="drivers:kind").set_origin(
+        "undead", on=marked, until=When.ENCOUNTER)
+    out.that("undead" in kinds_of(world, marked)
+             and "undead" not in kinds_of(world, plain),
+             "one foe carries the printed word and the other does not --"
+             " the board for both lines below",
+             f"{sorted(kinds_of(world, marked))[:4]} vs"
+             f" {sorted(kinds_of(world, plain))[:4]}")
+
+    def shoved(victim: int) -> int:
+        """How far it actually moved, counted between squares.
+
+        **Not `c.push`'s return value**, which is the same number the bug
+        reported -- it answers the agreed distance, and the question here is
+        whether the creature ended up there.
+        """
+        where = world.need(victim, Position)
+        was = where.square
+        Cast(world=world, me=me, ref="drivers:shove").push(1, on=victim)
+        return grid_distance(was, where.square)
+
+    before_marked, before_plain = shoved(marked), shoved(plain)
+    out.that(before_marked == 1 and before_plain == 1,
+             "with nothing standing, a push of 1 moves 1 square whoever it"
+             " is -- the baseline",
+             f"{before_marked}, {before_plain}")
+
+    REGISTRY["i3169x1"].body(Cast(world=world, me=me, ref="i3169x1"))
+
+    out.that(shoved(marked) == 2,
+             "the extra square is paid against the creature the card names",
+             f"{shoved(marked)}")
+    out.that(shoved(plain) == 1,
+             "and NOT against one it does not -- which is the whole of the"
+             " fix. Before #748 this read 2 as well, because the shove's"
+             " context never said who was being moved",
+             f"{shoved(plain)}")
+
+    out.that(not str(REGISTRY["i3169x1"].unfinished)
+             or str(REGISTRY["i3169x1"].unfinished) == "()",
+             "i3169x1 carries no marker",
+             f"{REGISTRY['i3169x1'].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -26173,6 +26459,16 @@ DRIVERS = {
         a_feats_three_riders_on_three_named_rows,
         "a feat's three riders, one of which a note had miscounted away"
         " (#750)",
+    ),
+    "insubstantial_to_one": (
+        insubstantial_to_one_attacker,
+        "insubstantial and no-miss-damage scoped to one attacker, and the"
+        " ungated trait that is unchanged (#747)",
+    ),
+    "shove_one_kind": (
+        an_extra_square_only_against_the_named_kind,
+        "an extra square of forced movement against one kind of creature"
+        " and not the rest (#748)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

@@ -3221,17 +3221,26 @@ def i3089p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.forces(target=)",),
 )
 def i3169x1(c: Cast) -> None:
-    """The damage bonus is gated on the victim's type words, which the
-    damage context carries. The forced-movement gate cannot be: `c.forces`
-    is handed `how` and `power` and never says who is being shoved, so
-    that square applies against everybody."""
-    c.forces(1, on=c.me, until=When.ENCOUNTER)
+    """Both halves are gated on the victim's type words now.
+
+    **The forced-movement half was a bug rather than a gap.** The square was
+    being laid unconditionally, because the shove's context carried `how` and
+    `power` and never said who was being moved -- so an extra square printed
+    for undead lengthened every push, pull and slide the character made.
+    Written, firing, and stronger than print, which is the shape this project
+    treats as worse than an absent row. #748 put `target` in that context and
+    the same `_target_is` helper the damage half already used does the rest.
+
+    One helper for both clauses deliberately: it is the same printed word
+    about the same creature, and the two contexts spell the victim the same
+    way now."""
+    undead = _target_is(c, "undead")
+    c.forces(1, on=c.me, until=When.ENCOUNTER, when=undead)
     c.bonus(
         "damage", 2, kind="item", on=c.me, until=When.ENCOUNTER,
-        when=_target_is(c, "undead"),
+        when=undead,
     )
 
 

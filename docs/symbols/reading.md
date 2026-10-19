@@ -142,7 +142,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.shield_bonus(world: 'World', eid: 'int') -> 'int'`
   - What this creature's shield adds to AC and Reflex. 0 for none.
-- `query.takes_half(world: 'World', eid: 'int', dtypes: 'frozenset[DamageType]' = frozenset()) -> 'bool'`
+- `query.takes_half(world: 'World', eid: 'int', dtypes: 'frozenset[DamageType]' = frozenset(), ctx: 'dict[str, Any] | None' = None) -> 'bool'`
   - Insubstantial: everything that reaches this creature is halved.
 
 ## what a creature may do

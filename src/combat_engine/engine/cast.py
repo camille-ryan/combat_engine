@@ -6000,6 +6000,7 @@ class Cast:
         until: When = When.EONT,
         on: int | None = None,
         except_: tuple[DamageType, ...] = (),
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """Halves all damage taken. A property of the creature, not the damage.
 
@@ -6012,15 +6013,53 @@ class Cast:
         three cards printing *both* clauses -- an exception and "it loses this
         trait until the start of its next turn" -- do not leave an exception
         standing for a trait that is switched off.
+
+        **`when` scopes the trait to one attacker**, which two reward rows
+        print -- "while you have total concealment *from a creature*, you are
+        insubstantial to that creature's attacks". It is asked the damage
+        context, so `source` answers who is swinging; #471 gave *modifiers*
+        that gate and this is not a modifier, which is why it was left out of
+        that pass. Recorded in `Defences.half_when` and read by
+        `query.takes_half`, which says what an empty list means. #747.
         """
         held = self.condition(Condition.INSUBSTANTIAL, until=until, on=on)
         kinds = tuple(except_)
-        if held is None or not kinds:
+        if held is None:
             return held
         who = held.owner
         from .components import Defences
 
         defences = self.world.get(who, Defences) or self.world.add(who, Defences())
+        # **Every source is recorded, gated or not.** `query.takes_half`
+        # answers True when any one of them applies, and it cannot tell an
+        # ungated trait from an absent one unless the ungated ones are
+        # counted -- so a gate laid by one card would otherwise suppress a
+        # blanket trait laid by another.
+        if when is None:
+            def drop_one() -> None:
+                defences.half_always = max(0, defences.half_always - 1)
+
+            def add_one() -> None:
+                defences.half_always += 1
+
+            add_one()
+            held.on_suspend.append(drop_one)
+            held.on_resume.append(add_one)
+        else:
+            gate = when
+
+            def drop_gate() -> None:
+                if gate in defences.half_when:
+                    defences.half_when.remove(gate)
+
+            def add_gate() -> None:
+                defences.half_when.append(gate)
+
+            add_gate()
+            held.on_suspend.append(drop_gate)
+            held.on_resume.append(add_gate)
+        if not kinds:
+            return held
 
         def lift() -> None:
             for kind in kinds:
@@ -8006,16 +8045,26 @@ class Cast:
         )
 
     def no_miss_damage(
-        self, *, on: int | None = None, until: When = When.ENCOUNTER
+        self,
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"The creature takes no damage from an attack that misses."
 
         The minion clause. The damage context had no way to ask whether the
         blow landed, so `deal_damage` is handed a `miss` flag and this is
         the only thing that reads it.
+
+        **`when` scopes it to one attacker**, which `i2426x1` prints -- "no
+        damage from **its** attacks that deal damage on a miss", of a
+        creature that cannot see you. The context that reads this carries
+        `source` now, which is the only thing that was in the way. #747.
         """
         return self.bonus(
-            "no_miss_damage", 1, on=on, until=until, kind="untyped"
+            "no_miss_damage", 1, on=on, until=until, kind="untyped",
+            when=when,
         )
 
     def merge(

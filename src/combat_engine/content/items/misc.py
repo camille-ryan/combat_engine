@@ -139,6 +139,8 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Defences, Powers
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.movement import overrun
+from combat_engine.engine.query import concealment_of, unseen_by
+from combat_engine.engine.types import Cover
 
 ITEM = "item"
 
@@ -1093,21 +1095,42 @@ def i2374x1(c: Cast) -> None:
 
 
 @power("i2426x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.insubstantial(when=)",))
+       reach=PERSONAL, target=SELF)
 def i2426x1(c: Cast) -> None:
-    """Both halves hang on "a creature that cannot see you". The reason is
-    not the context -- `dmg_ctx` has carried `source` since #302 and
-    `resist_ctx` is `{**dmg_ctx, ...}`, so the attacker is askable. It is
-    that halving is not a resistance: `query.takes_half` reads the
-    `INSUBSTANTIAL` condition off the *creature*, and `c.insubstantial`'s
-    only narrowing is `except_`, which is damage types in
-    `Defences.half_except`. There is nowhere to hang a predicate on who is
-    swinging, and halving by hand on `DamageRolled` would be a number
-    standing in for a named trait -- it would miss `half_except` and the
-    attacker's "ignores insubstantial" both.
+    """Both halves hang on "a creature that cannot see you", and both are
+    written.
 
-    The miss-damage half ("no damage from its attacks that deal damage on a
-    miss") needs the same gate besides."""
+    The old note was right about where the fault was **not**: `dmg_ctx` has
+    carried `source` since #302, so the attacker was always askable. What it
+    was right about is that halving is not a resistance -- `query.takes_half`
+    reads the condition off the creature and `c.insubstantial`'s only
+    narrowing was `except_`, which is damage types. #747 gave it a `when=`,
+    recorded in `Defences.half_when`, beside the `vulnerable_when` #471 added
+    for the same reason one field up.
+
+    **Two verbs, not one, and the second already existed.**
+    `c.no_miss_damage` has been there for the minion clause; all it needed
+    was the same gate and `source` in the context that reads it. Halving by
+    hand on `DamageRolled` is what the old note warned against and it was
+    right: a number standing in for a named trait misses `half_except` and
+    the attacker's "ignores insubstantial" both.
+
+    `query.unseen_by(world, watcher, who)` is the question, in that order --
+    *is this creature invisible to that one*. Asked of the attacker as the
+    watcher and the holder as the hidden one, which is the direction the card
+    prints and the opposite of what `c.can_see` asks."""
+    me = c.me
+
+    def cannot_see_me(ctx: dict[str, Any]) -> bool:
+        swinging = ctx.get("source")
+        return (
+            isinstance(swinging, int)
+            and swinging != me
+            and unseen_by(c.world, swinging, me)
+        )
+
+    c.insubstantial(on=me, until=When.ENCOUNTER, when=cannot_see_me)
+    c.no_miss_damage(on=me, until=When.ENCOUNTER, when=cannot_see_me)
 
 
 @power("i2426p1", level=3, cls=ITEM, usage=DAILY, action=REACTION,
@@ -3087,19 +3110,34 @@ def i3386p1(c: Cast) -> None:
 
 
 @power("i3401x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.insubstantial(when=)",))
+       reach=PERSONAL, target=SELF)
 def i3401x1(c: Cast) -> None:
-    """Insubstantial is a property of the creature and not of one
-    attacker's blows. The damage context *does* carry the attacker -- #302
-    added `source` -- so the stale half of this was the context; what is
-    still absent is a `when=` on `c.insubstantial`, whose only narrowing is
-    `except_` and that is damage types. `query.takes_half` reads the
-    condition off the target and asks nothing else. See `i2426x1`.
+    """Written. The old note had the whole of it except the verb, which #747
+    added: insubstantial takes a `when=` now and records it in
+    `Defences.half_when`.
 
-    Total concealment is readable: `query.concealment_of` returns
-    `Cover.SUPERIOR` for it and the attack context carries `attacker`, so
-    the gate's own half is there and only the thing it would gate is
-    not."""
+    Total concealment was always readable -- `query.concealment_of` answers
+    `Cover.SUPERIOR` for it -- and the one thing to be careful of is **which
+    key**: concealment modifiers are gated on `attacker`, the attack
+    context's word, while this gate is asked the *damage* context, whose
+    word is `source`. So the ref is translated rather than passed through.
+
+    Not the same question as `i2426x1`'s, and deliberately not sharing a
+    helper with it: that card asks whether the attacker can see you at all,
+    this one asks whether your concealment from it is total. A creature in
+    deep shadow has the second without the first."""
+    me = c.me
+
+    def total_concealment_from(ctx: dict[str, Any]) -> bool:
+        swinging = ctx.get("source")
+        if not isinstance(swinging, int) or swinging == me:
+            return False
+        return (
+            concealment_of(c.world, me, {"attacker": swinging})
+            is Cover.SUPERIOR
+        )
+
+    c.insubstantial(on=me, until=When.ENCOUNTER, when=total_concealment_from)
 
 
 @power("i3401p1", level=8, cls=ITEM, usage=ENCOUNTER, action=FREE,
