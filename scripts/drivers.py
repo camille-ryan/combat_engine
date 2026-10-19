@@ -20202,8 +20202,18 @@ def the_expectation_model_prices_high_crit(out: Result) -> None:
         if foe is None or gear is None or not gear.weapons:
             return None, None, None
         blow = gear.weapons[0]
-        if high_crit:
-            blow.properties = blow.properties | {"high crit"}
+        # **Set both ways, rather than adding for the keen case and hoping
+        # the board's weapon lacks it.** This read
+        # `if high_crit: blow.properties |= {"high crit"}` and asserted the
+        # control weapon had none -- true until #724 gave the dealt greataxe
+        # back the `high crit` the page prints, at which point both halves
+        # of the comparison were keen and the delta was `15.1250 ->
+        # 15.1250`. A control that depends on what the dealer happens to
+        # hand over is not a control.
+        blow.properties = (
+            blow.properties | {"high crit"} if high_crit
+            else blow.properties - {"high crit"}
+        )
         window = _mods(world, me, "crit_range", {"power": ref})
         return expected(world, me, ref, foe), blow, window
 
@@ -24299,6 +24309,163 @@ def a_simple_weapon_is_a_category(out: Result) -> None:
                  f"simple {with_simple} military {with_military}")
 
 
+def a_dealt_weapon_is_the_printed_one(out: Result) -> None:
+    """The weapon a character carries has to be the weapon the page prints.
+
+    `chargen`'s hand-written `Weapon` constants are *"what a character
+    actually carries"* -- `_from_the_table`'s own docstring says so, and says
+    why: *"they need every field a gate reads."* It copied the slug alone,
+    and the hand-written values disagreed with the compendium's table in 10
+    places across 8 of the 20 weapons anybody is dealt.
+
+    Six were a property the page prints and the constant omitted, and the
+    worst is the fighter's own greataxe:
+
+    ```
+    w3612  missing 'high crit'     w3617  missing 'spear', reach 1 not 2
+    w3596  missing 'versatile'     w3629  missing 'load minor'
+    w3610  missing 'versatile'     w3631  missing 'load free'
+    ```
+
+    **The first assertion is the whole family in one line** -- every dealt
+    weapon, every class, every leg, matched field by field against the table
+    -- so a constant drifting again is caught where the old arrangement
+    caught nothing. It is the shape `localise.py`'s manifest has and for the
+    same reason: the value is that a change becomes visible.
+
+    Then the one that cost real damage. `Cast._high_crit` is `if weapon is
+    None or "high crit" not in weapon.properties: return 0`, so a critical
+    hit through the only greataxe a fighter is dealt paid **nothing** while
+    `engine/expect.py` priced a die for it. Asserted through the verb rather
+    than off the property, because the property being present is what the
+    line above already proves and this is a different question.
+    """
+
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.chargen import BUILDS, CLASSES, PRINTED
+    from combat_engine.engine import Bus, Rng, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+    from combat_engine.engine.grid import Grid as _Grid
+
+    # **Named here, not read from `chargen._FROM_TABLE`.** The first draft
+    # imported that tuple -- which is the list the fix itself walks -- so a
+    # plant dropping `reach` from it dropped `reach` from this comparison
+    # too, and stayed green. A check that shares its subject's definition
+    # cannot fail when the definition is the fault.
+    #
+    # `enhancement` and `item` are left out on purpose rather than by
+    # omission: both are per-character, written by `magic_for` when a magic
+    # weapon is dealt, and the table carries a plain weapon's zero. An
+    # earlier draft compared every field and reported `w3594.enhancement`
+    # twenty times over.
+    columns = (
+        "damage", "proficiency", "reach", "ranged", "thrown",
+        "group", "category", "hands", "properties",
+    )
+
+    # -- every dealt weapon, against the table ----------------------------
+    seen: set[str] = set()
+    wrong: list[str] = []
+    was = chargen.SCORED_CHOICES
+    chargen.SCORED_CHOICES = True
+    try:
+        for cls in sorted(CLASSES):
+            for leg in [b.name for b in BUILDS.get(cls, ())] or [""]:
+                try:
+                    world = World(_Grid(24, 16), Rng(5), Bus())
+                    me = chargen.spawn(
+                        world, chargen.Character(cls=cls, level=1, build=leg),
+                        (5, 5),
+                    )
+                except Exception:
+                    continue
+                for arm in world.need(me, Gear).weapons:
+                    table = PRINTED.get(arm.ref)
+                    if table is None:
+                        continue
+                    seen.add(arm.ref)
+                    for col in columns:
+                        if getattr(arm, col) != getattr(table, col):
+                            wrong.append(f"{arm.ref}.{col}")
+    finally:
+        chargen.SCORED_CHOICES = was
+
+    out.that(len(seen) >= 15,
+             "enough weapons are dealt across the classes and legs for the"
+             " line below to mean something",
+             f"{len(seen)} distinct")
+    out.that(not wrong,
+             "and every one of them matches the compendium's table field for"
+             " field -- 8 of 20 did not, and six were missing a property the"
+             " page prints",
+             f"{sorted(set(wrong))}")
+
+    # **And every constant, not only the ones a level-1 character is dealt.**
+    # That is what `_from_the_table` actually walks, and the difference is
+    # not academic: `w3617` is reached through a feat's `proficiency=` rather
+    # than any chassis, so it is absent from the loop above -- and it is the
+    # weapon with the `reach` fault, 1 where the page says 2. A plant that
+    # dropped `reach` from the copied columns stayed green until this line
+    # existed.
+    adrift = [
+        f"{val.ref}.{col}"
+        for val in vars(chargen).values()
+        if isinstance(val, Weapon) and PRINTED.get(val.ref) is not None
+        for col in columns
+        if getattr(val, col) != getattr(PRINTED[val.ref], col)
+    ]
+    out.that(not adrift,
+             "and so does every hand-written constant in `chargen`, dealt or"
+             " not -- 10 fields across 8 of them had drifted, including a"
+             " reach weapon whose reach was 1",
+             f"{sorted(set(adrift))}")
+
+    # -- the one that cost damage -----------------------------------------
+    #
+    # **Seed 11, because seed 5's fighter is not holding its greataxe.** A
+    # feat-bought superior weapon competes for the hand -- `outfit` says so
+    # and says why -- so at some seeds the great-weapon leg swings `w3660`
+    # and stows `w3612`. Measured identical before and after this commit, so
+    # it is not something the table fix caused; it is just not the character
+    # this assertion is about.
+    world = World(_Grid(24, 16), Rng(11), Bus())
+    me = chargen.spawn(
+        world, chargen.Character(cls="fighter", level=1, build="great-weapon"),
+        (5, 5),
+    )
+    gear = world.need(me, Gear)
+    axe = gear.main
+    out.that(axe is not None and axe.ref == "w3612",
+             "the great-weapon fighter swings the greataxe",
+             f"{axe.ref if axe else None}")
+    # **Through a declared weapon row, not a bare `Cast`.** `_high_crit`
+    # opens `if p is None or Keyword.WEAPON not in self.keywords_of(p)` and
+    # returns 0, so a `Cast` with an invented ref answers zero whatever the
+    # weapon is -- the assertion would have passed for the broken version.
+    # `p1000` is a fighter at-will carrying `martial` and `weapon`.
+    c = Cast(world=world, me=me, ref="p1000")
+    out.that(c._high_crit() != 0,
+             "and a critical hit through it pays a high-crit die. It paid"
+             " zero, because the constant beside the table omitted the"
+             " word -- while `engine/expect.py` priced one, so the"
+             " expectation and the board disagreed and nothing said which"
+             " was wrong",
+             f"{c._high_crit()!r}")
+
+    # The control: a weapon with no such property pays nothing, so the line
+    # above is the property and not an unconditional bonus.
+    plain = next(w for w in PRINTED.values()
+                 if "high crit" not in w.properties and not w.ranged)
+    gear.weapons[:] = [plain]
+    gear.stowed.clear()
+    out.that(c._high_crit() == 0,
+             "and a weapon the page gives no high crit pays none, so the line"
+             " above is the property rather than an unconditional bonus",
+             f"{plain.ref} -> {c._high_crit()!r}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -24349,6 +24516,11 @@ DRIVERS = {
         a_simple_weapon_is_a_category,
         "a simple weapon is a category and not a property, and five rows"
         " were dead on it (#726)",
+    ),
+    "dealt_weapon": (
+        a_dealt_weapon_is_the_printed_one,
+        "a dealt weapon is the printed one, field for field, and the"
+        " greataxe had lost its high crit (#724)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

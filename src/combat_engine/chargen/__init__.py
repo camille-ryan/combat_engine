@@ -453,46 +453,99 @@ def _printed_weapons() -> dict[str, Weapon]:
 PRINTED: dict[str, Weapon] = _printed_weapons()
 
 
-def _with_slugs() -> None:
-    """Give the hand-written constants the slug the table holds for them.
+#: Every field of `Weapon` the compendium's own table is the authority on.
+#: `ref` is the key and `slug` is handled separately below, because a slug has
+#: to be derivable for the invented implement refs the table does not carry.
+_FROM_TABLE = (
+    "damage", "proficiency", "reach", "ranged", "thrown",
+    "group", "category", "hands", "properties",
+)
+#: **`enhancement` and `item` are deliberately not in it.** Both are
+#: per-character: `magic_for` writes them when a magic weapon is dealt, and
+#: the table carries a plain weapon's zero. Copying them here would be a
+#: no-op at import and a trap for any reader who takes the tuple to mean
+#: "every field", so the exclusion is named rather than implied.
+
+
+def _from_the_table() -> None:
+    """Give the hand-written constants what the compendium's table says.
 
     **The constants are what a character actually carries**, not a fallback --
     `ClassLine.weapons` references them by name -- so they need every field a
     gate reads. `Weapon.slug` is the printed word a card can name a weapon by,
     and `chargen.meets`' `weapon_prof` test and `query.holding` both ask for it.
 
-    It is **not written beside them**, because a slug is a printed name and the
-    constants are tracked source. Read off the `weapon` table instead, which is
-    where the name belongs and the only place it is kept.
+    Nothing is written beside the constants, because a slug is a printed name
+    and the constants are tracked source. Read off the `weapon` table instead,
+    which is where the name belongs and the only place it is kept.
 
-    Measured when it was missing: four rows went from usable to *never usable
-    here* -- `audit.py` read 776 against a watermark of 772 -- because their
-    printed Requirement names one weapon and nothing on the character could
-    answer which weapon it was holding. That is the whole reason this exists; a
-    `slug=""` on a dealt weapon is a silently un-gateable row.
+    Measured when the slug was missing: four rows went from usable to *never
+    usable here* -- `audit.py` read 776 against a watermark of 772 -- because
+    their printed Requirement names one weapon and nothing on the character
+    could answer which weapon it was holding. That is the whole reason this
+    exists; a `slug=""` on a dealt weapon is a silently un-gateable row.
+
+    **This was called `_with_slugs` and copied the slug alone**, while the
+    paragraph above promised every field a gate reads. The hand-written values
+    beside the constants disagreed with the table in **10 places across 8 of
+    the 20 weapons `chargen` deals**, and six of those were a property the page
+    prints and the constant omitted:
+
+    ```
+    w3612  properties  missing 'high crit'    <- the fighter's greataxe
+    w3596  properties  missing 'versatile'
+    w3610  properties  missing 'versatile'
+    w3617  properties  missing 'spear'
+    w3629  properties  missing 'load minor'
+    w3631  properties  missing 'load free'
+    w3594  properties  'light blade' for 'light thrown'
+    w3611  properties  'light blade', which is its group
+    w3617  reach       1, left at the default, where the table says 2
+    w3617  group       'spear', where the table says 'polearm'
+    ```
+
+    None of it showed as a failure. `Cast._high_crit` is `if weapon is None or
+    "high crit" not in weapon.properties: return 0`, so a critical hit through
+    the only greataxe a fighter is dealt paid **no high-crit die at all** while
+    `engine/expect.py` priced one. Ten content sites gate on `versatile` and
+    five on `spear`. A gate that is never true lays its effect, audits green
+    and does nothing.
+
+    `group` is the one to read twice: the constant called `w3617` a spear and
+    the table calls it a polearm with `spear` among its **properties**, so the
+    five `c.wielding("spear")` gates matched through the group and keep
+    matching through the property -- `wielding` tests both. Fixing one without
+    the other would have broken them.
 
     **Set in place rather than rebound.** `CLASSES` and `IMPLEMENTS` are built
     above this and hold the constant *objects*, so replacing the module globals
-    with copies left every one of those references on the slugless original --
-    which looked fixed from the outside and was not. `Weapon` is not frozen, so
-    one assignment reaches every holder.
+    with copies left every one of those references on the original -- which
+    looked fixed from the outside and was not. `Weapon` is not frozen, so one
+    assignment reaches every holder. That was true of the slug and is true of
+    all of it. #724.
     """
     for value in list(globals().values()):
-        if not isinstance(value, Weapon) or value.slug:
+        if not isinstance(value, Weapon):
             continue
         table = PRINTED.get(value.ref)
-        if table is not None and table.slug:
-            value.slug = table.slug
-        elif value.ref.startswith("w:"):
+        if table is None:
             # **An implement, and the ref already is the word.** The compendium's
             # weapon table carries no implements -- an orb has no damage die and
             # no proficiency bonus -- so these refs were invented here, out of
             # words that are in `sanitise.RULES_TERMS` and are mechanics. Taking
             # the slug from the ref writes no new name down.
-            value.slug = value.ref.removeprefix("w:")
+            if not value.slug and value.ref.startswith("w:"):
+                value.slug = value.ref.removeprefix("w:")
+            continue
+        if table.slug and not value.slug:
+            value.slug = table.slug
+        # `column`, not `field`: `dataclasses.field` is imported at the top
+        # of this module and a loop variable of that name shadows it.
+        for column in _FROM_TABLE:
+            setattr(value, column, getattr(table, column))
 
 
-_with_slugs()
+_from_the_table()
 
 #: The arms the chassis dealt none of, and that a printed benefit names.
 #:
