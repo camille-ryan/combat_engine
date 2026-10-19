@@ -126,6 +126,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Which weapon the attack behind this event was swung with.
 - `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', on: 'int | None' = None) -> 'int'`
   - Give that creature's weapons a printed range. Returns how many.
+- `c.wearing(self, prop: 'str', *, on: 'int | None' = None) -> 'bool'`
+  - Is this creature in armour of that kind? `c.wielding`'s sibling.
 - `c.wielding(self, prop: 'str') -> 'bool'`
   - Does the caster meet a printed Requirement line?
 - `c.wis_`

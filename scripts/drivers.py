@@ -22818,6 +22818,222 @@ def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def what_a_creature_is_wearing(out: Result) -> None:
+    """`c.wearing`, and the two rows that read heavy armour without chain.
+
+    Four rows on one stat block carried `dropped=('c.wearing("heavy
+    armor")',)` under a file header saying *"nothing on `Cast` reads a
+    creature's armour category"*. True of `Cast`; **false of the tree** --
+    **25 sites** in `content/` read `Gear.armour` by hand, and
+    `items.alchemical.i2370p1` already said so: *"the old docstring said
+    nothing reports what a creature is wearing, and something does"*.
+
+    **The duplication was not harmless, which is the finding.** Two of the
+    25 read `("scale", "plate")` for a rule that covers **chain** too:
+
+    * `p4327` prints *"if you aren't wearing heavy armor, you can shift 3
+      squares"*, and heavy armour is chain, scale or plate -- so a fighter
+      in chain shifted 3 where the card says 2.
+    * `rt:r2-t3` gives back the square armour costs, and
+      `chargen.ARMOUR_SPEED` charges **-1 on chain** as well -- so the
+      square never came back for a character in it. It reads that table
+      directly now rather than a tuple that has to agree with it by hand.
+
+    Both are asserted below, each against the weight that was missing and
+    against one that was never in question.
+
+    `c.wearing` **raises on an unrecognised word**, the discipline
+    `c.bonus(once=)` got in #544: a typo would read False in every fight and
+    the row would look written. `"heavy armor"` -- the two words the markers
+    used -- is exactly such a typo and is refused.
+
+    And it defaults to `c.target` where `c.wielding` defaults to the caster,
+    because a Requirement is about the user and these clauses are about the
+    victim. Two siblings defaulting opposite ways is a trap, so the
+    assertion below is that the default really is the target.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import Gear
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+
+    # -- the vocabulary, and the sets it maps to --------------------------
+    world, me, _ = _posed("m3447a0", 1)
+    c = Cast(world=world, me=me, ref="drivers:wearing")
+    foe = sorted(enemies(world, me))[0]
+    gear = world.get(foe, Gear)
+    out.that(gear is not None,
+             "the board's enemy has Gear to wear armour in")
+    if gear is None:
+        return
+    for worn, heavy, light, metal in (
+        ("cloth", False, True, False),
+        ("leather", False, True, False),
+        ("hide", False, True, False),
+        ("chain", True, False, True),
+        ("scale", True, False, True),
+        ("plate", True, False, True),
+    ):
+        gear.armour = worn
+        got = (c.wearing("heavy", on=foe), c.wearing("light", on=foe),
+               c.wearing("metal", on=foe))
+        out.that(got == (heavy, light, metal),
+                 f"{worn}: heavy={heavy} light={light} metal={metal}",
+                 f"{got}")
+        out.that(c.wearing(worn, on=foe)
+                 and not c.wearing("none", on=foe),
+                 f"and {worn} answers to its own name, and not to 'none'")
+    # **The one the four hand-rolled copies disagreed about.** A creature
+    # with no `Gear` at all is wearing nothing; `items.feet._light_armour`
+    # counted that as light and the other three returned False for it.
+    gear.armour = ""
+    out.that(c.wearing("none", on=foe)
+             and not c.wearing("heavy", on=foe)
+             and not c.wearing("light", on=foe),
+             "an empty wardrobe is 'none' and nothing else -- the case the"
+             " hand-rolled copies answered three different ways",
+             f"none={c.wearing('none', on=foe)}"
+             f" light={c.wearing('light', on=foe)}")
+
+    # -- the typo the markers themselves used is refused ------------------
+    try:
+        c.wearing("heavy armor", on=foe)
+    except ValueError as exc:
+        out.that("not an armour word" in str(exc),
+                 "`c.wearing(\"heavy armor\")` raises -- the exact spelling"
+                 " four markers used, and a word that would otherwise read"
+                 " False in every fight",
+                 f"{exc}")
+    else:
+        out.that(False, "an unrecognised armour word must raise")
+
+    # -- the default is the target, not the caster -----------------------
+    world, me, _ = _posed("m3447a0", 1)
+    aimed = sorted(enemies(world, me))[0]
+    mine = world.get(me, Gear)
+    theirs = world.get(aimed, Gear)
+    if mine is not None and theirs is not None:
+        mine.armour, theirs.armour = "cloth", "plate"
+        asking = Cast(world=world, me=me, ref="drivers:default",
+                      targets=[aimed])
+        asking.target = aimed
+        out.that(asking.wearing("heavy") and not asking.wearing("heavy", on=me),
+                 "a bare `c.wearing` asks about the TARGET, where"
+                 " `c.wielding` beside it asks about the caster -- the"
+                 " caster here is in cloth and the target in plate, so the"
+                 " two answers differ and the default is not guessable",
+                 f"bare={asking.wearing('heavy')} caster="
+                 f"{asking.wearing('heavy', on=me)}")
+
+    # -- the four rows, each against both armours ------------------------
+    def struck(ref: str, worn: str):  # noqa: ANN202
+        """Run the row against a target in that armour; return what it asked.
+
+        **The slide ASK, not the `Moved` it produces.** `c.slide(2)` and
+        `c.slide(1)` both move a creature on a board with room, so a
+        `Moved`-counting assertion passes for either distance -- and
+        `c.slide` is "slide *up to* n" with a destination chooser, so the
+        landing square is board geometry rather than the row. Recording the
+        argument is the only thing here that belongs to the row.
+        """
+        world, me, _ = _posed(ref, 1)
+        aim = sorted(enemies(world, me))[0]
+        g = world.get(aim, Gear)
+        if g is not None:
+            g.armour = worn
+        use = Cast(world=world, me=me, ref=ref, targets=[aim])
+        use.target = aim
+        asked: list[int] = []
+        real = use.slide
+
+        def recording(n: int = 1, **kw: object) -> bool:
+            asked.append(n)
+            return real(n, **kw)  # type: ignore[arg-type]
+
+        use.slide = recording          # ty: ignore[invalid-assignment]
+        world.rng.loaded = 20
+        mark = len(world.bus.log)
+        REGISTRY[ref].body(use)
+        return asked, world.bus.log[mark:]
+
+    for ref, heavy, light in (("m3447a0", 2, 1), ("m3447a2", 6, 3)):
+        asked_heavy, _ = struck(ref, "plate")
+        asked_light, _ = struck(ref, "leather")
+        out.that(asked_heavy == [heavy] and asked_light == [light],
+                 f"{ref} slides {heavy} squares in heavy armour and {light}"
+                 " otherwise -- the ASK, because both distances produce a"
+                 " `Moved` on a board with room and a counting assertion"
+                 " would pass for either",
+                 f"plate {asked_heavy} leather {asked_light}")
+        out.that(len(asked_heavy) == 1,
+                 f"and {ref} slides ONCE, not once and then again: a second"
+                 " call is a second forced move, provoking its own"
+                 " opportunities and letting the chooser stop short twice",
+                 f"{asked_heavy}")
+
+    for worn, more in (("plate", True), ("leather", False)):
+        _asked, log = struck("m3447a5", worn)
+        flats = [e for e in log if isinstance(e, DamageApplied)]
+        out.that(len(flats) == (2 if more else 1),
+                 f"m3447a5 deals its extra 4 to a target in {worn}"
+                 if more else
+                 "and only the printed damage to one in leather -- a second"
+                 " `DamageApplied` is the additional 4, and it is the"
+                 " assertion the header could not carry",
+                 f"{len(flats)} DamageApplied")
+
+    for ref in ("m3447a0", "m3447a2", "m3447a4", "m3447a5"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker now",
+                 f"{REGISTRY[ref].unfinished}")
+
+    # -- the two rows that were missing chain ----------------------------
+    # **Through `p4327`'s own body, not through `c.wearing`.** The reader was
+    # never broken; the fix is at the call site, and a rule that asks
+    # `c.wearing` itself passes with the old tuple restored.
+    # `powers.fighter.footwork.close_by_shift` ends in `c.shift(steps,
+    # to=…)`, so the steps it is handed is the row's ask.
+    for worn, want in (("chain", 2), ("scale", 2), ("leather", 3)):
+        world, me, _ = _posed("p4327", 1)
+        g = world.get(me, Gear)
+        if g is not None:
+            g.armour = worn
+        asked = Cast(world=world, me=me, ref="p4327")
+        steps: list[int] = []
+        real_shift = asked.shift
+
+        def noting(n: int = 1, _into: list[int] = steps,
+                   _real: object = real_shift, **kw: object) -> bool:
+            _into.append(n)
+            return _real(n, **kw)  # type: ignore[operator]
+
+        asked.shift = noting          # ty: ignore[invalid-assignment]
+        REGISTRY["p4327"].body(asked)
+        out.that(steps == [want],
+                 f"p4327 shifts {want} in {worn}: heavy armour is chain,"
+                 " scale or plate, and this read `(\"scale\", \"plate\")`"
+                 " -- so a fighter in chain shifted 3 where the card"
+                 " says 2",
+                 f"{steps}")
+
+    for worn, want in (("chain", 1), ("plate", 1), ("leather", 0)):
+        world, me, _ = _posed("rt:r2-t3", 1)
+        g = world.get(me, Gear)
+        if g is not None:
+            g.armour = worn
+        racial = Cast(world=world, me=me, ref="rt:r2-t3")
+        before = racial.speed_of()
+        REGISTRY["rt:r2-t3"].body(racial)
+        out.that(racial.speed_of() - before == want,
+                 f"rt:r2-t3 gives back {want} square(s) in {worn} -- chain"
+                 " carries a -1 in `chargen.ARMOUR_SPEED` and this row read"
+                 " a tuple that left it out",
+                 f"{before} -> {racial.speed_of()}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -22830,6 +23046,10 @@ DRIVERS = {
     "retype_scoped": (
         a_retype_names_its_keyword_its_sources_and_one_use,
         "a retype naming its keyword, its source types and one use (#711)",
+    ),
+    "wearing": (
+        what_a_creature_is_wearing,
+        "what a creature is wearing, and two rows that forgot chain (#713)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

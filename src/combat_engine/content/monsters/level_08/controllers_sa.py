@@ -47,10 +47,12 @@ already carries this exact gap elsewhere in the tree:
 
 Three symbols name gaps nothing else in this file's blocks share:
 
-* **`c.wearing("heavy armor")` does not exist.** Nothing on `Cast` reads a
-  creature's armour category, so every "+2 more if wearing heavy armor"
-  clause on `m3447` is `dropped=` against this one symbol -- four rows, one
-  gap.
+* **`c.wearing("heavy armor")` exists now, and the sentence under it was
+  false when it was written.** It said nothing on `Cast` reads a creature's
+  armour category -- true of `Cast`, and not of the tree: four content
+  helpers were reading `Gear.armour` already, and `items.alchemical.i2370p1`
+  says so in as many words. `c.wearing` is where that read lives now and all
+  four `m3447` clauses are written. #713.
 * **`Weapon.rusting` does not exist.** `m3447a1`'s whole printed Effect is
   destroying a "rusting" item of a given level or lower, and nothing tags an
   item that way. `todo=`, because the attack has nothing left to aim once
@@ -2135,14 +2137,17 @@ def m3377a3(c: Cast) -> None:
     keywords=[Keyword.MELEE],
     attack=Attack(vs=AC, printed=13),
     damage=Damage("1d10", 6),
-    dropped=('c.wearing("heavy armor")',),
 )
 def m3447a0(c: Cast) -> None:
-    """"2 squares if wearing heavy armor" cannot be asked -- nothing on
-    `Cast` reads a creature's armour category. The 1-square slide plays."""
+    """Written. "Or 2 squares if the target is wearing heavy armor" is
+    `c.wearing("heavy")`, which the old note said could not be asked.
+
+    One `c.slide` of the distance the card gives, not a slide and then
+    another: a second call is a second forced move, which provokes its own
+    opportunities and lets the chooser stop short twice."""
     if c.strike():
         c.hit()
-        c.slide(1)
+        c.slide(2 if c.wearing("heavy") else 1)
 
 
 @power(
@@ -2172,12 +2177,12 @@ def m3447a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d10", 6, kind=LIMITED),
-    dropped=('c.wearing("heavy armor")',),
 )
 def m3447a2(c: Cast) -> None:
+    """The same clause as `m3447a0` at twice the distance."""
     if c.strike():
         c.hit()
-        c.slide(3)
+        c.slide(6 if c.wearing("heavy") else 3)
 
 
 @power(
@@ -2208,14 +2213,18 @@ def m3447a3(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("1d6", 6),
-    dropped=('c.wearing("heavy armor")',),
 )
 def m3447a4(c: Cast) -> None:
-    """"If wearing heavy armor" for the Aftereffect cannot be asked. The
-    base slow plays."""
+    """Written. The Aftereffect is gated on the target's armour rather than
+    dropped, and it is laid as an `c.aftereffect` on the hold the base slow
+    makes -- the printed word is Aftereffect, which is what follows the
+    first condition ending, not a second condition applied beside it."""
     if c.strike():
         c.hit()
-        c.slowed(until=When.EONT)
+        held = c.slowed(until=When.EONT)
+        if held is not None and c.wearing("heavy"):
+            foe = c.target
+            c.aftereffect(held, lambda: c.slowed(until=When.SAVE_ENDS, on=foe))
 
 
 @power(
@@ -2228,12 +2237,20 @@ def m3447a4(c: Cast) -> None:
     keywords=[Keyword.AREA],
     attack=Attack(vs=FORT, printed=12),
     damage=Damage("2d8", 5, kind=LIMITED),
-    dropped=('c.wearing("heavy armor")',),
 )
 def m3447a5(c: Cast) -> None:
-    """"Plus 4 more if wearing heavy armor" cannot be asked."""
+    """Written. "Plus an additional 4 damage if the target is wearing heavy
+    armor" is a second `c.flat` on the same target rather than a bigger
+    header number: the header is data the page and the policy read without
+    running anything, and it cannot carry a condition.
+
+    The body runs once per target, so each one is asked about its own
+    armour -- which is what a burst needs and what a single pooled total
+    could not do."""
     if c.strike():
         c.hit()
+        if c.wearing("heavy"):
+            c.flat(4)
         c.prone()
 
 

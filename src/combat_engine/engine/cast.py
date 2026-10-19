@@ -270,6 +270,28 @@ def _is_terrain_label(word: str) -> bool:
     return word in DIFFICULT_LABELS or bool(_REF_LABEL.match(word))
 
 
+#: What `c.wearing` accepts, and nothing else. A category word maps to the
+#: weights it covers; a weight maps to itself.
+#:
+#: **`"heavy"` and `"metal"` name the same three today and are kept apart
+#: anyway.** They are different printed questions -- "while wearing heavy
+#: armor" is about the AC rule, "a target wearing metal armor" is about what
+#: the stuff is made of -- and one symbol serving two needs is what the
+#: component rules warn against. Nothing in the heroic corpus separates them;
+#: something outside it might, and then only one of the two entries moves.
+WORN: dict[str, frozenset[str]] = {
+    "cloth": frozenset({"cloth"}),
+    "leather": frozenset({"leather"}),
+    "hide": frozenset({"hide"}),
+    "chain": frozenset({"chain"}),
+    "scale": frozenset({"scale"}),
+    "plate": frozenset({"plate"}),
+    "light": frozenset({"cloth", "leather", "hide"}),
+    "heavy": frozenset({"chain", "scale", "plate"}),
+    "metal": frozenset({"chain", "scale", "plate"}),
+}
+
+
 @dataclass
 class Cast:
     """One use of one power, aimed at one target."""
@@ -2318,6 +2340,49 @@ class Cast:
             lambda: known.granted_keywords.__setitem__(ref, was | {keyword})
         )
         return effect
+
+    def wearing(self, prop: str, *, on: int | None = None) -> bool:
+        """Is this creature in armour of that kind? `c.wielding`'s sibling.
+
+        `"heavy"`, `"light"`, `"metal"`, `"none"`, or one of the six weights
+        `chargen.ARMOUR` names. **An unrecognised word raises**, for the
+        reason `c.bonus(once=)` does: a typo here would read False in every
+        fight and the row would look written.
+
+        **Defaults to `c.target`, where `c.wielding` defaults to the
+        caster**, and the difference is the printed difference. A
+        Requirement line is about the person using the power -- "requires a
+        light blade" -- and that is what `c.wielding` answers. The clauses
+        this one is for are about the victim: "2 squares if the target is
+        wearing heavy armor", "a target wearing metal armor". Four rows on
+        one stat block and one alchemical item, all of them the target.
+
+        Two siblings that default opposite ways is a trap, so every caller
+        in the tree passes `on=` explicitly -- including the ones that mean
+        the caster.
+
+        **`"none"` is a real answer and the four hand-rolled copies of this
+        read disagreed about it.** A creature with no `Gear` at all is
+        wearing nothing: `items/feet._light_armour` counted that as light
+        and said so, and the other three returned False for the same
+        creature. The rule here is the card's: no wardrobe means no armour,
+        so `"none"` is True and every other word is False.
+        """
+        from .components import Gear as _Gear
+
+        if prop != "none" and prop not in WORN:
+            raise ValueError(
+                f"{self.ref}: c.wearing({prop!r}) is not an armour word. "
+                f"Use 'none', or one of: {', '.join(sorted(WORN))}."
+            )
+        who = self._who(on)
+        if who is None:
+            return False
+        gear = self.world.get(who, _Gear)
+        worn = gear.armour if gear is not None else ""
+        if prop == "none":
+            return not worn
+        return worn in WORN[prop]
 
     def wielding(self, prop: str) -> bool:
         """Does the caster meet a printed Requirement line?

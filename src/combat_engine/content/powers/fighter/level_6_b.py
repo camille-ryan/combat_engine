@@ -512,11 +512,16 @@ def p12700(c: Cast) -> None:
     keywords=MARTIAL,
 )
 def p4327(c: Cast) -> None:
-    from combat_engine.engine import Gear
+    """"If you aren't wearing heavy armor, you can shift 3 squares."
 
-    gear = c.world.get(c.me, Gear)
-    heavy = gear is not None and gear.armour in ("scale", "plate")
-    close_by_shift(c, 2 if heavy else 3)
+    **Chain was missing, and a fighter in it shifted 3 instead of 2.** This
+    read `("scale", "plate")` for a card that says *heavy armor*, and heavy
+    armour is chain, scale or plate -- `chargen.ARMOUR_SPEED` levies its -1
+    on all three. Hand-rolled against a tuple, where `c.wearing("heavy")`
+    is the vocabulary (#713); the bug is what a hand-rolled set of weights
+    is for.
+    """
+    close_by_shift(c, 2 if c.wearing("heavy", on=c.me) else 3)
 
 
 # -- answering something ----------------------------------------------------

@@ -58,6 +58,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.chargen import ARMOUR_SPEED
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -302,11 +303,20 @@ def rt_r2_t2(c: Cast) -> None:
 def rt_r2_t3(c: Cast) -> None:
     """The armour penalty is a square taken off in `chargen.spawn`, so
     giving it back is a square of speed rather than a rule about armour --
-    and it is laid only when there is a penalty to undo, or a dwarf in
-    leather would walk 6. A heavy load is not carried anywhere."""
+    and it is laid only when there is a penalty to undo, or this race in
+    leather would walk 6. A heavy load is not carried anywhere.
+
+    **Chain was missing.** This read `("scale", "plate")`, and
+    `chargen.ARMOUR_SPEED` levies its -1 on **chain** as well -- so the one
+    square never came back for a character in it. Read off that table now
+    rather than off a tuple of weights: the row's whole job is undoing
+    exactly what the table charged, so it cannot be a second list that
+    agrees with it by hand. #713.
+    """
     gear = c.world.get(c.me, Gear)
-    if gear is not None and gear.armour in ("scale", "plate"):
-        c.bonus("speed", 1, on=c.me, until=_HOLDS)
+    cost = ARMOUR_SPEED.get(gear.armour, 0) if gear is not None else 0
+    if cost:
+        c.bonus("speed", -cost, on=c.me, until=_HOLDS)
 
 
 @power("rt:r2-t4", level=0, cls="", usage=AT_WILL,
