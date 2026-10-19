@@ -115,7 +115,14 @@ def p1455(c: Cast) -> None:
     if not c.may("spend a healing surge", who=who):
         return
     if c.surge(on=who):
-        c.heal(c.roll("1d6"), on=who)
+        # **`c.instead_of` is the read half of `c.pre_empt`**, and f2005 is
+        # the feat that trades this clause away: "forgo granting the extra
+        # hit points to instead grant resist necrotic 5". The surge is not
+        # inside the substitution, because the card forgoes the *extra* hit
+        # points and not the healing surge the target spends. #739.
+        c.instead_of(
+            "extra_hp", lambda: c.heal(c.roll("1d6"), on=who), on=who
+        )
 
 
 @power(

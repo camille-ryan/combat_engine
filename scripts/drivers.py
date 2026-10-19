@@ -25496,6 +25496,124 @@ def a_range_that_is_longer_than_printed(out: Result) -> None:
                      f"{REGISTRY[ref].unfinished}")
 
 
+def resistance_instead_of_the_extra_hit_points(out: Result) -> None:
+    """*"Whenever you use p1455, you can forgo granting the extra hit points
+    to instead grant resist necrotic 5 to the target."*
+
+    The row was marked as wanting a facility for suppressing one clause of
+    another row's body. `c.pre_empt` is that facility -- it is the word
+    "instead" -- and f2081 has been trading `p2095`'s temporary hit points
+    for extra damage with it since #479. This row was never revisited. #739.
+
+    **The assertion that matters is what does NOT happen.** Granting the
+    resistance while the heal is also paid is a strictly better feat than
+    the printed one, and that is what the old body did: it hung on
+    `PowerUsed` and laid the resistance beside a heal it could not stop. So
+    the test is that variant 1's ally gains **exactly the surge** and not a
+    point more -- a rule that only checked the resistance had arrived would
+    have passed the old body too.
+
+    **And the surge is still spent**, because the card forgoes the extra hit
+    points and not the healing surge the target spends. A substitution
+    wrapped one line higher would have taken both, which reads the same on
+    the resistance and is wrong by ten hit points.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.actions import _variants
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies
+    from combat_engine.engine.types import DamageType
+
+    def posed():  # noqa: ANN202
+        """p1455's board with exactly one wounded ally, standing adjacent.
+
+        **Everybody else at full on purpose.** `_worst_hurt` sorts by what
+        is missing, so a caster left wounded is offered ahead of the ally
+        and the heal lands on somebody this rule is not watching -- which
+        is how the first run of it read a flat zero twice and looked like
+        a dead substitution.
+        """
+        world, me, _ = _posed("p1455", 1)
+        mate = next(a for a in sorted(allies(world, me)) if a != me)
+        here = world.need(me, Position).square
+        there = (here[0] + 1, here[1])
+        world.grid.lift(mate)
+        world.need(mate, Position).square = there
+        world.grid.place(mate, frozenset({there}))
+        for who in [me, *sorted(allies(world, me))]:
+            health = world.get(who, Health)
+            if health is not None:
+                health.hp = health.max_hp
+        world.need(mate, Health).hp = 1
+        return world, me, mate
+
+    world, me, _mate = posed()
+    out.that(_variants(world, me, "p1455") == [0],
+             "p1455 offers one way of being used before the feat is taken")
+    c = Cast(world=world, me=me, ref="f2005")
+    REGISTRY["f2005"].body(c)
+    out.that(_variants(world, me, "p1455") == [0, 1],
+             "and two once f2005 is standing -- the printed clause still"
+             " first, because the card says 'you can'",
+             f"{_variants(world, me, 'p1455')}")
+    out.that(c.substitutions("p1455") == ["f2005"],
+             "labelled with the row that registered it",
+             f"{c.substitutions('p1455')}")
+
+    def used(variant: int):  # noqa: ANN202
+        world, me, mate = posed()
+        REGISTRY["f2005"].body(Cast(world=world, me=me, ref="f2005"))
+        health = world.need(mate, Health)
+        before, surges = health.hp, health.surges
+        use = Cast(world=world, me=me, ref="p1455", variant=variant,
+                   targets=[mate])
+        use.target = mate
+        REGISTRY["p1455"].body(use)
+        resist = Cast(world=world, me=me, ref="drivers:read").resistances(
+            on=mate)
+        return {
+            "gained": health.hp - before,
+            "surge": use.surge_value(of=mate),
+            "spent": surges - health.surges,
+            "resist": resist.get(DamageType.NECROTIC, 0),
+        }
+
+    printed, traded = used(0), used(1)
+
+    out.that(printed["gained"] > printed["surge"],
+             "on the printed clause the ally gains the surge AND the extra"
+             " hit points",
+             f"gained {printed['gained']}, surge value {printed['surge']}")
+    out.that(printed["resist"] == 0,
+             "and no resistance -- the negative control, and the one that"
+             " says the feat is not simply always on",
+             f"{printed['resist']}")
+
+    out.that(traded["resist"] == 5,
+             "on the trade the ally gets resist necrotic 5",
+             f"{traded['resist']}")
+    out.that(traded["gained"] < printed["gained"],
+             "and gains LESS than the printed clause pays -- which is the"
+             " whole of the trade, and what the old body got wrong: it laid"
+             " the resistance beside a heal it could not stop, so the feat"
+             " was strictly better than print",
+             f"traded {traded['gained']} vs printed {printed['gained']}")
+    out.that(traded["spent"] >= 1,
+             "**and the healing surge is still spent.** The card forgoes the"
+             " extra hit points, not the surge -- a substitution wrapped one"
+             " line higher would take both, which reads identically on the"
+             " resistance",
+             f"surges spent {traded['spent']}")
+
+    out.that(not str(REGISTRY["f2005"].unfinished)
+             or str(REGISTRY["f2005"].unfinished) == "()",
+             "f2005 carries no marker",
+             f"{REGISTRY['f2005'].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25585,6 +25703,11 @@ DRIVERS = {
     "longer_range": (
         a_range_that_is_longer_than_printed,
         "a range longer than printed, and both edges of both bands (#737)",
+    ),
+    "instead_of_the_heal": (
+        resistance_instead_of_the_extra_hit_points,
+        "resistance instead of a heal's extra hit points, and the surge that"
+        " is still spent (#739)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

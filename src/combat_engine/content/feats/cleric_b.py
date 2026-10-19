@@ -177,26 +177,48 @@ def f2182(c: Cast) -> None:
     _once_healed(c, pay)
 
 
-@power("f2005", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.forgo_healing()",),
-       trigger="you use p1455",
-       on=Trigger(PowerUsed, _i_used(WORD), "you use p1455"))
-def f2005(c: Cast) -> None:
-    """Resistance instead of the extra hit points.
+def _f2005_resist(using: Cast) -> None:
+    """Resist necrotic in place of p1455's extra hit points, on the ladder.
 
-    The trade is dropped: nothing suppresses one clause of another
-    row's body, so the resistance is granted and `p1455`'s own extra
-    hit points are granted too. `c.half_healing` is the nearest thing
-    in the tree and it is a standing penalty on a creature, not a
-    forgoing of one heal.
+    5, then 10 at 11th and 20 at 21st, read off the *using* row's caster
+    because that is the character whose level the card means -- the same
+    reasoning f2081 gives for its own ladder.
+
+    `using.target` and not the feat's own caster: p1455 heals an ally, and
+    the resistance the trade buys goes to whoever the heal would have gone
+    to.
     """
-    if not c.may("grant resistance instead of the extra hit points"):
+    step = 5 + 5 * (using.level >= 11) + 10 * (using.level >= 21)
+    who = using.target
+    if who is None:
         return
+    using.resist(step, DamageType.NECROTIC, on=who, until=When.EONT)
 
-    def pay(ev: Any) -> None:
-        c.resist(5, DamageType.NECROTIC, on=ev.target, until=When.EONT)
 
-    _once_healed(c, pay)
+@power("f2005", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f2005(c: Cast) -> None:
+    """Resistance instead of the extra hit points, and the trade is written.
+
+    **The old note was stale and f2081 is the twin that proves it.** It said
+    nothing suppresses one clause of another row's body; `c.pre_empt` is
+    exactly that -- the word "instead" -- and f2081 has been trading
+    `p2095`'s temporary hit points for extra damage with it for some time.
+    #479 built it and this row was never revisited. `c.half_healing`, which
+    the old note offered as the nearest thing, is indeed not this: it is a
+    standing penalty on a creature rather than the forgoing of one clause.
+
+    **The trade is the whole point of the row.** Granting the resistance
+    *without* giving up the extra hit points would be a strictly better feat
+    than the printed one, which is the trap `c.pre_empt` exists to close --
+    and is what the old body did, since the resistance was paid and p1455's
+    heal was paid too.
+
+    No trigger on the header any more. `c.pre_empt` puts its own entry in
+    the action menu, so the choice is made where it can be clicked and
+    scored, rather than by a question halfway through a body. That is the
+    same shape f2081 carries. #739."""
+    c.pre_empt("p1455", "extra_hp", _f2005_resist)
 
 
 @power("f2866", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

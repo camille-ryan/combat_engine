@@ -2568,11 +2568,20 @@ def f2726(c: Cast) -> None:
 
 @power("f2868", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.forgo_healing()",))
+       todo=("c.second_wind(instead_of=)",))
 def f2868(c: Cast) -> None:
     """`SecondWind` is the moment. What is left is the trade: nothing
     refuses the hit points `Cast.second_wind` puts back, and without that
-    the ally is paid for free."""
+    the ally is paid for free.
+
+    **Re-pointed, not re-diagnosed.** The marker used to read
+    `c.forgo_healing()`, which f2005 carried too -- and f2005 wanted
+    `c.pre_empt`, a verb that has existed since #479. One symbol for two
+    mechanisms made this row report as half of a pair when it is a single
+    card with a gap of its own: `c.pre_empt` keys on a **row ref** and the
+    row has to read the clause, and second wind is not a row. It is
+    `Cast.second_wind`, which is deliberately the only implementation and
+    has no `c.instead_of` on it. #740, and #739 for the other half."""
 
 
 @power("f2845", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
