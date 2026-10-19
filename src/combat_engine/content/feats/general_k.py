@@ -1758,16 +1758,18 @@ def f2023(c: Cast) -> None:
 
 @power("f2023b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
        reach=Ranged(10), target=ONE_CREATURE, keywords=[Keyword.CHARM],
-       attack=Attack(INT, vs=WILL, plus=3),
-       dropped=("c.cannot_approach()",))
+       attack=Attack(INT, vs=WILL, plus=3))
 def f2023b(c: Cast) -> None:
     """The named hold is load-bearing: four other feats in this batch ask
     "a target currently affected by your f2023b", and `c.suffering`
     matches on the label, so without it none of them has a question.
 
-    "Cannot willingly move closer to you" is dropped. `c.cannot_shift` and
-    `c.no_walk` both bar a whole kind of movement rather than a
-    direction, and there is nothing that bars one direction only."""
+    **"Cannot willingly move closer to you" is written.** The old note was
+    right that `c.cannot_shift` and `c.no_walk` bar a kind of movement
+    rather than a direction; `c.cannot_approach` is the one that bars a
+    direction, and it filters the voluntary menu, which is where the printed
+    **"willingly"** lives. `When.EONT` because the card clocks both halves
+    on the holder's next turn."""
     victim = c.target
     if victim is None:
         return
@@ -1775,6 +1777,7 @@ def f2023b(c: Cast) -> None:
     if not c.strike(plus=best - c.attack_mod):
         return
     c.grants_advantage(on=victim, until=When.EONT)
+    c.cannot_approach(on=victim, until=When.EONT)
     c.effect(c.ref, on=victim, until=When.EONT)
 
 

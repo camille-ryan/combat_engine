@@ -173,10 +173,17 @@ CATEGORIES: dict[str, dict] = {
                 "insubstantial", "prone", "slowed", "stunned", "unconscious",
                 "weakened",
             ]),
+            # `c.cannot_approach` sits beside `c.leash` and not beside
+            # `c.cannot_shift` in the same-named-writer list above, which is
+            # the nearer-looking shelf. The two of them are one mechanism --
+            # a restriction on the movement menu, enforced in
+            # `movement.reachable` -- where `cannot_shift` bars a kind of
+            # movement outright. Four rows' notes reached for the wrong one
+            # of those for years. #728.
             ("writers -- a condition under another name, or the generic", [
-                "bind", "command", "condition", "control", "dominate", "grab",
-                "grab_attempt", "latch", "leash", "link", "mark", "unlatch",
-                "worsen",
+                "bind", "cannot_approach", "command", "condition", "control",
+                "dominate", "grab", "grab_attempt", "latch", "leash", "link",
+                "mark", "unlatch", "worsen",
             ]),
             ("readers", [
                 "dying", "grabbed_by", "grabbing", "latched", "marked",
@@ -606,7 +613,8 @@ READERS: dict[str, list[str]] = {
         "stat_block", "targetable", "team",
     ],
     "where, and how far": [
-        "adjacent", "distance_between", "leash_of", "line_of_effect",
+        "adjacent", "distance_between", "kept_away_from", "leash_of",
+        "line_of_effect",
         "moving_as", "on_the_ground", "prefers_range", "range_profile",
         "sealed", "speed", "squares", "telepathy_of",
     ],

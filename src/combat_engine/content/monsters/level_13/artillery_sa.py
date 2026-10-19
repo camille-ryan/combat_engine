@@ -1572,14 +1572,23 @@ def m6016a1(c: Cast) -> None:
     keywords=[Keyword.NECROTIC, Keyword.RANGED],
     attack=Attack(vs=REF, printed=18),
     damage=Damage("4d8", 3, dtype=DamageType.NECROTIC),
-    dropped=("c.cannot_approach()",),
 )
 def m6016a2(c: Cast) -> None:
-    """The damage is exact. "Cannot willingly move closer to the m6016" is
-    the dropped half: `c.cannot_shift`, `c.no_walk` and `c.immobilized` all
-    stop movement outright and none of them can be pointed at a direction."""
+    """The damage was exact and the second half is written:
+    `c.cannot_approach` points at a direction, which the old note correctly
+    said `c.cannot_shift`, `c.no_walk` and `c.immobilized` cannot.
+
+    **Written although this is a paragon row**, which is the one place the
+    level band gives way: the row is already declared and plays, the clause
+    is two lines, and leaving the marker would turn `todo.py` red the moment
+    the symbol landed. That is finishing a declared row, not opening paragon
+    work.
+
+    `When.EOTNT` -- the card says "until the end of **its** next turn", so
+    the clock is the target's."""
     if c.strike():
         c.hit()
+        c.cannot_approach(until=When.EOTNT)
 
 
 @power(

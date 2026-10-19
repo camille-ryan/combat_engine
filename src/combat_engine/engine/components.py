@@ -225,6 +225,23 @@ class Leash:
     radius: int = 0
     to: int | None = None
     square: tuple[int, int] | None = None
+    #: **The same restriction pointed the other way**: a creature this
+    #: creature may not get *closer* to. "The target cannot move closer to
+    #: the X (save ends)" is printed on seven rows and none of them could be
+    #: written -- `c.immovable` is about being shoved and `c.cannot_shift`
+    #: about shifting, and neither bars walking in one direction.
+    #:
+    #: Kept here rather than in a component of its own because it is the same
+    #: question `radius` asks, with the comparison reversed, and
+    #: `movement.reachable` is already the one place that asks it. A creature
+    #: can carry both: tethered to a point and kept away from a creature.
+    #:
+    #: **No number beside it, on purpose.** The floor is the distance the
+    #: creature is at when it moves, measured then -- the printed clause
+    #: forbids *reducing* the distance. Freezing a number when the effect
+    #: landed would leave the creature unable to move at all the moment the
+    #: anchor walked towards it. #728.
+    away_from: int | None = None
 
 
 @dataclass

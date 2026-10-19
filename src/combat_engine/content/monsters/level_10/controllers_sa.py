@@ -1046,18 +1046,27 @@ def m1567a1(c: Cast) -> None:
     target=EACH_ENEMY,
     keywords=[Keyword.FEAR, Keyword.NECROTIC, Keyword.AREA],
     attack=Attack(vs=FORT, printed=14),
-    dropped=("c.cannot_approach()",),
 )
 def m1567a2(c: Cast) -> None:
-    """The burn and the restraint are exact. "Can't move closer to m1567"
-    has no primitive -- nothing bounds a creature's own movement by
-    direction relative to a point."""
+    """The burn and the restraint were exact and the third clause is written
+    now: `c.cannot_approach` bounds movement by direction, which the old
+    note correctly said nothing did.
+
+    **It rides the aftereffect, not the hit.** The card reads "Restrained
+    (save ends). Aftereffect: Ongoing 10 necrotic damage **and** the target
+    can't move closer to the m1567 (save ends both)" -- so both aftereffect
+    clauses land when the restraint ends, which is what the `on_end` hook
+    below already did for the burn."""
     victim = c.target
     if not c.strike():
         return
     hold = c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS)
     if hold is not None and victim is not None:
-        hold.on_end.append(lambda v=victim: c.ongoing(10, DamageType.NECROTIC, on=v))
+        def after(v: int = victim) -> None:
+            c.ongoing(10, DamageType.NECROTIC, on=v)
+            c.cannot_approach(on=v, until=When.SAVE_ENDS)
+
+        hold.on_end.append(after)
 
 
 @power(

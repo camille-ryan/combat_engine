@@ -378,13 +378,24 @@ def p1871(c: Cast) -> None:
     attack=Attack(CHA, vs=WILL),
 )
 def p1872(c: Cast) -> None:
-    """"An undead target cannot move closer to you" is the clause with no
-    method: `c.immovable` is about being shoved and `c.cannot_shift` about
-    shifting, and neither forbids walking towards somebody."""
+    """**Written, and this row carried no marker for it** -- the clause was
+    described and dropped in the same breath, so nothing counted it. #728.
+
+    `c.cannot_approach` bars a direction, which is what the old note rightly
+    said `c.immovable` and `c.cannot_shift` cannot. The narrowing is the
+    card's: *"**if the target is undead**, it also cannot move closer to
+    you"*, so it is gated on the kind and not laid on everything the daze
+    catches.
+
+    `When.EOTNT` and not `EONT`: the card says *"on **its** next turn"*,
+    which is the target's clock, and the daze above it is clocked the same
+    way."""
     pact = augmenting(c, "f3423")
     if c.strike():
         c.damage("1d12", c.cha_mod, dtype=DamageType.NECROTIC)
         c.dazed(until=When.EOTNT)
+        if c.is_kind("undead"):
+            c.cannot_approach(until=When.EOTNT)
         if pact:
             c.insubstantial(until=When.SONT, on=c.me)
 

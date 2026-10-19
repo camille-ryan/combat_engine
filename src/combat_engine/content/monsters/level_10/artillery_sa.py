@@ -587,15 +587,25 @@ def m2079a0(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.RADIANT],
     attack=Attack(vs=FORT, printed=15),
     damage=Damage("2d6", 5, dtype=DamageType.RADIANT),
-    dropped=("c.condition(cannot_approach=)",),
 )
 def m2079a1(c: Cast) -> None:
-    """The burn plays, save ends. "Cannot move closer to m2079" has no
-    condition to carry it -- the printed conditions are the fixed list in
-    `scripts/vocab.py` and none of them narrows movement by direction."""
+    """The burn played and the third clause is written.
+
+    **The old marker named a second symbol for one gap.** It asked for
+    `c.condition(cannot_approach=)` while four other rows asked for
+    `c.cannot_approach()`, on the reasoning that the printed conditions are
+    a fixed list and none of them narrows movement by direction. True, and
+    the conclusion does not follow: this is not a condition, it is a
+    restriction on the movement menu, which is where `c.leash` already
+    lives. One gap, one symbol -- a symbol serving two needs cannot go green
+    correctly for either.
+
+    `SAVE_ENDS`, which is the "save ends both" the card prints over the burn
+    and this together."""
     if c.strike():
         c.hit()
         c.ongoing(5, DamageType.RADIANT)
+        c.cannot_approach()
         victim = c.target
         if victim is not None:
             other = next(

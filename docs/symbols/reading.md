@@ -64,6 +64,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Next to each other -- **or joined by a link.**
 - `query.distance_between(world: 'World', a: 'int', b: 'int') -> 'int'`
   - (no docstring)
+- `query.kept_away_from(world: 'World', eid: 'int') -> 'tuple[int, int] | None'`
+  - The square this creature may not get closer to, and how close it is.
 - `query.leash_of(world: 'World', eid: 'int') -> 'tuple[tuple[int, int], int] | None'`
   - Where this creature is tethered and how far it may stray, or None.
 - `query.line_of_effect(world: 'World', a: 'int', b: 'int') -> 'bool'`

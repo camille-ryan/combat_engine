@@ -32,6 +32,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 
 - `c.bind(self, *, on: 'int | None' = None) -> 'bool'`
   - Make that creature this one's servant.
+- `c.cannot_approach(self, *, to: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
+  - *"The target cannot move closer to the X (save ends)."*
 - `c.command(self, who: 'int', *, on: 'int | None' = None, charge: 'bool' = False) -> 'AttackResult | None'`
   - Spend your action making a summon attack with **its own** line.
 - `c.condition(self, *conditions: 'Condition', until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None, save_mod: 'int' = 0, ongoing: 'tuple[int, DamageType] | None' = None, escalate: 'Callable[[Effect], None] | None' = None) -> 'Effect | None'`

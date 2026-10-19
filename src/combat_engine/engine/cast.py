@@ -9010,6 +9010,69 @@ class Cast:
             by=self.ref,
         )
 
+    def cannot_approach(
+        self,
+        *,
+        to: int | None = None,
+        on: int | None = None,
+        until: When = When.SAVE_ENDS,
+    ) -> Effect | None:
+        """*"The target cannot move closer to the X (save ends)."*
+
+        Seven rows print it and none could be written. Their notes all say
+        the same true thing -- *"`c.immovable` is about being shoved and
+        `c.cannot_shift` about shifting, and neither forbids walking towards
+        somebody"* -- and two of the seven carried **no marker at all**, so
+        the clause was dropped in silence.
+
+        **`c.leash` with the comparison reversed, and deliberately the same
+        mechanism.** That verb is "may not get further than `radius` from
+        something" and this is "may not get nearer"; both live on `Leash` and
+        both are enforced in `movement.reachable`, which filters the
+        destinations on offer. A square that would close the gap is never
+        offered rather than punished afterwards -- `c.leash`'s docstring
+        gives the reason and it is the same one: *"these lines are
+        restrictions, not penalties, and the UI and `policy/` both read that
+        menu."*
+
+        **The floor is measured per move.** `query.kept_away_from` answers
+        the anchor's square and how far away the creature is *now*, so the
+        clause forbids **reducing** the distance rather than pinning the
+        creature to a number. Freezing one when the effect landed would leave
+        a creature unable to move at all the moment the anchor walked
+        towards it.
+
+        **"Willingly" comes free.** Four of the seven print the word and
+        three do not; filtering the voluntary menu honours both, because a
+        push, a pull or a slide never goes through `reachable`. `m6026a3`
+        depends on that -- it pushes the target three squares and *then*
+        forbids the approach.
+
+        `to` is the thing not to approach and defaults to the **caster**,
+        which is the anchor on all seven cards. `on` is the creature held and
+        defaults to `c.target` like everything else here. `SAVE_ENDS` is
+        what every one of them prints. #728.
+        """
+        from .components import Leash
+
+        who = self._who(on)
+        anchor = self.me if to is None else to
+        if who is None or who == anchor:
+            return None
+        held = self.world.get(who, Leash) or self.world.add(who, Leash())
+        before = held.away_from
+        held.away_from = anchor
+
+        def undo() -> None:
+            held.away_from = before
+
+        return self.world.effects.apply(
+            who, self.me, until,
+            label=f"{self.ref} cannot approach {anchor}",
+            on_end=[undo],
+            by=self.ref,
+        )
+
     def attacks_defence(
         self,
         defence: Defense,

@@ -2318,16 +2318,24 @@ def m6026a2(c: Cast) -> None:
     keywords=[Keyword.FEAR, Keyword.IMPLEMENT, Keyword.NECROTIC],
     attack=Attack(vs=WILL, printed=11),
     damage=Damage("2d8", 5, dtype=DamageType.NECROTIC, kind=LIMITED, half_on_miss=True),
-    dropped=("c.cannot_approach()",),
 )
 def m6026a3(c: Cast) -> None:
-    """"Cannot move closer to it willingly" has no method: `c.immovable` is
-    about being shoved and `c.cannot_shift` about shifting, and neither
-    forbids walking towards somebody -- the same gap `warlock/level_7_b.py`'s
-    `p1872` already names."""
+    """Written. `c.cannot_approach` bars a direction, which is what the old
+    note rightly said `c.immovable` and `c.cannot_shift` cannot.
+
+    **The order matters and the push proves the design.** The card pushes
+    the target three squares and *then* forbids the approach, so the
+    restriction must not touch forced movement -- and it does not:
+    `c.cannot_approach` filters `movement.reachable`, the **voluntary**
+    menu, which a push never goes through. That is also what makes the
+    printed **"willingly"** right for free.
+
+    On the hit alone, and `SAVE_ENDS`, which is what the card clocks it
+    on. The miss pushes and does not hold."""
     if c.strike():
         c.hit()
         c.push(3)
+        c.cannot_approach()
     else:
         c.hit(half=True)
         c.push(2)

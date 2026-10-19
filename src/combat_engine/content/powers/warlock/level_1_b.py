@@ -176,15 +176,25 @@ def p12307(c: Cast) -> None:
     attack=Attack(CHA, vs=FORT),
 )
 def p12308(c: Cast) -> None:
-    """"Cannot willingly move closer to you" is the clause with no method.
+    """**Both halves of the clause are written now**, and this row carried
+    no marker for either -- the note said the omission was deliberate
+    ("left out of the primary and the secondary alike rather than
+    approximated") and nothing declared it, so `blocked.py` could not see it
+    and `todo.py` would never have reported it ready. That is the worse half
+    of the two faults in this family. #728.
 
-    `c.immovable` is about being shoved and `c.cannot_shift` about shifting;
-    neither forbids a creature walking towards somebody. It is left out of
-    the primary and the secondary alike rather than approximated.
+    `c.cannot_approach` bars a direction, which is what the old note
+    correctly said `c.immovable` and `c.cannot_shift` cannot do. The primary
+    clause prints **"willingly"** and the secondary does not; filtering the
+    voluntary menu is right for both, since a push or a pull never goes
+    through it.
+
+    `When.EONT` on both, which is what the card clocks them on.
     """
     victim = c.target
     if c.strike():
         c.damage("2d10", c.cha_mod)
+        c.cannot_approach(on=victim, until=When.EONT)
         if c.build("infernal"):
             c.resist(2 + c.int_mod, on=c.me, until=When.EONT)
         return
@@ -193,6 +203,7 @@ def p12308(c: Cast) -> None:
     second = c.choose(pool, f"{c.ref}: who the backlash finds") if pool else None
     if second is not None and c.attack(c.cha_, FORT, on=second):
         c.half_damage("2d10", c.cha_mod, on=second)
+        c.cannot_approach(on=second, until=When.EONT)
 
 
 @power(

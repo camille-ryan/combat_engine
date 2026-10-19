@@ -24466,6 +24466,173 @@ def a_dealt_weapon_is_the_printed_one(out: Result) -> None:
              f"{plain.ref} -> {c._high_crit()!r}")
 
 
+def a_creature_that_may_not_come_closer(out: Result) -> None:
+    """*"The target cannot move closer to the X (save ends)."*
+
+    Seven rows print it and all seven said the same true thing --
+    *"`c.immovable` is about being shoved and `c.cannot_shift` about
+    shifting, and neither forbids walking towards somebody."* Two of them
+    said it and carried **no marker**, so the clause was dropped in silence
+    and nothing counted it; a third asked for
+    `c.condition(cannot_approach=)`, a second name for one gap.
+
+    `c.cannot_approach` is `c.leash` with the comparison reversed, on the
+    same component and filtered in the same place, and the assertions below
+    are about the three things that design decides.
+
+    **"Willingly" is free, and one card depends on it.** The filter is in
+    `movement.reachable`, the voluntary menu, so a push, a pull or a slide
+    still moves the creature closer. `m6026a3` pushes its target three
+    squares **and then** forbids the approach; if the restriction touched
+    forced movement the card would contradict itself.
+
+    **The floor is measured per move.** Nothing is stored but the anchor, so
+    the clause forbids *reducing* the distance rather than pinning the
+    creature to a number. Asserted by walking the anchor **towards** the
+    held creature and checking it can still move -- a frozen number would
+    leave it with nowhere legal to stand.
+
+    **A dead anchor cuts it**, which is the waiver `leash_of` already makes
+    rather than measuring against a corpse's last position.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import Condition
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Leash, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.grid import distance as grid_distance
+    from combat_engine.engine.movement import place, reachable
+    from combat_engine.engine.query import enemies, kept_away_from
+
+    def apart(ref: str, gap: int = 6):  # noqa: ANN202
+        """That row's board with the target `gap` squares off, so there are
+        nearer squares for the restriction to take away.
+
+        **The board puts them adjacent**, where every square is as near or
+        nearer and the whole assertion is vacuous -- the first draft read
+        "0 nearer squares on offer" before the hold and called it proof.
+        """
+        world, me, _ = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(me, Position).square
+        place(world, foe, (here[0] + gap, here[1]))
+        return world, me, foe, Cast(world=world, me=me, ref=ref)
+
+    def nearer(world, who: int, anchor: int) -> int:  # noqa: ANN001
+        """How many squares on offer would close the gap."""
+        at = world.need(anchor, Position).square
+        now = grid_distance(world.need(who, Position).square, at)
+        return sum(1 for sq in reachable(world, who, 6)
+                   if grid_distance(sq, at) < now)
+
+    # -- the mechanism, with its control --------------------------------
+    world, me, foe, c = apart("m6026a3")
+    before = nearer(world, foe, me)
+    out.that(before > 0,
+             "with the target six squares off, some of the squares on offer"
+             " would close the gap -- the control, and the reason the board's"
+             " own adjacent placement cannot be used",
+             f"{before} nearer")
+    hold = c.cannot_approach(on=foe)
+    out.that(hold is not None, "the hold is laid", f"{hold.label if hold else None}")
+    out.that(nearer(world, foe, me) == 0,
+             "and not one of them is offered any more",
+             f"{nearer(world, foe, me)}")
+    out.that(len(reachable(world, foe, 6)) > 0,
+             "while the creature can still move -- the restriction takes a"
+             " direction away, not the move",
+             f"{len(reachable(world, foe, 6))} squares")
+
+    # -- a push still closes the gap, which is "willingly" ---------------
+    was = grid_distance(world.need(foe, Position).square,
+                        world.need(me, Position).square)
+    c.target = foe
+    c.targets = [foe]
+    c.pull(3, on=foe)
+    now = grid_distance(world.need(foe, Position).square,
+                        world.need(me, Position).square)
+    out.that(now < was,
+             "a PULL still drags it closer, because forced movement does not"
+             " go through the voluntary menu. `m6026a3` pushes its target"
+             " three squares and then forbids the approach -- if this were"
+             " false the card would contradict itself",
+             f"{was} -> {now}")
+
+    # -- the floor moves with the creature -------------------------------
+    world, me, foe, c = apart("m6026a3")
+    c.cannot_approach(on=foe)
+    held = world.need(foe, Leash)
+    out.that(held.away_from == me and held.radius == 0,
+             "the hold stores the anchor and no number -- `radius` is the"
+             " tether's and is untouched, so a creature can carry both",
+             f"away_from={held.away_from} radius={held.radius}")
+    anchor_was = kept_away_from(world, foe)
+    here = world.need(me, Position).square
+    place(world, me, (here[0] + 3, here[1]))
+    anchor_now = kept_away_from(world, foe)
+    out.that(anchor_was is not None and anchor_now is not None
+             and anchor_now[1] < anchor_was[1],
+             "and walking the anchor towards it reads a SMALLER distance,"
+             " because the floor is measured now rather than stored",
+             f"{anchor_was} -> {anchor_now}")
+    out.that(len(reachable(world, foe, 6)) > 0,
+             "so the creature can still move after the anchor closed in. A"
+             " frozen number would have left it nowhere legal to stand",
+             f"{len(reachable(world, foe, 6))} squares")
+
+    # -- a dead anchor cuts it -------------------------------------------
+    world, me, foe, c = apart("m6026a3")
+    c.cannot_approach(on=foe)
+    out.that(nearer(world, foe, me) == 0, "held while the anchor lives")
+    # **`c.kill`, not the DEAD condition.** `query.alive` is
+    # `h.hp > h.dying_at` and reads no condition, so applying `DEAD` by hand
+    # left the anchor alive as far as this waiver was concerned and the
+    # assertion failed on a board that was not what it said.
+    c.kill(on=me)
+    out.that(kept_away_from(world, foe) is None,
+             "and cut once the anchor is dead -- the waiver `leash_of`"
+             " already makes, rather than measuring against a corpse",
+             f"{kept_away_from(world, foe)}")
+
+    # -- three rows through their own bodies -----------------------------
+    #
+    # `m6026a3` pushes AND holds; `m1567a2`'s hold arrives on the
+    # aftereffect and not on the hit; `p1872` holds only an undead target.
+    world, me, foe, _ = apart("m6026a3")
+    use = Cast(world=world, me=me, ref="m6026a3", targets=[foe])
+    use.target = foe
+    world.rng.loaded = 20
+    REGISTRY["m6026a3"].body(use)
+    out.that(kept_away_from(world, foe) is not None,
+             "m6026a3's own body lays it on a hit",
+             f"{kept_away_from(world, foe)}")
+
+    world, me, foe, _ = apart("m1567a2")
+    use = Cast(world=world, me=me, ref="m1567a2", targets=[foe])
+    use.target = foe
+    world.rng.loaded = 20
+    REGISTRY["m1567a2"].body(use)
+    out.that(kept_away_from(world, foe) is None,
+             "m1567a2 does NOT lay it on the hit -- the card puts it in the"
+             " aftereffect, behind the restraint",
+             f"{kept_away_from(world, foe)}")
+    for eff in list(world.effects.of(foe)):
+        if Condition.RESTRAINED in (eff.conditions or ()):
+            world.effects.end(eff, "drivers: saved")
+    out.that(kept_away_from(world, foe) is not None,
+             "and does lay it when the restraint ends, which is what"
+             " \"Aftereffect: ... (save ends both)\" means",
+             f"{kept_away_from(world, foe)}")
+
+    # -- every marker is gone --------------------------------------------
+    for ref in ("f2023b", "p12308", "p1872", "m6026a3", "m1567a2",
+                "m2079a1", "m6016a2"):
+        out.that("approach" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} waits on no approach symbol",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -24521,6 +24688,11 @@ DRIVERS = {
         a_dealt_weapon_is_the_printed_one,
         "a dealt weapon is the printed one, field for field, and the"
         " greataxe had lost its high crit (#724)",
+    ),
+    "cannot_approach": (
+        a_creature_that_may_not_come_closer,
+        "a creature that may not come closer, and the push that still"
+        " drags it (#728)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

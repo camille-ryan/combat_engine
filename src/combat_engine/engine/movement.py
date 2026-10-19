@@ -1006,6 +1006,28 @@ def reachable(
             for sq, path in paths.items()
             if grid_distance(sq, held) <= radius
         }
+    # **And the same filter reversed**, which is "cannot move closer to the
+    # X (save ends)" -- seven rows, and none of them could be written. Here
+    # rather than as a penalty for the same reason the tether is here, and
+    # here rather than in the search for the same one: passing through a
+    # nearer square to reach a farther one is not moving closer, and no card
+    # forbids it.
+    #
+    # This is also what makes the printed word **"willingly"** right on the
+    # four rows that print it: a push, a pull or a slide does not come
+    # through `reachable`, so a creature can still be shoved towards the
+    # thing it may not approach. `m6026a3` depends on that -- it pushes the
+    # target three squares and *then* forbids the approach. #728.
+    from .query import kept_away_from
+
+    keep = kept_away_from(world, eid)
+    if keep is not None:
+        anchor, now = keep
+        paths = {
+            sq: path
+            for sq, path in paths.items()
+            if grid_distance(sq, anchor) >= now
+        }
     return paths
 
 

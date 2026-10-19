@@ -2205,3 +2205,33 @@ def leash_of(world: World, eid: int) -> tuple[tuple[int, int], int] | None:
         at = world.get(tie.to, Position)
         return (at.square, tie.radius) if at is not None else None
     return (tie.square, tie.radius) if tie.square is not None else None
+
+
+def kept_away_from(world: World, eid: int) -> tuple[int, int] | None:
+    """The square this creature may not get closer to, and how close it is.
+
+    `(anchor_square, distance_now)`, so the caller's test is
+    `grid_distance(sq, anchor) >= distance_now` -- which is *"cannot move
+    closer"* exactly. The distance is measured **now** rather than stored
+    when the effect landed, for the reason `Leash.away_from` gives: the
+    clause forbids reducing the gap, and a frozen number would pin a
+    creature the anchor had since walked towards.
+
+    `None` when there is no such hold, when the anchor is dead or gone, or
+    when this creature has no position to measure from -- the same three
+    waivers `leash_of` makes, and a dead anchor cuts the restriction rather
+    than measuring against a corpse. #728.
+    """
+    from .components import Leash, Position
+    from .grid import distance as grid_distance
+
+    tie = world.get(eid, Leash)
+    if tie is None or tie.away_from is None:
+        return None
+    if not alive(world, tie.away_from):
+        return None
+    anchor = world.get(tie.away_from, Position)
+    mine = world.get(eid, Position)
+    if anchor is None or mine is None:
+        return None
+    return (anchor.square, grid_distance(mine.square, anchor.square))
