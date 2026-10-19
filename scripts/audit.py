@@ -2101,6 +2101,24 @@ def board(ref: str, seed: int, pose: bool = False,
             "" if MONSTER_ABILITY.match(ref) else cls)
     if pose:
         _pose(world, caster, declared, foe_team)
+    # **Give the row under test its own uses back.** Arming the board runs
+    # every trait the caster holds, and one of them -- a theme row printing
+    # "give up one of your encounter or daily powers" -- calls
+    # `c.expend_row` on whatever `c.choose` hands it, which headless is the
+    # **alphabetically first** encounter row the caster knows. On three
+    # boards that was the row under test: `p1171`, `p11030` and `p251`
+    # arrived already expended, `dsl.usable` answered "expended", and the
+    # audit reported them in the bucket it cannot explain -- "no trigger
+    # and no Requirement, and still unusable".
+    #
+    # Only the ref being measured, and only its uses: everything else the
+    # arming spent stays spent, because a sibling's expenditure is part of
+    # the board. This is the same argument `_provoke.probe` makes for
+    # handing back the immediate action -- every row is measured on a board
+    # of its own, and the one under test has to be available on it. #760.
+    own = world.get(caster, Powers)
+    if own is not None and own.times(ref):
+        own.restore(ref)
     return world, caster, armed
 
 
