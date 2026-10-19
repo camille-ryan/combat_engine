@@ -247,6 +247,24 @@ class Leash:
 @dataclass
 class Movement:
     speed: int = 6
+    #: **True while this creature is in the middle of a charge.** A charge is
+    #: a walk and then a swing, and three rows ask about the creature *doing*
+    #: it rather than about the attack: "while charging, it gains +4 to all
+    #: defences", "a bonus to Athletics checks made to jump as part of that
+    #: charge", "+1 to speed when charging while in beast form".
+    #:
+    #: The attack context's `charge` is a different fact and is already
+    #: there: it says *this attack is a charge's attack*, which an **attacker**
+    #: reads. It cannot answer a defence bonus on the charger, because the
+    #: attack that benefits is somebody else's opportunity swing on the way
+    #: in -- and that is exactly the attack "while charging" is printed to
+    #: survive.
+    #:
+    #: Set and cleared around the whole action in `actions.execute` and
+    #: `Cast.charge_at`, which are the two doors a charge comes through, and
+    #: cleared in a `finally` so a raise cannot leave a creature permanently
+    #: charging. Read by `query.charging`. #732.
+    charging: bool = False
     #: Extra modes and their speeds, e.g. {"fly": 8, "climb": 3}.
     modes: dict[str, int] = field(default_factory=dict)
     #: Kinds of difficult terrain this creature crosses for nothing, by the

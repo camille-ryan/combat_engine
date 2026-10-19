@@ -51,7 +51,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features.warlock import FELL
-from combat_engine.content.powers.druid.forms import BEAST, in_beast_form
+from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
     AC,
@@ -123,6 +123,7 @@ from combat_engine.engine import (
 )
 from combat_engine.engine.components import Powers
 from combat_engine.engine.events import PowerResolved
+from combat_engine.engine.query import charging
 
 ITEM = "item"
 
@@ -872,27 +873,43 @@ def i684p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.charging()",),
 )
 def i726x1(c: Cast) -> None:
-    """Re-aimed. Beast form is askable after all -- the druid package
-    records it as one labelled effect and `in_beast_form` is the read, so
-    the bonus is laid when the shape is taken rather than at arming. What
-    is still dropped is "when charging": speed is totalled with no context
-    at all, so nothing can narrow a speed bonus to one kind of move. No
-    type word on the card, so untyped."""
+    """One modifier, gated on both halves of the printed condition.
 
-    def granted() -> None:
-        c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER)
+    **"When charging" was already answerable and the old note was stale.**
+    It said speed is totalled with no context at all; `query.speed` takes a
+    `ctx` and its own docstring is this very clause: *"'+4 to speed when
+    charging' -- a gate on a key the context did not carry -- was silently
+    false … The three places that measure a charge's run pass the word."*
 
-    if in_beast_form(c.world, c.me):
-        granted()
+    **The ctx key and not `query.charging`**, which is the other half of
+    #732 and is the wrong tool here: a charge's reach is measured by
+    `actions._charges` **before** the charge starts, to decide whether one
+    is even on offer, so the creature is not charging yet at the moment this
+    bonus has to count. Both facts are real and they are a moment apart.
 
-    def shaped(ev: EffectApplied) -> None:
-        if ev.target == c.me and ev.label == BEAST:
-            granted()
+    **And the shape is asked in the gate too, which fixes two faults in the
+    old shape of this row.** It laid the bonus from a `granted()` helper,
+    called once if the druid was already in beast form and again from an
+    `EffectApplied` watcher whenever the shape was taken:
 
-    c.watch(EffectApplied, shaped, until=When.ENCOUNTER)
+    * the bonus was `until=When.ENCOUNTER` and ungated on the form, so it
+      **kept paying after the druid left beast form**, for the rest of the
+      fight;
+    * shaping twice laid it twice, and two untyped bonuses stack, so a druid
+      that shifted out and back had **+2 speed** where the card says +1.
+      Found by this row's own driver reading `5 -> 7`.
+
+    Asking both conditions inside one modifier cannot do either, and reads
+    the card more directly: it is a property of the item, true exactly when
+    both things are.
+
+    No type word on the card, so untyped."""
+    c.bonus("speed", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: (
+                bool(ctx.get("charge")) and in_beast_form(c.world, c.me)
+            ))
 
 
 @power(
@@ -1207,12 +1224,25 @@ def i1398p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.charging()",),
 )
 def i1515x1(c: Cast) -> None:
-    """A skill modifier is read with no context, so "as part of that
-    charge" cannot narrow it and the bonus stands all fight."""
-    c.bonus("skill:athletics", 2 + c.enhancement, on=c.me, until=When.ENCOUNTER)
+    """Written. The old note said a skill modifier is read with no context,
+    so the bonus stood all fight -- which it did, and the narrowing does not
+    need a context: `query.charging` is a fact about the creature, so the
+    gate asks it directly.
+
+    **"To jump as part of that charge" is not separated from "during that
+    charge", and that is exact rather than lazy.** A charge is a run and a
+    swing; the only Athletics check it can contain is the jump over
+    something in the way. So a gate on the charge alone cannot pay out on
+    any other check, and splitting the two would be a distinction the board
+    cannot produce.
+
+    `2 + c.enhancement`, which is the printed sum, and untyped -- no type
+    word on the card. #732."""
+    c.bonus("skill:athletics", 2 + c.enhancement, on=c.me,
+            until=When.ENCOUNTER,
+            when=lambda ctx: charging(c.world, c.me))
 
 
 @power(

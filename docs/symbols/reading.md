@@ -62,6 +62,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 - `query.adjacent(world: 'World', a: 'int', b: 'int') -> 'bool'`
   - Next to each other -- **or joined by a link.**
+- `query.charging(world: 'World', eid: 'int') -> 'bool'`
+  - Is this creature in the middle of a charge?
 - `query.distance_between(world: 'World', a: 'int', b: 'int') -> 'int'`
   - (no docstring)
 - `query.kept_away_from(world: 'World', eid: 'int') -> 'tuple[int, int] | None'`

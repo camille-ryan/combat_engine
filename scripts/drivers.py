@@ -24740,6 +24740,212 @@ def darkvision_sees_through_the_cloud(out: Result) -> None:
              f"{base} -> {beside}")
 
 
+def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
+    """*"While charging, it gains a +4 bonus to all defenses."*
+
+    `query.charging()` held three rows and they wanted **three different
+    things**, which is the flattened-symbol signature:
+
+    | row | wanted |
+    |---|---|
+    | `i726x1` | **nothing** -- `query.speed`'s ctx already carries `charge` |
+    | `m5084a0` | the charger's own state, for a defence bonus |
+    | `i1515x1` | the same state, for a skill check |
+
+    **The attack context's `charge` cannot answer the last two, and the
+    reason is the whole design.** That key says *this attack is a charge's
+    attack*, read by whoever swings. `m5084a0`'s +4 has to survive somebody
+    else's **opportunity** swing provoked on the way in -- and that
+    attacker's context carries no charge at all. So the fact has to live on
+    the charger.
+
+    **And `i726x1` needs the ctx and not the state**, which is a distinction
+    worth asserting rather than assuming: a charge's reach is measured by
+    `actions._charges` *before* the charge starts, to decide whether one is
+    even on offer, so the creature is not charging yet at the moment that
+    bonus must count. Both facts are real and they are a moment apart.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import AC, FORT, REF, WILL, When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Moved
+    from combat_engine.engine.movement import place
+    from combat_engine.engine.query import charging, defence, enemies, speed
+    from combat_engine.engine.skills import modifier as skill_mod
+
+    def apart(ref: str, gap: int = 4):  # noqa: ANN202
+        world, me, _ = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        from combat_engine.engine.components import Position
+        here = world.need(me, Position).square
+        place(world, foe, (here[0] + gap, here[1]))
+        return world, me, foe, Cast(world=world, me=me, ref=ref)
+
+    # -- the state, and when it is true ----------------------------------
+    world, me, foe, c = apart("m5084a0")
+    out.that(not charging(world, me),
+             "a creature standing still is not charging -- the control")
+    seen: list[tuple[int, bool]] = []
+    world.bus.on(Moved, lambda ev: seen.append((ev.actor, charging(world, ev.actor))))
+    world.rng.loaded = 20
+    c.charge_at(foe)
+    out.that(any(who == me and yes for who, yes in seen),
+             "it is charging while its own run is happening, read from a"
+             " `Moved` watcher -- the only honest way to read a transient",
+             f"{seen[:4]}")
+    out.that(not any(who != me and yes for who, yes in seen),
+             "and nobody else is, so the flag is per creature and not a"
+             " world-wide mode",
+             f"{seen[:4]}")
+    out.that(not charging(world, me),
+             "and it has stopped once the charge is over")
+
+    # -- and through the ACTION, which is how a charge happens in play ----
+    #
+    # **Two plants stayed green until this existed**, and they were the two
+    # that matter most: the flag never set by `actions.execute`, and the
+    # `finally` deleted. The rule drove `c.charge_at` only -- the door a
+    # *row* uses -- so the door the turn loop uses was unasserted, which is
+    # the whole of how a charge happens in a fight.
+    from combat_engine.engine.actions import legal, perform
+
+    world, me, foe, c = apart("m5084a0", gap=3)
+    enc = world.encounter
+    if enc is not None:
+        offered = [a for a in legal(world, enc, me) if a.kind == "charge"]
+        out.that(bool(offered),
+                 "a charge is on the action menu with a target three squares"
+                 " off -- the board for the lines below",
+                 f"{[a.kind for a in legal(world, enc, me)][:6]}")
+        if offered:
+            # **Narrowed to the charge's OWN steps**, by the `kind_` the
+            # move carries. A bare "any `Moved` where it was charging" stayed
+            # green under the plant that stops `perform` setting the flag:
+            # the charge's attack reaches a row that calls `c.charge_at`,
+            # which sets the flag by its own door, and a later `walk` inside
+            # that read true. The plant was right and the assertion was not
+            # measuring the door it named.
+            inside: list[tuple[str, bool]] = []
+            world.bus.on(Moved, lambda ev: inside.append(
+                (getattr(ev, "kind_", ""), ev.actor == me
+                 and charging(world, me))))
+            world.rng.loaded = 20
+            perform(world, enc, me, offered[0])
+            out.that(any(yes for kind, yes in inside if kind == "charge"),
+                     "and taking it makes the creature charging for the run"
+                     " -- `actions.perform`'s own door, not `c.charge_at`'s",
+                     f"{inside[:6]}")
+            out.that(not charging(world, me),
+                     "and not charging once the action is over, which is the"
+                     " `finally` doing its job on the path that matters")
+
+    # -- cleared even when the charge never happens ----------------------
+    world, me, foe, c = apart("m5084a0", gap=40)
+    out.that(not c.charge_at(foe),
+             "a charge at somebody out of reach does not happen",
+             f"{charging(world, me)}")
+    out.that(not charging(world, me),
+             "and leaves the creature not charging -- the `finally`, without"
+             " which a refused charge would mark it mid-charge for the rest"
+             " of the fight")
+
+    # -- m5084a0: the +4 through `query.defence` -------------------------
+    #
+    # Off `query.defence` and not off the `Mods` list: a gated modifier is
+    # stored whether or not it ever applies, so the list would read the same
+    # for a gate that is never true.
+    # **Another row's board, because this one's has already armed the
+    # trait.** `audit.board` arms every `action=NONE` row it is handed, so
+    # running the body on `m5084a0`'s own board laid the bonus a second time
+    # -- and two untyped bonuses stack, which read as `+8` and looked like
+    # the row being wrong. The creature here is a different one and the
+    # bonus lands on whoever runs the body, which is what `on=c.me` says.
+    world, me, foe, c = apart("i1515x1")
+    REGISTRY["m5084a0"].body(Cast(world=world, me=me, ref="m5084a0"))
+    quiet = {d: defence(world, me, d) for d in (AC, FORT, REF, WILL)}
+    mover = world.need(me, Movement)
+    mover.charging = True
+    loud = {d: defence(world, me, d) for d in (AC, FORT, REF, WILL)}
+    mover.charging = False
+    out.that(all(loud[d] - quiet[d] == 4 for d in quiet),
+             "all four defences are 4 higher while it charges, and no higher"
+             " when it does not",
+             f"{ {str(d): (quiet[d], loud[d]) for d in quiet} }")
+
+    # -- i1515x1: the skill check ----------------------------------------
+    world, me, foe, c = apart("i1515x1")
+    REGISTRY["i1515x1"].body(Cast(world=world, me=me, ref="i1515x1"))
+    still = skill_mod(world, me, "athletics")
+    world.need(me, Movement).charging = True
+    running = skill_mod(world, me, "athletics")
+    world.need(me, Movement).charging = False
+    out.that(running > still,
+             "the Athletics check is higher mid-charge and not otherwise --"
+             " the old note said a skill modifier is read with no context,"
+             " which is true and is not what this needed",
+             f"{still} -> {running}")
+
+    # -- i726x1: the ctx, and the state is NOT what answers it ------------
+    # **In beast form first**, which the row gates both halves on: without
+    # the shape it lays nothing at all, and the speed read was `5 -> 5` --
+    # a pass for any implementation, including none.
+    # On another row's board for the reason the defence pair is: this row is
+    # `action=NONE`, so `audit.board` has already armed it, and running the
+    # body again laid a second modifier -- which read `5 -> 7` and is the
+    # fault the row itself had.
+    world, me, foe, c = apart("i1515x1")
+    from combat_engine.content.powers.druid.forms import BEAST, in_beast_form
+
+    c.effect(BEAST, on=me, until=When.ENCOUNTER)
+    out.that(in_beast_form(world, me),
+             "the druid is in beast form, which this row gates on",
+             f"{in_beast_form(world, me)}")
+    REGISTRY["i726x1"].body(Cast(world=world, me=me, ref="i726x1"))
+    plain = speed(world, me)
+    charged = speed(world, me, {"charge": True})
+    out.that(not charging(world, me),
+             "the creature is NOT charging when a charge's reach is measured"
+             " -- `actions._charges` asks before the charge exists, which is"
+             " why this row needs the context key and not the state",
+             f"{charging(world, me)}")
+    out.that(charged == plain + 1,
+             "and its speed is one higher for a charge's measurement only",
+             f"{plain} -> {charged}")
+
+    # -- the two faults the old shape of i726x1 had ----------------------
+    #
+    # It laid the bonus from a helper called once at arming and again from
+    # an `EffectApplied` watcher, `until=When.ENCOUNTER` and ungated on the
+    # form. So it kept paying out of beast form, and shaping twice stacked
+    # two untyped +1s. Both are asserted because both are easy to write
+    # again, and the second is how they were found: this rule read `5 -> 7`.
+    for eff in list(world.effects.of(me)):
+        if eff.label == BEAST:
+            world.effects.end(eff, "drivers: back to the humanoid")
+    out.that(not in_beast_form(world, me),
+             "out of beast form again")
+    out.that(speed(world, me, {"charge": True}) == plain,
+             "and the bonus is gone -- the old shape kept paying for the"
+             " rest of the fight once the shape had been taken",
+             f"{speed(world, me, {'charge': True})} want {plain}")
+
+    c.effect(BEAST, on=me, until=When.ENCOUNTER)
+    c.effect(BEAST, on=me, until=When.ENCOUNTER)
+    out.that(speed(world, me, {"charge": True}) == plain + 1,
+             "and shaping twice is still worth one square, not two -- two"
+             " untyped bonuses stack, so the old shape gave +2 to a druid"
+             " that shifted out and back",
+             f"{speed(world, me, {'charge': True})} want {plain + 1}")
+
+    for ref in ("m5084a0", "i1515x1", "i726x1"):
+        out.that("charging" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} waits on no charging symbol",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -24805,6 +25011,11 @@ DRIVERS = {
         darkvision_sees_through_the_cloud,
         "a cloud that darkvision sees through, dropped with no marker"
         " (#729)",
+    ),
+    "charging": (
+        a_creature_in_the_middle_of_a_charge,
+        "a creature in the middle of a charge, which is not the same as a"
+        " charge's attack (#732)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

@@ -7117,7 +7117,7 @@ class Cast:
 
         Three content files had grown their own copy of this.
         """
-        from .components import Powers
+        from .components import Movement, Powers
         from .dsl import basic_options, use
 
         # `who` charges instead of the caster -- "three of its allies can
@@ -7125,23 +7125,35 @@ class Cast:
         # the swing without the move or the flag, which is the half of that
         # line that matters.
         runner = who if who is not None else self.me
-        if not self.run_at(victim, who=runner):
-            return False
-        if not ref:
-            known = self.world.get(runner, Powers)
-            ref = (known.basic if known else "") or "mba"
-            # "You can use this in place of a melee basic attack when
-            # charging." Asked of the runner, not the caster: a row that
-            # sends somebody else charging is their choice to make.
-            offered = basic_options(self.world, runner, "charge", ref)
-            if len(offered) > 1:
-                ref = self.world.decide(
-                    runner, "choose", offered, "which attack to make"
-                )
-        return use(
-            self.world, runner, ref, targets=[victim], spend=False, charge=True,
-            granted_by=self.me, granted_via=self.ref,
-        )
+        # **The second door a charge comes through**, so it sets the same
+        # flag `actions.execute` does: `query.charging` has to be true for
+        # the run and the swing alike whichever way the charge started, or a
+        # row reading it works in play and not from inside a body. #732.
+        mover = self.world.get(runner, Movement)
+        was_charging = mover.charging if mover is not None else False
+        if mover is not None:
+            mover.charging = True
+        try:
+            if not self.run_at(victim, who=runner):
+                return False
+            if not ref:
+                known = self.world.get(runner, Powers)
+                ref = (known.basic if known else "") or "mba"
+                # "You can use this in place of a melee basic attack when
+                # charging." Asked of the runner, not the caster: a row that
+                # sends somebody else charging is their choice to make.
+                offered = basic_options(self.world, runner, "charge", ref)
+                if len(offered) > 1:
+                    ref = self.world.decide(
+                        runner, "choose", offered, "which attack to make"
+                    )
+            return use(
+                self.world, runner, ref, targets=[victim], spend=False,
+                charge=True, granted_by=self.me, granted_via=self.ref,
+            )
+        finally:
+            if mover is not None:
+                mover.charging = was_charging
 
     def overrun(self, to: Square | None = None) -> list[int]:
         """Trample: walk through whoever is in the way, and say who that was.

@@ -741,13 +741,29 @@ def m2071a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.speed_of(while_charging=)",),
+    todo=("actions._charges(ref=)",),
 )
 def m2071a3(c: Cast) -> None:
     """"Can make a1 against any creature in its [reach]" asks nothing
     `a1` does not already offer -- it is at-will and carries no recharge
-    for this to bypass. The speed bump while charging with it has no
-    hook: nothing scopes a speed bonus to the one action a charge is."""
+    for this to bypass.
+
+    **Re-pointed, and the old symbol was wrong twice.** It asked for
+    `c.speed_of(while_charging=)`, which reads as *somebody else's* speed,
+    and it said "nothing scopes a speed bonus to the one action a charge
+    is" -- which #732 settles: `query.speed` takes a `ctx` carrying
+    `charge`, and `i726x1` is written against it.
+
+    What is left is narrower and real. The card says *"if it uses a **charge
+    attack** to make its m2071a1, its speed increases to 8 **when making
+    that charge**"* -- so the bonus belongs to a charge made with one named
+    row, and `actions._charges` prices the run **once for the whole menu**,
+    before any swing is chosen, with `{"charge": True}` and no ref in it. A
+    gate on the attack has nothing to read.
+
+    The second half is a different shape again: "increases **to** 8"
+    replaces the speed rather than adding to it, and `c.bonus("speed", ...)`
+    can only add -- a creature slowed to 2 would come out at 10."""
 
 
 # ==========================================================================

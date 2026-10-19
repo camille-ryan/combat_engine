@@ -117,6 +117,7 @@ from combat_engine.engine.events import (
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import (
     allies,
+    charging,
     distance_between,
     has_combat_advantage,
     team,
@@ -1593,12 +1594,25 @@ def m4639a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("query.charging()",),
 )
 def m5084a0(c: Cast) -> None:
-    """Nothing asks whether a creature is mid-charge from the defending
-    side; the attack context's `charge` flag names the attacker's charge,
-    not this creature's own."""
+    """Written. The old note had the distinction exactly right -- *"the
+    attack context's `charge` flag names the attacker's charge, not this
+    creature's own"* -- and `query.charging` is the fact it was missing.
+
+    **The defending side is the whole point of the card.** A charge is a run
+    and then a swing, and the attack this +4 has to survive is somebody
+    else's opportunity swing provoked on the way in -- where the attacker's
+    context carries no charge at all. So the gate reads the charger's own
+    state rather than any context key.
+
+    Asked inside the modifier rather than once at arming: a trait armed at
+    the top of the fight cannot know when a charge starts, and the bonus has
+    to come and go with it. Untyped and `ALL_DEFENCES`, which is what "a +4
+    bonus to all defenses" prints. #732."""
+    for defence in ALL_DEFENCES:
+        c.bonus(defence, 4, on=c.me, until=When.ENCOUNTER,
+                when=lambda ctx: charging(c.world, c.me))
 
 
 @power(

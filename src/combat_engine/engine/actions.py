@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .components import Budget, Build, Health, Mod, Position, Powers
+from .components import Budget, Build, Health, Mod, Movement, Position, Powers
 from .dsl import affordable, aim_points, candidates, get, usable
 from .durations import When
 from .grid import Square, distance, spread
@@ -1334,7 +1334,17 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # the charge does not provoke" had nothing to test -- two rows named that as
         # their gap and one named it twice. `walk` already threads `kind` through to
         # `step`, which is where the window is opened. #301.
-        walk(world, actor, list(action.path), kind="charge")
+        # **The creature is charging for the whole of this**, which is what
+        # "while charging" spans: the run in, the opportunity attacks it
+        # provokes on the way, and the swing at the end. Cleared in a
+        # `finally` so a raise cannot leave a creature charging for the rest
+        # of the fight. `query.charging` is the reader. #732.
+        mover = world.get(actor, Movement)
+        was_charging = mover.charging if mover is not None else False
+        if mover is not None:
+            mover.charging = True
+        try:
+            walk(world, actor, list(action.path), kind="charge")
         # The move goes with it, and so does everything else: a charge ends your
         # turn whatever you have left. Spent after the walk so that an opportunity
         # attack on the way in still resolves normally.
@@ -1346,11 +1356,14 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         # sequence falls out without a special case. Checked rather than assumed,
         # and exercised in play: over 24 fights, 76 turns contained a charge, 14 of
         # those spent a point afterwards, and all 14 then attacked again.
-        encounter.spend(actor, ActionType.MOVE)
-        hit = use(
-            world, actor, action.ref,
-            targets=list(action.targets) or None, spend=True, charge=True,
-        )
+            encounter.spend(actor, ActionType.MOVE)
+            hit = use(
+                world, actor, action.ref,
+                targets=list(action.targets) or None, spend=True, charge=True,
+            )
+        finally:
+            if mover is not None:
+                mover.charging = was_charging
         budget = world.get(actor, Budget)
         if budget is not None:
             budget.standard = budget.move = budget.minor = 0

@@ -498,6 +498,26 @@ def moving_as(world: World, eid: int, mode: str) -> bool:
     return bool(mv and mv.using == mode)
 
 
+def charging(world: World, eid: int) -> bool:
+    """Is this creature in the middle of a charge?
+
+    Not the same question as the attack context's `charge`, and the
+    difference is the whole reason this exists. That key says *this attack
+    is the charge's attack* and is read by whoever is swinging; three rows
+    ask about the creature **doing** the charging, and one of them is a
+    defence bonus -- so the attack it has to survive is somebody else's
+    opportunity swing provoked on the way in, where the attacker's context
+    carries no charge at all.
+
+    True from the first step of the run to the end of the swing, which is
+    what "while charging" spans. `Movement.charging` is the flag and
+    `actions.execute` and `Cast.charge_at` are the two doors that set it.
+    #732.
+    """
+    mv = world.get(eid, Movement)
+    return mv is not None and mv.charging
+
+
 def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
     """How far this creature moves, for the kind of move it is making.
 
