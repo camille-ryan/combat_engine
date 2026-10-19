@@ -4538,6 +4538,30 @@ def main() -> int:
     _began = _sub.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                       capture_output=True, text=True)
     STARTED_AT = _began.stdout.strip() if _began.returncode == 0 else ""
+    # **And whether the tree is that sha.** The comment above is careful
+    # about *which* commit to name and said nothing about whether the files
+    # match one, so a sweep over uncommitted work rewrote the whole-tree
+    # baseline and labelled it with a commit it had not read.
+    #
+    # Measured: a sweep run at 19:53 on 2026-10-18 with #719 uncommitted
+    # stamped `b0ed304db` and added six rows to `silent_refs`. At that sha
+    # `i2127p1` fires and emits `EffectExpired, Moved`; it is silent only
+    # with #719 applied. The fixture described a commit that did not exist.
+    #
+    # `nightly.sh` already refuses a dirty tree and says why -- "a sweep
+    # over uncommitted edits certifies no commit" (#469) -- and this is that
+    # rule where the other caller can reach it. The run still happens and
+    # every narrow verdict it prints is still worth reading; it is the
+    # fixture *write* that is a claim about a commit, and that is the only
+    # thing withheld. No `--force`: numbers from a dirty sweep can be read
+    # off the run, and what must not happen is their becoming the baseline.
+    # #723.
+    _dirty = _sub.run(["git", "status", "--porcelain"], cwd=ROOT,
+                      capture_output=True, text=True)
+    DIRTY = [
+        ln for ln in _dirty.stdout.splitlines()
+        if ln.strip() and not ln.endswith(WATERMARK.name)
+    ]
     full = not (args.refs or args.calls or args.changed or args.since
                 or args.sample or args.cls or args.level or args.monsters)
     # **Said on every run, the way `scorecard.py` says its baseline age.** #291's
@@ -5006,6 +5030,7 @@ def main() -> int:
     if full:
         import json
 
+        _head, STARTED_AT = STARTED_AT, ("" if DIRTY else STARTED_AT)
         if STARTED_AT:
             # **The five buckets have to add up to the ref count, and the
             # file used to record four of them.** `refs 21627, fired 20106,
@@ -5081,6 +5106,13 @@ def main() -> int:
             }, indent=2) + "\n")
             print(f"\n  watermark written at {STARTED_AT[:9]}"
                   f" -- the sha this sweep read")
+        elif DIRTY:
+            print(f"\n  watermark WITHHELD: {len(DIRTY)} file(s) differ from"
+                  f" {_head[:9]}, so this sweep certifies no commit. #723")
+            for ln in DIRTY[:6]:
+                print(f"    {ln}")
+            if len(DIRTY) > 6:
+                print(f"    ... and {len(DIRTY) - 6} more")
 
     # `refused` fails the run. An engine that announces a thing and then
     # does it anyway is a worse fault than any single row being wrong, and
