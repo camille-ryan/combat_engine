@@ -1449,7 +1449,7 @@ def f1397(c: Cast) -> None:
 
 @power("f1398", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.amplify_bonus()",))
+       dropped=("c.raise_every_defence_bonus()",))
 def f1398(c: Cast) -> None:
     """The mark half is written; raising every defence bonus is not.
 
@@ -1467,6 +1467,14 @@ def f1398(c: Cast) -> None:
     editing a modifier **somebody else laid**, which `c.change_amount`
     cannot do because it names a mechanic rather than an effect. The ritual
     line is out of the fight.
+
+    **Re-pointed off `c.amplify_bonus()`, which two other rows have
+    stopped needing (#715).** Both of those name **one** leg each, and the
+    answer for them is for that leg to read a raise -- `c.amount_for`, the
+    shape `f790` already uses. This card names no leg: it is *every*
+    defence bonus from *any* of the character's rows, most of them bodies
+    nobody has written yet, so there is nothing to teach to read a raise.
+    A different mechanism and now a different symbol.
     """
     c.change_amount(MARK_KEY, 3, on=c.me, until=When.ENCOUNTER)
 

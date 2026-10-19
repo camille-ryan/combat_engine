@@ -271,6 +271,17 @@ def wizard_orb_deception(c: Cast) -> None:
     c.grant_attack(c.me, on=who, ref=ev.power, attack_bonus=c.cha_mod, reentrant=True)
 
 
+#: How much the staff form adds to the attacked defence, as a raise an
+#: item may change. `i2633x1` prints "increase the bonus to defense by an
+#: amount equal to the enhancement bonus of this staff", and the number the
+#: leg hands out is a local in its own body -- so the leg has to **read** a
+#: raise rather than the item reaching into it. `f790` is the worked
+#: example and `c.change_amount`'s own docstring is the rule: a raise on a
+#: mechanic whose body still hard-codes its number is a modifier nothing
+#: reads. #715.
+STAFF_DEFENCE_RAISE = "arcanist:staff-defence-raise"
+
+
 @power(
     "cf:wizard-arcanist-f0c2",
     level=0,
@@ -298,7 +309,16 @@ def wizard_staff_defense(c: Cast) -> None:
     ev = c.trigger
     if ev is None:
         return
-    c.bonus(ev.vs, c.con_mod, until=When.EOT, on=c.me, once=True)
+    # The printed number is the Constitution modifier; `STAFF_DEFENCE_RAISE`
+    # is what an item adds to it. Read here rather than laid as a second
+    # bonus from the item, because `PowerResolved` does not carry which
+    # defence this picked -- so a second bonus would have to cover all four
+    # and would be spent by whichever attack came next.
+    c.bonus(
+        ev.vs,
+        c.con_mod + c.amount_for(STAFF_DEFENCE_RAISE, 0),
+        until=When.EOT, on=c.me, once=True,
+    )
 
 
 @power(

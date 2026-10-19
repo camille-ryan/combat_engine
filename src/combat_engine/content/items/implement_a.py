@@ -57,6 +57,8 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.features.arcanist import STAFF_DEFENCE_RAISE
+from combat_engine.content.features.controllers import IMPOSITION_RAISE
 from combat_engine.content.features.strikers import extra_damage
 from combat_engine.engine import (
     AC,
@@ -2971,6 +2973,16 @@ def i1983p1(c: Cast) -> None:
         c.bonus(d, 5 + c.enhancement, on=c.me, until=When.EONT)
 
 
+def _arcanist_leg_by_me(world, me: int, ev: Any) -> bool:  # noqa: ANN001
+    """This character used the class feature the orb deepens.
+
+    The leg is written inline inside `cf:wizard-arcanist-f0` rather than as
+    its own ref, so the feature's own ref is what `PowerUsed` carries.
+    """
+    return getattr(ev, "actor", None) == me and getattr(
+        ev, "power", "") == "cf:wizard-arcanist-f0"
+
+
 @power(
     "i1986p1",
     level=3,
@@ -2979,24 +2991,35 @@ def i1983p1(c: Cast) -> None:
     action=FREE,
     reach=Ranged(10),
     target=ONE_CREATURE,
-    trigger="you use your orb of imposition on a creature this orb hit",
-    todo=("c.amplify_bonus()",),
+    trigger="you use cf:wizard-arcanist-f0 on a creature this orb hit",
+    on=Trigger(PowerUsed, _arcanist_leg_by_me,
+               "you use that class feature"),
+    dropped=("c.weapon_of(cf:)",),
 )
 def i1986p1(c: Cast) -> None:
     """Deepens a saving-throw penalty `cf:wizard-arcanist-f0` laid.
 
-    The brief prints `cf:wizard-arcanist-f0c1` and nothing declares that
-    ref; the thing it names is the control leg written inline inside
-    `cf:wizard-arcanist-f0`, which chooses a victim, chooses one of that
-    victim's save-ends effects and lays `c.penalty("save", wis_mod, ...)`
-    gated on that one effect. Both the effect and the size of the penalty
-    are locals in its closure, so adding 2 means editing a modifier
-    somebody else laid -- and a second, separate penalty would be gated on
-    nothing and would bite every save the creature made.
+    The old note had the mechanics right and the conclusion wrong, as
+    `i2633x1` did: the penalty and the effect it is gated on are both
+    locals in the leg's closure, and the fix is for **the laying row to
+    read a raise** rather than for this one to reach in. A second,
+    separate penalty really would be gated on nothing and bite every save
+    the creature made -- which is why the raise and not a second penalty.
 
-    Re-aimed: the brief does give a ref, so `spec.power_ref()` was the
-    wrong thing to be waiting for and kept this row in a queue the fix
-    would never reach. What is missing is the deepening."""
+    **The ordering is the whole of the difficulty, and it is why this is a
+    declared trigger.** "Use this power when you use your class feature"
+    means the raise has to be standing *before* the leg lays the penalty.
+    `dsl.use` emits `PowerUsed` and then runs the body, so a handler on
+    that event runs first and the raise is in place; laid afterwards it
+    would be a modifier nothing reads, which `c.change_amount`'s own
+    docstring names as the commonest bug in this pair.
+
+    Still dropped: "on a creature hit by an attack made through this
+    implement". A wizard carries no implement in `Gear` at all -- the
+    class chassis gives it none -- so there is nothing to ask whether the
+    blow came through, and `c.weapon_of` has no `cf:` equivalent for a
+    class feature's implement."""
+    c.change_amount(IMPOSITION_RAISE, 2, on=c.me, until=When.ENCOUNTER)
 
 
 @power(
@@ -3458,19 +3481,29 @@ def i2627x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.amplify_bonus()",),
 )
 def i2633x1(c: Cast) -> None:
-    """Deepens one form of `cf:wizard-arcanist-f0`.
+    """Deepens one form of `cf:wizard-arcanist-f0`, and the answer was the
+    other way round.
 
-    That form is `cf:wizard-arcanist-f0c2`, which is declared: an
-    immediate interrupt that reads the attacked defence off
-    `AttackDeclared` and lays `c.bonus(vs, con_mod, once=True)` on it. The
-    defence it picked is a local in that body, and `PowerResolved` does
-    not carry it, so a second bonus laid from here would have to be
-    spread across all four defences and would be spent by whichever
-    attack came next. Raising the one modifier that was laid is the
-    printed sentence, and nothing reaches a stored modifier."""
+    The old note had the mechanics right and the conclusion wrong. It is
+    true that `cf:wizard-arcanist-f0c2` reads the attacked defence off
+    `AttackDeclared`, that the defence is a local in that body, and that a
+    second bonus laid from here would have to cover all four and would be
+    spent by whichever attack came next. The fix is not for this row to
+    reach a stored modifier -- it is for **the laying row to read a
+    raise**, which `c.change_amount` / `c.amount_for` has always been for.
+    `f790` is the worked example in the same shape and says so in as many
+    words.
+
+    "An amount equal to the enhancement bonus of this staff" is
+    `c.enhancement`, so the raise is that and not a printed constant.
+
+    `until=When.ENCOUNTER` because a property is not spent: the staff is
+    held for the fight and the leg is once per encounter anyway."""
+    c.change_amount(
+        STAFF_DEFENCE_RAISE, c.enhancement, on=c.me, until=When.ENCOUNTER,
+    )
 
 
 @power(

@@ -22,6 +22,14 @@ from combat_engine.engine import (
     power,
 )
 
+#: How much harder the control leg makes one saving throw, as a raise an
+#: item may change. `i1986p1` prints "increase your saving throw penalty by
+#: 2", and the penalty is a local in the leg's own body -- so the leg reads
+#: the raise rather than the item reaching in. A second, separate penalty
+#: would be gated on nothing and would bite every save the creature made,
+#: which is what that row's old docstring said made it unwritable. #715.
+IMPOSITION_RAISE = "arcanist:imposition-raise"
+
 
 @power(
     "cf:wizard-arcanist-f0",
@@ -106,7 +114,10 @@ def wizard_implement(c: Cast) -> None:
     def this_one(ctx: dict[str, Any]) -> bool:
         return ctx.get("effect") is against
 
-    held = c.penalty("save", c.wis_mod, on=who, until=When.ENCOUNTER, when=this_one)
+    held = c.penalty(
+        "save", c.wis_mod + c.amount_for(IMPOSITION_RAISE, 0),
+        on=who, until=When.ENCOUNTER, when=this_one,
+    )
     if held is None:
         return
 

@@ -23232,6 +23232,150 @@ def a_conjuration_a_creature_can_attack(out: Result) -> None:
              f"{REGISTRY['i2208p2'].unfinished}")
 
 
+def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
+    """Two items raise a class feature's own number, through `amount_for`.
+
+    Three rows carried `c.amplify_bonus()` and a fourth, `f790`, carries
+    the answer in its own docstring:
+
+        the answer is for the laying row to *read* a raise rather than for
+        this one to reach into it, which is what `c.change_amount` /
+        `c.amount_for` has always been for.
+
+    So the mechanism existed, one row had adopted it, and three had not.
+    Two of the three name **one leg** each and are that shape exactly;
+    `f790`'s own mark half is written the same way.
+
+    **Asserted off the number the LEG hands out, never off the item's
+    call.** `c.change_amount`'s docstring names the failure precisely -- *"a
+    `change_amount` on a mechanic whose body still hard-codes its number is
+    a modifier nothing reads"* -- and an assertion on `amount_for` would
+    pass for exactly that case. So each half runs the leg and reads the
+    modifier it laid.
+
+    **The ordering is the one real trap, and it is `i1986p1`'s.** "Use this
+    power when you use your class feature" means the raise must stand
+    *before* the leg lays the penalty. `dsl.use` emits `PowerUsed` and then
+    runs the body, so a declared handler on that event is in place in time;
+    laid afterwards it is a modifier nothing reads. The rule asserts both
+    orders, because only the wrong one distinguishes the fix.
+
+    `f1398` is not this shape and no longer shares the symbol: *"whenever
+    one of your powers grants a bonus to a defense"* is a modifier on
+    modifiers, every defence bonus from any row the character has.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition, Defense
+
+    # -- the staff: a defence bonus the item deepens ----------------------
+    def staff(*, held: bool) -> tuple[int, int, int]:
+        world, me, _ = _posed("cf:wizard-arcanist-f0c2", 1)
+        leg = Cast(world=world, me=me, ref="cf:wizard-arcanist-f0c2")
+        bump = 0
+        if held:
+            item = Cast(world=world, me=me, ref="i2633x1")
+            REGISTRY["i2633x1"].body(item)
+            bump = item.enhancement
+        leg.trigger = AttackDeclared(
+            attacker=me, target=me, power="mba", vs=Defense.AC,
+        )
+        before = leg.total(Defense.AC.value)
+        REGISTRY["cf:wizard-arcanist-f0c2"].body(leg)
+        return before, leg.total(Defense.AC.value), bump
+
+    bare_before, bare_after, _ = staff(held=False)
+    with_before, with_after, bump = staff(held=True)
+    out.that(bare_after - bare_before > 0,
+             "the staff form lays a defence bonus with nothing raising it --"
+             " the control, and the number the card prints",
+             f"{bare_before} -> {bare_after}")
+    out.that(bump > 0,
+             "the staff has an enhancement bonus to be worth, or the raise"
+             " is zero and proves nothing",
+             f"enhancement {bump}")
+    out.that(with_after - with_before == (bare_after - bare_before) + bump,
+             "and with the staff held it is exactly that much larger -- read"
+             " off the modifier the LEG laid, not off the item's call, which"
+             " would pass for a raise nothing reads",
+             f"{bare_after - bare_before} -> {with_after - with_before}")
+
+    # -- the orb: a save penalty the item deepens, and the ordering -------
+    def orb(*, when: str) -> int:
+        """The save penalty the control leg lays. `when` is item-first,
+        item-after, or never."""
+        world, me, _ = _posed("cf:wizard-arcanist-f0", 1)
+        c = Cast(world=world, me=me, ref="cf:wizard-arcanist-f0")
+        # The leg needs one of this caster's own save-ends effects to
+        # deepen, and the board carries none -- which is why the row is
+        # excused as quiet. Posed here.
+        victim = sorted(enemies(world, me))[0]
+        c.condition(Condition.SLOWED, on=victim, until=When.SAVE_ENDS)
+        item = Cast(world=world, me=me, ref="i1986p1")
+        if when == "first":
+            REGISTRY["i1986p1"].body(item)
+        REGISTRY["cf:wizard-arcanist-f0"].body(
+            Cast(world=world, me=me, ref="cf:wizard-arcanist-f0"),
+        )
+        if when == "after":
+            REGISTRY["i1986p1"].body(item)
+        # **Read off the effect the leg laid, not through `c.total`.** The
+        # penalty is gated on `ctx["effect"] is <the one it chose>`, and
+        # that effect is a local in the leg's closure -- so a `c.total`
+        # with an empty ctx answers 0 and would have made every assertion
+        # below pass for nothing.
+        # `startswith`, because `c.penalty` writes the key and the amount
+        # into the label -- "cf:wizard-arcanist-f0 save-3". An equality
+        # test matched nothing and read as a leg that lays no penalty.
+        laid = [
+            eff for eff in world.effects.of(victim)
+            if eff.label.startswith("cf:wizard-arcanist-f0")
+        ]
+        return sum(
+            m.value for eff in laid for _who, m in eff.mods
+            if m.what == "save"
+        )
+
+    plain = orb(when="never")
+    first = orb(when="first")
+    after = orb(when="after")
+    out.that(plain != 0,
+             "the control leg lays a save penalty when the caster has an"
+             " effect to deepen -- posed, because the audit board carries"
+             " none of them, which is why the row is excused as quiet",
+             f"{plain}")
+    out.that(first == plain - 2,
+             "with the orb's power spent FIRST the penalty is 2 deeper,"
+             " which is the printed sentence",
+             f"{plain} -> {first}")
+    out.that(after == plain,
+             "and spent AFTER the leg it changes nothing -- the ordering"
+             " assertion, and the only one that tells the fix from a raise"
+             " nothing reads. `i1986p1` is declared on `PowerUsed` for"
+             " exactly this: `dsl.use` announces before it runs the body",
+             f"{plain} -> {after}")
+
+    # -- the markers -------------------------------------------------------
+    out.that(not REGISTRY["i2633x1"].unfinished,
+             "i2633x1 carries no marker now",
+             f"{REGISTRY['i2633x1'].unfinished}")
+    out.that(REGISTRY["i1986p1"].unfinished == ("c.weapon_of(cf:)",),
+             "i1986p1 keeps the one clause it still earns -- whether the"
+             " blow came through this implement, which a wizard holding no"
+             " implement at all cannot be asked",
+             f"{REGISTRY['i1986p1'].unfinished}")
+    out.that("c.amplify_bonus()" not in str(REGISTRY["f1398"].unfinished),
+             "and f1398 no longer shares a symbol with them: raising EVERY"
+             " defence bonus the character's powers grant is a modifier on"
+             " modifiers, not one leg reading a raise",
+             f"{REGISTRY['f1398'].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -23253,6 +23397,11 @@ DRIVERS = {
         a_conjuration_a_creature_can_attack,
         "a conjuration a creature can attack, and the four things it is"
         " not (#714)",
+    ),
+    "deepened_number": (
+        an_item_deepens_a_number_another_body_laid,
+        "an item deepening a number another body laid, and the order it"
+        " has to happen in (#715)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
