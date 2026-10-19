@@ -1530,15 +1530,25 @@ def m5302a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.in_sunlight(world, square)",),
 )
 def m5302a1(c: Cast) -> None:
-    """The radiant half is exact. Direct sunlight is not askable: `Light` has
-    three values and the brightest of them is a torch as much as a noon sky,
-    so `query.light_level` cannot tell the clause's own circumstance from an
-    ordinary lit room -- and gating on BRIGHT would fire on every board, every
-    fight, since an unlit `Grid.light` reads BRIGHT by default."""
+    """Both halves are written.
+
+    The radiant half was always exact. **The sunlight half is
+    `c.terrain("sunlight")`**, which eight monster rows already ask and the
+    old note did not know about -- it reasoned about `query.light_level`
+    instead, and was right about that: `Light` holds bright, dim and dark,
+    bright is a torch as much as a noon sky, and it is the default for every
+    square, so a gate on BRIGHT would fire in every indoor fight.
+
+    *"Exposed to direct sunlight"* is a standing circumstance rather than a
+    moment, so the penalty is laid once with the terrain asked **inside the
+    gate**: a creature dragged out of the sun stops paying, and the attack
+    read happens where the condition can still change. The radiant half
+    stays a watcher, because that one *is* a moment. #734."""
     me = c.me
+    c.penalty("attack", 2, on=me, until=When.ENCOUNTER,
+              when=lambda ctx: c.terrain("sunlight"))
 
     def scorched(ev: DamageApplied) -> None:
         if ev.target == me and ev.dtype is DamageType.RADIANT:

@@ -2022,12 +2022,27 @@ def m5303a0(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("World.sunlight",),
 )
 def m5303a1(c: Cast) -> None:
-    """Direct sunlight has nothing to ask -- the board has no concept of
-    it. Taking radiant damage does, and is the half that plays."""
+    """Both halves are written, and this is `m5302a1`'s card word for word.
+
+    **The old note said the board has no concept of direct sunlight.** Ten
+    monster rows ask it, with `c.terrain("sunlight")` -- `sunlight` is one of
+    the ten words in `TERRAIN_WORDS`. What it has no concept of is *which
+    square* is in the sun: the terrain word is a property of the encounter.
+    That is the honest limit and it is the safe one, since `World.terrain` is
+    empty until a board sets it.
+
+    The symbol was `World.sunlight`, a second name for the absence
+    `query.in_sunlight(world, square)` carried on three other rows -- and
+    both names were wrong about the same thing. #734.
+
+    *"Exposed to direct sunlight"* is a standing circumstance rather than a
+    moment, so it is one modifier with the terrain asked inside the gate; the
+    radiant half stays a watcher, because that one is a moment."""
     me = c.me
+    c.penalty("attack", 2, on=me, until=When.ENCOUNTER,
+              when=lambda ctx: c.terrain("sunlight"))
 
     def stung(ev: DamageApplied) -> None:
         if ev.target != me:

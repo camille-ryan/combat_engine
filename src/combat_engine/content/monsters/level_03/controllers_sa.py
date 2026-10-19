@@ -2998,17 +2998,31 @@ def m6269a0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.RADIANT],
-    todo=("query.in_sunlight(world, square)",),
 )
 def m6269a1(c: Cast) -> None:
-    """The whole trait is a toll for standing in *direct sunlight*.
+    """The whole trait is a toll for standing in *direct sunlight*, and it is
+    written.
 
-    **Re-pointed.** There is a light model now, and it is not the one this
-    needs: `Light` holds bright, dim and dark, and bright is both daylight
-    and a torch -- and it is the *default* for every square of every board,
-    so reading it would charge this creature 5 radiant damage at the top of
-    every turn of every fight indoors. The distinction the card turns on is
-    the one the model does not hold."""
+    **The re-pointing note was right about the light model and wrong that
+    nothing else holds the fact.** `Light` is bright/dim/dark, bright is
+    both daylight and a torch, and it is the default for every square -- so
+    reading it would charge 5 radiant damage every turn of every indoor
+    fight, exactly as that note says. But `c.terrain("sunlight")` is a
+    different fact, eight monster rows ask it, and `World.terrain` is empty
+    until a board sets it, so the toll is silent indoors by construction
+    rather than by luck.
+
+    Its own damage, so `c.flat(on=me)`: the keyword is radiant and the
+    creature is the target of its own card. #734."""
+    me = c.me
+
+    def toll(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me or not c.terrain("sunlight"):
+            return
+        c.flat(5, dtype=DamageType.RADIANT, on=me)
+
+    c.watch(TurnStart, toll, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} sunburn")
 
 
 @power(

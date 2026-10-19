@@ -487,11 +487,52 @@ def m1435a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("query.in_sunlight(world, square)",),
 )
 def m1435a5(c: Cast) -> None:
-    """Both halves of this are about how bright the creature's square is, and
-    nothing on the board measures that."""
+    """Both halves are written, and `m820a1` is the twin that was already
+    written the same way.
+
+    **The old note said nothing on the board measures it. Eight monster rows
+    measure it.** `c.terrain("sunlight")` is the question -- `sunlight` is
+    one of the ten words in `TERRAIN_WORDS`, and `m820a1` implements this
+    very card with it: a `TurnStart` watcher that empties the budget and a
+    `TurnEnd` watcher that kills. The two cards differ only in which action
+    the sun leaves.
+
+    **What the old note was right about is `query.light_level`**, which is
+    the reader a search would find: `Light` holds bright, dim and dark,
+    bright is a torch as much as a noon sky, and it is the *default* for
+    every square -- so a gate on BRIGHT would fire in every indoor fight.
+    That is a real trap and the reason this family looked blocked. The
+    terrain word is a different and coarser fact: a property of the
+    **encounter**, not of a square, and that is the honest limit here.
+    `World.terrain` is empty until a board sets it, so the gate is false by
+    default -- which is the safe direction for a clause that destroys the
+    creature. #734."""
+    me = c.me
+
+    def begins_in_the_light(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me or not c.terrain("sunlight"):
+            return
+        # "Only a single standard action": the standard stays and the rest
+        # goes. `m820a1`'s card leaves the *move* instead, which is why the
+        # two rows zero different fields off one mechanism.
+        from combat_engine.engine.components import Budget
+
+        budget = c.world.get(me, Budget)
+        if budget is not None:
+            budget.move = 0
+            budget.minor = 0
+        c.note(f"{c.ref}: sunlight leaves it a single standard action")
+
+    def ends_in_the_light(ev: TurnEnd) -> None:
+        if ev.actor == me and not ev.ghost and c.terrain("sunlight"):
+            c.kill(on=me)
+
+    c.watch(TurnStart, begins_in_the_light, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} dawn")
+    c.watch(TurnEnd, ends_in_the_light, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} ash")
 
 
 # --------------------------------------------------------------------------

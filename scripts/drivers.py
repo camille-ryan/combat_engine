@@ -25045,6 +25045,146 @@ def it_can_attack_with_only_one_row(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def three_creatures_the_sun_hurts(out: Result) -> None:
+    """*"Whenever it starts its turn in direct sunlight, it takes 5 radiant
+    damage."*
+
+    Three rows said direct sunlight was unaskable. **Eight monster rows ask
+    it**, with `c.terrain("sunlight")` -- `sunlight` is one of the ten words
+    in `TERRAIN_WORDS` -- and one of those eight, `m820a1`, implements
+    `m1435a5`'s card almost line for line.
+
+    **What the three notes were right about is the trap, and it is worth
+    keeping.** `query.light_level` is the reader a search finds, and it
+    cannot answer this: `Light` holds bright, dim and dark, bright is a
+    torch as much as a noon sky, and it is the **default** for every square
+    of every board. A gate on BRIGHT would burn `m6269a1` for 5 radiant at
+    the top of every turn of every indoor fight. So the rows were not lazy;
+    they reasoned about the wrong one of two facts.
+
+    The terrain word is coarser -- a property of the **encounter**, not of a
+    square -- and that is the honest limit. It is also the safe one:
+    `World.terrain` is empty until a board sets it, so every one of these
+    clauses is silent indoors by construction. **The control below is that
+    silence**, which matters more than usual here: one of the three
+    destroys the creature outright.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import TurnEnd, TurnStart
+    from combat_engine.engine.query import alive
+
+    def lit(ref: str, sun: bool):  # noqa: ANN202
+        """That row's board, armed, with the sun on or off."""
+        world, me, _ = _posed(ref, 1)
+        # `set`, not `frozenset`: `World.terrain` is annotated
+        # `set[str]`, and `ty` is what said so.
+        world.terrain = {"sunlight"} if sun else set()
+        c = Cast(world=world, me=me, ref=ref)
+        REGISTRY[ref].body(c)
+        return world, me, c
+
+    # -- m6269a1: the toll ------------------------------------------------
+    #
+    # **`>= 5` in the sun and `== 0` in the shade, not `== 5`.** The first
+    # draft asserted exactly 5 and read 6: `c.flat` goes through
+    # `deal_damage` with `from_attack` at its default, so the board's own
+    # damage modifier is added to it. That 6 is the board's number and not
+    # the row's, and pinning it would be measuring the dummy. The shade
+    # case is the one that has to be exact, and it is -- nothing at all.
+    took: dict[bool, int] = {}
+    for sun in (False, True):
+        world, me, _c = lit("m6269a1", sun)
+        health = world.need(me, Health)
+        before = health.hp
+        world.bus.emit(TurnStart(actor=me, round=world.round))
+        took[sun] = before - health.hp
+    out.that(took[False] == 0,
+             "m6269a1 takes nothing at the top of its turn out of the sun --"
+             " the control, and the one that matters: `World.terrain` is"
+             " empty on every board until something sets it, so this clause"
+             " is silent indoors by construction",
+             f"{took[False]}")
+    out.that(took[True] >= 5,
+             "and at least the printed 5 radiant in it",
+             f"{took[True]} (5 printed, plus whatever the board's damage"
+             f" modifier adds)")
+
+    # -- m1435a5: the budget and the ash ---------------------------------
+    world, me, _c = lit("m1435a5", True)
+    budget = world.need(me, Budget)
+    budget.standard = budget.move = budget.minor = 1
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    out.that(budget.standard == 1 and budget.move == 0 and budget.minor == 0,
+             "m1435a5 keeps its standard action in the sun and loses the"
+             " rest -- 'only a single standard action'. `m820a1`'s card"
+             " leaves the MOVE instead, which is why the two rows zero"
+             " different fields off one mechanism",
+             f"standard={budget.standard} move={budget.move}"
+             f" minor={budget.minor}")
+    out.that(alive(world, me), "and it is still standing at that point")
+    world.bus.emit(TurnEnd(actor=me, round=world.round))
+    out.that(not alive(world, me),
+             "and burns to ash at the end of the turn, which is the half a"
+             "  budget change cannot show")
+
+    world, me, _c = lit("m1435a5", False)
+    budget = world.need(me, Budget)
+    budget.standard = budget.move = budget.minor = 1
+    world.bus.emit(TurnStart(actor=me, round=world.round))
+    world.bus.emit(TurnEnd(actor=me, round=world.round))
+    out.that(budget.move == 1 and budget.minor == 1 and alive(world, me),
+             "and out of the sun it keeps its whole turn and lives -- the"
+             " control for both halves at once",
+             f"move={budget.move} minor={budget.minor}"
+             f" alive={alive(world, me)}")
+
+    # -- m5302a1: the standing penalty -----------------------------------
+    world, me, c = lit("m5302a1", True)
+    burnt = c.total("attack", me, {})
+    world, me, shade = lit("m5302a1", False)
+    shaded = shade.total("attack", me, {})
+    out.that(burnt == shaded - 2,
+             "m5302a1 attacks at -2 while it stands in the sun and not"
+             " otherwise -- asked inside the gate, so a creature dragged"
+             " out of the light stops paying",
+             f"sun {burnt} shade {shaded}")
+
+    # -- and the two twins that carried a SECOND name for the absence -----
+    #
+    # `m5303a1` is `m5302a1`'s card word for word and `m5715a0` is
+    # `m6269a1`'s at 10 radiant instead of 5, and both waited on
+    # `World.sunlight` rather than `query.in_sunlight(world, square)`. Two
+    # names for one gap, and both wrong about the same thing.
+    world, me, lit_up = lit("m5303a1", True)
+    burnt = lit_up.total("attack", me, {})
+    world, me, shaded_up = lit("m5303a1", False)
+    out.that(burnt == shaded_up.total("attack", me, {}) - 2,
+             "m5303a1 takes the same -2 in the sun as its twin",
+             f"sun {burnt} shade {shaded_up.total('attack', me, {})}")
+
+    paid: dict[bool, int] = {}
+    for sun in (False, True):
+        world, me, _c = lit("m5715a0", sun)
+        health = world.need(me, Health)
+        was = health.hp
+        world.bus.emit(TurnStart(actor=me, round=world.round))
+        paid[sun] = was - health.hp
+    out.that(paid[False] == 0 and paid[True] >= 10,
+             "and m5715a0 pays its printed 10 in the sun and nothing out of"
+             " it -- paragon, written because the row is declared and the"
+             " premise its marker rested on is false",
+             f"shade {paid[False]} sun {paid[True]}")
+
+    for ref in ("m1435a5", "m5302a1", "m6269a1", "m5303a1", "m5715a0"):
+        out.that("sunlight" not in str(REGISTRY[ref].unfinished).lower(),
+                 f"{ref} waits on no sunlight symbol, under either name",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25120,6 +25260,11 @@ DRIVERS = {
         it_can_attack_with_only_one_row,
         "a creature that may attack with only one named row, and the heals"
         " that are not touched (#733)",
+    ),
+    "sunlight": (
+        three_creatures_the_sun_hurts,
+        "three creatures the sun hurts, and the eight rows that already"
+        " asked (#734)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

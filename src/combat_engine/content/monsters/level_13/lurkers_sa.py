@@ -2009,12 +2009,29 @@ def m4484a6(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.RADIANT],
-    todo=("World.sunlight",),
 )
 def m5715a0(c: Cast) -> None:
-    """"In direct sunlight" is the whole of the trigger and the board holds
-    no light at all, so there is nothing to ask and no half to play. The
-    symbol is the one m5303a1 already carries for the same absence."""
+    """"In direct sunlight" is the whole of the trigger, and it is written:
+    `c.terrain("sunlight")`, which ten monster rows ask. The old note said
+    the board holds no light at all -- it holds two different lights, and
+    this is the coarser one, a property of the encounter rather than of a
+    square.
+
+    `m6269a1` is the same card at 5 radiant instead of 10.
+
+    **Written although this is paragon**, for the reason `m6016a2` was: the
+    row is declared, the clause is two lines, and the premise its marker
+    rested on is false now. Finishing a declared row is not opening paragon
+    work. #734."""
+    me = c.me
+
+    def toll(ev: TurnStart) -> None:
+        if ev.ghost or ev.actor != me or not c.terrain("sunlight"):
+            return
+        c.flat(10, dtype=DamageType.RADIANT, on=me)
+
+    c.watch(TurnStart, toll, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} sunburn")
 
 
 @power(
