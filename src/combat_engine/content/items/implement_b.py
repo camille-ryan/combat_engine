@@ -3212,13 +3212,21 @@ def i3169x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.deals(only_untyped=)",),
 )
 def i3170x1(c: Cast) -> None:
-    """`c.deals` is an override and takes no account of what the damage
-    already was, so "unless the damage already has a type" is the dropped
-    clause -- this makes a cold power's damage fire."""
-    c.deals(DamageType.FIRE, on=c.me, until=When.ENCOUNTER, implement=True)
+    """Written, and the marker was stale rather than waiting. It asked for
+    `c.deals(only_untyped=)`; "unless the damage already has a type" **is**
+    `from_=DamageType.UNTYPED`, which has existed since #613 -- its own
+    docstring calls that case out by name, as "the narrow behaviour this
+    method used to have by accident". Nothing needed building.
+
+    Found while landing three other narrowings on the same verb (#711),
+    which is the argument for reading a verb's whole signature rather than
+    the parameter a marker happens to name."""
+    c.deals(
+        DamageType.FIRE, on=c.me, until=When.ENCOUNTER, implement=True,
+        from_=DamageType.UNTYPED,
+    )
 
 
 @power(

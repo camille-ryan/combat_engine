@@ -1465,13 +1465,27 @@ def i2361p1(c: Cast) -> None:
     target=SELF,
     trigger="you score a critical hit on your turn",
     on=Trigger(Hit, _my_crit_on_my_turn, "you score a critical hit"),
-    todo=("c.deals(add=True)",),
 )
 def i2550p1(c: Cast) -> None:
-    """"In addition to its normal damage types" is the one thing `c.deals`
-    will not do: it is an override by design and ends whatever type was
-    standing, so writing it here would take the attack's own type away
-    rather than add to it."""
+    """Written. "In addition to its normal damage types" was the one thing
+    `c.deals` would not do, and `add=True` is now that: `Cast._retyped`
+    already holds the type the card printed, so the whole of it is
+    answering `(printed, *mine)` rather than `mine`. The printed type stays
+    **first**, because `resolve.deal_damage` takes the primary from there
+    and every event reader asks about it -- the attack is still its own
+    type, with one more.
+
+    "Radiant damage **or** fire damage" is a real choice and is offered as
+    one, before the retype is laid: the two are not interchangeable against
+    a target that resists either.
+
+    `once=True` because the clause is about **the triggering attack** and
+    nothing after it, and `When.EOT` so the hold cannot outlive the turn if
+    that attack somehow rolls no damage."""
+    word = c.choose([DamageType.RADIANT, DamageType.FIRE], c.ref)
+    if word is None:
+        return
+    c.deals(word, on=c.me, until=When.EOT, add=True, once=True)
 
 
 @power(
@@ -3426,18 +3440,25 @@ def i2400x1(c: Cast) -> None:
     keywords=[Keyword.RADIANT],
     trigger="you attack with the weapon most recently sheathed",
     on=Trigger(AttackDeclared, by_me, "you attack"),
-    dropped=("c.deals(once=)", "c.sheathed()"),
+    dropped=("c.sheathed()",),
 )
 def i2400p1(c: Cast) -> None:
-    """`c.deals` changes every swing for a duration and has no spend, so
-    "the next attack" is served by the shortest duration there is.
+    """One of the two clauses landed. `c.deals(once=True)` is "**the next**
+    attack you make with that weapon", spent by the blow it recolours, where
+    this held the retype for the whole printed window and recoloured every
+    swing in it -- a row more generous than its card. `todo.py` went red
+    naming this row the moment the parameter arrived, which is what that
+    instrument is for. #711.
 
-    Two clauses are missing, not one, and only the first was named: which
-    weapon was last sheathed is not recorded either -- `Gear.stowed` is an
-    unordered `set[str]` and no extended rest is modelled -- so the recolour
-    reaches whatever is in hand, as in i2361p1. `c.sheathed()` is the symbol
-    that row already waits on."""
-    c.deals(DamageType.RADIANT, on=c.me, until=When.EONT)
+    `until=When.EONT` stays: the card prints a window as well as a count
+    ("before the end of your next turn"), so the hold has to expire even if
+    no attack is ever made.
+
+    Still dropped: which weapon was last sheathed is not recorded --
+    `Gear.stowed` is an unordered `set[str]` and no extended rest is
+    modelled -- so the recolour reaches whatever is in hand, as in
+    `i2361p1`. `c.sheathed()` is the symbol that row already waits on."""
+    c.deals(DamageType.RADIANT, on=c.me, until=When.EONT, once=True)
 
 
 @power("i2487x1", level=10, cls=ITEM, action=ActionType.NONE,

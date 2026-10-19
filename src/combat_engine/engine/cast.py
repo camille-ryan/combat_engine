@@ -12990,7 +12990,10 @@ class Cast:
         until: When = When.ENCOUNTER,
         on: int | None = None,
         implement: bool = False,
-        from_: DamageType | None = None,
+        through: Keyword | None = None,
+        from_: DamageType | Sequence[DamageType] | None = None,
+        once: bool = False,
+        add: bool = False,
         ranged: bool = False,
         ref: str = "",
         vs_kind: str = "",
@@ -13070,13 +13073,47 @@ class Cast:
         `from_=FIRE, dtypes=(FIRE, NECROTIC)` and the mirror of it. Two
         holds, which is why the line below changed.
 
+        **`through=` names the keyword the override speaks for**, where
+        `implement=` chooses between two. The label field has always held a
+        keyword -- `_retyped` asks `Keyword(through) not in keywords` -- so
+        only the caller could not name it, and *"the next **arcane** power
+        you use deals necrotic"* had nothing to ask for: `implement=True` is
+        both too narrow, since an arcane *weapon* power is untouched, and
+        too wide, since a non-arcane implement power is caught.
+        `implement=` stays for the two dozen cards that print one of the two
+        words.
+
+        **`once=True` is spent by the blow it recolours**, which is what
+        *"the **next** power you use"* says. Three rows printed it and held
+        the retype to the end of the turn instead; each said so in its own
+        docstring. `c.bonus(once=)` has had this since it was written.
+
+        **`from_` takes a set as well as one type.** "The next necrotic
+        **or** poison power you use through this rod deals radiant" is two
+        source types, and with one the row was written as an unconditional
+        override -- *wider* than the card, recolouring everything the rod
+        cast. `Target.conditions` is the precedent and its note is the
+        argument: *"any of them, not all of them"*.
+
+        **`add=True` adds instead of replacing.** One card prints "deals
+        radiant damage or fire damage **in addition to** its normal damage
+        types", and this method is an override by design -- so written
+        without it the row would take the attack's own type *away*.
+        `_retyped` already has the printed type in hand, so the whole of it
+        is answering `(printed, *mine)` rather than `mine`.
+
         Held as a labelled effect rather than written onto the `Weapon`,
         because the weapon object is the character's and the change is
         usually for a fight. Yours, so it defaults to the caster.
         """
         who = on if on is not None else self.me
         types = tuple(dict.fromkeys(dtypes)) or (dtype,)
-        through = Keyword.IMPLEMENT if implement else Keyword.WEAPON
+        word = through or (Keyword.IMPLEMENT if implement else Keyword.WEAPON)
+        sources = (
+            (from_,) if isinstance(from_, DamageType)
+            else tuple(dict.fromkeys(from_)) if from_
+            else ()
+        )
         # **A fixed six-field key.** The label was `deals:<to>:<through>`
         # and nothing outside this file parses it -- the two other mentions
         # in the tree are docstrings using it as an example of a label that
@@ -13094,7 +13131,7 @@ class Cast:
         # The `deals:` prefix stays: `durations.py`, `dsl.py` and
         # `audit.py` all test `label.startswith("deals:")`.
         narrowing = (
-            f"{through.value}|{from_.value if from_ is not None else ''}"
+            f"{word.value}|{','.join(t.value for t in sources)}"
             f"|{'ranged' if ranged else ''}|{ref}|{vs_kind}"
         )
         # **Ends a standing retype only where the two speak for the same
@@ -13120,7 +13157,8 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until,
             label=(f"deals:{types[0].value}|{narrowing}"
-                   f"|{','.join(t.value for t in types[1:])}"),
+                   f"|{','.join(t.value for t in types[1:])}"
+                   f"|{','.join(f for f, on in (('once', once), ('add', add)) if on)}"),
             # A structured key, not a ref: `by` carries the row. #580
             by=self.ref,
         )
@@ -13201,9 +13239,15 @@ class Cast:
             # Positional, and padded: a label written before the two
             # narrowing fields existed has two parts and must keep
             # meaning exactly what it meant.
-            parts = [*eff.label.split("|"), "", "", "", "", "", ""][0:7]
+            parts = [*eff.label.split("|"), "", "", "", "", "", "", ""][0:8]
             said = parts[0].removeprefix("deals:")
-            through, only, scope, named, kind, also = parts[1:7]
+            through, only, scope, named, kind, also, flags = parts[1:8]
+            # **A comma-joined flag set, not a word per field.** Two
+            # booleans would have been two more positions on a label that
+            # already carries seven, and every one is a chance to read the
+            # whole thing one place to the left -- which is exactly how
+            # `ref` with a colon in it went wrong.
+            marks = set(flags.split(",")) - {""}
             # **A named row is its own narrowing, and `through` steps
             # aside for it.** That field scopes "this weapon" or "this
             # implement" and is one of those two or nothing -- there is no
@@ -13223,7 +13267,10 @@ class Cast:
                 and Keyword(through) not in keywords
             ):
                 continue
-            if only and DamageType(only) is not printed:
+            # **A set, comma-joined, and any of them matches.** One card
+            # prints "the next necrotic or poison power", and with a single
+            # type the row had to be written as a blanket override.
+            if only and printed.value not in only.split(","):
                 continue
             if scope == "ranged" and not self.ranged:
                 continue
@@ -13236,10 +13283,31 @@ class Cast:
             # reason this is a kind and not a hand-rolled test.
             if kind and not self.is_kind(kind):
                 continue
-            return (
+            mine = (
                 DamageType(said),
                 *(DamageType(v) for v in also.split(",") if v),
             )
+            # **The printed type first when adding**, because `deal_damage`
+            # takes `types[0]` as the blow's primary and every event reader
+            # asks about that. "In addition to its normal damage types"
+            # keeps the attack's own type as what the blow *is*.
+            answer = (
+                tuple(dict.fromkeys((printed, *mine))) if "add" in marks
+                else mine
+            )
+            # **Spent by the blow it recolours, which is a read with a side
+            # effect and is deliberate.** "The next power you use deals
+            # necrotic" is one blow, and the type for *this* blow is already
+            # in hand by the time this line runs -- `c.damage` has not called
+            # `deal_damage` yet. Ending it here rather than on a listener is
+            # the same ordering argument `_weapon_dtype` gives: a type
+            # settled after the damage modifiers are summed changes
+            # resistance and the log and nothing else.
+            #
+            # Safe to end mid-walk because the walk ends with this return.
+            if "once" in marks:
+                self.world.effects.end(eff, "the retype is spent")
+            return answer
         return None
 
     def _weapon_dtype(self) -> DamageType | None:

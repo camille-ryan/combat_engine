@@ -119,7 +119,7 @@ def warlock_f1s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.ELEMENTAL],
-    dropped=("c.deals(from_many=)",),
+    dropped=("c.deals(may=)",),
     requires=on_leg("elemental"),
     requires_text="needs the pact that prints it",
 )
@@ -135,21 +135,33 @@ def warlock_f1s1(c: Cast) -> None:
     rather than four named ones on one named row, so taking it would
     recolour the whole character.
 
-    **Re-pointed, because the half that landed is not the half this needs.**
-    `c.deals(ref=)` exists now -- and this card names no row. It says "an
-    arcane attack power", a *class*, so the narrowing it wants is by
-    keyword, which `implement=True` already half-does for one keyword. The
-    blocking clause is the other one: the affinity "replaces **each
-    instance** of force, necrotic, poison, and psychic damage", so the
-    retype has to narrow on **four** source types rather than one. Without
-    that it recolours every type the character deals, which is the widening
-    the paragraph above describes.
+    **Re-pointed twice, and the second time most of it landed.** The first
+    re-point was off `c.deals(ref=)`: this card names no row, it names "an
+    arcane attack power", a *class*. What it wanted instead was a narrowing
+    by **keyword** and a narrowing on **four source types**, since the
+    affinity "replaces each instance of force, necrotic, poison, and
+    psychic damage" -- and without the second it would recolour every type
+    the character deals, which is the widening the paragraph above
+    describes.
 
-    The symbol is `c.deals(from_many=)` and not `c.deals(from_=several)`,
-    because `blocked.py` resolves the second one as **existing** -- it sees
-    `from_` on the signature and does not read the value word -- so that
-    spelling would have reported this row READY on a facility nobody had
-    built. Checked with `blocked._exists` before choosing, the same way
+    **Both of those are parameters now** (#711): `through=Keyword.ARCANE`
+    and `from_` taking the set. What is left is the printed **may**. The
+    affinity replaces each instance *at the character's option*, and a
+    standing retype has no moment to ask -- it is a label read inside
+    `Cast._typed`, not a body that runs per blow. The nearest writable
+    shape is a choice made once as the turn starts, laid `until=When.EOT`
+    off a `TurnStart` watch, which is a narrowing of the card rather than
+    the card; that is worth doing and is not this symbol.
+
+    "On your own turn" is **not** part of the gap: that same `TurnStart`
+    watch scopes it, the way `f3225` brackets a hold around one power.
+
+    The symbol is `c.deals(may=)` and not `c.deals(optional=)` or a bare
+    `may`, for the reason the last one was chosen this way: `blocked.py`
+    resolves a parameter name it can see on the signature as **existing**
+    and does not read the value word, so a spelling already present would
+    have reported this row READY on a facility nobody had built. Checked
+    with `blocked._exists` before choosing, the same way
     `warlock.boon_instead_of()` was.
     """
     if not c.build("elemental"):

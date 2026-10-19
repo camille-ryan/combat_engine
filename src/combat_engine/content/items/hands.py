@@ -800,17 +800,32 @@ def i2168x1(c: Cast) -> None:
 
 
 @power("i2452p1", level=6, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.NECROTIC],
-       dropped=("c.next_attack_becomes()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.NECROTIC])
 def i2452p1(c: Cast) -> None:
-    """`c.deals` changes what the *weapon* deals, which is the nearest
-    thing to "the next arcane power you use deals necrotic" -- and it is
-    only near: `Cast._typed` applies it to weapon powers alone, so an
-    arcane implement power is untouched. The extra die carries the
-    printed type on its own."""
-    c.deals(DamageType.NECROTIC, on=c.me, until=When.EOT)
+    """Written. Both halves of "the next arcane power you use" are
+    parameters now: `through=Keyword.ARCANE` is which powers it speaks for
+    and `once=True` is how many of them.
+
+    **The marker named neither.** It said `c.next_attack_becomes()`, a
+    symbol five rows shared and which turned out to be two unrelated
+    mechanisms -- this retype, and turning a single-target attack into a
+    burst (#712). The old note's complaint was right about the shape and
+    wrong about the fix: `implement=True` is not the nearest thing, it is
+    the wrong thing in both directions, catching a non-arcane implement
+    power and missing an arcane weapon one.
+
+    **`When.ENCOUNTER`, not `When.EOT`, and that is a correction.** The
+    card prints no duration at all -- it says *the next* arcane power, and
+    a minor action spent on this one turn may well be followed by that
+    power on the next. With `once=True` doing the limiting, a turn-long
+    hold was only ever an approximation of a count.
+
+    The die rides the same clause: one `once=True` bonus, spent by the same
+    blow."""
+    c.deals(DamageType.NECROTIC, on=c.me, until=When.ENCOUNTER,
+            through=Keyword.ARCANE, once=True)
     c.bonus("damage", 0, dice="1d6", dtype=DamageType.NECROTIC, on=c.me,
-            until=When.EOT, once=True)
+            until=When.ENCOUNTER, once=True)
 
 
 @power("i3223x1", level=6, cls=ITEM, action=ActionType.NONE,
@@ -1046,15 +1061,15 @@ def i1431p1(c: Cast) -> None:
 
 
 @power("i1440p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON],
-       dropped=("c.next_attack_becomes()",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POISON])
 def i1440p1(c: Cast) -> None:
-    """As `i2452p1`: `c.deals` is the nearest thing to "the next arcane
-    power you use deals poison", and the extra die at least lands as the
-    printed type."""
-    c.deals(DamageType.POISON, on=c.me, until=When.EOT)
+    """The same card as `i2452p1` two levels up and in the other type, and
+    written the same way -- see it for why `through=` and `once=` are the
+    two things the old marker was standing in for."""
+    c.deals(DamageType.POISON, on=c.me, until=When.ENCOUNTER,
+            through=Keyword.ARCANE, once=True)
     c.bonus("damage", 0, dice="1d6", dtype=DamageType.POISON, on=c.me,
-            until=When.EOT, once=True)
+            until=When.ENCOUNTER, once=True)
 
 
 @power("i1441x1", level=8, cls=ITEM, action=ActionType.NONE,

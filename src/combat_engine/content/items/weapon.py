@@ -1783,12 +1783,22 @@ def i1295x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    todo=("c.next_attack_becomes()",),
+    todo=("c.becomes_burst()",),
 )
 def i1300p1(c: Cast) -> None:
-    """Rewrites the next basic attack into a burst against a different
-    defence with different damage. `c.widen_areas` grows an area a power
-    already has; nothing turns a single-target attack into one."""
+    """Rewrites the next ranged basic attack into a burst 1 centred on the
+    target, against Reflex, dealing ongoing fire instead of its normal
+    damage. `c.widen_areas` grows an area a power already **has** and
+    returns 0 for a single-target row; `c.area_origin` moves where an area
+    is centred, which is only useful once there is one.
+
+    **Re-pointed off `c.next_attack_becomes()`, which was two mechanisms.**
+    Three rows sharing that symbol wanted a *retype* narrowed by keyword,
+    source and one use, and those landed in #711. This row and `i2878p1`
+    want an edit to the shape, the defence and the damage of an attack not
+    yet declared -- one symbol for the three together, because they are one
+    printed sentence and splitting them would be the same mistake again.
+    #712."""
 
 
 @power(

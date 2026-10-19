@@ -19,7 +19,7 @@ Points off and points back on, and the dice behind them.
   - Soften the fall being answered. With no number, all of it.
 - `c.damage(self, dice: 'str | int' = 0, bonus: 'int' = 0, *, dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, dtypes: 'Sequence[DamageType]' = (), on: 'int | None' = None, detail: 'str' = '') -> 'int'`
   - Roll and apply damage. A critical hit maxes the dice, as printed.
-- `c.deals(self, dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, dtypes: 'Sequence[DamageType]' = (), until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, implement: 'bool' = False, from_: 'DamageType | None' = None, ranged: 'bool' = False, ref: 'str' = '', vs_kind: 'str' = '') -> 'Effect | None'`
+- `c.deals(self, dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, *, dtypes: 'Sequence[DamageType]' = (), until: 'When' = <When.ENCOUNTER: 'end of encounter'>, on: 'int | None' = None, implement: 'bool' = False, through: 'Keyword | None' = None, from_: 'DamageType | Sequence[DamageType] | None' = None, once: 'bool' = False, add: 'bool' = False, ranged: 'bool' = False, ref: 'str' = '', vs_kind: 'str' = '') -> 'Effect | None'`
   - This creature's weapon attacks deal that type from now on.
 - `c.flat(self, amount: 'int', *, dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, dtypes: 'Sequence[DamageType]' = (), unpreventable: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Damage that is not rolled. `dtypes` is one blow of several types.

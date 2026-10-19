@@ -975,16 +975,22 @@ def i2330x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    dropped=("c.deals(once=)",),
 )
 def i2330p1(c: Cast) -> None:
-    """`c.deals(implement=True)` is the conversion: it beats the type the
-    power printed and speaks for `Keyword.IMPLEMENT` rows, which is both
-    halves of what this line needs.
+    """Written, and the old note understated what was missing. It said
+    `implement=True` was "both halves of what this line needs" and only
+    the one-use scope was dropped -- but the card narrows the **source**
+    too: "the next **necrotic or poison** power you use through this rod".
+    Written as a bare override it recoloured everything the rod cast, which
+    is wider than the card rather than narrower, and so the kind of gap no
+    audit verdict can see.
 
-    What is left is the scope. Nothing spends the override on one use, so
-    it is held to the end of the turn rather than to "the next power"."""
-    c.deals(DamageType.RADIANT, on=c.me, until=When.EOT, implement=True)
+    Three narrowings, all parameters now: `implement=True` for the rod,
+    `from_` taking the pair, and `once=True` for "the next"."""
+    c.deals(
+        DamageType.RADIANT, on=c.me, until=When.ENCOUNTER, implement=True,
+        from_=(DamageType.NECROTIC, DamageType.POISON), once=True,
+    )
 
 
 @power(

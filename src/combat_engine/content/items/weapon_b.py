@@ -2784,12 +2784,13 @@ def i2853p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.THUNDER],
-    todo=("c.next_attack_becomes()",),
+    todo=("c.becomes_burst()",),
 )
 def i2878p1(c: Cast) -> None:
-    """Rewrites the next basic attack into a burst against a different
-    defence. `c.widen_areas` grows an area a power already has; nothing
-    turns a single-target attack into one."""
+    """The same card as `i1300p1` a level up, against Fortitude and with
+    the weapon's own damage rather than an ongoing burn. Re-pointed with
+    it: see that row for why `c.next_attack_becomes()` was two mechanisms
+    and this is the other one. #712."""
 
 
 @power(

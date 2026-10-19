@@ -14549,8 +14549,14 @@ def a_retype_can_name_one_row_and_one_victim(out: Result) -> None:
     # `f1488` was here and is written: `c.deals(dtypes=)` landed in #706.
     # Its two neighbours want different things and are the reason one symbol
     # over four rows could go green correctly for none of them.
+    #
+    # **`cf:warlock-f1s1` moved on again in #711.** It wanted a keyword
+    # narrowing and a *set* of source types, and both are parameters now
+    # (`through=`, `from_` taking a sequence), so `from_many=` is spent. What
+    # is left is the printed **may** -- a choice per instance, which a
+    # standing label read inside `_typed` has no moment to ask.
     left = {
-        "cf:warlock-f1s1": ("c.deals(from_many=)",),
+        "cf:warlock-f1s1": ("c.deals(may=)",),
         "f2179": ("c.deals(like=)",),
     }
     out.that(not REGISTRY["f1488"].unfinished,
@@ -22567,6 +22573,251 @@ def a_retype_can_be_of_two_types_at_once(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
+    """`c.deals(through=, once=)` and `from_` as a set -- three narrowings.
+
+    Five rows carried `c.next_attack_becomes()` and wanted **two unrelated
+    things**: three of them a retype with narrowings `c.deals` could not
+    say, two of them a single-target attack turned into a burst (#712).
+    Rows disagreeing about what is missing is the symbol being the bug.
+
+    **`through=` is the one with a three-way control**, and it is the only
+    assertion here that `implement=True` could not already pass:
+
+    * an arcane **implement** power is recoloured -- which `implement=True`
+      also does;
+    * an arcane **weapon** power is recoloured -- which it does **not**;
+    * a non-arcane implement power is left alone -- which it does not
+      either.
+
+    So the old note on `i2452p1` calling `implement=True` "the nearest
+    thing" was wrong in both directions at once, and a board with only
+    implement powers on it could never have shown that.
+
+    **`once=` is asserted on the second blow, not the first.** A retype that
+    fires once and a retype that stands all turn are identical on one blow,
+    so the control is the blow *after*, plus the hold being gone from
+    `world.effects.live`. The failure mode without it is a row more generous
+    than its card, which no audit verdict looks for.
+
+    **`from_` as a set** is two sources matching and a third not.
+    `i2330p1`'s old note claimed `implement=True` was "both halves of what
+    this line needs" and missed that the card names the source types too --
+    so the row was written as a blanket override, wider than the card.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType as T
+    from combat_engine.engine.types import Keyword
+
+    def find(*, arcane: bool, word: Keyword) -> str:
+        for ref, p in sorted(REGISTRY.items()):
+            if not ref.startswith("p") or (p.level or 0) > 10 or p.todo:
+                continue
+            kws = p.keywords or ()
+            if word in kws and (Keyword.ARCANE in kws) is arcane:
+                return ref
+        return ""
+
+    arc_imp = find(arcane=True, word=Keyword.IMPLEMENT)
+    arc_wep = find(arcane=True, word=Keyword.WEAPON)
+    other = find(arcane=False, word=Keyword.IMPLEMENT)
+    out.that(bool(arc_imp) and bool(arc_wep) and bool(other),
+             "there is a heroic arcane implement power, a heroic arcane"
+             " weapon power and a heroic implement power that is not arcane"
+             " -- without all three, `through=` proves nothing that"
+             " `implement=True` does not",
+             f"{arc_imp} / {arc_wep} / {other}")
+
+    def board(ref: str):  # noqa: ANN202
+        world, me, _ = _posed(ref, 1)
+        return world, me, sorted(enemies(world, me))[0]
+
+    def blow(world, me, foe, ref, printed):  # noqa: ANN001, ANN202
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        mark = len(world.bus.log)
+        use.damage("1d1", 9, dtype=printed, on=foe)
+        hits = [e for e in world.bus.log[mark:]
+                if isinstance(e, DamageApplied)]
+        return hits[-1].types() if hits else ()
+
+    # -- through=: the three-way control ----------------------------------
+    for ref, want, why in (
+        (arc_imp, (T.NECROTIC,), "an arcane IMPLEMENT power is recoloured"),
+        (arc_wep, (T.NECROTIC,),
+         "an arcane WEAPON power is recoloured too, which `implement=True`"
+         " would have missed"),
+        (other, (T.FIRE,),
+         "and an implement power that is NOT arcane is left alone, which"
+         " `implement=True` would have caught"),
+    ):
+        world, me, foe = board("i2452p1")
+        Cast(world=world, me=me, ref="drivers:through").deals(
+            T.NECROTIC, on=me, until=When.ENCOUNTER, through=Keyword.ARCANE,
+        )
+        # **Struck once, and the answer kept.** Calling `blow` again for the
+        # detail string is a second blow, and three assertions deep the foe
+        # is dead and answers `()` -- which is how the `from_` case below
+        # failed on its last line while reading perfectly.
+        got = blow(world, me, foe, ref, T.FIRE)
+        out.that(got == want,
+                 f"`through=Keyword.ARCANE`: {why}",
+                 f"{ref} -> {got}")
+
+    # -- once=: the SECOND blow is the assertion --------------------------
+    world, me, foe = board("i2452p1")
+    Cast(world=world, me=me, ref="drivers:once").deals(
+        T.NECROTIC, on=me, until=When.ENCOUNTER, through=Keyword.ARCANE,
+        once=True,
+    )
+    first = blow(world, me, foe, arc_imp, T.FIRE)
+    second = blow(world, me, foe, arc_imp, T.FIRE)
+    out.that(first == (T.NECROTIC,) and second == (T.FIRE,),
+             "`once=True` recolours one blow and leaves the next alone --"
+             " asserted on the SECOND, because one blow cannot tell a spent"
+             " retype from a standing one",
+             f"first {first} second {second}")
+    out.that(not [e for e in world.effects.of(me)
+                  if e.label.startswith("deals:")],
+             "and the hold is gone rather than merely inert, so nothing else"
+             " can read it back",
+             f"{[e.label for e in world.effects.of(me)]}")
+    # The control for the control: without `once`, the second blow is caught.
+    world, me, foe = board("i2452p1")
+    Cast(world=world, me=me, ref="drivers:standing").deals(
+        T.NECROTIC, on=me, until=When.ENCOUNTER, through=Keyword.ARCANE,
+    )
+    blow(world, me, foe, arc_imp, T.FIRE)
+    out.that(blow(world, me, foe, arc_imp, T.FIRE) == (T.NECROTIC,),
+             "where a standing retype catches the second blow as well --"
+             " the arrangement that makes the pair above mean something")
+
+    # -- from_ as a set ---------------------------------------------------
+    for printed, want, why in (
+        (T.NECROTIC, (T.RADIANT,), "the first source matches"),
+        (T.POISON, (T.RADIANT,), "the second does too -- a set, not one"),
+        (T.COLD, (T.COLD,),
+         "and a type the card does not name is untouched, which the blanket"
+         " override this row used to be could not say"),
+    ):
+        # A fresh board per source, for the reason above: three 10-point
+        # blows on one foe kill it and the fourth answers nothing.
+        world, me, foe = board("i2330p1")
+        Cast(world=world, me=me, ref="drivers:sources").deals(
+            T.RADIANT, on=me, until=When.ENCOUNTER, implement=True,
+            from_=(T.NECROTIC, T.POISON),
+        )
+        got = blow(world, me, foe, arc_imp, printed)
+        out.that(got == want,
+                 f"`from_=(NECROTIC, POISON)`: {why}",
+                 f"{printed.value} -> {got}")
+
+    # -- and through the three rows' own bodies ---------------------------
+    # **Each row gets a case it must NOT cover**, and that pairing is here
+    # because a plant found it missing: reverting `i2330p1` to the blanket
+    # override it used to be left this block green, since a blanket override
+    # answers RADIANT for a necrotic blow too. Only a type the card does not
+    # name can tell the two apart.
+    for ref, covers, printed, want, misses, other in (
+        ("i2452p1", (Keyword.ARCANE, Keyword.IMPLEMENT), T.FIRE, T.NECROTIC,
+         (Keyword.DIVINE, Keyword.IMPLEMENT), T.FIRE),
+        ("i1440p1", (Keyword.ARCANE, Keyword.IMPLEMENT), T.FIRE, T.POISON,
+         (Keyword.DIVINE, Keyword.IMPLEMENT), T.FIRE),
+        ("i2330p1", (Keyword.IMPLEMENT,), T.NECROTIC, T.RADIANT,
+         (Keyword.IMPLEMENT,), T.COLD),
+    ):
+        world, me, _foe = board(ref)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        rolling = Cast(world=world, me=me, ref="drivers:rolling")
+        got = rolling._retyped(covers, printed)
+        out.that(got == (want,),
+                 f"{ref}'s own body retypes to {want.value}",
+                 f"{got}")
+        out.that(rolling._retyped(misses, other) is None,
+                 f"and leaves alone what its card does not name -- for the"
+                 f" two arcane rows a power of another source, for the rod"
+                 f" a damage type it does not list ({other.value})",
+                 f"{rolling._retyped(misses, other)}")
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker now",
+                 f"{REGISTRY[ref].unfinished}")
+
+    # -- add=: the printed type kept, one more added --------------------
+    world, me, _foe = board("i2550p1")
+    Cast(world=world, me=me, ref="drivers:add").deals(
+        T.RADIANT, on=me, until=When.EOT, add=True,
+    )
+    adding = Cast(world=world, me=me, ref="drivers:adding")
+    out.that(adding._retyped((Keyword.WEAPON,), T.COLD)
+             == (T.COLD, T.RADIANT),
+             "`add=True` keeps the type the card printed and adds its own"
+             " -- printed FIRST, because `deal_damage` takes the primary"
+             " from there and every event reader asks about that",
+             f"{adding._retyped((Keyword.WEAPON,), T.COLD)}")
+    out.that(adding._retyped((Keyword.WEAPON,), T.RADIANT) == (T.RADIANT,),
+             "and adding a type the blow already is leaves one of it, not"
+             " two -- `min(resist)` and `all(immune)` would read the same"
+             " entry twice for no change",
+             f"{adding._retyped((Keyword.WEAPON,), T.RADIANT)}")
+
+    # -- three more rows in the same family, two of them stale markers ----
+    # `i3170x1` asked for `c.deals(only_untyped=)` and "unless the damage
+    # already has a type" **is** `from_=UNTYPED`, which has existed since
+    # #613. `i2400p1` is what `todo.py` reddened on the moment `once=`
+    # landed. `i2550p1` is the one that needed `add=`.
+    for ref, kws, printed, want in (
+        ("i3170x1", (Keyword.IMPLEMENT,), T.UNTYPED, (T.FIRE,)),
+        ("i2400p1", (Keyword.WEAPON,), T.COLD, (T.RADIANT,)),
+        ("i2550p1", (Keyword.WEAPON,), T.COLD, (T.COLD, T.RADIANT)),
+    ):
+        world, me, _foe = board(ref)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        asking = Cast(world=world, me=me, ref="drivers:asking")
+        out.that(asking._retyped(kws, printed) == want,
+                 f"{ref}'s own body answers {tuple(t.value for t in want)}",
+                 f"{asking._retyped(kws, printed)}")
+    # ... and the narrowing each of the three must respect.
+    world, me, _foe = board("i3170x1")
+    REGISTRY["i3170x1"].body(Cast(world=world, me=me, ref="i3170x1"))
+    out.that(Cast(world=world, me=me, ref="drivers:typed")._retyped(
+                 (Keyword.IMPLEMENT,), T.COLD) is None,
+             "and `i3170x1` leaves a blow that already has a type alone,"
+             " which is the whole printed clause and what its old marker"
+             " said could not be written")
+    world, me, _foe = board("i2400p1")
+    REGISTRY["i2400p1"].body(Cast(world=world, me=me, ref="i2400p1"))
+    spent = Cast(world=world, me=me, ref="drivers:spent")
+    spent._retyped((Keyword.WEAPON,), T.COLD)
+    out.that(spent._retyped((Keyword.WEAPON,), T.COLD) is None,
+             "and `i2400p1` is spent by one blow -- it used to recolour"
+             " every swing in the printed window, which is a row more"
+             " generous than its card")
+    out.that(REGISTRY["i2400p1"].unfinished == ("c.sheathed()",),
+             "`i2400p1` keeps the one marker it still earns: which weapon"
+             " was last sheathed is not recorded anywhere",
+             f"{REGISTRY['i2400p1'].unfinished}")
+    for ref in ("i3170x1", "i2550p1"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} carries no marker now",
+                 f"{REGISTRY[ref].unfinished}")
+
+    # -- the two rows the symbol was ALSO covering, now pointed elsewhere --
+    for ref in ("i1300p1", "i2878p1"):
+        out.that(REGISTRY[ref].unfinished
+                 and "c.next_attack_becomes()" not in str(
+                     REGISTRY[ref].unfinished),
+                 f"{ref} no longer shares a symbol with the retype rows --"
+                 " it turns a single-target attack into a burst, which is"
+                 " #712 and a different mechanism",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -22575,6 +22826,10 @@ DRIVERS = {
     "retype_two_types": (
         a_retype_can_be_of_two_types_at_once,
         "a standing retype of two damage types at once (#706)",
+    ),
+    "retype_scoped": (
+        a_retype_names_its_keyword_its_sources_and_one_use,
+        "a retype naming its keyword, its source types and one use (#711)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
