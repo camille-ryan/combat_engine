@@ -1587,7 +1587,11 @@ DEAL_RACES = True
 #: nothing else in it and with `--redraw`, for the reason `DEAL_RACES` gives
 #: above: every dealt character changes, so every roll after the first changes
 #: with it, and that divergence is indistinguishable from a real regression.
-SCORED_CHOICES = True
+#: **Annotated `bool`, not left to infer `Literal[True]`.** Three instruments
+#: write it -- `audit.py` at import time, `expect.py` from a flag, and
+#: `drivers.py`'s own board helper -- and without the annotation every one of
+#: those assignments is a type error. #721.
+SCORED_CHOICES: bool = True
 
 #: Whether the draw also consults `ratings.py` -- the community guides' colour
 #: ratings for 5,240 options. Separate from `SCORED_CHOICES` so the two can be

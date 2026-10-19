@@ -18,7 +18,7 @@ line and the unusual case still one line.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
@@ -5378,7 +5378,16 @@ class Cast:
             parts += [
                 Defenses(values=dict.fromkeys(DEFENCES, defences),
                          scale="none"),
-                Side(team=_side_of(self.world, self.me) or Team.ALLY),
+                # **`Team.NEUTRAL` and not `Team.ALLY`, which does not
+                # exist.** Four sites spelled `or Team.ALLY` -- three of
+                # them for years -- and `query.team` is `Team | None`, so
+                # the branch raised `AttributeError` exactly when the
+                # caster had no `Side`. Dead on every board `chargen`
+                # builds, which is why `audit.py` reports 0 raise; live on
+                # any hand-built one. `NEUTRAL` is the only member that
+                # means "no side", so the unknown propagates rather than
+                # being invented as the caster's. #722.
+                Side(team=_side_of(self.world, self.me) or Team.NEUTRAL),
                 # One hit point, which **is** the printed "no hit points,
                 # destroyed by a damaging hit" -- see the docstring.
                 Health(hp=1, max_hp=1, dies_at_zero=True),
@@ -7348,7 +7357,7 @@ class Cast:
             # again" is about calling *that* companion again.
             self.dismiss_companion()
 
-        side = side_of(self.world, self.me) or Team.ALLY
+        side = side_of(self.world, self.me) or Team.NEUTRAL
         if ref.startswith("comp:"):
             # A beast's page is a formula rather than a finished stat block
             # and lives in its own table, so it has a loader of its own. Its
@@ -7454,7 +7463,7 @@ class Cast:
         each = spec.per_defence or {}
         made = self.world.spawn(
             Position(square=where, size=Size(spec.size)),
-            Side(team=side_of(self.world, self.me) or Team.ALLY),
+            Side(team=side_of(self.world, self.me) or Team.NEUTRAL),
             Health(hp=hp, max_hp=hp),
             Defenses(
                 values={
@@ -13447,7 +13456,12 @@ class Cast:
 
     def _retyped(
         self,
-        keywords: Sequence[Keyword] | None,
+        # **`Collection`, not `Sequence`.** Every caller passes what
+        # `c.keywords_of` returns, which is a `frozenset` -- no
+        # `__getitem__`, so not a `Sequence` -- and this only iterates it
+        # and asks `in`. The narrow annotation made its own in-tree caller
+        # a type error, which is how it was found. #721.
+        keywords: Collection[Keyword] | None,
         printed: DamageType = DamageType.UNTYPED,
     ) -> tuple[DamageType, ...] | None:
         """The override a `c.deals` laid down, if it covers this row.
@@ -13980,7 +13994,7 @@ class Cast:
         if hp:
             barrier = self.world.spawn(
                 Position(square=min(laid), spans=frozenset(laid)),
-                Side(team=side_of(self.world, self.me) or Team.ALLY),
+                Side(team=side_of(self.world, self.me) or Team.NEUTRAL),
                 Health(hp=hp, max_hp=hp),
                 # "Attacks against it hit automatically", which is a defence
                 # of nothing rather than a special case in the attack.

@@ -49,7 +49,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -5796,7 +5798,6 @@ def each_banked_reroll_names_its_own_roll(out: Result) -> None:
     Each is driven through `REGISTRY[ref].body`, so the assertions are
     about the rows and not about `c.reroll_attack`.
     """
-    from typing import Any
 
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
@@ -13785,7 +13786,6 @@ def once_spent(out: Result) -> None:
     a bloodied enemy" goes back to being burned by a miss on a healthy one --
     the original fault the enumeration was introduced to cure.
     """
-    from collections.abc import Callable
 
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.durations import When
@@ -18300,7 +18300,6 @@ def the_run_action_costs_what_it_costs(out: Result) -> None:
     waiver needs that context's `target`, so the swing is the only honest
     question.
     """
-    from typing import Any
 
     import combat_engine.content  # noqa: F401
     from combat_engine.engine.actions import legal, perform
@@ -18627,7 +18626,6 @@ def what_a_saving_throw_says_about_itself(out: Result) -> None:
       would pass -- and break the moment `i499x1` is on the same character.
       Both are put on one board to show they are different questions.
     """
-    from typing import Any
 
     import combat_engine.content  # noqa: F401
     from audit import board as audit_board
@@ -22809,7 +22807,7 @@ def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
 
     # -- the two rows the symbol was ALSO covering, now pointed elsewhere --
     for ref in ("i1300p1", "i2878p1"):
-        out.that(REGISTRY[ref].unfinished
+        out.that(bool(REGISTRY[ref].unfinished)
                  and "c.next_attack_becomes()" not in str(
                      REGISTRY[ref].unfinished),
                  f"{ref} no longer shares a symbol with the retype rows --"
@@ -22947,11 +22945,19 @@ def what_a_creature_is_wearing(out: Result) -> None:
         use = Cast(world=world, me=me, ref=ref, targets=[aim])
         use.target = aim
         asked: list[int] = []
-        real = use.slide
+        # `-> int`, which is how many squares moved. The recorder answered
+        # `bool` and the wrapper is what the row calls, so the two have to
+        # agree or the row reads a truth value where it asked for a count.
+        real: Callable[..., int] = use.slide
 
-        def recording(n: int = 1, **kw: object) -> bool:
+        # `**kw: Any` and not `**kw: object`: the recorder passes the
+        # caller's keywords straight through, so narrowing them here only
+        # makes `ty` check them against a signature this wrapper does not
+        # have. The old `# type: ignore[arg-type]` was mypy's spelling and
+        # suppressed nothing -- five errors behind one unread comment. #721.
+        def recording(n: int = 1, **kw: Any) -> int:
             asked.append(n)
-            return real(n, **kw)  # type: ignore[arg-type]
+            return real(n, **kw)
 
         use.slide = recording          # ty: ignore[invalid-assignment]
         world.rng.loaded = 20
@@ -23006,9 +23012,10 @@ def what_a_creature_is_wearing(out: Result) -> None:
         real_shift = asked.shift
 
         def noting(n: int = 1, _into: list[int] = steps,
-                   _real: object = real_shift, **kw: object) -> bool:
+                   _real: Callable[..., bool] = real_shift,
+                   **kw: Any) -> bool:
             _into.append(n)
-            return _real(n, **kw)  # type: ignore[operator]
+            return bool(_real(n, **kw))
 
         asked.shift = noting          # ty: ignore[invalid-assignment]
         REGISTRY["p4327"].body(asked)
@@ -23108,7 +23115,7 @@ def a_conjuration_a_creature_can_attack(out: Result) -> None:
     foe = sorted(enemies(world, me))[0]
 
     plain = c.conjure(label="plain", until=When.ENCOUNTER, sustain=None)
-    out.that(plain and not targetable(world, plain),
+    out.that(plain is not None and not targetable(world, plain),
              "a conjuration with no printed defences stays un-aimable --"
              " `query.defence` would reach for a `Defenses` it has not got,"
              " and the spectral hounds must keep their old behaviour",
@@ -23230,6 +23237,56 @@ def a_conjuration_a_creature_can_attack(out: Result) -> None:
              "and i2208p2 keeps the one marker it still earns -- the other"
              " way its illusion pops, which is a creature touching it",
              f"{REGISTRY['i2208p2'].unfinished}")
+
+    # -- whose side the thing is on when the caster is on none -------------
+    #
+    # Four spawn sites read `query.team(...) or Team.ALLY` and `Team` has no
+    # `ALLY`, so the fallback raised `AttributeError` -- three of them for
+    # years. Dead on every `chargen` board, because a character always has a
+    # `Side`; live the moment anything hand-builds one, which a probe, an
+    # instrument and this assertion all do. `audit.py` reports 0 raise and
+    # could never have found it. #722.
+    from combat_engine.engine import Bus, Rng, Team, World
+    from combat_engine.engine.components import Health as _Health
+    from combat_engine.engine.components import Ident as _Ident
+    from combat_engine.engine.components import Position as _Position
+    from combat_engine.engine.components import Side as _Side
+    from combat_engine.engine.grid import Grid as _Grid
+    from combat_engine.engine.query import team as _team
+
+    bare = World(_Grid(24, 16), Rng(3), Bus())
+    nobody = bare.spawn(_Ident(ref="drivers:sideless"),
+                        _Position(square=(5, 5)),
+                        _Health(hp=10, max_hp=10))
+    out.that(_team(bare, nobody) is None,
+             "a creature spawned with no `Side` is on no team, which is the"
+             " state the fallback exists for",
+             f"{_team(bare, nobody)}")
+    loose = Cast(world=bare, me=nobody, ref="drivers:sideless")
+    raised: list[str] = []
+    try:
+        made = loose.conjure(label="sideless", until=When.ENCOUNTER,
+                             sustain=None, defences=10)
+    except AttributeError as exc:
+        made, _ = None, raised.append(str(exc))
+    out.that(not raised and made is not None,
+             "`c.conjure` from a sideless caster does not raise",
+             f"{raised or made}")
+    if made is not None:
+        side = bare.get(made, _Side)
+        out.that(side is not None and side.team is Team.NEUTRAL,
+                 "and the conjuration is NEUTRAL -- the unknown propagates"
+                 " as nobody's rather than being invented as the caster's",
+                 f"{side}")
+    try:
+        built_wall = loose.wall(2, hp=10)
+    except AttributeError as exc:
+        built_wall = -1
+        raised.append(str(exc))
+    out.that(built_wall >= 0 and not raised,
+             "and `c.wall(hp=)` does not either -- the site the crash was"
+             " first reproduced on",
+             f"{raised or built_wall}")
 
 
 def an_item_deepens_a_number_another_body_laid(out: Result) -> None:
@@ -23621,7 +23678,7 @@ def moving_an_attack_onto_somebody_else(out: Result) -> None:
 
     # Inside a walk, where both verbs do reach: the power below is this
     # one's parent, which is what an immediate interrupt has.
-    taken: dict[str, object] = {}
+    taken: dict[str, Any] = {}
 
     def inner(c: Cast) -> None:
         outer = running_below(c)
@@ -23681,7 +23738,16 @@ def moving_an_attack_onto_somebody_else(out: Result) -> None:
     out.that(burn() == [foes[0]],
              "sustaining it burns the creature it holds")
     # Aim it at somebody else, which is what the card's next sentence does.
-    c.release(foes[0]) if hasattr(c, "release") else None
+    #
+    # **There is no `c.release`.** This line was
+    # `c.release(foes[0]) if hasattr(c, "release") else None`, which is a
+    # guard around a verb that does not exist -- so it never ran, and `ty`
+    # is what said so. Taking the hold off is not needed for the
+    # assertion either: `c.grab` does not displace an earlier grab (probed
+    # -- `grabbing()` goes `[3]` then `[3, 4]`), so what is asserted below
+    # is that the burn **follows** the grab, not that it moved off the
+    # first creature. A one-tentacle creature never holds two, so the two
+    # readings cannot differ for this card.
     c.grab(on=foes[1])
     out.that(foes[1] in burn(),
              "and once the tentacle holds somebody new the burn follows --"
@@ -23749,15 +23815,35 @@ def a_weapon_the_build_chose(out: Result) -> None:
     def built(  # noqa: ANN202
         cls: str, leg: str = "", feats: list[str] | None = None,
         powers: list[str] | None = None, seed: int = 5,
+        *, scored: bool = True,
     ):
         """A real `chargen` character, because the record is a build-time one
-        and an `audit.board` row cannot be asked about a choice."""
-        world = World(Grid(24, 16), Rng(seed), Bus())
-        who = chargen.Character(
-            cls=cls, level=1, build=leg,
-            feats=list(feats or []), powers=list(powers or []),
-        )
-        me = chargen.spawn(world, who, (5, 5))
+        and an `audit.board` row cannot be asked about a choice.
+
+        **`scored` is pinned, and it has to be.** `chargen.SCORED_CHOICES`
+        is a process-wide flag that `audit.py` sets to `False` **at import
+        time** -- deliberately, so the board deals unscored characters --
+        and `drivers.py` imports `audit` for other rules. So this rule
+        passed alone and failed inside the suite, on the one assertion that
+        reads which weapon won a hand: with scoring off, `outfit` benches a
+        granted arm whenever the chassis already filled that job.
+
+        That is the shared-mutable trap, and the honest fix is to say which
+        configuration each assertion is about rather than to inherit
+        whichever rule ran first. `True` is what `replay` and `fight` play
+        with, so it is the default here.
+        """
+        was = chargen.SCORED_CHOICES
+        chargen.SCORED_CHOICES = scored
+        try:
+            world = World(Grid(24, 16), Rng(seed), Bus())
+            who = chargen.Character(
+                cls=cls, level=1, build=leg,
+                feats=list(feats or []), powers=list(powers or []),
+            )
+            me = chargen.spawn(world, who, (5, 5))
+        finally:
+            chargen.SCORED_CHOICES = was
         return world, me, Cast(world=world, me=me, ref="drivers:chose")
 
     # -- #718: a class feature's grant reaches the character ---------------
@@ -23838,6 +23924,19 @@ def a_weapon_the_build_chose(out: Result) -> None:
              "the set is still the hand and not the belt, so \"additional"
              " arena weapons\" needs no second mechanism",
              f"{sorted(c.chosen_weapons())}")
+
+    # And the other configuration, named rather than inherited: with scoring
+    # off -- which is what `audit.py` sets process-wide -- `outfit` benches a
+    # granted arm whose job the chassis already filled, so the same feat
+    # leaves the fighter holding the chassis weapon.
+    world, me, c = built("fighter", "arena", feats=["f3202"], scored=False)
+    gear = world.need(me, Gear)
+    out.that(not set(REGISTRY["f3202"].proficiency) & {w.ref for w in gear.held}
+             and set(REGISTRY["f3202"].proficiency) <= gear.stowed,
+             "unscored, the same grant goes to the belt instead -- so the"
+             " audit board cannot see this feat's effect and a verdict from"
+             " it is no evidence either way",
+             f"held={[w.ref for w in gear.held]} stowed={sorted(gear.stowed)}")
 
     # -- f3181: the bonus, and the draw that stops it -----------------------
     world, me, c = built("fighter", "arena", feats=["f3202", "f3181"])
