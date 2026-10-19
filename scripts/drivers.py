@@ -23495,6 +23495,218 @@ def counting_as_bloodied(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def moving_an_attack_onto_somebody_else(out: Result) -> None:
+    """`c.retarget()` was four mechanisms, and the hardest-looking one was
+    already writable.
+
+    | row | wanted |
+    |---|---|
+    | `f3695` | **nothing** -- `resolve.attack` reads the target back |
+    | `f3319` | the mirror of `c.add_target`, and then a window |
+    | `f1027` | a clause's beneficiary, published like a number |
+    | `m976a2` | a standard action the stat block gives no ref |
+
+    **`f3695` is asserted off the `Hit` event and not off the field**, and
+    that is the whole point: the row was blocked because setting
+    `AttackDeclared.target` used to change nothing, so an assertion on the
+    field would pass for exactly the broken version. `resolve.attack`'s own
+    comment is the history -- *"the closure captured the parameters
+    instead, so assigning `ev.target` did nothing at all and failed
+    silently."*
+
+    `c.drop_target` lands here too, as the mirror of `c.add_target`. It
+    does not finish `f3319`: both reach the power running *below* through
+    `dsl.running_below`, and `dsl.use` pushes onto `_RUNNING` **after** it
+    announces `PowerUsed` -- the only moment between the targets being
+    chosen and the list being walked. Probed, asserted, and that is why
+    that row's symbol moved rather than its marker coming off.
+
+    And `m976a2` had a bug under its marker: its sustain burn closed over
+    the creature first caught, so *"damage to the grabbed foe each round"*
+    went on hurting the wrong one -- exactly when the card's next sentence
+    says the tentacle may be aimed at somebody new.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import AC, WILL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY, running_below
+    from combat_engine.engine.events import DamageApplied, Hit, Miss
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.resolve import attack
+
+    # -- f3695: the attack lands on the ally ------------------------------
+    def swung(vs, *, armed: bool = True, beside: bool = True):  # noqa: ANN001, ANN202
+        world, me, _ = _posed("f3695", 1)
+        c = Cast(world=world, me=me, ref="f3695")
+        if not beside:
+            # Walk every ally out of reach, so the row has nobody to hand
+            # the attack to -- the control for "an ally adjacent to you".
+            from combat_engine.engine.components import Position
+            from combat_engine.engine.movement import place
+            for mate in allies(world, me):
+                spot = world.need(me, Position).square
+                place(world, mate, (spot[0] + 6, spot[1] + 6))
+        if armed:
+            REGISTRY["f3695"].body(c)
+        foe = sorted(enemies(world, me))[0]
+        world.rng.loaded = 20
+        mark = len(world.bus.log)
+        attack(world, foe, me, 10, vs, power="drivers:f3695")
+        struck = [
+            e.target for e in world.bus.log[mark:] if isinstance(e, (Hit, Miss))
+        ]
+        hurt = sum(
+            e.amount for e in world.bus.log[mark:]
+            if isinstance(e, DamageApplied) and e.target == me
+        )
+        return me, struck, hurt
+
+    me, struck, hurt = swung(WILL)
+    out.that(struck and me not in struck,
+             "an attack against the holder's Will lands on somebody else --"
+             " read off the `Hit`, because the field this row sets used to"
+             " change nothing and an assertion on it would pass for that",
+             f"me={me} struck={struck}")
+    out.that(hurt > 0,
+             "and the holder takes the 5 the retarget costs",
+             f"{hurt}")
+
+    me, struck, hurt = swung(AC)
+    out.that(struck == [me],
+             "an attack against AC is left alone -- the card names Will and"
+             " only Will",
+             f"{struck}")
+    out.that(hurt == 0,
+             "and nothing is paid for a retarget that did not happen")
+
+    # **The unarmed control cannot come off this row's own board.**
+    # `audit.board` arms every `action=NONE` row it is handed, so the watch
+    # is already laid before the body is called and `armed=False` changes
+    # nothing -- which is `audit-board-pre-sets-the-numbers-you-measure` in
+    # its plainest form. Built on another row's board, where the caster
+    # does not hold the feat at all.
+    world, other, _ = _posed("f3696", 1)
+    out.that("f3695" not in (REGISTRY["f3696"].unfinished or ())
+             and not any(
+                 eff.label == "f3695" for eff in world.effects.of(other)
+             ),
+             "a caster on another feat's board has no f3695 watch standing",
+             f"{[e.label for e in world.effects.of(other)][:6]}")
+    foe = sorted(enemies(world, other))[0]
+    world.rng.loaded = 20
+    mark = len(world.bus.log)
+    attack(world, foe, other, 10, WILL, power="drivers:control")
+    bare = [e.target for e in world.bus.log[mark:]
+            if isinstance(e, (Hit, Miss))]
+    out.that(bare == [other],
+             "and the same Will attack lands on it, so the lines above are"
+             " the row and not the board",
+             f"{bare}")
+
+    me, struck, _ = swung(WILL, beside=False)
+    out.that(struck == [me],
+             "and with every ally out of reach it lands on the holder too --"
+             " \"an ally adjacent to you\" is the narrowing, and a row that"
+             " ignored it would hand the blow across the board")
+
+    # -- c.drop_target, the mirror ----------------------------------------
+    world, me, _ = _posed("f3319", 1)
+    loose = Cast(world=world, me=me, ref="drivers:drop")
+    out.that(running_below(loose) is None
+             and not loose.drop_target(sorted(enemies(world, me))[0]),
+             "`c.drop_target` refuses when nothing is running underneath,"
+             " the way `c.add_target` does -- there is no list to edit",
+             f"{running_below(loose)}")
+
+    # Inside a walk, where both verbs do reach: the power below is this
+    # one's parent, which is what an immediate interrupt has.
+    taken: dict[str, object] = {}
+
+    def inner(c: Cast) -> None:
+        outer = running_below(c)
+        taken["reached"] = outer is not None and outer is not c
+        if outer is not None and outer.targets:
+            first = outer.targets[0]
+            taken["dropped"] = c.drop_target(first)
+            taken["left"] = list(outer.targets)
+            taken["again"] = c.drop_target(first)
+
+    world, me, _ = _posed("f3319", 1)
+    foes = sorted(enemies(world, me))
+    host = Cast(world=world, me=me, ref="drivers:host", targets=list(foes[:2]))
+    from combat_engine.engine import dsl as _dsl
+    _dsl._RUNNING.append(host)
+    try:
+        nested = Cast(world=world, me=me, ref="drivers:nested")
+        _dsl._RUNNING.append(nested)
+        try:
+            inner(nested)
+        finally:
+            _dsl._RUNNING.pop()
+    finally:
+        _dsl._RUNNING.pop()
+    out.that(taken.get("reached") is True and taken.get("dropped") is True
+             and foes[0] not in (taken.get("left") or []),
+             "and inside a walk it takes the named creature off the list the"
+             " power below is holding",
+             f"{taken}")
+    out.that(taken.get("again") is False,
+             "and refuses the same creature twice -- a list that does not"
+             " hold it is not a list to take it from")
+
+    # -- m976a2: the burn follows the grab --------------------------------
+    world, me, _ = _posed("m976a2", 1)
+    foes = sorted(enemies(world, me))
+    c = Cast(world=world, me=me, ref="m976a2", targets=[foes[0]])
+    c.target = foes[0]
+    world.rng.loaded = 20
+    REGISTRY["m976a2"].body(c)
+    out.that(c.grabbing() == [foes[0]],
+             "`m976a2` grabs its target",
+             f"{c.grabbing()}")
+    holds = [e for e in world.effects.of(me) if "tentacle" in e.label]
+    out.that(len(holds) == 1, "and lays one sustained hold", f"{len(holds)}")
+
+    def burn() -> list[int]:
+        mark = len(world.bus.log)
+        for eff in holds:
+            for fn in getattr(eff, "on_sustain", []) or []:
+                fn()
+        return [
+            e.target for e in world.bus.log[mark:]
+            if isinstance(e, DamageApplied)
+        ]
+
+    out.that(burn() == [foes[0]],
+             "sustaining it burns the creature it holds")
+    # Aim it at somebody else, which is what the card's next sentence does.
+    c.release(foes[0]) if hasattr(c, "release") else None
+    c.grab(on=foes[1])
+    out.that(foes[1] in burn(),
+             "and once the tentacle holds somebody new the burn follows --"
+             " it used to close over the creature first caught, so \"the"
+             " grabbed foe each round\" hurt the wrong one exactly when the"
+             " card says the target may change",
+             f"grabbing {c.grabbing()}")
+
+    # -- the four markers are four different things now -------------------
+    for ref, want in (
+        ("f3695", ()),
+        ("f3319", ("c.swap_target()",)),
+        ("f1027", ("c.change_beneficiary()",)),
+        # **`c.extra_action()` was the second guess and `todo.py` refused
+        # it in one run** -- that verb exists, so the marker claimed the
+        # thing had arrived. What is absent is a *ref*: the printed second
+        # action lives inside one ability block the import folds into one
+        # row.
+        ("m976a2", ("etl.monster.second_action()",)),
+    ):
+        out.that(REGISTRY[ref].unfinished == want,
+                 f"{ref} waits on {want or 'nothing'}",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -23525,6 +23737,11 @@ DRIVERS = {
     "counts_as_bloodied": (
         counting_as_bloodied,
         "counting as bloodied, and the 62 readers that had to agree (#716)",
+    ),
+    "retarget_split": (
+        moving_an_attack_onto_somebody_else,
+        "moving a declared attack onto somebody else, and the three things"
+        " that is not (#717)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

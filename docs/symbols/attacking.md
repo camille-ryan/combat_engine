@@ -37,6 +37,8 @@ Making an attack, and what the attack turns out to be.
   - (no docstring)
 - `c.disarm(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None) -> 'bool'`
   - Knock a weapon out of a hand. It lands in that creature's square.
+- `c.drop_target(self, who: 'int') -> 'bool'`
+  - Take a creature **off** the use this one is nested inside.
 - `c.flurry_of_blows(self, *, on: 'int | None' = None) -> 'str'`
   - Which flurry of blows **this** monk has, as a ref. Empty for anyone else.
 - `c.grant_attack(self, who: 'int', *, on: 'int | None' = None, ref: 'str' = '', damage_bonus: 'int' = 0, damage_type: 'DamageType | None' = None, attack_bonus: 'int' = 0, trigger: 'Any' = None, reentrant: 'bool' = False) -> 'bool'`

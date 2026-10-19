@@ -584,17 +584,51 @@ def f3693b(c: Cast) -> None:
 
 
 @power("f3695", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.retarget()",))
+       reach=PERSONAL, target=SELF)
 def f3695(c: Cast) -> None:
-    """Heroic tier, so +2. The interrupt half moves an attack that has
-    been *declared* onto a different creature, which is a retarget rather
-    than the `c.redirect` an interrupt row does with its own trigger --
-    and the 5 damage that buys it is `c.flat(..., unpreventable=True)`,
-    which exists now -- so the only gap left is the retarget. The cost is
-    not written on its own: it buys the retarget and would be a character
-    paying hit points for nothing."""
+    """Heroic tier, so +2. And the interrupt half is written: the retarget
+    the old note was waiting for had already landed.
+
+    **`resolve.attack` reads the target back off the event**, and says so
+    in a comment that is this row's whole answer -- *"an immediate
+    interrupt may have moved the attack... the closure captured the
+    parameters instead, so assigning `ev.target` did nothing at all and
+    failed silently."* It does not any more, so setting
+    `AttackDeclared.target` moves the blow.
+
+    Armed as a watch rather than declared with `on=`, because the row holds
+    a standing modifier **and** a printed trigger and a declared trigger
+    would mean the Will bonus is never laid. `Window.BEFORE` is what makes
+    it an interrupt: the handler runs before `resolve`'s own callback picks
+    the target up.
+
+    The cost is not written on its own -- it buys the retarget, and a
+    character paying hit points for nothing is not the card. So it is
+    taken inside the branch, after an ally has been chosen, and
+    `unpreventable=True` is the printed "you cannot reduce this damage in
+    any way"."""
     c.bonus(WILL, 2, kind="feat", on=c.me, until=When.ENCOUNTER)
+
+    def interrupt(ev: AttackDeclared) -> None:
+        if ev.target != c.me or ev.vs is not WILL:
+            return
+        if ev.attacker in (c.me, *c.allies()):
+            return
+        beside = [mate for mate in c.allies() if c.adjacent(to=mate)]
+        if not beside:
+            return
+        if not c.may("take 5 damage to put the attack on an ally"):
+            return
+        mate = c.choose(sorted(beside), c.ref)
+        if mate is None:
+            return
+        c.flat(5, on=c.me, unpreventable=True)
+        ev.target = mate
+
+    c.watch(
+        AttackDeclared, interrupt, until=When.ENCOUNTER, on=c.me,
+        window=Window.BEFORE, label=c.ref,
+    )
 
 
 f3696 = _grants("f3696", "f3696b")

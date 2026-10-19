@@ -2650,6 +2650,34 @@ class Cast:
         outer.targets.append(who)
         return True
 
+    def drop_target(self, who: int) -> bool:
+        """Take a creature **off** the use this one is nested inside.
+
+        The mirror of `c.add_target`, and one row's whole gap: *"you can
+        replace one normal target of that power with one creature within 10
+        squares"* is the two together, and `f3319`'s note said so -- *"a
+        target off a use that has already chosen them -- `c.add_target`
+        puts one on and there is no other half."*
+
+        Same reach as its sibling: the power running **below** this one, so
+        an immediate interrupt or a free action that answers a power can
+        edit that power's target list while it is still walking it. Refused
+        where nothing is running underneath, and refused for a creature the
+        list does not hold.
+
+        **A creature already resolved is not taken back.** The list is
+        walked in order, so dropping somebody the body has already been
+        called for changes nothing that happened -- which is right, and is
+        why the printed cards that do this are interrupts.
+        """
+        from .dsl import running_below
+
+        outer = running_below(self)
+        if outer is None or outer is self or who not in outer.targets:
+            return False
+        outer.targets.remove(who)
+        return True
+
     def ignores_long_range(
         self, *, on: int | None = None, until: When = When.EONT
     ) -> Effect | None:

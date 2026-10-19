@@ -514,12 +514,29 @@ def f3318(c: Cast) -> None:
 
 
 @power("f3319", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retarget()",))
+       reach=PERSONAL, target=SELF, todo=("c.swap_target()",))
 def f3319(c: Cast) -> None:
     """Swaps one target of the feature for a distant one. The feature is
-    `FLURRY` and the weapon half is readable; what is missing is taking a
-    target off a use that has already chosen them -- `c.add_target` puts
-    one on and there is no other half."""
+    `FLURRY`, the weapon half is `c.wielding("sling")`, and the other half
+    of `c.add_target` landed as `c.drop_target` -- so three of the four
+    pieces are here.
+
+    **What is left is a window, not a verb, and that is why the symbol
+    moved.** Both target verbs reach the power running *below* this one
+    through `dsl.running_below`, and `dsl.use` pushes the cast onto
+    `_RUNNING` **after** it announces `PowerUsed` -- so a handler on that
+    event, which is the only moment between the targets being chosen and
+    the list being walked, cannot reach the cast whose list it must edit.
+    `PowerUsed.targets` is a `list(...)` copy, which `i2400p1`'s
+    neighbour already records, so editing that reaches nothing either.
+
+    Probed rather than assumed: a `PowerUsed` handler calling
+    `c.drop_target` gets `running_below() is None` and the list it wanted
+    is empty.
+
+    An interrupt *inside* the walk works and is not this card: by then the
+    targets are being resolved one at a time, and "replace one normal
+    target" is about the set before any of them is."""
 
 
 @power("f3320", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -403,7 +403,7 @@ def f1861(c: Cast) -> None:
 
 
 @power("f1027", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retarget()",))
+       reach=PERSONAL, target=SELF, todo=("c.change_beneficiary()",))
 def f1027(c: Cast) -> None:
     """Moves p3773's second helping from an ally beside the spirit to one
     within 2 squares of the target. The choice is made inside that

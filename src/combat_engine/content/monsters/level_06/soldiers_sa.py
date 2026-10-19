@@ -2338,6 +2338,18 @@ def m976a1(c: Cast) -> None:
     c.flat(c.roll("1d4"), dtype=element)
 
 
+def _tentacle_burn(c: Cast) -> None:
+    """Hurt whoever the tentacle is holding **now**, not who it caught.
+
+    "1d6+3 necrotic damage to the grabbed foe each round" is about the
+    current victim, and the card's next sentence is that the target can be
+    changed -- so a closure over the first one is wrong exactly when the
+    card says it would be. See `m976a2`.
+    """
+    for held in c.grabbing():
+        c.damage("1d6", 3, dtype=DamageType.NECROTIC, on=held)
+
+
 @power(
     "m976a2",
     level=6,
@@ -2348,12 +2360,31 @@ def m976a1(c: Cast) -> None:
     keywords=[Keyword.CONJURATION, Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=10),
     damage=Damage("1d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED),
-    dropped=("c.retarget()",),
+    dropped=("etl.monster.second_action()",),
 )
 def m976a2(c: Cast) -> None:
-    """The grab and its per-sustain burn play. Changing the tentacle's
-    target or walking it up to 5 squares as a later standard action has no
-    verb: nothing here lets a sustained hold be aimed at somebody new."""
+    """The grab and its per-sustain burn play, and the burn follows the
+    grab now rather than the creature first caught.
+
+    **That was a bug under the marker.** The sustain closure captured
+    `victim`, so "1d6+3 necrotic damage to **the grabbed foe** each round"
+    went on hurting whoever the tentacle caught first -- and the card's own
+    next sentence is that the tentacle can be aimed at somebody new, which
+    is exactly when a captured victim is the wrong one. `c.grabbing()`
+    answers who it currently holds, which is what "the grabbed foe" means.
+
+    **Re-pointed, twice.** The old symbol said nothing lets a sustained
+    hold be aimed at somebody new; it is not a retarget verb that is
+    missing. `c.extra_action()` was the second guess and `todo.py` refused
+    it in one run -- that verb exists, so the marker claimed the thing had
+    arrived.
+
+    What is absent is a **ref**. The printed line "as a standard action,
+    the tentacle can change target and can move up to 5 squares" is a
+    second action inside one ability block, and the import folds the block
+    into one row with one action cost -- so there is nowhere to declare a
+    standard action that does it. Once the id exists both halves are
+    ordinary: release the grab, grab somebody new, `c.move` the arm."""
     victim = c.target
     if victim is None:
         return
@@ -2362,7 +2393,7 @@ def m976a2(c: Cast) -> None:
         c.grab(on=victim)
         held = c.effect(f"{c.ref} tentacle", until=When.SUSTAIN, sustain=MINOR, on=c.me)
         if held is not None:
-            c.on_sustain(held, lambda v=victim: c.damage("1d6", 3, dtype=DamageType.NECROTIC, on=v))
+            c.on_sustain(held, lambda: _tentacle_burn(c))
 
 
 @power(
