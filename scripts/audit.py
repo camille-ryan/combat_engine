@@ -1025,6 +1025,11 @@ KNOWN_SILENT = {
     "f2630": "it returns unless `Gear.shield` is set and this board's "
              "character holds none -- the same board fact three other "
              "entries here already record. #755",
+    "f1450b": "it refunds a use of `p1450` and this board's character "
+              "does not know that row -- measured: `Powers.all` has no "
+              "`p1450` and `times` is 0, so `c.restore_use` has nothing "
+              "to restore. Reachable since #759's reroll pose, and "
+              "correctly silent",
     "m5466a2": "**unexplained, and #754 is the row.** Fired by hand with "
                "the foe adjacent and a failed escape handed in, its body "
                "deals 31 damage; offered 48 times by the harness it shows "
@@ -3304,10 +3309,11 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
 #:     TotalDefence   8    somebody takes the total defence action
 #:     Fell          11    somebody falls
 #:     Escaped        8    somebody escapes a grab
-#:     WeaponHeld     1    somebody draws a weapon
+#:     WeaponHeld     1    somebody catches a disarmed weapon
+#:     Rerolled       4    somebody rolls an attack again
 #:
 #: #755, and #753 is the same shape for a saving throw.
-_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld")
+_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld", "Rerolled")
 
 
 def _does_the_ordinary_things(
@@ -3458,7 +3464,15 @@ def _does_the_ordinary_things(
                 world.rng.loaded = face
                 rearm()
                 try:
-                    attempt(world, victim)
+                    # **A bonus on the winning pose, not just a loaded 20.**
+                    # The escape is rolled against the grabber's defence, and
+                    # a level-9 brute's beats a 20 outright -- so `m2619a2`,
+                    # whose card wants a creature that *succeeds*, stayed
+                    # UNUSED through a pose that could never let one. The
+                    # bonus is the instrument arranging the outcome the card
+                    # names, the same bargain the loaded die is.
+                    attempt(world, victim,
+                            bonus=50 if face == 20 else 0)
                 finally:
                     world.rng.loaded = was
                 # Ended through the effect this pass laid, not by clearing
@@ -3473,6 +3487,61 @@ def _does_the_ordinary_things(
                     spot.square = was_at
                     world.grid.place(victim, frozenset({was_at}))
                 if fired:
+                    return True
+
+    # -- a roll made again ------------------------------------------------
+    #
+    # Four rows answer `Rerolled` -- "when the reroll it bought misses
+    # anyway", "+1d4 on the reroll" -- and nothing here ever rolled anything
+    # twice. `c.reroll_attack(ev=)` names the roll, which is what a banked
+    # reroll needs and what this pass has: the attack is made first and
+    # handed over afterwards.
+    if "Rerolled" in wants and foes:
+        from combat_engine.engine.events import AttackRolled
+
+        # **A fresh swing for each outcome, not one swing rerolled twice.**
+        # `AttackResult.rerolled_by` records who has already rerolled a
+        # roll, so a second reroll of the same one is refused -- and a loop
+        # that tried it left the row wanting a *missed* reroll reachable and
+        # silent. One of the four refunds the reroll "when the reroll it
+        # bought misses anyway", so both outcomes have to be real.
+        for victim in foes[:1]:
+            # **The miss first, and the order is not arbitrary.** With the
+            # hit posed first, `f1697` -- which answers the reroll rather
+            # than its outcome -- stopped being credited: the first pose
+            # that fires spends what the second needed. Measured both ways
+            # round; miss-then-hit credits three rows and hit-then-miss
+            # credits two.
+            for face in (1, 20):
+                if not alive(world, victim):
+                    continue
+                rearm()
+                # **`c.basic`, not a bare `strike()` on this pass's own
+                # Cast.** `audit:ordinary` declares no attack line, so
+                # `strike` raises -- which it did, on four rows. That verb
+                # resolves whatever this creature's basic attack actually
+                # is, the same reasoning the swing pairs below use for
+                # `Powers.basic`.
+                _Cast(world=world, me=caster, ref="audit:ordinary").basic(
+                    on=victim
+                )
+                rolled = [
+                    e for e in world.bus.log
+                    if isinstance(e, AttackRolled)
+                    and getattr(e, "attacker", None) == caster
+                ]
+                if not rolled:
+                    continue
+                rearm()
+                was = getattr(world.rng, "loaded", None)
+                world.rng.loaded = face
+                try:
+                    _Cast(
+                        world=world, me=caster, ref="audit:ordinary"
+                    ).reroll_attack(ev=rolled[-1])
+                finally:
+                    world.rng.loaded = was
+                if _fired(world, ref, cursor):
                     return True
 
     # -- taking a weapon in hand -----------------------------------------
