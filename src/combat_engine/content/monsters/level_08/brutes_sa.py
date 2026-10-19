@@ -891,9 +891,24 @@ def m1521a2(c: Cast) -> None:
     todo=("query.bloodied(to=)",),
 )
 def m1521a3(c: Cast) -> None:
-    """Nothing lets another row's "if bloodied" ask treat a creature as
-    bloodied on account of a condition rather than its own hit points --
-    `Health.bloodied` is read directly everywhere that matters."""
+    """Treated as bloodied **by this creature** and by nobody else, which
+    is what the symbol's `to=` is for.
+
+    **The second half of the old note is no longer true and the marker is
+    still right.** It said `Health.bloodied` is read directly everywhere
+    that matters; all 62 of those sites go through `query.bloodied` now
+    (#716), and a hold that makes a creature count as bloodied exists --
+    `c.considered_bloodied`. So the mechanism is there and the state is
+    readable in one place.
+
+    What is left is the **scoping**, and it is the whole of this card: the
+    victim is bloodied *as far as this creature is concerned* and not as
+    far as anybody else is. Every reader answers one question about one
+    creature; none of them says who is asking, and adding that is a change
+    to the question rather than to the hold.
+
+    The other half -- "taking ongoing poison damage from this creature's
+    attacks" -- needs nothing: `c.taking_ongoing` answers it."""
 
 
 # ==========================================================================
