@@ -3,13 +3,16 @@
 Four things recur here and are worth saying once.
 
 **"You must use this power with a simple weapon"** and its softer cousin
-"if you're wielding a simple weapon, the attack deals 1d6 extra" both ask a
-question the gear table cannot answer: `chargen`'s weapons carry a group and
-a handful of properties, and nothing anywhere says simple or military. So
-`_simple` asks for the property that ought to be there, which makes the two
-Requirement rows unusable and the two riders unpaid until one word is added
-to the weapon table. Writing a group list instead would be a guess, and a
-wrong one -- simple-ness is per weapon, not per group.
+"if you're wielding a simple weapon, the attack deals 1d6 extra" are both
+answerable and were both dead. This paragraph used to say the gear table
+could not answer them -- *"nothing anywhere says simple or military"* -- and
+that `_simple` therefore asked for *"the property that ought to be there"*,
+which left two Requirement rows refused in play and two riders unpaid.
+
+`Weapon.category` is that word and was added for this clause; its comment in
+`components.py` quotes the sentence. The old paragraph's last line is the
+argument for it rather than against: simple-ness **is** per weapon and not
+per group, and `category` is the per-weapon column. #726.
 
 **A bonus that is "while adjacent to you" or "while within the zone"** is
 membership, not a one-off: `_hold_while_inside` puts the hold on at
@@ -83,15 +86,23 @@ DEFENCES = (AC, FORT, REF, WILL)
 
 
 def _simple(world: World, eid: int) -> bool:
-    """"A simple weapon" -- the word the gear table does not have yet.
+    """"A simple weapon", off `Weapon.category`, which is where it lives.
 
-    Asked of the wielded weapon's properties rather than its group: in the
-    printed rules simple-ness is a property of the weapon and two weapons of
-    one group can differ. See the module docstring.
+    **This asked `"simple" in weapon.properties` and no weapon in the table
+    carries that word**, so it was False for every creature in every fight
+    and the two Requirement rows below were refused in play while the two
+    riders never paid. The reasoning in the module docstring was right about
+    the game and wrong about the model: simple-ness *is* per weapon rather
+    than per group, and the per-weapon column is `category` --
+    `simple`/`military`/`superior`, as the table prints it beside the group.
+    `Cast.wielding("simple")` has matched against it all along.
+
+    22 of the 118 weapons in the table are simple, and 7 of 23 classes --
+    the cleric among them -- wield one in the main hand. #726.
     """
     gear = world.get(eid, Gear)
     weapon = gear.main if gear is not None else None
-    return weapon is not None and "simple" in weapon.properties
+    return weapon is not None and weapon.category == "simple"
 
 
 def _two_handed(c: Cast) -> int:

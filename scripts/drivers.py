@@ -24177,6 +24177,128 @@ def a_power_held_ready_and_paid_for_in_kind(out: Result) -> None:
              " and no card to lend cannot be built in this tree")
 
 
+def a_simple_weapon_is_a_category(out: Result) -> None:
+    """*"You must use this power with a simple weapon."*
+
+    Two cleric helpers asked `"simple" in weapon.properties`, and **no
+    weapon in the table carries that word**: it is `Weapon.category`, the
+    column added for this very clause. So both were False for every creature
+    in every fight -- three rows refused in play, two riders never paid --
+    and both helpers carried a paragraph explaining why that was unavoidable.
+    `level_7_b`'s said `Weapon` has *"no category"*; it has one.
+
+    **The assertion is the pair, and the pair is the point.** A gate that is
+    always False and a gate that is always True look the same from a row
+    that fires, so the simple weapon and the military one are both posed and
+    the answers have to differ. 22 of the 118 weapons in the table are
+    simple and 7 of 23 classes wield one in the main hand, the cleric
+    included, so neither side of the pair is a hypothetical.
+
+    `c.wielding("simple")` is asserted beside the helpers, because it has
+    matched `category` all along and is what `p14301`'s note already named
+    -- while saying no weapon answered it.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.chargen import PRINTED
+    from combat_engine.content.powers.cleric.level_1_d import _simple
+    from combat_engine.content.powers.cleric.level_7_b import _simple_weapon
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.query import enemies
+
+    simple = next(w for w in PRINTED.values() if w.category == "simple")
+    military = next(w for w in PRINTED.values() if w.category == "military")
+    out.that("simple" not in simple.properties,
+             "the simple weapon does not carry `simple` as a property --"
+             " which is what both helpers used to ask for",
+             f"{simple.ref} properties={sorted(simple.properties)}"
+             f" category={simple.category!r}")
+
+    def armed(ref, weapon):  # noqa: ANN001, ANN202
+        """That row's own board, with one weapon in hand.
+
+        **Per ref, not one board for all three.** The first draft posed
+        `p14295`'s board and asked about all three rows; the other two
+        refused for *"not known"* -- the caster knows the row its board was
+        built for -- so the positive assertions failed honestly and the
+        negative ones passed for the wrong reason entirely.
+        """
+        world, me, _ = _posed(ref, 1)
+        gear = world.need(me, Gear)
+        gear.weapons[:] = [weapon]
+        gear.stowed.clear()
+        return world, me, Cast(world=world, me=me, ref="drivers:simple")
+
+    world, me, c = armed("p14295", simple)
+    out.that(_simple(world, me) and _simple_weapon(world, me),
+             "both helpers say yes to a simple weapon",
+             f"{simple.ref}")
+    out.that(c.wielding("simple"),
+             "and so does `c.wielding('simple')`, which is the verb"
+             " `p14301`'s own note named while saying nothing answered it")
+
+    world, me, c = armed("p14295", military)
+    out.that(not _simple(world, me) and not _simple_weapon(world, me),
+             "and both say no to a military one, so neither is answering yes"
+             " by accident -- a gate that cannot be false is the same fault"
+             " pointed the other way",
+             f"{military.ref} category={military.category!r}")
+    out.that(not c.wielding("simple"),
+             "`c.wielding('simple')` agrees")
+
+    # **`usable` returns `(bool, reason)`.** The first draft handed the tuple
+    # straight to `that(ok: bool, ...)`, so every one of these was testing a
+    # tuple's truthiness -- and three of them passed on that alone. Unpacked,
+    # with the reason printed, which is the half worth reading when a row
+    # refuses for something other than the clause under test.
+    for ref in ("p14295", "p14297", "p14302"):
+        world, me, _c = armed(ref, simple)
+        ok, why = usable(world, me, REGISTRY[ref])
+        out.that(ok,
+                 f"{ref} is offered with a simple weapon in hand -- its"
+                 f" Requirement was refused in every fight",
+                 f"{ref}: {why or 'offered'}")
+        world, me, _c = armed(ref, military)
+        ok, why = usable(world, me, REGISTRY[ref])
+        out.that(not ok and "weapon" in why.lower(),
+                 f"and {ref} is refused with a military one, for the weapon"
+                 f" and not for something else",
+                 f"{ref}: {why or 'OFFERED'}")
+
+    # -- and the two riders, through their own bodies ---------------------
+    #
+    # Asserted off the damage the body deals rather than off the helper: the
+    # rows read `if _simple(...)` inside a `c.damage` and a gate asserted on
+    # its own is evidence about the gate, not about the row.
+    from combat_engine.engine.events import DamageApplied
+
+    def rider(ref: str, weapon) -> int:  # noqa: ANN001
+        world, me, _ = _posed(ref, 1)
+        gear = world.need(me, Gear)
+        gear.weapons[:] = [weapon]
+        gear.stowed.clear()
+        use = Cast(world=world, me=me, ref=ref)
+        foe = sorted(enemies(world, me))[0]
+        use.target = foe
+        use.targets = [foe]
+        world.rng.loaded = 20
+        mark = len(world.bus.log)
+        REGISTRY[ref].body(use)
+        return sum(e.amount for e in world.bus.log[mark:]
+                   if isinstance(e, DamageApplied))
+
+    for ref in ("p14296", "p14298"):
+        with_simple = rider(ref, simple)
+        with_military = rider(ref, military)
+        out.that(with_simple > with_military > 0,
+                 f"{ref}'s rider pays more through a simple weapon than"
+                 f" through a military one, and both hit -- the rider was"
+                 f" unreachable, not the row",
+                 f"simple {with_simple} military {with_military}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -24222,6 +24344,11 @@ DRIVERS = {
         a_power_held_ready_and_paid_for_in_kind,
         "a power held ready and paid for in kind, and the three traps the"
         " trade has (#720)",
+    ),
+    "simple_weapon": (
+        a_simple_weapon_is_a_category,
+        "a simple weapon is a category and not a property, and five rows"
+        " were dead on it (#726)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

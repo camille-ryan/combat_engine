@@ -77,17 +77,21 @@ DIVINE_WEAPON = [Keyword.DIVINE, Keyword.WEAPON]
 
 
 def _simple_weapon(world: World, eid: int) -> bool:
-    """"You must use this power with a simple weapon."
+    """"You must use this power with a simple weapon", off `Weapon.category`.
 
-    `Weapon` carries a group and a set of properties and **no category**, so
-    nothing in the model is marked simple and this is false for everybody
-    today. It is written as the property that would say so rather than as a
-    guess at which groups are simple -- the mace group holds a military
-    weapon too. See the report.
+    **The docstring here said `Weapon` has "no category"**, and it has one --
+    `simple`/`military`/`superior`, added for this very sentence. So this
+    read `"simple" in weapon.properties`, which no weapon in the table
+    answers, and the row below was refused in every fight.
+
+    The old note's own reason is why `category` is right and a group list is
+    not: the mace group holds a military weapon too, so the question is
+    per weapon, and that is the column. `level_1_d._simple` is the same
+    helper and was wrong the same way. #726.
     """
     gear = world.get(eid, Gear)
     weapon = gear.main if gear else None
-    return weapon is not None and "simple" in weapon.properties
+    return weapon is not None and weapon.category == "simple"
 
 
 def _a_bloodied_enemy(world: World, eid: int) -> bool:
@@ -385,8 +389,9 @@ def _step_into_flank(c: Cast, victim: int) -> None:
     attack=Attack(STR, vs=AC),
 )
 def p14301(c: Cast) -> None:
-    """The simple-weapon rider is `c.wielding("simple")`, which no weapon in
-    the model answers yet; see `_simple_weapon`.
+    """The simple-weapon rider is `c.wielding("simple")`, and it answers:
+    `wielding` matches `Weapon.category` and 22 weapons in the table are
+    simple. This note said no weapon answered it; see `_simple_weapon`. #726.
 
     The two bonuses are different `what`s, so they stack with each other,
     and both are gated on the attack being an opportunity one against this
