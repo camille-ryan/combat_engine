@@ -85,22 +85,40 @@ def p841(c: Cast) -> None:
     attack=Attack(WIS, vs=REF),
 )
 def p889(c: Cast) -> None:
+    """The ally's benefit is read through `c.instead_of`, because a feat
+    replaces **both** of its branches at once.
+
+    f1097 prints "you can choose to grant one ally resist necrotic equal to
+    your Charisma modifier *instead of* granting temporary hit points or the
+    ability to make a saving throw" -- one substitution for the whole
+    benefit, not one per branch, so there is one clause word rather than
+    two. #750.
+    """
     if c.strike():
         c.damage("1d6", c.wis_mod, dtype=DamageType.RADIANT)
         friends = [a for a in c.allies() if c.can_see(a)]
         if not friends:
             return
         ally = c.choose(friends, "who is helped")
-        # The printed line lets the *ally* pick, so the question goes to
-        # whoever is playing the ally rather than to the cleric.
-        saves = [e for e in c.world.effects.of(ally) if e.when is When.SAVE_ENDS]
-        wants = c.world.decide(
-            ally, "choose", ["save", "temporary hit points"], "which do you take"
-        )
-        if saves and wants == "save":
-            c.world.effects.save(saves[0])
-        else:
-            c.temp_hp(c.cha_mod + c.level // 2, on=ally)
+        if ally is None:
+            return
+
+        def printed() -> None:
+            # The printed line lets the *ally* pick, so the question goes to
+            # whoever is playing the ally rather than to the cleric.
+            saves = [
+                e for e in c.world.effects.of(ally) if e.when is When.SAVE_ENDS
+            ]
+            wants = c.world.decide(
+                ally, "choose", ["save", "temporary hit points"],
+                "which do you take",
+            )
+            if saves and wants == "save":
+                c.world.effects.save(saves[0])
+            else:
+                c.temp_hp(c.cha_mod + c.level // 2, on=ally)
+
+        c.instead_of("ally_benefit", printed, on=ally)
 
 
 @power(

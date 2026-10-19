@@ -25921,6 +25921,149 @@ def a_disarmed_weapon_caught_in_a_free_hand(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_feats_three_riders_on_three_named_rows(out: Result) -> None:
+    """*"You gain a benefit with any of the following powers you possess"* --
+    and the card lists **three**, where the note that set this row's marker
+    counted two.
+
+    The third is an explicit *instead*: "grant one ally resist necrotic
+    equal to your Charisma modifier **instead of** granting temporary hit
+    points or the ability to make a saving throw". The note removed
+    `c.opt_in()` on the reading that "neither forgoes anything, so there is
+    nothing to substitute" -- right that the symbol was wrong, wrong that
+    there was nothing there. `c.pre_empt` is the verb. #750.
+
+    **One clause word for p889's whole benefit, not one per branch.** The
+    card replaces "temporary hit points **or** the ability to make a saving
+    throw" as a pair, so a substitution written per branch would let a
+    character take the resistance *and* still get the other branch -- which
+    is the assertion below about temporary hit points staying at zero.
+
+    The p463 half is the other thing the note was right about and the tree
+    had anyway: `c.ignore_resistance(insubstantial=True)`. Gated, so it is
+    this card and not a blanket exemption -- and the gate is what the
+    control measures.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Defences, Health, Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import DamageType
+
+    # -- p463's half: the exemption, and who it is NOT for ---------------
+    world, me, _ = _posed("f1097", 1)
+    foe = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+    REGISTRY["f1097"].body(Cast(world=world, me=me, ref="f1097"))
+    mods = world.need(me, Mods)
+
+    def exempt(power: str, undead: bool) -> int:
+        return mods.total("ignore insubstantial",
+                          {"power": power, "target": foe})
+
+    Cast(world=world, me=me, ref="drivers:kind").set_origin(
+        "undead", on=foe)
+    out.that(exempt("p463", True) > 0,
+             "the insubstantial exemption applies to p463 against an undead"
+             " target -- `c.ignore_resistance(insubstantial=True)` existed"
+             " all along and this card is what it was waiting for",
+             f"{exempt('p463', True)}")
+    out.that(exempt("p1567", True) == 0,
+             "and NOT to another of this feat's own rows -- the gate reads"
+             " the power, so the exemption is this clause and not a blanket"
+             " one",
+             f"{exempt('p1567', True)}")
+
+    world, me, _ = _posed("f1097", 1)
+    plain = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+    REGISTRY["f1097"].body(Cast(world=world, me=me, ref="f1097"))
+    mods = world.need(me, Mods)
+    out.that(mods.total("ignore insubstantial",
+                        {"power": "p463", "target": plain}) == 0,
+             "and not against a target that is not undead -- the second half"
+             " of the printed narrowing, and the control that catches a gate"
+             " reading only the power",
+             f"{mods.total('ignore insubstantial', {'power': 'p463', 'target': plain})}")
+
+    # -- p889's half: the substitution, and what it replaces -------------
+    def used_p889(variant: int):  # noqa: ANN202
+        """Run p889 once and read the benefit **off whichever ally got it**.
+
+        p889 picks the ally itself -- `c.choose(friends, "who is helped")`,
+        and headless takes the first of its own list, which is not the one
+        a probe nominates. The first run of this read a flat zero in both
+        variants because it watched the wrong creature; the third time
+        tonight that an in-body choice chose somebody else. So the read is
+        the maximum across every ally, and exactly one of them is paid.
+        """
+        world, me, _ = _posed("p889", 1)
+        mates = [a for a in sorted(allies(world, me)) if a != me]
+        REGISTRY["f1097"].body(Cast(world=world, me=me, ref="f1097"))
+        for who in mates:
+            health = world.get(who, Health)
+            if health is not None:
+                health.hp = health.max_hp
+                health.temp = 0
+            # **The printed branch is a fork and the board decides which
+            # arm.** p889 asks the ally "save or temporary hit points",
+            # headless takes the first answer, and the arm that then runs
+            # depends on whether the ally has a `SAVE_ENDS` effect at all.
+            # The board arms every `action=NONE` row, so sometimes it does
+            # -- and the first run of this read zero temporary hit points
+            # while the printed clause was working perfectly, having taken
+            # the save. Cleared here so the measurement is single-valued.
+            for eff in list(world.effects.of(who)):
+                if eff.when is When.SAVE_ENDS:
+                    world.effects.end(eff, "drivers: clearing the fork")
+        use = Cast(world=world, me=me, ref="p889", variant=variant,
+                   targets=mates[:1])
+        use.target = mates[0] if mates else me
+        world.rng.loaded = 20
+        REGISTRY["p889"].body(use)
+        healths = [h for w in mates if (h := world.get(w, Health))]
+        temp = max((h.temp for h in healths), default=0)
+        resist = 0
+        for who in mates:
+            defences = world.get(who, Defences)
+            if defences is not None:
+                resist = max(resist,
+                             defences.resist.get(DamageType.NECROTIC, 0))
+        return {"temp": temp, "resist": resist, "allies": len(mates)}
+
+    from combat_engine.engine.actions import _variants
+
+    world, me, _ = _posed("p889", 1)
+    out.that(_variants(world, me, "p889") == [0],
+             "p889 offers one way of being used before the feat is taken")
+    c = Cast(world=world, me=me, ref="f1097")
+    REGISTRY["f1097"].body(c)
+    out.that(_variants(world, me, "p889") == [0, 1],
+             "and two once f1097 is standing -- the printed clause first,"
+             " because the card says 'you can choose'",
+             f"{_variants(world, me, 'p889')}")
+
+    printed, traded = used_p889(0), used_p889(1)
+    out.that(printed["temp"] > 0 and printed["resist"] == 0,
+             "the printed clause pays temporary hit points and no"
+             " resistance",
+             f"{printed}")
+    out.that(traded["resist"] > 0,
+             "the trade pays resist necrotic", f"{traded}")
+    out.that(traded["temp"] == 0,
+             "and NOT the temporary hit points -- one clause word for the"
+             " whole benefit, because the card replaces the pair. Written"
+             " per branch, a character would take the resistance and keep"
+             " the other branch too",
+             f"temp {traded['temp']}")
+
+    out.that(not str(REGISTRY["f1097"].unfinished)
+             or str(REGISTRY["f1097"].unfinished) == "()",
+             "f1097 carries no marker",
+             f"{REGISTRY['f1097'].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -26025,6 +26168,11 @@ DRIVERS = {
         a_disarmed_weapon_caught_in_a_free_hand,
         "a disarmed weapon caught in a free hand, and the draw that must"
         " not fire the free swing (#745)",
+    ),
+    "three_riders": (
+        a_feats_three_riders_on_three_named_rows,
+        "a feat's three riders, one of which a note had miscounted away"
+        " (#750)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

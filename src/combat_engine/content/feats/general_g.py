@@ -874,14 +874,55 @@ def _p620(c: Cast, ev: Any) -> None:
             return
 
 
-#: **`c.opt_in()` came off, and it named a clause this card has not got.**
-#: f1097's two printed riders are an *addition* (p1567 hands a neighbour a
-#: damage bonus) and an *exemption* (p463 ignores the insubstantial trait).
-#: Neither forgoes anything, so there is nothing to substitute -- the symbol
-#: was attached to a card with no opt-in in it. The p1567 half is written,
-#: right above; `c.ignore_insubstantial()` is the one real gap left.
-_riders("f1097", {"p1567": _p1567},
-        dropped=("c.ignore_insubstantial()",))
+def _f1097_necrotic(using: Cast) -> None:
+    """Resist necrotic in place of p889's whole ally benefit.
+
+    The Charisma modifier of the character **using the prayer**, which is
+    the one the card means -- the same reading f2081's helper gives for its
+    own ladder. Until the end of the user's next turn, which is the duration
+    every other rider on this family lays.
+    """
+    ally = using.target
+    if ally is None:
+        return
+    using.resist(using.cha_mod, DamageType.NECROTIC, on=ally,
+                 until=When.EONT)
+
+
+def _f1097(c: Cast) -> None:
+    """The two riders that are not about landing a blow.
+
+    **`c.opt_in()` came off this card and the note that removed it dropped
+    a clause.** It said f1097 has two riders, an addition and an exemption,
+    and that "neither forgoes anything, so there is nothing to substitute".
+    The card prints **three**, and the third is an explicit *instead*:
+    "grant one ally resist necrotic [...] **instead of** granting temporary
+    hit points or the ability to make a saving throw". So there was an opt-in
+    in it; what was wrong was the verb, and `c.pre_empt` is the one. #750.
+
+    * **p463** -- "your attack ignores the insubstantial trait" against an
+      undead enemy. `c.ignore_resistance(insubstantial=True)` has existed
+      all along; the gate is what makes it this card rather than a blanket
+      exemption, and it reads the row and the victim's type words off the
+      damage context.
+    * **p889** -- one `c.pre_empt` against the whole benefit, because the
+      card replaces both of its branches and p889 reads one clause word for
+      the pair.
+
+    Laid at arming rather than per use: a substitution has to be standing
+    before the row is offered, which is `c.pre_empt`'s own reasoning, and
+    an exemption gated on the power costs nothing when that power is not
+    the one rolling.
+    """
+    c.ignore_resistance(
+        insubstantial=True, until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("power") == "p463"
+        and _undead(c, ctx.get("target")),
+    )
+    c.pre_empt("p889", "ally_benefit", _f1097_necrotic)
+
+
+_riders("f1097", {"p1567": _p1567}, setup=_f1097)
 
 _riders("f1100", {"p841": _p841, "p835": _p835_will})
 
