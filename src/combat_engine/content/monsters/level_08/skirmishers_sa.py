@@ -128,6 +128,7 @@ from combat_engine.engine.events import (
     SurgeSpent,
     TurnEnd,
     TurnStart,
+    WeaponHeld,
 )
 from combat_engine.engine.grid import distance
 from combat_engine.engine.monster_math import LIMITED
@@ -746,6 +747,17 @@ def m1819a1(c: Cast) -> None:
         c.hit()
 
 
+#: "When it successfully catches a weapon a target drops." The catch is a
+#: `WeaponHeld` with `caught=True`, which only `Cast.disarm(catch=True)`
+#: sets -- an ordinary draw emits the same event and must not fire this.
+_M1819_CAUGHT = "when it successfully catches a weapon a target drops"
+
+
+def _caught_from_a_hand(world: World, me: int, ev: Any) -> bool:
+    """This creature caught a weapon out of somebody's hand."""
+    return bool(ev.actor == me and ev.caught and ev.from_)
+
+
 @power(
     "m1819a2",
     level=8,
@@ -756,14 +768,30 @@ def m1819a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=11),
     damage=Damage("3d6", 9, kind=LIMITED),
-    dropped=("c.disarm(catch=)",),
 )
 def m1819a2(c: Cast) -> None:
-    """`c.disarm` always drops the weapon to the ground; there is no way
-    to catch one in a free hand instead."""
-    if c.strike():
-        c.hit()
-        c.disarm(on=c.target)
+    """Both branches of the printed choice, and they differ in two ways.
+
+    `c.disarm(catch=True)` takes the weapon into a free hand -- which did
+    not exist and is #745 -- and falls back to the floor when both hands are
+    full, because the card says *in a free hand*. The other branch puts it
+    at **this creature's** feet rather than the victim's, which is what
+    `drops_at=` is for: `c.disarm` reads the victim's square by default and
+    every other caller wants that.
+
+    The catch comes first because the player would take it: it is the
+    stronger branch and it arms m1819a3. `c.may` puts the choice where it
+    can be clicked, and its default-yes is the headless answer."""
+    if not c.strike():
+        return
+    c.hit()
+    victim = c.target
+    if victim is None:
+        return
+    if c.may("catch the dropped weapon in a free hand"):
+        c.disarm(on=victim, catch=True)
+    else:
+        c.disarm(on=victim, drops_at=c.me)
 
 
 @power(
@@ -773,11 +801,27 @@ def m1819a2(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="when it successfully catches a weapon a target drops",
-    todo=("c.disarm(catch=)",),
+    trigger=_M1819_CAUGHT,
+    on=Trigger(WeaponHeld, _caught_from_a_hand, _M1819_CAUGHT),
 )
 def m1819a3(c: Cast) -> None:
-    """Can never fire: catching a disarmed weapon has no verb at all."""
+    """A free swing with the weapon it just took.
+
+    The old note was right that this could never fire: `c.disarm` emitted a
+    `Note`, which has no actor and is outside `audit.DID_SOMETHING` by
+    design, so there was no moment to hang a trigger on. `WeaponHeld` is the
+    event and `caught=` is the field that tells a catch from an ordinary
+    draw. #745.
+
+    **Nothing is said about which weapon to swing**, and nothing needs to
+    be: the catch wields it, so `Powers.basic` swings what is in hand.
+
+    **The target is a reading and should be read as one.** The card names
+    none -- it says only that the creature makes a basic attack -- and
+    `c.basic` cannot pick one for itself. The creature just disarmed is the
+    one in reach, since the disarm is Melee 1, and `WeaponHeld.from_` is
+    what carries it."""
+    c.basic(on=c.trigger.from_ or None)
 
 
 @power(

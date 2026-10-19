@@ -25739,6 +25739,188 @@ def a_beast_form_row_is_known_by_its_keyword(out: Result) -> None:
              f"{mine(neither)}")
 
 
+def a_disarmed_weapon_caught_in_a_free_hand(out: Result) -> None:
+    """*"The target drops one weapon it is holding. The creature can choose
+    to catch the dropped weapon in a free hand or have it land on the ground
+    at his feet (in his square)."*
+
+    Two rows, and the second could never fire: `c.disarm` emitted a `Note`,
+    which has no actor and sits outside `audit.DID_SOMETHING` on purpose, so
+    a free action triggering on a catch had no moment to hang on. #745.
+
+    **Three assertions carry this rule and the other ones are scaffolding.**
+
+    * **The catch refuses when no hand is free.** `Gear.wield` stows
+      whatever cannot share a hand, which is right for drawing off a belt
+      and wrong here -- the card says *in a free hand*. A catch that stowed
+      the catcher's own sword instead would look identical on every other
+      line.
+    * **An ordinary draw must not fire m1819a3.** `c.draw` emits the same
+      `WeaponHeld`, so `caught=` is the whole of the narrowing, and the
+      control is a draw that leaves the trigger False.
+    * **The uncaught branch lands at the attacker's feet**, not the
+      victim's, which is what the card prints and the opposite of
+      `c.disarm`'s default. Measured as two squares, not as "somewhere".
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.monsters.level_08.skirmishers_sa import (
+        _caught_from_a_hand,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Item, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, WeaponHeld
+
+    def armed():  # noqa: ANN202
+        """m1819's board, and the first creature on it holding a weapon.
+
+        **Monsters hold nothing**: `loader.spawn` hands them `Gear()` with
+        an empty `weapons`, which `c.disarm`'s own comment says. So the
+        victim has to be one of the characters, found by looking rather
+        than assumed -- the first probe disarmed another monster and read a
+        flat False.
+        """
+        world, me, _ = _posed("m1819a1", 1)
+        victim = next(
+            eid for eid in sorted(world.entities)
+            if (g := world.get(eid, Gear)) is not None and g.held
+        )
+        return world, me, victim
+
+    def floor(world):  # noqa: ANN001, ANN202
+        return [(eid, it) for eid, it in world.each(Item) if it.weapon is not None]
+
+    # -- the catch -------------------------------------------------------
+    world, me, victim = armed()
+    had = [w.ref for w in world.need(victim, Gear).held]
+    seen: list[WeaponHeld] = []
+    world.bus.on(WeaponHeld, seen.append, owner=me)
+    out.that(len(had) >= 1 and not world.need(me, Gear).held,
+             "the victim holds something and the catcher's hands are empty",
+             f"victim {had}, catcher"
+             f" {[w.ref for w in world.need(me, Gear).held]}")
+
+    took = Cast(world=world, me=me, ref="drivers:catch").disarm(
+        on=victim, catch=True)
+    out.that(took, "the disarm lands")
+    out.that(bool(world.need(me, Gear).held),
+             "and the weapon is in the catcher's hand",
+             f"{[w.ref for w in world.need(me, Gear).held]}")
+    out.that(not floor(world),
+             "with nothing on the floor -- caught, not dropped and picked up",
+             f"{[r for _e, r in floor(world)]}")
+    out.that(len(seen) == 1 and seen[0].caught and seen[0].from_ == victim,
+             "and `WeaponHeld` says it was CAUGHT and whose it was -- the"
+             " field `Item.was` would hold if a caught weapon ever became"
+             " an `Item`, which it does not",
+             f"{[(e.caught, e.from_) for e in seen]}")
+
+    # -- no free hand ----------------------------------------------------
+    world, me, victim = armed()
+    mine = world.need(me, Gear)
+    spare = [w for w in world.need(victim, Gear).weapons if not w.two_handed]
+    others = [
+        w for eid in sorted(world.entities)
+        if (g := world.get(eid, Gear)) is not None and eid != victim
+        for w in g.weapons if not w.two_handed
+    ]
+    fill = (spare + others)[:1]
+    if len(fill) < 1:
+        out.skip("no one-handed weapon on the board to fill a hand with")
+    else:
+        for w in (fill * 2)[:2]:
+            mine.weapons.append(w)
+            mine.wield(w)
+        out.that(len(mine.held) == 2,
+                 "both of the catcher's hands are full",
+                 f"{[w.ref for w in mine.held]}")
+        before = {w.ref for w in mine.held}
+        Cast(world=world, me=me, ref="drivers:full").disarm(
+            on=victim, catch=True)
+        out.that(floor(world),
+                 "a catch with no free hand lets the weapon fall -- the"
+                 " card says *in a free hand*",
+                 f"{[r.weapon.ref for _e, r in floor(world)]}")
+        out.that({w.ref for w in mine.held} == before,
+                 "and does NOT stow what the catcher was already holding,"
+                 " which is what `Gear.wield` would have done and is the"
+                 " near miss this assertion exists for",
+                 f"{before} -> {[w.ref for w in mine.held]}")
+
+    # -- the square, both ways -------------------------------------------
+    world, me, victim = armed()
+    Cast(world=world, me=me, ref="drivers:feet").disarm(
+        on=victim, drops_at=me)
+    at_me = [world.get(e, Position).square for e, _i in floor(world)]
+    out.that(bool(at_me) and at_me[0] == world.need(me, Position).square,
+             "`drops_at=` puts it at the ATTACKER's feet, which this card"
+             " prints",
+             f"{at_me} vs {world.need(me, Position).square}")
+
+    world, me, victim = armed()
+    Cast(world=world, me=me, ref="drivers:theirs").disarm(on=victim)
+    theirs = [world.get(e, Position).square for e, _i in floor(world)]
+    out.that(bool(theirs)
+             and theirs[0] == world.need(victim, Position).square
+             and theirs[0] != world.need(me, Position).square,
+             "and the default is still the victim's square, a DIFFERENT"
+             " square -- so every earlier caller is unchanged",
+             f"{theirs}, victim"
+             f" {world.need(victim, Position).square}, me"
+             f" {world.need(me, Position).square}")
+
+    # -- the trigger, and the draw that must not fire it -----------------
+    world, me, victim = armed()
+    caught = WeaponHeld(actor=me, ref="w:x", drawn=True, caught=True,
+                        from_=victim)
+    drawn = WeaponHeld(actor=me, ref="w:x", drawn=True)
+    out.that(_caught_from_a_hand(world, me, caught),
+             "m1819a3's trigger fires on a catch")
+    out.that(not _caught_from_a_hand(world, me, drawn),
+             "and NOT on an ordinary draw, which emits the same event --"
+             " `caught=` is the whole of the narrowing and this is the"
+             " control for it")
+    out.that(not _caught_from_a_hand(world, victim, caught),
+             "and not for somebody else's catch")
+
+    # -- the two rows' own bodies ----------------------------------------
+    world, me, victim = armed()
+    seen = []
+    world.bus.on(WeaponHeld, seen.append, owner=me)
+    use = Cast(world=world, me=me, ref="m1819a2", targets=[victim])
+    use.target = victim
+    world.rng.loaded = 20
+    REGISTRY["m1819a2"].body(use)
+    out.that(any(e.caught for e in seen) and not floor(world),
+             "m1819a2's own body CATCHES, and nothing is left on the"
+             " floor. Not 'one or the other': `c.may` defaults to yes and"
+             " headless takes the first answer, so the branch a run takes"
+             " is known and an `or` here would assert only that something"
+             " happened",
+             f"caught {[e.caught for e in seen]}, floor {len(floor(world))}")
+
+    world, me, victim = armed()
+    Cast(world=world, me=me, ref="drivers:arm").disarm(on=victim, catch=True)
+    swings: list[AttackRolled] = []
+    world.bus.on(AttackRolled, swings.append, owner=me)
+    free = Cast(world=world, me=me, ref="m1819a3")
+    free.trigger = WeaponHeld(actor=me, ref="w:x", drawn=True, caught=True,
+                              from_=victim)
+    REGISTRY["m1819a3"].body(free)
+    out.that(any(getattr(e, "attacker", None) == me for e in swings),
+             "and m1819a3 swings -- the row, not the verb. It could never"
+             " fire before, and the weapon it swings is the one the catch"
+             " put in its hand",
+             f"{len(swings)} roll(s)")
+
+    for ref in ("m1819a2", "m1819a3"):
+        out.that(not str(REGISTRY[ref].unfinished)
+                 or str(REGISTRY[ref].unfinished) == "()",
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25838,6 +26020,11 @@ DRIVERS = {
         a_beast_form_row_is_known_by_its_keyword,
         "a beast form row known by its printed keyword, and the three that"
         " print no requirement (#744)",
+    ),
+    "caught_weapon": (
+        a_disarmed_weapon_caught_in_a_free_hand,
+        "a disarmed weapon caught in a free hand, and the draw that must"
+        " not fire the free swing (#745)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

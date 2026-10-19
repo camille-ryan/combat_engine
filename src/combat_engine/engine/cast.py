@@ -13880,11 +13880,39 @@ class Cast:
         self.world.bus.emit(Note(text=f"{arm.ref} is destroyed"))
         return True
 
-    def disarm(self, *, on: int | None = None, weapon: Weapon | None = None) -> bool:
+    def disarm(
+        self,
+        *,
+        on: int | None = None,
+        weapon: Weapon | None = None,
+        catch: bool = False,
+        drops_at: int | None = None,
+    ) -> bool:
         """Knock a weapon out of a hand. It lands in that creature's square.
 
         Not stowed: a stowed weapon is on the belt and can be drawn again for
         a minor action, and the printed line puts this one on the floor.
+
+        **`catch=True` takes it instead**, which one card prints -- "can
+        choose to catch the dropped weapon in a free hand". It goes into the
+        caster's `Gear` and is wielded, and `WeaponHeld` is announced with
+        `caught=True` so the free action that triggers on a catch has a
+        moment to hang on. A `Note` could not serve: it has no actor and is
+        outside `audit.DID_SOMETHING` by design.
+
+        **A catch refuses when no hand is free**, and does not stow what the
+        catcher is already holding. `Gear.wield` stows by design, which is
+        right for drawing off a belt and wrong here -- the card says *in a
+        free hand*, so a full pair of hands means the weapon falls. Returns
+        True either way, because the disarm happened; the catch is read back
+        off the event or off `Gear`.
+
+        **`drops_at` names whose square it lands in**, because this card
+        puts the uncaught weapon at the *attacker's* feet rather than the
+        victim's. Defaults to the victim, so every earlier caller is
+        unchanged. It matters more than it looks now that
+        `Cast.recall_weapon` measures the distance to a dropped weapon.
+        #745.
         """
         from .components import Item, Position
 
@@ -13910,7 +13938,10 @@ class Cast:
             return False
         gear.weapons.remove(arm)
         gear.stowed.discard(arm.ref)
-        here = self.world.get(who, Position)
+        if catch and self._caught(arm, was=who):
+            return True
+        lands_on = who if drops_at is None else drops_at
+        here = self.world.get(lands_on, Position)
         # `was=who` and `by=self.me` are **different creatures**: the
         # weapon belonged to the victim and the disarm was done by the
         # caster. `by` is read by the consumable rows for whose numbers a
@@ -13923,6 +13954,33 @@ class Cast:
             parts.append(Position(square=here.square))
         self.world.spawn(*parts)
         self.world.bus.emit(Note(text=f"{who} drops {arm.ref}"))
+        return True
+
+    def _caught(self, arm: Weapon, *, was: int) -> bool:
+        """Take a disarmed weapon into a free hand. False if there is none.
+
+        Split out so `disarm` reads as the one printed sentence it is. The
+        free-hand test is `Gear.held` rather than `Gear.weapons`: a stowed
+        weapon is on the belt and the hand holding it is free.
+
+        `was` goes on the event because a caught weapon never becomes an
+        `Item`, so `Item.was` -- the field #736 added for exactly this
+        question -- has nowhere to live.
+        """
+        from .events import WeaponHeld
+
+        gear = self.world.get(self.me, Gear)
+        if gear is None:
+            return False
+        held = list(gear.held)
+        if len(held) >= 2 or any(w.two_handed for w in held):
+            return False
+        gear.weapons.append(arm)
+        gear.wield(arm)
+        self.world.bus.emit(
+            WeaponHeld(actor=self.me, ref=arm.ref, drawn=True, caught=True,
+                       from_=was)
+        )
         return True
 
     def recall_weapon(

@@ -35,7 +35,7 @@ Making an attack, and what the attack turns out to be.
   - Finish a helpless creature. An automatic critical, and nothing added.
 - `c.crit`
   - (no docstring)
-- `c.disarm(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None) -> 'bool'`
+- `c.disarm(self, *, on: 'int | None' = None, weapon: 'Weapon | None' = None, catch: 'bool' = False, drops_at: 'int | None' = None) -> 'bool'`
   - Knock a weapon out of a hand. It lands in that creature's square.
 - `c.drop_target(self, who: 'int') -> 'bool'`
   - Take a creature **off** the use this one is nested inside.

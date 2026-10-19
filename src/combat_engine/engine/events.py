@@ -1380,6 +1380,17 @@ class WeaponHeld(Event):
     actor: int
     ref: str
     drawn: bool = True
+    #: **Caught out of the air rather than drawn off the belt.** One card
+    #: triggers on a catch and must not fire on an ordinary draw, and a
+    #: `Note` could not tell them apart -- it has no actor and sits outside
+    #: `audit.DID_SOMETHING` on purpose. Same arrangement as `drawn` one
+    #: field up: one event, two cases, a flag that says which. Only
+    #: `Cast.disarm(catch=True)` ever sets it. #745.
+    caught: bool = False
+    #: **Whose it was**, on a catch. The same fact `Item.was` records for a
+    #: weapon that reaches the floor (#736) -- and a caught one never does,
+    #: so there is no `Item` to carry it. 0 for an ordinary draw.
+    from_: int = 0
 
 
 @dataclass
