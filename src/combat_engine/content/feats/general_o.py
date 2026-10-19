@@ -1732,15 +1732,29 @@ def f3141(c: Cast) -> None:
 
 
 @power("f3142", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.chosen_weapon_group()",))
+       reach=PERSONAL, target=SELF)
 def f3142(c: Cast) -> None:
-    """Printed as "choose an implement", and nothing records a choice
-    made at build time, so the bonus pays on every implement attack --
-    wider than print for a character holding two kinds, and exactly
-    right for the one implement `chargen` actually hands out."""
+    """Printed as "choose an implement", and the choice is recorded now:
+    `chargen.spawn` writes `chose:<ref>` for every arm the build settled
+    on, and `c.with_a_chosen_weapon` asks whether this blow used one.
+
+    **Narrowed rather than merely marked.** The gate was the keyword alone,
+    and the note beside it admitted what that cost -- *"wider than print for
+    a character holding two kinds, and exactly right for the one implement
+    `chargen` actually hands out."* True of a character at spawn and false
+    the moment one draws a second: `c.draw` takes a stowed implement up, and
+    the old gate paid out on it. Both halves are asked for now, because the
+    keyword is what makes it an implement attack and the record is which
+    implement was chosen.
+
+    The 11th and 21st steps are paragon and epic, and the Special line --
+    take it again for another implement -- is a second copy of the same
+    feat, which `chargen` deals or does not."""
     c.bonus(
         "damage", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: _keyworded(ctx, Keyword.IMPLEMENT),
+        when=lambda ctx: (
+            _keyworded(ctx, Keyword.IMPLEMENT) and c.with_a_chosen_weapon(ctx)
+        ),
     )
 
 

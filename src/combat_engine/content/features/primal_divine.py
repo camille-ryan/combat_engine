@@ -410,7 +410,6 @@ def druid_shape_grant(c: Cast) -> None:
     dropped=(
         "c.improvised()",
         "Weapon.proficiency",
-        "c.chosen_weapon_group()",
     ),
 )
 def fighter_talent_arena(c: Cast) -> None:

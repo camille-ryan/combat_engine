@@ -338,14 +338,23 @@ CATEGORIES: dict[str, dict] = {
                 "total", "total_defence", "weapon_dice", "weapon_of",
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
+            # `c.chosen_weapons` and `c.with_a_chosen_weapon` are here and
+            # not under "the caster's own numbers" beside `c.wielding`,
+            # which is the nearer-looking shelf. They ask what the *build*
+            # settled on, which is the question `c.build` and `c.element`
+            # answer and the one `c.wielding` does not -- that reads the
+            # hand, and the hand changes when `c.draw` fires. Keeping the
+            # pair beside `element` is how somebody who knows they want a
+            # build-time fact finds them. #719.
             ("state and identity", [
-                "bloodied", "build", "considered_bloodied", "element",
+                "bloodied", "build", "chosen_weapons",
+                "considered_bloodied", "element",
                 "feat", "feats", "granted_by",
                 "granted_via", "healed_by", "index", "instinctive", "is_",
                 "is_hidden", "is_kind", "is_minion", "is_quarry", "is_trap",
                 "keywords_of", "kinds_of", "knows", "made_by", "missing",
                 "passive", "quarry", "race_of", "reach", "result", "turn_of",
-                "wounded",
+                "with_a_chosen_weapon", "wounded",
             ]),
             # `c.telepathy` is the odd one here and is here on purpose.
             # It is **not** a sense -- nothing asks whether a telepath

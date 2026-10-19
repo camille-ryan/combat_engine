@@ -2834,8 +2834,15 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # exactly as a feat does, and says so in the same header field.
     # A feat and a race both open weapons up through the same header field, and
     # only the feat cost a slot -- see `outfit`'s `spent`.
+    #
+    # **And a class feature does too, which this read two of the three lists
+    # for.** A `cf:` row lands in `powers`, so `cf:rogue-scoundrel-f1s3`'s
+    # `proficiency=("w3593", "w3596")` was dropped on the floor -- the reader
+    # worked and was never reached. Priced like a race rather than a feat and
+    # for the reason `outfit`'s `spent=` gives: only a feat costs a slot, so
+    # only a feat's weapon may displace one the chassis already chose. #718.
     from_feats = proficiency(feats)
-    from_race = proficiency(racial)
+    from_race = proficiency([*racial, *powers])
     belt = outfit(
         carried,
         [*from_feats, *from_race],
@@ -2892,7 +2899,25 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
         # Everybody has one action point and may spend one a fight. A row
         # that hands out a second says so; the pool is not a class feature.
         ActionPoints(points=1),
-        BuildState(choices=set(who.choices)),
+        # **Plus the arms the build settled on**, as `chose:<ref>`, beside the
+        # leg's name the way `element:` and `beast:` sit there -- a build-time
+        # choice with a `Cast` reader and no component of its own.
+        #
+        # "You select two weapons as your X weapons" is the printed sentence,
+        # and it cannot be answered in a fight: the gear is already in hand
+        # when the first round opens. What is *held at spawn* is the
+        # selection, and deliberately not `Gear.weapons` read live --
+        # `c.draw` takes a stowed weapon up mid-fight, so a reader over the
+        # hand would be a gate that cannot be false.
+        #
+        # **`chose:` and not `weapon:`**, which was the first spelling:
+        # `Gear.bands` already uses `weapon:<slug>` for a class whose page
+        # names weapons one at a time, and two keys that differ only in which
+        # identifier they carry is the kind of near-collision that gets read
+        # as the same fact. #719.
+        BuildState(
+            choices={*who.choices, *(f"chose:{w.ref}" for w in carried)}
+        ),
         # **Training, which nothing recorded until #565.** Its own stream,
         # like the loadout's and the gear's, so which skills a character is
         # trained in is a property of its seed rather than of how many dice

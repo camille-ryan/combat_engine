@@ -141,6 +141,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Is this creature bloodied -- by its hit points, or by a card.
 - `c.build(self, choice: 'str', *, on: 'int | None' = None) -> 'bool'`
   - Did this character take that build? `c.build("infernal")`.
+- `c.chosen_weapons(self, *, on: 'int | None' = None) -> 'frozenset[str]'`
+  - The weapon refs this character's build settled on, by ref.
 - `c.considered_bloodied(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "You are considered bloodied for all purposes."
 - `c.element(self, *, on: 'int | None' = None) -> 'DamageType | None'`
@@ -193,6 +195,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - the last `AttackResult`, or None. `.advantage` is whether the attack had combat advantage; asking again is too late.
 - `c.turn_of(self) -> 'int | None'`
   - Whose turn it is, for a trigger that cares.
+- `c.with_a_chosen_weapon(self, ctx: 'dict[str, Any]', *, on: 'int | None' = None) -> 'bool'`
+  - Was this blow struck with one of `c.chosen_weapons`?
 - `c.wounded(self, on: 'int | None' = None) -> 'bool'`
   - Has lost any hit points at all. What a healing power looks for.
 

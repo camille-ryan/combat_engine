@@ -36,6 +36,7 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     AT_WILL,
+    DEX,
     ENCOUNTER,
     FORT,
     ONE_CREATURE,
@@ -52,8 +53,10 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     RelationSet,
+    SecondWind,
     Trigger,
     When,
+    about_me,
     power,
 )
 from combat_engine.engine.components import Position
@@ -1199,18 +1202,62 @@ def f2861(c: Cast) -> None:
 # -- the arena ---------------------------------------------------------------
 
 
-@power("f3181", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f3181", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.chosen_weapon_group()",))
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3181(c: Cast) -> None:
-    """`SecondWind` is the moment now. "Your arena weapons" is a set
-    chosen at build time that nothing stores, and it is the whole of what
-    the bonus applies to."""
+    """`SecondWind` is the moment and the set is stored now.
+
+    **The set was the gap and it is a `chargen` record, not a verb.** What
+    the build settled on is `chose:<ref>` on `Build.choices`, written where
+    `element:` and `beast:` are written, and `c.with_a_chosen_weapon` asks
+    whether *this blow* was struck with one. The old note called it
+    `c.chosen_weapon_group()`, which is wrong twice: the card says two
+    weapons rather than a group, and the choice cannot be made in a fight.
+
+    **The gate is the weapon actually swung, not the one in hand when the
+    trait armed.** `c.draw` takes a stowed weapon up mid-round, so a bonus
+    installed on the strength of the opening grip would follow the character
+    onto a weapon the build never chose -- and that is also what makes this
+    gate falsifiable rather than a condition that cannot be false.
+
+    `AT_WILL` because the row is triggered: this file's own note is that a
+    triggered `action=NONE` row spends a use every time it fires, so an
+    `ENCOUNTER` one answers once and is inert afterwards. The printed limit
+    is on the second wind, not on this.
+
+    The 11th and 21st steps the card prints are paragon and epic."""
+    c.bonus(
+        "damage", c.mod(DEX), on=c.me, until=When.EONT, kind="feat",
+        when=lambda ctx: c.with_a_chosen_weapon(ctx),
+    )
 
 
 @power("f3202", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.chosen_weapon_group()",))
+       reach=PERSONAL, target=SELF, out_of_combat=True,
+       proficiency=("w3621", "w3650"))
 def f3202(c: Cast) -> None:
-    """Two weapons chosen at build time become proficient and join the
-    same unstored set. Proficiency is a column on `Weapon` decided when
-    the character is made, and the choice is not recorded anywhere."""
+    """Both clauses are header data, and `f2783` is the template -- *"the
+    whole benefit is the grant, it lands when the character is built, and
+    nothing is left for a fight."*
+
+    **The grant.** `proficiency=` is read by `chargen.proficiency`, which
+    hands the arms over at build time; "you gain proficiency with two
+    weapons" has no other moment to happen in. Two superior weapons of the
+    group the chassis already swings, because a fighter is proficient with
+    every simple and military weapon already and a grant of one of those
+    would be a feat that changes nothing. `outfit` then scores them against
+    what is in hand, which is how a selected feat reaches the board.
+
+    **"Which become additional arena weapons for you"** follows with no
+    second mechanism: the set is the arms held when the character is built,
+    so a granted weapon that wins a hand is in it and `f3181` pays out on
+    it. One that loses and goes to the belt is not -- and *nothing can
+    observe the difference*, because every clause the set feeds pays on
+    attacks **with** the weapon and a belt weapon is not swung. The model is
+    observationally complete rather than literally complete, which is the
+    honest way to put it.
+
+    No body: the row is its header, and `out_of_combat=True` says there is
+    nothing left for a fight."""

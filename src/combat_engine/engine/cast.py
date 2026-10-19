@@ -1088,6 +1088,80 @@ class Cast:
                 return by_value.get(choice.split(":", 1)[1])
         return None
 
+    def chosen_weapons(self, *, on: int | None = None) -> frozenset[str]:
+        """The weapon refs this character's build settled on, by ref.
+
+        *"You select two weapons as your X weapons"* -- a sentence four rows
+        wait on and nothing recorded. It cannot be answered in a fight, which
+        `chargen.proficiency`'s docstring already says about the clause next
+        to it: *"the fight opens with the gear already in hand, so the clause
+        has no moment to happen in."* So `chargen.spawn` writes
+        `chose:<ref>` onto `Build.choices` for every arm the character is
+        **holding when it is built**, beside `element:` and `beast:`.
+
+        **Not `Gear.weapons` read live, and that is the whole design.**
+        `c.draw` takes a stowed weapon up mid-fight, so what is in hand
+        changes and the selection does not -- a reader over the hand would be
+        a gate that cannot be false, which is worse than no gate. Drawing a
+        belt weapon is this verb's negative control.
+
+        Empty for a monster and for a board assembled by hand, the way
+        `Gear.trained` is empty, and for the same reason: a missing record
+        must not read as a selection of nothing that then *withholds*
+        something. A row asking this gates a bonus **on**, never off.
+        """
+        from .components import Build
+
+        held = self.world.get(self.me if on is None else on, Build)
+        if held is None:
+            return frozenset()
+        return frozenset(
+            choice.split(":", 1)[1] for choice in held.choices
+            if choice.startswith("chose:")
+        )
+
+    def with_a_chosen_weapon(
+        self, ctx: dict[str, Any], *, on: int | None = None
+    ) -> bool:
+        """Was this blow struck with one of `c.chosen_weapons`?
+
+        The damage context carries a power ref and **no weapon**, so the grip
+        is reconstructed from what the row is: the implement on an implement
+        attack, the ranged arm on a ranged branch, the main hand otherwise.
+        Three content files hand-roll the last two; this is the fourth site
+        and the first in the kernel, so a row wanting it no longer copies it.
+
+        **The implement branch is not decoration.** `Gear.main` deliberately
+        refuses to answer "the orb" -- *"a wizard holding nothing but an orb
+        is holding nothing it can swing, and answering 'the orb' makes every
+        row that asks what is in hand quietly true"* -- so a reader that
+        stopped at `main` could never see an implement, and `f3142`'s whole
+        card is about one. Found by this verb's own driver, which asserted
+        the bonus pays and got nothing.
+
+        False when nothing is recorded and when nothing is held. A row asking
+        this gates a bonus **on**, so a missing record withholds rather than
+        inventing.
+        """
+        from .components import Gear
+        from .dsl import get
+
+        who = self.me if on is None else on
+        chosen = self.chosen_weapons(on=who)
+        if not chosen:
+            return False
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return False
+        declared = get(str(ctx.get("power") or ""))
+        if declared is not None and Keyword.IMPLEMENT in declared.keywords:
+            arm = gear.implement
+        elif ctx.get("ranged") and gear.ranged:
+            arm = gear.ranged
+        else:
+            arm = gear.main
+        return arm is not None and arm.ref in chosen
+
     def suffering(
         self, label: str = "", *, by: int | None = None, include_self: bool = False
     ) -> list[int]:

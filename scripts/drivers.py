@@ -23707,6 +23707,226 @@ def moving_an_attack_onto_somebody_else(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_weapon_the_build_chose(out: Result) -> None:
+    """*"You select two weapons as your X weapons"* -- and the clause next to
+    it, which was dead.
+
+    Four rows waited on `c.chosen_weapon_group()` and the symbol was wrong in
+    both halves of its name. Not a **group**: the card says two weapons, and
+    every implement carries `group == "implement"` so the kind is the slug.
+    Not a `Cast` **verb**: `chargen.proficiency`'s docstring already says why
+    about the adjacent sentence -- *"the fight opens with the gear already in
+    hand, so the clause has no moment to happen in."*
+
+    So the record is `chose:<ref>` on `Build.choices`, beside `element:` and
+    `beast:`, written from the arms the character is **holding when it is
+    built**.
+
+    **Deliberately not `Gear.weapons` read live, and the draw is why.**
+    `c.draw` takes a stowed weapon up mid-fight, so what is in hand changes
+    and the selection does not. A reader over the hand would be a gate that
+    cannot be false -- the shape that let one blocker in a line pass for
+    either implementation -- so every assertion below that says a bonus pays
+    out is paired with one after a draw that says it stops.
+
+    And the half of `cf:fighter-weaponmaster-f3s0`'s card this *does not*
+    answer was a live bug one layer up: `chargen.spawn` settled proficiency
+    from `feats` and `racial` and never from `powers`, which is where every
+    class feature lands. `cf:rogue-scoundrel-f1s3` declares
+    `proficiency=("w3593", "w3596")` and its own docstring asserts the grant
+    lands. It did not. #718.
+    """
+    import combat_engine.content  # noqa: F401
+    from combat_engine import chargen
+    from combat_engine.chargen import IMPLEMENTS, PRINTED
+    from combat_engine.engine import DEX, Bus, Keyword, Rng, Trigger, World
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import SecondWind
+    from combat_engine.engine.grid import Grid
+
+    def built(  # noqa: ANN202
+        cls: str, leg: str = "", feats: list[str] | None = None,
+        powers: list[str] | None = None, seed: int = 5,
+    ):
+        """A real `chargen` character, because the record is a build-time one
+        and an `audit.board` row cannot be asked about a choice."""
+        world = World(Grid(24, 16), Rng(seed), Bus())
+        who = chargen.Character(
+            cls=cls, level=1, build=leg,
+            feats=list(feats or []), powers=list(powers or []),
+        )
+        me = chargen.spawn(world, who, (5, 5))
+        return world, me, Cast(world=world, me=me, ref="drivers:chose")
+
+    # -- #718: a class feature's grant reaches the character ---------------
+    PROF = "cf:rogue-scoundrel-f1s3"
+    out.that(REGISTRY[PROF].proficiency == ("w3593", "w3596"),
+             "the feature declares two weapons in its header",
+             f"{REGISTRY[PROF].proficiency}")
+
+    world, me, _ = built("rogue", powers=[PROF])
+    trained = world.need(me, Gear).trained
+    out.that("w3593" in trained and "w3596" in trained,
+             "and a character given it the way `chargen` gives a class"
+             " feature -- in `powers` -- is trained with both. `spawn` read"
+             " `feats` and `racial` and not `powers`, so this was False and"
+             " the row's own docstring said otherwise",
+             f"{sorted(trained)}")
+
+    world, me, _ = built("rogue", feats=[PROF])
+    out.that("w3593" in world.need(me, Gear).trained,
+             "handed in as a feat it was always trained -- the control that"
+             " says the reader worked and was never reached")
+
+    # **There is no rogue without it**, which is why the control is the
+    # *shape* of the grant rather than its absence: the feature carries no
+    # `requires=on_leg`, so every rogue is dealt it and `powers=[]` ("deal me
+    # some") includes it. The first draft asserted a plain rogue was trained
+    # with neither and failed, which is the board and not the fix.
+    world, me, _ = built("rogue")
+    trained = world.need(me, Gear).trained
+    out.that(set(REGISTRY[PROF].proficiency) <= trained,
+             "every rogue is dealt the feature, so every rogue is trained"
+             " with both -- it carries no leg requirement",
+             f"{sorted(trained)}")
+    out.that("w3621" not in trained and len(trained) == 4,
+             "and with those two and its chassis pair and nothing else:"
+             " reading `powers` grants exactly the refs a header names, not"
+             " every weapon any power mentions",
+             f"{sorted(trained)}")
+
+    # -- #719: the record ---------------------------------------------------
+    world, me, c = built("fighter", "arena")
+    gear = world.need(me, Gear)
+    chosen = c.chosen_weapons()
+    out.that(chosen == {w.ref for w in gear.held},
+             "the arms held at spawn are exactly what the build chose",
+             f"chosen={sorted(chosen)} held={[w.ref for w in gear.held]}")
+    out.that(chosen.isdisjoint(gear.stowed) or not gear.stowed,
+             "and nothing on the belt is in the set",
+             f"stowed={sorted(gear.stowed)}")
+    out.that(all(f"chose:{ref}" in world.need(me, Build).choices
+                 for ref in chosen),
+             "recorded as `chose:<ref>` on `Build.choices`, where"
+             " `element:` and `beast:` are")
+    out.that(c.with_a_chosen_weapon({}),
+             "so the weapon in hand is one the build chose")
+
+    out.that(not Cast(world=world, me=0, ref="drivers:none").chosen_weapons(),
+             "a creature with no `Build` chooses nothing rather than raising"
+             " -- `Gear.trained` is empty the same way, and for the reason"
+             " its comment gives: a missing record must not read as a"
+             " selection of nothing that then withholds something")
+
+    # -- f3202: the grant reaches the board, which is the point of it -------
+    world, me, c = built("fighter", "arena", feats=["f3202"])
+    gear = world.need(me, Gear)
+    out.that(bool(set(REGISTRY["f3202"].proficiency)
+                  & {w.ref for w in gear.held}),
+             "`f3202` is two superior weapons in its header and one of them"
+             " is what the fighter ends up swinging -- a selected feat that"
+             " left the character holding the chassis weapon would be"
+             " drawable and inert",
+             f"held={[w.ref for w in gear.held]}")
+    out.that(len(gear.stowed) >= 1,
+             "and the arms it beat are on the belt, which is what gives"
+             " every gate below something to be false about",
+             f"stowed={sorted(gear.stowed)}")
+    out.that(c.chosen_weapons() == {w.ref for w in gear.held},
+             "the set is still the hand and not the belt, so \"additional"
+             " arena weapons\" needs no second mechanism",
+             f"{sorted(c.chosen_weapons())}")
+
+    # -- f3181: the bonus, and the draw that stops it -----------------------
+    world, me, c = built("fighter", "arena", feats=["f3202", "f3181"])
+    gear = world.need(me, Gear)
+    want = c.mod(DEX)
+    ctx: dict[str, object] = {}
+
+    out.that(c.total("damage", me, ctx) == 0,
+             "before the second wind there is no bonus to damage",
+             f"{c.total('damage', me, ctx)}")
+
+    REGISTRY["f3181"].body(Cast(world=world, me=me, ref="f3181"))
+    got = c.total("damage", me, ctx)
+    out.that(got == want and want > 0,
+             "once it fires the chosen weapon hits for the Dexterity"
+             " modifier more",
+             f"{got} want {want}")
+
+    stowed = sorted(gear.stowed)
+    out.that(bool(stowed) and c.draw(stowed[0]),
+             "a belt weapon can be taken up mid-fight",
+             f"{stowed}")
+    out.that(c.total("damage", me, ctx) == 0,
+             "and the bonus stops, because the gate is the weapon actually"
+             " swung. This is the assertion the design is for: a reader over"
+             " `Gear.weapons` would answer True here and no row would look"
+             " wrong",
+             f"holding {[w.ref for w in gear.held]}"
+             f" bonus {c.total('damage', me, ctx)}")
+
+    world, me, c = built("fighter", "arena", feats=["f3202", "f3181"])
+    out.that(c.total("damage", me, {}) == 0,
+             "and a fresh character that never took a second wind has none"
+             " of it -- the row is the trigger, not the board")
+
+    # `Power.on` is a `Trigger | Sequence[Trigger]`, so the event is read
+    # off whichever shape this row carries rather than off `.event` blind.
+    fired = REGISTRY["f3181"].on
+    armed = [fired] if isinstance(fired, Trigger) else list(fired or ())
+    out.that(len(armed) == 1 and armed[0].event is SecondWind,
+             "declared on the event rather than watched, because the whole"
+             " card is the triggered half",
+             f"{fired}")
+
+    # -- f3142: the implement, where the group cannot tell them apart -------
+    world, me, c = built("wizard", feats=["f3142"])
+    gear = world.need(me, Gear)
+    out.that(all(w.group == "implement" for w in gear.held),
+             "every implement carries the same group, which is why the old"
+             " symbol's name could not have worked",
+             f"{[(w.ref, w.group) for w in gear.held]}")
+
+    REGISTRY["f3142"].body(Cast(world=world, me=me, ref="f3142"))
+    spell = next((r for r, d in REGISTRY.items()
+                  if Keyword.IMPLEMENT in d.keywords), "")
+    out.that(spell != "", "there is an implement row to ask about", spell)
+    out.that(c.total("damage", me, {"power": spell}) == 1,
+             "an implement attack with the chosen implement pays 1")
+    out.that(c.total("damage", me, {}) == 0,
+             "and a blow that is no row's implement attack pays nothing --"
+             " the keyword half of the gate")
+
+    arms = [*PRINTED.values(), *IMPLEMENTS.values()]
+    swapped = next((w for w in arms if w.group == "implement"
+                    and w.ref not in c.chosen_weapons()), None)
+    if swapped is not None:
+        gear.weapons[:] = [swapped]
+        out.that(c.total("damage", me, {"power": spell}) == 0,
+                 "and an implement the build did not choose pays nothing,"
+                 " which is the clause the old note admitted to missing --"
+                 " \"wider than print for a character holding two kinds\"",
+                 f"{swapped.ref}")
+    else:
+        out.that(False, "no second implement to swap in -- the negative"
+                        " control for f3142 could not be built")
+
+    # -- the markers --------------------------------------------------------
+    for ref, want_marks in (
+        ("f3181", ()),
+        ("f3202", ()),
+        ("f3142", ()),
+        ("cf:fighter-weaponmaster-f3s0",
+         ("c.improvised()", "Weapon.proficiency")),
+    ):
+        out.that(REGISTRY[ref].unfinished == want_marks,
+                 f"{ref} waits on {want_marks or 'nothing'}",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -23742,6 +23962,11 @@ DRIVERS = {
         moving_an_attack_onto_somebody_else,
         "moving a declared attack onto somebody else, and the three things"
         " that is not (#717)",
+    ),
+    "chosen_weapon": (
+        a_weapon_the_build_chose,
+        "a weapon the build chose, and a class feature's grant that never"
+        " landed (#718, #719)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,
