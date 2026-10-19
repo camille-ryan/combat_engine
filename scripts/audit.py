@@ -2688,6 +2688,9 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
     if _rolls_checks(world, caster, ref, cursor):
         return True
 
+    if _rolls_saves(world, caster, ref, cursor):
+        return True
+
     # Bloodied as a **crossing**, not as a state. The board starts the
     # caster below half so that a row *gated* on being bloodied can fire --
     # which means the threshold is already behind it and `Bloodied` is
@@ -3267,6 +3270,87 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
         if conds is not None:
             for cond in (Condition.DYING, Condition.UNCONSCIOUS, Condition.PRONE):
                 conds.counts.pop(cond, None)
+
+
+def _rolls_saves(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
+    """Roll saving throws, for a row whose printed trigger is one.
+
+    **75 rows watch `SavingThrow` and this harness had never announced
+    one.** Everything it arranges -- a second wind, an action point, a
+    sibling row, a class feature, a skill check, a bloodied crossing, four
+    attack pairs, a walk past -- produces no save, because a save needs two
+    things nothing here supplied: an effect that a save can end, and a turn
+    for that creature to end. So the whole family reported UNUSED, which
+    reads as "this row cannot work" rather than "the board never asked".
+
+    The sibling of `_rolls_checks` above and gated the same way, for the
+    same reason: the pass is three rollers by two outcomes and running it
+    for every triggered row in the tree would be most of the audit's time.
+
+    **Both outcomes, because the printed triggers split on them.** "You
+    fail a saving throw" and "you succeed on a saving throw" are different
+    cards -- `i1509p4` and `f1516` -- and a pass producing only one leaves
+    half the family unexercised. A loaded 3 fails against the 10 the rules
+    print and a loaded 18 passes.
+
+    **Three rollers, because the cards name three.** "You make a saving
+    throw" is the caster; "a creature within 5 squares makes a saving
+    throw" is an ally; "an enemy fails a saving throw against one of your
+    powers" is a foe, and that one cannot be reached by rolling the
+    caster's own saves however many times.
+
+    **The condition is laid by `c.condition` rather than written onto the
+    component**, so the effect is a real `SAVE_ENDS` hold that
+    `Effects.tick` will offer a throw for -- which is the thing being
+    exercised. `DAZED` because it is the plainest one: it ends on a save,
+    carries no ongoing damage to confuse a damage-side rider, and no row in
+    this family gates on which condition it is.
+
+    A **death** saving throw is a different roll -- `turns.py` rolls it off
+    `Health.failures` -- and one row (`f1446b`) prints that trigger. It is
+    not posed here; the throw this produces is the ordinary end-of-turn one.
+    """
+    from combat_engine.engine import When
+    from combat_engine.engine.events import SavingThrow, TurnEnd
+    from combat_engine.engine.query import enemies as _foes
+    from combat_engine.engine.types import Condition
+
+    declared = get(ref)
+    if declared is None or not any(
+        t.event is SavingThrow for t in declared.triggers
+    ):
+        return False
+
+    from combat_engine.engine.cast import Cast as _Cast
+
+    rollers = [caster, *_allies_of(world, caster)[:1],
+               *[f for f in sorted(_foes(world, caster)) if alive(world, f)][:1]]
+    was = getattr(world.rng, "loaded", None)
+    try:
+        for roller in rollers:
+            if not alive(world, roller):
+                continue
+            for face in (3, 18):
+                # Laid by the creature whose row is under test, so a rider
+                # reading "an effect **your** attack bestowed" has the ref
+                # it is looking for. `by=` on the hold is the laying row.
+                hand = _Cast(world=world, me=caster, ref=ref)
+                held = hand.condition(
+                    Condition.DAZED, until=When.SAVE_ENDS, on=roller
+                )
+                if held is None:
+                    continue
+                world.rng.loaded = face
+                world.bus.emit(TurnEnd(actor=roller, round=world.round))
+                if _fired(world, ref, cursor):
+                    return True
+    finally:
+        if was is None:
+            if hasattr(world.rng, "loaded"):
+                world.rng.loaded = None
+        else:
+            world.rng.loaded = was
+    return False
 
 
 def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
