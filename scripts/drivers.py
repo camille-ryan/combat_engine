@@ -17420,12 +17420,29 @@ def mage_school_riders(out: Result) -> None:
     else:
         world, caster, _ = _board(ref)
         mods = world.need(caster, Mods)
-        out.that(mods.total("damage", {"power": FIRE_ARCANE}) == 1,
+
+        def laid_here(power: str) -> int:
+            """What **this row** adds to damage, not what the pool holds.
+
+            `Mods.total` sums every source, and the pool moved under this
+            assertion: f1995 going from `todo=` to `dropped=` made it
+            drawable, which re-rolls every chargen draw, and the board
+            came back holding f2612 -- +2 damage in round 1 with a melee
+            power. A read of 1 became 3 and the rule went red over a
+            feature it was not about. A rule about one row asserts the
+            number that row laid. #737.
+            """
+            ctx = {"power": power}
+            return sum(m.amount() for m in mods.items
+                       if m.what == "damage" and m.label == ref
+                       and m.applies(ctx))
+
+        out.that(laid_here(FIRE_ARCANE) == 1,
                  "a +1 damage bonus on an arcane fire power",
-                 f"it gave {mods.total('damage', {'power': FIRE_ARCANE})}")
-        out.that(mods.total("damage", {"power": NEITHER}) == 0,
+                 f"it gave {laid_here(FIRE_ARCANE)}")
+        out.that(laid_here(NEITHER) == 0,
                  "and none on a power that is neither -- the negative control",
-                 f"it gave {mods.total('damage', {'power': NEITHER})}")
+                 f"it gave {laid_here(NEITHER)}")
 
     # ---- the evocation tier: ONE die, rerolled ONCE ---------------------
     #
@@ -25297,6 +25314,188 @@ def a_weapon_called_back_to_the_hand(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_range_that_is_longer_than_printed(out: Result) -> None:
+    """*"If a c9 power has a range of 10 squares or fewer, increase the
+    power's normal range by 2 squares. If a c9 power has a range of 11-20
+    squares, increase the power's normal range by 5 squares."*
+
+    Four rows under two symbols all carried the same note: a `"range"` or
+    `"reach"` modifier **widens the offer and not the swing**, because
+    `dsl.area_of` added `_stretched` to the range and `dsl._within_reach`
+    read `p.reach_of(...)` raw. #533 moved the stretch down into
+    `dsl._reach_of`, which `_within_reach` and the policy readers all call,
+    and the notes were never revisited. #737.
+
+    **Both edges of both bands, which is the whole of the assertion.** One
+    modifier would pass a one-sided test: a `Ranged 20` row gets 5 and
+    **not** 7, so the test is that 24 reaches and 26 does not. A `Ranged 10`
+    row gets 2 and not 5 -- 12 reaches, 13 does not. That pair is what
+    separates the card from "add the bigger number to everything".
+
+    **Posed on another row's board on purpose.** `audit.board` arms every
+    `action=NONE` row the creature holds, so a board built for `f1995` has
+    `f1995` already standing -- the first run of this measured a doubled
+    stretch and read it as the right answer at the wrong distance.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, _within_reach
+    from combat_engine.engine.query import distance_between, enemies
+    from combat_engine.engine.types import Keyword
+
+    def ranged(cls: str, size: int) -> str:
+        """A row of this class printing exactly this ranged distance."""
+        return next(
+            d.ref for d in REGISTRY.values()
+            if d.cls == cls
+            and d.reach_of().kind == "ranged"
+            and d.reach_of().size == size
+        )
+
+    def posed(on_row: str, gap: int):  # noqa: ANN202
+        """`on_row`'s board with the foe `gap` squares off.
+
+        **Not the row under test's own board**: `audit.board` arms every
+        `action=NONE` row, so the passive being measured would already be
+        standing before the body ran.
+        """
+        world, me, _ = _posed(on_row, 1)
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(me, Position).square
+        there = (here[0] + gap, here[1])
+        # **Lift, then move, then re-index.** `Position.square` alone leaves
+        # `Grid`'s occupant index naming the old square, and `place` refuses
+        # to overwrite somebody else's entry rather than silently taking it.
+        world.grid.lift(foe)
+        world.need(foe, Position).square = there
+        world.grid.place(foe, frozenset({there}))
+        return world, me, foe
+
+    def reaches(on_row: str, row: str, gap: int, arm: str):  # noqa: ANN202
+        world, me, foe = posed(on_row, gap)
+        far = distance_between(world, me, foe)
+        before = _within_reach(world, me, REGISTRY[row], foe)
+        REGISTRY[arm].body(Cast(world=world, me=me, ref=arm))
+        return far, before, _within_reach(world, me, REGISTRY[row], foe)
+
+    # -- f1995: two bands, and both edges of each ------------------------
+    r5, r10, r20 = ranged("wizard", 5), ranged("wizard", 10), ranged("wizard", 20)
+    board_row = r10
+    for row, printed, gap, want in (
+        (r5, 5, 7, True), (r5, 5, 8, False),
+        (r10, 10, 12, True), (r10, 10, 13, False),
+        (r20, 20, 24, True), (r20, 20, 26, False),
+    ):
+        far, before, after = reaches(board_row, row, gap, "f1995")
+        grants = 2 if printed <= 10 else 5
+        out.that(far == gap and not before,
+                 f"a Ranged {printed} row does not reach {gap} squares"
+                 " unaided -- the control for the line below",
+                 f"distance {far}, reach {before}")
+        out.that(after is want,
+                 f"and {'does' if want else 'does not'} with f1995 standing:"
+                 f" {printed} + {grants} is {printed + grants}, so {gap} is"
+                 f" {'inside' if want else 'outside'} it. **Both edges of"
+                 " both bands**, because one modifier for everything would"
+                 " pass the reaching half alone",
+                 f"{before} -> {after}")
+
+    cleric = ranged("cleric", 5)
+    far, before, after = reaches(board_row, cleric, 7, "f1995")
+    out.that(not before and not after,
+             "and a row of another class is not lengthened at all -- the"
+             " gate is read off the row being measured, not off the"
+             " creature",
+             f"{cleric}: {before} -> {after}")
+
+    # -- i2962x1: the enhancement, onto an arcane row with no attack -----
+    arcane = next(
+        d.ref for d in REGISTRY.values()
+        if Keyword.ARCANE in d.keywords and d.attack is None
+        and d.reach_of().kind == "ranged" and d.reach_of().size == 10
+    )
+    swinging = next(
+        d.ref for d in REGISTRY.values()
+        if Keyword.ARCANE in d.keywords and d.attack is not None
+        and d.reach_of().kind == "ranged" and d.reach_of().size == 10
+    )
+    world, me, foe = posed(board_row, 11)
+    c = Cast(world=world, me=me, ref="i2962x1")
+    plus = c.enhancement
+    out.that(plus >= 1, "the item answers a plus at all", f"{plus}")
+    out.that(not _within_reach(world, me, REGISTRY[arcane], foe),
+             "a Ranged 10 arcane row does not reach 11 squares unaided")
+    REGISTRY["i2962x1"].body(c)
+    out.that(_within_reach(world, me, REGISTRY[arcane], foe) is (plus >= 1),
+             "and does once i2962x1 is standing, by the item's own plus",
+             f"plus {plus}")
+    out.that(not _within_reach(world, me, REGISTRY[swinging], foe),
+             "and an arcane row that rolls an attack is NOT lengthened --"
+             " the narrowing is the absence of an attack line, which is the"
+             " reading this row stands on and the thing a careless gate"
+             " would have dropped",
+             f"{swinging}")
+
+    # -- i2771x1: the same shape, gated on a keyword rather than a class --
+    divine = next(
+        d.ref for d in REGISTRY.values()
+        if Keyword.DIVINE in d.keywords and d.reach_of().kind == "ranged"
+        and d.reach_of().size == 10
+    )
+    world, me, foe = posed(board_row, 11)
+    c = Cast(world=world, me=me, ref="i2771x1")
+    plus = c.enhancement
+    out.that(not _within_reach(world, me, REGISTRY[divine], foe),
+             "a Ranged 10 divine row does not reach 11 squares unaided")
+    REGISTRY["i2771x1"].body(c)
+    out.that(_within_reach(world, me, REGISTRY[divine], foe) is (plus >= 1),
+             "and does once i2771x1 is standing", f"plus {plus}")
+    out.that(not _within_reach(world, me, REGISTRY[cleric], foe),
+             "while a Ranged 5 row of the same class is still short at 11 --"
+             " the plus is added to the printed range, not a flat reach",
+             f"{cleric}")
+
+    # -- m6579a1: a melee square that follows a state --------------------
+    #
+    # **Three squares off, not two.** At two the first version of this went
+    # green with the modifier deleted: growing to Large gives the creature a
+    # 2x2 footprint, and `_within_reach` measures from the footprint, so a
+    # foe at two squares is simply adjacent to the bigger body. The reach
+    # the card prints and the size it comes with are two different facts and
+    # only one distance separates them.
+    world, me, foe = posed("m6579a2", 3)
+    out.that(not _within_reach(world, me, REGISTRY["m6579a1"], foe),
+             "m6579a1 does not reach three squares while the creature is its"
+             " printed size")
+    REGISTRY["m6579a3"].body(Cast(world=world, me=me, ref="m6579a3"))
+    out.that(world.need(me, Position) is not None, "the creature is still on"
+             " the board after growing")
+    out.that(_within_reach(world, me, REGISTRY["m6579a1"], foe),
+             "and does once m6579a3 has made it Large -- one square of that"
+             " is the footprint and the other is the square the card prints"
+             " on the attack, laid by the row that does the growing because"
+             " a modifier has to be standing before the area is taken",
+             f"size {Cast(world=world, me=me, ref='x').size_of(me)}")
+
+    for ref, want in (("f1995", "within"), ("i2771x1", "within"),
+                      ("i2962x1", ""), ("m6579a1", "")):
+        marks = str(REGISTRY[ref].unfinished)
+        out.that("range" not in marks and "reach" not in marks,
+                 f"{ref} waits on no range or reach symbol",
+                 f"{REGISTRY[ref].unfinished}")
+        if want:
+            out.that(want in marks,
+                     f"{ref} still names the area half, which is #738 and is"
+                     " a different number from the one that landed",
+                     f"{REGISTRY[ref].unfinished}")
+        else:
+            out.that(not marks or marks == "()",
+                     f"{ref} carries no marker at all",
+                     f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -25382,6 +25581,10 @@ DRIVERS = {
         a_weapon_called_back_to_the_hand,
         "a weapon called back to the hand, and the two ids a dropped one"
         " has to carry (#736)",
+    ),
+    "longer_range": (
+        a_range_that_is_longer_than_printed,
+        "a range longer than printed, and both edges of both bands (#737)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

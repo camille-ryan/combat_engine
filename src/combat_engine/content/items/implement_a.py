@@ -1548,20 +1548,35 @@ def i2911p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.power_range()",),
 )
 def i2962x1(c: Cast) -> None:
-    """A row's reach is header data and nothing lengthens another row's.
+    """Written. The whole card is one ranged clause and no area one.
 
-    **`dsl._stretched` is not the route.** Its `"range"` modifier is read by
-    `area_of`, which decides what may be aimed at, and *not* by
-    `_within_reach`, which `actions.perform` re-asks before spending the
-    action -- so the longer range is offered and then silently refused.
-    Driven on a board this round; see `i2771x1`.
+    **The note saying `dsl._stretched` was not the route was stale**, for
+    the reason f1995 and i2771x1 now carry: #533 moved the stretch into
+    `dsl._reach_of`, so `_within_reach` and `actions.perform` read the same
+    number `area_of` does.
 
-    Two things would also be wanted if it worked: "utility" is not a column,
-    so the narrowing would have to be read off the absence of an attack
-    line."""
+    **"Utility" is still not a column**, so the narrowing is the absence of
+    an attack line, which is a reading and not a dropped clause -- there is
+    no marker for it because there is nothing to wait for. It is right for
+    every arcane row in the tree that prints no attack, and would miss a
+    utility power that rolls one. 143 arcane rows print a ranged line and no
+    attack. #737."""
+    me = c.me
+    plus = c.enhancement
+
+    def an_arcane_utility(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return (
+            ctx.get("range_kind") == "ranged"
+            and p is not None
+            and p.attack is None
+            and Keyword.ARCANE in p.keywords
+        )
+
+    c.bonus("range", plus, on=me, until=When.ENCOUNTER,
+            when=an_arcane_utility)
 
 
 @power(
@@ -3707,22 +3722,42 @@ def i2762p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.power_range()",),
+    dropped=("c.bonus('within')",),
 )
 def i2771x1(c: Cast) -> None:
-    """A row's reach is header data and nothing lengthens another row's.
+    """The ranged half is written; the area half is the one clause in the
+    tree that wants `Range.within` lengthened.
 
-    **`dsl._stretched` is not the route, and it looks like one.** It reads a
-    `"range"` modifier, but only from `area_of`, which decides what may be
-    *aimed* at -- `_within_reach` reads `p.reach_of(...)` raw, and
-    `actions.perform` re-asks it before spending the action. So the longer
-    range is offered and then refused, which is a dropped clause wearing a
-    finished row. Driven on a board this round. `_reach_of`'s weapon branch
-    throws the stretch away a second time.
+    **The note saying `dsl._stretched` was not the route was stale.** It
+    described an engine where the modifier reached `area_of`, which decides
+    what may be *aimed* at, and not `_within_reach`, which `actions.perform`
+    re-asks before spending the action -- so the longer range was offered
+    and then refused. #533 moved the stretch into `dsl._reach_of`, which
+    every one of those readers calls.
 
-    The printed area half is further off still: a burst reads
-    `"blast_size"`, which is the burst's own radius, where this card
-    lengthens the `within` an area burst may be *placed* at."""
+    166 divine rows print a ranged line and the gate is the keyword, not the
+    class: a prayer is a prayer whoever throws it. `c.enhancement` reads the
+    plus of the item this row belongs to rather than whatever magic is in
+    hand, which matters for a character carrying two.
+
+    **32 divine rows print an area burst and those are dropped**, because
+    the card lengthens the `within` a burst may be placed at and
+    `"blast_size"` is the burst's own radius -- a different number, and
+    laying the plus there would widen the blast instead of moving it.
+    f1995 is the other row printing this clause. #737, and the area half is
+    #738."""
+    me = c.me
+    plus = c.enhancement
+
+    def a_ranged_prayer(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return (
+            ctx.get("range_kind") == "ranged"
+            and p is not None
+            and Keyword.DIVINE in p.keywords
+        )
+
+    c.bonus("range", plus, on=me, until=When.ENCOUNTER, when=a_ranged_prayer)
 
 
 @power(

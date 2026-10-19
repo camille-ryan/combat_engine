@@ -209,27 +209,55 @@ def f1997(c: Cast) -> None:
 
 
 @power("f1995", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reach_bonus()",))
+       reach=PERSONAL, target=SELF, dropped=("c.bonus('within')",))
 def f1995(c: Cast) -> None:
-    """Every wizard power reaches further, on a sliding scale, areas
-    included. Same symbol f986 names for the melee side of it.
+    """Every wizard power reaches further, on a sliding scale. Same symbol
+    f986 names for the melee side of it.
 
-    **A `"range"` modifier exists and is the wrong half of the answer**,
-    which the old docstring's "nothing rewrites it" missed in both
-    directions. Driven on a board, both printed halves still fail:
+    **The ranged half is written, and the note saying it could not be was
+    stale rather than wrong.** It was written against an engine where
+    `area_of` added `dsl._stretched` to `Range.size` and `_within_reach`
+    read `p.reach_of(...)` raw -- so the longer range was offered and then
+    refused by the very next question. #533 moved the stretch down into
+    `dsl._reach_of`, which `_within_reach`, `Cast.reach_of` and the three
+    policy readers all call, and the four now agree. Measured: a foe at
+    distance 6 is out of a `Ranged 5` row's reach and inside it once a
+    `+2` is standing.
 
-    * the ranged half **widens the offer and not the swing** -- `area_of`
-      adds `dsl._stretched` to `Range.size`, so a foe at 11 is offered to a
-      `Ranged 10` row carrying `+2`, and `dsl._within_reach` never asks
-      `_stretched`, so `use()` and `actions.perform` refuse that very
-      target. An engine fault, not this clause's;
-    * the area half has **nothing to write to at all**. The card lengthens
-      `Range.within` -- where an area burst may be *placed* -- and
-      `"blast_size"` is the burst's own radius: laying `+2` turned a
-      `burst 1 within 10` from 9 squares into 49. `_stretched`'s docstring
-      says outright that no printed line of this shape lengthens `within`,
-      and this is that line.
-    """
+    Two modifiers rather than one, because the card prints two bands and
+    the wider one is not the sum: a `Ranged 20` row gets 5 and not 7. The
+    band is read off the row being measured -- 98 wizard ranged rows print
+    10 or less, 20 print 11 to 20 -- and the kind off `ctx["range_kind"]`
+    rather than the row's own header, because `dsl.switched` has already
+    resolved an alt range by the time the question is asked.
+
+    **The area half is still dropped, and it is the only clause in the tree
+    that wants `within`.** The card lengthens where an area burst may be
+    *placed*; `"blast_size"` is the burst's own radius, and laying `+2`
+    there turned a `burst 1 within 10` from 9 squares into 49. 56 wizard
+    rows print an area burst within 10 or 20, so the clause is not
+    theoretical. `_stretched`'s docstring says no printed line of this
+    shape lengthens `within` -- this is that line, and i2771x1 is the
+    other. #737, and the area half is #738."""
+    me = c.me
+
+    def band(lo: int, hi: int):  # noqa: ANN202
+        """"A c9 power whose printed range falls in this band."""
+
+        def gate(ctx: dict[str, Any]) -> bool:
+            if ctx.get("range_kind") != "ranged":
+                return False
+            p = get(ctx.get("power", ""))
+            return (
+                p is not None
+                and p.cls == "wizard"
+                and lo <= p.reach_of().size <= hi
+            )
+
+        return gate
+
+    c.bonus("range", 2, on=me, until=When.ENCOUNTER, when=band(0, 10))
+    c.bonus("range", 5, on=me, until=When.ENCOUNTER, when=band(11, 20))
 
 
 # -- the racial fire family ------------------------------------------------

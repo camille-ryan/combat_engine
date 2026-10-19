@@ -2220,22 +2220,23 @@ def m6579a0(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=8),
     damage=Damage("2d8", 4),
-    dropped=("c.reach_bonus()",),
 )
 def m6579a1(c: Cast) -> None:
     """Both damage expressions are written out, because the bigger one replaces
     the smaller rather than adding to it.
 
-    "Melee 2 while Large" is still dropped, and the route is **broken rather
-    than absent**, which is worse: `c.bonus("reach", 1)` is read by
-    `dsl._stretched` where the *area* is worked out, so the longer reach is
-    offered -- the area grew 9 squares to 36 on a board -- but
-    `dsl._within_reach` reads `p.reach_of(...)` raw and consults no modifier,
-    so `use` then refuses the swing it had just offered. Driven on a Large
-    m6579 with a foe two squares off its footprint: area yes, `_within_reach`
-    no, no attack rolled. A modifier here would read as a finished row that
-    cannot reach. `Range(alt=)` is not the tool either: that is a *choice*
-    between two shapes, not a reach that follows a state."""
+    **"Melee 2 while Large" is written, and it is written on m6579a3**, the
+    row that does the growing. A modifier has to be standing before the area
+    is taken and an at-will attack cannot put one up for its own use, which
+    the old note on that row already said -- what it gave as the reason not
+    to is now false. `dsl._within_reach` no longer reads `p.reach_of(...)`
+    raw: #533 moved the stretch into `dsl._reach_of`, which it and
+    `actions.perform` and the policy readers all call, so the square that is
+    offered is the square that may be swung at.
+
+    `Range(alt=)` is still not the tool, for the reason the old note gave:
+    that is a *choice* between two shapes, not a reach that follows a
+    state."""
     if c.strike():
         if c.size_of(c.me) is Size.LARGE:
             c.damage("2d10", 9)
@@ -2278,12 +2279,23 @@ def m6579a3(c: Cast) -> None:
     because that is the printed consequence of growing rather than a separate
     line -- so the second sentence needs nothing of its own.
 
-    The square of reach m6579a1 prints while Large would belong here, gated to
-    that row by `ctx["power"]` -- a modifier has to be standing before the area
-    is taken and an at-will attack cannot put one up for its own use. It is not
-    written, because `dsl._within_reach` does not read the modifier `area_of`
-    does; see m6579a1."""
-    c.resize(Size.LARGE, until=When.EONT, on=c.me)
+    The square of reach m6579a1 prints while Large belongs here, gated to that
+    row by `ctx["power"]` -- a modifier has to be standing before the area is
+    taken and an at-will attack cannot put one up for its own use. The reason
+    it was not written is gone: #533 moved the stretch into `dsl._reach_of`,
+    so `_within_reach` reads the same number `area_of` does.
+
+    The size is asked **inside the gate** as well as bounded by `EONT`,
+    because the two clocks are not the same thing: `c.resize` can be undone
+    by another card, and a reach standing on a creature that is no longer
+    Large is a square the print does not give it. #737."""
+    me = c.me
+    c.resize(Size.LARGE, until=When.EONT, on=me)
+    c.bonus(
+        "reach", 1, on=me, until=When.EONT,
+        when=lambda ctx: ctx.get("power") == "m6579a1"
+        and c.size_of(me) is Size.LARGE,
+    )
 
 
 # --------------------------------------------------------------------------
