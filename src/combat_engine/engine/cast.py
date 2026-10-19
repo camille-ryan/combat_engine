@@ -14414,6 +14414,42 @@ class Cast:
         )
         return True
 
+    def attacked_me_since(self, who: int | None = None) -> bool:
+        """"A target that has attacked you since the end of your last turn."
+
+        Reads the bus log rather than a remembered set -- see
+        `query.since_turn_ended`, which is where the two rows that wanted
+        this had each concluded nothing recorded it. #757.
+        """
+        from .query import attacked_since
+
+        them = self._who(who)
+        return them is not None and attacked_since(self.world, self.me, them)
+
+    def hurt_me_since(
+        self, who: int | None = None, *, or_an_ally: bool = False
+    ) -> bool:
+        """"The target dealt damage to you (or an ally) since the end of your
+        last turn." #757."""
+        from .query import damaged_since
+
+        them = self._who(who)
+        return them is not None and damaged_since(
+            self.world, self.me, them, or_an_ally=or_an_ally
+        )
+
+    def floored_me_since(
+        self, who: int | None = None, *, or_an_ally: bool = False
+    ) -> bool:
+        """"The target reduced you (or an ally) to 0 hit points or fewer
+        since the end of your last turn." #757."""
+        from .query import dropped_since
+
+        them = self._who(who)
+        return them is not None and dropped_since(
+            self.world, self.me, them, or_an_ally=or_an_ally
+        )
+
     def made_by(self, thing: int) -> int | None:
         """Whoever put that zone or conjuration on the board."""
         from .components import Conjuration

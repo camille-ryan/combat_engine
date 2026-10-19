@@ -26350,6 +26350,203 @@ def an_extra_square_only_against_the_named_kind(out: Result) -> None:
              f"{REGISTRY['i3169x1'].unfinished}")
 
 
+def what_happened_since_your_turn_ended(out: Result) -> None:
+    """*"You hit a target that has attacked you since the end of your last
+    turn"; "if the target of your attack dealt damage to you or an ally
+    since the end of your last turn [...] if the target reduced you or an
+    ally to 0 or fewer hit points, you instead deal an extra 2d8."*
+
+    Two rows, and both notes said the same false thing: *"nothing asks the
+    world who has attacked whom since when"*, *"nothing keeps that history:
+    the events are gone by the time this row is asked"*. **The bus log keeps
+    every event of the fight**, with a monotonic `seq`, and `TurnEnd` carries
+    the actor -- so the boundary is a `max()` and the history is a slice.
+    #757.
+
+    **The boundary is the assertion.** A reader that looked at the whole log
+    would answer True for a blow struck three turns ago, and one that looked
+    at nothing would answer False always: the pair below is damage dealt
+    *before* this creature's last `TurnEnd` reading False and damage dealt
+    *after* it reading True, off the same two creatures on one board.
+
+    **And the two branches do not add.** "You *instead* deal an extra 2d8"
+    is one printed word, so a target that both hurt you and dropped you pays
+    2d8 and not 3d8 -- which a careless `if`/`if` would get wrong and
+    nothing else here would notice.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit, TurnEnd
+    from combat_engine.engine.query import (
+        allies,
+        attacked_since,
+        damaged_since,
+        dropped_since,
+        enemies,
+        is_,
+        since_turn_ended,
+    )
+    from combat_engine.engine.types import Condition
+
+    world, me, _ = _posed("mba", 1)
+    foe = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+    mate = next((a for a in sorted(allies(world, me)) if a != me), None)
+
+    out.that(since_turn_ended(world, me) == -1,
+             "before this creature has ended a turn the boundary is -1, so"
+             " the whole fight counts -- which is the right answer in round"
+             " one, where 'since the end of your last turn' means 'since"
+             " the fight began'",
+             f"{since_turn_ended(world, me)}")
+
+    # -- the boundary, which is the whole of it --------------------------
+    Cast(world=world, me=foe, ref="drivers:early").flat(5, on=me)
+    out.that(damaged_since(world, me, foe),
+             "a blow landed before any turn has ended counts")
+    world.bus.emit(TurnEnd(actor=me, round=world.round))
+    out.that(not damaged_since(world, me, foe),
+             "and STOPS counting once this creature's turn ends -- the"
+             " boundary moved, and a reader that walked the whole log would"
+             " still answer True here",
+             f"boundary {since_turn_ended(world, me)}")
+    Cast(world=world, me=foe, ref="drivers:late").flat(7, on=me)
+    out.that(damaged_since(world, me, foe),
+             "and counts again for a blow landed after it")
+
+    # -- somebody else's blow is not this one's --------------------------
+    world, me, _ = _posed("mba", 1)
+    foes = sorted(e for e in enemies(world, me) if world.get(e, Health))
+    if len(foes) < 2:
+        out.skip("the board holds one enemy, so there is no other to tell"
+                 " apart")
+    else:
+        Cast(world=world, me=foes[0], ref="drivers:one").flat(5, on=me)
+        out.that(damaged_since(world, me, foes[0]),
+                 "the creature that struck is recorded")
+        out.that(not damaged_since(world, me, foes[1]),
+                 "and the one that did not is not -- the control, and what"
+                 " says the read is per attacker rather than 'anybody hurt"
+                 " me lately'")
+
+    # -- an ally's wound only counts when the card says so ---------------
+    if mate is not None:
+        world, me, _ = _posed("mba", 1)
+        foe = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+        mate = next(a for a in sorted(allies(world, me)) if a != me)
+        Cast(world=world, me=foe, ref="drivers:ally").flat(5, on=mate)
+        out.that(not damaged_since(world, me, foe),
+                 "a blow on an ALLY does not count by default -- one of the"
+                 " two rows prints 'you or an ally' and the other does not")
+        out.that(damaged_since(world, me, foe, or_an_ally=True),
+                 "and does with `or_an_ally=`, which is the printed clause")
+
+    # -- attacked, not hit ------------------------------------------------
+    world, me, _ = _posed("mba", 1)
+    foe = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+    swing = Cast(world=world, me=foe, ref="mba", targets=[me])
+    swing.target = me
+    world.rng.loaded = 1
+    swing.strike()
+    out.that(attacked_since(world, me, foe),
+             "a MISS counts as having attacked -- `AttackDeclared` and not"
+             " `Hit`, because the card says 'a target that has attacked"
+             " you' and whether it landed is not part of that")
+    out.that(not damaged_since(world, me, foe),
+             "and the same miss is not damage -- the two reads are separate"
+             " facts and one row turns on each")
+
+    # -- the rows ---------------------------------------------------------
+    world, me, _ = _posed("i2303p1", 1)
+    foe = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+    use = Cast(world=world, me=me, ref="i2303p1")
+    use.trigger = Hit(attacker=me, target=foe, power="i2303p1",
+                      critical=False)
+    REGISTRY["i2303p1"].body(use)
+    out.that(not is_(world, foe, Condition.STUNNED),
+             "i2303p1 stuns nobody when the target has not attacked -- the"
+             " gate, and the whole of what it was missing: before #757 the"
+             " stun landed on any hit")
+
+    swing = Cast(world=world, me=foe, ref="mba", targets=[me])
+    swing.target = me
+    world.rng.loaded = 1
+    swing.strike()
+    use = Cast(world=world, me=me, ref="i2303p1")
+    use.trigger = Hit(attacker=me, target=foe, power="i2303p1",
+                      critical=False)
+    REGISTRY["i2303p1"].body(use)
+    out.that(is_(world, foe, Condition.STUNNED),
+             "and stuns it once that target HAS attacked -- the same board,"
+             " the same hit, one swing apart")
+
+    # -- i2803p1: the two branches are one choice, not a sum -------------
+    #
+    # "You **instead** deal an extra 2d8" is one printed word, and an
+    # `if`/`if` pair would pay 3d8 to a target that both hurt you and put
+    # you down. Both facts are laid on one board and the payout is read off
+    # the victim, so the assertion is a number rather than a branch taken.
+    def paid_by(hurt: bool, floored: bool) -> int:
+        world, me, _ = _posed("i2803p1", 1)
+        foe = sorted(e for e in enemies(world, me) if world.get(e, Health))[0]
+        mine = world.need(me, Health)
+        mine.hp = mine.max_hp
+        if hurt:
+            Cast(world=world, me=foe, ref="drivers:hurt").flat(3, on=me)
+        if floored:
+            Cast(world=world, me=foe, ref="drivers:drop").kill(on=me)
+            mine.hp = mine.max_hp
+        theirs = world.need(foe, Health)
+        theirs.hp = theirs.max_hp
+        before = theirs.hp
+        use = Cast(world=world, me=me, ref="i2803p1")
+        use.trigger = Hit(attacker=me, target=foe, power="i2803p1",
+                          critical=False)
+        world.rng.loaded = 4
+        REGISTRY["i2803p1"].body(use)
+        return before - theirs.hp
+
+    nothing = paid_by(False, False)
+    hurt_only = paid_by(True, False)
+    floored_only = paid_by(False, True)
+    both = paid_by(True, True)
+    out.that(nothing == 0,
+             "i2803p1 pays nothing when the target has done neither -- the"
+             " negative control",
+             f"{nothing}")
+    out.that(hurt_only > 0,
+             "and pays for a target that dealt damage", f"{hurt_only}")
+    out.that(floored_only > hurt_only,
+             "and more for one that put the holder down",
+             f"hurt {hurt_only}, floored {floored_only}")
+    # **Equality, not an inequality.** The first version of this asserted
+    # `both <= 2 * hurt_only`, and the `if`/`if` plant walked straight
+    # through it: the two branches came to 13 against a bound of 14,
+    # because the board's damage modifier is spent by the first blow and
+    # the second is cheaper than the first. A loose bound on a number the
+    # board helps decide is not a control. "You **instead** deal an extra
+    # 2d8" says the two are one choice, so the exact reading is that a
+    # target which did both pays precisely what one that only floored you
+    # pays.
+    out.that(both == floored_only,
+             "and a target that did BOTH pays exactly what one that only"
+             " put the holder down pays -- 'you INSTEAD deal an extra 2d8'"
+             " is one printed word, and an `if`/`if` pair pays 13 here"
+             " where the card says 11",
+             f"floored {floored_only}, both {both}")
+    out.that(not dropped_since(_posed("mba", 1)[0], 1, 2),
+             "and `dropped_since` answers False on a board where nobody has"
+             " been put down -- the reader's own control")
+
+    for ref in ("i2303p1", "i2803p1"):
+        out.that(not str(REGISTRY[ref].unfinished)
+                 or str(REGISTRY[ref].unfinished) == "()",
+                 f"{ref} carries no marker",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 DRIVERS = {
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
@@ -26469,6 +26666,11 @@ DRIVERS = {
         an_extra_square_only_against_the_named_kind,
         "an extra square of forced movement against one kind of creature"
         " and not the rest (#748)",
+    ),
+    "since_your_turn": (
+        what_happened_since_your_turn_ended,
+        "what a creature did since your last turn ended, which the bus log"
+        " had kept all along (#757)",
     ),
     "gear_and_jump": (
         drawing_stowing_and_a_running_jump,

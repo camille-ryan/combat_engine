@@ -170,8 +170,14 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 
 ## what has already happened
 
+- `query.attacked_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None) -> 'bool'`
+  - Has that creature attacked this one since the boundary?
 - `query.bloodied(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature bloodied -- by its hit points, or by a card saying so.
+- `query.damaged_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None, or_an_ally: 'bool' = False) -> 'bool'`
+  - Has that creature dealt damage to this one since the boundary?
+- `query.dropped_since(world: 'World', victim: 'int', by: 'int', *, since: 'int | None' = None, or_an_ally: 'bool' = False) -> 'bool'`
+  - Has that creature put this one on the floor since the boundary?
 - `query.granted_amount(world: 'World', eid: 'int', ref: 'str', default: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
   - How big a number a named mechanic hands out, for this creature.
 - `query.hit_me_this_turn(world: 'World', eid: 'int') -> 'set[int]'`
@@ -188,6 +194,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Has this creature taken a shape that is not its own?
 - `query.since_turn_began(world: 'World', eid: 'int') -> 'list[Any]'`
   - Everything that has happened since this creature's own turn began.
+- `query.since_turn_ended(world: 'World', eid: 'int') -> 'int'`
+  - The `seq` after which something counts as "since the end of your last
 - `query.surge_value(world: 'World', eid: 'int') -> 'int'`
   - What one healing surge is worth: a quarter of maximum, modified.
 - `query.taking_ongoing(world: 'World', eid: 'int', types: 'frozenset[DamageType]' = frozenset()) -> 'bool'`

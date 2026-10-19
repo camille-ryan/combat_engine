@@ -2885,12 +2885,36 @@ def i2801p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
     on=Trigger(Hit, by_me, "you hit with this holy symbol"),
-    todo=("query.damaged_since()",),
 )
 def i2803p1(c: Cast) -> None:
-    """Both branches turn on what the target did since the end of your
-    last turn, and nothing keeps that history: the events are gone by the
-    time this row is asked."""
+    """Both branches are written, and the old note's premise was false.
+
+    It read "nothing keeps that history: the events are gone by the time
+    this row is asked", and **the bus log keeps every event of the fight**.
+    "Since the end of your last turn" is the `seq` of this creature's last
+    `TurnEnd`, which makes the history a slice rather than something a
+    component has to remember. See `query.since_turn_ended`. #757.
+
+    **The bigger branch wins outright and the two do not add**: "you
+    *instead* deal an extra 2d8" is one printed word doing that work, so a
+    target that both hurt you and dropped you pays 2d8 and not 3d8.
+
+    "You or an ally" on both branches, which `or_an_ally=` asks -- the
+    allies are read now rather than remembered, the same simplification
+    every other `query.allies` caller makes.
+
+    **1d8 and 2d8, which is the heroic band and the whole of it.** The card
+    prints "Level 14 or 19: 2d8" and "Level 24 or 29: 3d8" above the base,
+    and those are paragon and epic -- out of this tier, so they are not
+    written rather than guessed at. `c.w` is not the expression either:
+    these are flat dice on a rider, not a weapon line."""
+    foe = c.trigger.target if c.trigger is not None else None
+    if foe is None:
+        return
+    if c.floored_me_since(foe, or_an_ally=True):
+        c.flat(c.roll("2d8"), on=foe)
+    elif c.hurt_me_since(foe, or_an_ally=True):
+        c.flat(c.roll("1d8"), on=foe)
 
 
 @power(

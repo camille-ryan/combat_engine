@@ -2279,3 +2279,106 @@ def kept_away_from(world: World, eid: int) -> tuple[int, int] | None:
     if anchor is None or mine is None:
         return None
     return (anchor.square, grid_distance(mine.square, anchor.square))
+
+
+def since_turn_ended(world: World, eid: int) -> int:
+    """The `seq` after which something counts as "since the end of your last
+    turn".
+
+    **The bus log already answers this and two rows said nothing did.**
+    `i2303p1`'s note read "nothing asks the world who has attacked whom
+    since when" and `i2803p1`'s "nothing keeps that history: the events are
+    gone by the time this row is asked" -- and neither is true. `Bus.log`
+    keeps every event of the fight with a monotonic `seq`, and `TurnEnd`
+    carries the actor, so the boundary is one `max()` and the history is a
+    slice. No component, no writer, nothing to keep in step.
+
+    `-1` when this creature has not ended a turn yet, which makes the whole
+    fight so far count -- the right answer for a row used in round one,
+    where "since the end of your last turn" is "since the fight began".
+    """
+    return max(
+        (
+            e.seq
+            for e in world.bus.log
+            if e.kind == "TurnEnd" and getattr(e, "actor", None) == eid
+        ),
+        default=-1,
+    )
+
+
+def attacked_since(
+    world: World, victim: int, by: int, *, since: int | None = None
+) -> bool:
+    """Has that creature attacked this one since the boundary?
+
+    `AttackDeclared` rather than `Hit`: the printed line is "a target that
+    has **attacked** you", which a miss satisfies. Declared rather than
+    rolled because a cancelled attack was still an attack made.
+    """
+    mark = since_turn_ended(world, victim) if since is None else since
+    return any(
+        e.seq > mark
+        and e.kind == "AttackDeclared"
+        and getattr(e, "attacker", None) == by
+        and getattr(e, "target", None) == victim
+        for e in world.bus.log
+    )
+
+
+def damaged_since(
+    world: World,
+    victim: int,
+    by: int,
+    *,
+    since: int | None = None,
+    or_an_ally: bool = False,
+) -> bool:
+    """Has that creature dealt damage to this one since the boundary?
+
+    `or_an_ally` is the printed "dealt damage to you **or an ally**", which
+    one of the two rows prints and the other does not. The ally list is
+    read at the moment of the question rather than remembered, which is the
+    same simplification `query.allies` makes everywhere else: a creature
+    that has since changed sides is read as it stands now.
+    """
+    mark = since_turn_ended(world, victim) if since is None else since
+    who = {victim}
+    if or_an_ally:
+        who |= set(allies(world, victim))
+    return any(
+        e.seq > mark
+        and e.kind == "DamageApplied"
+        and getattr(e, "source", None) == by
+        and getattr(e, "target", None) in who
+        and getattr(e, "amount", 0) > 0
+        for e in world.bus.log
+    )
+
+
+def dropped_since(
+    world: World,
+    victim: int,
+    by: int,
+    *,
+    since: int | None = None,
+    or_an_ally: bool = False,
+) -> bool:
+    """Has that creature put this one on the floor since the boundary?
+
+    `Dropped` and not a hit-point read: the event is announced for dying
+    and for dead outright, which is what "reduced to 0 hit points or fewer"
+    means, and a creature healed back up since would read False off its
+    sheet while the printed clause still counts it.
+    """
+    mark = since_turn_ended(world, victim) if since is None else since
+    who = {victim}
+    if or_an_ally:
+        who |= set(allies(world, victim))
+    return any(
+        e.seq > mark
+        and e.kind == "Dropped"
+        and getattr(e, "source", None) == by
+        and getattr(e, "actor", None) in who
+        for e in world.bus.log
+    )

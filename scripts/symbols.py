@@ -360,6 +360,14 @@ CATEGORIES: dict[str, dict] = {
                 "granted_via", "healed_by", "index", "instinctive", "is_",
                 "is_hidden", "is_kind", "is_minion", "is_quarry", "is_trap",
                 "keywords_of", "kinds_of", "knows", "made_by", "missing",
+                # **"Since the end of your last turn" is three questions,
+                # not one state.** They belong here rather than with the
+                # senses or the conditions because what they ask about is
+                # another creature's *history* with this one -- which the
+                # bus log answers, so there is no component to point at.
+                # `query.since_turn_ended` is the boundary all three share.
+                # #757.
+                "attacked_me_since", "floored_me_since", "hurt_me_since",
                 "passive", "quarry", "race_of", "reach", "result", "turn_of",
                 "with_a_chosen_weapon", "wounded",
             ]),
@@ -640,9 +648,11 @@ READERS: dict[str, list[str]] = {
         "immune_to",
     ],
     "what has already happened": [
-        "bloodied", "hit_me_this_turn", "in_form", "granted_amount", "lingers",
+        "attacked_since", "bloodied", "damaged_since", "dropped_since",
+        "hit_me_this_turn", "in_form", "granted_amount", "lingers",
         "my_hits_this_turn", "my_misses_this_turn", "shifted",
-        "since_turn_began", "surge_value", "taking_ongoing",
+        "since_turn_began", "since_turn_ended", "surge_value",
+        "taking_ongoing",
     ],
     "the companion": [
         "acting_independently", "familiar_active", "familiar_echoes",

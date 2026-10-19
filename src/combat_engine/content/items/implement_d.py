@@ -1229,14 +1229,25 @@ def i2303x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit a target that has attacked you since your last turn",
     on=HIT_BY_ME,
-    dropped=("query.damaged_since()",),
 )
 def i2303p1(c: Cast) -> None:
-    """The property beside this one keeps its own set of recent attackers
-    in a closure, which a separate row cannot read; nothing asks the world
-    who has attacked whom since when, so the stun lands on any hit."""
+    """The gate is written, and the old note's premise was false.
+
+    It read "nothing asks the world who has attacked whom since when", and
+    **the bus log has kept it all along**: every event of the fight with a
+    monotonic `seq`, and `TurnEnd` carrying the actor, so "since the end of
+    your last turn" is a boundary rather than a history somebody has to
+    remember. `query.attacked_since` is that read and `#757` is where the
+    other row with the same premise is written.
+
+    `c.attacked_me_since` and not the property beside this one, which keeps
+    its own set of recent attackers in a closure -- correct for itself and
+    unreadable from here, which is what the note was right about.
+
+    `AttackDeclared`, so a **miss** counts: the card says "a target that
+    has attacked you", and whether the swing landed is not part of it."""
     foe = _struck(c)
-    if foe is not None:
+    if foe is not None and c.attacked_me_since(foe):
         c.stunned(on=foe, until=When.EONT)
 
 

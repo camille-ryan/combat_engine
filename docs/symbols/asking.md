@@ -137,6 +137,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
 
 ## state and identity
 
+- `c.attacked_me_since(self, who: 'int | None' = None) -> 'bool'`
+  - "A target that has attacked you since the end of your last turn."
 - `c.bloodied(self, on: 'int | None' = None) -> 'bool'`
   - Is this creature bloodied -- by its hit points, or by a card.
 - `c.build(self, choice: 'str', *, on: 'int | None' = None) -> 'bool'`
@@ -151,12 +153,16 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Has this character taken that feat? `c.feat("f611")`.
 - `c.feats(self, *, category: 'str' = '', on: 'int | None' = None) -> 'tuple[str, ...]'`
   - The feats this creature has, by ref -- `c.feats(category="Rune")`.
+- `c.floored_me_since(self, who: 'int | None' = None, *, or_an_ally: 'bool' = False) -> 'bool'`
+  - "The target reduced you (or an ally) to 0 hit points or fewer
 - `c.granted_by: int`
   - who handed this creature the basic attack, or -1.
 - `c.granted_via: str`
   - the ref of the row that handed it over, or empty.
 - `c.healed_by(self, ev: 'Any', *, ref: 'str' = '', cls: 'str' = '', keyword: 'Keyword | None' = None, usage: 'Usage | tuple[Usage, ...] | None' = None) -> 'bool'`
   - Did this `Healed` come from a row matching the card's wording?
+- `c.hurt_me_since(self, who: 'int | None' = None, *, or_an_ally: 'bool' = False) -> 'bool'`
+  - "The target dealt damage to you (or an ally) since the end of your
 - `c.index: int`
   - which target this is, counting from 0. `c.first` is `index == 0`.
 - `c.instinctive(self, who: 'int') -> 'bool'`
