@@ -82,6 +82,8 @@ def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> N
                   + (f", {made.rounds} rounds" if made.rounds else "") + ")")
         for note in made.notes:
             print(f"   ! {note}")
+        if made.transcript:
+            print(f"   log {made.transcript}")
         return
     if not quiet:
         for line in made.lines:
@@ -90,6 +92,8 @@ def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> N
         print(f"   {made.outcome}" + (f" in {made.rounds} rounds" if made.rounds else ""))
     for note in made.notes:
         print(f"   ! {note}")
+    if made.transcript:
+        print(f"   log {made.transcript}")
 
 
 def ask(question: maker_mod.Question) -> int:

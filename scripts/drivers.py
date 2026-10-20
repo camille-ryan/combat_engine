@@ -28266,7 +28266,70 @@ def every_default_makes_the_character_the_dealer_would_have(out: Result) -> None
     )
 
 
+def a_campaign_replays_in_a_fresh_process(out: Result) -> None:
+    """The same seed plays the same campaign -- in a *new interpreter*.
+
+    The charter's second constraint and the one `replay.py` rests on. It was
+    false for three commits and the check that was meant to catch it could
+    not, which is the whole reason this driver crosses a process boundary.
+
+    **The bug.** `run._fight` seeded its board with
+    `campaign.seed + abs(hash(scene.id)) % 100000`. `hash()` on a `str` is
+    salted per process, so every run fielded different monsters and played
+    different fights. Measured before the fix: three runs of one chapter at
+    one seed gave 5.5, 4.5 and 6.0 rounds a fight, and one of the three wiped
+    the party where the other two finished.
+
+    **Why it was not caught.** The determinism check ran both campaigns in
+    one process, where `hash()` is stable for the life of the interpreter.
+    Same seed, same answer, green -- and the probe could not see the thing it
+    was written to see. So this one shells out twice.
+
+    The control is a different seed, which must produce a different campaign:
+    without it this passes just as well on a `run.step` that ignored the seed
+    and played the same scripted fight every time.
+    """
+    import subprocess
+
+    def run(seed: int) -> str:
+        got = subprocess.run(
+            [
+                "uv", "run", "scripts/play.py", "--play",
+                "scripts/fixtures/modules/sunken-mill.json",
+                "--seed", str(seed), "--quiet",
+            ],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        # The summary alone would pass on two campaigns that differed in the
+        # middle and happened to end alike. Every line that carries an
+        # outcome, a round count or the party's state is compared.
+        return "\n".join(
+            ln for ln in got.stdout.splitlines()
+            if "hp/" in ln or " in " in ln or ln.startswith("--")
+        )
+
+    first, again = run(7), run(7)
+    out.that(
+        first == again and bool(first),
+        "the same seed plays the same campaign in a fresh interpreter",
+        f"{len(first.splitlines())} lines compared"
+        + ("" if first == again else "; first divergence: " + next(
+            (f"{a!r} vs {b!r}" for a, b in zip(
+                first.splitlines(), again.splitlines(), strict=False) if a != b),
+            "(different lengths)")),
+    )
+    other = run(8)
+    out.that(
+        other != first and bool(other),
+        "and a different seed plays a different one",
+    )
+
+
 DRIVERS = {
+    "campaign_replays": (
+        a_campaign_replays_in_a_fresh_process,
+        "the same seed plays the same campaign, across processes (#789)",
+    ),
     "chargen_defaults": (
         every_default_makes_the_character_the_dealer_would_have,
         "a hand-made character taking every default is the dealt one (#793)",

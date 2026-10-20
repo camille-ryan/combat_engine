@@ -73,6 +73,8 @@ class Step:
     notes: list[str] = field(default_factory=list)
     rounds: int = 0
     enemies: list[str] = field(default_factory=list)
+    #: Where the blow-by-blow went, for a combat scene. Empty otherwise.
+    transcript: str = ""
 
     def say(self, line: str) -> None:
         self.lines.append(line)
@@ -123,6 +125,28 @@ def _stream(campaign: Campaign, scene: Scene, what: str = "") -> Random:
     return Random(f"{campaign.seed}:{campaign.module}:{scene.id}:{what}")
 
 
+def seed_for(campaign: Campaign, scene: Scene, what: str) -> int:
+    """A scene's seed for something that wants an int rather than a stream.
+
+    **`hash()` must not appear anywhere near this.** The first version of
+    `_fight` seeded its board with `campaign.seed + abs(hash(scene.id)) %
+    100000`, and `hash()` on a `str` is salted per process -- so the same
+    campaign on the same seed fielded different monsters and played different
+    fights in every new interpreter. Measured: three runs of one chapter gave
+    5.5, 4.5 and 6.0 rounds a fight, and one of the three wiped the party
+    where the others finished comfortably.
+
+    It survived the determinism check because that check ran both campaigns
+    **in one process**, where `hash()` is stable for the life of the
+    interpreter. The probe could not see the thing it was written to see.
+
+    `Random(str)` is seeded from the string's bytes and is stable across
+    processes, which `drivers.py campaign_replays` now asserts by running a
+    whole campaign in a *subprocess* twice.
+    """
+    return _stream(campaign, scene, what).randrange(1 << 30)
+
+
 def _enemy_eids(world: object) -> list[int]:
     """Spawned enemies in spawn order, which is the order the refs went in.
 
@@ -137,8 +161,19 @@ def _enemy_eids(world: object) -> list[int]:
     )
 
 
-def _fight(campaign: Campaign, module: Module, scene: Scene, step: Step) -> None:
-    """Field a combat scene, dress it, play it out, and harvest the wear."""
+def _fight(
+    campaign: Campaign, module: Module, scene: Scene, step: Step,
+    *, record: bool = True,
+) -> None:
+    """Field a combat scene, dress it, play it out, and harvest the wear.
+
+    `record` writes a transcript per fight into git-ignored `logs/`, the way
+    `api/session.py` already does for a fight played over HTTP. It was not
+    here at first and the omission cost real time: a campaign wiped its party
+    and there was nothing to read back but the summary line, so the only way
+    to see what happened was to play it again -- which, while the seeding was
+    broken, did not give the same fight twice.
+    """
     draw = _stream(campaign, scene, "cast")
     dressed = resolve(
         scene, party_level=module.party_level, draw=draw,
@@ -157,8 +192,9 @@ def _fight(campaign: Campaign, module: Module, scene: Scene, step: Step) -> None
             "what sort of place a fight is in -- see #539"
         )
 
+    board_seed = seed_for(campaign, scene, "fight")
     fielded = field_encounter(
-        campaign.seed + abs(hash(scene.id)) % 100000,
+        board_seed,
         module.party_level,
         enemies=dressed.refs,
         party=campaign.party,
@@ -166,6 +202,37 @@ def _fight(campaign: Campaign, module: Module, scene: Scene, step: Step) -> None
     world = fielded.world
     for eid, flavour in zip(_enemy_eids(world), dressed.flavours, strict=False):
         apply_flavour(world, eid, flavour)
+
+    written = None
+    if record:
+        from combat_engine.transcript import Transcript
+
+        # Attached before `start()`, for the reason `api/session.py` gives:
+        # initiative and the traits armed at the top of round one belong in
+        # the file, and a transcript that begins on round two is a transcript
+        # of the wrong fight.
+        written = Transcript.open(
+            f"{campaign.module}-{len(campaign.visited):02d}-{scene.id}",
+            {
+                "campaign": campaign.module,
+                "scene": scene.id,
+                # **The board's seed, not the campaign's.** `transcript.py`
+                # builds a "re-run" line out of this field, and the campaign
+                # seed would make that line name a fight nobody played. The
+                # honest re-run for a campaign fight is
+                # `play.py --play <module> --seed <campaign_seed>`, because
+                # the party walks in already worn -- which no single-fight
+                # command can reproduce.
+                "seed": board_seed,
+                "campaign_seed": campaign.seed,
+                "level": module.party_level,
+                "pcs": [sheet.cls for sheet in campaign.party.sheets],
+                "enemies": list(dressed.refs),
+                "flavours": [str(f) for f in dressed.flavours],
+            },
+        )
+        written.attach(world)
+        step.transcript = str(written.path)
 
     encounter = Encounter(world)
     policy = DoctrinePolicy()
@@ -178,6 +245,8 @@ def _fight(campaign: Campaign, module: Module, scene: Scene, step: Step) -> None
         take_turn(world, encounter, actor, policy)
         encounter.advance()
 
+    if written is not None:
+        written.flush()
     harvest(world, campaign.party)
     step.rounds = world.round
     step.enemies = list(dressed.refs)
@@ -208,7 +277,7 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
 
 def step(
     campaign: Campaign, module: Module, *,
-    choice: str = "", choose: Chooser | None = None,
+    choice: str = "", choose: Chooser | None = None, record: bool = True,
 ) -> Step:
     """Play the scene the campaign is on and advance it.
 
@@ -225,7 +294,7 @@ def step(
         made.say(scene.brief)
 
     if scene.kind == "combat":
-        _fight(campaign, module, scene, made)
+        _fight(campaign, module, scene, made, record=record)
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "rest":
