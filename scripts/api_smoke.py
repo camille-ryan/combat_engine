@@ -105,6 +105,26 @@ class Server:
             time.sleep(0.25)
         raise SystemExit("the server did not come up")
 
+    def status(self, path: str, *, method: str = "POST") -> int:
+        """The status code alone, for a call that is meant to be refused.
+
+        **The method is a parameter because it has to be.** Asking for a
+        missing day with a POST got a 405 from the GET-only route, which is a
+        true answer to the wrong question -- it proves routing, not that an
+        unknown id is reported as unknown.
+        """
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}{path}",
+            data=b"{}" if method == "POST" else None,
+            method=method,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as reply:
+                return int(reply.status)
+        except urllib.error.HTTPError as err:
+            return int(err.code)
+
     def __exit__(self, *_: object) -> None:
         """Signal the whole process group, not just the wrapper.
 
@@ -249,6 +269,191 @@ def play(
     check.that(state["winner"] is not None, "somebody won")
     check.that(asked > 0, "at least one power suspended to ask a question")
     return eid, state
+
+
+def play_day(server: Server, check: Checks, *, show: bool) -> dict:
+    """Play a whole day of fights over HTTP, the way the page does.
+
+    Three legs rather than the default four, because the fights are the cost
+    and the third one already shows everything the fourth would: a scale
+    below 1, a scale of 1, a scale above it, two rests, and the one milestone
+    that two completed encounters buy.
+
+    **Asserted on the party getting worse, not on the day running.** A day
+    that fielded three fights and healed the party to full between them would
+    pass every structural check here and be the single-encounter engine with
+    extra steps -- the carry is the whole point, so `hp` entering leg 2 is
+    what this is really about.
+    """
+    state = server.post("/api/day", {"level": 3, "seed": 7, "scales": [0.75, 1, 1.25]})
+    did = state["id"]
+    check.that(len(state["legs"]) == 3, "the day laid out the legs it was asked for",
+               f"{len(state['legs'])}")
+    check.that([leg["scale"] for leg in state["legs"]] == [0.75, 1.0, 1.25],
+               "each leg kept its own budget multiplier",
+               f"{[leg['scale'] for leg in state['legs']]}")
+    check.that(bool(state["encounter"]),
+               "and the first fight is already fielded -- the page opens it"
+               " straight after this call, so a day with no encounter would"
+               " leave the player with a panel and nothing to click")
+    check.that(state["legs"][0]["status"] == "fighting"
+               and state["legs"][1]["status"] == "pending",
+               "the first leg is the one in progress",
+               f"{[leg['status'] for leg in state['legs']]}")
+    check.that(len(state["legs"][0]["entering"]) >= 4,
+               "with the party recorded as it walked in",
+               f"{len(state['legs'][0]['entering'])}")
+    check.that(all(s["hp"] == s["hp_max"] and s["surges"] == s["surges_max"]
+                   for s in state["legs"][0]["entering"]),
+               "and the first leg's party is recorded at full -- the control"
+               " for the snapshot being taken before the enemies act, since"
+               " `Session.create` runs the monsters' turns before returning"
+               " and the party was being read after being shot at",
+               f"{[(s['hp'], s['hp_max'], s['surges']) for s in state['legs'][0]['entering']]}")
+    check.that(state["milestones"] == 0, "no milestone before any fight is done")
+
+    worst = {}
+    roll_call: list[tuple[str, str]] | None = None
+    for leg_no in range(3):
+        eid = state["encounter"]
+        check.that(bool(eid), f"leg {leg_no} has a fight to play")
+        if not eid:
+            break
+        fight = server.get(f"/api/encounter/{eid}")
+        for _ in range(600):
+            if fight["status"] == "finished":
+                break
+            if fight.get("pending"):
+                fight = server.post(f"/api/encounter/{eid}/decide", {"answer_index": 0})
+                continue
+            options = fight["options"]
+            if not options:
+                break
+            best = max(range(len(options)), key=lambda i: options[i]["score"])
+            if show:
+                print(f"        leg {leg_no} {fight['current']}:"
+                      f" {options[best]['label']}")
+            fight = server.post(f"/api/encounter/{eid}/act", {"action_index": best})
+        check.that(fight["status"] == "finished",
+                   f"leg {leg_no}'s fight reached a finish", f"{fight['round']}")
+
+        # **The day advances on an ordinary read**, which is the contract the
+        # page relies on: it polls `/api/day/{id}` and never reports that a
+        # fight ended.
+        state = server.get(f"/api/day/{did}")
+        done = state["legs"][leg_no]
+        check.that(done["status"] in ("won", "lost", "abandoned"),
+                   f"reading the day closed leg {leg_no} without being told",
+                   f"{done['status']}")
+        check.that(done["rounds"] > 0, f"leg {leg_no} recorded its length",
+                   f"{done['rounds']}")
+        check.that(len(done["ended"]) == len(done["entering"])
+                   and len(done["rested"]) == len(done["entering"]),
+                   f"leg {leg_no} has all three snapshots, same party in each",
+                   f"{len(done['entering'])}/{len(done['ended'])}"
+                   f"/{len(done['rested'])}")
+        check.that(bool(done["rest_text"]), f"leg {leg_no} says what the rest cost")
+        # **The three snapshots must name the same people in the same order.**
+        # `entering`/`ended` come off the board and `rested` off the sheets,
+        # and the sheets carry no entity id -- `story.harvest` matches them
+        # by *position*. Two orders that happen to agree would print one
+        # character's hit points under another's name the first time they
+        # did not, and nothing else here would notice.
+        who = [(c["id"], c["label"]) for c in done["entering"]]
+        check.that([(c["id"], c["label"]) for c in done["ended"]] == who
+                   and [(c["id"], c["label"]) for c in done["rested"]] == who,
+                   f"leg {leg_no}'s three snapshots name the same party in the"
+                   " same order, board and sheets alike",
+                   f"in {who} / ended"
+                   f" {[(c['id'], c['label']) for c in done['ended']]} / rested"
+                   f" {[(c['id'], c['label']) for c in done['rested']]}")
+        check.that(len(set(c["id"] for c in done["entering"])) == len(who),
+                   "and each character has its own wire id rather than two"
+                   " sharing one, which positional matching would hide",
+                   f"{[c['id'] for c in done['entering']]}")
+        if roll_call is None:
+            roll_call = who
+        else:
+            check.that(who == roll_call,
+                       f"leg {leg_no} is the same party as leg 0 -- it is one"
+                       " `story.Party` dealt once and handed to every leg,"
+                       " not a fresh draw per fight",
+                       f"{who} vs {roll_call}")
+        check.that(all(s["surges_max"] > 0 for s in done["rested"]),
+                   "and every character has a surge track to draw -- the page"
+                   " renders one pip per maximum, so a zero would print an"
+                   " empty track for a character who has surges",
+                   f"{[s['surges_max'] for s in done['rested']]}")
+        hurt = sum(s["hp"] for s in done["ended"])
+        full = sum(s["hp_max"] for s in done["ended"])
+        back = sum(s["hp"] for s in done["rested"])
+        check.that(hurt <= back <= full,
+                   f"leg {leg_no}'s rest healed and did not overheal",
+                   f"ended {hurt}, rested {back}, full {full}")
+        worst[leg_no] = (back, full, sum(s["surges"] for s in done["rested"]))
+
+        if state["finished"]:
+            break
+        check.that(state["awaiting_next"] and not state["encounter"],
+                   f"after leg {leg_no} the day waits for the player to walk on"
+                   " rather than starting the next fight by itself")
+        check.that(state["leg"] == leg_no + 1,
+                   "and points at the next leg, which is the one the button"
+                   " names and the budget it names",
+                   f"{state['leg']}")
+        if leg_no == 1:
+            check.that(state["milestones"] == 1,
+                       "two completed encounters is one milestone -- Camille's"
+                       " ruling on #666",
+                       f"{state['milestones']}")
+        state = server.post(f"/api/day/{did}/next", {})
+        check.that(bool(state["encounter"]),
+                   f"and walking on fielded leg {leg_no + 1}")
+        walked_in = state["legs"][leg_no + 1]["entering"]
+        rested = state["legs"][leg_no]["rested"]
+        # **Equality, not "no better than".** The snapshots come from two
+        # different places -- `rested` off the `story.Sheet`s that outlive the
+        # fight, `entering` off the next fight's board -- so matching them
+        # exactly is what proves the hand-over is lossless. A `<=` passed
+        # while the carry was dropping surges.
+        check.that([(c["hp"], c["surges"]) for c in walked_in]
+                   == [(c["hp"], c["surges"]) for c in rested],
+                   f"leg {leg_no + 1} walks in exactly as leg {leg_no} rested"
+                   " -- the carry is the whole point of a day, and the two"
+                   " numbers come from the sheets and from the board",
+                   f"in {[(c['hp'], c['surges']) for c in walked_in]}"
+                   f" vs rested {[(c['hp'], c['surges']) for c in rested]}")
+        check.that(any(c["surges"] < c["surges_max"] for c in walked_in)
+                   or all(c["surges"] == c["surges_max"] for c in rested),
+                   "and a party that spent surges walks in short of them"
+                   " rather than being topped up by the new board",
+                   f"{[(c['surges'], c['surges_max']) for c in walked_in]}")
+
+    state = server.get(f"/api/day/{did}")
+    check.that(state["finished"], "the day ended", f"{state['outcome']}")
+    check.that(bool(state["outcome"]), "and says how")
+    check.that(server.status(f"/api/day/{did}/next") == 409,
+               "walking on from a finished day is refused rather than"
+               " silently starting a fight outside it")
+    check.that(server.status(f"/api/day/{did}", method="GET") == 200,
+               "a finished day is still readable -- the page keeps polling it")
+    check.that(server.status("/api/day/nosuchday", method="GET") == 404,
+               "and an unknown day is a 404")
+    check.that(server.status("/api/day/nosuchday/next") == 404,
+               "as is walking on from one")
+
+    # The thing the day is for. Not asserted as a strict drop -- a short rest
+    # buys hp back, so a lucky leg can end better off than the one before --
+    # but *something* has to accumulate or the legs are independent fights.
+    if len(worst) >= 2:
+        first, last = worst[min(worst)], worst[max(worst)]
+        check.that(last[2] <= first[2],
+                   "surges do not come back across a day, so the party is"
+                   " worse off at the end than the start -- the one fact a"
+                   " day has that three separate fights do not",
+                   f"{first[2]} surges after leg {min(worst)},"
+                   f" {last[2]} after leg {max(worst)}")
+    return state
 
 
 def check_stream(server: Server, check: Checks, eid: str) -> list[dict]:
@@ -508,6 +713,8 @@ def main() -> int:
         events = check_stream(server, check, eid)
         check_no_engine_ids(check, state, events)
         check_option_labels(check, labels)
+        print("\nplaying an adventuring day")
+        play_day(server, check, show=args.show)
     print("\nthe same game with CE_NAMES=off")
     check_hosted(check)
 

@@ -1,8 +1,9 @@
 # Wire
 
 Engine state → DTOs → the page. `app.py` (endpoints), `session.py` (one
-encounter held across requests), `dto.py` (what crosses the wire),
-`render.py` (state → what the page draws), `wire.py` (ids → names).
+encounter held across requests), `day.py` (several of them in a row),
+`dto.py` (what crosses the wire), `render.py` (state → what the page draws),
+`wire.py` (ids → names).
 
 Global rules are in the root `CLAUDE.md`.
 
@@ -55,7 +56,26 @@ that one.
   `scripts/fight.py`, with the six replay fixtures pinning the *scripts*
   copy. Change composition in one and the other silently diverges and
   `replay` will not notice. Filed; this is the Story Engine's job.
-* `/api/day` is a deliberate `501`. The adventuring day is not built.
+* **The adventuring day is `day.py`, and it owns a `Party`, not a `World`.**
+  A world cannot be copied — bus subscriptions close over it — so one world
+  per fight is the shape, and what crosses between legs is the *wear*:
+  `story.harvest` writes it onto `story.Sheet`s and `Party.rest` spends
+  surges to heal them. `Session.create(party=, scale=)` is the door in.
+  Camille calls this arcade mode: a user-chosen number of single combats, a
+  budget multiplier each, parallel to the Story Engine rather than part of
+  it. #666.
+* **A day advances on an ordinary `GET`.** `Day.settle` runs from
+  `/api/day/{id}`, so the page's existing poll is what closes a finished
+  leg. Nothing requires the client to report that a fight ended, and a
+  client that stops asking leaves the day where it was rather than half
+  closed.
+* **Snapshot the party through `Session.create(on_fielded=)`, never off the
+  returned session.** `create` plays the monsters' turns before it returns,
+  so a party read afterwards has already been shot at — leg 1 appeared to
+  walk in worse than it had rested to, which reads as the rest being undone.
+* `leg.status` is read twice: as a CSS class (`style.css` styles `leg-won`,
+  `leg-lost`, `leg-abandoned`) and as prose inside the chip. A new word has
+  to work as both.
 
 ## Seam
 
@@ -70,9 +90,15 @@ that one.
 ## Checking
 
 ```
-uv run scripts/api_smoke.py    play an encounter over HTTP, check the wire
-uv run scripts/browser.py      and the page that reads it
+uv run scripts/api_smoke.py    play an encounter and a day over HTTP
+uv run scripts/browser.py      and the page that reads them
 ```
+
+**The day is checked in both, and it has to be.** `api_smoke.play_day`
+asserts the server's state field by field; `browser._check_day` asserts that
+`renderDay` reads those fields. The two halves were written against each
+other — the day DTOs were derived from the renderer rather than designed —
+so only the real page catches a field name that does not match.
 
 `api_smoke` starts a real server on a spare port. Both harnesses now spawn it
 in its own process group and kill the group — `terminate()` on the `uv`

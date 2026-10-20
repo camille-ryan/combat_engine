@@ -124,6 +124,19 @@ header button:hover {
   display: flex;
   gap: 0.25rem;
 }
+/* **A class that sets `display` beats the browser's own `[hidden]` rule**,
+   which is a single type selector. So `syncConfig`'s three toggles -- the
+   four per-encounter multipliers, the single-fight difficulty, the named
+   enemies -- all set `hidden` and nothing moved: every box was on screen at
+   once, and `dayBody` quietly ignores the two that do not apply to a day.
+   `app.js` says the enemies box is "hidden while the checkbox is ticked
+   rather than being sent and dropped on the floor"; until this rule it was
+   being sent and dropped on the floor. */
+.day-scales[hidden],
+.config .field[hidden],
+.settings .field[hidden] {
+  display: none;
+}
 
 .day-scales input[type="number"] {
   width: 3.2rem;

@@ -25,6 +25,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import day as day_mode
 from . import dto, render, replay
 from .session import SESSIONS, Session
 from .wire import names_enabled
@@ -69,7 +70,12 @@ class NewEncounter(BaseModel):
     pcs: list[str] | None = None
     enemies: list[str] | None = None
     scaling: str = "full"
-    scale: float | None = None  # accepted and ignored; the page sends it
+    #: The multiple of the printed XP budget to field. **Honoured now**: this
+    #: was "accepted and ignored; the page sends it" until `story.budget`
+    #: grew a scale, so the single-fight form's difficulty box did nothing.
+    #: Ignored when `enemies` names the monsters, which `field_encounter`
+    #: decides rather than this.
+    scale: float | None = None
 
 
 class ActRequest(BaseModel):
@@ -121,6 +127,7 @@ def create_encounter(body: NewEncounter | None = None) -> dto.EncounterStateDTO:
             scaling=body.scaling,
             pcs=body.pcs,
             enemies=body.enemies,
+            scale=body.scale if body.scale else 1.0,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -358,16 +365,79 @@ def chargen_classes() -> list[dict[str, object]]:
     ]
 
 
-@app.get("/api/day")
-@app.post("/api/day")
-async def day() -> dict[str, str]:
-    """The adventuring day is not built yet.
+class NewDay(BaseModel):
+    """A day of fights. Blank means default, as `NewEncounter` does.
 
-    The page has a day mode -- several fights with a rest between -- and it
-    is past what a combat engine is for, so it comes later. Answering plainly
-    is better than a 404 the page would read as a bug.
+    `scales` is the page's row of per-encounter multipliers. Absent or empty
+    falls back to `day.scales(4)`, which is the same curve those boxes ship
+    pre-filled with.
     """
-    raise HTTPException(501, "the adventuring day is not implemented yet")
+
+    level: int = 1
+    seed: int | None = None
+    pcs: list[str] | None = None
+    scaling: str = "full"
+    scales: list[float] | None = None
+
+
+@app.post("/api/day")
+def start_day(body: NewDay | None = None) -> dto.DayStateDTO:
+    """Deal a party, set out the legs, and field the first fight.
+
+    The first encounter is built here rather than on a second call, because
+    the page opens `day.encounter` straight after this returns -- a day that
+    answered with no fight would be a day the player has to poke twice to
+    start.
+    """
+    body = body or NewDay()
+    seed = body.seed if body.seed is not None else _draw()
+    try:
+        the_day = day_mode.Day.create(
+            seed=seed,
+            level=body.level,
+            scaling=body.scaling,
+            pcs=body.pcs,
+            want=body.scales,
+        )
+        session = the_day.build_leg()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    day_mode.DAYS[the_day.id] = the_day
+    SESSIONS[session.id] = session
+    return the_day.state()
+
+
+@app.get("/api/day/{day_id}")
+def read_day(day_id: str) -> dto.DayStateDTO:
+    """Where the day has got to.
+
+    **This is what advances it.** `Day.settle` runs from here, so the page's
+    ordinary poll closes a finished leg -- harvest the wear, take the short
+    rest, record the curve. There is no moment the client has to report, and
+    a client that stops asking leaves the day where it was rather than
+    half-closed.
+    """
+    the_day = day_mode.DAYS.get(day_id)
+    if the_day is None:
+        raise HTTPException(404, "no such day")
+    return the_day.state(SESSIONS.get(the_day.session_id))
+
+
+@app.post("/api/day/{day_id}/next")
+def next_leg(day_id: str) -> dto.DayStateDTO:
+    """Walk into the next encounter."""
+    the_day = day_mode.DAYS.get(day_id)
+    if the_day is None:
+        raise HTTPException(404, "no such day")
+    the_day.state(SESSIONS.get(the_day.session_id))
+    if the_day.finished:
+        raise HTTPException(409, "the day is over")
+    try:
+        session = the_day.build_leg()
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    SESSIONS[session.id] = session
+    return the_day.state()
 
 
 def _draw() -> int:

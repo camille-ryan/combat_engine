@@ -231,6 +231,11 @@ def main() -> int:
         _restart(page, START_SEED, served)
         _play(page, check, problems, served, calls)
 
+        # **Before chargen, because chargen navigates away.** The day's
+        # controls are on the fight page, and `_check_chargen` leaves the
+        # browser on a different one -- `#day-on` simply is not there.
+        _check_day(page, check, problems)
+
         _check_chargen(page, check, problems)
 
         if args.shot:
@@ -1246,6 +1251,129 @@ def _restart(page, seed: int, served: list[dict] | None = None) -> None:  # noqa
         while len(served) <= mark and time.monotonic() < deadline:
             page.wait_for_timeout(100)
     page.wait_for_timeout(600)
+
+
+#: What the day's four boxes are set to for the browser run. Low on purpose:
+#: the panel is what is being tested, and a leg built to a quarter of the
+#: budget fields a creature or two, so the fight is over in a few clicks
+#: instead of twenty. The curve shape is `api_smoke`'s business.
+DAY_SCALES = ("0.25", "0.25", "0.25", "0.25")
+
+
+def _check_day(page, check: Checks, problems: list[str]) -> None:  # noqa: ANN001
+    """Tick the day on, play its first leg, and walk into the second.
+
+    **The one seam `api_smoke` cannot see.** That instrument asserts the
+    server's day state field by field; this asserts that `renderDay` reads
+    those fields. The two halves were written against each other -- the DTO
+    shapes came off the renderer -- so nothing but the real page catches a
+    name that does not match.
+    """
+    before = len(problems)
+    check.that(not page.is_visible("#day-scales"),
+               "a single fight does not show the four per-encounter"
+               " multipliers -- the control for the three checks below, which"
+               " all passed while every box was permanently on screen")
+    page.check("#day-on")
+    check.that(page.is_visible("#day-scales"),
+               "ticking the day on shows the four per-encounter multipliers")
+    check.that(not page.is_visible("#enemies"),
+               "and takes away the named-enemies box, which a day has nowhere"
+               " to put -- every fight is built to a budget")
+    check.that(not page.is_visible("#scale"),
+               "and hides the single-fight difficulty, which is a different"
+               " question rather than the same one greyed out")
+    check.that("day" in page.inner_text("#restart").lower(),
+               "and the start button says what it will start",
+               page.inner_text("#restart"))
+
+    boxes = page.locator("#day-scales .leg-scale")
+    check.that(boxes.count() == len(DAY_SCALES),
+               f"the form offers {len(DAY_SCALES)} legs", f"{boxes.count()}")
+    for i, value in enumerate(DAY_SCALES):
+        boxes.nth(i).fill(value)
+
+    page.click("#restart")
+    # **Wait for a leg chip, not for the board.** The tokens of the fight
+    # just played are still on screen, so `_settled` on `#board .token`
+    # returns immediately and the panel is read before it has been drawn --
+    # which is how "the day panel is showing" failed and every check after
+    # it passed.
+    page.wait_for_selector("#day-legs .leg", timeout=30000)
+    _settled(page, "#board .token", TOKENS_DRAWN)
+    page.wait_for_timeout(600)
+
+    check.that(page.is_visible("#day"), "the day panel is showing")
+    legs = page.locator("#day-legs .leg")
+    check.that(legs.count() == len(DAY_SCALES),
+               f"with one chip per leg ({legs.count()})")
+    check.that("current" in (legs.nth(0).get_attribute("class") or ""),
+               "the first leg is marked as the one being played",
+               legs.nth(0).get_attribute("class") or "")
+    check.that("0.25" in legs.nth(0).inner_text(),
+               "and each chip prints the budget it was built to",
+               legs.nth(0).inner_text().replace("\n", " "))
+    check.that("pending" in legs.nth(1).inner_text(),
+               "while a leg not yet played says so",
+               legs.nth(1).inner_text().replace("\n", " "))
+    check.that(not page.locator("#day-curve .curve-row").count(),
+               "and nothing is on the curve until a fight has ended",
+               f"{page.locator('#day-curve .curve-row').count()}")
+
+    # -- play the leg out --------------------------------------------------
+    for _ in range(6):
+        if page.locator("#day-foot .day-next").count():
+            break
+        _play_on(page, 10)
+        page.wait_for_timeout(400)
+
+    walk_on = page.locator("#day-foot .day-next")
+    if not walk_on.count():
+        check.skip(
+            "the day offers the next encounter",
+            "the first leg had not finished after 60 clicks -- the panel"
+            " and the chips are still checked above, but the hand-over"
+            " between legs is not",
+        )
+        return
+
+    check.that(walk_on.count() == 1,
+               "a finished leg offers exactly one way onward")
+    text = walk_on.inner_text()
+    check.that("2" in text and "0.25" in text,
+               "and the button names the encounter and its budget", text)
+
+    rows = page.locator("#day-curve .curve-row")
+    check.that(rows.count() == 1,
+               "the curve gained the fight that just ended", f"{rows.count()}")
+    line = rows.nth(0).inner_text()
+    check.that("hp" in line and "rested" in line,
+               "reading as what the party brought in, left with, and got back",
+               line.replace("\n", " | ")[:160])
+    pips = page.locator("#day-curve .surge-pips .pip")
+    check.that(pips.count() >= 4,
+               "with a surge pip per surge the party could ever spend --"
+               " personal, because the character who needs one is often not"
+               " the one holding it",
+               f"{pips.count()} pips")
+
+    done = page.locator("#day-legs .leg").nth(0)
+    check.that(any(word in (done.get_attribute("class") or "")
+                   for word in ("leg-won", "leg-lost", "leg-abandoned")),
+               "and the chip for the finished leg says how it went",
+               done.get_attribute("class") or "")
+
+    walk_on.click()
+    _settled(page, "#board .token", TOKENS_DRAWN)
+    page.wait_for_timeout(600)
+    legs = page.locator("#day-legs .leg")
+    check.that("current" in (legs.nth(1).get_attribute("class") or ""),
+               "walking on moves the marker to the second leg",
+               legs.nth(1).get_attribute("class") or "")
+    check.that(not page.locator("#day-foot .day-next").count(),
+               "and the button is gone while that fight is being played")
+    check.that(len(problems) == before, "no script errors across the day",
+               "; ".join(problems[before:][:3]))
 
 
 def _check_footprint(page, check: Checks, state: dict | None) -> None:  # noqa: ANN001
