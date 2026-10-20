@@ -12957,6 +12957,136 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_day_of_scaled_budgets(out: Result) -> None:
+    """A day of fights, each built to its own share of the printed budget.
+
+    Camille's arcade mode: a user-chosen number of single combats, each with
+    an XP budget, defaulting to a soft opener and a hard finale around
+    standard middles. #666.
+
+    **Asserted on the XP actually fielded, not on the monster count.** A
+    harder budget often buys one more creature, but not always -- the band
+    and the cost-fit can spend it on a dearer monster instead -- so counting
+    heads would pass on a day whose legs were all the same fight. The
+    currency is what `story.budget` reads out of the database, so the
+    assertion is in the same units the rule is printed in.
+    """
+    from random import Random
+
+    from combat_engine import story
+    from combat_engine.api.day import scales
+    from combat_engine.db import game
+
+    # -- the curve ---------------------------------------------------------
+    out.that(scales(4) == [0.75, 1.0, 1.0, 1.25],
+             "four fights are Camille's default curve", f"{scales(4)}")
+    out.that(scales(6) == [0.75, 1.0, 1.0, 1.0, 1.0, 1.25],
+             "a longer day pads the middle rather than stretching the curve"
+             " -- Camille's call, and the opener and finale stay one each",
+             f"{scales(6)}")
+    out.that(scales(1) == [1.0],
+             "one fight is standard: an opener with no finale after it is not"
+             " an opener")
+    out.that(scales(2) == [0.75, 1.25],
+             "two are the opener and the finale with nothing between")
+    out.that(scales(0) == [],
+             "and a day of no fights asks for no budgets rather than one")
+    out.that(sum(scales(4)) == 4.0,
+             "the default day totals four standard encounters, which is the"
+             " printed shape of a day", f"{sum(scales(4))}")
+
+    # -- the budget scales -------------------------------------------------
+    base = story.budget(5)
+    out.that(base > 0, "a standard level-5 encounter is worth something",
+             f"{base}")
+    out.that(story.budget(5, 1.0) == base,
+             "scale 1.0 is the unchanged printed budget, so every existing"
+             " caller is unaffected")
+    out.that(story.budget(5, 0.75) < base < story.budget(5, 1.25),
+             "and the opener is cheaper than standard, the finale dearer",
+             f"{story.budget(5, 0.75)} < {base} < {story.budget(5, 1.25)}")
+
+    # -- what reaches the board, in XP ------------------------------------
+    db = game()
+
+    def worth(pool: list[str]) -> int:
+        total = 0
+        for ref in pool:
+            row = db.execute(
+                "SELECT xp FROM monster WHERE ref = ?", (ref,)).fetchone()
+            total += int((row[0] if row else 0) or 0)
+        return total
+
+    soft, _at, _s = story.opposition(5, Random(3), "standard", scale=0.75)
+    mid, _at, _s = story.opposition(5, Random(3), "standard", scale=1.0)
+    hard, _at, _s = story.opposition(5, Random(3), "standard", scale=1.25)
+    ws, wm, wh = worth(soft), worth(mid), worth(hard)
+    out.that(ws < wh,
+             "the finale fields more XP than the opener -- the scale reaches"
+             " the board, which is the whole point and is not implied by the"
+             " budget arithmetic above",
+             f"0.75 -> {ws} XP, 1.0 -> {wm}, 1.25 -> {wh}")
+    # **The opener overshoots its own ceiling and that is permitted**, which
+    # this assertion got wrong first by demanding a guarantee `_compose` never
+    # makes: it skips a candidate that would break the ceiling *"unless
+    # nothing has been taken yet"*, so a `COMPOSITION` share too small to
+    # afford one creature takes one anyway. A 0.75 budget makes every share
+    # smaller, so the opener is the leg it happens to.
+    #
+    # Measured at standard, one seed, so the bound is not a guess:
+    #
+    #     level   0.75     1.0     1.25
+    #         1   100%    100%     100%
+    #         3   106%    100%     100%
+    #         5   108%    100%     100%
+    #         8   110%    100%     100%
+    #        10   100%    100%     100%
+    #
+    # So 1.0 and 1.25 land exactly and only the opener runs over, by at most a
+    # tenth. The consequence worth knowing: a 0.75 leg is softer than standard
+    # but **not by the full quarter** -- 1150 against 1400 at level 8 is 82%,
+    # not 75%.
+    for sc, fielded in ((0.75, ws), (1.0, wm), (1.25, wh)):
+        ceiling = story.budget(5, sc)
+        out.that(fielded <= round(ceiling * 1.25),
+                 f"the x{sc} leg stays within a quarter of its ceiling rather"
+                 " than being unbounded -- the share escape hatch can overrun"
+                 " it, and this is what stops that becoming a fight of a"
+                 " different size",
+                 f"{fielded} vs ceiling {ceiling}")
+    out.that(wm <= story.budget(5, 1.0) and wh <= story.budget(5, 1.25),
+             "and the standard and finale legs land on or under their ceiling"
+             " exactly -- only the opener overruns",
+             f"{wm}<={story.budget(5, 1.0)}, {wh}<={story.budget(5, 1.25)}")
+    out.that(ws < wm,
+             "the opener is still cheaper than a standard fight in absolute"
+             " terms, so the curve points the way it says even where the"
+             " ceiling is overrun",
+             f"{ws} < {wm}")
+
+    # -- through `field_encounter`, which is the door a day will use -------
+    easy = story.field_encounter(3, 5, scaling="full", scale=0.75)
+    tough = story.field_encounter(3, 5, scaling="full", scale=1.25)
+    out.that(bool(easy.enemies) and bool(tough.enemies),
+             "both legs field somebody")
+    out.that(worth(list(tough.enemies)) >= worth(list(easy.enemies)),
+             "and `field_encounter(scale=)` carries it the same way, rather"
+             " than the parameter stopping at `opposition`",
+             f"easy {worth(list(easy.enemies))} XP,"
+             f" tough {worth(list(tough.enemies))}")
+
+    # -- a named opposition ignores it, which is documented ----------------
+    named = ["m4801", "m4709"]
+    pinned = story.field_encounter(3, 5, scaling="full", enemies=named,
+                                   scale=1.25)
+    out.that(sorted(pinned.enemies) == sorted(named)
+             or len(pinned.enemies) == len(named),
+             "a caller that named the monsters keeps them whatever the scale"
+             " -- it has already decided what the fight is worth, and the"
+             " fixtures name theirs",
+             f"{sorted(pinned.enemies)}")
+
+
 def a_kind_waived_for_one_attacker(out: Result) -> None:
     """"You can also target creatures of the elemental origin." #770.
 
@@ -28115,6 +28245,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "day_budgets": (
+        a_day_of_scaled_budgets,
+        "an adventuring day's legs, each built to its share of the printed XP"
+        " budget (#666)",
+    ),
     "kind_waived": (
         a_kind_waived_for_one_attacker,
         "a creature's type widened for one attacker's divine powers (#770)",
