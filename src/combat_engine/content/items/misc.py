@@ -3447,7 +3447,7 @@ def i1675x1(c: Cast) -> None:
 
 
 @power("i1675p1", level=10, cls=ITEM, usage=DAILY, action=FREE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_attack(rolls=)",),
+       reach=PERSONAL, target=SELF, dropped=("resolve.replay()",),
        trigger="you use an arcane attack power and miss all targets",
        on=Trigger(Miss, _hit_by_me_with(Keyword.ARCANE),
                   "you miss with an arcane attack power"))
@@ -3464,7 +3464,16 @@ def i1675p1(c: Cast) -> None:
     is the row to fix this alongside.
 
     So it stays on `Miss` and rerolls the one it is about, which is a
-    narrower rule than the card's and the only one available."""
+    narrower rule than the card's and the only one available.
+
+    **Re-pointed: this was never a parameter.** `c.reroll_attack(rolls=)`
+    read as "let it take a set of rolls", and taking the set is the easy
+    half. All three rows that wore it trigger on `PowerResolved`, by which
+    point every miss has already been resolved -- so a roll turned into a
+    hit buys **no damage and no rider**, and the row would have reported
+    finished while paying nothing. What is wanted is to *replay* what each
+    new number lands, which is a re-resolution and belongs in `resolve`.
+    #775."""
     c.reroll_attack(keep="new")
 
 

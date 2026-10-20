@@ -980,7 +980,7 @@ def f2438(c: Cast) -> None:
 
 @power("f2448", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.reroll_attack(rolls=)",))
+       todo=("resolve.replay()",))
 def f2448(c: Cast) -> None:
     """Spends the racial power to reroll every attack roll of a use that
     missed everything. Two of the three holds had already gone, and the
@@ -995,7 +995,16 @@ def f2448(c: Cast) -> None:
     `c.trigger`. Re-aimed at the symbol `i1675p1` and `p10354` already
     carry. Written on `Miss` instead it would spend a daily racial power
     on the first roll of a use whose other rolls may yet hit, so the row
-    stays refused rather than wrong."""
+    stays refused rather than wrong.
+
+    **Re-pointed: this was never a parameter.** `c.reroll_attack(rolls=)`
+    read as "let it take a set of rolls", and taking the set is the easy
+    half. All three rows that wore it trigger on `PowerResolved`, by which
+    point every miss has already been resolved -- so a roll turned into a
+    hit buys **no damage and no rider**, and the row would have reported
+    finished while paying nothing. What is wanted is to *replay* what each
+    new number lands, which is a re-resolution and belongs in `resolve`.
+    #775."""
 
 
 @power("f2456", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

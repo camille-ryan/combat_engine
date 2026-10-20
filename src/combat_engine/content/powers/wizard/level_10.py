@@ -820,11 +820,20 @@ def _missed_twice(world: World, me: int, ev: PowerResolved) -> bool:
         _missed_twice,
         "you miss with at least two of one arcane power's attack rolls",
     ),
-    todo=("c.reroll_attack(rolls=)",),
+    todo=("resolve.replay()",),
 )
 def p10354(c: Cast) -> None:
     """The trigger is exact. The effect is not: `c.reroll_attack` reads one
     result off `c.trigger` and rewrites its number, and by `PowerResolved`
     every miss has already been resolved -- so a roll turned into a hit would
     buy no damage and no rider. It wants the set, and to replay what each new
-    number now lands."""
+    number now lands.
+
+    **Re-pointed: this was never a parameter.** `c.reroll_attack(rolls=)`
+    read as "let it take a set of rolls", and taking the set is the easy
+    half. All three rows that wore it trigger on `PowerResolved`, by which
+    point every miss has already been resolved -- so a roll turned into a
+    hit buys **no damage and no rider**, and the row would have reported
+    finished while paying nothing. What is wanted is to *replay* what each
+    new number lands, which is a re-resolution and belongs in `resolve`.
+    #775."""
