@@ -125,8 +125,37 @@ class Table:
         return roll_check(self.world, self.eids[index], skill.lower(), dc)
 
     def strike(self) -> None:
-        """Read the wear back onto the sheets and let the board go."""
+        """Read the wear back onto the sheets and let the board go.
+
+        **Arming is not spending, and conflating the two cost the party their
+        whole encounter kit.** `Encounter.start()` fires every once-per-fight
+        *trait* -- a class feature, a passive feat -- and firing one marks it
+        used, which is correct on a real board. Harvesting that off the
+        scratch board carried it into the campaign: measured, four characters
+        walked out of a *conversation* having spent 6, 4, 5 and 10 rows, and
+        then into the next fight without them. Nothing about the output looked
+        wrong; the party was simply weaker from then on.
+
+        So a row that arrived in `used` during this scene is kept only if it
+        **costs an action**. A trait that armed itself is an artefact of
+        needing a board at all -- no turn is ever taken here -- while a feat
+        that really did spend something to help with a check took an action to
+        do it and should stay spent.
+        """
+        from combat_engine.engine.dsl import get
+        from combat_engine.engine.types import ActionType
+
+        before = [dict(sheet.spent) for sheet in self.party.sheets]
         harvest(self.world, self.party)
+        for sheet, had in zip(self.party.sheets, before, strict=False):
+            kept = dict(had)
+            for ref, when in sheet.spent.items():
+                if ref in had:
+                    continue
+                row = get(ref)
+                if row is not None and getattr(row, "action", None) is not ActionType.NONE:
+                    kept[ref] = when
+            sheet.spent = kept
 
 
 def lay(party: Party, *, seed: int = 0) -> Table:
