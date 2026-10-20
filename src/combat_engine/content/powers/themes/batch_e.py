@@ -1456,15 +1456,21 @@ def p16076(c: Cast) -> None:
     keywords=[Keyword.FEAR],
     trigger="you hit an enemy with an attack",
     on=Trigger(Hit, by_me, "you hit an enemy with an attack"),
-    dropped=("c.mark(lapses=)",),
 )
 def p16374(c: Cast) -> None:
-    """The printed mark ends when a turn of mine passes without swinging at
-    the creature; no duration says that, so it is held for the encounter and
-    the lapse is the dropped clause."""
+    """**Written.** The printed mark ends when a turn of mine passes without
+    swinging at the creature, and no duration said that -- so it was held
+    for the encounter and the lapse was the dropped clause.
+    `c.mark(lapses=True)` is it, watched on the marker's own turn ending and
+    asked off `query.attacked_since`, so a swing that missed still counts.
+    #773.
+
+    The lapse is laid here rather than left to the clock because the mark
+    outlives a turn: `When.ENCOUNTER` is what the card prints, and the
+    lapse is a *condition* on top of it rather than a shorter duration."""
     foe = c.trigger.target
     c.immobilized(on=foe, until=When.EONT)
-    c.mark(on=foe, until=When.ENCOUNTER)
+    c.mark(on=foe, until=When.ENCOUNTER, lapses=True)
     c.quarry(on=foe, until=When.ENCOUNTER)
 
 

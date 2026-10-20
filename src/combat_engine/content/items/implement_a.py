@@ -3699,20 +3699,36 @@ def i2759p1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     trigger="you hit with an attack using this holy symbol",
-    todo=("c.mark(lapses=)",),
+    todo=("c.mark(keeps=)",),
 )
 def i2762p1(c: Cast) -> None:
-    """Re-aimed twice. The feature is `p805` and arrives as a ref, so the
-    naming gap is closed; and lengthening a live effect is not the hold
-    either -- `Effect` is a mutable dataclass and `i1960p1` writes the clock
-    on one, the way `p5052` does.
+    """Re-aimed three times.
 
-    The hold is on the other side of the sentence. `p805` lays its mark
-    `until=When.ENCOUNTER` and nothing ends it early, so "even if it would
-    normally end" has nothing to prevent and there is no duration here to
-    postpone -- moving that mark onto an end-of-next-turn clock would
-    *shorten* it. The row waits on `p805`'s mark being able to lapse at
-    all."""
+    The feature is `p805` and arrives as a ref, so the naming gap closed;
+    lengthening a live effect is not the hold either -- `Effect` is a
+    mutable dataclass and `i1960p1` writes the clock on one. The hold is on
+    the other side of the sentence: "even if it would normally end" has
+    nothing to prevent, because `p805` lays its mark `until=When.ENCOUNTER`
+    and nothing ends it early. Moving that mark onto an end-of-next-turn
+    clock would *shorten* it.
+
+    **`c.mark(lapses=)` exists now and is not this row's answer.** #773
+    built the lapse for `p16374`; `p805` does not use it, deliberately,
+    because its own note reads the card as *"the mark lasts until the power
+    is used again"*. So this clause needs two things and the marker names
+    the nearer one: a way to **suppress** a lapse for a while, which is
+    `c.mark(keeps=)` and does not exist.
+
+    **It briefly carried `todo=("p805",)` and `todo.py` was right to go
+    red.** `p805` is a declared row, so a marker naming it reported this
+    row ready the moment it was written -- which is the trap
+    `content/CLAUDE.md` describes for `todo=`: it means "nothing works
+    yet", so `todo.py` calls the row finishable as soon as the thing it
+    names exists. A marker must name something that does **not**.
+
+    The other half is a reading of `p805`'s card and a change to the
+    paladin's core feature, which is not this row's to make. Even with that
+    settled, the clause still wants the suppression above."""
 
 
 @power(

@@ -12957,6 +12957,109 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_mark_that_lapses(out: Result) -> None:
+    """"The mark ends if you do not attack it", and the row that forbids it.
+
+    A mark laid for the encounter never ended early, so two rows sat on
+    **opposite sides of one missing rule**: `p16374` printed the lapse, and
+    `i2762p1` -- *"your divine challenge remains in effect ... even if it
+    would normally end"* -- printed the **exception**, which had nothing to
+    prevent. Its note said exactly that: *"nothing ends it early, so 'even
+    if it would normally end' has nothing to prevent."*
+
+    So the exception is this flag left **off**, which is why one parameter
+    closes both rows and why the control below is the whole evidence: a
+    lapse that fired regardless of the flag would pass every assertion
+    about `p16374` and silently break the item.
+
+    Asked of the **marker's** turn, because the sentence is about what the
+    marker did with its turn, and off `query.attacked_since` -- which reads
+    `AttackDeclared`, so a swing that **missed** still counts. The card
+    says attack, not hit.
+
+    Posed on `m3210a0`: a Medium creature whose basic attack lands with the
+    foe one square away. Two bigger casters were tried first and `c.basic`
+    returned False on both -- a Large footprint puts an adjacent square
+    inside the creature -- which made the "it swung" arm read as a lapse
+    and the verb look broken.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import AttackDeclared, TurnEnd, TurnStart
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Relation
+
+    MEDIUM = "m3210a0"
+
+    def run(lapses: bool, swing: bool):  # noqa: ANN202
+        world, me, _armed = _posed(MEDIUM, 1)
+        foe = sorted(enemies(world, me))[0]
+        here = world.need(me, Position).square
+        dest = (here[0] + 1, here[1])
+        world.grid.lift(foe)
+        world.need(foe, Position).square = dest
+        world.grid.place(foe, frozenset({dest}))
+        Cast(world=world, me=me, ref="drivers:lapse").mark(
+            on=foe, until=When.ENCOUNTER, lapses=lapses)
+        before = world.relations.holds(Relation.MARKED_BY, me, foe)
+        # a fresh turn of the MARKER's, so the lay-turn guard is past
+        world.bus.emit(TurnStart(actor=me, round=world.round + 1))
+        hit = False
+        if swing:
+            world.rng.loaded = 20
+            hit = Cast(world=world, me=me, ref="drivers:lapse").basic(on=foe)
+        world.bus.emit(TurnEnd(actor=me, round=world.round + 1))
+        after = world.relations.holds(Relation.MARKED_BY, me, foe)
+        swung = any(
+            isinstance(e, AttackDeclared) and getattr(e, "attacker", None) == me
+            for e in world.bus.log)
+        return before, after, hit, swung
+
+    # -- the floor: the probe can actually swing on this board -----------
+    _b, _a, hit, swung = run(True, True)
+    out.that(hit and swung,
+             "the probe's basic attack lands at all -- the floor, and"
+             " without it the 'it swung' arm is indistinguishable from the"
+             " 'it did not' arm and everything below passes vacuously",
+             f"c.basic returned {hit}, AttackDeclared seen: {swung}")
+
+    WANT = {
+        (True, False): False,   # lapses, spared it -> the mark goes
+        (True, True): True,     # lapses, swung at it -> it stays
+        (False, False): True,   # no lapse, spared it -> it stays
+        (False, True): True,    # no lapse, swung -> it stays
+    }
+    for (lapses, swing), want in WANT.items():
+        before, after, _hit, _swung = run(lapses, swing)
+        out.that(before, f"lapses={lapses} swing={swing}: the mark is laid")
+        why = ""
+        if (lapses, swing) == (True, False):
+            why = " -- the printed lapse, and the only cell that ends it"
+        elif (lapses, swing) == (True, True):
+            why = (" -- swinging at it keeps the mark, which is what makes"
+                   " the lapse a rule rather than a timer")
+        elif not lapses:
+            why = (" -- `i2762p1`'s exception is this flag left off, so a"
+                   " lapse that fired regardless would break the item while"
+                   " passing every assertion about `p16374`")
+        out.that(after is want,
+                 f"lapses={lapses} swing={swing}: marked afterwards is"
+                 f" {want}{why}",
+                 f"it was {after}")
+
+    # -- and neither row waits on the symbol -----------------------------
+    from combat_engine.engine.dsl import REGISTRY
+    left = [r for r in ("i2762p1", "p16374")
+            if "c.mark(lapses=)" in (
+                tuple(getattr(REGISTRY[r], "todo", ()) or ())
+                + tuple(getattr(REGISTRY[r], "dropped", ()) or ()))]
+    out.that(not left, "and neither row waits on the symbol any more",
+             f"{left}")
+
+
 def a_zone_that_grants_a_die(out: Result) -> None:
     """A zone whose benefit is a rolled die, not a flat number.
 
@@ -27446,6 +27549,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "mark_lapses": (
+        a_mark_that_lapses,
+        "a mark that ends when its turn passes without an attack, and the"
+        " row whose whole clause is forbidding that (#773)",
+    ),
     "zone_grants_a_die": (
         a_zone_that_grants_a_die,
         "a zone whose benefit is a rolled die rather than a flat number,"

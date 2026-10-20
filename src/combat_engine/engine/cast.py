@@ -6149,13 +6149,39 @@ class Cast:
         return self.condition(Condition.UNCONSCIOUS, until=until, on=on)
 
     def mark(
-        self, *, until: When = When.EONT, on: int | None = None, by: int | None = None
+        self,
+        *,
+        until: When = When.EONT,
+        on: int | None = None,
+        by: int | None = None,
+        lapses: bool = False,
     ) -> Effect | None:
         """Mark the target -- for you, or for somebody else.
 
         `by=` is the bard's whole conceit: "the target is marked by an ally
         within 5 squares of you". `c.marked` has always been able to *ask*
         about a mark somebody else laid; until now nothing could lay one.
+
+        **`lapses=True` is the printed "the mark ends if you do not attack
+        it".** A mark laid for the encounter never ended early, so two rows
+        were stuck on opposite sides of the same missing rule: `p16374`
+        needed the lapse, and `i2762p1` -- *"your divine challenge remains
+        in effect ... even if it would normally end"* -- needed the
+        **exception**, which had nothing to prevent. Its note said so:
+        *"nothing ends it early, so 'even if it would normally end' has
+        nothing to prevent."* So the exception is simply this flag left
+        off, which is why both rows close on one parameter.
+
+        Watched on the **marker's** turn ending, not the marked creature's:
+        the sentence is about what the marker did with its turn.
+        `query.attacked_since` answers it off `AttackDeclared`, so a swing
+        that missed still counts -- the card says attack, not hit.
+
+        The turn the mark is laid on does not end it. A mark laid *during*
+        the marker's own turn would otherwise lapse at the end of that same
+        turn unless the row also swung afterwards, which is the opposite of
+        what every one of these cards means: `p16374` marks **on a hit**,
+        so the attack is already over when the mark arrives.
         """
         who = self._who(on)
         if who is None:
@@ -6163,11 +6189,52 @@ class Cast:
         marker = self.me if by is None else by
         if marker == who:
             return None          # nothing is marked by itself
-        return self.world.effects.apply(
+        held = self.world.effects.apply(
             who, marker, until, label=f"{self.ref} mark",
             relations=[(Relation.MARKED_BY, marker, who)],
             by=self.ref,
         )
+        if held is not None and lapses:
+            self._mark_lapses(held, marker, who)
+        return held
+
+    def _mark_lapses(self, held: Effect, marker: int, who: int) -> None:
+        """End `held` at the end of a turn of `marker`'s that spared `who`."""
+        from .events import TurnEnd
+        from .query import attacked_since
+
+        # **The turn, not the turn's actor.** Comparing `ev.actor` against
+        # `world.turn` suppressed every later turn of the marker's too, not
+        # just the one the mark was laid on -- so the lapse never fired at
+        # all. A turn is the pair.
+        laid_on = (self.world.turn, self.world.round)
+
+        def at_the_end(ev: TurnEnd) -> None:
+            if ev.actor != marker:
+                return
+            if (ev.actor, getattr(ev, "round", -1)) == laid_on:
+                return
+            if not attacked_since(self.world, who, marker,
+                                  since=self._turn_began(marker)):
+                self.world.effects.end(held, "the mark lapsed")
+
+        self.watch(TurnEnd, at_the_end, until=held.when, on=marker,
+                   label=f"{self.ref} lapse")
+
+    def _turn_began(self, eid: int) -> int:
+        """The `seq` this creature's current turn started at.
+
+        `query.since_turn_began` returns the events; the boundary itself is
+        what `attacked_since` wants, and reading the first of those events
+        is how to get it without a second walk of the log.
+        """
+        from .events import TurnStart
+
+        begin = 0
+        for ev in self.world.bus.log:
+            if isinstance(ev, TurnStart) and ev.actor == eid:
+                begin = ev.seq
+        return begin
 
     def curse(self, *, on: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
         """Curse a creature. Lasts the fight unless something says otherwise.
