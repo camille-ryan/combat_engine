@@ -25,7 +25,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Which dice this row rolls for this creature, after any change.
 - `c.enhancement`
   - The plus of the magic item **this row belongs to**.
-- `c.grants_in(self, zone: 'int', what: 'str | Defense', value: 'int', *, side: 'str' = 'team', kind: 'str' = 'power', when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'None'`
+- `c.grants_in(self, zone: 'int', what: 'str | Defense', value: 'int', *, side: 'str' = 'team', kind: 'str' = 'power', when: 'Callable[[dict[str, Any]], bool] | None' = None, dice: 'str' = '', dtype: 'DamageType | Sequence[DamageType] | None' = None) -> 'None'`
   - A zone that carries a modifier for as long as you stand in it.
 - `c.penalty(self, what: 'str | Defense', value: 'int', **kw: 'Any') -> 'Effect | None'`
   - A negative modifier. **It takes no `kind`, and that is the rule.**

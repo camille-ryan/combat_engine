@@ -3386,24 +3386,31 @@ def i512x1(c: Cast) -> None:
 
 @power("i512p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=CloseBurst(3), target=NO_TARGET,
-       keywords=[Keyword.PSYCHIC, Keyword.ZONE],
-       dropped=("c.grants_in(dice=)",))
+       keywords=[Keyword.PSYCHIC, Keyword.ZONE])
 def i512p1(c: Cast) -> None:
-    """The die is laid on each ally standing in the zone when it is made, so
-    an ally who walks in later does not pick it up.
+    """"Each ally within the zone deals 1d6 extra psychic damage with any
+    attack that does not include you as a target."
 
-    **Re-aimed: `when=` was never the hold.** The gate is written right here
-    on `c.bonus` and always could have been; what `c.grants_in` cannot carry
-    is the *die*, which is why the bonus is laid per ally instead of on the
-    zone. The marker named the half that was available."""
+    **The die is on the zone now, not on whoever happened to be standing
+    there.** This used to walk the squares once and lay the bonus per ally,
+    because `c.grants_in` carried a flat number and not a rolled one -- and
+    its own note said what that cost: *"an ally who walks in later does not
+    pick it up."* A zone whose benefit is decided at the moment it is made
+    is not a zone. `c.grants_in(dice=)` hands the die through to `c.bonus`,
+    which has always taken one, and `_while_inside` lays it on whoever is
+    inside now.
+
+    The `when=` gate is the printed exception -- "any attack that does not
+    include you as a target" -- and it was never the hold.
+
+    The Level 19 line is epic and out of band."""
     area = c.area()
-    c.zone(area, until=When.EONT)
-    for friend in c.in_squares(area, side="ally"):
-        if friend == c.me:
-            continue
-        c.bonus("damage", 0, dice="1d6", on=friend, until=When.EONT,
-                dtype=DamageType.PSYCHIC,
-                when=lambda ctx: ctx.get("target") != c.me)
+    zone = c.zone(area, until=When.EONT)
+    c.grants_in(
+        zone, "damage", 0, side="ally", dice="1d6",
+        dtype=DamageType.PSYCHIC,
+        when=lambda ctx: ctx.get("target") != c.me,
+    )
 
 
 # -- level 10 ---------------------------------------------------------------

@@ -12957,6 +12957,149 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_zone_that_grants_a_die(out: Result) -> None:
+    """A zone whose benefit is a rolled die, not a flat number.
+
+    `c.grants_in` carried a flat value and handed `when=` through to
+    `c.bonus`, but not `dice=` -- which `c.bonus` has taken all along. Two
+    rows print "+1d6" on a zone and both were stuck on it, and `i512p1`'s
+    own note says exactly what the workaround cost:
+
+    > The die is laid on each ally standing in the zone when it is made, so
+    > an ally who walks in later does not pick it up.
+
+    **That is the control this rule is built around.** A zone whose benefit
+    is decided at the moment it is made is not a zone, and the hand-rolled
+    version passes every test that only checks the allies who happened to be
+    standing there. `_while_inside` is the whole point of the verb: it lays
+    the modifier on whoever is inside *now*.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import allies
+
+    def rolled_damage(world, who: int) -> int:  # noqa: ANN001
+        """How many standing damage modifiers carry a **rolled** component.
+
+        **Not the die's text.** `c.bonus(dice=)` is the argument; the field
+        it lands in is `Mod.roll`, and that holds a *callable* which rolls
+        it -- so there is no `"1d6"` anywhere to match, and an earlier draft
+        asserting on one compared against a lambda's repr. The question that
+        can be answered is whether the modifier has a rolled part at all,
+        which is exactly what separates this from the flat grant.
+        """
+        mods = world.get(who, Mods)
+        if mods is None:
+            return 0
+        return sum(
+            1 for m in mods.items
+            if str(getattr(m, "what", "")) == "damage"
+            and callable(getattr(m, "roll", None))
+        )
+
+    # -- the verb hands the die through ----------------------------------
+    # **Posed on a character row.** A monster's board deals one ally and
+    # the control below needs two distinct ones; `i512p1` is one of the two
+    # rows this verb is for and its board fields a party.
+    PARTY = "i512p1"
+    world, me, _armed = _posed(PARTY, 1)
+    friends = sorted(a for a in allies(world, me) if a != me)
+    # **Two distinct allies, or the control is the same creature.** With one
+    # ally on the board `friends[0]` and `friends[-1]` are the same entity,
+    # so "an ally outside does not carry it" read the one standing inside
+    # and came back 1.
+    if len(friends) < 2:
+        out.skip(f"the board deals this caster {len(friends)} all(y|ies),"
+                 " and the control needs two")
+        return
+    inside, outside = friends[0], friends[-1]
+    c = Cast(world=world, me=me, ref="drivers:dicezone")
+    here = world.need(me, Position).square
+    world.grid.lift(inside)
+    world.need(inside, Position).square = here
+    world.grid.place(inside, frozenset({here}))
+    zone = c.zone({here}, until=When.ENCOUNTER)
+    c.grants_in(zone, "damage", 0, side="ally", dice="1d6")
+
+    out.that(rolled_damage(world, inside) == 1,
+             "an ally standing in the zone carries exactly one damage"
+             " modifier with a rolled part",
+             f"{rolled_damage(world, inside)}")
+    out.that(rolled_damage(world, outside) == 0,
+             "and an ally outside it does not -- the control, and without it"
+             " a verb laying the bonus on everybody would pass",
+             f"{rolled_damage(world, outside)}")
+
+    # -- **the ally who walks in later**, which is the whole point -------
+    #
+    # `i512p1`'s note states the workaround's cost in one sentence: "the die
+    # is laid on each ally standing in the zone when it is made, so an ally
+    # who walks in later does not pick it up." A zone whose benefit is
+    # decided at creation is not a zone, and every assertion above passes
+    # for the hand-rolled version. This one does not.
+    out.that(rolled_damage(world, outside) == 0,
+             "the second ally is outside and carries nothing yet")
+    world.grid.lift(outside)
+    world.need(outside, Position).square = here
+    world.grid.place(outside, frozenset({here}))
+    # **`zones.refresh()` is what the engine calls**, and it is what emits
+    # `ZoneEntered` -- which is the only thing `_while_inside` listens to.
+    # Rewriting the grid alone moved the creature without the engine
+    # noticing, and this assertion read 0 for a verb that works.
+    world.zones.refresh()
+    out.that(rolled_damage(world, outside) == 1,
+             "and picks the die up by WALKING IN -- the assertion the"
+             " per-ally workaround fails and every other one here passes",
+             f"{rolled_damage(world, outside)}")
+
+    # -- flat still works, so the pass-through broke nothing -------------
+    world, me, _armed = _posed(PARTY, 1)
+    friends = sorted(a for a in allies(world, me) if a != me)
+    c = Cast(world=world, me=me, ref="drivers:flatzone")
+    here = world.need(me, Position).square
+    world.grid.lift(friends[0])
+    world.need(friends[0], Position).square = here
+    world.grid.place(friends[0], frozenset({here}))
+    zone = c.zone({here}, until=When.ENCOUNTER)
+    c.grants_in(zone, "attack", 1, side="ally")
+    mods = world.get(friends[0], Mods)
+    flat = sum(
+        getattr(m, "value", 0) for m in (mods.items if mods else ())
+        if str(getattr(m, "key", getattr(m, "what", ""))) == "attack"
+    )
+    out.that(flat >= 1,
+             "a flat grant still lands -- `dice=` defaults to empty and the"
+             " two rows that wanted it are not the 10 that did not",
+             f"attack total {flat}")
+
+    # -- and the two rows, through their own bodies ----------------------
+    for ref in ("i512p1", "p11811"):
+        world, me, _armed = _posed(ref, 1)
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        zones = [z for _zid, z in world.zones.all() if z.owner == me]
+        out.that(bool(zones),
+                 f"{ref} lays at least one zone or aura of its own",
+                 f"{len(zones)}")
+        carried = [a for a in allies(world, me)
+                   if a != me and rolled_damage(world, a)]
+        out.that(bool(carried) or not zones,
+                 f"and an ally inside one of {ref}'s zones carries a rolled"
+                 " damage modifier -- read off `Mods`, so a row laying a"
+                 " flat number instead reads as zero here",
+                 f"{len(carried)} all(y|ies) carrying it")
+
+    out.that(not any(
+        "c.grants_in(dice=)" in (
+            tuple(getattr(REGISTRY[r], "todo", ()) or ())
+            + tuple(getattr(REGISTRY[r], "dropped", ()) or ()))
+        for r in ("i512p1", "p11811")),
+        "and neither row waits on the symbol any more")
+
+
 def concealment_without_cover(out: Result) -> None:
     """Sight that passes a fog bank and stops at a wall. #771.
 
@@ -27303,6 +27446,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "zone_grants_a_die": (
+        a_zone_that_grants_a_die,
+        "a zone whose benefit is a rolled die rather than a flat number,"
+        " laid on whoever is inside now (#772)",
+    ),
     "concealment_without_cover": (
         concealment_without_cover,
         "a waiver of concealment that leaves cover standing, which four"

@@ -11083,6 +11083,8 @@ class Cast:
         side: str = "team",
         kind: str = "power",
         when: Callable[[dict[str, Any]], bool] | None = None,
+        dice: str = "",
+        dtype: DamageType | Sequence[DamageType] | None = None,
     ) -> None:
         """A zone that carries a modifier for as long as you stand in it.
 
@@ -11107,6 +11109,16 @@ class Cast:
         it is read where every other gated bonus is read, with the same context
         -- "+1 to attack inside the zone **against bloodied enemies**" is one
         lambda rather than a second kind of zone. Ten rows asked for it.
+
+        **`dice` and `dtype` are handed over the same way, and for the same
+        reason.** Two rows print "+1d6 to damage rolls" on a zone rather than
+        a flat number, and this verb could only carry the flat one -- so
+        `i512p1` laid the die on each ally **by hand**, once per creature
+        standing there when the zone was made, and its own note says what
+        that cost: *"an ally who walks in later does not pick it up."* The
+        whole point of this verb is that `_while_inside` lays the modifier
+        on whoever is in the zone *now*, so a hand-rolled copy is a zone
+        that stops being a zone. `c.bonus` has taken `dice` all along.
         """
         # Resistance is not a modifier -- `deal_damage` reads it off
         # `Defences.resist` and never consults `Mods` -- so asking for it
@@ -11120,7 +11132,8 @@ class Cast:
         self._while_inside(
             zone,
             lambda who: self.bonus(
-                what, value, on=who, until=When.ENCOUNTER, kind=kind, when=when
+                what, value, on=who, until=When.ENCOUNTER, kind=kind,
+                when=when, dice=dice, dtype=dtype,
             ),
             side,
         )

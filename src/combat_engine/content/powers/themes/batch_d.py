@@ -363,17 +363,21 @@ def p11808(c: Cast) -> None:
     reach=Ranged(10),
     target=NO_TARGET,
     keywords=PRIMAL_CONJ,
-    dropped=("c.grants_in(dice=)",),
 )
 def p11811(c: Cast) -> None:
-    """The attack bonus is written. The "+1d6 to damage rolls on melee
-    attacks" half wants a rolled modifier on a zone.
+    """Four conjured elementals, each with an aura that helps whoever stands
+    in it.
 
-    **One marker now, not two.** The gate half arrived -- `c.grants_in` takes
-    `when=` and narrowing to melee is a lambda -- but a gate on a bonus that
-    cannot be rolled buys nothing, so the whole clause still waits on `dice=`.
-    Two symbols for one clause meant this row would have reported ready when
-    only the useless half of it landed."""
+    **Both halves are written now.** The attack bonus always was; the "+1d6
+    to damage rolls on melee attacks" half wanted a *rolled* modifier on a
+    zone and `c.grants_in` carried only a flat one. The gate half had
+    already arrived -- narrowing to melee is a lambda -- but a gate on a
+    bonus that cannot be rolled buys nothing, which is why one marker
+    covered the clause rather than two: this row would have reported ready
+    when only the useless half landed.
+
+    `kind="power"` on both, which is the word the card prints before
+    "bonus"."""
     made: list[int] = []
     for _ in range(4):
         elemental = c.conjure(until=When.ENCOUNTER, sustain=None)
@@ -382,6 +386,10 @@ def p11811(c: Cast) -> None:
         made.append(elemental)
         ring = c.aura(1, on=elemental, until=When.ENCOUNTER, label=c.ref)
         c.grants_in(ring, "attack", 1, side="ally", kind="power")
+        c.grants_in(
+            ring, "damage", 0, side="ally", kind="power", dice="1d6",
+            when=lambda ctx: not ctx.get("ranged"),
+        )
     hold = c.effect(c.ref, until=When.ENCOUNTER, on=c.me)
 
     def dismiss() -> None:

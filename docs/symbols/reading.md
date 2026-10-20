@@ -98,7 +98,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
 - `query.concealment_of(world: 'World', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'Cover'`
   - How hard this creature is to see, as an attack penalty.
 - `query.concealment_waived(world: 'World', attacker: 'int', target: 'int', ctx: 'dict[str, Any] | None' = None) -> 'int'`
-  - How much **concealment** this pairing does not count. #770.
+  - How much **concealment** this pairing does not count. #771.
 - `query.cover_between(world: 'World', attacker: 'int', target: 'int', *, ranged: 'bool' = False, ctx: 'dict | None' = None) -> 'Cover'`
   - The worst cover the target has, measured from the attacker's best square.
 - `query.cover_granters(world: 'World', attacker: 'int', target: 'int') -> 'list[int]'`
