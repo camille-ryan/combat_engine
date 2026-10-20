@@ -1,0 +1,114 @@
+{
+  "id": "sunken-mill",
+  "edition": "none",
+  "party_level": 2,
+  "party_size": 4,
+  "start": "millyard",
+  "flags": {"alarm": 0},
+
+  "_note": [
+    "Our own invention, every word of it, and that is the whole point. This is",
+    "what check.py plays, so it has to live in the tree -- and a published",
+    "module never can. Nothing here is transcribed from anything.",
+    "",
+    "It names no creature. A module from a 4e book names creatures and",
+    "cast_list resolves them against localization/names.json, but that file is",
+    "git-ignored and a fresh clone has none -- so a fixture leaning on it would",
+    "pass on this machine and fail on a clone. Specifying foes by words, role",
+    "and rank exercises the thematic and reflavour paths instead, which are the",
+    "ones that have to work for every other edition anyway.",
+    "",
+    "Five scenes, covering all four kinds, with a real branch: the skill",
+    "challenge leads somewhere different depending on whether it is won.",
+    "",
+    "If you edit the prose here, check it against the localisation by hand.",
+    "The first draft invented 'river rats' and that is a printed name --",
+    "leaks.py reported the file clean, because its wide walk waives a name made",
+    "of two ordinary words. Inventing a name is not the same as inventing an",
+    "unused one. The check is one query against localisation(), and #494 is why",
+    "it cannot be the gate's job."
+  ],
+
+  "scenes": [
+    {
+      "id": "millyard",
+      "kind": "roleplay",
+      "name": "The Mill Yard",
+      "chapter": "one",
+      "brief": "Flood water stands knee-deep across the yard and the mill wheel has stopped turning. The miller's dog is on the roof of the cart shed and will not come down. Something has been in the cellar since the river rose, and the miller would rather pay than go down there herself.",
+      "exits": ["wheelhouse"]
+    },
+
+    {
+      "id": "wheelhouse",
+      "kind": "skill_challenge",
+      "name": "Freeing the Wheel",
+      "chapter": "one",
+      "brief": "The wheel is jammed with silt and broken timber. Clearing it drains the cellar; leaving it means going down into standing water, in the dark, with whatever is already in there listening to you work.",
+      "complexity": 1,
+      "level": 2,
+      "primary": ["athletics", "endurance"],
+      "secondary": ["perception", "nature", "thievery"],
+      "on_success": "cellar",
+      "on_failure": "cellar_alarmed"
+    },
+
+    {
+      "id": "cellar",
+      "kind": "combat",
+      "name": "The Drained Cellar",
+      "chapter": "one",
+      "brief": "The water goes out in a rush and leaves the floor slick and littered. Whatever was swimming down here is now walking, and it is not pleased about the change.",
+      "difficulty": "standard",
+      "terrain": ["aquatic"],
+      "foes": [
+        {"count": 3, "name": "sluice crawlers", "words": ["beast", "natural"], "role": "skirmisher", "rank": "standard"},
+        {"count": 1, "name": "the squatter", "words": ["humanoid", "natural"], "role": "soldier", "rank": "standard"}
+      ],
+      "tactics": "The skirmishers circle and bite at whoever is furthest from the stair. The soldier holds the stair itself and does not leave it.",
+      "exits": ["rest_1"]
+    },
+
+    {
+      "id": "cellar_alarmed",
+      "kind": "combat",
+      "name": "The Flooded Cellar",
+      "chapter": "one",
+      "brief": "The wheel is still jammed and the cellar is still full. You go down into it anyway, by lantern light, and everything down here heard you coming.",
+      "difficulty": "hard",
+      "terrain": ["aquatic", "darkness"],
+      "foes": [
+        {"count": 4, "name": "sluice crawlers", "words": ["beast", "natural"], "role": "skirmisher", "rank": "standard"},
+        {"count": 2, "name": "squatters", "words": ["humanoid", "natural"], "role": "soldier", "rank": "standard"}
+      ],
+      "tactics": "They have had time to spread out. The soldiers take the stair from both sides and the skirmishers come from behind the grain bins.",
+      "exits": ["rest_1"]
+    },
+
+    {
+      "id": "rest_1",
+      "kind": "rest",
+      "name": "Five Minutes on the Stair",
+      "chapter": "one",
+      "brief": "Long enough to bind a wound and get your breath back. Not long enough to get a daily power back, and not long enough for the thing in the loft to lose interest.",
+      "extended": false,
+      "exits": ["loft"]
+    },
+
+    {
+      "id": "loft",
+      "kind": "combat",
+      "name": "The Grain Loft",
+      "chapter": "one",
+      "brief": "The ladder comes up through the floor into the dark under the roof beams, and it is the only way up or down.",
+      "difficulty": "hard",
+      "terrain": ["darkness"],
+      "foes": [
+        {"count": 1, "name": "the hoarder", "words": ["humanoid", "natural"], "role": "controller", "rank": "elite"},
+        {"count": 4, "name": "its hangers-on", "words": ["humanoid", "natural"], "role": "skirmisher", "rank": "minion"}
+      ],
+      "tactics": "The elite stays beyond the lantern and spends its minions to keep the ladder head crowded.",
+      "exits": []
+    }
+  ]
+}
