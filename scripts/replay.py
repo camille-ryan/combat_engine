@@ -67,7 +67,8 @@ CASES = [
 def play(case: dict) -> list[str]:
     world, encounter = build(
         case["seed"], case["level"], case["scaling"],
-        feats=case.get("feats"), enemies=case.get("enemies"),
+        feats=case.get("feats"), powers=case.get("powers"),
+        enemies=case.get("enemies"),
     )
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
@@ -107,6 +108,55 @@ def _drawn(case: dict) -> dict[str, list[str]]:
     return out
 
 
+def _drawn_powers(case: dict) -> dict[str, list[str]]:
+    """Which hand this seed deals each class, **pre-swap**.
+
+    The other half of `_drawn`, and it exists for the same reason stated
+    there: a hand is drawn from the pool of *declared* rows, so writing a
+    clause into a power could change which powers a character is dealt --
+    and from there the action menu, what the policy is offered, and every
+    choice after it. Measured on `level-5-full`: adding one feat clause to
+    `p992` put it into a character's hand that had not held it, displacing
+    another row, and three fixtures diverged. #783.
+
+    **Pre-swap, which is what `chargen.dealt_hand` returns.** `power_swap` is
+    not idempotent -- one row leaves per feat that trades one -- so recording
+    the post-swap list and feeding it back through `spawn` would take a second
+    card away on every record. Pinning the pre-swap hand lets `spawn`'s single
+    swap run exactly as it always has, which is what makes this pin
+    behaviour-neutral: recording it changes no log.
+
+    Derived rather than read off the board, because `Powers.known` holds the
+    post-swap hand mixed in with class features, racial rows and item powers,
+    and picking "the powers" back out of that by ref shape is how a pin comes
+    to cover less than it says.
+    """
+    from combat_engine.chargen import build_of, dealt_hand
+    from combat_engine.engine import Ident
+
+    world, _ = build(case["seed"], case["level"], case["scaling"])
+    out: dict[str, list[str]] = {}
+    for _eid, ident in sorted(world.each(Ident)):
+        if not ident.ref.startswith("c:"):
+            continue
+        key = ident.ref.removeprefix("c:")
+        out[key] = dealt_hand(
+            case["seed"], key, case["level"], build_of(key, "")
+        )
+    return out
+
+
+def _pinned_powers(case: dict, redraw: bool) -> dict[str, list[str]]:
+    """The saved hand, unless `--redraw`. `_pinned`'s reasoning, verbatim."""
+    if not redraw:
+        path = FIXTURES / f"{case['name']}.json"
+        if path.exists():
+            saved = json.loads(path.read_text()).get("powers")
+            if saved:
+                return saved
+    return _drawn_powers(case)
+
+
 def _pinned(case: dict, redraw: bool) -> dict[str, list[str]]:
     """The feats this fixture should run with.
 
@@ -133,7 +183,8 @@ def _pinned(case: dict, redraw: bool) -> dict[str, list[str]]:
 def record(redraw: bool = False) -> int:
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for case in CASES:
-        pinned = {**case, "feats": _pinned(case, redraw)}
+        pinned = {**case, "feats": _pinned(case, redraw),
+                  "powers": _pinned_powers(case, redraw)}
         log = play(pinned)
         path = FIXTURES / f"{case['name']}.json"
         path.write_text(json.dumps({**pinned, "log": log}, indent=1))
@@ -154,7 +205,8 @@ def verify() -> int:
             continue
         saved = json.loads(path.read_text())
         want = saved["log"]
-        got = play({**case, "feats": saved.get("feats")})
+        got = play({**case, "feats": saved.get("feats"),
+                    "powers": saved.get("powers")})
         where = _diverges(want, got)
         if where is None:
             print(f"  {case['name']:<18} ok      {len(got):5d} events")

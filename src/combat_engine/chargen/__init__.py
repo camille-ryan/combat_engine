@@ -1902,6 +1902,32 @@ def loadout(
     return out + sorted(r for ref in out for r in riders.get(ref, []))
 
 
+def dealt_hand(seed: int | str, cls: str, level: int,
+               build: Build) -> list[str]:
+    """The hand a seed deals this class, **before** `power_swap` takes its
+    card back. One derivation, for everybody who needs to predict it.
+
+    `build` is **required**, where `loadout`'s is optional: the key this
+    derives is `f"{seed}:{cls}:{build.name}"`, so there is no honest answer
+    without one and inventing a name for the `None` case would mint a key no
+    caller wants. All three callers already hold a `Build`.
+
+    `spawn` and `Party.of` each wrote `Random(f"{seed}:{cls}:{build.name}")`
+    out by hand, which is two copies of a key that has to agree or a party
+    changes shape between the sheet and the board -- the drift `Party.of`'s
+    own comment is about. `replay.py` needs a third copy to pin a fixture's
+    powers (#783), so the derivation moves here instead of being written a
+    third time.
+
+    **Pre-swap on purpose.** `power_swap` is not idempotent -- it removes the
+    lowest qualifying row once per feat that trades one -- so a hand recorded
+    *after* the swap and then fed back through `spawn` would lose another row
+    every time. Pinning the pre-swap hand lets the single swap in `spawn` run
+    exactly as it always has, which is what makes the pin behaviour-neutral.
+    """
+    return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"))
+
+
 def _best_of(
     pool: list[str], count: int, cls: str, build: Build, pick: Random
 ) -> list[str]:
@@ -2867,8 +2893,8 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # ids and both had gone stale. The draw is seeded off the fight, so the
     # same seed deals the same character, and off a stream of its own, so
     # dealing one does not move the dice the fight is about to roll.
-    powers = who.powers or loadout(
-        who.cls, who.level, build, Random(f"{world.rng.seed}:{who.cls}:{build.name}")
+    powers = who.powers or dealt_hand(
+        world.rng.seed, who.cls, who.level, build
     )
     # Its own stream, like the loadout's and for the same reason: dealing
     # a character's feats must not move the dice the fight is about to

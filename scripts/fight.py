@@ -45,6 +45,7 @@ PARTY = story.PARTY
 def build(
     seed: int, level: int, scaling: str, math: str = "printed",
     feats: dict[str, list[str]] | None = None,
+    powers: dict[str, list[str]] | None = None,
     enemies: list[str] | None = None,
 ) -> tuple[World, Encounter]:
     """One fight, built from a seed.
@@ -57,6 +58,11 @@ def build(
     without anybody seeing it. Pinning them makes the fixture a test of
     the engine again rather than of the corpus's size.
 
+    `powers` pins each class's **hand**, pre-swap, for the same reason and it
+    was simply never built: a hand is dealt from the pool of declared rows
+    too, so writing a clause into a power could change which powers a
+    character was dealt and every choice downstream of that. #783.
+
     `enemies` pins the opposition, for exactly the same reason one step over.
     Which monsters a seed fields is drawn from every usable monster at the level
     now -- it used to be the first four by ref, the same four every seed -- so
@@ -65,7 +71,7 @@ def build(
     """
 
     fielded = story.field_encounter(
-        seed, level, scaling=scaling, math=math, feats=feats,
+        seed, level, scaling=scaling, math=math, feats=feats, powers=powers,
         enemies=enemies,
     )
     world = fielded.world

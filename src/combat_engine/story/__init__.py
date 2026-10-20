@@ -232,8 +232,8 @@ class Party:
             DEAL_RACES,
             build_of,
             deal_race,
+            dealt_hand,
             feats_for,
-            loadout,
             power_swap,
         )
 
@@ -245,7 +245,7 @@ class Party:
                 deal_race(Random(f"{seed}:{key}:race"), key, build)
                 if DEAL_RACES else ""
             )
-            hand = loadout(key, level, build, Random(f"{seed}:{key}:{build.name}"))
+            hand = dealt_hand(seed, key, level, build)
             taken = list((feats or {}).get(key, [])) or feats_for(
                 key, level, build,
                 Random(f"{seed}:{key}:{build.name}:feats"), list(hand), race,
@@ -633,6 +633,7 @@ def field_encounter(
     pcs: list[str] | None = None,
     enemies: list[str] | None = None,
     feats: dict[str, list[str]] | None = None,
+    powers: dict[str, list[str]] | None = None,
     party: Party | None = None,
 ) -> Fielded:
     """Build a board and put both sides on it.
@@ -642,6 +643,16 @@ def field_encounter(
     *declared* ones, so every content wave changed the party and every fixture
     diverged. Pinning them makes a fixture a test of the engine rather than of
     the corpus's size.
+
+    `powers` is the same pin one step over, and the argument above applies to
+    it word for word -- it was simply never built. A fixture's **hand** is
+    also dealt from the pool of declared rows, so writing a clause into a
+    power could change which powers a character was dealt, and from there the
+    action menu and every choice after it. #783.
+
+    It is the **pre-swap** hand, which is what `chargen.dealt_hand` returns:
+    `power_swap` is not idempotent, so pinning the post-swap list and feeding
+    it back through `spawn` would take a second card away.
 
     `enemies` names the opposition outright, for a caller that is not asking for
     a level-appropriate band.
@@ -678,7 +689,11 @@ def field_encounter(
             key = name.strip().lower()
             chargen.spawn(
                 world,
-                chargen.Character(key, level, feats=list((feats or {}).get(key, []))),
+                chargen.Character(
+                    key, level,
+                    powers=list((powers or {}).get(key, [])),
+                    feats=list((feats or {}).get(key, [])),
+                ),
                 (PARTY_AT[0], PARTY_AT[1] + i * SPACING),
             )
 
