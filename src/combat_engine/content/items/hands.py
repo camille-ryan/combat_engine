@@ -989,6 +989,20 @@ def i1259p1(c: Cast) -> None:
                   "you make a melee attack"),
        dropped=("c.milestone()",))
 def i1362p1(c: Cast) -> None:
+    """The retype, the slow and the standing extra all play. What is dropped
+    is the milestone branch, and it is a **binary** one: the card pays 1
+    extra, and "if you've reached at least one milestone today" pays 2
+    instead. `_infusion` lays the 1, which is the printed non-milestone
+    branch -- so this row is **under**-paying a character mid-day rather
+    than over-paying one at the start of it, which is the safe direction to
+    be wrong in.
+
+    Carried a marker and no reason until now. The family's reasoning is in
+    #666, which read all seven cards: `cf:artificer-f0` wants a *count*
+    ("for each milestone"), these item rows want only *at least one*, and a
+    count answers both. It waits on a scope call -- does this engine model a
+    day -- so there is nothing to write here until that is answered.
+    """
     _infusion(c, DamageType.COLD, _reach_gate("melee"))
     _on_next_hit(c, lambda ev: c.slowed(on=ev.target, until=When.EONT))
 
@@ -1101,8 +1115,30 @@ def i1486x1(c: Cast) -> None:
                   lambda world, me, ev: (
                       ev.actor == me and _has_keyword(ev.power, Keyword.DIVINE)),
                   "you use a divine power"),
-       dropped=("c.milestone()",))
+       dropped=("c.milestone()", "query.deals_damage(ref)"))
 def i1560p1(c: Cast) -> None:
+    """Same shape as `i1362p1` and the same milestone clause: the branch is
+    binary -- 1 extra becomes 2 "if you've reached at least one milestone
+    today" -- and `_infusion` lays the 1, so that half under-pays a
+    character mid-day rather than over-paying one at the start. #666 holds
+    the family's reasoning and the scope call it waits on.
+
+    **Two symbols, because this row has a second and opposite fault: it is
+    over-paying.** The card ends "if the power doesn't normally deal damage,
+    no extra damage is dealt", and nothing here asks. `_on_next_hit` watches
+    `Hit` and fires on any blow the caster lands, so a damageless divine
+    power that hits -- `p3069`, `p5330`, `p5331`, `cf:avenger-oath` -- is
+    paid the 1d6 anyway. A row stronger than its card, which is the
+    direction never to leave alone.
+
+    **And the obvious gate is the trap.** `Hit` carries `power`, so
+    `get(ev.power).damage is None` looks like the question -- and it is not:
+    `p992`'s header also reads `damage=None` while its body deals damage
+    through `c.damage`. The header is one of *two* places damage comes from,
+    so "does this power normally deal damage" is not answerable from it, and
+    writing that gate would silently suppress the rider on most of the rows
+    that should get it. Hence a symbol rather than a fix.
+    """
     _infusion(c, DamageType.RADIANT, _keyword_gate(Keyword.RADIANT))
     _on_next_hit(
         c, lambda ev: c.damage("1d6", dtype=DamageType.RADIANT, on=ev.target))

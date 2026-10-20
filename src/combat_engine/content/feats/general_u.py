@@ -724,9 +724,16 @@ def f3447(c: Cast) -> None:
     than a grab are not a hold anything rolls against.
 
     **Re-aimed.** The marker read `c.check(circumstance=)`, which no
-    other row in the tree named; eleven rows name `c.skill_circumstance()`
-    for the same gap, and this file already declared that constant and
-    never used it."""
+    other row in the tree named; this file already declared
+    `c.skill_circumstance()` and never used it, so this row joins the ones
+    already waiting on it rather than minting a synonym.
+
+    **The count in this note was wrong, and correcting it here matters**
+    because this is the row the rest of the family defers to -- a reader
+    arriving will size the job off it. It said "eleven rows"; the tree holds
+    **five**: this one, `f946`, `i1246x1`, `i2746x1`, `i693x1`. #735's
+    figure of nine is the right one for the scope call it asks for, being
+    those five plus the four on `c.stealth_speed()`."""
     c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 

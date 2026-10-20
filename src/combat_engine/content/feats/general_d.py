@@ -258,11 +258,21 @@ def f946(c: Cast) -> None:
 
     The hook is not the gap -- `SkillCheck` is announced and carries
     `skill`, `total` and `success`, so "a successful Bluff check" is
-    already askable, and `c.bloodied` answers the rest of the gate. Two
-    things are missing and the marker names both: what the check was
-    *made to do*, since a check to gain combat advantage and a check to
-    tell a lie are one skill here, and **who it was made against**, with
-    no target on the event there is nobody to slide.
+    already askable, and `c.bloodied` answers the rest of the gate.
+
+    **Re-pointed: only one thing is missing now, not two.** This note used
+    to end "and **who it was made against**, with no target on the event
+    there is nobody to slide". That half is stale -- `SkillCheck` carries a
+    `target` field, and `skills.modifier(world, eid, skill, target=,
+    natural=)` takes one too, so the creature the check was made against is
+    on the event and in the reader. #735's body says to re-point this row
+    "whatever is decided here", and this is that.
+
+    What is still missing is what the check was *made to do*: a check to
+    gain combat advantage and a check to tell a lie are one skill here. So
+    the marker stays and now names one gap rather than two, which is the
+    rule -- a symbol serving two needs cannot go red or green correctly for
+    either.
     """
 
 
