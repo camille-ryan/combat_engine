@@ -43,6 +43,7 @@ from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 
 from . import PARTY, Party, field_encounter, harvest
+from . import beat as beat_mod
 from . import table as table_mod
 from .cast_list import resolve
 from .challenge import Chooser
@@ -75,6 +76,8 @@ class Step:
     enemies: list[str] = field(default_factory=list)
     #: Where the blow-by-blow went, for a combat scene. Empty otherwise.
     transcript: str = ""
+    #: The beats, for a roleplay scene that had any. Empty otherwise.
+    played: beat_mod.Playing | None = None
 
     def say(self, line: str) -> None:
         self.lines.append(line)
@@ -261,6 +264,56 @@ def _fight(
     step.say(f"{step.outcome.title()} in {step.rounds} rounds.")
 
 
+def actors_for(campaign: Campaign) -> list[beat_mod.Actor]:
+    """The party as the beat loop sees them: who they are and who plays them.
+
+    Position is the join, which is the same thing `harvest` and `_wear` match
+    on and for the same reason -- a `Sheet` carries no id, because an id
+    belongs to a world and a sheet outlives one.
+    """
+    out = []
+    for slot, sheet in enumerate(campaign.party.sheets):
+        who = campaign.persona(slot)
+        out.append(beat_mod.Actor(
+            slot=slot, name=who.name or sheet.cls.title(), cls=sheet.cls,
+            control=campaign.controls(slot), voice=who.voice, wants=who.wants,
+        ))
+    return out
+
+
+def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
+              director: beat_mod.Director | None,
+              ask_human: beat_mod.AskHuman) -> None:
+    """Play a roleplay scene out, if the module gave it anything to play.
+
+    **A scene with no affordances and no NPCs stays what it was**: its brief,
+    printed, and on. That is every scene in every module converted so far, so
+    the old behaviour is the default rather than a fallback -- and a module
+    only pays for beats where its author wrote something to do.
+    """
+    if not (scene.affordances or scene.npcs):
+        return
+    seed = seed_for(campaign, scene, "beats")
+    table = table_mod.lay(campaign.party, seed=seed)
+    playing = beat_mod.play_scene(
+        scene, table, actors_for(campaign),
+        director or beat_mod.Director(scripted=True),
+        ask_human=ask_human, party_level=module.party_level,
+    )
+    table.strike()
+    step.played = playing
+    for made in playing.beats:
+        for intent in made.intents:
+            step.say(f"  {intent}")
+        for ruling in made.rulings:
+            if ruling.affordance != "none":
+                step.say(str(ruling))
+        if made.reaction:
+            step.say(f"  DM: {made.reaction}")
+    if playing.leads_to:
+        step.next_id = playing.leads_to
+
+
 def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
                choose: Chooser | None) -> None:
     """Run a skill challenge on a board with nobody to fight on it."""
@@ -278,6 +331,8 @@ def _challenge(campaign: Campaign, module: Module, scene: Scene, step: Step,
 def step(
     campaign: Campaign, module: Module, *,
     choice: str = "", choose: Chooser | None = None, record: bool = True,
+    director: beat_mod.Director | None = None,
+    ask_human: beat_mod.AskHuman = beat_mod.silent,
 ) -> Step:
     """Play the scene the campaign is on and advance it.
 
@@ -293,7 +348,9 @@ def step(
     if scene.brief:
         made.say(scene.brief)
 
-    if scene.kind == "combat":
+    if scene.kind == "roleplay":
+        _roleplay(campaign, module, scene, made, director, ask_human)
+    elif scene.kind == "combat":
         _fight(campaign, module, scene, made, record=record)
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
@@ -307,7 +364,11 @@ def step(
 
     # Where next. A challenge routes on its result when the module says so;
     # everything else takes the named exit or the first one.
-    if scene.kind == "skill_challenge" and (scene.on_success or scene.on_failure):
+    if made.next_id:
+        # A roleplay scene left through an affordance's `leads_to`, which the
+        # module wrote and the model could not have chosen.
+        pass
+    elif scene.kind == "skill_challenge" and (scene.on_success or scene.on_failure):
         wanted = scene.on_success if made.outcome == "won" else scene.on_failure
         made.next_id = wanted or module.next_of(scene, choice)
     else:

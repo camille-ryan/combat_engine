@@ -50,6 +50,56 @@ VERSION = 1
 SAVES = ROOT / "saves"
 
 
+#: Who the party is when the model has to play them. Defaults by class, so a
+#: party built before personas existed still plays -- a nameless companion is
+#: a worse companion and not a broken one.
+DEFAULT_WANTS = {
+    "fighter": "to be where the fighting is and be paid for it",
+    "cleric": "to know the people she travels with are worth saving",
+    "rogue": "a bigger share than anyone has offered",
+    "wizard": "to understand the thing nobody else has noticed",
+    "ranger": "to be outdoors and moving",
+    "paladin": "to do this the right way, whatever it costs",
+    "warlord": "to get everyone home",
+    "warlock": "to find out what the bargain is really for",
+}
+
+
+@dataclass
+class Persona:
+    """Who a character is, as opposed to what they can do.
+
+    **`chargen` models none of this.** `Character` carries class, level,
+    build, feats, race and powers, and no name, background or voice at all --
+    so solo play had four party members for the model to speak for and
+    nothing to speak from. #803.
+
+    It lives in the save rather than the tree because it is generated prose,
+    and the charter is plain about that: a generated name in a column is
+    indistinguishable from a leaked one.
+    """
+
+    name: str = ""
+    voice: str = ""
+    wants: str = ""
+
+    @classmethod
+    def by_class(cls, who: str, nth: int = 0) -> Persona:
+        """A serviceable default, so a party without personas still plays.
+
+        `nth` is which one of that class this is, and it only shows when
+        there is more than one -- a lone cleric is "Cleric", not "Cleric 2".
+        The first draft numbered by party slot and produced a party of
+        Cleric 2, Rogue 3 and Wizard 4, which reads as a bug.
+        """
+        word = (who or "adventurer").strip().lower()
+        return cls(
+            name=word.title() if nth == 0 else f"{word.title()} {nth + 1}",
+            voice="",
+            wants=DEFAULT_WANTS.get(word, "to come out of this better off"),
+        )
+
+
 @dataclass
 class Campaign:
     """Where a party has got to, and what it cost them."""
@@ -68,6 +118,30 @@ class Campaign:
     #: One line per scene played, for a recap. Not a transcript: a fight's
     #: blow-by-blow goes to `logs/` and is re-runnable from its seed.
     log: list[str] = field(default_factory=list)
+    #: Who each character is, by the same position `harvest` matches on.
+    personas: list[Persona] = field(default_factory=list)
+    #: `"human"` or `"ai"` per party slot. **The whole difference between the
+    #: two playstyles**: solo is one human and the rest played, party is all
+    #: human. One field rather than two flows, so the loop cannot drift the
+    #: way encounter setup did when it existed twice (#229).
+    control: list[str] = field(default_factory=list)
+
+    def persona(self, slot: int) -> Persona:
+        """Who slot N is, falling back to a default by class."""
+        if slot < len(self.personas) and self.personas[slot].name:
+            return self.personas[slot]
+        sheets = self.party.sheets
+        cls_ = sheets[slot].cls if slot < len(sheets) else ""
+        nth = sum(1 for s in sheets[:slot] if s.cls == cls_)
+        return Persona.by_class(cls_, nth)
+
+    def controls(self, slot: int) -> str:
+        """`"human"` or `"ai"`. Unset is human, which is the safe default --
+        a character nobody has decided about should wait for a person rather
+        than be spoken for."""
+        if slot < len(self.control):
+            return self.control[slot]
+        return "human"
 
     @property
     def finished(self) -> bool:
@@ -99,6 +173,8 @@ def to_dict(campaign: Campaign) -> dict:
         "flags": dict(campaign.flags),
         "log": list(campaign.log),
         "party": [asdict(s) for s in campaign.party.sheets],
+        "personas": [asdict(p) for p in campaign.personas],
+        "control": list(campaign.control),
     }
 
 
@@ -118,6 +194,12 @@ def from_dict(raw: dict) -> Campaign:
         flags={str(k): int(v) for k, v in (raw.get("flags") or {}).items()},
         log=[str(line) for line in raw.get("log", ())],
         party=Party(sheets=[_sheet(s) for s in raw.get("party", ())]),
+        personas=[
+            Persona(**{k: str(v) for k, v in p.items()
+                       if k in Persona.__dataclass_fields__})
+            for p in raw.get("personas", ())
+        ],
+        control=[str(c) for c in raw.get("control", ())],
     )
 
 
@@ -155,17 +237,35 @@ def party_path(name: str) -> Path:
     return SAVES / f"{Path(name).name}.party.json"
 
 
-def save_party(party: Party, name: str) -> Path:
+def save_party(party: Party, name: str,
+               personas: list[Persona] | None = None) -> Path:
     SAVES.mkdir(parents=True, exist_ok=True)
     where = party_path(name)
     where.write_text(
         json.dumps(
-            {"version": VERSION, "party": [asdict(s) for s in party.sheets]},
+            {
+                "version": VERSION,
+                "party": [asdict(s) for s in party.sheets],
+                "personas": [asdict(p) for p in personas or ()],
+            },
             indent=2,
         )
         + "\n"
     )
     return where
+
+
+def load_personas(name: str) -> list[Persona]:
+    """Who a hand-made party are. `[]` when the file predates personas."""
+    where = party_path(name)
+    if not where.exists():
+        return []
+    raw = json.loads(where.read_text())
+    return [
+        Persona(**{k: str(v) for k, v in p.items()
+                   if k in Persona.__dataclass_fields__})
+        for p in raw.get("personas", ())
+    ]
 
 
 def load_party(name: str) -> Party:

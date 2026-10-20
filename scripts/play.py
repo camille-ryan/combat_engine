@@ -45,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from combat_engine.story import Party, importer
+from combat_engine.story import beat as beat_mod
 from combat_engine.story import maker as maker_mod
 from combat_engine.story import module as module_mod
 from combat_engine.story import run as run_mod
@@ -102,6 +103,28 @@ def choose_exit(scene: module_mod.Scene, module: module_mod.Module) -> str:
         if said.isdigit() and 0 <= int(said) < len(exits):
             return exits[int(said)]
         print(f"     a number from 0 to {len(exits) - 1}, or Enter.")
+
+
+def declare(actor: beat_mod.Actor, situation: str) -> tuple[str, str]:
+    """Ask a person what their character says and does.
+
+    Two lines rather than one, because the beat loop keeps speech and action
+    apart all the way through -- the matcher reads them together and the DM
+    is shown them separately, and collapsing them here would make the person
+    the only actor whose intent arrives in a different shape.
+
+    Enter on both means they sit this beat out, which is a real thing to do
+    in a conversation and costs nothing.
+    """
+    if not sys.stdin.isatty():
+        return "", ""
+    print(f"\n  {actor.name} ({actor.cls})")
+    try:
+        speech = input('    say:  ').strip()
+        doing = input('    do:   ').strip()
+    except EOFError:
+        return "", ""
+    return speech, doing
 
 
 def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> None:
@@ -166,9 +189,29 @@ def new_character(party_name: str, *, level: int, seed: int, cls: str) -> int:
     except SystemExit:
         party = Party()
     sheet = maker_mod.interview(ask, level=level, seed=seed, cls=cls)
+    personas = save_mod.load_personas(party_name)
+    while len(personas) < len(party.sheets):
+        at = len(personas)
+        kind = party.sheets[at].cls
+        personas.append(save_mod.Persona.by_class(
+            kind, sum(1 for s in party.sheets[:at] if s.cls == kind)))
+    # Who they are, as opposed to what they can do. Only the model reads it,
+    # and only in solo play -- so every field may be left blank and a default
+    # by class fills in.
+    fallback = save_mod.Persona.by_class(
+        sheet.cls, sum(1 for s in party.sheets if s.cls == sheet.cls))
+    print("\n  Who is this? Enter takes the default; only the model reads it.")
+    try:
+        name = input(f"    name   [{fallback.name}] ").strip() or fallback.name
+        voice = input("    voice  [plain] ").strip()
+        wants = input(f"    wants  [{fallback.wants}] ").strip() or fallback.wants
+    except EOFError:
+        name, voice, wants = fallback.name, "", fallback.wants
+        print("    (taking the defaults)")
     party.sheets.append(sheet)
-    where = save_mod.save_party(party, party_name)
-    print(f"\n=== {sheet.cls} level {sheet.level} ===")
+    personas.append(save_mod.Persona(name=name, voice=voice, wants=wants))
+    where = save_mod.save_party(party, party_name, personas)
+    print(f"\n=== {personas[-1].name}, {sheet.cls} level {sheet.level} ===")
     print(f"  build    {sheet.build or '(the only one)'}")
     print(f"  race     {sheet.race or '(none)'}")
     print(f"  powers   {', '.join(sheet.powers)}")
@@ -178,7 +221,8 @@ def new_character(party_name: str, *, level: int, seed: int, cls: str) -> int:
 
 
 def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
-         with_dm: bool = False, party_name: str = "") -> int:
+         with_dm: bool = False, party_name: str = "", solo: bool = False,
+         everyone: bool = False, no_llm: bool = False) -> int:
     """Play a module from the start, or pick one up where it was left."""
     if resume:
         campaign = save_mod.load(resume)
@@ -192,11 +236,17 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
     else:
         module = module_mod.load(path)
         campaign = run_mod.begin(module, seed=seed)
+        if solo or everyone:
+            campaign.control = (
+                ["human"] + ["ai"] * (len(campaign.party.sheets) - 1)
+                if solo else ["human"] * len(campaign.party.sheets)
+            )
         if party_name:
             # A party somebody made by hand replaces the dealt one. The
             # module still says what level the adventure is written for, so
             # a mismatch is worth printing rather than silently playing.
             campaign.party = save_mod.load_party(party_name)
+            campaign.personas = save_mod.load_personas(party_name)
             levels = {s.level for s in campaign.party.sheets}
             if levels != {module.party_level}:
                 print(
@@ -205,6 +255,27 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
                     f"adventure is written for {module.party_level}"
                 )
         print(f"=== {module.id}, seed {seed}, party level {module.party_level} ===")
+
+    director = None
+    if solo or everyone:
+        from combat_engine.story import beat as _b
+        from combat_engine.story import llm
+
+        if no_llm:
+            director = _b.Director(scripted=True)
+            print("   story: scripted, no model")
+        else:
+            roles = llm.roles_for(save_as or campaign.module)
+            why = llm.reachable(roles["companion"])
+            if why:
+                print(why)
+                return 2
+            director = _b.Director(roles=roles)
+            print(f"   story: {roles['companion'].model} "
+                  f"at {roles['companion'].base_url}")
+        played = sum(1 for i in range(len(campaign.party.sheets))
+                     if campaign.controls(i) == "ai")
+        print(f"   playing: {len(campaign.party.sheets) - played} human, {played} model")
 
     narrator = None
     if with_dm:
@@ -233,6 +304,7 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
         made = run_mod.step(
             campaign, module, choice=choice,
             choose=narrator.choose if narrator else None,
+            director=director, ask_human=declare,
         )
         played += 1
         _print_step(made, quiet=quiet, narrated=bool(narrator))
@@ -253,6 +325,8 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
         print(f"  fights          {fights}, {rounds / fights:.1f} rounds on average")
     alive = sum(1 for s in campaign.party.sheets if not s.down)
     print(f"  party           {alive} of {len(campaign.party.sheets)} standing")
+    if director is not None and director.spend.calls:
+        print(f"  story           {director.spend}")
     if narrator:
         print(f"  dm              {narrator.spend()}")
     if save_as:
@@ -313,7 +387,7 @@ def main() -> int:
         "picked (#793)",
     )
     ap.add_argument(
-        "--party", metavar="NAME", default="",
+        "--group", dest="party_name", metavar="NAME", default="",
         help="a party made by hand: the group --new-character adds to, and "
         "the group --play fields instead of the dealt four",
     )
@@ -324,6 +398,22 @@ def main() -> int:
     ap.add_argument(
         "--level", type=int, default=1,
         help="what level to make a character at",
+    )
+    ap.add_argument(
+        "--solo", action="store_true",
+        help="you play one character and the model plays the rest of the "
+        "party. Every actor declares at the prompt, then they are "
+        "adjudicated together (#800)",
+    )
+    ap.add_argument(
+        "--party", dest="everyone", action="store_true",
+        help="you play everybody. The same loop; only who is asked changes",
+    )
+    ap.add_argument(
+        "--no-llm", dest="no_llm", action="store_true",
+        help="run the story loop with no model at all, from canned lines. "
+        "What check.py uses: an instrument that needs a model is an "
+        "instrument that goes red when nobody is serving",
     )
     ap.add_argument(
         "--dm", action="store_true",
@@ -354,12 +444,12 @@ def main() -> int:
         print(f"  uv run scripts/play.py --validate {got.into}/module.json")
         return 0
     if args.new_character:
-        if not args.party:
+        if not args.party_name:
             raise SystemExit(
-                "--new-character needs --party to say which group to add to."
+                "--new-character needs --group to say which group to add to."
             )
         return new_character(
-            args.party, level=args.level, seed=args.seed, cls=args.cls,
+            args.party_name, level=args.level, seed=args.seed, cls=args.cls,
         )
     if args.validate:
         return validate(args.validate)
@@ -369,7 +459,8 @@ def main() -> int:
         return play(
             args.play, seed=args.seed, save_as=args.save,
             quiet=args.quiet, resume=args.resume or "", with_dm=args.dm,
-            party_name=args.party,
+            party_name=args.party_name, solo=args.solo, everyone=args.everyone,
+            no_llm=args.no_llm,
         )
     ap.print_help()
     return 0

@@ -231,6 +231,7 @@ voice.
 Never repeat or restate what a party member said -- the reader just heard it.
 Never write a line for a party member.
 Never say whether anything worked; that is already decided.
+Never describe the party moving, arriving or leaving.
 
 **A party member's line is what they said, not what is true.** If one of \
 them refers to a thing that is not in the scene, that thing is not there and \
@@ -400,9 +401,17 @@ class Director:
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
         told.append("WHAT THE PARTY JUST DID:\n" + "\n".join(str(i) for i in intents))
-        facts = [f"{r.name}: {r.fact}" for r in rulings if r.fact]
+        # **Unattributed, and that is a fix.** Labelling each fact with the
+        # party member who earned it -- "Pike: she adds a map to the fee" --
+        # read to the model as *Pike* doing it, and the DM duly wrote a line
+        # and an action for a party member, which the prompt forbids in as
+        # many words. A fact is a thing that is now true, not a thing
+        # somebody did.
+        facts = [r.fact for r in rulings if r.fact]
         told.append(
-            "WHAT IS NOW TRUE (state only these):\n" + "\n".join(facts)
+            "WHAT IS NOW TRUE. These are things the people here say or do, "
+            "never things a party member does. State only these:\n"
+            + "\n".join(f"- {f}" for f in facts)
             if facts else
             "NOTHING NEW IS TRUE. Nobody learnt anything; react only."
         )
@@ -453,6 +462,16 @@ def one_beat(
     for intent in beat.intents:
         wanted = picks.get(intent.slot, "none")
         chosen = scene.affordance(wanted) if wanted != "none" else None
+        if chosen is not None and chosen.once and chosen.id in playing.spent:
+            # **Once means once, including twice in the same beat.** The
+            # first version computed the open list before matching and only
+            # spent an id afterwards, so two characters could take the same
+            # affordance in one exchange -- measured, a cleric failed
+            # `coax-the-dog` and a rogue passed it in the same beat, and the
+            # DM was handed "the dog stays where it is" and "the dog comes
+            # down" together and dutifully wrote both. The second character
+            # is simply talking instead.
+            chosen = None
         if chosen is None:
             beat.rulings.append(Ruling(slot=intent.slot, name=intent.name))
             continue

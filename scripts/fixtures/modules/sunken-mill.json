@@ -4,8 +4,9 @@
   "party_level": 2,
   "party_size": 4,
   "start": "millyard",
-  "flags": {"alarm": 0},
-
+  "flags": {
+    "alarm": 0
+  },
   "_note": [
     "Our own invention, every word of it, and that is the whole point. This is",
     "what check.py plays, so it has to live in the tree -- and a published",
@@ -35,9 +36,13 @@
     "leaks.py reported the file clean, because its wide walk waives a name made",
     "of two ordinary words. Inventing a name is not the same as inventing an",
     "unused one. The check is one query against localisation(), and #494 is why",
-    "it cannot be the gate's job."
+    "it cannot be the gate's job.",
+    "",
+    "The yard carries affordances and an npc so check.py exercises the beat",
+    "loop rather than only the scenes that were here first. Scripted, it takes",
+    "none of them and runs to max_beats -- which is the point: the bookkeeping",
+    "is driven without pretending to a judgement no model made."
   ],
-
   "scenes": [
     {
       "id": "millyard",
@@ -45,9 +50,58 @@
       "name": "The Mill Yard",
       "chapter": "one",
       "brief": "Flood water stands knee-deep across the yard and the mill wheel has stopped turning. The miller's dog is on the roof of the cart shed and will not come down. Something has been in the cellar since the river rose, and the miller would rather pay than go down there herself.",
-      "exits": ["wheelhouse"]
+      "exits": [
+        "wheelhouse"
+      ],
+      "npcs": [
+        {
+          "name": "the miller",
+          "wants": "somebody else to go down into her cellar",
+          "voice": "tired, practical, haggling out of habit",
+          "knows": [
+            "the water came up three nights ago and has not gone down",
+            "something has been moving down there since",
+            "she will pay in coin and in grain"
+          ],
+          "hides": [
+            "she heard it before the flood and said nothing"
+          ]
+        }
+      ],
+      "affordances": [
+        {
+          "id": "haggle-the-fee",
+          "what": "push the miller for more than she first offered",
+          "skill": "diplomacy",
+          "band": "moderate",
+          "win": "she adds a sack of grain and the loan of a lantern to the fee",
+          "lose": "the offer stands as it was and she looks away"
+        },
+        {
+          "id": "read-the-miller",
+          "what": "study the miller for what she is not saying",
+          "skill": "insight",
+          "band": "hard",
+          "win": "she is frightened of the cellar in a way a flood does not explain",
+          "lose": "nothing, and she notices the staring"
+        },
+        {
+          "id": "coax-the-dog",
+          "what": "get the dog down off the cart shed roof",
+          "skill": "nature",
+          "band": "easy",
+          "win": "the dog comes down and will not go near the cellar stair",
+          "lose": "the dog stays where it is"
+        },
+        {
+          "id": "go-down",
+          "what": "stop talking and go to the wheel",
+          "win": "the party crosses the yard to the mill wheel",
+          "leads_to": "wheelhouse"
+        }
+      ],
+      "max_beats": 4
     },
-
     {
       "id": "wheelhouse",
       "kind": "skill_challenge",
@@ -56,12 +110,20 @@
       "brief": "The wheel is jammed with silt and broken timber. Clearing it drains the cellar; leaving it means going down into standing water, in the dark, with whatever is already in there listening to you work.",
       "complexity": 1,
       "level": 2,
-      "primary": ["athletics", "endurance", "nature", "thievery"],
-      "secondary": ["perception", "arcana", "insight"],
+      "primary": [
+        "athletics",
+        "endurance",
+        "nature",
+        "thievery"
+      ],
+      "secondary": [
+        "perception",
+        "arcana",
+        "insight"
+      ],
       "on_success": "cellar",
       "on_failure": "cellar_alarmed"
     },
-
     {
       "id": "cellar",
       "kind": "combat",
@@ -69,15 +131,36 @@
       "chapter": "one",
       "brief": "The water goes out in a rush and leaves the floor slick and littered. Whatever was swimming down here is now walking, and it is not pleased about the change.",
       "difficulty": "standard",
-      "terrain": ["aquatic"],
+      "terrain": [
+        "aquatic"
+      ],
       "foes": [
-        {"count": 3, "name": "sluice crawlers", "words": ["beast", "natural"], "role": "skirmisher", "rank": "standard"},
-        {"count": 1, "name": "the squatter", "words": ["humanoid", "natural"], "role": "soldier", "rank": "standard"}
+        {
+          "count": 3,
+          "name": "sluice crawlers",
+          "words": [
+            "beast",
+            "natural"
+          ],
+          "role": "skirmisher",
+          "rank": "standard"
+        },
+        {
+          "count": 1,
+          "name": "the squatter",
+          "words": [
+            "humanoid",
+            "natural"
+          ],
+          "role": "soldier",
+          "rank": "standard"
+        }
       ],
       "tactics": "The skirmishers circle and bite at whoever is furthest from the stair. The soldier holds the stair itself and does not leave it.",
-      "exits": ["rest_1"]
+      "exits": [
+        "rest_1"
+      ]
     },
-
     {
       "id": "cellar_alarmed",
       "kind": "combat",
@@ -85,15 +168,37 @@
       "chapter": "one",
       "brief": "The wheel is still jammed and the cellar is still full. You go down into it anyway, by lantern light, and everything down here heard you coming.",
       "difficulty": "hard",
-      "terrain": ["aquatic", "darkness"],
+      "terrain": [
+        "aquatic",
+        "darkness"
+      ],
       "foes": [
-        {"count": 4, "name": "sluice crawlers", "words": ["beast", "natural"], "role": "skirmisher", "rank": "standard"},
-        {"count": 2, "name": "squatters", "words": ["humanoid", "natural"], "role": "soldier", "rank": "standard"}
+        {
+          "count": 4,
+          "name": "sluice crawlers",
+          "words": [
+            "beast",
+            "natural"
+          ],
+          "role": "skirmisher",
+          "rank": "standard"
+        },
+        {
+          "count": 2,
+          "name": "squatters",
+          "words": [
+            "humanoid",
+            "natural"
+          ],
+          "role": "soldier",
+          "rank": "standard"
+        }
       ],
       "tactics": "They have had time to spread out. The soldiers take the stair from both sides and the skirmishers come from behind the grain bins.",
-      "exits": ["rest_1"]
+      "exits": [
+        "rest_1"
+      ]
     },
-
     {
       "id": "rest_1",
       "kind": "rest",
@@ -101,9 +206,10 @@
       "chapter": "one",
       "brief": "Long enough to bind a wound and get your breath back. Not long enough to get a daily power back, and not long enough for the thing in the loft to lose interest.",
       "extended": false,
-      "exits": ["loft"]
+      "exits": [
+        "loft"
+      ]
     },
-
     {
       "id": "loft",
       "kind": "combat",
@@ -111,10 +217,30 @@
       "chapter": "one",
       "brief": "The ladder comes up through the floor into the dark under the roof beams, and it is the only way up or down.",
       "difficulty": "hard",
-      "terrain": ["darkness"],
+      "terrain": [
+        "darkness"
+      ],
       "foes": [
-        {"count": 1, "name": "the hoarder", "words": ["humanoid", "natural"], "role": "controller", "rank": "elite"},
-        {"count": 4, "name": "its hangers-on", "words": ["humanoid", "natural"], "role": "skirmisher", "rank": "minion"}
+        {
+          "count": 1,
+          "name": "the hoarder",
+          "words": [
+            "humanoid",
+            "natural"
+          ],
+          "role": "controller",
+          "rank": "elite"
+        },
+        {
+          "count": 4,
+          "name": "its hangers-on",
+          "words": [
+            "humanoid",
+            "natural"
+          ],
+          "role": "skirmisher",
+          "rank": "minion"
+        }
       ],
       "tactics": "The elite stays beyond the lantern and spends its minions to keep the ladder head crowded.",
       "exits": []

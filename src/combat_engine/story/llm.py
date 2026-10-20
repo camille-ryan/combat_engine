@@ -114,7 +114,10 @@ class Role:
 #: the whole affordance design was taken there and was stable across runs;
 #: moving it is moving the thing that makes a small model usable.
 ROLES: dict[str, Role] = {
-    "dm": Role(temperature=0.6, max_tokens=500),
+    # 200, not 500. Three sentences is about 60 tokens and the extra room was
+    # being spent on scene-setting the prompt forbids -- a cap is a cheaper
+    # instruction than a sentence asking for brevity.
+    "dm": Role(temperature=0.6, max_tokens=200),
     "companion": Role(temperature=0.9, max_tokens=250),
     "match": Role(temperature=0.0, max_tokens=200),
 }
