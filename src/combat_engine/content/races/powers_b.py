@@ -514,7 +514,6 @@ def p2472(c: Cast) -> None:
         lambda w, me, ev: ev.actor == me and ev.power == "p16033",
         "you use that racial power",
     ),
-    dropped=("c.hover(across=)",),
 )
 def p16034(c: Cast) -> None:
     """Makes the levitation sustainable, which it is not on its own.
@@ -529,13 +528,30 @@ def p16034(c: Cast) -> None:
     the next turn. Without `sustain=` a `When.SUSTAIN` hold lapses after a
     round with nobody able to pay for it.
 
-    The one square of horizontal drift has no verb, which is the marker
-    `p16033` carries for the same clause.
+    `MOVE` is the printed cost and it is also a cost the machinery can take:
+    `Budget` has a `move` slot, so `durations._sustain_by_default` can spend
+    it. A free one could not -- #776 -- which is worth knowing here because
+    the sustain line is the whole of this row.
+
+    **The clause that was dropped is the card's `or`**, and it is `across=`
+    now (#778): each sustain buys *either* three squares of height *or* one
+    square sideways, not both and not always the vertical one. `c.hover`
+    with no `squares_` is the sideways case -- it re-marks the creature as
+    hovering and slides it without changing its altitude, which is exactly
+    what the printed line says.
     """
     held = c.effect(c.ref, until=When.SUSTAIN, on=c.me, sustain=MOVE)
     if held is None:
         return
-    held.on_sustain.append(lambda: c.hover(3, on=c.me, until=When.EONT))
+
+    def again() -> None:
+        sideways = c.choose([False, True], "one square sideways instead of three up")
+        if sideways:
+            c.hover(across=1, on=c.me, until=When.EONT)
+        else:
+            c.hover(3, on=c.me, until=When.EONT)
+
+    held.on_sustain.append(again)
 
 
 # -- r18 --------------------------------------------------------------------

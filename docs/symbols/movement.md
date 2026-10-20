@@ -13,7 +13,7 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Run at somebody and swing, with the swing marked as a charge.
 - `c.flee(self, squares_: 'int', *, on: 'int | None' = None) -> 'int'`
   - The target runs, under its own power, as far from you as it can.
-- `c.hover(self, squares_: 'int' = 0, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
+- `c.hover(self, squares_: 'int' = 0, *, across: 'int' = 0, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, sustain: 'ActionType | None' = None) -> 'Effect | None'`
   - Go up and stay up. Yours, so it defaults to the caster.
 - `c.jump(self, squares_: 'int', *, on: 'int | None' = None, toward: 'int | None' = None, away_from: 'int | None' = None) -> 'int'`
   - A jump: ground crossed rather than walked over.

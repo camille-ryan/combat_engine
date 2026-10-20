@@ -12957,6 +12957,137 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_levitation_that_drifts(out: Result) -> None:
+    """"Up to N squares vertically **and** one square horizontally". #778.
+
+    Two axes, which is the whole reason this is not more `squares_`: height
+    is `falling.lift`'s own number and sideways is the grid. `c.hover` had
+    the vertical half, so both rows that print the sideways square carried
+    `dropped=("c.hover(across=)",)`.
+
+    **The negative control is `across=0`.** A rule that only checked "the
+    creature ends up one square over" would pass on any board where the lift
+    happened to shove it, and would pass identically if `across=` were
+    ignored and something else moved the creature. So the same lift is run
+    both ways and the square is compared against itself.
+
+    **The ordering is the other thing worth pinning.** The slide must happen
+    after `Movement.using` is set to hovering, because `falling.ground` is
+    entitled to plant a creature that is still walking -- so the assertion
+    is that the creature is *still airborne at its original height* after
+    drifting, not merely that it moved.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import falling
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget, Movement, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.types import ActionType
+
+    def posed(ref):  # noqa: ANN001, ANN202
+        world, me, _armed = _posed(ref, 1)
+        return world, me
+
+    # -- the verb, with its own control ----------------------------------
+    squares = {}
+    for across in (0, 1):
+        world, me = posed("p16033")
+        start = world.get(me, Position).square
+        Cast(world=world, me=me, ref="drivers:drift").hover(
+            4, across=across, on=me, until=When.EONT)
+        squares[across] = (start, world.get(me, Position).square,
+                           falling.height(world, me),
+                           world.get(me, Movement).using)
+
+    (s0, e0, h0, u0) = squares[0]
+    (s1, e1, h1, u1) = squares[1]
+    out.that(h0 == 4 and u0 == "hover",
+             "the lift alone puts the creature 4 up and marks it hovering",
+             f"height={h0} using={u0!r}")
+    out.that(s0 == e0,
+             "and with across=0 it does NOT change square -- the negative"
+             " control, and the whole difference between this landing and a"
+             " lift that happened to shove somebody",
+             f"{s0} -> {e0}")
+    out.that(s1 != e1,
+             "across=1 moves it off its square",
+             f"{s1} -> {e1}")
+    out.that(h1 == 4 and u1 == "hover",
+             "and leaves it airborne at the same height -- the ordering"
+             " assertion: a slide made before the hovering mark would let"
+             " `falling.ground` plant it",
+             f"height={h1} using={u1!r}")
+
+    # **The sideways-only call, which is the one `p16034`'s branch makes.**
+    # Covered explicitly because the row reaches it through `c.choose`, and
+    # `c.choose` on this board takes the first option -- so the vertical
+    # branch is the only one the row's own body ever runs here, and a plant
+    # that broke `across=` left the sustain assertion below green.
+    world, me = posed("p16033")
+    start = world.get(me, Position).square
+    Cast(world=world, me=me, ref="drivers:drift").hover(
+        across=1, on=me, until=When.EONT)
+    out.that(world.get(me, Position).square != start
+             and falling.height(world, me) == 0,
+             "`across=` with no lift drifts one square and changes no"
+             " altitude -- the sideways half of the printed `or`, on its own",
+             f"{start} -> {world.get(me, Position).square},"
+             f" height={falling.height(world, me)}")
+
+    # -- through p16033's own body ---------------------------------------
+    world, me = posed("p16033")
+    start = world.get(me, Position).square
+    use = Cast(world=world, me=me, ref="p16033")
+    use.target = me
+    REGISTRY["p16033"].body(use)
+    moved = world.get(me, Position).square
+    out.that(falling.height(world, me) == 4 and start != moved,
+             "p16033's own body lifts 4 and drifts one square, rather than"
+             " the verb being right and the row not calling it",
+             f"height={falling.height(world, me)} {start} -> {moved}")
+
+    # -- through p16034's body, and its sustain --------------------------
+    world, me = posed("p16034")
+    use = Cast(world=world, me=me, ref="p16034")
+    use.target = me
+    REGISTRY["p16034"].body(use)
+    held = [e for e in world.effects.live.values() if e.label == "p16034"]
+    out.that(len(held) == 1, "p16034 lays one sustainable hold",
+             f"{[e.label for e in world.effects.live.values()]}")
+    if held:
+        eff = held[0]
+        out.that(eff.sustain_cost is ActionType.MOVE,
+                 "costing a move, which is the printed cost")
+        out.that(hasattr(Budget, ActionType.MOVE.value)
+                 or ActionType.MOVE.value in Budget.__dataclass_fields__,
+                 "and `move` is a slot `Budget` actually has, so"
+                 " `_sustain_by_default` can spend it -- a free one could"
+                 " not, which is #776")
+        out.that(len(eff.on_sustain) == 1,
+                 "with one thing to do each time it is paid")
+        before = world.get(me, Position).square
+        h_before = falling.height(world, me)
+        for fn in list(eff.on_sustain):
+            fn()
+        after = world.get(me, Position).square
+        h_after = falling.height(world, me)
+        out.that((h_after > h_before) != (after != before),
+                 "and paying it buys EITHER height OR one square sideways,"
+                 " never both and never neither -- the card's `or`, which is"
+                 " the clause that was dropped",
+                 f"height {h_before}->{h_after}, square {before}->{after}")
+
+    # -- the markers ------------------------------------------------------
+    left = [r for r in ("p16033", "p16034")
+            if "c.hover(across=)" in (
+                tuple(getattr(REGISTRY[r], "todo", ()) or ())
+                + tuple(getattr(REGISTRY[r], "dropped", ()) or ()))]
+    out.that(not left, "and neither row waits on the symbol any more",
+             f"{left}")
+
+
 def invisibility_taken_away(out: Result) -> None:
     """"The target cannot benefit from invisibility" -- for everybody. #774.
 
@@ -27659,6 +27790,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "levitation_drifts": (
+        a_levitation_that_drifts,
+        "a levitation's sideways square, which is a different axis from its"
+        " lift (#778)",
+    ),
     "invisibility_taken_away": (
         invisibility_taken_away,
         "a creature stripped of the benefit of invisibility, against every"

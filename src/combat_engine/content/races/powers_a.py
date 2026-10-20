@@ -463,13 +463,21 @@ def p14388(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.hover(across=)",),
 )
 def p16033(c: Cast) -> None:
     """`c.hover` lifts, keeps the creature airborne past the end of the
-    move and lands it without falling damage -- all three printed lines.
-    The one square of horizontal drift has no verb."""
-    c.hover(4, on=c.me, until=When.EONT)
+    move and lands it without falling damage. The one square of horizontal
+    drift is `across=` now (#778), and it is one move action rather than a
+    lift and a walk, which is why it belongs to the verb instead of a
+    `c.slide` line here: the slide has to happen with the creature already
+    marked as hovering or it moves something that is still on the floor.
+
+    The printed altitude limit of 4 needs nothing: 4 is the whole lift, so
+    the cap and the distance are the same number and nothing in this row can
+    exceed it. A row that pushed the creature higher would be the one to ask,
+    and none does.
+    """
+    c.hover(4, across=1, on=c.me, until=When.EONT)
 
 
 @power(

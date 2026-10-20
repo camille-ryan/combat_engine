@@ -14535,6 +14535,7 @@ class Cast:
         self,
         squares_: int = 0,
         *,
+        across: int = 0,
         on: int | None = None,
         until: When = When.EONT,
         sustain: ActionType | None = None,
@@ -14546,6 +14547,19 @@ class Cast:
         is what keeps `falling.ground` from putting it straight back down on
         its next step. When the hold ends it descends without taking falling
         damage, which is the printed line on the one row that levitates.
+
+        `across` is the sideways half of the same movement -- "up to N
+        squares vertically **and** one square horizontally" is one move
+        action on the two rows that print it, not a lift and then a separate
+        walk. Vertical and horizontal are different axes here: height is
+        `falling.lift`'s own number and sideways is the grid, so the drift
+        has to be an actual slide rather than more of `squares_`.
+
+        **It goes after `mv.using` is set, and that ordering is the whole
+        reason it works.** A slide while already marked as hovering keeps
+        `using == "hover"`, stays airborne and keeps its height -- measured
+        -- so `falling.ground` never sees a creature touching the floor.
+        Sliding first would move a creature that is still walking.
         """
         from .components import Movement
 
@@ -14557,6 +14571,8 @@ class Cast:
         if squares_:
             self.rise(squares_, on=who)
         mv.using = "hover"
+        if across:
+            self.slide(across, on=who)
 
         def land() -> None:
             mv.using = was
