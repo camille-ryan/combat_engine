@@ -159,6 +159,29 @@ CHECKS = (
                "the engine still plays the recorded fights"),
     Instrument("fight", ("uv", "run", "scripts/fight.py", "--quiet"),
                "a whole fight runs to a finish"),
+    # **Beside `fight` because it is the same question one level up**, and it
+    # covers the seam none of the above reaches: `fight` plays an encounter,
+    # `replay` plays seven recorded ones, and neither knows what a fight is
+    # *for*. This plays an adventure -- a roleplay scene, a skill challenge, a
+    # fight, a rest, another fight -- carrying the party's wounds, spent
+    # powers and surges between them.
+    #
+    # It caught a real resource leak on its first run and nothing else could
+    # have: after the *skill challenge*, four characters had spent 6, 4, 5 and
+    # 10 powers between them with nothing having attacked anything, because a
+    # challenge needs a started encounter for feats to arm and starting one
+    # fires every once-per-fight trait. No crash and no warning -- just a
+    # party that was quietly weaker from then on, which no per-encounter
+    # instrument can see because each of them builds a fresh party.
+    #
+    # Seconds, and it needs no network: `--no-dm` plays the module's own
+    # written text, which is why that is a first-class mode rather than a
+    # fallback (#794). The fixture module is ours -- a published one can
+    # never be committed. #789.
+    Instrument("play", ("uv", "run", "scripts/play.py", "--play",
+                        "scripts/fixtures/modules/sunken-mill.json",
+                        "--seed", "7", "--quiet"),
+               "a whole adventure runs, carrying the party between scenes"),
     # **Both of these were broken by a refactor and nothing noticed**, which is why
     # they are here. Retiring `LinearPolicy` left `winrate.py` with a stale
     # `policy_name="linear"` default, so its ordinary invocation raised `KeyError`

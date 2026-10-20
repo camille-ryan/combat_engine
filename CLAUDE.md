@@ -179,8 +179,8 @@ say so in the commit.
 | Wire | `src/combat_engine/api/` | engine state → DTOs → the page. |
 | UI | `web/` | the page. Vanilla JS, no build step. |
 | AI Policy | `src/combat_engine/policy/` | what the AI chooses, not what the rules allow. |
-| Chargen | `src/combat_engine/chargen/` | builds every character. Persistence does not exist. |
-| Story Engine | `src/combat_engine/story/` | fields an encounter: who is on the board, and where. `docs/STORY_ENGINE.md` is the charter; the rest of it is not built. |
+| Chargen | `src/combat_engine/chargen/` | builds every character, and only deals them -- a human cannot drive it (#793). Persistence is `story/save.py`, which writes a party's sheets and where the campaign got to. |
+| Story Engine | `src/combat_engine/story/` | the campaign runner: a module as a graph of scenes, roleplay, skill challenges, reflavouring, persistence, and the party carried between fights. `story/CLAUDE.md` governs it. |
 | Database | `src/combat_engine/db.py` | where `game.db` and the localisation are, and how to read them. Below every component; imports nothing from the package. |
 | Instruments | `scripts/` | belongs to no component. |
 

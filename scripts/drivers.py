@@ -27748,7 +27748,394 @@ def what_happened_since_your_turn_ended(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_reflavour_changes_the_damage_type_and_a_twin_keeps_its_own(out: Result) -> None:
+    """A reflavoured creature deals the new type; an identical one still does not.
+
+    `story/reflavour.py` retypes a creature by laying one `c.deals` per
+    declared ability, naming the ability -- the blanket form speaks only for
+    weapon and implement rows and a monster's claw is neither. #790.
+
+    **The twin is the control and it is not decoration.** Asserting only that
+    the reflavoured creature deals necrotic would pass on a creature that
+    dealt necrotic to begin with, which is most of the ways this could be
+    silently broken. The two are the same ref on the same board, so the only
+    difference between them is the overlay.
+
+    The overlay is laid **before** `Encounter.start()`, which is where
+    `run._fight` lays it and is the arrangement that could have gone wrong:
+    an encounter-duration effect cleared by the clock starting would leave
+    every reflavour gone by the first attack.
+    """
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import DamageType, Team
+    from combat_engine.story.reflavour import apply as reflavour
+    from combat_engine.story.reflavour import themed
+
+    ability, creature = "m2798a0", "m2798"   # level 2, acid 1d8, standard
+    seen: dict[int, set[str]] = {}
+
+    # **Adjacent, because the ability is Melee 1.** The first draft put the
+    # victim two squares off and nobody could swing, so both creatures dealt
+    # nothing -- and the two *negative* assertions passed vacuously while the
+    # positive ones failed. That asymmetry is the whole argument for carrying
+    # both: a driver with only the "no longer deals acid" half would have been
+    # green on a board where no attack was possible.
+    world = World(Grid(16, 12), Rng(5), Bus())
+    dressed = loader.spawn(world, creature, (4, 4), team=Team.ENEMY)
+    plain = loader.spawn(world, creature, (4, 6), team=Team.ENEMY)
+    victim = loader.spawn(world, "m145", (5, 5), team=Team.PC)
+    laid = reflavour(world, dressed, themed(("necrotic",), 2))
+
+    def watch(ev: DamageApplied) -> None:
+        seen.setdefault(ev.source, set()).update(t.value for t in ev.types())
+
+    world.bus.on(DamageApplied, watch)
+    Encounter(world).start()
+
+    # Several swings each, because a miss deals nothing and one roll would
+    # make this driver flaky rather than wrong.
+    for _ in range(12):
+        for who in (dressed, plain):
+            use(world, who, ability, targets=[victim], spend=False)
+
+    out.that(laid > 0, "a retype lays one hold per declared ability", f"laid {laid}")
+    out.that(
+        DamageType.NECROTIC.value in seen.get(dressed, set()),
+        "a creature reflavoured to necrotic deals necrotic",
+        f"dealt {sorted(seen.get(dressed, set()))}",
+    )
+    out.that(
+        DamageType.ACID.value not in seen.get(dressed, set()),
+        "and no longer deals the type its card printed",
+        f"dealt {sorted(seen.get(dressed, set()))}",
+    )
+    out.that(
+        DamageType.ACID.value in seen.get(plain, set()),
+        "while an identical creature beside it still deals the printed type",
+        f"dealt {sorted(seen.get(plain, set()))}",
+    )
+    out.that(
+        DamageType.NECROTIC.value not in seen.get(plain, set()),
+        "and never the reflavoured one -- the overlay is per creature",
+        f"dealt {sorted(seen.get(plain, set()))}",
+    )
+
+
+def a_reflavour_adds_a_creature_word_and_can_take_one_away(out: Result) -> None:
+    """`kinds_of` reports a word a reflavour added, and not one it did not.
+
+    The second half of a reflavour: a stat block worn as something else has to
+    *answer* as that thing, because every "against undead" rider in content
+    reads `query.kinds_of`. #790.
+
+    Three assertions and two of them are controls. A word the theme did not
+    add must still be absent -- otherwise `kinds_of` answering True to
+    everything would pass. And the displaced word must stop answering, which
+    is the half only `instead_of` can do and the half a stat block's own
+    column would otherwise keep answering for ever.
+    """
+    from combat_engine.content import loader
+    from combat_engine.engine import Bus, Grid, Rng, World
+    from combat_engine.engine.query import kinds_of
+    from combat_engine.engine.types import Team
+    from combat_engine.story.reflavour import apply as reflavour
+    from combat_engine.story.reflavour import themed
+
+    world = World(Grid(12, 10), Rng(3), Bus())
+    # A natural creature, so "shadow instead of natural" has something to take.
+    who = loader.spawn(world, "m2798", (4, 4), team=Team.ENEMY)
+    before = set(kinds_of(world, who))
+    out.that("natural" in before, "the creature starts out natural", f"{sorted(before)}")
+
+    reflavour(world, who, themed(("undead",), 2))
+    after = set(kinds_of(world, who))
+    out.that("undead" in after, "a word the reflavour added reads back")
+    out.that(
+        "construct" not in after,
+        "and a word it did not add is still absent",
+        f"{sorted(after)}",
+    )
+
+    other = loader.spawn(world, "m2798", (4, 7), team=Team.ENEMY)
+    out.that(
+        "undead" not in set(kinds_of(world, other)),
+        "an identical creature beside it is unchanged",
+    )
+
+    reflavour(world, other, themed(("shadow",), 2))
+    swapped = set(kinds_of(world, other))
+    out.that("shadow" in swapped, "an origin theme grants its origin")
+    out.that(
+        "natural" not in swapped,
+        "and displaces the printed one -- an origin is exclusive",
+        f"{sorted(swapped)}",
+    )
+
+
+def a_skill_challenge_ends_on_its_successes_or_on_three_failures(out: Result) -> None:
+    """Complexity fixes the successes; three failures ends it either way.
+
+    The printed table out of the compendium glossary, asserted over seeds
+    rather than on one roll: a finished challenge has **either** exactly the
+    successes its complexity asks for **or** exactly three failures, and never
+    more of either. #791.
+
+    **Both ends are forced rather than hoped for**, which is what makes this a
+    driver and not a sample. The same scene is run at level 1, where the party
+    beats the DCs almost always, and at level 30, where it cannot beat them at
+    all -- so the won path and the lost path are both exercised every run
+    instead of whenever the dice oblige.
+    """
+    from dataclasses import replace
+
+    from combat_engine.story import Party
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import module as mod
+    from combat_engine.story import table as tbl
+
+    scene = mod.load(ROOT / "scripts/fixtures/modules/sunken-mill.json").scene("wheelhouse")
+    scene = replace(scene, complexity=2)
+    needs = scene.needs
+    out.that(needs == 6, "complexity 2 wants six successes", f"wants {needs}")
+    out.that(
+        list(scene.bands) == ["moderate"] * 5 + ["hard"],
+        "and five moderate checks then a hard one, not six moderate",
+        f"{list(scene.bands)}",
+    )
+
+    def run_at(level: int, seeds: range) -> list[ch.Running]:
+        got = []
+        for seed in seeds:
+            party = Party.of(level=2, seed=7)
+            table = tbl.lay(party, seed=seed)
+            got.append(ch.play(replace(scene, level=level), table, party_level=2))
+            table.strike()
+        return got
+
+    easy = run_at(1, range(1, 9))
+    hard = run_at(30, range(1, 9))
+
+    out.that(all(r.over for r in easy + hard), "every challenge reaches an end")
+    out.that(
+        all(r.failures <= ch.FAILURES for r in easy + hard),
+        "and none of them takes a fourth failure",
+        f"most failures seen: {max(r.failures for r in easy + hard)}",
+    )
+    out.that(
+        all(r.successes <= needs for r in easy + hard),
+        "nor a success past the number asked for",
+        f"most successes seen: {max(r.successes for r in easy + hard)}",
+    )
+    # **Won means exactly the successes asked for, lost means exactly three
+    # failures.** Stated as an equivalence over every run rather than as "the
+    # low-level party always wins", which was the first draft and was simply
+    # false: complexity 2 ends on a *hard* check, DC 19 even at level 1, so
+    # two of eight seeds lost there. The assertion was wrong, not the code.
+    every = easy + hard
+    out.that(
+        all(r.won == (r.successes == needs) for r in every),
+        "a challenge is won exactly when it has the successes it asked for",
+        f"{[(r.won, r.successes, r.failures) for r in every]}",
+    )
+    out.that(
+        all(r.failures == ch.FAILURES for r in every if not r.won),
+        "and every loss is three failures, never two and never four",
+        f"{[(r.successes, r.failures) for r in every if not r.won]}",
+    )
+    # The two controls: the band genuinely decides the outcome.
+    out.that(
+        any(r.won for r in easy),
+        "against DCs it can beat, the party wins some of them",
+        f"{sum(r.won for r in easy)} of {len(easy)}",
+    )
+    out.that(
+        not any(r.won for r in hard),
+        "and against DCs it cannot beat, it wins none of them",
+        f"{sum(r.won for r in hard)} of {len(hard)}",
+    )
+
+
+def a_challenge_refuses_a_skill_it_does_not_list(out: Result) -> None:
+    """An unlisted skill is refused, and refusing costs neither a tally nor a die.
+
+    A model chooses the skills here (#794), so both halves matter. Counting a
+    guess as a failure would let it burn a challenge down; rolling a refused
+    check would spend a draw from the scene's stream and make two runs diverge
+    on a choice that did nothing.
+
+    The secondary cap is the same shape -- the second use of one secondary is
+    refused rather than failed -- and a *failed* secondary deliberately does
+    not burn the cap, because charging both would make the easier roll the
+    more expensive one.
+    """
+    from combat_engine.story import Party
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import module as mod
+    from combat_engine.story import table as tbl
+
+    scene = mod.load(ROOT / "scripts/fixtures/modules/sunken-mill.json").scene("wheelhouse")
+    party = Party.of(level=2, seed=7)
+    table = tbl.lay(party, seed=4)
+    run = ch.open_challenge(scene, party_level=2)
+
+    refused = ch.attempt(run, table, 0, "diplomacy")
+    out.that(
+        refused.counted == "not a listed skill",
+        "a skill the challenge does not list is refused",
+    )
+    out.that(not refused.rolled and refused.natural == 0, "and is not rolled")
+    out.that(
+        run.successes == 0 and run.failures == 0,
+        "and changes neither tally",
+        f"{run.tally}",
+    )
+
+    listed = ch.attempt(run, table, 0, "athletics")
+    out.that(listed.rolled, "while a listed skill is rolled", f"{listed}")
+    out.that(
+        run.successes + run.failures == 1,
+        "and moves the tally by exactly one",
+        f"{run.tally}",
+    )
+
+    table.strike()
+
+
+def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
+    """The +5 for being trained, asserted by taking it away.
+
+    `skills.TRAINING` is read by `modifier` and is deliberately **not** a
+    `Mods` entry -- it is a property of the creature rather than an effect
+    laid on it. This is the story engine's reason to care: every skill
+    challenge DC is set against the assumption that a trained character is
+    five better, and `table.py` exists so that assumption holds off the board.
+
+    The control is the same character a moment later, which rules out the
+    difference coming from anything else about them.
+
+    **What this does not catch, said out loud.** It asserts the difference
+    equals `TRAINING`, so changing the constant moves both sides and the
+    driver stays green -- checked, `TRAINING = 0` passes. What it proves is
+    that the bonus is *applied*, which is the half that has actually been
+    missing here: this file's own docstring used to say the +5 "is not applied
+    by default" and 16 rows were blocked on it (#565). Breaking the read
+    instead -- `modifier` no longer consulting `Skills.trained` -- turns it
+    red, which is the break that matters.
+    """
+    from combat_engine.engine.components import Skills
+    from combat_engine.engine.skills import TRAINING
+    from combat_engine.story import Party
+    from combat_engine.story import table as tbl
+
+    party = Party.of(level=2, seed=7)
+    table = tbl.lay(party, seed=2)
+
+    found = ""
+    slot = 0
+    for i in range(len(table.eids)):
+        skills = table.world.get(table.eids[i], Skills)
+        if skills and skills.trained:
+            slot, found = i, sorted(skills.trained)[0]
+            break
+    if not found:
+        out.skip("no character in the dealt party is trained in anything")
+        return
+
+    with_training = table.modifier(slot, found)
+    skills = table.world.get(table.eids[slot], Skills)
+    kept = skills.trained
+    skills.trained = frozenset(w for w in kept if w != found)
+    without = table.modifier(slot, found)
+    skills.trained = kept
+
+    out.that(
+        with_training - without == TRAINING,
+        f"being trained is worth exactly {TRAINING} on a check",
+        f"{with_training} trained against {without} untrained",
+    )
+    out.that(
+        table.modifier(slot, found) == with_training,
+        "and putting the training back restores the number",
+    )
+    table.strike()
+
+
+def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
+    """Arming is not spending, which cost the party its whole encounter kit.
+
+    `Encounter.start()` fires every once-per-fight **trait** and firing one
+    marks it used -- correct on a real board. `table.py` needs a started
+    encounter so that feats are armed, so harvesting `used` off it carried
+    that into the campaign: measured, four characters walked out of a
+    *conversation* having spent 6, 4, 5 and 10 rows and into the next fight
+    without them. No crash, no warning, a quietly weaker party.
+
+    **The control is hit points**, which must still be harvested. A fix that
+    stopped harvesting altogether would pass the first assertion and lose the
+    thing the harvest is for.
+    """
+    from combat_engine.story import Party
+    from combat_engine.story import challenge as ch
+    from combat_engine.story import module as mod
+    from combat_engine.story import table as tbl
+
+    scene = mod.load(ROOT / "scripts/fixtures/modules/sunken-mill.json").scene("wheelhouse")
+    party = Party.of(level=2, seed=7)
+    before = [len(s.spent) for s in party.sheets]
+    out.that(all(n == 0 for n in before), "a fresh party has spent nothing", f"{before}")
+
+    table = tbl.lay(party, seed=6)
+    armed = sum(
+        len(table.world.need(eid, __import__(
+            "combat_engine.engine.components", fromlist=["Powers"]).Powers).used)
+        for eid in table.eids
+    )
+    ch.play(scene, table, party_level=2)
+    table.strike()
+
+    after = [len(s.spent) for s in party.sheets]
+    out.that(armed > 0, "starting the encounter does arm traits on the board", f"{armed}")
+    out.that(
+        all(n == 0 for n in after),
+        "and none of that arming reaches the party's sheets",
+        f"{after}",
+    )
+    out.that(
+        all(s.hp is not None and s.max_hp > 0 for s in party.sheets),
+        "while the wear the harvest is for still comes back",
+        f"{[(s.hp, s.max_hp) for s in party.sheets]}",
+    )
+
+
 DRIVERS = {
+    "reflavour_retype": (
+        a_reflavour_changes_the_damage_type_and_a_twin_keeps_its_own,
+        "a reflavoured creature's damage type, against an identical twin (#790)",
+    ),
+    "reflavour_words": (
+        a_reflavour_adds_a_creature_word_and_can_take_one_away,
+        "the creature words a reflavour grants and displaces (#790)",
+    ),
+    "skill_challenge": (
+        a_skill_challenge_ends_on_its_successes_or_on_three_failures,
+        "successes by complexity against three failures, both ends forced (#791)",
+    ),
+    "challenge_refusal": (
+        a_challenge_refuses_a_skill_it_does_not_list,
+        "a skill the challenge does not list is refused, not failed (#791)",
+    ),
+    "training_bonus": (
+        training_is_worth_exactly_five_on_a_check,
+        "the +5 for training, asserted by taking it away (#791)",
+    ),
+    "challenge_costs_nothing": (
+        a_non_combat_scene_does_not_spend_the_party_s_powers,
+        "a conversation does not spend the party's encounter powers (#792)",
+    ),
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
         "a tome lending a card and charging for it, as one walk (#704)",

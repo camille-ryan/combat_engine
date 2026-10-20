@@ -1,8 +1,22 @@
 # Story Engine — charter
 
-**Nothing is built.** This file was 0 bytes. It is a charter, not
-documentation, and there is no `CLAUDE.md` for this component because there is
-no code to govern.
+**This file was 0 bytes and then said "Nothing is built", and both have now
+been wrong for a while.** It is a charter rather than documentation, and the
+documentation is `src/combat_engine/story/CLAUDE.md`, which exists because
+there is code to govern.
+
+What is built, as of 2026-10-20: a module is a graph of scenes
+(`module.py`, #789); an adventure you own is split out of a PDF into a draft
+worth filling in (`importer.py`); a scene's opposition resolves by name, then
+by theme, then by shape (`cast_list.py`, #790); a stat block can be worn as
+something else (`reflavour.py`, #790); a skill challenge runs on a board with
+nobody to fight on it (`table.py`, `challenge.py`, `dc.py`, #791); and a
+campaign is written down and picked up again (`save.py`, `run.py`, #792).
+`scripts/play.py` plays one and `check.py` runs it.
+
+Not built: the model that narrates (#794), human-driven character creation
+(#793), `/api/day` and any browser view of a campaign, milestones (#615), and
+a freeform campaign with no module behind it.
 
 Written down so the next person does not have to rediscover where the job
 currently lives, or mistake the log renderer for a story engine.
