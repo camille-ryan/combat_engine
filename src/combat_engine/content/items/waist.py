@@ -424,16 +424,34 @@ def i3523x1(c: Cast) -> None:
 
 
 @power("i640x1", level=3, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:barbarian-f1s0",))
+       reach=PERSONAL, target=SELF)
 def i640x1(c: Cast) -> None:
-    """`cf:barbarian-f1s0` is a ref the card prints and no row carries:
-    `cf:barbarian-f1` writes that option inline, on its `rageblood` leg,
-    and the temporary hit points come off a `Dropped` handler there.
+    """Adds a modifier to the temporary hit points one class-feature
+    option pays.
 
-    Even with a row it would not be enough. `TempHP` carries a source, a
-    target and an amount and no power, so a pool this feature laid cannot
-    be told from any other, and temporary hit points do not add -- a
-    second, larger pool laid from here would replace rather than raise."""
+    **Both of the blockers this row used to state have landed.** `TempHP`
+    carries the granting row as a ref now, so the pool *can* be told from
+    any other; and `resolve.temp_hp` adds a `temp_hp` term off the
+    receiver **before** the non-stacking comparison, so this raises the
+    feature's pool instead of laying a second one that would have to beat
+    it. `f1855` is the same shape on a racial trait and `f1009` on this
+    same pool.
+
+    **The gate names `cf:barbarian-f1`, not the option the card prints.**
+    No row carries `cf:barbarian-f1s0` -- the option is written inline on
+    `cf:barbarian-f1`'s `rageblood` leg -- so `cf:barbarian-f1` is the ref
+    that rides the `TempHP`. Exact, not merely close: the other leg
+    `c.forbid`s and returns before reaching that row's only `c.temp_hp`.
+
+    "You *can* add" is written as a standing modifier rather than an
+    offered choice, because a larger pool is never worse and there is
+    nothing to weigh.
+
+    Untyped, not an item bonus: the card prints no word in front of a
+    bonus at all, unlike `i654x1` two rows up, which says item and is
+    written that way."""
+    c.bonus("temp_hp", c.str_mod, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("power") == "cf:barbarian-f1")
 
 
 @power("i657x1", level=3, cls=ITEM, action=ActionType.NONE,

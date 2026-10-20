@@ -143,10 +143,6 @@
     "wants": "a compendium ref for the class-feature step power, as dsl.REGISTRY has none for it",
     "why": "Augment 2's teleport is that same rider; its 2[W] is not written alone because half a clause is worse than none"
   },
-  "p13303:augment2": {
-    "wants": "augment.augment called on p13303b, the minor-action attack printed under this id",
-    "why": "Augment 2 is that second card's dice, so it belongs to the row that now has its own ref"
-  },
   "p13311:augment1": {
     "wants": "a third command on dsl.Summon, beyond its standard and opportunity attacks",
     "why": "Augment 1 gives the servant an opportunity action that makes a Heal check on a dying ally, and Summon declares two attack lines and nothing else"
@@ -155,17 +151,9 @@
     "wants": "c.penalty_in(zone, what, value) -- a modifier scoped to a zone or an aura, as c.resist_in and c.cover_in already are",
     "why": "enemies take -2 to attack rolls while adjacent to the target, and nothing scopes an attack modifier to a footprint"
   },
-  "p13320:augment2": {
-    "wants": "augment.augment called on p13320b, the opportunity attack printed under this id",
-    "why": "Augment 2 is that second card's hit line"
-  },
   "p13325:augment1": {
     "wants": "a rider on dsl.Summon's attack line, so a summoned creature's grab can be applied",
     "why": "the penalty is to escaping a grab the summon never applies, so the clause could never come up"
-  },
-  "p13331:augment2": {
-    "wants": "augment.augment called on p13331b, the minor-action burst printed under this id",
-    "why": "Augment 2 is that second card's dice"
   },
   "p13783:augment1": {
     "wants": "SkillCheck.purpose, so a bonus can be gated to checks made to find hidden creatures",

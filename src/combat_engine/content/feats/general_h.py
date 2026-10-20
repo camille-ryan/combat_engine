@@ -1135,10 +1135,17 @@ def f1295b(c: Cast) -> None:
 # says which range that half printed, so a rider on a melee-or-ranged row
 # tells the two apart instead of paying out on both.
 #
-# **A row's second swing cannot be told from its first.** The riposte four
-# of these cards ride on is rolled longhand inside its own body, so its
-# `Hit` carries the same `power` as the opening attack and a rider hung
-# there would pay twice. Those clauses are `c.on_riposte()`.
+# **A row's second swing says which it is.** The riposte four of these
+# cards ride on is rolled longhand inside its own body, so its `Hit`
+# carries the same `power` as the opening attack -- and a rider hung there
+# used to pay on both, which is what `c.on_riposte()` named. p653 stamps
+# `as_="riposte"` on the counter now and the attack context carries the
+# same key (#501), so those clauses are written.
+#
+# **The damage context does not carry `as_`**, which is the half of it
+# that is still not askable: a damage-side gate cannot say which swing it
+# is. The one clause that adds to the counter's *damage roll* is laid at
+# the counter's own `Hit` instead -- see `_riposte_off_kind`.
 #
 # **A clause that is not about hitting does not belong on `Hit`.** f1302's
 # two writable clauses are about *the target of* the exploit, hit or not,
@@ -1167,6 +1174,43 @@ def _melee_half(ev: Any) -> bool:
     """
     p = get(getattr(ev, "power", ""))
     return p is not None and p.reach_of(getattr(ev, "branch", 0)).kind == "melee"
+
+
+def _swings(c: Cast, ev: Any) -> list[int]:
+    """Who a finished use hit, **one entry per swing**, oldest first.
+
+    `exploits._hits` reads `PowerResolved.rolls`, and that is one entry per
+    *target*, not per attack: `dsl.use` appends `cast.result` after the body
+    has run, so a row making two attacks inside one body run leaves the
+    second roll behind and the first is simply gone. Measured on p87, which
+    is exactly that row -- two swings at one creature resolve with **one**
+    roll on the event, so "if you hit with both attacks" read as one hit and
+    `exploits._twice` could never answer at all. Against two creatures the
+    body runs twice and both rolls are there, so the blindness is in the
+    single-target case alone, which is the half the cards care most about.
+
+    Every swing is on the bus either way -- `Hit` is emitted per roll -- so
+    the use's own span of the log is the honest reader. Back to the
+    `PowerUsed` that opened it, which `dsl.use` announces before the body; a
+    row cannot nest inside itself (`dsl._IN_FLIGHT` refuses it), so the
+    first one walking back is this use's own.
+
+    `PowerResolved.rolls` should be the one place this is asked, and its
+    own docstring says it is ("every `AttackResult` the use produced").
+    Until that is true, this is what `f1304`'s p87 clause here and
+    `f1102`'s in `general_g` read instead -- and `exploits._hits` is still
+    right for every clause about a swing the row hands somebody else,
+    which is one roll per target by construction.
+    """
+    hits: list[int] = []
+    for past in reversed(c.world.bus.log[:ev.seq]):
+        same = getattr(past, "power", "") == ev.power
+        if past.kind == "PowerUsed" and same and past.actor == ev.actor:
+            break
+        if past.kind == "Hit" and same and past.attacker == ev.actor:
+            hits.append(past.target)
+    hits.reverse()
+    return hits
 
 
 def _surprise_round(c: Cast) -> bool:
@@ -1300,6 +1344,62 @@ def _ongoing_on_riposte(c: Cast, ev: Any) -> None:
     if getattr(ev, "as_", "") != "riposte" or c.wis_mod <= 0:
         return
     c.ongoing(c.wis_mod, on=ev.target)
+
+
+def _riposte_off_kind(c: Cast, ev: Any) -> None:
+    """The counter's attack roll **and** damage roll, after an opening hit.
+
+    Both halves are owed only when the opening blow lands on one of the
+    four kinds, and p653 arms its riposte whether it hit or not -- so the
+    clause fires on the opening blow and has to carry the fact forward to
+    a swing that happens later. The latch is a closure over a one-shot
+    watcher, which is `_slow_instead_of_push`'s shape and keeps the memory
+    off the board.
+
+    The attack half is an ordinary gated bonus: the attack context carries
+    `as_`, so "of your riposte" is one key to read.
+
+    **The damage half cannot be gated the same way** -- the damage context
+    carries no `as_`, and both of this row's damage rolls are p653's
+    against the same creature, so a bonus laid at the opening hit would be
+    spent by the opening blow's own damage. Laid at the counter's `Hit`
+    instead: a one-shot damage bonus is spent by the damage roll that
+    applies it, and the next p653 damage roll after that `Hit` is the
+    counter's. `f992`'s p87 clause leans on the same ordering.
+    """
+    if getattr(ev, "as_", "") == "riposte" or c.int_mod <= 0:
+        return
+    if not _is_named_kind(c, ev.target):
+        return
+    me, amount = c.me, c.int_mod
+    # `once=True` because the card buys one counter's roll, not every
+    # counter until the turn comes round: a one-shot attack bonus is spent
+    # by the roll that *used* it, which is a riposte and nothing else.
+    c.bonus("attack", amount, on=me, until=When.SONT, once=True,
+            when=lambda ctx: ctx.get("as_") == "riposte")
+    paid: list[bool] = []
+
+    def counter(hit: Hit) -> None:
+        if paid or hit.attacker != me or hit.power != "p653":
+            return
+        if getattr(hit, "as_", "") != "riposte":
+            return
+        paid.append(True)
+        foe = hit.target
+        c.bonus("damage", amount, on=me, until=When.SONT, once=True,
+                when=lambda ctx: ctx.get("power") == "p653"
+                and ctx.get("target") == foe)
+
+    c.watch(Hit, counter, until=When.SONT, on=me,
+            label=f"{c.ref} riposte")
+
+
+def _cow_on_riposte(c: Cast, ev: Any) -> None:
+    """The attack penalty, on the counter the row grants rather than on the
+    blow that armed it -- `as_` is what tells those two apart."""
+    if getattr(ev, "as_", "") != "riposte":
+        return
+    c.penalty("attack", 2, on=ev.target, until=When.EONT)
 
 
 def _extra_if_held(c: Cast, ev: Any) -> None:
@@ -1461,14 +1561,40 @@ def _cow_on_granted_hit(c: Cast, ev: Any) -> None:
         c.penalty("attack", 2, on=foe, until=When.EONT)
 
 
+def _cow_if_both_hit(c: Cast, ev: Any) -> None:
+    """"If you hit with both attacks, **one** target takes the penalty."
+
+    A `resolved` clause: the question is about the whole use, and no
+    earlier window has both swings in it. p87 rolls exactly two, over one
+    creature or two, so two hits is both of them landing -- counted with
+    `_swings` rather than `_hits`, which cannot see the second swing into
+    a single target.
+
+    One penalty rather than one per hit, because the card says one target.
+    Where both swings went into the same creature there is nothing to
+    pick; where they caught two, the choice is the character's.
+    """
+    caught = _swings(c, ev)
+    if len(caught) < 2:
+        return
+    pool = sorted(set(caught))
+    who = pool[0] if len(pool) == 1 else c.choose(pool, "who takes the penalty")
+    if who is not None:
+        c.penalty("attack", 2, on=who, until=When.EONT)
+
+
 # p1061 adds to the attack roll of the basic attack that row hands an
 # ally, which is now an ordinary read; p653's clause rides the riposte,
-# which shares its row's `Hit`.
+# which shares its row's `Hit` and is told apart by `as_`.
+# **All four clauses are written and the marker is gone.** The riposte's
+# attack roll is a gated bonus and its damage roll is paid at the
+# counter's hit -- see `_riposte_off_kind` for why the two halves are
+# written in different places.
 # **p2099's entry has moved into p2099's body** (#550).
 _riders("f1298", {
     "p87": _extra_off_kind,
-}, granted={"p1061": _ally_adds_half_int},
-   dropped=("c.on_riposte()",))
+    "p653": _riposte_off_kind,
+}, granted={"p1061": _ally_adds_half_int})
 
 # p315's clause rides the swing that row hands an ally, p653 the
 # riposte, and the ranger's beast clause is still a printed name.
@@ -1597,13 +1723,14 @@ def f1303(c: Cast) -> None:
 
 
 # p4541's clause rides the basic attack that row hands an ally -- which
-# `granted_via` names now -- p653's the riposte, and p87's both of its
-# two attacks landing.
+# `granted_via` names now -- p653's the riposte, which `as_` tells from
+# the blow that armed it, and p87's both of its two attacks landing,
+# which only the `resolved` window sees.
 #
-# **p992's entry has moved into p992's body** (#550), which leaves this
-# row's only `clauses` leg empty.
-_riders("f1304", {}, landed={"p4541": _cow_on_granted_hit},
-   dropped=("c.on_riposte()", "c.hit_twice()"))
+# **p992's entry has moved into p992's body** (#550).
+_riders("f1304", {"p653": _cow_on_riposte},
+   resolved={"p87": _cow_if_both_hit},
+   landed={"p4541": _cow_on_granted_hit})
 
 # All four clauses are about the zone `p2473` lays. The two splash ones
 # are riders on a hit inside it and are written; p87's wants the zone to
@@ -1680,7 +1807,7 @@ def f1307(c: Cast) -> None:
     c.watch(Hit, swung, until=When.ENCOUNTER, on=me, label=f"{c.ref} riders")
 
 
-@_trait("f1308", dropped=("c.on_riposte()",))
+@_trait("f1308", dropped=("p653.riposte_hook",))
 def f1308(c: Cast) -> None:
     """Written by hand rather than through `_riders`: p4368's clause needs
     a memory of what happened on somebody else's turn, which a table of
@@ -1700,8 +1827,19 @@ def f1308(c: Cast) -> None:
     before the swing is rolled, which is exactly the window a one-shot
     grant of combat advantage has to be in.
 
-    Dropped: p653's clause rides the riposte, whose `Hit` carries the
-    same `power` as the opening swing.
+    **Dropped, and the marker is re-aimed.** It said p653's clause rides
+    the riposte and could not be told from the opening swing -- which is
+    `c.on_riposte()`, and which p653's `as_="riposte"` answers now. That
+    was never this card's clause. It does not hang anything on the
+    counter: it **widens what provokes one**, from the target attacking me
+    to the target attacking me *or any ally adjacent to me*.
+
+    That cannot be written from out here. p653 arms its riposte inside its
+    own body, behind a private latch, and reads nothing from outside -- so
+    a watcher armed here would counter in *addition* to the row's own and
+    hand the character two swings where the card prints one. The widening
+    belongs in p653, which is `f985`'s gap from the other side: that row
+    wants the same closure to let a feat decline the counter.
     """
     me = c.me
     c.as_basic("p2620", window="challenge")

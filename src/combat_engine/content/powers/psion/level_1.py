@@ -209,8 +209,22 @@ def p13303(c: Cast) -> None:
 
     Augment 1 is the shard's speed: `speed=` is how far its creator may move
     it with a move action, which is exactly what the clause grants.
+
+    **The offer is `(2, 1)` even though Augment 2 belongs to the other
+    block.** The points are spent *here* -- `augment` is called on this row
+    and `spend_points` happens once -- so a parent offering only 1 makes the
+    second block's Augment 2 unreachable for ever: `spent_on` can never
+    return 2 because 2 was never on the menu. The clause lives there and the
+    *choice* has to live here.
+
+    And the Augment 1 clause below is gated on `spent == 1`, not on `spent`
+    being truthy. An Augment line **replaces** the printed one above it
+    rather than adding to it, so at 2 points this row's own clause is not
+    paid at all.
     """
-    c.conjure(until=When.EONT, sustain=None, speed=5 if augment(c, 1) else 0)
+    spent = augment(c, 2, 1)
+    c.conjure(until=When.EONT, sustain=None,
+              speed=5 if spent == 1 else 0)
 
 
 @power(

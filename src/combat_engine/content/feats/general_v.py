@@ -109,26 +109,21 @@ from combat_engine.engine.query import concealment_of, creatures, is_, team, uns
 FEATURE = ("c.class_feature()",)
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
-#: **Which manifestation `rt:r44-t2` is currently showing**, and the
-#: moment it is chosen. That trait is declared and refused in play, and
-#: the choice is **not** a build decision -- the card says "whenever you
-#: choose", which is a per-encounter moment with no event behind it. So
-#: this is not `c.race_option()`, which it carried: that symbol was doing
-#: duty for six different needs and one row's state is not one of them.
+#: **Retired.** It read `c.manifestation()` -- "which of this racial trait's
+#: several modes is the character in now", wanted by `f3530` for `rt:r44-t2`
+#: and by `f1521` and `f602` for `rt:r33-t0`. All three premises were false
+#: and in the same way: a race that offers a choice of modes offers a choice
+#: of **powers**, `RaceLine.one_of` says which races do, and
+#: `RaceLine.granted` puts the one taken in `Powers.known`. So the mode is
+#: recorded, by ref, in the place the compendium's own prerequisite lines read
+#: it from, and `features/racial._holds` is the reader this symbol was filed
+#: for. `rt:r33-t0` forks thirteen ways on it and `rt:r44-t2` is `_inert`
+#: because the power *is* the whole of the aspect.
 #:
-#: And **not the trait's own ref either**, which was the first re-point and
-#: was wrong in the way `todo.py` exists to catch: `rt:r44-t2` is declared,
-#: so a marker naming it can never go from absent to present and the row
-#: would have waited for ever. The gap is a *reader* for which
-#: manifestation is current, so the symbol names the reader.
-#:
-#: **And it is the same reader `f1521` and `f602` want**, which is why they
-#: share this symbol rather than a near-twin of it. All three ask "which of
-#: this racial trait's several modes is the character in now" -- an aspect
-#: of nature here, an elemental manifestation there. Two spellings for one
-#: gap is the exact fault that made `c.race_option()` cover six needs, and
-#: it would have been introduced by the commit that split it.
-ASPECT = ("c.manifestation()",)
+#: The three rows are written or re-pointed. Kept as a comment rather than
+#: deleted so the next reader meets the correction: the symbol argued that
+#: a mode is in-fight state where a race option is build-time, and for both
+#: of these races it is build-time.
 #: The three racial powers of `r44`, which the page offers as a choice.
 R44 = ("p7441", "p7442", "p7443")
 #: A power traded for another at build time.
@@ -1368,19 +1363,31 @@ def f3529b(c: Cast) -> None:
 
 
 @power("f3530", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=(*ASPECT, "c.resist(once=)"))
+       reach=PERSONAL, target=SELF, todo=("c.resist(once=)",))
 def f3530(c: Cast) -> None:
-    """"Whenever you choose an aspect of nature" is `rt:r44-t2` --
-    a declared racial trait, and one that is refused in play because
-    nothing records which aspect was chosen or when. So there is no
-    moment to hang this on; and resistance spent by the first hit that
-    reads it is a shape `c.resist` has no flag for either.
+    """**Re-pointed off `ASPECT`, whose premise was false twice over.**
+    This said "whenever you choose an aspect of nature" had no moment,
+    because `rt:r44-t2` is refused in play and nothing records which
+    aspect was chosen. That row is not refused -- it is `_inert`, and its
+    own note says why: `RaceLine.one_of` holds for `r44`, so
+    `RaceLine.granted` deals exactly one of the three aspects and the
+    choice is recorded in `Powers.known`. `f3304` reads it from there and
+    carries no marker for it. Re-choosing is an extended-rest rule that
+    no fight reaches, so the choosing is the moment this row is armed.
 
-    `c.bonus(once=)` is not that flag forwarded. Its gated path lays a
-    `"resist <type>"` mod, which is neither a `Defense` nor `damage`,
-    `save` or `crit_range` -- so `once=` falls through to the attack-roll
-    branch and the resistance would be spent by the *resisting* creature's
-    own next swing. Fifth key that method has read in the wrong place."""
+    What is left is the one gap the marker still names: resistance
+    **spent by the first hit that reads it**. The printed line is resist
+    5 for the *next* attack that hits and deals that type; laying it for
+    the encounter instead is a row stronger than its card, so nothing is
+    written rather than half of it.
+
+    `c.bonus(once=)` is not that flag forwarded. `c.resist`'s gated path
+    lays a `"resist <type>"` mod, which is neither a `Defense` nor
+    `damage`, `save`, `skill`, `crit_range` nor `forced` -- and since
+    `drivers.once_spend_moments`, a key with no spend moment **raises**
+    rather than being quietly handed to the attack roll. So it now fails
+    loudly where it used to spend the resistance on the resisting
+    creature's own next swing. Either way there is no flag."""
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

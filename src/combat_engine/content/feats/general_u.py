@@ -61,6 +61,7 @@ from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.features.sorcerer import phase_of
+from combat_engine.content.features.warlock import BOON, BOONS
 from combat_engine.engine import (
     AT_WILL,
     CHA,
@@ -642,63 +643,64 @@ def f3443(c: Cast) -> None:
 
 @power("f3444", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("warlock.boon_instead_of()",),
-       trigger="you drop an enemy you have cursed to 0 hit points",
-       on=Trigger(Dropped, both(by_me, cursed_by_me),
-                  "you drop an enemy you have cursed"))
+       dropped=("warlock.boon_instead_of()",))
 def f3444(c: Cast) -> None:
-    """Hands back the racial power in place of the pact boon.
+    """Hands back the racial power **in place of** the pact boon.
 
-    **Re-aimed, and the payout is written.** Two of the three holds were
-    stale. The spec names the racial power by ref -- `p1449`, the same
-    row `f3439` and `f3446` already spend and read -- so there is nothing
-    to look up, and `c.restore_use` is ref-agnostic: it reaches the
-    `Powers` store, which does not care that the row is racial. What is
-    genuinely missing is the price. "Instead of gaining your normal pact
-    boon" suppresses whichever pact the warlock took -- the card names no
-    one of them -- and nothing announces a pact boon or stands in its
-    way, so this row is free where the card charges for it.
+    The spec names the racial power by ref -- `p1449`, the same row `f3439`
+    and `f3446` already spend and read -- and `c.restore_use` is
+    ref-agnostic: it reaches the `Powers` store, which does not care that
+    the row is racial. The price is the half that needed building, and it
+    is built: each payout offers itself as the clause
+    `features.warlock.BOON` and this registers a substitution against every
+    ref in `BOONS`, because the card names no pact and cannot know which
+    leg the character took. `f3232` is the twin, trading one leg's narrower
+    `BOON_REGAIN` for a power point.
 
-    **The gap is a door in the boon's own body, not a missing mechanism,
-    and the old symbol said otherwise.** "Nothing announces a pact boon" is
-    false. The boons are declared: `cf:warlock-f1`'s own watch pays three
-    legs inline, `cf:warlock-f1s4` pays a fourth, `cf:warlock-f1c10` is the
-    star pact's card and `p16254` the remaining leg's.
+    **No trigger on the header any more, and that is the whole reshape.**
+    With a declared `on=`, the body ran only once the enemy was already
+    down -- which is the same `Dropped` the boon pays on, so the regain
+    landed *beside* the printed payout rather than instead of it and the
+    row was free where the card charges. A substitution has to be
+    registered before the event, so this is a trait and the boon's own
+    payout runs the clause. `f2005` carries the same reshape for the same
+    reason.
 
-    What is missing is that **none of those payouts asks**.
-    `c.pre_empt(ref, what, clause)` is the registration and this row is one
-    of its callers; the read has to happen where the boon is paid.
-    `c.instead_of` cannot do it there -- it needs a non-zero `c.variant`,
-    which `dsl.use` settles from a chosen menu entry, and three of these
-    legs pay inside a `c.watch` callback where `variant` is 0 for ever.
+    **Registered when `p1449` is spent, not when the fight starts.** The
+    printed clause is "if you have already used it that encounter", and
+    `c.instead_of_now` cannot take an offer back once it is accepted -- so
+    a clause offered with nothing to regain would trade the boon away for
+    nothing, which is worse than the row not firing.
 
-    `c.instead_of_now` is written for exactly that shape and says so: *"for
-    a clause that fires inside a watcher the row installed itself rather
-    than from a body the menu reached"*, with the invoker's covenant
-    manifestation as its worked case. It settles the objection too -- a
-    question inside a watcher is invisible to `policy/`, which is
-    acceptable **because a boon is a passive**: the AI never chose the
-    bargain and cannot be asked to weigh it differently.
+    Once per encounter is the registration lifting rather than a flag: the
+    effects `c.pre_empt` hands back drop their entries out of
+    `Powers.pre_empts` when they end, so the trade stops being offered
+    after it is taken.
 
-    `cf:warlock-f1c10` is the one exception and takes plain
-    `c.instead_of`, because it carries a declared trigger and so is offered
-    by the dispatcher -- the distinction that verb's own docstring draws
-    with `rt:r24-t0`.
+    `dropped=` and not finished: the clause reaches **two of the seven
+    pacts**. `cf:warlock-f1s4` and `cf:warlock-f1c10` offer it; the three
+    legs `cf:warlock-f1` pays inline and `p16254`'s do not yet, and both of
+    those files are elsewhere, while `cf:warlock-f1c12` pays nothing at all
+    until `c.active_vestige()` lands. A warlock on one of the other five is
+    offered nothing and keeps the printed boon -- a narrowing, where the
+    old shape was a widening. `ENCOUNTER` on a trait armed once at the
+    start of the fight is this file's convention."""
+    armed: list[Any] = []
 
-    So the symbol names a content door in `features/warlock.py` rather than
-    a `Cast` verb, because that is where the work is. #551's verdict, read
-    down to the mechanism. #641.
+    def regain(using: Cast) -> None:
+        using.restore_use("p1449")
+        while armed:
+            c.end_effect(armed.pop(), on=c.me, why="spent")
 
+    def offer(ev: PowerUsed) -> None:
+        if armed or ev.actor != c.me or ev.power != "p1449":
+            return
+        for boon in BOONS:
+            effect = c.pre_empt(boon, BOON, regain)
+            if effect is not None:
+                armed.append(effect)
 
-    `ENCOUNTER` on a triggered trait is the card's own "once per
-    encounter" and not the #210 accident. "If you have already used it"
-    is the gate: `c.restore_use` would answer False anyway, but asking
-    first keeps the choice off the player when there is nothing to
-    choose."""
-    if "p1449" not in c.expended(on=c.me):
-        return
-    if c.may("regain p1449 instead of the pact boon"):
-        c.restore_use("p1449")
+    c.watch(PowerUsed, offer, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f3446", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

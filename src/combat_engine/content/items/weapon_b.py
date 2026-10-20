@@ -75,6 +75,7 @@ from combat_engine.engine import (
     EffectApplied,
     Forced,
     ForcedMove,
+    Gear,
     Healed,
     Hit,
     Keyword,
@@ -83,6 +84,7 @@ from combat_engine.engine import (
     MoveStart,
     OpportunityWindow,
     Position,
+    PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
@@ -5097,6 +5099,67 @@ def i2981x1(c: Cast) -> None:
     c.watch(Hit, landed, until=When.ENCOUNTER)
 
 
+def _hit_twice(world: World, ev: Any) -> int | None:
+    """The one creature a finished use hit with two separate attacks.
+
+    **Not off `PowerResolved.rolls`**, which is the obvious reading and is
+    blind to exactly this question: `dsl.use` appends one roll per
+    *target* after the body has run, so two swings into one creature leave
+    one roll behind and the first is gone. Measured -- a single-target p87
+    resolves with one roll and two `Hit`s.
+
+    The swings are on the bus, so the use's own span of the log answers
+    it: back to the `PowerUsed` that opened the use, which is announced
+    before the body. A row cannot nest inside itself
+    (`dsl._IN_FLIGHT`), so the first one found walking back is this use's.
+
+    The property beside this tallies hits by hand across `Hit`s and a
+    turn, which is the same conclusion reached from the other end -- but
+    a declared trigger has no trait to keep a tally in, and this needs
+    none.
+    """
+    seen: list[int] = []
+    for past in reversed(world.bus.log[:ev.seq]):
+        same = getattr(past, "power", "") == ev.power
+        if past.kind == "PowerUsed" and same and past.actor == ev.actor:
+            break
+        if past.kind == "Hit" and same and past.attacker == ev.actor:
+            if past.target in seen:
+                return past.target
+            seen.append(past.target)
+    return None
+
+
+def _two_melee_in_hand(world: World, eid: int) -> bool:
+    """"A power that requires two melee weapons", asked of the character.
+
+    Nothing on a row says what its weapon requirement *is* -- `requires`
+    is a callable and `requires_text` is prose -- so the printed condition
+    is read off the hands instead. A melee weapon is one that is not
+    fired, which is how every ranger row counting the pair reads it, and
+    `Gear.held` is what is in hand rather than what is on the belt.
+
+    The two questions part company only for a row that *permits* the pair
+    without requiring it, and a character holding two melee weapons
+    cannot have taken such a row's ranged leg: a bow takes both hands.
+    """
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return False
+    return len([w for w in gear.held if w.ranged is None]) >= 2
+
+
+def _ranger_pair_twice(world: World, me: int, ev: Any) -> bool:
+    if ev.actor != me or not _two_melee_in_hand(world, me):
+        return False
+    row = get(ev.power or "")
+    return (
+        row is not None
+        and row.cls == "ranger"
+        and _hit_twice(world, ev) is not None
+    )
+
+
 @power(
     "i2981p1",
     level=7,
@@ -5105,12 +5168,24 @@ def i2981x1(c: Cast) -> None:
     action=FREE,
     reach=Melee(1),
     target=ONE_CREATURE,
-    todo=("c.hit_twice()",),
+    trigger="you hit one target twice with a ranger power needing two "
+            "melee weapons",
+    on=Trigger(PowerResolved, _ranger_pair_twice,
+               "you hit one target twice with that power"),
 )
 def i2981p1(c: Cast) -> None:
-    """The class half is `get(ref).cls`; what cannot be *declared* is the
-    second hit, because a `Trigger` predicate is handed one event and no
-    history, and a daily has no trait to keep the tally in."""
+    """The class half is `get(ref).cls`. The second hit **is** declarable:
+    the old note said a `Trigger` predicate is handed one event and no
+    history, and the history is in the bus log -- `PowerResolved` is
+    emitted once the use is over, so the whole use is behind it. See
+    `_hit_twice`, which does not trust that event's own `rolls`.
+
+    "Grants combat advantage" with nobody named is the whole side, which
+    is `to="team"`.
+    """
+    foe = _hit_twice(c.world, c.trigger)
+    if foe is not None:
+        c.grants_advantage(on=foe, until=When.SAVE_ENDS, to="team")
 
 
 @power(

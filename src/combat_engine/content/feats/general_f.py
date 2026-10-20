@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.racial import _holds
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -59,6 +60,27 @@ RACIAL = ("c.on_racial_power()",)
 PROFICIENCY = ("chargen.proficiency()",)
 
 _BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
+
+#: The five manifestations `f602` forks on, by the ref of the power each one
+#: comes with, against the damage type the card prints for it.
+#:
+#: The card spells the fork as `rt:r33-s0` through `rt:r33-s4`, which are
+#: sub-option refs and not rows -- but `racial_trait` carries each one's spec
+#: and every spec **names its power**, which is the ref `RaceLine.granted`
+#: puts in `Powers.known`. So the join is read off the compendium rather than
+#: guessed, and it is the same join `RaceLine._manifestation_for` makes.
+#:
+#: The race prints thirteen manifestations now and this card five. A
+#: character holding one of the other eight is not on this card and gets
+#: nothing, which is why the five are listed here rather than taken from
+#: `features/racial.py`.
+_MANIFESTED_DAMAGE = {
+    "p1766": DamageType.FIRE,
+    "p1767": DamageType.FORCE,
+    "p1769": DamageType.THUNDER,
+    "p1770": DamageType.ACID,
+    "p1828": DamageType.COLD,
+}
 
 #: The five the breath feat may be sworn to, in the card's own order.
 _BREATH_TYPES = (
@@ -440,18 +462,45 @@ def f387(c: Cast) -> None:
 
 
 @power("f602", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.manifestation()",))
+       reach=PERSONAL, target=SELF)
 def f602(c: Cast) -> None:
-    """**Re-aimed: half of what held this has arrived.** A use now
-    carries who granted it and through which row, so "the melee basic
-    attack granted by your `p3322`" is an ordinary gate -- `f603` is
-    written against exactly that.
+    """A typed +3 on every melee basic attack `p3322` grants.
 
-    What is left is the whole payload. The bonus is +3 *of a type chosen
-    by the manifestation*, and `rt:r33-t0` is the declared
-    row whose own marker says why: thirteen manifestations, one choice,
-    recorded nowhere. `c.element` reads a build's element and a genasi
-    has none, so the type has no source and there is no bonus to lay."""
+    **Written, and the half this waited on was never missing.** The old
+    note said the manifestation was "recorded nowhere" and that
+    `rt:r33-t0` carried a marker saying so. That row carries no marker:
+    it forks thirteen ways on which of the thirteen *powers*
+    `RaceLine.granted` put in `Powers.known`, because the whole of the
+    choice is which power comes with it. `_MANIFESTED_DAMAGE` is the same
+    read, narrowed to the five legs this card prints.
+
+    `_holds` and not `c.knows`: `c.knows` answers who **on the board**
+    has a row, so it is true for a character standing next to somebody
+    else's manifestation.
+
+    The gate is `granted_via`, which is what `f603` -- the other half of
+    the same printed feature -- is written against. No melee test beside
+    it: `p3322` grants a melee basic attack and nothing else, so the
+    provenance key is the whole of the printed clause.
+
+    `dtype=`, because the +3 is of the manifestation's type where the
+    weapon's own damage is not, so those three points meet a resistance
+    on their own terms.
+
+    Not written, and not a gap: "if you are currently manifesting more
+    than one element, choose one damage type when making the attack". A
+    second manifestation is `f604`, which is marked, and `granted` deals
+    exactly one -- so there is never a second type to choose between."""
+    manifested = next(
+        (ref for ref in _MANIFESTED_DAMAGE if _holds(c, ref)), ""
+    )
+    if not manifested:
+        return
+    c.bonus(
+        "damage", 3, dtype=_MANIFESTED_DAMAGE[manifested], on=c.me,
+        until=When.ENCOUNTER,
+        when=lambda ctx: ctx.get("granted_via") == "p3322",
+    )
 
 
 @power("f604", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

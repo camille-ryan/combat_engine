@@ -39,6 +39,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat_engine.content.feats.exploits import _riders
+from combat_engine.content.feats.general_h import _swings
 from combat_engine.content.feats.styles import among
 from combat_engine.engine import (
     AC,
@@ -865,6 +866,47 @@ def _p1758(c: Cast, ev: Any) -> None:
         c.flat(c.str_mod, on=ev.target)
 
 
+def _p87(c: Cast, ev: Any) -> None:
+    """"Extra damage if you hit with both attacks", against undead, while
+    armed with two melee weapons.
+
+    A `resolved` clause: the question is about the whole use, and no
+    earlier window has both swings in it. p87 rolls exactly two, so two
+    hits is both of them landing.
+
+    **Counted with `general_h._swings`, not with `exploits._hits`.** The
+    rolls on the resolved event are one per *target*, so the commonest
+    shape of this card -- both swings into one creature -- resolves with a
+    single roll on the event and read as one hit. That helper's docstring
+    has the measurement.
+
+    **The weapon pair is asked of the hands, not of the branch.** p87's
+    melee leg carries the same printed requirement, so reading the branch
+    would make the gate say nothing -- and the card asks about the
+    character, who can be holding two blades while taking the row's ranged
+    leg. `ranged is None` is how the ranger rows count a melee weapon, and
+    `Gear.held` is what is in hand rather than on the belt.
+
+    The extra damage is one lot, laid on the undead creature the use
+    caught: the clause names "an undead creature" in the singular, and the
+    row can hit two creatures with its two swings.
+    """
+    if c.wis_mod <= 0:
+        return
+    caught = _swings(c, ev)
+    if len(caught) < 2:
+        return
+    if len([w for w in c.held() if w.ranged is None]) < 2:
+        return
+    dead = [foe for foe in dict.fromkeys(caught) if _undead(c, foe)]
+    if not dead:
+        return
+    who = dead[0] if len(dead) == 1 else c.choose(
+        dead, "who takes the extra damage")
+    if who is not None:
+        c.flat(c.wis_mod, on=who)
+
+
 def _p620(c: Cast, ev: Any) -> None:
     if not _undead(c, ev.target):
         return
@@ -926,8 +968,11 @@ _riders("f1097", {"p1567": _p1567}, setup=_f1097)
 
 _riders("f1100", {"p841": _p841, "p835": _p835_will})
 
+# p87's clause is the only one of the four that is not about a single
+# blow: "if you hit with both attacks" is a question about the whole use,
+# which is the `resolved` window and nothing earlier.
 _riders("f1102", {"p835": _p835_swarm, "p1758": _p1758, "p620": _p620},
-        dropped=("c.hit_twice()",))
+        resolved={"p87": _p87})
 
 
 # -- the feats that grant a card -------------------------------------------

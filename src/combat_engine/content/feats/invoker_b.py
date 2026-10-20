@@ -35,6 +35,7 @@ from combat_engine.content.features.builds import (
     INVOKER_F1_OPTIONS,
     stand_on_another_leg,
 )
+from combat_engine.content.features.racial import _holds
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -163,6 +164,21 @@ def _struck(world, ev: Any) -> list[int]:  # noqa: ANN001
 
 _CARD_A = "cf:invoker-f1c0"
 _CARD_B = "cf:invoker-f1c1"
+
+#: The five manifestations `f1521` forks on, by the ref of the power each one
+#: comes with, in the card's own order of legs.
+#:
+#: The card spells the fork as `rt:r33-s0` through `rt:r33-s4`, which are
+#: sub-option refs and not rows -- but `racial_trait` carries each one's spec
+#: and every spec **names its power**, which is the ref `RaceLine.granted`
+#: puts in `Powers.known`. So the join is data rather than inference, and it
+#: is the join `RaceLine._manifestation_for` already makes.
+#:
+#: The race prints thirteen manifestations now and this card five, so a
+#: character holding one of the other eight is not on this card and gets
+#: nothing. That is why the five are listed here rather than read off
+#: `features/racial.py`.
+_MANIFESTED = ("p1766", "p1767", "p1769", "p1770", "p1828")
 
 
 def _card_ally(ev: Any) -> int | None:
@@ -545,23 +561,54 @@ def f1506(c: Cast) -> None:
     )
 
 
-@power("f1521", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.manifestation()",))
+@power("f1521", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF,
+       trigger="you use cf:invoker-f1c0",
+       on=Trigger(PowerUsed, _used(_CARD_A), "you use that covenant card"))
 def f1521(c: Cast) -> None:
     """Five elemental variants of a bonus to the ally `cf:invoker-f1c0`
-    protected. Re-aimed: the ally is on the card's trigger and that is
-    carried now.
+    protected.
 
-    **And re-aimed again, off `c.race_option()`.** That symbol was doing
-    duty for six unrelated needs across 23 rows, and this is not one of
-    them: a *manifestation* is a state the character is currently in and
-    changes during a fight, where a race option is a build-time choice
-    with one answer for the character's whole life. A symbol covering both
-    could not go green correctly for either.
+    **Written, and the last note here was wrong about both halves of why
+    it could not be.** It said a manifestation is a state that changes
+    during a fight and that `rt:r33-t0` carried the same marker. That row
+    carries none: it forks thirteen ways on which of the thirteen
+    *powers* `RaceLine.granted` put in `Powers.known`, because the whole
+    of the choice is which power comes with it, and a manifestation is
+    picked when the character is built and not in a fight. Two of these
+    five legs being untyped is true and is beside the point -- the fork is
+    on the power's ref, never on a damage type, so there was never a
+    `c.element` to stand in for.
 
-    Which of the five legs is current is still what is missing -- two of
-    them are not damage types at all, so `c.element` cannot stand in, and
-    `rt:r33-t0` carries the same marker."""
+    `_holds` and not `c.knows`: `c.knows` answers who **on the board**
+    has a row, so it is true for a character standing beside somebody
+    else's manifestation.
+
+    `AT_WILL`, not `ENCOUNTER`: this is declared on a trigger now, and a
+    triggered `action=NONE` row spends a use every time it fires. The
+    card prints no limit, so `ENCOUNTER` would have paid once a fight.
+
+    "Until the start of your next turn" is `SONT` -- the clock is the
+    invoker's, and the holder of every one of these is the ally."""
+    ally = _card_ally(c.trigger)
+    manifested = next((ref for ref in _MANIFESTED if _holds(c, ref)), "")
+    if ally is None or not manifested:
+        return
+    if manifested == "p1766":
+        c.bonus(REF, 1, kind="power", on=ally, until=When.SONT)
+        c.resist(5, DamageType.FIRE, on=ally, until=When.SONT)
+    elif manifested == "p1767":
+        c.bonus(FORT, 1, kind="power", on=ally, until=When.SONT)
+        c.bonus("save", 1, kind="power", on=ally, until=When.SONT)
+    elif manifested == "p1769":
+        c.bonus(FORT, 1, kind="power", on=ally, until=When.SONT)
+        c.resist(5, DamageType.LIGHTNING, on=ally, until=When.SONT)
+    elif manifested == "p1770":
+        c.bonus("save", 5, kind="power", on=ally, until=When.SONT,
+                when=lambda ctx: bool(ctx.get("ongoing")))
+    elif manifested == "p1828":
+        c.bonus("speed", 1, kind="power", on=ally, until=When.SONT)
+        c.resist(5, DamageType.COLD, on=ally, until=When.SONT)
 
 
 @power("f1525", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

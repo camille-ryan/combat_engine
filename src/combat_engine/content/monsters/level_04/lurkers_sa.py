@@ -121,7 +121,15 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import enemies, has_combat_advantage, hidden_from, is_, team
-from combat_engine.engine.triggers import Trigger, about_me, by_power, hits_me, targets_me
+from combat_engine.engine.triggers import (
+    Trigger,
+    about_me,
+    both,
+    by_melee,
+    by_power,
+    hits_me,
+    targets_me,
+)
 from combat_engine.engine.zones import Zone
 
 # --------------------------------------------------------------------------
@@ -1945,16 +1953,42 @@ def m815a3(c: Cast) -> None:
     action=REACTION,
     reach=PERSONAL,
     target=SELF,
-    todo=("etl.monster.trigger_text()",),
+    trigger="it is missed by a melee attack",
+    on=Trigger(Miss, both(targets_me, by_melee),
+               "it is missed by a melee attack"),
 )
 def m815a4(c: Cast) -> None:
-    """Refused in play, and the gap is in the data rather than in the engine:
-    the row is filed as an immediate reaction with **no trigger line at all**,
-    so there is nothing to declare and a reaction with no trigger can never
-    fire. Two other blocks in this wave print the sentence this one is missing;
-    guessing which it is would be inventing a rule. The shift itself is one
-    line and waits on the trigger, not the other way round.
+    """The trigger is recovered from the block's own action type, not guessed.
+
+    **The old note was right that this entry prints no trigger line.** It is
+    a pre-MM3 stat block and that format omits them; the ability appears as
+    "(immediate reaction; at-will)" and nothing more. So the sentence really
+    is absent here and the marker was not stale in the way a glossary change
+    would make it.
+
+    **What settles it is that the two sibling readings are not
+    interchangeable, and only one is a reaction.** The same racial trait is
+    printed on other blocks with a trigger, and it is printed *two different
+    ways*:
+
+    * `m1056a5` -- "immediate **reaction**, when **missed** by a melee
+      attack"
+    * `m3617`'s copy -- "immediate **interrupt**, when **targeted** by a
+      melee attack"
+
+    Those are different rules: one fires after a swing has missed, the other
+    before it resolves. Copying either at random would have been inventing a
+    rule, which is what the old note correctly refused to do. But this
+    block's own entry prints **immediate reaction**, and of the two printed
+    readings only one is a reaction -- so the action type this card does
+    carry picks the trigger it does not. Same shape as `m1056a5`, which is
+    the row that reading points at.
+
+    Recorded at length because the next reader will find the other sibling
+    first as often as not, and an interrupt here would let this creature
+    shift out of an attack that was going to hit.
     """
+    c.shift(1)
 
 
 @power(

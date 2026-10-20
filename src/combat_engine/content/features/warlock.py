@@ -14,6 +14,13 @@ sentence twice. Granting the at-will is the half nothing else says --
 not have the one its leg says it always has. `cf:warlock-f0` grants its
 card for that same reason.
 
+**A boon can be traded away.** Four cards say "instead of your normal pact
+boon" and name no pact, so each payout offers itself as the clause `BOON`
+and the trading row registers against every ref in `BOONS` -- the shape
+`f3232` already had against this leg's narrower `BOON_REGAIN`. The two
+payouts in this file offer it; the two outside it do not yet, and `BOONS`
+says which. #641.
+
 All seven legs have an entry in `chargen.BUILDS["warlock"]` now and gate
 on it with `c.build`. Three of them were written behind a gate no leg
 answered and marked `todo=("chargen.BUILDS",)`; the legs landed, so the
@@ -81,6 +88,31 @@ FELL = "cf:warlock-f1s4:boon"
 #: replace it. `f3232` is the one that does -- it takes a power point
 #: instead of the charge coming back.
 BOON_REGAIN = "boon_regain"
+
+#: The clause name every leg offers its **whole** payout under, for a card
+#: that trades the boon away and names no pact -- `f3444` is the one that
+#: does. `BOON_REGAIN` above is narrower: one leg's half of the payout,
+#: which is why both are offered and this one is offered outermost.
+BOON = "boon"
+
+#: Every ref a pact boon is paid at. A row trading the boon away registers
+#: against each of them, because the card names no pact and cannot know
+#: which leg the character took -- `c.pre_empt`'s own instruction, and a
+#: registration against a row the character does not have never fires.
+#:
+#: **Two of these do not offer `BOON` yet and are not in this file**:
+#: `cf:warlock-f1`, whose three legs pay inline in `features/strikers.py`,
+#: and `p16254` in `powers/warlock/pacts.py`. `cf:warlock-f1c12` is here
+#: and pays nothing yet -- it waits on `c.active_vestige()`. All three are
+#: listed anyway, so the registering rows need no second pass when each
+#: door opens. #641.
+BOONS = (
+    "cf:warlock-f1",
+    "cf:warlock-f1s4",
+    "cf:warlock-f1c10",
+    "cf:warlock-f1c12",
+    "p16254",
+)
 
 _A_CURSED_ENEMY_FALLS = "an enemy under your curse drops to 0 hit points"
 
@@ -256,7 +288,19 @@ def warlock_f1s4(c: Cast) -> None:
             # inside a watcher this row installed, so there was never a
             # menu entry and `c.variant` is 0 for ever -- the case that
             # verb's own docstring describes.
-            c.instead_of_now(BOON_REGAIN, lambda: c.restore_charge(FELL))
+            #
+            # `BOON` wraps `BOON_REGAIN` rather than replacing it. A card
+            # saying "instead of your normal pact boon" names no pact and
+            # registers against every leg, where `f3232` replaces this
+            # leg's regain in particular -- two different trades, so two
+            # clauses. Outermost, because taking the whole boon away leaves
+            # no regain for the narrower clause to stand in for.
+            c.instead_of_now(
+                BOON,
+                lambda: c.instead_of_now(
+                    BOON_REGAIN, lambda: c.restore_charge(FELL)
+                ),
+            )
 
     c.watch(Dropped, fell, until=When.ENCOUNTER, on=c.me,
             label=f"{c.ref} regain")
@@ -347,7 +391,14 @@ def warlock_f1c10(c: Cast) -> None:
     so the latch is hand-rolled over the three events that announce a d20
     this creature rolled. Each drop lays its own untyped set, so three
     drops are the printed +3 on one roll rather than three separate +1s,
-    and the first roll ends every set at once."""
+    and the first roll ends every set at once.
+
+    The whole payout is offered under `BOON`, for a card that trades the
+    boon away without naming a pact. **Plain `c.instead_of` here and not
+    `instead_of_now`**: this row carries a declared trigger, so
+    `Triggers._ask` has already offered each registered substitution as a
+    way of taking the trigger and `c.variant` names the one chosen -- the
+    distinction `instead_of_now`'s own docstring draws with `rt:r24-t0`."""
     me = c.me
     # **Read, not hard-coded, so an item can add to it.** `i2343p2` prints
     # "add the enhancement bonus of this rod to the bonus your pact gives
@@ -360,23 +411,26 @@ def warlock_f1c10(c: Cast) -> None:
     # The default stays the printed 1, so a warlock with no such item is
     # unchanged, and `amount_for` takes the largest rather than summing --
     # two items raising one boon is not two raises.
-    boon = c.amount_for("cf:warlock-f1c10", 1)
-    laid = [
-        c.bonus(what, boon, until=When.EONT, on=me)
-        for what in ("attack", "save", "skill", "ability_check")
-    ]
+    def payout() -> None:
+        boon = c.amount_for("cf:warlock-f1c10", 1)
+        laid = [
+            c.bonus(what, boon, until=When.EONT, on=me)
+            for what in ("attack", "save", "skill", "ability_check")
+        ]
 
-    def spend(ev: Any) -> None:
-        who = getattr(ev, "attacker", None)
-        if who is None:
-            who = getattr(ev, "actor", None)
-        if who != me:
-            return
-        for eff in laid:
-            c.end_effect(eff, on=me, why="used")
+        def spend(ev: Any) -> None:
+            who = getattr(ev, "attacker", None)
+            if who is None:
+                who = getattr(ev, "actor", None)
+            if who != me:
+                return
+            for eff in laid:
+                c.end_effect(eff, on=me, why="used")
 
-    for event in (AttackRolled, SavingThrow, SkillCheck):
-        c.watch(event, spend, until=When.EONT, on=me)
+        for event in (AttackRolled, SavingThrow, SkillCheck):
+            c.watch(event, spend, until=When.EONT, on=me)
+
+    c.instead_of(BOON, payout)
 
 
 @power(
