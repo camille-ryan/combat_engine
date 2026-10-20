@@ -13,12 +13,19 @@ a graph of scenes, some of which are fights -- and plays it through, carrying
 the party's wounds, spent powers and surges from one scene to the next and
 writing the whole thing down so it can be picked up again.
 
-**`--no-dm` is the default and is not a degraded mode.** With it, a scene is
-its own written text and the choices are a menu. That matters for two
-reasons: `check.py` runs this and an instrument that needs a network and an
-API key is an instrument that goes red for the wrong reason, and a person who
-has not configured a model should still be able to play. The model is the
-other half (#794) and is additive.
+**`--no-dm` is the default and is not a degraded mode.** With it a scene is
+its own written text, and where a scene genuinely branches you are asked
+which way. That matters for two reasons: `check.py` runs this and an
+instrument that needs a network and an API key is an instrument that goes red
+for the wrong reason, and a person who has not configured a model should
+still be able to play. The model is the other half (#794) and is additive.
+
+Be clear about how little the asking currently amounts to, because the first
+draft of this docstring claimed a menu that did not exist. A roleplay scene
+prints its brief and advances; the only interaction is the branch prompt, and
+**a linear adventure has no branches at all** -- neither the converted module
+nor the fixture has a single scene with two exits. The prompt is real and it
+is almost never reached.
 
 **On names.** The rest of `scripts/` prints refs and never names, and this is
 the one place that differs: a scene's prose and its word for a creature come
@@ -67,6 +74,34 @@ def validate(path: str) -> int:
     if module.flags:
         print("  flags       " + ", ".join(f"{k}={v}" for k, v in module.flags.items()))
     return 0
+
+
+def choose_exit(scene: module_mod.Scene, module: module_mod.Module) -> str:
+    """Ask which way, when a scene genuinely branches. `""` takes the first.
+
+    **Only at a terminal.** `check.py` runs this script as a subprocess that
+    inherits stdin, so an unconditional prompt would block the whole suite
+    the day somebody writes a branching module. Not hypothetical -- it is the
+    shape of bug that waits for the one commit that makes it reachable.
+    """
+    exits = list(scene.exits)
+    if len(exits) < 2 or not sys.stdin.isatty():
+        return ""
+    print("   where do they go?")
+    for i, exit_id in enumerate(exits):
+        other = module.scenes[exit_id]
+        mark = "*" if i == 0 else " "
+        print(f"     {mark}{i}  {exit_id:<36} {other.name}")
+    while True:
+        try:
+            said = input("     [0] ").strip()
+        except EOFError:
+            return ""
+        if not said:
+            return ""
+        if said.isdigit() and 0 <= int(said) < len(exits):
+            return exits[int(said)]
+        print(f"     a number from 0 to {len(exits) - 1}, or Enter.")
 
 
 def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> None:
@@ -191,7 +226,10 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
     played = 0
     while not campaign.finished and played < LIMIT:
         scene = module.scene(campaign.scene)
-        choice = narrator.pick_exit(scene) if narrator else ""
+        choice = (
+            narrator.pick_exit(scene) if narrator
+            else choose_exit(scene, module)
+        )
         made = run_mod.step(
             campaign, module, choice=choice,
             choose=narrator.choose if narrator else None,
