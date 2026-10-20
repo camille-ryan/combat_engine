@@ -243,13 +243,27 @@ def _rank(
 
 def resolve(
     scene: Scene, *, party_level: int, draw: Random | None = None,
+    party_size: int = SIDE,
 ) -> Dressed:
-    """The creatures a combat scene fields, and how each one is dressed."""
+    """The creatures a combat scene fields, and how each one is dressed.
+
+    `party_size` scales the budget, because the printed rule is one standard
+    monster **per character** and `story.budget` is hard-wired to `SIDE`. A
+    module written for five and played by four was getting a fight built for
+    four either way; now that `run.party_for` fields the five the module asked
+    for, the fight has to be built for five too, or the extra character is a
+    free win. A scene that states its own `xp` overrides all of this, which is
+    what every fight in the module in `modules/` does.
+    """
     out = Dressed()
     if scene.kind != "combat":
         return out
 
-    want = float(scene.xp) if scene.xp else budget(party_level) * scene.share
+    per_head = max(1, int(party_size)) / SIDE
+    want = (
+        float(scene.xp) if scene.xp
+        else budget(party_level) * scene.share * per_head
+    )
     if want <= 0:
         out.notes.append(
             f"{scene.id}: no XP is written for level {party_level}, so the "

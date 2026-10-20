@@ -78,9 +78,40 @@ class Step:
         self.lines.append(line)
 
 
+#: Who joins when a module wants more than the standard four, in order.
+#:
+#: `story.PARTY` is defender, leader, striker, controller -- one of each role,
+#: which is what a published encounter is built against. Past four, the next
+#: ones double up a role rather than reaching for something exotic: a second
+#: striker, then a second defender, then a second leader. A module asking for
+#: six gets a party that still covers every role twice over, which is the
+#: shape its own difficulty assumes.
+EXTRAS = ["ranger", "paladin", "warlord", "warlock"]
+
+
+def party_for(size: int) -> list[str]:
+    """The classes a party of that size is built from.
+
+    **`module.party_size` was validated, printed by `--validate`, and then
+    read by nothing.** `begin` built `story.PARTY` -- a fixed four -- whatever
+    the module said, so an adventure written for five 1st-level characters was
+    played by four and its own weak-party guidance never applied. Found by
+    converting a real module, where `--validate` printed "5 characters" and
+    the run then fielded four.
+
+    Clamped to at least one and at most the classes available, because a
+    module is user-supplied data and `party_size: 0` should field somebody
+    rather than raise three scenes later.
+    """
+    want = max(1, min(int(size or len(PARTY)), len(PARTY) + len(EXTRAS)))
+    return [*PARTY, *EXTRAS][:want]
+
+
 def begin(module: Module, *, seed: int = 0, pcs: list[str] | None = None) -> Campaign:
     """A fresh campaign at the module's opening scene."""
-    party = Party.of(pcs or PARTY, level=module.party_level, seed=seed)
+    party = Party.of(
+        pcs or party_for(module.party_size), level=module.party_level, seed=seed,
+    )
     return Campaign(
         module=module.id, seed=seed, scene=module.start,
         party=party, flags=dict(module.flags),
@@ -109,7 +140,10 @@ def _enemy_eids(world: object) -> list[int]:
 def _fight(campaign: Campaign, module: Module, scene: Scene, step: Step) -> None:
     """Field a combat scene, dress it, play it out, and harvest the wear."""
     draw = _stream(campaign, scene, "cast")
-    dressed = resolve(scene, party_level=module.party_level, draw=draw)
+    dressed = resolve(
+        scene, party_level=module.party_level, draw=draw,
+        party_size=len(campaign.party.sheets),
+    )
     step.notes += dressed.notes
     if not dressed.refs:
         step.outcome = "skipped"

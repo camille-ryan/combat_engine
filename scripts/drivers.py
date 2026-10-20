@@ -28111,7 +28111,76 @@ def a_non_combat_scene_does_not_spend_the_party_s_powers(out: Result) -> None:
     )
 
 
+def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
+    """`party_size` fields that many characters, and buys that many monsters.
+
+    It was validated, printed by `--validate`, and **read by nothing**:
+    `run.begin` built `story.PARTY` -- a fixed four -- whatever the module
+    said. Found by converting a real adventure written for five, where the
+    validator printed "5 characters" and the run then fielded four, lost the
+    last fight of the chapter and wiped. With the five it asked for, the same
+    chapter finishes with all five standing.
+
+    Two halves, because fixing only the first makes the game *easier*: a
+    fifth character against a fight built for four is a free win. The printed
+    rule is one standard monster per character, and `story.budget` is wired to
+    `SIDE`, so the scene's share has to scale too.
+
+    The control on both is a party of four, which must keep the numbers it
+    had -- otherwise this "fix" has quietly moved every existing fight.
+    """
+    from dataclasses import replace
+    from random import Random
+
+    from combat_engine.story import SIDE
+    from combat_engine.story import cast_list as cl
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    loaded = mod.load(ROOT / "scripts/fixtures/modules/sunken-mill.json")
+    out.that(
+        len(run_mod.party_for(SIDE)) == SIDE,
+        f"a module asking for {SIDE} fields {SIDE}",
+    )
+    out.that(
+        len(run_mod.party_for(SIDE + 1)) == SIDE + 1,
+        f"and one asking for {SIDE + 1} fields {SIDE + 1}",
+        f"{run_mod.party_for(SIDE + 1)}",
+    )
+    out.that(
+        len(set(run_mod.party_for(SIDE + 2))) == SIDE + 2,
+        "with no character doubled up before the classes run out",
+        f"{run_mod.party_for(SIDE + 2)}",
+    )
+    out.that(
+        run_mod.party_for(0) == run_mod.party_for(SIDE),
+        "and a module that says nothing gets the standard party",
+    )
+
+    # The budget half. A scene the budget has to clamp, so the ceiling shows.
+    scene = loaded.scene("cellar")
+    greedy = replace(scene, foes=(replace(scene.foes[0], count=40),))
+    sizes = {
+        n: len(cl.resolve(greedy, party_level=2, draw=Random(7), party_size=n))
+        for n in (SIDE, SIDE + 1, SIDE + 2)
+    }
+    out.that(
+        sizes[SIDE] == SIDE,
+        f"a party of {SIDE} buys {SIDE} standard monsters",
+        f"{sizes}",
+    )
+    out.that(
+        sizes[SIDE + 1] == SIDE + 1 and sizes[SIDE + 2] == SIDE + 2,
+        "and each extra character buys exactly one more",
+        f"{sizes}",
+    )
+
+
 DRIVERS = {
+    "party_size": (
+        a_module_gets_the_party_size_it_asked_for,
+        "a module's stated party size reaches both the party and the budget (#789)",
+    ),
     "reflavour_retype": (
         a_reflavour_changes_the_damage_type_and_a_twin_keeps_its_own,
         "a reflavoured creature's damage type, against an identical twin (#790)",
