@@ -18321,6 +18321,7 @@ def the_run_action_costs_what_it_costs(out: Result) -> None:
     import combat_engine.content  # noqa: F401
     from combat_engine.engine.actions import legal, perform
     from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
     from combat_engine.engine.durations import When
     from combat_engine.engine.events import AttackRolled
     from combat_engine.engine.query import enemies
@@ -18434,6 +18435,45 @@ def the_run_action_costs_what_it_costs(out: Result) -> None:
              "`c.run_penalty(2)` makes it -2 and not -5, which is"
              " `i1695x1`'s whole clause",
              f"it charged {soft}")
+
+    # -- the same clause, through the two rows that print it ---------------
+    # **The leg above calls the verb, so it stays green with either row
+    # reverted.** `i1316x1` sat refused for its whole life on a note saying
+    # the run cost nothing but the combat advantage -- which #669 had made
+    # false, and which `i1695x1` already recorded as false in its own
+    # docstring eight levels up. Nothing was watching the *callers*, so the
+    # twin that was fixed and the twin that was not looked alike.
+    for twin in ("i1316x1", "i1695x1"):
+        worldT, meT, encT = board_with_an_encounter()
+        if encT is None:
+            out.skip(f"{twin}'s board has no encounter")
+            continue
+        foeT = sorted(enemies(worldT, meT))[0]
+        # **The run has to happen first**: `actions.perform` is what lays the
+        # penalty, so reading the cost off a creature that has not run gives
+        # 0 for the softened row and 0 for the bare one -- a control that
+        # cannot tell them apart. It read 0 here first time out.
+        out.that(run_once(worldT, encT, meT), f"{twin}'s control runner runs")
+        bare = cost_of_running(worldT, meT, foeT, f"drivers:{twin}")
+        out.that(bare == 5,
+                 f"and with {twin}'s body NOT run, it costs the printed -5 --"
+                 " the control, and without it a row laying nothing would"
+                 " pass for a row laying the softening",
+                 f"it charged {bare}")
+
+        worldT, meT, encT = board_with_an_encounter()
+        if encT is None:
+            continue
+        foeT = sorted(enemies(worldT, meT))[0]
+        REGISTRY[twin].body(Cast(world=worldT, me=meT, ref=twin))
+        out.that(run_once(worldT, encT, meT), f"{twin}'s runner runs")
+        paidT = cost_of_running(worldT, meT, foeT, f"drivers:{twin}")
+        out.that(paidT == 2,
+                 f"and {twin}'s own body brings it to -2. Both rows print"
+                 " the identical sentence, so both are asserted: the one"
+                 " that was already written cannot vouch for the one that"
+                 " was not",
+                 f"it charged {paidT}")
 
     # -- the penalty waived against one creature: `f2165` -----------------
     world5, me5, enc5 = board_with_an_encounter()

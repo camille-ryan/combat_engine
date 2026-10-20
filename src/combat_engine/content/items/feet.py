@@ -22,9 +22,12 @@ Four judgements run through the file.
 * **Running is a move action.** `actions._moves` offers it at speed + 2,
   where the 2 is `c.bonus("run")`, and the combat advantage it grants is
   suppressed by a negative `"run_exposed"`. A run announces itself as
-  `kind_ == "run"` on `MoveStart` and `MoveEnd`. What is still missing is
-  the printed attack penalty for running: nothing applies one, so the one
-  block that discounts it has nothing to cut.
+  `kind_ == "run"` on `MoveStart` and `MoveEnd`. **The printed attack
+  penalty is applied too**, by `actions.perform`, since #669 -- and this
+  paragraph said the opposite for as long as `i1316x1` sat refused on it.
+  A block that discounts the penalty writes `c.run_penalty(2)`, which says
+  the replacement rather than the difference, so nothing here has to know
+  what the printed 5 is.
 * **A skill modifier is real** and its context is `{actor, skill}` only,
   so "+2 to Athletics checks" is exact and "+2 to Athletics checks **to
   jump**" is the same flat modifier plus `narrative=("skill:athletics",)`.
@@ -435,12 +438,25 @@ def i3077p1(c: Cast) -> None:
 
 
 @power("i1316x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("query.run_penalty()",))
+       reach=PERSONAL, target=SELF)
 def i1316x1(c: Cast) -> None:
-    """A run is a move action now, but the only thing it costs is the
-    combat advantage it grants: nothing applies the printed attack penalty
-    for running, so there is no penalty here to cut down to -2. Writing
-    the discount as a bonus would be three points out of nowhere."""
+    """"Running gives you only a -2 penalty to attack rolls."
+
+    **The old note said the run cost nothing but the combat advantage, so
+    there was no penalty here to cut down.** #669 laid the printed -5 in
+    `actions.perform`, which is the half that was missing, and `i1695x1` --
+    the same clause eight levels up -- was rewritten then. This row prints
+    the identical sentence and was not, so it sat refused on a premise its
+    own twin had already recorded as false.
+
+    The marker said `query.run_penalty()`, a *reader*, for the same reason:
+    with no penalty on the board a discount looks like it has to read a
+    baseline first. `c.run_penalty(2)` says the **replacement**, so the
+    arithmetic from the printed 5 stays at the one site that lays it and
+    nothing here needs to know what 5 is.
+
+    The Level 15 and 25 lines are paragon and epic and out of band."""
+    c.run_penalty(2, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i2012p1", level=5, cls=ITEM, usage=DAILY, action=REACTION,
