@@ -936,7 +936,6 @@ def p16473(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ELEMENTAL, Keyword.SUMMONING],
-    defect="the card defers the statistics and the entry prints no block",
 )
 def p16476(c: Cast) -> None:
     """**It has a row now** (#459), so this is `c.summon` and the numbers are
@@ -948,6 +947,17 @@ def p16476(c: Cast) -> None:
     a `Companion`, it takes no turn and acts when its summoner spends an
     action on it. The lost surge when it drops is a clause about a
     creature that is gone and nothing watches a summon's own `Dropped`.
+
+    **The `defect=` is gone, and it had been refusing this written row.**
+    It said the card defers its statistics and the entry prints no block,
+    which was true when it was written and stopped being true at #459:
+    `x10_93` is a full block -- tiny, elemental, speed 5, hit points equal
+    to the summoner's bloodied value, defences at the summoner's -2. It
+    lives in the `associate` table rather than `monster`, which is why a
+    check that looked only at `monster` kept reporting the gap, and the
+    extractor had already substituted the ref into this card's own spec
+    text. The 13 siblings carrying the same reason still print prose with
+    no ref, so theirs holds. #766.
     """
     c.summon("x10_93", at=c.origin)
 

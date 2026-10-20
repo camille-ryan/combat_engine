@@ -843,12 +843,26 @@ def p14129(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.POLYMORPH],
-    defect="the card defers the statistics and the entry prints no block",
+    dropped=("c.form(chosen=)",),
     narrative=("skill:insight",),
 )
 def p14130(c: Cast) -> None:
-    """The movement modes come from a beast the player picks, and no block
-    for it was given, so `c.form(modes=)` has nothing to be handed.
+    """**Re-pointed off `defect=`.** The old marker said the compendium
+    defers the statistics and prints no block, and that is the wrong
+    diagnosis: the card does not defer to a block it failed to print, it
+    defers to **a beast the player chooses**. No page was ever going to
+    carry that, so no `defect=` can close and the marker both refused a
+    written row and claimed a source gap that does not exist.
+
+    `c.form(modes=)` is already a parameter -- the gap is not the door but
+    what to hand it, which is the player's pick, and nothing stores a
+    sub-choice of this kind. Same shape as `c.deals(chosen=)`, and the same
+    missing store the `c.race_option()` / `c.set_build()` family waits on.
+    #758.
+
+    What plays: the form is assumed and the attack prohibition holds, so
+    the row is `dropped=` rather than `todo=`. What is missing is the
+    senses and movement modes of whichever beast was picked.
 
     The Insight clause is the narrative one: it is a DC for an observer
     deciding whether the shape looks supernatural, which is a question
