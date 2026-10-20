@@ -2060,11 +2060,13 @@
  },
  "c.extend_effect()": {
   "by": "slice6",
+  "corrected_by": "main session 2026-10-20, after reading each waiting row",
   "found": "powers/druid/level_6_b.p5052 -- effect.when / effect.clock / effect.latch written by hand",
   "refused_rows": 3,
   "rows": 4,
-  "verdict": "mis-marked",
-  "why": "p5052 is a written row whose docstring states the route: 'a zone due to end at the end of this turn is moved onto the end-of-next-turn clock by writing the clock, and latch is what keeps an effect on that clock alive through the turn it was made in'. Effect is a mutable dataclass, so i1960p1/i2762p1/i2323x1/f2628's 'nothing lengthens a live effect' is wrong -- what is missing is a Cast door, as with c.aura(difficult=)."
+  "verdict": "real",
+  "was": "p5052 is a written row whose docstring states the route: 'a zone due to end at the end of this turn is moved onto the end-of-next-turn clock by writing the clock, and latch is what keeps an effect on that clock alive through the turn it was made in'. Effect is a mutable dataclass, so i1960p1/i2762p1/i2323x1/f2628's 'nothing lengthens a live effect' is wrong -- what is missing is a Cast door, as with c.aura(difficult=).",
+  "why": "Corrected to `real`, #777. `Effect` is mutable and `p5052` does write `effect.when` by hand, so the earlier verdict's premise holds for `p5052`'s case -- but `i2323x1` was re-diagnosed after this verdict was recorded and the gap is elsewhere. `p5052` works because it moves `When.EOT` to `When.EONT`, a rung that exists; this card asks for the end of the caster's turn the round *after* next, and the ladder is EOT, EONT, SONT, EOTNT, SOTNT with EONT already the top. A `Cast` door over a `When` value that does not exist writes nothing. `f2628`'s half is lengthening a duration another row laid, which is the door -- so the symbol covers two gaps and wants splitting before it is worked."
  },
  "c.extend_move(any_of=)": {
   "by": "slice3",
@@ -2650,11 +2652,13 @@
  },
  "c.grant_inline()": {
   "by": "slice6",
+  "corrected_by": "main session 2026-10-20, after reading each waiting row",
   "found": "a coined ref plus c.grant_row -- the f1253/f1253b and rt:/cf: precedent",
   "refused_rows": 1,
   "rows": 2,
-  "verdict": "mis-marked",
-  "why": "i1188p1 and i2980p1 both say the granted power 'has no ref of its own'. Content coins refs routinely for rows the compendium does not number (f1253b via _swap, every rt: and cf:), the author has the card's full text in the brief, and c.grant_row then hands the declared row over -- so these are rows to write rather than a facility to build."
+  "verdict": "real",
+  "was": "i1188p1 and i2980p1 both say the granted power 'has no ref of its own'. Content coins refs routinely for rows the compendium does not number (f1253b via _swap, every rt: and cf:), the author has the card's full text in the brief, and c.grant_row then hands the declared row over -- so these are rows to write rather than a facility to build.",
+  "why": "Corrected to `real`, #777. Content does coin refs routinely, so the verdict's precedent is real -- but `i2980p1`'s note names two things stopping it and says outright that neither is `c.grant_inline`. First, there is no coined-ref convention for an *item* block: a feat's second card is `fNNNb`, while an item's blocks are read straight off columns in `game.db`, so a coined second block here would read as one the database is missing rather than one content invented. That is a spelling for Camille to settle. Second, 'once per round' is not one of the four `Usage` values, so the cadence is a `c.world.round` latch on the granted row. `i1188p1` needs the at-will half, which `c.give` (a one-shot) does not do."
  },
  "c.grant_trait(mount)": {
   "by": "slice1",
@@ -4918,11 +4922,13 @@
  },
  "c.retype_damage(dtypes=)": {
   "by": "slice3",
+  "corrected_by": "main session 2026-10-20, after reading each waiting row",
   "found": "f1646's DamageRolled/Window.BEFORE mutation of ev.dtypes keyed on ev.detail, c.counts_as_keyword (+ Powers.granted_keywords, read in dsl.keywords_of)",
   "refused_rows": 2,
   "rows": 2,
-  "verdict": "mis-marked",
-  "why": "Both halves f1231 calls missing sit in the tree: a feat beside it already adds a second type to another named row's damage, and a keyword can be granted per creature per row -- 'header data no trait can add to' is what counts_as_keyword exists to work around. It does not answer f1639/f1659, whose rider rolls no damage to catch."
+  "verdict": "real",
+  "was": "Both halves f1231 calls missing sit in the tree: a feat beside it already adds a second type to another named row's damage, and a keyword can be granted per creature per row -- 'header data no trait can add to' is what counts_as_keyword exists to work around. It does not answer f1639/f1659, whose rider rolls no damage to catch.",
+  "why": "Corrected to `real`, #777. `f1231` has been re-aimed twice since this verdict and its note now ends 'Both halves are missing'. The verdict's two sites are real but neither is the thing: `f1646` mutates `ev.dtypes` keyed on `ev.detail` for one named row, which is a hand-rolled instance rather than a facility a row can call, and `c.counts_as_keyword` grants the keyword half and not the damage half. `f2849` was re-pointed off this symbol entirely (#496)."
  },
  "c.revives_unless(within=)": {
   "by": "singleton-sweep",
@@ -5590,11 +5596,13 @@
  },
  "c.sustain_free()": {
   "by": "slice1",
+  "corrected_by": "main session 2026-10-20, after reading each waiting row",
   "found": "c.effect(sustain=ActionType.FREE), Effect.sustain_cost, actions._sustaining",
   "refused_rows": 3,
   "rows": 4,
-  "verdict": "mis-marked",
-  "why": "m4460a4 says 'a free one is not a cost the sustain machinery takes'; sustain_cost is typed `ActionType | None` and actions._sustaining only asks `encounter.can_spend(actor, eff.sustain_cost)`, which FREE satisfies. c.effect, c.aura and c.zone all already take sustain=."
+  "verdict": "real",
+  "was": "m4460a4 says 'a free one is not a cost the sustain machinery takes'; sustain_cost is typed `ActionType | None` and actions._sustaining only asks `encounter.can_spend(actor, eff.sustain_cost)`, which FREE satisfies. c.effect, c.aura and c.zone all already take sustain=.",
+  "why": "Corrected to `real` by measurement, #776. The earlier verdict's two facts are both true and both describe the *deliberate menu* path: `sustain_cost` is typed `ActionType | None`, and `actions._sustaining` only asks `can_spend`, which a free action satisfies. What keeps a `When.SUSTAIN` effect alive is `durations._sustain_by_default`, which resolves the slot as `getattr(budget, cost.value, 0)` -- and `Budget` has `standard`, `move`, `minor`, `immediate_round`, `opportunity_turn` and no `free`, so the default fires and the cost reads as a slot already at zero. Same board, round advanced, budget refreshed: MINOR and STANDARD survive and emit `sustained`; FREE ends the effect with no note at all. `_warn_sustainless` does not cover it either -- that fires only when `sustain_cost is None`. So `sustain=ActionType.FREE` is worse than absent, which is what `i1071p1`'s docstring says in detail, and its marker is right. Five of `ActionType`'s eight members name no `Budget` field."
  },
  "c.sustain_grab()": {
   "by": "slice5",
@@ -5750,10 +5758,12 @@
  },
  "c.tome_powers()": {
   "by": "slice6 + hand",
+  "corrected_by": "main session 2026-10-20, after reading each waiting row",
   "found": "items.implement_b._tome_power, c.borrow_row",
   "rows": 10,
-  "verdict": "mis-marked",
-  "why": "Upgraded from my own `probable`, deferring to slice 6. I marked it probable because I had not run it down; the agent did, and found `_tome_power` is live and reaches the dailies through `c.borrow_row`, walking the level ladder the card describes. A hand verdict outranks an agent's by default -- but not when the agent is the one who did the reading."
+  "verdict": "real",
+  "was": "Upgraded from my own `probable`, deferring to slice 6. I marked it probable because I had not run it down; the agent did, and found `_tome_power` is live and reaches the dailies through `c.borrow_row`, walking the level ladder the card describes. A hand verdict outranks an agent's by default -- but not when the agent is the one who did the reading.",
+  "why": "Corrected to `real`, #777, reversing my own upgrade from `probable`. `_tome_power` is live and does reach the dailies through `c.borrow_row` -- the agent's reading was accurate about the code. It is the wrong code for this clause. `c.borrow_row` samples the set at the moment of use and records nothing, and its own note says a campaign carrying between fights would want `chargen` to hold the pick. `i2899x1` and `i2900x1` are both the pick *surviving acquisition*, which is the sub-choice store, not a sampler. `i2899p1`/`i2900p1` are written off the sampling and are fine; the `x1` halves are not the same clause."
  },
  "c.trade_accuracy()": {
   "by": "slice3",

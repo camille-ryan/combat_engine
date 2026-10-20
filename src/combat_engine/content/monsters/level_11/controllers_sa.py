@@ -2419,12 +2419,29 @@ def m4460a3(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=REF, printed=15),
     damage=Damage("2d6", 3, dtype=DamageType.NECROTIC, kind=LIMITED),
+    dropped=("c.sustain_free()",),
 )
 def m4460a4(c: Cast) -> None:
-    """A free sustain **is** a cost the machinery takes: `Effect.sustain_cost`
-    is typed `ActionType | None` and `actions._sustaining` only asks
-    `can_spend`, which a free action satisfies. So the hold carries the
-    printed payout through `c.on_sustain`.
+    """**Half of the free sustain works and the half that matters does not.**
+    This docstring used to argue that it all did, from two true facts --
+    `Effect.sustain_cost` is typed `ActionType | None`, and
+    `actions._sustaining` only asks `can_spend`, which a free action
+    satisfies. Both are about the *deliberate menu* path, and measurement
+    (#776) says that path is the only one that works:
+
+    * taken from the menu, `sustain=ActionType.FREE` is offered and the grip
+      survives;
+    * left to the default, it does not. `durations._sustain_by_default` is
+      what keeps a `When.SUSTAIN` effect alive and it resolves the slot as
+      `getattr(budget, cost.value, 0)`. `Budget` has no `free`, so the
+      default fires, the cost reads as a slot already at zero, and the effect
+      ends "not sustained" -- silently, since `_warn_sustainless` only speaks
+      up when `sustain_cost is None`.
+
+    So the payout fires again only when somebody chooses it, where the card
+    charges nothing and means always. `ActionType.FREE` stays anyway, because
+    it is the least wrong spelling available: dropping it to `None` loses the
+    menu entry too and the grip then cannot be kept alive at all.
 
     Laid once for the burst rather than once per target, and the payout hits
     everything the creature is still holding -- "sustains the grab" is one
