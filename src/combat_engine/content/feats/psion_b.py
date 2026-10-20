@@ -12,17 +12,21 @@ objects or send a sentence -- and two feats ride those. `p8225` announces
 a `PowerUsed` whatever else it does, so the riders work; `p11267` has no
 sustain to make cheaper, which is header data and blocks one row.
 
-`cf:psion-focus` is the discipline focus, and it has a leg per option in
-`chargen.BUILDS["psion"]` now -- so which two cards a psion's focus
-granted is answerable, and `f1632` is written against it. `f3398` still
-is not: it is a **second** focus alongside the first, and a character
-takes one leg and stays on it.
+`cf:psion-focus` is the `cf:psion-f0`, and it has a leg per option in
+`chargen.BUILDS["psion"]` -- so which two cards a psion's focus granted is
+answerable, and `f1632` is written against it. `f3398` is written now too:
+it is a **second** focus alongside the first, which needed `c.set_build`,
+since a character took one leg and nothing could add another.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import (
+    PSION_F0_OPTIONS,
+    stand_on_another_leg,
+)
 from combat_engine.content.powers.augment import spent_on
 from combat_engine.engine import (
     AT_WILL,
@@ -66,11 +70,7 @@ CLOUD = "p2473"
 #: The racial attack power `f3172` retypes and hands back.
 RACIAL = "p8278"
 
-#: `chargen.BUILDS` has a leg per printed focus now, so the list is not
-#: the gap -- what is missing is a way to be on a *second* leg at once.
-SECOND_BUILD = ("c.set_build()",)
-
-#: The two cards each discipline focus hands over, by the leg that takes
+#: The two cards each `cf:psion-f0` hands over, by the leg that takes
 #: it. Read off `features/psionic.py`, which is what grants them.
 FOCUS_ROWS = {
     "f0s0": ("p13300", "p13301"),
@@ -365,7 +365,7 @@ def f3324(c: Cast) -> None:
 @power("f1632", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF)
 def f1632(c: Cast) -> None:
-    """A second use of each of the two cards the discipline focus grants.
+    """A second use of each of the two cards the `cf:psion-f0` grants.
 
     Which two they are is the leg, and `chargen.BUILDS["psion"]` has one
     per printed focus now, so the pair is looked up rather than guessed.
@@ -395,14 +395,26 @@ def f1632(c: Cast) -> None:
 
 
 @power("f3398", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=SECOND_BUILD)
+       reach=PERSONAL, target=SELF)
 def f3398(c: Cast) -> None:
-    """A second discipline focus, its powers usable as dailies.
+    """"Choose and gain a `cf:psion-f0` other than one you already
+    possess. You can use any powers associated with it as daily powers."
 
-    Re-aimed: `chargen.BUILDS` exists and has a leg per printed focus,
-    which is what `f1632` reads, so naming it was naming a gap that has
-    closed. What is missing is standing on two legs -- `c.build` asks
-    which one was taken and nothing adds another."""
+    **Written.** What was missing was standing on two legs -- `c.build`
+    asked which one was taken and nothing added another. `c.set_build` is
+    that, and unlike the cross-class feats this one is a psion's own class,
+    so the second leg is a second *real* focus rather than a borrowed one.
+
+    "Other than one you already possess" needs no clause of its own:
+    `c.borrow_row` already drops any option the character knows, and a
+    psion knows its own focus row. So the printed exclusion is the set
+    being picked from, which is where it belongs.
+
+    **Not `c.borrow_row`.** A psion already knows all three focus rows --
+    `chargen.loadout` deals a class every level 0 row it has -- so there is
+    nothing to hand over and this row audited SILENT written that way. What
+    the card gives is the *leg*, which is `stand_on_another_leg`."""
+    stand_on_another_leg(c, PSION_F0_OPTIONS)
 
 
 @power("f2588", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -355,6 +355,13 @@ CATEGORIES: dict[str, dict] = {
             # build-time fact finds them. #719.
             ("state and identity", [
                 "bloodied", "build", "chosen_weapons",
+                # `set_build` is the writer for the reader beside it: six
+                # feats stand a character on a build leg chargen did not
+                # deal. Placed here rather than under choices, because the
+                # question an author arrives with is "how do I say this
+                # character counts as that build", and `build` is the other
+                # half of the answer.
+                "set_build",
                 "considered_bloodied", "element",
                 "feat", "feats", "granted_by",
                 "granted_via", "healed_by", "index", "instinctive", "is_",
@@ -621,7 +628,8 @@ READERS: dict[str, list[str]] = {
     "who, and whose side": [
         "active", "alive", "allies", "combatants", "conscious", "creatures",
         "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
-        "is_trap", "kinds_of", "level_term", "living", "printed_kinds",
+        "is_trap", "kinds_of", "level_term", "living", "on_build",
+        "printed_kinds",
         "race_of", "race_sizes", "race_skills", "races_sized", "scenery",
         "stat_block", "targetable", "team",
     ],

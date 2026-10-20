@@ -31,6 +31,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import (
+    INVOKER_F1_OPTIONS,
+    stand_on_another_leg,
+)
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -494,17 +498,28 @@ def f2984(c: Cast) -> None:
 
 
 @power("f2989", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.set_build()",))
+       reach=PERSONAL, target=SELF)
 def f2989(c: Cast) -> None:
-    """Swaps the covenant manifestation for another covenant's between
-    fights.
+    """"After each extended rest, replace your covenant manifestation with
+    the covenant manifestation from any `cf:invoker-f1` of your choice."
 
-    Re-aimed off the multiclass symbol, which covered two unrelated
-    things and this is the other one. Nothing is being borrowed here:
-    the covenants are this character's own class's, they are declared,
-    and each refuses itself on the legs it is not for. What the card
-    does is move the character onto a different leg, and `c.build`
-    only reads one."""
+    **Written, and it is the one row in this family that *replaces* rather
+    than adds.** Nothing is borrowed: the covenants are this character's
+    own class's, they are declared, and each refuses itself on the legs it
+    is not for. What the card does is move the invoker onto a different
+    leg, and `c.build` only ever read one.
+
+    `c.set_build(instead_of=...)` is both halves at once -- the same shape
+    `c.set_origin` uses for "gains the shadow origin **instead of** the
+    natural origin", and for the same reason: the displaced word has to
+    stop answering or the character manifests both covenants. The leg being
+    left is found by asking, because nothing records which one chargen
+    dealt beyond the answer itself.
+
+    **Not `c.borrow_row`.** An invoker already knows both covenant rows,
+    so there was nothing to hand over and this audited SILENT written that
+    way -- fired 48 times, did nothing. Only the leg moves."""
+    stand_on_another_leg(c, INVOKER_F1_OPTIONS, instead=True)
 
 
 # -- riders on powers the spec names in prose -------------------------------

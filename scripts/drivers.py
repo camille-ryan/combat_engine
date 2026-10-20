@@ -12957,6 +12957,219 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def another_legs_option(out: Result) -> None:
+    """Standing on a leg chargen did not deal, which six feats need.
+
+    `Build.choices` is what chargen writes once, and `c.build` only ever
+    **read** it. Every one of a class feature's fourteen declared options
+    gates itself on its own leg, so a feat handing one to a character of
+    another class handed over a row that **refused itself**. Six heroic
+    feats said so in six different ways and all six waited on
+    `c.set_build()`.
+
+    **Two gates, and the second is why this rule exists.** Nine options
+    gate in their bodies with `c.build("f0sN")`; swordmage's three and
+    invoker's two gate in their *headers* with `requires=on_leg(...)`, and
+    `on_leg` read `Build.choices` directly. A verb reaching only the body
+    gate would have left `f1217` and `f2989` handed a row that still
+    refused itself, and the fault would have looked like the verb not
+    working. `query.on_build` is the one reader now and both callers are a
+    line over it.
+
+    **The leg is written out per option, not derived from the ref**, and
+    this rule is what holds those pairs honest: nine want their ref tail,
+    but the other five want `assault`, `ensnarement`, `shielding`,
+    `malediction`, `wrath`. A `ref.rsplit("-")[-1]` reads those as a leg
+    nobody stands on.
+
+    **And the own-class half needed a different verb.** `c.borrow_row`
+    drops options the character knows and `chargen.loadout` deals every
+    level 0 row, so a psion knows all three focus rows and an invoker both
+    covenants: `f3398` and `f2989` audited SILENT -- fired 48 times, did
+    nothing -- until they picked a *leg* instead of borrowing a row. Driven
+    below, since "fires and does something" cannot tell those apart.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.features.builds import (
+        ARDENT_F0_OPTIONS,
+        BATTLEMIND_F2_OPTIONS,
+        INVOKER_F1_OPTIONS,
+        PSION_F0_OPTIONS,
+        SWORDMAGE_F1_OPTIONS,
+    )
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Build, Powers
+    from combat_engine.engine.dsl import REGISTRY, usable
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import on_build
+
+    TABLES = {
+        "ARDENT_F0_OPTIONS": ARDENT_F0_OPTIONS,
+        "PSION_F0_OPTIONS": PSION_F0_OPTIONS,
+        "BATTLEMIND_F2_OPTIONS": BATTLEMIND_F2_OPTIONS,
+        "SWORDMAGE_F1_OPTIONS": SWORDMAGE_F1_OPTIONS,
+        "INVOKER_F1_OPTIONS": INVOKER_F1_OPTIONS,
+    }
+
+    # -- every option exists, and its pair unlocks its own gate -----------
+    pairs = [(n, o, leg) for n, t in TABLES.items() for o, leg in t.items()]
+    out.that(len(pairs) == 14,
+             "fourteen options across five features, which is the corpus"
+             " this family is about -- the floor, so the loop below cannot"
+             " pass on an empty table",
+             f"{len(pairs)}")
+    missing = [o for _n, o, _l in pairs if o not in REGISTRY]
+    out.that(not missing, "and every one is a declared row", f"{missing}")
+
+    # **The negative control is one made-up word, not one per pair.** A
+    # per-pair "nobody starts on this leg" control is unsound, because the
+    # leg vocabulary is **not class-scoped**: `f0s1` is a leg of the ardent
+    # fork, the psion fork *and* nothing distinguishes them, since
+    # `Build.choices` is a flat set of plain words. The board's character
+    # for `f3390` already holds `f0s1`, so that control failed on a true
+    # fact about the tree rather than on anything this verb does. Filed as
+    # #768; collisions are reported below rather than asserted away.
+    world, me, _armed = _posed("f3390", 1)
+    out.that(not on_build(world, me, "drivers:no-such-leg"),
+             "a leg nobody prints answers False -- the negative control, and"
+             " without it a reader returning True for everything would pass"
+             " every assertion below",
+             "a made-up leg answered True")
+
+    for name, option, leg in pairs:
+        world, me, _armed = _posed("f3390", 1)
+        Cast(world=world, me=me, ref="drivers:leg").set_build(
+            leg, until=When.ENCOUNTER)
+        out.that(on_build(world, me, leg),
+                 f"{name}: `c.set_build({leg!r})` puts them on it",
+                 f"{leg!r}")
+
+        # **Asked of the OPTION's own gate, not of the table's word.**
+        # Checking `on_leg(leg)` here instead is self-consistent whatever
+        # the table says -- a plant swapping `assault` for the ref tail
+        # `f1s0` passed it, because the probe set and read the same wrong
+        # word. The option is the only thing that knows which leg it wants.
+        gate = getattr(REGISTRY[option], "requires", None)
+        if gate is not None:
+            out.that(gate(world, me),
+                     f"{name}: and {option}'s own `requires=` gate opens --"
+                     " this is what catches a pair drifting from the leg"
+                     " the option actually reads",
+                     f"paired with {leg!r}")
+        else:
+            cursor = len(world.bus.log)
+            REGISTRY[option].body(Cast(world=world, me=me, ref=option))
+            did = [e for e in world.bus.log[cursor:]]
+            out.that(bool(did),
+                     f"{name}: and {option}'s body gets past its own"
+                     f" `c.build(...)` line -- it returns immediately on the"
+                     " wrong leg, so an empty bus is a drifted pair",
+                     f"paired with {leg!r}, {len(did)} event(s)")
+        # **It must come off again, or `until=` is a lie.** Every effect
+        # carrying the word is ended, not just this probe's -- the board
+        # arms `f3390`, which lays one of its own, and an earlier draft
+        # only cleaned up after itself and read that leftover as the verb
+        # writing the component.
+        for eff in list(world.effects.of(me)):
+            if f"build:{leg}" in eff.label:
+                world.effects.end(eff)
+        held = world.get(me, Build)
+        dealt = leg in held.choices if held is not None else False
+        out.that(not on_build(world, me, leg) or dealt,
+                 f"{name}: and ending every effect carrying {leg!r} takes it"
+                 " away again unless chargen dealt it -- without this the"
+                 " verb could be writing the component and `until=` would"
+                 " be a lie",
+                 f"{leg!r} still held, chargen dealt it: {dealt}")
+
+    # **Report the collisions rather than pretend there are none.** Two
+    # features sharing a leg word means a feat standing a character on one
+    # satisfies the other's gate too. Contained today only because a
+    # cross-class taker knows neither row.
+    seen: dict[str, list[str]] = {}
+    for name, _option, leg in pairs:
+        seen.setdefault(leg, []).append(name)
+    shared = {leg: ns for leg, ns in seen.items() if len(set(ns)) > 1}
+    out.that(len(shared) == 2,
+             "exactly two leg words are shared between features -- `f0s1`"
+             " and `f0s2`, the ardent fork and the psion fork, which is"
+             " #768. Pinned so a third is a finding rather than a surprise,"
+             " and a fix that scopes them shows up here as zero",
+             f"{ {k: sorted(set(v)) for k, v in shared.items()} }")
+
+    # -- what each row LAID, read off its own labels ----------------------
+    #
+    # **Not the leg set before and after.** `audit.board` arms every
+    # `action=NONE` row, so all six of these have already fired by the time
+    # a rule looks -- an earlier draft asserted "its own class stands on
+    # exactly one leg to start with" and failed because `f2989` had already
+    # correctly moved the invoker off it. The labels are what the row did,
+    # and they do not care who armed it or how often.
+    def laid(world, who: int, ref: str) -> tuple[list[str], list[str]]:  # noqa: ANN001
+        got, gone = [], []
+        for eff in world.effects.of(who):
+            if not eff.label.startswith(f"{ref} "):
+                continue
+            if "unbuild:" in eff.label:
+                gone.append(eff.label.split("unbuild:", 1)[1])
+            elif "build:" in eff.label:
+                got.append(eff.label.split("build:", 1)[1])
+        return sorted(got), sorted(gone)
+
+    for ref, table, replacing in (
+        ("f1217", SWORDMAGE_F1_OPTIONS, False),
+        ("f3390", ARDENT_F0_OPTIONS, False),
+        ("f3391", PSION_F0_OPTIONS, False),
+        ("f3394", BATTLEMIND_F2_OPTIONS, False),
+        ("f3398", PSION_F0_OPTIONS, False),
+        ("f2989", INVOKER_F1_OPTIONS, True),
+    ):
+        world, me, _armed = _posed(ref, 1)
+        got, gone = laid(world, me, ref)
+        out.that(len(got) == 1,
+                 f"{ref} stands its taker on exactly ONE leg -- not none,"
+                 " which is what an empty pool looks like, and not several,"
+                 " which is #548's stacking trap",
+                 f"gained {got}")
+        out.that(all(leg in table.values() for leg in got),
+                 f"{ref}: and it is a leg from its own feature's table",
+                 f"{got} vs {sorted(set(table.values()))}")
+        if replacing:
+            out.that(len(gone) == 1 and gone != got,
+                     f"{ref} also takes the old leg away, and a different"
+                     " one -- a character manifesting two covenants is the"
+                     " fault `instead_of` exists for, and displacing the"
+                     " leg it just granted is the fault idempotence fixed",
+                     f"gained {got}, lost {gone}")
+        else:
+            out.that(not gone,
+                     f"{ref} takes nothing away -- the control, and the"
+                     " difference between gaining a second option and"
+                     " swapping one",
+                     f"lost {gone}")
+
+    # -- and the handed-over row is known and no longer self-refusing -----
+    world, me, _armed = _posed("f3390", 1)
+    got, _gone = laid(world, me, "f3390")
+    held = set(world.need(me, Powers).all)
+    theirs = sorted(o for o, leg in ARDENT_F0_OPTIONS.items() if leg in got)
+    out.that(bool(theirs) and theirs[0] in held,
+             "the option whose leg `f3390` granted is one the taker now"
+             " KNOWS -- the grant and the leg are one choice, so a row"
+             " standing somebody on a leg without handing over its row"
+             " would pass everything above and still do nothing",
+             f"{theirs} vs known={sorted(set(ARDENT_F0_OPTIONS) & held)}")
+    if theirs:
+        _ok, why = usable(world, me, REGISTRY[theirs[0]])
+        out.that("not known" not in why and "requires" not in why,
+                 f"and `usable` no longer refuses {theirs[0]} for not being"
+                 " known or for its leg -- it was 'not known' before the"
+                 " grant and would refuse on `requires` without the leg."
+                 " (A spent usage is the board's arming, not this row.)",
+                 f"usable said {why!r}")
+
+
 def defective_entry(out: Result) -> None:
     """A defective part drops the **whole compendium entry**. #600.
 
@@ -26954,6 +27167,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "another_legs_option": (
+        another_legs_option,
+        "standing on a build leg chargen did not deal, which is what six"
+        " feats handing over another class's option need (#768)",
+    ),
     "recharge_announced": (recharge_announced,
                            "a spent row coming back says so, on both paths"),
     "lost_mode": (lost_mode,

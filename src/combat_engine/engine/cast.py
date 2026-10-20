@@ -940,6 +940,68 @@ class Cast:
             )
         return held
 
+    def set_build(
+        self,
+        *choices: str,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        instead_of: str = "",
+    ) -> Effect | None:
+        """Stand on a build's leg that chargen did not deal you.
+
+        `Build.choices` is what chargen wrote once and the character lives
+        with, and `c.build` only ever **read** it. Six heroic feats need the
+        other half, and they say so in six different ways:
+
+        * *"Choose a power granted by `cf:ardent-f0`"* -- `f3390`, `f3391`,
+          `f3394`, `f1217`. Every one of those options opens with
+          `if not c.build("f0sN"): return`, or carries `requires=on_leg(...)`
+          in its header, so a feat that hands one over hands a row that
+          **refuses itself**. The grant and the choosing both already work;
+          this is the word the granted row reads.
+        * *"a second discipline focus"* -- `f3398`, which is standing on two
+          legs at once.
+        * *"swaps the covenant manifestation for another covenant's"* --
+          `f2989`, which is standing on a different one. That is
+          `instead_of`.
+
+        **Deliberately the same shape as `c.set_origin`**, down to the
+        `instead_of` and the label convention, because it is the same kind of
+        fact: a word about this creature that something gave it, lasting
+        exactly as long as whatever gave it. A field on `Build` would have
+        made the duration unwritable.
+
+        **`until=` is what keeps #548's trap shut.** A leg's options are
+        gated on the leg, so a *permanent* extra leg would hand a character
+        everything printed on it -- the failure that issue describes as
+        thirteen choices collapsing into a stack. Scoped to the encounter,
+        and granting no rows of its own, this adds the word and nothing else:
+        a cross-class feat's taker still knows only the row `c.grant_row`
+        handed them.
+
+        Yours, so it defaults to the **caster**, exactly as `c.build` does
+        and for the same reason.
+        """
+        who = on if on is not None else self.me
+        held: Effect | None = None
+        # **The ref leads the label.** `audit._claimed` credits an
+        # `EffectApplied` to a row only when the label *starts with* that
+        # row's ref, and `c.set_origin`'s comment records 17 rows reporting
+        # SILENT for getting this backwards. #374.
+        if instead_of:
+            held = self.world.effects.apply(
+                who, self.me, until,
+                label=f"{self.ref} unbuild:{instead_of.strip().lower()}",
+                by=self.ref,
+            )
+        for choice in choices:
+            held = self.world.effects.apply(
+                who, self.me, until,
+                label=f"{self.ref} build:{choice.strip().lower()}",
+                by=self.ref,
+            )
+        return held
+
     def build(self, choice: str, *, on: int | None = None) -> bool:
         """Did this character take that build? `c.build("infernal")`.
 
@@ -947,12 +1009,17 @@ class Cast:
         build rider is always about whoever is using the power, never about
         who it lands on. Four agents across three classes asked for this
         independently, which is how it got written.
+
+        **A standing `c.set_build` answers too**, so one line over
+        `query.on_build` rather than reading `Build` here: the header gate
+        `content.features.builds.on_leg` has to give the same answer, and
+        two copies of this question is how a verb reaches one gate and not
+        the other. See that reader for the ordering traps.
         """
-        from .components import Build
+        from .query import on_build
 
         who = self.me if on is None else on
-        held = self.world.get(who, Build)
-        return held is not None and choice.lower() in held.choices
+        return on_build(self.world, who, choice)
 
     def feat(self, ref: str, *, on: int | None = None) -> bool:
         """Has this character taken that feat? `c.feat("f611")`.

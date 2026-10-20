@@ -199,6 +199,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - How far this creature's melee attacks carry, in squares.
 - `c.result: AttackResult | None`
   - the last `AttackResult`, or None. `.advantage` is whether the attack had combat advantage; asking again is too late.
+- `c.set_build(self, *choices: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, instead_of: 'str' = '') -> 'Effect | None'`
+  - Stand on a build's leg that chargen did not deal you.
 - `c.turn_of(self) -> 'int | None'`
   - Whose turn it is, for a trigger that cares.
 - `c.with_a_chosen_weapon(self, ctx: 'dict[str, Any]', *, on: 'int | None' = None) -> 'bool'`

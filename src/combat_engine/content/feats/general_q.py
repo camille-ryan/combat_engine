@@ -50,6 +50,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.builds import (
+    ARDENT_F0_OPTIONS,
+    BATTLEMIND_F2_OPTIONS,
+    PSION_F0_OPTIONS,
+    another_legs_option,
+)
 from combat_engine.content.features.warlock import BOON_REGAIN
 from combat_engine.content.powers.monk.level_0 import FLURRIES
 from combat_engine.engine import (
@@ -2209,24 +2215,41 @@ def f3389(c: Cast) -> None:
     pool.points += 1
 
 
-@power("f3390", level=1, cls="", usage=DAILY, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
-def f3390(c: Cast) -> None:
-    """"Choose a power granted by <a feature>."
 
-    Re-aimed. The feature has a list now -- its options are declared --
-    so the choosing is `c.borrow_row(among=...)` and the handing over is
-    `c.grant_row`. What is left is that each option opens with
-    `if not c.build("f0sN"): return`, which is the word *one* said where
-    a member of the class can read it and is false for everybody
-    else."""
+
+@power("f3390", level=1, cls="", usage=DAILY, action=ActionType.NONE,
+       reach=PERSONAL, target=SELF)
+def f3390(c: Cast) -> None:
+    """"Choose a power granted by <a feature>. You can use that power once
+    per day."
+
+    **Written.** The last hold was that each option opens with
+    `if not c.build("f0sN"): return` -- the word *one* said where a member
+    of the class can read it and false for everybody else -- so a character
+    of another class was handed a row that refused itself. `c.set_build`
+    stands the taker on that option's leg for the encounter, which is the
+    half that did not exist.
+
+    `uses=1` is the printed "once per day": the options are `ENCOUNTER`
+    traits on their own cards, and handed over bare one would come back
+    every fight."""
+    another_legs_option(c, ARDENT_F0_OPTIONS, usage=Usage.ENCOUNTER)
 
 
 @power("f3391", level=1, cls="", usage=DAILY, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF)
 def f3391(c: Cast) -> None:
-    """Same shape: every power a named feature grants, once a day. The
-    three options are declared and each one gates itself on a leg."""
+    """"Choose a psion `cf:psion-f0`. You can use each power granted by
+    it once per day."
+
+    Same shape as `f3390` and the same hold, now gone. Three options, each
+    gating on its own ref tail.
+
+    The card says "each power granted by" the focus and the focus *is* the
+    row that grants them, so taking the one row is taking the lot -- there
+    is no second list to enumerate and inventing one would be writing a
+    card nobody printed."""
+    another_legs_option(c, PSION_F0_OPTIONS, usage=Usage.ENCOUNTER)
 
 
 @power("f3392", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -2256,11 +2279,13 @@ def f3393(c: Cast) -> None:
 
 
 @power("f3394", level=1, cls="", usage=DAILY, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF)
 def f3394(c: Cast) -> None:
-    """A power granted by a named feature, once a day. Same as f3390:
-    the four options are declared and each refuses itself off its
-    leg."""
+    """"Choose a power granted by a battlemind `cf:battlemind-f2`. You can use
+    that power once per day."
+
+    Same as `f3390`, with four options rather than two."""
+    another_legs_option(c, BATTLEMIND_F2_OPTIONS, usage=Usage.ENCOUNTER)
 
 
 @power("f3395", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

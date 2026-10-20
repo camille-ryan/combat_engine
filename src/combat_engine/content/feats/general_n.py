@@ -41,6 +41,10 @@ from collections.abc import Callable
 from typing import Any
 
 from combat_engine.content.features import CHANNEL_DIVINITY
+from combat_engine.content.features.builds import (
+    SWORDMAGE_F1_OPTIONS,
+    another_legs_option,
+)
 from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
@@ -2014,18 +2018,23 @@ def f2203(c: Cast) -> None:
 
 
 @power("f1217", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF)
 def f1217(c: Cast) -> None:
-    """Another class's feature hands over a power of the taker's choice.
+    """"Choose a `cf:swordmage-f1` power. You can use that power once per
+    encounter."
 
-    Re-aimed. The `cf:` ref is declared now and so are its three
-    options, so the borrowing is no longer the hold -- `c.grant_row`
-    hands a feature over and `c.borrow_row` picks one out of a list.
-    The hold is one step further in: each option gates itself on a leg
-    of its own class, `cf:swordmage-f1s0` with a `requires=on_leg(...)`
-    in the header and the other two inside the body, so a character who
-    took this feat is handed a row that refuses itself. Nothing puts a
-    character on another class's leg."""
+    **Written.** The hold was that each of the three options gates itself
+    on a leg of its own class, so a character who took this feat was handed
+    a row that refused itself and nothing could put them on another class's
+    leg. `c.set_build` is that, and `another_legs_option` is the three
+    steps in order.
+
+    Two corrections to the note that stood here. All three options gate in
+    their **headers** with `requires=on_leg(...)`, not one in the header and
+    two in their bodies -- measured. And the legs are *named*: `assault`,
+    `ensnarement`, `shielding`, not the `f1sN` tails nine other options use.
+    That is why `SWORDMAGE_F1_OPTIONS` writes each pair out."""
+    another_legs_option(c, SWORDMAGE_F1_OPTIONS, usage=Usage.ENCOUNTER)
 
 
 @power("f1351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

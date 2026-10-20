@@ -891,6 +891,49 @@ def printed_kinds() -> frozenset[str]:
     return frozenset(w for w in (_type_word(w) for w in out) if w)
 
 
+def on_build(world: World, eid: int, choice: str) -> bool:
+    """Does this character stand on that leg of its class's fork?
+
+    **Lifted out of `Cast` so the header gate can ask it**, which is the
+    whole point. A class feature's options gate themselves on their own leg
+    two different ways -- nine of the fourteen with `c.build("f0sN")` in the
+    body, and five with `requires=on_leg(...)` in the header -- and six feats
+    hand a character another leg's option. With the answer living in two
+    places, `c.set_build` could reach the body gate and not the header one,
+    so `f1217` and `f2989` would have been handed a row that still refused
+    itself and the fault would have looked like the verb not working.
+
+    `content.features.builds.on_leg` and `Cast.build` are both one line over
+    this now. Same reason `kinds_of` was lifted, and the same reason
+    `c.in_form` delegates here.
+
+    Off `Build.choices`, which chargen writes once, plus anything
+    `c.set_build` has laid and minus anything it took away. The displaced
+    word has to stop answering: `f2989` replaces one covenant manifestation
+    with another and a character on both is wrong in the same way a creature
+    with two origins is.
+    """
+    want = choice.strip().lower()
+    added = False
+    for eff in world.effects.of(eid):
+        # **Searched for, not anchored**, and both halves collected before
+        # either is answered -- the same two traps `kinds_of` documents. The
+        # label leads with the laying row's ref so `audit._claimed` can
+        # credit it (#374), and `build:` is a substring of `unbuild:`.
+        #
+        # Returning on the first match instead would make the answer depend
+        # on effect iteration order the moment one row adds a leg and
+        # another takes it away.
+        tag = eff.label
+        if f"unbuild:{want}" in tag:
+            return False
+        added = added or f"build:{want}" in tag
+    if added:
+        return True
+    held = world.get(eid, Build)
+    return held is not None and want in held.choices
+
+
 def kinds_of(world: World, eid: int) -> frozenset[str]:
     """A creature's type words: undead, goblin, beast, natural, and so on.
 
