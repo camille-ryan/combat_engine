@@ -1157,7 +1157,7 @@ def f3517(c: Cast) -> None:
     the easy one -- `not ctx.get("ranged")` is "melee". What could not be
     said was *concealment and not cover*: `cover_waived` answered one
     number for both, so this feat waived a wall too. `concealment_only=True`
-    is the carve-out. #770.
+    is the carve-out. #771.
 
     The card names partial **and** total concealment, which is the whole of
     it, so no `partial=` narrowing: that parameter is for the rows printing

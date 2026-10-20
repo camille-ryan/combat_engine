@@ -12958,7 +12958,7 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
 
 
 def concealment_without_cover(out: Result) -> None:
-    """Sight that passes a fog bank and stops at a wall. #770.
+    """Sight that passes a fog bank and stops at a wall. #771.
 
     Four rows print "ignore concealment" and not one of them prints cover:
     three monster traits and one feat. `resolve.situational_attack` took the
@@ -27306,7 +27306,7 @@ DRIVERS = {
     "concealment_without_cover": (
         concealment_without_cover,
         "a waiver of concealment that leaves cover standing, which four"
-        " rows print and none could say (#770)",
+        " rows print and none could say (#771)",
     ),
     "another_legs_option": (
         another_legs_option,

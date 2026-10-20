@@ -2628,7 +2628,7 @@ def m5316a0(c: Cast) -> None:
     as well, because `cover_waived` answered one number for both halves of
     the penalty and there was nothing to carve out. `concealment_only=True`
     is the carve-out, so a wounded creature behind a wall is still behind a
-    wall. #770.
+    wall. #771.
     """
     c.ignore_cover(
         on=c.me,

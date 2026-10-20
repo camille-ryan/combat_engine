@@ -1952,7 +1952,7 @@ def cover_waived(
 def concealment_waived(
     world: World, attacker: int, target: int, ctx: dict[str, Any] | None = None
 ) -> int:
-    """How much **concealment** this pairing does not count. #770.
+    """How much **concealment** this pairing does not count. #771.
 
     Everything `cover_waived` answers, because "you ignore cover and
     concealment" covers this half too -- plus the narrower sentence that

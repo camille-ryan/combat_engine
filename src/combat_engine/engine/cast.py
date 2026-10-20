@@ -6662,7 +6662,7 @@ class Cast:
         wall for free, which `m5426a0`'s note calls "a bigger rule than the
         card". The two halves are waived separately now and only then
         compared, and this lays the narrower key `ignore_concealment` that
-        `query.concealment_waived` reads. #770.
+        `query.concealment_waived` reads. #771.
 
         Darkness counts as concealment, so this waives that too -- which is
         what "sees a wounded creature however well hidden" means.

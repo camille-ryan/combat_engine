@@ -1730,7 +1730,7 @@ def m5426a0(c: Cast) -> None:
     which is a bigger rule than the card has and the sort of over-grant
     nothing ever catches again. Each half is waived against its own number
     now and only then compared, so `concealment_only=True` leaves cover
-    standing. #770.
+    standing. #771.
     """
     c.ignore_cover(on=c.me, until=When.ENCOUNTER, concealment_only=True)
 

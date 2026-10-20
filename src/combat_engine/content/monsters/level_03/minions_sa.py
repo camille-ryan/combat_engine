@@ -509,7 +509,7 @@ def m5477a0(c: Cast) -> None:
     `when=` gate is the "against bloodied creatures" half, read off the
     attack context's target the way `m5316a0` reads it. The two halves of
     the penalty are waived separately now, so cover still stops this
-    creature. #770."""
+    creature. #771."""
     c.ignore_cover(
         on=c.me,
         until=When.ENCOUNTER,

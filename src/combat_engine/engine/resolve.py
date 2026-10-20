@@ -153,7 +153,7 @@ def situational_attack(
         # *first* and asking one waiver about the pair made four printed
         # sentences unwritable: sight that passes concealment and not
         # cover. Waiving the pair would have let those creatures shoot
-        # through a wall. #770.
+        # through a wall. #771.
         #
         # A standing waiver -- `c.ignore_cover` on the attacker or
         # `c.no_cover` on the target -- reads the same context the penalty
