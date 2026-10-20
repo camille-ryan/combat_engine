@@ -6750,6 +6750,36 @@ class Cast:
             once=once, when=when,
         )
 
+    def no_invisibility(
+        self, *, on: int | None = None, until: When = When.EONT
+    ) -> Effect | None:
+        """"The target cannot benefit from invisibility."
+
+        The companion of `c.no_cover` and deliberately a **separate verb**
+        rather than a flag on `c.invisible`: this sits on whoever is being
+        looked at, where every existing waiver -- `sees_invisible`,
+        `sees_through` -- sits on whoever is looking. Two monster rows print
+        the sentence and had nowhere to write it, because making the caster
+        see invisible creatures would let it see *every* hidden creature,
+        which is a far bigger rule than the card. Same distinction
+        `c.no_cover`'s own note draws against `c.ignore_cover`.
+
+        Read by `query.unseen_by`, which is the one place the relation is
+        turned into an answer -- so the sight and the combat advantage can
+        never disagree about it.
+
+        Follows `c.target`, since it is done *to* the creature. The
+        concealment half of those cards is `c.no_cover`; a row printing both
+        calls both, because they are two sentences about two mechanisms that
+        happen to share a line. #774.
+        """
+        who = self._who(on)
+        if who is None:
+            return None
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} revealed", by=self.ref,
+        )
+
     def no_cover(
         self,
         *,

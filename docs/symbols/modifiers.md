@@ -100,6 +100,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "You do not grant combat advantage to any of your enemies."
 - `c.no_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target does not benefit from cover or concealment."
+- `c.no_invisibility(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
+  - "The target cannot benefit from invisibility."
 - `c.unhide(self) -> 'None'`
   - Give yourself away deliberately.
 

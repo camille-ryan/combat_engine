@@ -1191,16 +1191,24 @@ def m2097a3(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=10),
-    dropped=("c.invisible(reveal=)",),
 )
 def m2097a4(c: Cast) -> None:
-    """The concealment half is `c.no_cover`, which says exactly "does not
-    benefit from cover or concealment." Seeing through the target's own
-    invisibility for every attacker, not just this one, has no verb --
-    see the report."""
+    """"The target grants combat advantage to all attackers, and cannot
+    benefit from invisibility or concealment."
+
+    **Both halves now.** The concealment one is `c.no_cover`, which says
+    exactly "does not benefit from cover or concealment". The invisibility
+    one is `c.no_invisibility`, and it had no verb: every existing waiver --
+    `sees_invisible`, `sees_through` -- sits on whoever is **looking**, and
+    writing this as one of those would have let the caster see every hidden
+    creature on the board rather than this one. #774.
+
+    Three sentences, three calls. They share a printed line and nothing
+    else."""
     if c.strike():
         c.grants_advantage(to="team", until=When.EONT)
         c.no_cover(on=c.target, until=When.EONT)
+        c.no_invisibility(on=c.target, until=When.EONT)
 
 
 # --------------------------------------------------------------------------
@@ -1956,16 +1964,14 @@ def m4364a1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=REF, printed=11),
-    dropped=("c.invisible(reveal=)",),
 )
 def m4364a2(c: Cast) -> None:
-    """Same card as `m2097a4` and written the same way: the concealment half
-    is `c.no_cover`, which says exactly "does not benefit from cover or
-    concealment", and seeing through the target's own invisibility for every
-    attacker rather than only this one has no verb."""
+    """Same card as `m2097a4` and written the same way, including the
+    invisibility half that `c.no_invisibility` closes. #774."""
     if c.strike():
         c.grants_advantage(to="team", until=When.EONT)
         c.no_cover(on=c.target, until=When.EONT)
+        c.no_invisibility(on=c.target, until=When.EONT)
 
 
 @power(

@@ -113,6 +113,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - The concealment the target gets from standing somewhere badly lit.
 - `query.light_level(world: 'World', square: 'Square', dark_zones: 'list[Any] | None' = None) -> 'Light'`
   - How well lit this square is.
+- `query.revealed(world: 'World', who: 'int') -> 'bool'`
+  - Has this creature been stripped of the benefit of invisibility? #774.
 - `query.sees_in(world: 'World', eid: 'int', level: 'Light', distance: 'int' = 0) -> 'bool'`
   - Can this creature see normally at that light level?
 - `query.sees_invisible(world: 'World', eid: 'int') -> 'bool'`

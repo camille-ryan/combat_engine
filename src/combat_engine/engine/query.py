@@ -1660,9 +1660,29 @@ def unseen_by(world: World, watcher: int, who: int) -> bool:
         return True
     if sight_capped(world, watcher, who):
         return True
+    if revealed(world, who):
+        return False
     return world.relations.holds(Relation.HIDDEN_FROM, who, watcher) and not sees_through(
         world, watcher, who
     )
+
+
+def revealed(world: World, who: int) -> bool:
+    """Has this creature been stripped of the benefit of invisibility? #774.
+
+    **The target's side of the waiver, where `sees_through` is the
+    watcher's.** Two monster rows print "the target cannot benefit from
+    invisibility or concealment" -- the concealment half is `c.no_cover`,
+    and the invisibility half had nowhere to be written, because the only
+    waiver was on whoever was looking. A row printing the second cannot be
+    written as the first: giving the caster see-invisible lets it see *every*
+    hidden creature, which is a much bigger rule than the card.
+
+    Held as a labelled effect rather than a `Mods` key, because `unseen_by`
+    is asked with no attack context and `Mods.total` wants one -- the same
+    reason `c.set_origin` and `c.deals` hold their words this way.
+    """
+    return any(" revealed" in eff.label for eff in world.effects.of(who))
 
 
 def concealment_of(

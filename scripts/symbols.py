@@ -292,7 +292,7 @@ CATEGORIES: dict[str, dict] = {
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
                 "hide", "ignore_cover", "ignores_long_range", "invisible",
-                "no_advantage", "no_cover", "unhide",
+                "no_advantage", "no_cover", "no_invisibility", "unhide",
             ]),
             # Not cover either: a relation between two creatures, where one
             # is answering for the other. Beside cover only because both end
@@ -643,7 +643,8 @@ READERS: dict[str, list[str]] = {
         "blinded", "concealment_of", "cover_between", "cover_granters",
         "concealment_waived", "cover_waived", "has_sense", "hidden_from",
         "light_concealment",
-        "light_level", "sees_in", "sees_invisible", "sees_through",
+        "light_level", "revealed", "sees_in", "sees_invisible",
+        "sees_through",
         "sheltered_from", "sight_capped", "unseen_by",
     ],
     "attacking and defending": [

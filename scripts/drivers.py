@@ -12957,6 +12957,116 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def invisibility_taken_away(out: Result) -> None:
+    """"The target cannot benefit from invisibility" -- for everybody. #774.
+
+    Every waiver this engine had sat on whoever was **looking**:
+    `sees_invisible`, `sees_through`, `query.unseen_by`'s blindness and
+    sight-cap terms. Two monster rows print the other side -- the target's
+    invisibility stops working, full stop -- and writing it as a
+    watcher-side waiver would have let the caster see **every** hidden
+    creature on the board instead of this one. Both rows' notes said so and
+    both left the clause dropped rather than over-grant.
+
+    `c.no_invisibility` is the target-side waiver, read by
+    `query.unseen_by`, which is the single place the `HIDDEN_FROM` relation
+    becomes an answer -- so the sight and the combat advantage cannot
+    disagree about it.
+
+    **The control is a second watcher.** A waiver that only blinded the
+    caster to this creature's invisibility would pass a one-watcher probe
+    and be the wrong rule; the card says the target benefits from it against
+    nobody.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        allies,
+        enemies,
+        revealed,
+        unseen_by,
+    )
+
+    def posed():  # noqa: ANN202
+        world, me, _armed = _posed("m2097a4", 1)
+        foe = sorted(enemies(world, me))[0]
+        friends = sorted(a for a in allies(world, me) if a != me)
+        return world, me, foe, (friends[0] if friends else None)
+
+    world, me, foe, ally = posed()
+    if ally is None:
+        out.that(False, "the board deals a second watcher for the control")
+        return
+
+    # **Laid per watcher on purpose.** `c.invisible` with no `to=` hides the
+    # subject from the *caster's* enemies, so hiding a foe from the caster
+    # needs naming -- a first draft without it read False before the waiver
+    # and the whole table was vacuous.
+    c = Cast(world=world, me=me, ref="drivers:unseen")
+    c.invisible(on=foe, to=me, until=When.ENCOUNTER)
+    c.invisible(on=foe, to=ally, until=When.ENCOUNTER)
+    out.that(unseen_by(world, me, foe) and unseen_by(world, ally, foe),
+             "the creature starts unseen by BOTH watchers -- the baseline,"
+             " and without it every assertion below passes on a creature"
+             " nobody could see anyway",
+             f"me={unseen_by(world, me, foe)} ally={unseen_by(world, ally, foe)}")
+    out.that(not revealed(world, foe),
+             "and nothing has taken the benefit away yet")
+
+    c.no_invisibility(on=foe, until=When.ENCOUNTER)
+    out.that(revealed(world, foe),
+             "`c.no_invisibility` marks it as stripped of the benefit")
+    out.that(not unseen_by(world, me, foe),
+             "so the caster sees it")
+    out.that(not unseen_by(world, ally, foe),
+             "and so does the OTHER watcher -- the control, and the whole"
+             " difference between this and giving the caster see-invisible,"
+             " which would also reveal every other hidden creature",
+             f"{unseen_by(world, ally, foe)}")
+
+    # -- it does not blind the caster to anybody else's invisibility -----
+    world, me, foe, ally = posed()
+    others = [e for e in sorted(enemies(world, me)) if e != foe]
+    if others:
+        second = others[0]
+        c = Cast(world=world, me=me, ref="drivers:unseen")
+        c.invisible(on=foe, to=me, until=When.ENCOUNTER)
+        c.invisible(on=second, to=me, until=When.ENCOUNTER)
+        c.no_invisibility(on=foe, until=When.ENCOUNTER)
+        out.that(not unseen_by(world, me, foe)
+                 and unseen_by(world, me, second),
+                 "and a SECOND hidden creature is still hidden -- the"
+                 " negative control, and the fault a watcher-side waiver"
+                 " would have had",
+                 f"target seen={not unseen_by(world, me, foe)},"
+                 f" bystander hidden={unseen_by(world, me, second)}")
+
+    # -- through the two rows' own bodies --------------------------------
+    for ref in ("m2097a4", "m4364a2"):
+        world, me, foe, _ally = posed()
+        Cast(world=world, me=me, ref="drivers:hide").invisible(
+            on=foe, to=me, until=When.ENCOUNTER)
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        world.rng.loaded = 20
+        REGISTRY[ref].body(use)
+        out.that(revealed(world, foe),
+                 f"{ref}'s own body takes the benefit away on a hit",
+                 f"revealed={revealed(world, foe)}")
+        out.that(not unseen_by(world, me, foe),
+                 f"and {ref}'s target is seen afterwards")
+
+    left = [r for r in ("m2097a4", "m4364a2")
+            if "c.invisible(reveal=)" in (
+                tuple(getattr(REGISTRY[r], "todo", ()) or ())
+                + tuple(getattr(REGISTRY[r], "dropped", ()) or ()))]
+    out.that(not left, "and neither row waits on the symbol any more",
+             f"{left}")
+
+
 def a_mark_that_lapses(out: Result) -> None:
     """"The mark ends if you do not attack it", and the row that forbids it.
 
@@ -27549,6 +27659,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "invisibility_taken_away": (
+        invisibility_taken_away,
+        "a creature stripped of the benefit of invisibility, against every"
+        " watcher rather than one (#774)",
+    ),
     "mark_lapses": (
         a_mark_that_lapses,
         "a mark that ends when its turn passes without an attack, and the"
