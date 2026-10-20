@@ -180,8 +180,19 @@ CHECKS = (
     # never be committed. #789.
     Instrument("play", ("uv", "run", "scripts/play.py", "--play",
                         "scripts/fixtures/modules/sunken-mill.json",
-                        "--seed", "7", "--quiet"),
+                        "--seed", "7", "--quiet", "--solo", "--no-llm"),
                "a whole adventure runs, carrying the party between scenes"),
+    # **`--solo --no-llm` and not just `--play`.** Without `--solo` every
+    # character defaults to human, nobody declares, and the beat loop spins
+    # four empty exchanges -- so the roleplay half would have been *driven*
+    # without being *exercised*, which is the shape of coverage this suite
+    # exists to refuse. With it, the fixture's yard runs its affordances,
+    # its `once` rule and its ending with canned lines and no model at all.
+    #
+    # `--no-llm` is load-bearing rather than defensive: `story/llm.py` talks
+    # to ollama, and an instrument that goes red because nobody started a
+    # model server is an instrument people route around. The model path has
+    # its own driver, which reports an honest skip instead (#801).
     # **Both of these were broken by a refactor and nothing noticed**, which is why
     # they are here. Retiring `LinearPolicy` left `winrate.py` with a stale
     # `policy_name="linear"` default, so its ordinary invocation raised `KeyError`

@@ -28325,7 +28325,204 @@ def a_campaign_replays_in_a_fresh_process(out: Result) -> None:
     )
 
 
+def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
+    """The bookkeeping around a beat, with no model in the loop at all.
+
+    `Director(scripted=True)` answers every call from canned text, so this
+    asserts the parts that are code -- the `once` rule, the rolls, the facts,
+    the ending -- without asserting anything about prose, which no instrument
+    can judge. #800.
+
+    **`once` was not once**, and that is why the first assertion exists. The
+    open list was computed before matching and an id spent only afterwards,
+    so two characters could take the same affordance in one exchange: a
+    cleric failed `coax-the-dog` and a rogue passed it in the same beat, and
+    the DM was handed "the dog stays where it is" and "the dog comes down"
+    together and wrote both.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import Party
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import table as tbl
+
+    raw = {
+        "id": "probe", "party_level": 2, "party_size": 3, "start": "talk",
+        "scenes": [
+            {"id": "talk", "kind": "roleplay", "name": "Talk", "brief": "A room.",
+             "max_beats": 3, "exits": ["away"],
+             "affordances": [
+                 {"id": "once-only", "what": "try the one thing",
+                  "skill": "diplomacy", "band": "easy",
+                  "win": "it worked", "lose": "it did not"},
+                 {"id": "no-roll", "what": "just do it", "win": "done"},
+                 {"id": "out", "what": "leave", "win": "they go",
+                  "leads_to": "away"}]},
+            {"id": "away", "kind": "roleplay", "name": "Away",
+             "brief": "Elsewhere.", "exits": []},
+        ],
+    }
+    module = mod.parse(raw, Path("<driver>"))
+    scene = module.scene("talk")
+    party = Party.of(["fighter", "cleric", "rogue"], level=2, seed=7)
+    actors = [bt.Actor(i, n, c, "ai") for i, (n, c) in enumerate(
+        [("A", "fighter"), ("B", "cleric"), ("C", "rogue")])]
+
+    # Everybody reaches for the same affordance in one beat.
+    class Greedy(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {i.slot: "once-only" for i in intents}
+
+    table = tbl.lay(party, seed=4)
+    playing = bt.Playing(scene=scene)
+    beat = bt.one_beat(playing, table, actors, Greedy(scripted=True),
+                       ask_human=bt.silent, party_level=2)
+    took = [r for r in beat.rulings if r.affordance == "once-only"]
+    out.that(
+        len(took) == 1,
+        "a once-only affordance is taken once even inside one beat",
+        f"{len(took)} of {len(beat.rulings)} intents took it",
+    )
+    out.that(
+        all(r.affordance == "none" for r in beat.rulings if r not in took),
+        "and the others are simply talking rather than failing",
+    )
+    out.that(
+        took[0].rolled and took[0].dc > 0,
+        "the one that took it rolled, in the engine, against a real DC",
+        f"{took[0]}",
+    )
+    out.that(
+        took[0].fact in ("it worked", "it did not"),
+        "and carries the module's own text as the fact, not the model's",
+        f"{took[0].fact!r}",
+    )
+    table.strike()
+
+    # An affordance with no skill still happens, and still states its fact.
+    class Quiet(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {intents[0].slot: "no-roll", **{
+                i.slot: "none" for i in intents[1:]}}
+
+    table = tbl.lay(party, seed=5)
+    playing = bt.Playing(scene=scene)
+    beat = bt.one_beat(playing, table, actors, Quiet(scripted=True),
+                       ask_human=bt.silent, party_level=2)
+    done = next(r for r in beat.rulings if r.affordance == "no-roll")
+    out.that(
+        not done.rolled and done.won and done.fact == "done",
+        "an affordance with no skill happens without a roll and still counts",
+        f"{done}",
+    )
+    table.strike()
+
+    # `leads_to` ends the scene, and the module decides where.
+    class Leaving(bt.Director):
+        def match(self, playing, intents) -> dict:  # noqa: ANN001
+            return {intents[0].slot: "out", **{
+                i.slot: "none" for i in intents[1:]}}
+
+    table = tbl.lay(party, seed=6)
+    playing = bt.play_scene(scene, table, actors, Leaving(scripted=True),
+                            ask_human=bt.silent, party_level=2)
+    out.that(
+        playing.leads_to == "away" and len(playing.beats) == 1,
+        "an affordance that leads somewhere ends the scene on the spot",
+        f"{playing.leads_to!r} after {len(playing.beats)} beat(s)",
+    )
+    table.strike()
+
+    # The control: nothing taken runs to the cap and ends nowhere.
+    table = tbl.lay(party, seed=7)
+    playing = bt.play_scene(scene, table, actors, bt.Director(scripted=True),
+                            ask_human=bt.silent, party_level=2)
+    out.that(
+        not playing.leads_to and len(playing.beats) == scene.max_beats,
+        "and a scene where nobody takes anything runs to max_beats",
+        f"{len(playing.beats)} beats, leads_to {playing.leads_to!r}",
+    )
+    table.strike()
+
+
+def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:
+    """The bet the whole story layer rests on, asked of whatever is serving.
+
+    A 7B asked to *judge* which intents need a check got one of three right.
+    Asked to **match** against a closed list it got 3 of 3, three runs out of
+    three, at temperature 0 -- including the "none" it had failed. #801.
+
+    That measurement is the reason affordances exist, so it is worth holding
+    a model to. It is also the one driver here that needs something serving,
+    which is why it **reports a skip** rather than failing: an instrument
+    that goes red because nobody started ollama is an instrument people route
+    around, and `scripts/CLAUDE.md` is explicit that the skip has to be said
+    out loud and counted.
+    """
+    from combat_engine.story import llm
+
+    roles = llm.roles_for()
+    why = llm.reachable(roles["match"])
+    if why:
+        out.skip(f"no model to ask: {why.splitlines()[0]}")
+        return
+
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+
+    raw = {
+        "id": "probe", "party_level": 2, "party_size": 3, "start": "talk",
+        "scenes": [{
+            "id": "talk", "kind": "roleplay", "name": "Talk",
+            "brief": "A friar offers the party a job over dinner.",
+            "exits": [],
+            "affordances": [
+                {"id": "read-friar",
+                 "what": "study the friar for signs he is hiding something",
+                 "skill": "insight", "band": "hard",
+                 "win": "he is holding something back", "lose": "nothing"},
+                {"id": "ask-around",
+                 "what": "leave and ask other people in the keep about him",
+                 "skill": "streetwise", "band": "moderate",
+                 "win": "he is well liked", "lose": "nothing"}]}]}
+    # No board and no party: matching is a classification over text and
+    # touches neither, which is also why it is the cheap half of a beat.
+    scene = mod.parse(raw, Path("<driver>")).scene("talk")
+    playing = bt.Playing(scene=scene)
+    intents = [
+        bt.Intent(0, "Durgan", "Who took him, and how many?",
+                  "wants numbers before agreeing"),
+        bt.Intent(1, "Sela", "", "studies the friar's face while he talks"),
+        bt.Intent(2, "Pike", "", "slips out to ask around the taverns"),
+    ]
+    wanted = {0: "none", 1: "read-friar", 2: "ask-around"}
+    got = bt.Director(roles=roles).match(playing, intents)
+    for slot, should in wanted.items():
+        name = intents[slot].name
+        out.that(
+            got.get(slot) == should,
+            f"{name}'s intent matches {should}",
+            f"matched {got.get(slot)!r}",
+        )
+    out.that(
+        got.get(0) == "none",
+        "and a plain question is not stretched to fit something it is not",
+        f"matched {got.get(0)!r}",
+    )
+
+
 DRIVERS = {
+    "beat_loop": (
+        a_beat_rolls_once_per_affordance_and_leaves_when_told,
+        "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "affordance_match": (
+        a_model_matches_an_intent_to_the_right_affordance,
+        "a model matches intents to affordances, skipped if none is serving (#801)",
+    ),
     "campaign_replays": (
         a_campaign_replays_in_a_fresh_process,
         "the same seed plays the same campaign, across processes (#789)",

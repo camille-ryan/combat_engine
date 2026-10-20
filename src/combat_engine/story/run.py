@@ -34,7 +34,9 @@ like it worked.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from random import Random
 
 from combat_engine.engine import Ident, Side, Team
@@ -55,6 +57,50 @@ from .save import Campaign
 #: A fight that has not finished by here is a grind, not a fight. The charter's
 #: target is 7-8 rounds; this is the backstop, not the goal.
 MAX_ROUNDS = 40
+
+#: Where a campaign's own record goes, beside the per-fight transcripts.
+#: Git-ignored, like everything in `logs/`.
+def campaign_log(campaign: Campaign) -> Path:
+    from combat_engine.transcript import LOGS
+
+    return LOGS / f"{campaign.module}.campaign.jsonl"
+
+
+def record_scene(campaign: Campaign, made: Step) -> str:
+    """Append one scene to the campaign's record. Returns where it went.
+
+    **Only fights were recorded and that was backwards.** `_fight` writes a
+    2,000-event transcript that is already reproducible from its board seed,
+    while a roleplay scene -- the part a person would actually re-read, and
+    the part the model writes -- left nothing at all behind. #799.
+
+    One line per scene rather than per beat, so a scene is a unit a reader
+    can skim and `Step` goes in as it already is.
+    """
+    from combat_engine.transcript import LOGS
+
+    LOGS.mkdir(parents=True, exist_ok=True)
+    where = campaign_log(campaign)
+    row = {
+        "scene": made.scene.id,
+        "kind": made.scene.kind,
+        "name": made.scene.name,
+        "outcome": made.outcome,
+        "next": made.next_id,
+        "rounds": made.rounds,
+        "enemies": made.enemies,
+        "transcript": made.transcript,
+        "notes": made.notes,
+        "party": party_line(campaign),
+        "beats": beat_mod.as_json(made.played) if made.played else [],
+        # The module's own text, which is what a roleplay scene *is* when
+        # nobody is playing it. Carried so a log reads as a session rather
+        # than as a list of outcomes.
+        "lines": made.lines,
+    }
+    with where.open("a") as fh:
+        fh.write(json.dumps(row) + "\n")
+    return str(where)
 
 
 @dataclass
@@ -376,6 +422,8 @@ def step(
 
     campaign.visited.append(scene.id)
     campaign.scene = made.next_id
+    if record:
+        record_scene(campaign, made)
     campaign.note(
         f"{scene.id} ({scene.kind}): {made.outcome}"
         + (f", {made.rounds} rounds" if made.rounds else "")
