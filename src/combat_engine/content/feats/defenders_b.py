@@ -407,15 +407,29 @@ def _used_my_flurry(world, me: int, ev: PowerUsed) -> bool:  # noqa: ANN001
 
 @power("f3171", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.pre_empt(damage_of=)",))
+       implemented_in=("p7448", "p11207", "p13123", "p16131", "p16132"))
 def f3171(c: Cast) -> None:
-    """The feature is `FLURRY` and no longer the hold, and stripping the
-    target's necrotic resistance is writable now -- `c.resistances` reads
-    what is standing and a negative `c.resist` takes it away. What is
-    left is the trade the whole row is: "you can choose to forgo dealing
-    damage", and a row cannot decline its own damage. Written without it
-    the row is the payout with no price, which is a strictly better
-    card than the one printed."""
+    """**Written into the five flurries, so this row is a pointer.** The card
+    names the *feature*, and a monk holds whichever of the five its tradition
+    granted -- `c.flurry_of_blows` is the verb for that -- so the clause lives
+    in `powers/monk/level_0.py::_forgo_for_necrotic`, behind `c.feat("f3171")`
+    in each body. Five is a finite list, which is the rule in
+    `content/CLAUDE.md`; the `c.pre_empt` route is for a feat naming a class
+    of powers with no list to edit.
+
+    **The premise that held this was false.** The note here said "a row
+    cannot decline its own damage". `c.strike()` rolls and does not pay --
+    the body pays, and these five pay with `c.flat` -- so declining is not
+    calling it. There was no verb to wait for. #780.
+
+    The other half was already writable and the old note said so:
+    `c.resistances` reads what is standing and a negative `c.resist` takes
+    that much away. The amount matters, because "negate" removes what is
+    there rather than imposing a floor.
+
+    Only the damage is given up. Three of the five also shift, pull, slide,
+    slow or bar a shift, and the card forgoes "dealing damage" and nothing
+    else."""
 
 
 @power("f3205", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

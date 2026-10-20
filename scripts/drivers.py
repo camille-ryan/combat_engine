@@ -12957,6 +12957,104 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_flurry_traded_for_a_resistance(out: Result) -> None:
+    """"Forgo dealing damage to negate the target's resistance." #780.
+
+    `f3171` names the monk's *feature*, and a monk holds whichever of the
+    five flurries its tradition granted, so the clause is written into all
+    five behind `c.feat` -- `content/CLAUDE.md`'s rule for a feat naming a
+    finite list of powers. This drives every one of them, because a helper
+    shared by five bodies is exactly the shape where four callers can be
+    right and the fifth never wired up.
+
+    **Three controls, and the second is the one that matters.** Without the
+    feat the blow deals its damage; *with* the feat and the trade declined
+    it still does, because a printed "you can" is a choice and not a free
+    upgrade; and only when taken does the damage stop. A rule that checked
+    only the third would pass on a row that always traded.
+
+    **And the fourth assertion is the clause's boundary.** The card gives up
+    "dealing damage" and nothing else, so each flurry's own rider -- a
+    slide, a pull, a barred shift -- has to survive the trade. Three of the
+    five have one.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.content.powers.monk.level_0 import FLURRIES
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    STANDING = 5
+
+    def run(ref: str, *, hold: bool, take: bool) -> tuple[int, int, int]:
+        """Damage dealt, necrotic resistance left, events the row emitted."""
+        world, me, _armed = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        if hold:
+            world.need(me, Powers).known.append("f3171")
+        # The resistance the card is about, put there by somebody else so the
+        # row has something to negate.
+        Cast(world=world, me=me, ref="drivers:resisted").resist(
+            STANDING, DamageType.NECROTIC, on=foe)
+        world.decider = (
+            lambda _a, _k, options, _p="":
+            take if options == [False, True] else options[0]
+        )
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        world.rng.loaded = 20
+        mark = len(world.bus.log)
+        REGISTRY[ref].body(use)
+        dealt = sum(int(getattr(e, "amount", 0) or 0)
+                    for e in world.bus.log[mark:]
+                    if isinstance(e, DamageApplied)
+                    and getattr(e, "target", None) == foe)
+        # Read through a `Cast`, because `resistances` is a `Cast` reader
+        # and not a `query` function -- `docs/symbols/reading.md` is the
+        # page that says which is which.
+        left = Cast(world=world, me=me, ref="drivers:read").resistances(
+            on=foe).get(DamageType.NECROTIC, 0)
+        return dealt, left, len(world.bus.log) - mark
+
+    out.that(len(FLURRIES) == 5,
+             "five flurries to drive, which is the list the clause was"
+             " written across", f"{FLURRIES}")
+
+    for ref in sorted(FLURRIES):
+        plain, plain_left, _ = run(ref, hold=False, take=True)
+        kept, kept_left, kept_events = run(ref, hold=True, take=False)
+        gone, gone_left, gone_events = run(ref, hold=True, take=True)
+
+        out.that(plain > 0 and plain_left == STANDING,
+                 f"{ref}: without f3171 it deals damage and the resistance"
+                 " stands -- the control, and what a bare gate would miss",
+                 f"dealt={plain} resist={plain_left}")
+        out.that(kept > 0 and kept_left == STANDING,
+                 f"{ref}: holding f3171 and declining is the ordinary row",
+                 f"dealt={kept} resist={kept_left}")
+        out.that(gone == 0,
+                 f"{ref}: taking the trade forgoes the damage",
+                 f"dealt={gone}")
+        out.that(gone_left == 0,
+                 f"{ref}: and negates the resistance that was standing --"
+                 " the amount, not a floor",
+                 f"resist {STANDING} -> {gone_left}")
+        out.that(gone_events > 0 and gone_events >= kept_events - 2,
+                 f"{ref}: its other clauses still happen; only the damage"
+                 " was given up",
+                 f"events kept={kept_events} traded={gone_events}")
+
+    f = REGISTRY.get("f3171")
+    if f is not None:
+        waiting = ((getattr(f, "todo", ()) or ())
+                   + (getattr(f, "dropped", ()) or ()))
+        out.that(not waiting, "and f3171 waits on nothing", f"{waiting}")
+
+
 def damage_forgone_for_a_rider(out: Result) -> None:
     """"You can forgo dealing damage to instead ...". #780.
 
@@ -27888,6 +27986,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "flurry_traded": (
+        a_flurry_traded_for_a_resistance,
+        "a flurry's damage given up to negate a resistance, across all five"
+        " of them (#780)",
+    ),
     "damage_forgone": (
         damage_forgone_for_a_rider,
         "forgoing a row's own damage to buy a rider, which needed no verb"
