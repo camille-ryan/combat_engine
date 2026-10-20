@@ -4416,6 +4416,38 @@ class Cast:
             )
         return word.lower() in getattr(self.world, "terrain", frozenset())
 
+    def milestone(self) -> int:
+        """How many milestones the party has reached today. `c.milestone()`.
+
+        Camille's ruling on #666: *"An adventuring day consists of 4-5
+        encounters, and a milestone is every two encounters."* So this is a
+        fact about the **day**, not about this fight or this creature, and a
+        fight fielded on its own answers 0.
+
+        **A count, because a count answers both shapes the seven cards ask
+        in.** `cf:artificer-f0` wants "one additional empowerment for each
+        milestone you reach"; the five item rows want only "if you've
+        reached at least one milestone today", which is `c.milestone() >= 1`.
+        Returning a bool would have served five rows and left the sixth
+        unwritable, and #666 read all seven before settling on this.
+
+        **Which direction a wrong answer is wrong in.** Before this existed
+        every one of those rows took its printed *non*-milestone branch, so
+        they **under**-paid a character mid-day rather than over-paying one
+        at the start of the day. That was the safe way round and it is worth
+        keeping: a row should read this and pay more, never read this and
+        take something away.
+
+        Set by whoever fields the encounter -- `api/day.py` from the legs
+        already finished, `scripts/fight.py --milestones` by hand -- and
+        never by a row.
+        """
+        got = getattr(self.world, "milestones", 0)
+        try:
+            return max(0, int(got))
+        except (TypeError, ValueError):
+            return 0
+
     def teleport(
         self,
         squares_: int,

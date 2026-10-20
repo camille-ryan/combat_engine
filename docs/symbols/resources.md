@@ -45,6 +45,8 @@ Things a creature spends, and the budget it spends them from.
   - Was that shot fired from the ammunition **this row belongs to**?
 - `c.charge_left(self, key: 'str', limit: 'int' = 1) -> 'int'`
   - How much of a per-encounter charge is left, for this creature.
+- `c.milestone(self) -> 'int'`
+  - How many milestones the party has reached today. `c.milestone()`.
 - `c.per_day_left(self, ref: 'str', limit: 'int') -> 'int'`
   - How many of a daily allowance are left today, for this creature.
 - `c.restore_charge(self, key: 'str', *, on: 'int | None' = None) -> 'bool'`

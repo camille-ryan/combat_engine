@@ -260,14 +260,39 @@ def _on_next_hit(c: Cast, fn: Callable[[Any], None]) -> None:
     c.watch(Hit, seen, until=When.EOT, on=c.me, once=True)
 
 
+#: What the standing extra is worth before and after a milestone. All five
+#: cards print the same pair -- "an extra 1", and "if you've reached at least
+#: one milestone today, instead ... an extra 2". Read from the compendium for
+#: each of i825, i843, i1362, i1560 and i2691 rather than assumed from one.
+INFUSION_EXTRA = 1
+INFUSION_EXTRA_AFTER_MILESTONE = 2
+
+
 def _infusion(c: Cast, dtype: DamageType,
               gate: Callable[[dict[str, Any]], bool],
               *, until: When = When.ENCOUNTER) -> None:
     """The half these five dailies share: the weapon deals the new type
     from now until the attack is over, and every later attack of the same
-    shape deals 1 extra."""
+    shape deals 1 extra -- **or 2, after a milestone**.
+
+    The milestone branch is **binary** on all five, not a count: "if you've
+    reached at least one milestone today ... instead deal an extra 2". So
+    `c.milestone() >= 1`, never the number itself. `cf:artificer-f0` is the
+    one row in the family that wants the count, which is why `c.milestone()`
+    returns one and this asks a question of it. #666.
+
+    Read **once, here, at use time** rather than through a `when=` gate. The
+    card says "if you've reached at least one milestone today *before using
+    this power*" (i825 prints that clause in full; the others are the same
+    shape), so the figure is fixed when the daily is spent and does not
+    change if a milestone arrives later in the encounter. A gate would have
+    re-asked on every attack and quietly paid 2 for blows struck before the
+    milestone.
+    """
+    extra = (INFUSION_EXTRA_AFTER_MILESTONE if c.milestone() >= 1
+             else INFUSION_EXTRA)
     c.deals(dtype, on=c.me, until=When.EOT)
-    c.bonus("damage", 1, on=c.me, until=until, when=gate)
+    c.bonus("damage", extra, on=c.me, until=until, when=gate)
 
 
 # -- level 1 ----------------------------------------------------------------
@@ -897,10 +922,10 @@ def i806p1(c: Cast) -> None:
                   lambda world, me, ev: (
                       ev.actor == me and _has_keyword(ev.power, Keyword.FIRE)),
                   "you make a fire attack"),
-       dropped=("c.milestone()",))
+)
 def i825p1(c: Cast) -> None:
-    """Nothing counts the day's milestones, so the larger of the two
-    printed numbers is never the one that applies."""
+    """Both printed numbers now apply: `_infusion` reads `c.milestone()`
+    and pays 2 instead of 1 once the party has reached one. #666."""
     _infusion(c, DamageType.FIRE, _keyword_gate(Keyword.FIRE))
     _on_next_hit(c, lambda ev: c.ongoing(5, DamageType.FIRE, on=ev.target))
 
@@ -915,7 +940,7 @@ def i825p1(c: Cast) -> None:
                       and row.reach is not None
                       and row.reach.kind == "ranged"),
                   "you make a ranged attack"),
-       dropped=("c.milestone()",))
+)
 def i843p1(c: Cast) -> None:
     """"Hit or miss" is read off the targets the use announced, which are
     chosen before the body and are trustworthy on `PowerUsed`."""
@@ -987,21 +1012,21 @@ def i1259p1(c: Cast) -> None:
                       and row.reach is not None
                       and row.reach.kind == "melee"),
                   "you make a melee attack"),
-       dropped=("c.milestone()",))
+)
 def i1362p1(c: Cast) -> None:
-    """The retype, the slow and the standing extra all play. What is dropped
-    is the milestone branch, and it is a **binary** one: the card pays 1
-    extra, and "if you've reached at least one milestone today" pays 2
-    instead. `_infusion` lays the 1, which is the printed non-milestone
-    branch -- so this row is **under**-paying a character mid-day rather
-    than over-paying one at the start of it, which is the safe direction to
-    be wrong in.
+    """The retype, the slow and the standing extra all play, and so does the
+    milestone branch now.
 
-    Carried a marker and no reason until now. The family's reasoning is in
-    #666, which read all seven cards: `cf:artificer-f0` wants a *count*
-    ("for each milestone"), these item rows want only *at least one*, and a
-    count answers both. It waits on a scope call -- does this engine model a
-    day -- so there is nothing to write here until that is answered.
+    It is a **binary** one: the card pays 1 extra, and "if you've reached at
+    least one milestone today" pays 2 instead. `_infusion` reads
+    `c.milestone()` and chooses, for this row and its four siblings.
+
+    #666 read all seven cards and settled the shape: `cf:artificer-f0` wants
+    a *count* ("for each milestone"), these item rows want only *at least
+    one*, and a count answers both -- so `c.milestone()` returns the number
+    and this asks a question of it. The scope call it was waiting on is
+    Camille's: an adventuring day is 4-5 encounters and a milestone is every
+    two of them.
     """
     _infusion(c, DamageType.COLD, _reach_gate("melee"))
     _on_next_hit(c, lambda ev: c.slowed(on=ev.target, until=When.EONT))
@@ -1115,7 +1140,7 @@ def i1486x1(c: Cast) -> None:
                   lambda world, me, ev: (
                       ev.actor == me and _has_keyword(ev.power, Keyword.DIVINE)),
                   "you use a divine power"),
-       dropped=("c.milestone()", "query.deals_damage(ref)"))
+       dropped=("query.deals_damage(ref)",))
 def i1560p1(c: Cast) -> None:
     """Same shape as `i1362p1` and the same milestone clause: the branch is
     binary -- 1 extra becomes 2 "if you've reached at least one milestone
@@ -1353,10 +1378,13 @@ def i1380p2(c: Cast) -> None:
                       and row.reach is not None
                       and row.reach.kind == "melee"),
                   "you make a melee attack"),
-       dropped=("c.milestone()",))
+)
 def i2691p1(c: Cast) -> None:
     """The standing extra lasts to the end of the next turn here, not to
-    the end of the encounter, which is what this one prints."""
+    the end of the encounter, which is what this one prints.
+
+    The milestone branch is `_infusion`'s and is shared with its four
+    siblings. #666."""
     _infusion(c, DamageType.THUNDER, _reach_gate("melee"), until=When.EONT)
     _on_next_hit(
         c, lambda ev: c.damage("1d6", dtype=DamageType.THUNDER, on=ev.target))

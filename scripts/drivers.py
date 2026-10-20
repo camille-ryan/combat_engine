@@ -12957,6 +12957,227 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def milestones_carry_across_a_day(out: Result) -> None:
+    """Milestones are a fact about the day, and seven rows read them. #666.
+
+    Camille's ruling: *"An adventuring day consists of 4-5 encounters, and a
+    milestone is every two encounters."*
+
+    **The two shapes are the point, and a plant proved they need separate
+    assertions.** Five item rows ask a *binary* question -- "if you've
+    reached at least one milestone today ... instead deal an extra 2" -- and
+    two rows want the *count*. Writing `1 + c.milestone()` in the shared
+    helper satisfies every assertion about the one-milestone case and is
+    wrong at two, which is exactly what the third assertion below catches.
+
+    Asserted **through each row's body**, never through `c.milestone()`
+    alone: the reader returning the right number proves nothing about
+    whether a row calls it. Two of the three families here were already
+    laying a modifier under the wrong key before this rule existed, and a
+    verb-level check would have stayed green for both.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.types import Keyword
+
+    # -- the reader and its default ---------------------------------------
+    world, me, _armed = _posed("i825p1", 6)
+    ask = Cast(world=world, me=me, ref="drivers:milestone")
+    out.that(ask.milestone() == 0,
+             "a fight fielded on its own has reached no milestones -- the"
+             " default, and the state every existing caller is in",
+             f"{ask.milestone()}")
+    world.milestones = 2
+    out.that(ask.milestone() == 2, "and reads back what the day set",
+             f"{ask.milestone()}")
+    world.milestones = -1
+    out.that(ask.milestone() == 0,
+             "a negative never reaches a row: a count below zero is a caller"
+             " bug and paying a negative bonus for it would be worse",
+             f"{ask.milestone()}")
+
+    # -- through i825p1's body: the binary branch --------------------------
+    #
+    # A real fire-keyword power out of the registry rather than a made-up
+    # ref, because `_keyword_gate` reads the keywords off the row the damage
+    # context names -- a ref that resolves to nothing fails the gate and
+    # every figure below would read 0 for the wrong reason.
+    fire = next((r for r, d in REGISTRY.items()
+                 if Keyword.FIRE in (tuple(d.keywords or ()))
+                 and getattr(d, "attack", None) is not None), "")
+    out.that(bool(fire) and get(fire) is not None,
+             "the tree holds a fire attack to pose the gate with", f"{fire!r}")
+
+    def paid(milestones: int, ref: str, ctx: dict) -> int:
+        """Run `ref`'s body on a fresh board and read what *it* laid.
+
+        **Only what *this run* lays**, which took two corrections to get
+        right and both are the same trap from different sides:
+
+        * A pooled `mods.total("damage", ctx)` reads 3 before any of this
+          runs -- the posed figure's own gear and feats. So filtering to the
+          row's own label is necessary.
+        * **It is not sufficient.** `audit.board` *arms* the row, and arming
+          a triggered row runs its body -- so by the time `world.milestones`
+          is set the body has already laid one modifier under this very
+          label, at the old count. Both melee rows then read one too high,
+          and the figure moved by the right amount for the wrong reason.
+
+        So the modifiers standing before the body runs are remembered and
+        excluded by identity. Asserting on a delta would have hidden the
+        same thing: the arming's modifier and this run's are both +1 at zero
+        milestones, so the delta is right while neither figure is.
+        """
+        world, me, _ = _posed(ref, 6)
+        world.milestones = milestones
+        mods = world.get(me, Mods)
+        already = {id(m) for m in mods.items} if mods is not None else set()
+        use = Cast(world=world, me=me, ref=ref)
+        use.target = me
+        REGISTRY[ref].body(use)
+        mods = world.get(me, Mods)
+        if mods is None:
+            return 0
+        return sum(m.amount() for m in mods.items
+                   if id(m) not in already
+                   and m.what == "damage" and m.label == ref
+                   and m.applies(ctx))
+
+    fire_ctx = {"power": fire}
+    at_none = paid(0, "i825p1", fire_ctx)
+    at_one = paid(1, "i825p1", fire_ctx)
+    at_three = paid(3, "i825p1", fire_ctx)
+    out.that(at_none == 1,
+             "with no milestone reached i825p1 pays the printed 1, which is"
+             " the branch it has always taken", f"{at_none}")
+    out.that(at_one == 2,
+             "and 2 once the party has reached one -- the clause that was"
+             " dropped for as long as nothing counted them", f"{at_one}")
+    out.that(at_three == 2,
+             "and still 2 at three milestones, because the card says"
+             " 'instead ... an extra 2' and not one per milestone. This is"
+             " the assertion that fails if the helper is ever simplified to"
+             " `1 + c.milestone()`", f"{at_three}")
+
+    # The gate is a separate lock from the figure, and a plant on one leaves
+    # the other green. Asked with a context the row must refuse.
+    cold = next((r for r, d in REGISTRY.items()
+                 if Keyword.FIRE not in tuple(d.keywords or ())
+                 and getattr(d, "attack", None) is not None), "")
+    out.that(paid(1, "i825p1", {"power": cold}) == 0,
+             "a power without the keyword gets nothing even at a milestone --"
+             " the when= gate, which the figures above cannot see",
+             f"tried {cold}")
+
+    # -- the other four items pay the same pair ----------------------------
+    melee = next((r for r, d in REGISTRY.items()
+                  if getattr(d, "reach", None) is not None
+                  and getattr(d.reach, "kind", "") == "melee"
+                  and getattr(d, "attack", None) is not None), "")
+    # **A ctx per row, because the five gates do not read the same key.**
+    # `i843p1` asks `ctx["ranged"]` directly where the others resolve the
+    # power the context names. One shared ctx read (2, 2) for it -- the gate
+    # refusing both figures, which looks like a row that ignores milestones.
+    for ref, ctx in (("i843p1", {"ranged": True}),
+                     ("i1362p1", {"power": melee}),
+                     ("i2691p1", {"power": melee})):
+        if ctx.get("power") == "":
+            continue
+        low, high = paid(0, ref, ctx), paid(1, ref, ctx)
+        out.that((low, high) == (1, 2),
+                 f"{ref} pays 1 then 2 the same way -- the branch is in the"
+                 " helper the five share, so this is the check that they all"
+                 " actually call it", f"{(low, high)}")
+
+    # -- through cf:artificer-f0: the count --------------------------------
+    from combat_engine.content.features.martial_leaders import EMPOWERMENTS, empowerments
+
+    def allowance(milestones: int) -> int:
+        world, me, _ = _posed("cf:artificer-f0", 6)
+        world.milestones = milestones
+        return empowerments(Cast(world=world, me=me, ref="cf:artificer-f0"))
+
+    out.that(allowance(0) == EMPOWERMENTS,
+             "the artificer's allowance with no milestone is the printed"
+             " number and nothing more", f"{allowance(0)}")
+    out.that(allowance(2) == EMPOWERMENTS + 2,
+             "and one more for each milestone -- a *count*, which is the row"
+             " that made `c.milestone()` return a number rather than a bool",
+             f"{allowance(2)}")
+
+    # -- through f3536: the count again, on three keys ---------------------
+    def f3536_mods(milestones: int) -> dict:
+        world, me, _ = _posed("f3536", 1)
+        world.milestones = milestones
+        use = Cast(world=world, me=me, ref="f3536")
+        use.target = me
+        REGISTRY["f3536"].body(use)
+        mods = world.get(me, Mods)
+        if mods is None:
+            return {}
+        return {m.what: m.amount() for m in mods.items
+                if m.label == "f3536" or m.what in
+                ("save", "skill", "ability_check")}
+
+    out.that(f3536_mods(0) == {},
+             "f3536 lays nothing at all with no milestone reached, rather"
+             " than three +0 modifiers -- a zero reads as a working bonus on"
+             " the audit board and on lint's unread-modifier pass, which is"
+             " how a dead key hides", f"{f3536_mods(0)}")
+    got = f3536_mods(2)
+    out.that(got.get("save") == 2 and got.get("skill") == 2
+             and got.get("ability_check") == 2,
+             "and at two milestones pays +2 to saving throws, skill checks"
+             " and ability checks -- the three keys the engine actually"
+             " reads, which is not the same list as the card's words",
+             f"{got}")
+    out.that("ability" not in got,
+             "and lays no bare 'ability' key, which nothing reads: the wide"
+             " one is 'ability_check', summed by the check's own finish"
+             " beside the rolled skill", f"{sorted(got)}")
+
+    # -- the seam: who sets it ---------------------------------------------
+    #
+    # **The rows above would all pass with nothing ever setting the count.**
+    # Every figure in this rule is posed by assigning `world.milestones`
+    # directly, which is the reader's contract and not the caller's -- so
+    # without this section a day that never set it would leave seventeen
+    # assertions green and seven rows inert in play. #583's shape.
+    from combat_engine.api import day as day_mode
+
+    a_day = day_mode.Day.create(seed=5, level=6, want=[1.0, 1.0, 1.0, 1.0])
+    out.that(a_day.milestones == 0,
+             "a day that has fought nothing has reached no milestones",
+             f"{a_day.milestones}")
+    for leg in a_day.legs[:2]:
+        leg.status = "won"
+    a_day.leg = 2
+    out.that(a_day.milestones == 1,
+             "two legs finished is one milestone -- derived from the legs"
+             " rather than counted as the day goes, so it cannot disagree"
+             " with the thing it counts", f"{a_day.milestones}")
+    built = a_day.build_leg()
+    out.that(built.world.milestones == 1,
+             "and the third leg's board is *built* with it, through"
+             " `Session.create(on_fielded=)` -- the only moment that is both"
+             " after the world exists and before a turn is taken",
+             f"{built.world.milestones}")
+    out.that(Cast(world=built.world, me=next(iter(built.world.entities)),
+                  ref="drivers:seam").milestone() == 1,
+             "so a row on that board reads 1, which is the whole chain: day"
+             " -> world -> `c.milestone()` -> the seven rows")
+
+    # -- the family is clear ----------------------------------------------
+    waiting = [r for r, d in REGISTRY.items()
+               if "c.milestone()" in (tuple(getattr(d, "todo", ()) or ())
+                                      + tuple(getattr(d, "dropped", ()) or ()))]
+    out.that(not waiting, "and no row waits on c.milestone() any more",
+             f"{waiting}")
+
+
 def a_day_of_scaled_budgets(out: Result) -> None:
     """A day of fights, each built to its own share of the printed budget.
 
@@ -28245,6 +28466,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "milestones": (
+        milestones_carry_across_a_day,
+        "a milestone counted across a day, and the seven rows that read it"
+        " (#666)",
+    ),
     "day_budgets": (
         a_day_of_scaled_budgets,
         "an adventuring day's legs, each built to its share of the printed XP"

@@ -1515,10 +1515,35 @@ def f3535(c: Cast) -> None:
 
 
 @power("f3536", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.milestone()",))
+       reach=PERSONAL, target=SELF)
 def f3536(c: Cast) -> None:
-    """Milestones are counted across an adventuring day and an encounter
-    knows nothing of them."""
+    """"For each milestone you've reached since your last extended rest, you
+    gain a +1 bonus to ability checks, saving throws, and skill checks."
+
+    A **count**, so this is the second of `c.milestone()`'s two shapes and
+    the other one that needed a number rather than a yes -- the five item
+    rows ask `>= 1`. #666.
+
+    **Three keys, because the engine reads three.** `"save"` is read by the
+    saving throw; `"skill"` is the wide key `skills.modifier` sums beside
+    `skill:<name>`; `"ability_check"` is the wide key the check's own
+    `finish` sums beside the rolled skill. There is no bare `"ability"` key
+    and writing one would have been a modifier nothing reads --
+    `cf:warlock-f1s*` already enumerates exactly these four minus attack,
+    which is this card's list.
+
+    Untyped and **not** `once=`: the card is a standing bonus until the next
+    extended rest, not something the first roll spends.
+
+    Zero milestones lays nothing at all rather than three +0 modifiers. A
+    +0 would read as a working bonus on the audit board and in `lint.py`'s
+    unread-modifier pass, which is the shape that hides a dead key.
+    """
+    got = c.milestone()
+    if not got:
+        return
+    for what in ("save", "skill", "ability_check"):
+        c.bonus(what, got, on=c.me, until=When.ENCOUNTER)
 
 
 # -- the mount pair ---------------------------------------------------------

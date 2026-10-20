@@ -194,11 +194,26 @@ class Day:
             pcs=self.pcs,
             party=self.party,
             scale=here.scale,
-            on_fielded=lambda s: setattr(here, "entering", self._snapshot(s, here)),
+            on_fielded=lambda s: self._fielded(s, here),
         )
         self.session_id = session.id
         here.status = "fighting"
         return session
+
+    def _fielded(self, session: Session, leg: _Leg) -> None:
+        """Called the moment the board exists, before anybody has acted.
+
+        Two things happen here and both have to, because this is the only
+        moment that is both after the world is built and before a turn is
+        taken.
+        """
+        # **How many milestones the party brings in**, which is a fact about
+        # the day and so cannot be derived on a board that knows only its
+        # own fight. Camille's ruling on #666: every two completed
+        # encounters. Set before `encounter.start()` arms anything, so a
+        # trait that reads it at arming gets the right number.
+        session.world.milestones = self.milestones
+        leg.entering = self._snapshot(session, leg)
 
     # -- the turn of a leg -------------------------------------------------
 

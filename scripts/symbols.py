@@ -413,7 +413,13 @@ CATEGORIES: dict[str, dict] = {
                 "spend_shrouds", "transfer_points",
             ]),
             ("charges and per-day uses", [
-                "ammunition", "charge_left", "per_day_left", "restore_charge",
+                "ammunition", "charge_left",
+                # Beside `per_day_left` because it is the same scope and the
+                # same reader: both answer a question about the *day*, not
+                # the fight. `cf:artificer-f0` reads them together -- its
+                # allowance is the printed 1 plus one per milestone. #666.
+                "milestone",
+                "per_day_left", "restore_charge",
                 "restore_use", "spend_charge", "spend_per_day",
             ]),
             ("actions and turns", [

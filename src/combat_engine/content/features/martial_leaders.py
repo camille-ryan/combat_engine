@@ -92,8 +92,21 @@ def empowerments(c: Cast) -> int:
 
     Named without a leading underscore because `f3791` is in another file and
     reads it. The constant stays as the printed number.
+
+    **Plus one per milestone**, which is the second half of the printed
+    sentence: "You begin each day with the ability to empower a magic item,
+    and you gain one additional arcane empowerment for each milestone you
+    reach." A *count*, not a yes -- this is the one row of
+    `c.milestone()`'s seven that needs the number rather than
+    `>= 1`, and it is why the reader returns an int. #666.
+
+    Added **outside** `c.amount_for` on purpose. That door is `f3791`'s, and
+    a feat that raises the allowance and a day that has reached two
+    milestones are two separate reasons to get more: folded into one
+    `amount_for` the feat could not tell its own grant from the day's, and
+    whichever was read second would overwrite the first.
     """
-    return c.amount_for(EMPOWERMENTS_REF, EMPOWERMENTS)
+    return c.amount_for(EMPOWERMENTS_REF, EMPOWERMENTS) + c.milestone()
 
 #: What the reservoir is worth, and the key a feat adds to it on. `f2110`
 #: doubles the bonus and writes the difference there; this row reads it when
@@ -123,7 +136,6 @@ BANKED_LABEL = "cf:artificer-f0s0 charge"
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=("c.milestone()",),
 )
 def artificer_empower(c: Cast) -> None:
     """The per-day allowance the two `-f0s*` options spend.
@@ -141,12 +153,13 @@ def artificer_empower(c: Cast) -> None:
     mirrors it in and out the way `Sheet.spent`/`Powers.used` already did,
     and `c.per_day_left`/`c.spend_per_day` are the reading.
 
-    **The allowance is 1.** "You begin each day with the ability to empower a
-    magic item, and you gain one additional arcane empowerment for each
-    milestone you reach" -- and nothing counts milestones, which is
-    `c.milestone()`, already a symbol on six other rows, three of which
-    record the same thing independently. So the dropped half makes this
-    under-grant at a milestone rather than over-grant before one.
+    **The allowance is 1, plus one per milestone.** "You begin each day with
+    the ability to empower a magic item, and you gain one additional arcane
+    empowerment for each milestone you reach" -- and `c.milestone()` now
+    counts them, so `empowerments` is the whole sentence rather than its
+    first clause. This was the row that needed the *count* where the six
+    item rows need only "at least one"; #666 read all seven and a count
+    answers both.
 
     This row holds the count and spends nothing. The spending is
     `cf:artificer-f0s0`'s and `-f0s1`'s, each of which asks this allowance

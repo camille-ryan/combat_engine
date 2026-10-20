@@ -2051,6 +2051,18 @@ def board(ref: str, seed: int, pose: bool = False,
     # and a weapon put in hand afterwards is one it never saw. #663.
     if arm:
         _put_in_hand(world, caster, arm)
+    # **The day's milestone count, set before the traits arm**, beside `arm`
+    # and for exactly its reason. `f3536` is an `action=NONE` row, so it does
+    # its work as the encounter starts and a count raised afterwards is one
+    # it never saw -- it went on reporting SILENT through all 48 attempts
+    # with the knob in `_pose` firing correctly on every posed one of them.
+    #
+    # Safe this early in a way a dummy is not: this is one integer on the
+    # `World`, with no placement, no team and no effect, so posing it cannot
+    # take another row's shift with it. That is why it is hoisted and the
+    # other two wants are not. #666.
+    if pose and _wants_milestone(declared):
+        world.milestones = 1
     world.setup_effects = set(world.effects.live)
     Encounter(world).start()
     # And again once every trait on the board is armed. Two snapshots,
@@ -2154,12 +2166,46 @@ def board(ref: str, seed: int, pose: bool = False,
 #:
 #: "Dark" alone is deliberately not in here: it would catch every shadow
 #: keyword in the tree.
+#: **A third knob: the day.** `World.milestones` is 0 on every board this
+#: harness builds, which is the right default for a standalone fight and
+#: means a row whose clause only pays *after* a milestone can never show
+#: itself. `f3536` lays nothing at all below one -- deliberately, because
+#: three +0 modifiers would read as a working bonus -- so it reported
+#: "fired 48/8 times and did nothing" the moment it stopped being marked.
+#:
+#: Aimed by the **read**, the pattern `light_level` established: a row that
+#: asks `c.milestone()` is a row that wants a board which has reached one,
+#: whichever way round its own test runs. There is no printed phrase here to
+#: match on as well -- "milestone" in a card's prose is the mechanic itself,
+#: so the read is the whole signal. #666.
+#:
+#: One, not two or four. Every one of the seven rows branches on "at least
+#: one" or counts from zero, so one milestone separates both shapes from the
+#: default; a larger number would pay more without testing anything further.
+#:
+#: **It is applied in `board` rather than here**, because `_pose` runs after
+#: the traits arm and a passive row has already done its work by then. See
+#: `_wants_milestone` below.
 _WANTS = (
     ("grab", re.compile(r"grabb|GRABBED|c\.grabbing")),
     ("dark", re.compile(
         r"light_level|light_radius|dim light|darkness"
         r"|Light\.DIM|Light\.DARK")),
 )
+
+#: The milestone read, matched the way the light one is: a row that asks
+#: `c.milestone()` wants a board that has reached one, whichever way round
+#: its own test runs. **Not in `_WANTS`**, because that table is applied
+#: after the traits arm and this has to be set before them -- see `board`.
+_WANTS_MILESTONE = re.compile(r"c\.milestone\(")
+
+
+def _wants_milestone(declared) -> bool:  # noqa: ANN001
+    """Does this row read the day's milestone count?"""
+    if declared is None:
+        return False
+    src = _source_of(declared.body, getattr(declared, "ref", ""))
+    return bool(_WANTS_MILESTONE.search(src))
 
 #: A row whose **body** asks whether somebody is on the floor, for the cases
 #: `_WANTED_CONDITIONS` cannot see: the restriction is in the code rather

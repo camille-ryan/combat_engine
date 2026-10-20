@@ -45,6 +45,19 @@ class World:
         self.terrain: set[str] = set()
         #: Whose turn it is. None between rounds and before combat starts.
         self.turn: int | None = None
+        #: How many milestones the party has reached **today**, not in this
+        #: fight. Camille's ruling on #666: *"An adventuring day consists of
+        #: 4-5 encounters, and a milestone is every two encounters."*
+        #:
+        #: On the `World` rather than on a component because it is a fact
+        #: about the day, not about a creature -- every character in the
+        #: party has reached the same number of them, and a fight fielded on
+        #: its own has reached none, which is what 0 means. Whoever fields
+        #: the encounter sets it: `api/day.py` from the legs already
+        #: finished, `scripts/fight.py --milestones` by hand.
+        #:
+        #: Read through `c.milestone()`; no row should touch this directly.
+        self.milestones = 0
         #: The fight in progress, once one has been made. A back-reference
         #: rather than a lookup, because a power body that summons something
         #: has to put it in the initiative order and had no way to reach it.

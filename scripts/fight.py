@@ -135,6 +135,14 @@ def main() -> int:
         "way a rogue ever opens a fight with a sneak attack",
     )
     ap.add_argument(
+        "--milestones", type=int, default=0, metavar="N",
+        help="how many milestones the party has already reached today, for a "
+        "single fight. With --fights this is derived instead -- every two "
+        "completed encounters, Camille's ruling on #666 -- so a flag is only "
+        "needed to pose one fight mid-day, which is what c.milestone()'s "
+        "seven rows read",
+    )
+    ap.add_argument(
         "--rest",
         choices=("none", "short", "extended"),
         help="take a rest before the fight, which is the only way a daily "
@@ -147,6 +155,7 @@ def main() -> int:
         return _a_day(args)
 
     world, encounter = build(args.seed, args.level, args.scaling, args.monster_math)
+    world.milestones = max(0, args.milestones)
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
 
@@ -221,6 +230,15 @@ def _a_day(args: argparse.Namespace) -> int:
         # `doctrine.DAY` -- which is the right default for a standalone fight but makes
         # every fight look like fight one of four, including the last.
         world.fights_left = args.fights - n + 1
+        # **How many milestones the party has reached today**, which is the
+        # other thing only this loop knows. Camille's ruling on #666: every
+        # two completed encounters. `n` is 1-based and counts the fight about
+        # to be played, so `n - 1` is the number finished.
+        #
+        # Set before `encounter.start()` arms anything, so a trait that reads
+        # it at arming gets the right number -- `api/day.py` does the same
+        # through its `on_fielded` hook and for the same reason.
+        world.milestones = (n - 1) // 2
         policy = DoctrinePolicy()
         install(world, encounter, {}, default=policy)
         encounter.start()
