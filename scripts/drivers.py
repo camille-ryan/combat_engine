@@ -28046,7 +28046,10 @@ def training_is_worth_exactly_five_on_a_check(out: Result) -> None:
         return
 
     with_training = table.modifier(slot, found)
-    skills = table.world.get(table.eids[slot], Skills)
+    # `need` rather than `get`: the loop above already proved this component
+    # is there, but `get` is `Skills | None` and three unnarrowed uses of it
+    # were three real `types.py` diagnostics over the baseline.
+    skills = table.world.need(table.eids[slot], Skills)
     kept = skills.trained
     skills.trained = frozenset(w for w in kept if w != found)
     without = table.modifier(slot, found)
@@ -28176,7 +28179,98 @@ def a_module_gets_the_party_size_it_asked_for(out: Result) -> None:
     )
 
 
+def every_default_makes_the_character_the_dealer_would_have(out: Result) -> None:
+    """A hand-made character taking every default *is* the dealt one.
+
+    The property `story/maker.py` is built around, and it is load-bearing
+    rather than tidy: the replay fixtures, `Party.of` and every balance
+    figure in this project rest on the dealt party. A maker whose defaults
+    differed would fork the two silently, and the first sign would be a
+    number moving somewhere unrelated.
+
+    **The control is choosing differently**, which has to produce a different
+    character that still plays -- otherwise this would pass just as well on a
+    maker that ignored its answerer entirely and dealt every time.
+    """
+    from dataclasses import asdict
+
+    from combat_engine.story import Party
+    from combat_engine.story import maker as mk
+
+    party = Party.of(level=2, seed=7)
+    for sheet in party.sheets:
+        made = mk.dealt(sheet.cls, level=2, seed=7)
+        same = asdict(made) == asdict(sheet)
+        out.that(
+            same,
+            f"all defaults deal the {sheet.cls} that Party.of deals",
+            "" if same else
+            ", ".join(
+                f"{k}: dealt {asdict(sheet)[k]!r} made {asdict(made)[k]!r}"
+                for k in asdict(sheet) if asdict(sheet)[k] != asdict(made)[k]
+            ),
+        )
+
+    # **A character the swap actually moves.** The four above do not exercise
+    # `power_swap` at all -- a feat that hands over a card takes one back, and
+    # none of their dealt feats does. Breaking the maker's swap left this
+    # driver green, which is a coverage hole rather than a passing grade. A
+    # rogue at level 8 loses a card to it (29 dealt, 28 after), and 11 of the
+    # (class, level, seed) combinations surveyed do.
+    swapped = Party.of(["rogue"], level=8, seed=7)
+    made = mk.dealt("rogue", level=8, seed=7)
+    out.that(
+        asdict(made) == asdict(swapped.sheets[0]),
+        "including a character whose feats take a card back",
+        f"dealt {len(swapped.sheets[0].powers)} powers, made {len(made.powers)}",
+    )
+
+    # **Asserted per field, not on the whole character.** "Choosing something
+    # else makes a different character" passes if *any one* of the questions
+    # takes effect, so ignoring the answerer for feats alone left it green.
+    # Each question has to be shown to move its own field.
+    dealt = mk.dealt("fighter", level=2, seed=7)
+
+    def only(key: str) -> mk.Answerer:
+        def pick(question: mk.Question) -> int:
+            if question.key == key and len(question.options) > 1:
+                return 1
+            return question.default
+        return pick
+
+    by_race = mk.interview(only("race"), level=2, seed=7, cls="fighter")
+    out.that(
+        by_race.race != dealt.race,
+        "choosing a different race changes the race",
+        f"{dealt.race} -> {by_race.race}",
+    )
+    by_feat = mk.interview(only("feat"), level=2, seed=7, cls="fighter")
+    out.that(
+        by_feat.feats != dealt.feats,
+        "and choosing a different feat changes the feats",
+        f"{dealt.feats} -> {by_feat.feats}",
+    )
+    by_power = mk.interview(only("power"), level=2, seed=7, cls="fighter")
+    out.that(
+        by_power.powers != dealt.powers,
+        "and choosing a different power changes the hand",
+        f"{len(dealt.powers)} powers dealt, "
+        f"{len(set(by_power.powers) ^ set(dealt.powers))} differ",
+    )
+    out.that(
+        all(
+            m.cls == "fighter" and m.powers and m.feats
+            for m in (by_race, by_feat, by_power)
+        ),
+        "and each is still a complete character",
+    )
+
+
 DRIVERS = {
+    "chargen_defaults": (
+        every_default_makes_the_character_the_dealer_would_have,
+        "a hand-made character taking every default is the dealt one (#793)",
+    ),
     "party_size": (
         a_module_gets_the_party_size_it_asked_for,
         "a module's stated party size reaches both the party and the budget (#789)",

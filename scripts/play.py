@@ -37,7 +37,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from combat_engine.story import importer
+from combat_engine.story import Party, importer
+from combat_engine.story import maker as maker_mod
 from combat_engine.story import module as module_mod
 from combat_engine.story import run as run_mod
 from combat_engine.story import save as save_mod
@@ -91,8 +92,54 @@ def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> N
         print(f"   ! {note}")
 
 
+def ask(question: maker_mod.Question) -> int:
+    """Put one question to whoever is at the terminal.
+
+    Enter takes the default, which is what the dealer would have picked --
+    so a person who wants a dealt character can hold Enter down and get
+    exactly the one `Party.of` would have made.
+    """
+    print(f"\n{question.prompt}")
+    for i, option in enumerate(question.options):
+        mark = "*" if i == question.default else " "
+        score = f"{option.score:6.2f}" if option.score else "      "
+        print(f"  {mark}{i:>3}  {option.ref:<22} {score}  {option.why}")
+    while True:
+        try:
+            said = input(f"  [{question.default}] ").strip()
+        except EOFError:
+            # Nothing on stdin -- piped, redirected, or the person walked
+            # away. Taking the default is the right answer for all three and
+            # is also what makes this runnable from an instrument.
+            print("(taking the default)")
+            return question.default
+        if not said:
+            return question.default
+        if said.isdigit() and 0 <= int(said) < len(question.options):
+            return int(said)
+        print(f"  a number from 0 to {len(question.options) - 1}, or Enter.")
+
+
+def new_character(party_name: str, *, level: int, seed: int, cls: str) -> int:
+    """Make one character and add them to a party."""
+    try:
+        party = save_mod.load_party(party_name)
+    except SystemExit:
+        party = Party()
+    sheet = maker_mod.interview(ask, level=level, seed=seed, cls=cls)
+    party.sheets.append(sheet)
+    where = save_mod.save_party(party, party_name)
+    print(f"\n=== {sheet.cls} level {sheet.level} ===")
+    print(f"  build    {sheet.build or '(the only one)'}")
+    print(f"  race     {sheet.race or '(none)'}")
+    print(f"  powers   {', '.join(sheet.powers)}")
+    print(f"  feats    {', '.join(sheet.feats) or '(none)'}")
+    print(f"\n  party    {len(party.sheets)} character(s), saved to {where}")
+    return 0
+
+
 def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
-         with_dm: bool = False) -> int:
+         with_dm: bool = False, party_name: str = "") -> int:
     """Play a module from the start, or pick one up where it was left."""
     if resume:
         campaign = save_mod.load(resume)
@@ -106,6 +153,18 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
     else:
         module = module_mod.load(path)
         campaign = run_mod.begin(module, seed=seed)
+        if party_name:
+            # A party somebody made by hand replaces the dealt one. The
+            # module still says what level the adventure is written for, so
+            # a mismatch is worth printing rather than silently playing.
+            campaign.party = save_mod.load_party(party_name)
+            levels = {s.level for s in campaign.party.sheets}
+            if levels != {module.party_level}:
+                print(
+                    f"   note: {party_name} is level "
+                    f"{'/'.join(str(n) for n in sorted(levels))} and the "
+                    f"adventure is written for {module.party_level}"
+                )
         print(f"=== {module.id}, seed {seed}, party level {module.party_level} ===")
 
     narrator = None
@@ -205,6 +264,26 @@ def main() -> int:
         "network and a key goes red for the wrong reason (#794)",
     )
     ap.add_argument(
+        "--new-character", action="store_true", dest="new_character",
+        help="make a character by choosing rather than being dealt one, and "
+        "add them to a party. Needs --party to say which. Enter takes the "
+        "default at every step, which is exactly what the dealer would have "
+        "picked (#793)",
+    )
+    ap.add_argument(
+        "--party", metavar="NAME", default="",
+        help="a party made by hand: the group --new-character adds to, and "
+        "the group --play fields instead of the dealt four",
+    )
+    ap.add_argument(
+        "--cls", metavar="CLASS", default="",
+        help="skip the class question in --new-character",
+    )
+    ap.add_argument(
+        "--level", type=int, default=1,
+        help="what level to make a character at",
+    )
+    ap.add_argument(
         "--dm", action="store_true",
         help="have a model narrate the adventure, play the people in it and "
         "make the choices a DM makes. Needs the optional anthropic SDK and "
@@ -232,6 +311,14 @@ def main() -> int:
         print("Next: read the brief, fill the draft in as module.json, then")
         print(f"  uv run scripts/play.py --validate {got.into}/module.json")
         return 0
+    if args.new_character:
+        if not args.party:
+            raise SystemExit(
+                "--new-character needs --party to say which group to add to."
+            )
+        return new_character(
+            args.party, level=args.level, seed=args.seed, cls=args.cls,
+        )
     if args.validate:
         return validate(args.validate)
     if args.resume and not args.play:
@@ -240,6 +327,7 @@ def main() -> int:
         return play(
             args.play, seed=args.seed, save_as=args.save,
             quiet=args.quiet, resume=args.resume or "", with_dm=args.dm,
+            party_name=args.party,
         )
     ap.print_help()
     return 0

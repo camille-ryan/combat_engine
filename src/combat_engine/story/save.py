@@ -147,8 +147,45 @@ def load(name: str) -> Campaign:
     return from_dict(json.loads(where.read_text()))
 
 
+#: Where a party lives, as opposed to a campaign. Same directory, different
+#: thing: a party is the characters, a campaign is a party plus where it has
+#: got to. Keeping them apart is what lets somebody build a group once and
+#: play several adventures with it.
+def party_path(name: str) -> Path:
+    return SAVES / f"{Path(name).name}.party.json"
+
+
+def save_party(party: Party, name: str) -> Path:
+    SAVES.mkdir(parents=True, exist_ok=True)
+    where = party_path(name)
+    where.write_text(
+        json.dumps(
+            {"version": VERSION, "party": [asdict(s) for s in party.sheets]},
+            indent=2,
+        )
+        + "\n"
+    )
+    return where
+
+
+def load_party(name: str) -> Party:
+    where = party_path(name)
+    if not where.exists():
+        raise SystemExit(
+            f"{where} is missing. Make one with: "
+            f"uv run scripts/play.py --new-character --party {Path(name).name}"
+        )
+    raw = json.loads(where.read_text())
+    got = raw.get("version", 0)
+    if got != VERSION:
+        raise SystemExit(f"that party is version {got}; this build reads {VERSION}.")
+    return Party(sheets=[_sheet(s) for s in raw.get("party", ())])
+
+
 def names() -> list[str]:
     """Every saved campaign on this machine."""
     if not SAVES.exists():
         return []
-    return sorted(p.stem for p in SAVES.glob("*.json"))
+    return sorted(
+        p.name.removesuffix(".json") for p in SAVES.glob("*.json")
+    )
