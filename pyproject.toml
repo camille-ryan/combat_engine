@@ -9,6 +9,14 @@ dependencies = [
 
 [project.optional-dependencies]
 api = ["fastapi>=0.115", "uvicorn[standard]>=0.34"]
+# Reading a module you supply yourself out of a PDF. Optional because the
+# engine plays a module perfectly well without ever having seen one -- the
+# import step is a one-off, and a `.txt` or `.md` adventure skips it entirely.
+modules = ["pypdf>=5.1"]
+# The model that narrates a campaign (#794). Optional because `--no-dm` is a
+# first-class mode and is the one `check.py` runs: an instrument that needs a
+# network and an API key goes red for the wrong reason.
+dm = ["anthropic>=0.69"]
 
 [build-system]
 requires = ["hatchling"]

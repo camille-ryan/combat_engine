@@ -37,6 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from combat_engine.story import importer
 from combat_engine.story import module as module_mod
 from combat_engine.story import run as run_mod
 from combat_engine.story import save as save_mod
@@ -145,6 +146,18 @@ def main() -> int:
         "itself -- the module is the user's own file and is not copied into "
         "the save",
     )
+    ap.add_argument(
+        "--import", dest="import_", metavar="FILE",
+        help="split an adventure you own into per-page text, pull its "
+        "outline, and write a draft module and a brief beside it under "
+        "modules/<id>/. A .pdf needs the optional pypdf; a .txt or .md "
+        "skips that step. Filling the draft in is a reading job and is "
+        "deliberately not done here -- see the brief it writes",
+    )
+    ap.add_argument(
+        "--id", metavar="NAME", default="",
+        help="what to call the imported module. Required with --import",
+    )
     ap.add_argument("--list", action="store_true", help="saved campaigns on this machine")
     ap.add_argument(
         "--seed", type=int, default=7,
@@ -165,6 +178,20 @@ def main() -> int:
     if args.list:
         found = save_mod.names()
         print("\n".join(found) if found else "no saved campaigns")
+        return 0
+    if args.import_:
+        if not args.id:
+            raise SystemExit("--import needs --id to say what to call the module.")
+        got = importer.run_import(args.import_, args.id)
+        print(f"=== imported into {got.into} ===")
+        print(f"  pages          {got.pages}, one text file each in pages/")
+        print(f"  outline        {got.headings} headings")
+        print(f"  draft scenes   {got.scenes}")
+        print(f"  draft          {got.draft}")
+        print(f"  brief          {got.brief}")
+        print()
+        print("Next: read the brief, fill the draft in as module.json, then")
+        print(f"  uv run scripts/play.py --validate {got.into}/module.json")
         return 0
     if args.validate:
         return validate(args.validate)
