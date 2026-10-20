@@ -56,6 +56,8 @@ from typing import Any
 from combat_engine.engine.cast import TERRAIN_WORDS
 from combat_engine.engine.skills import SKILLS
 
+from .dc import BANDS
+
 #: What sort of thing a scene is. Four, and they are the four the module in
 #: `modules/` is made of -- its outline has a heading for each.
 #:
@@ -150,6 +152,75 @@ class FoeSpec:
     rank: str = "standard"
 
 
+#: How many beats a roleplay scene runs before it gives up and takes its first
+#: exit. A backstop, not a target -- a scene that has not resolved in six
+#: exchanges is a scene the module did not finish writing, and a loop with no
+#: bound is worse than an early exit.
+MAX_BEATS = 6
+
+
+@dataclass(frozen=True)
+class Affordance:
+    """Something a character can try in this scene, and what it costs.
+
+    **The thing that makes a small model usable.** Asked to decide freely
+    which declared intents needed a check, `qwen2.5:7b` got one of three
+    right and the wrong one broke an instruction that was in its prompt
+    verbatim. Handed this list and asked to *match*, it got 3 of 3 across
+    three runs at temperature 0. Classification against a closed set is a
+    different task from open judgement, and a 7B is on the right side of the
+    line for one and the wrong side for the other. #801.
+
+    `win` and `lose` are the facts the DM may state afterwards. Everything
+    else it may not -- which is the whole of how canon is held.
+    """
+
+    id: str
+    #: What trying it looks like, in the fiction. This is what the matcher
+    #: compares an intent against, so it is written for a reader rather than
+    #: as a label: "study him for signs he is hiding something", not "insight".
+    what: str = ""
+    skill: str = ""
+    band: str = "moderate"
+    win: str = ""
+    lose: str = ""
+    #: Once each, like a challenge's secondary skills, so a party cannot
+    #: grind one affordance until it lands.
+    once: bool = True
+    #: Taking this ends the scene and goes there. Empty leaves the scene
+    #: running until `max_beats`.
+    leads_to: str = ""
+
+    @property
+    def rolls(self) -> bool:
+        """Does trying this put dice on the table?
+
+        An affordance with no skill is a thing a character can simply do --
+        open the door, hand over the money -- which still matters because it
+        is a thing the module *said* they could do, and the DM may then speak
+        to its `win` text.
+        """
+        return bool(self.skill)
+
+
+@dataclass(frozen=True)
+class Npc:
+    """Somebody in the scene for the model to play.
+
+    `knows` is what they may say. **`hides` is withheld from the prompt
+    entirely** rather than included with an instruction not to reveal it:
+    a 7B told a secret and told not to tell it is a 7B one unlucky sample
+    away from telling it, and the cheapest way to keep a secret from a model
+    is not to give it one.
+    """
+
+    name: str
+    wants: str = ""
+    knows: tuple[str, ...] = ()
+    hides: tuple[str, ...] = ()
+    voice: str = ""
+
+
 @dataclass(frozen=True)
 class Scene:
     """One beat of the adventure, and where it can lead.
@@ -175,6 +246,14 @@ class Scene:
     #: ends the module.
     exits: tuple[str, ...] = ()
 
+    # -- roleplay ------------------------------------------------------------
+    #: Who is here to be talked to.
+    npcs: tuple[Npc, ...] = ()
+    #: What can be tried. An empty list makes the scene a read-aloud that
+    #: advances, which is what every scene was before this existed.
+    affordances: tuple[Affordance, ...] = ()
+    max_beats: int = MAX_BEATS
+
     # -- combat ------------------------------------------------------------
     difficulty: str = "standard"
     #: Overrides `difficulty` when the module prints a real XP figure.
@@ -198,6 +277,10 @@ class Scene:
 
     # -- rest ---------------------------------------------------------------
     extended: bool = False
+
+    def affordance(self, wanted: str) -> Affordance | None:
+        """One by id, or `None`. `"none"` is a legal answer and means nothing."""
+        return next((a for a in self.affordances if a.id == wanted), None)
 
     @property
     def share(self) -> float:
@@ -277,6 +360,74 @@ def _as_foe(raw: Any, where: str, problems: list[str]) -> FoeSpec:
     )
 
 
+def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: an npc must be an object")
+        return None
+    name = str(raw.get("name", "")).strip()
+    if not name:
+        problems.append(f"{where}: an npc needs a name")
+        return None
+    def lines(key: str) -> tuple[str, ...]:
+        got = raw.get(key, ())
+        if isinstance(got, str):
+            got = [got]
+        return tuple(str(x).strip() for x in got if str(x).strip())
+    return Npc(
+        name=name, wants=str(raw.get("wants", "")).strip(),
+        knows=lines("knows"), hides=lines("hides"),
+        voice=str(raw.get("voice", "")).strip(),
+    )
+
+
+def _as_affordance(raw: Any, where: str, problems: list[str]) -> Affordance | None:
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: an affordance must be an object")
+        return None
+    aid = str(raw.get("id", "")).strip()
+    if not aid:
+        problems.append(f"{where}: an affordance needs an id")
+        return None
+    what = str(raw.get("what", "")).strip()
+    if not what:
+        # **The matcher reads this, not the id.** An affordance with no
+        # description gives the model a bare slug to compare an intent
+        # against, which is the condition the measurement in #801 was *not*
+        # taken under -- so it would be shipping on evidence that does not
+        # cover it.
+        problems.append(
+            f"{where}: affordance {aid!r} needs a 'what' -- the matcher "
+            "compares an intent against that sentence, not against the id"
+        )
+    skill = str(raw.get("skill", "")).strip().lower()
+    if skill and skill not in SKILLS:
+        problems.append(
+            f"{where}: affordance {aid!r} names {skill!r}, which is not a "
+            f"skill. Known: {', '.join(sorted(SKILLS))}"
+        )
+    band = str(raw.get("band", "moderate")).strip().lower()
+    if band not in BANDS:
+        problems.append(
+            f"{where}: affordance {aid!r} has band {band!r}, not one of "
+            f"{', '.join(BANDS)}"
+        )
+        band = "moderate"
+    if skill and not (raw.get("win") or raw.get("lose")):
+        # A roll with no stated consequence is a die thrown for nothing, and
+        # the DM has no fact to speak to afterwards.
+        problems.append(
+            f"{where}: affordance {aid!r} rolls {skill} and says what neither "
+            "winning nor losing does"
+        )
+    return Affordance(
+        id=aid, what=what, skill=skill, band=band,
+        win=str(raw.get("win", "")).strip(),
+        lose=str(raw.get("lose", "")).strip(),
+        once=bool(raw.get("once", True)),
+        leads_to=str(raw.get("leads_to", "")).strip(),
+    )
+
+
 def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     where = f"scene {index}"
     if not isinstance(raw, dict):
@@ -348,6 +499,30 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     foes = tuple(
         _as_foe(f, where, problems) for f in raw.get("foes", ())
     )
+    npcs = tuple(
+        n for n in (_as_npc(x, where, problems) for x in raw.get("npcs", ()))
+        if n is not None
+    )
+    affordances = tuple(
+        a for a in
+        (_as_affordance(x, where, problems) for x in raw.get("affordances", ()))
+        if a is not None
+    )
+    seen_ids = [a.id for a in affordances]
+    for aid in sorted({a for a in seen_ids if seen_ids.count(a) > 1}):
+        problems.append(f"{where}: two affordances share the id {aid!r}")
+    if "none" in seen_ids:
+        # The matcher's enum carries "none" for "this just happens", so an
+        # affordance called that would be unreachable *and* would silently
+        # swallow every intent the model meant to leave alone.
+        problems.append(
+            f"{where}: an affordance may not be called 'none' -- the matcher "
+            "uses that word for an intent that needs no roll"
+        )
+    beats = raw.get("max_beats", MAX_BEATS)
+    if not isinstance(beats, int) or beats < 1:
+        problems.append(f"{where}: max_beats must be a positive integer")
+        beats = MAX_BEATS
     if kind == "combat" and not foes:
         problems.append(f"{where}: a combat scene needs at least one foe line")
 
@@ -357,9 +532,10 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     # Both read exactly like a scene that works, which is why they are refused.
     unused = {
         "roleplay": ("foes", "terrain", "complexity", "primary", "secondary"),
-        "skill_challenge": ("foes", "terrain"),
-        "combat": ("complexity", "primary", "secondary"),
-        "rest": ("foes", "terrain", "complexity", "primary", "secondary"),
+        "skill_challenge": ("foes", "terrain", "affordances"),
+        "combat": ("complexity", "primary", "secondary", "affordances"),
+        "rest": ("foes", "terrain", "complexity", "primary", "secondary",
+                 "affordances", "npcs"),
     }[kind]
     for name in unused:
         if raw.get(name):
@@ -371,6 +547,9 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         brief=str(raw.get("brief", "")),
         chapter=str(raw.get("chapter", "")).strip(),
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
+        npcs=npcs,
+        affordances=affordances,
+        max_beats=beats,
         difficulty=difficulty,
         xp=int(raw.get("xp", 0) or 0),
         terrain=terrain,
@@ -417,7 +596,9 @@ def parse(raw: dict, path: Path) -> Module:
     # time.** A dangling exit is a campaign that stops dead three hours in,
     # which is the worst possible moment to discover a typo.
     for scene in scenes.values():
-        for exit_id in (*scene.exits, scene.on_success, scene.on_failure):
+        edges = [*scene.exits, scene.on_success, scene.on_failure]
+        edges += [a.leads_to for a in scene.affordances]
+        for exit_id in edges:
             if exit_id and exit_id not in scenes:
                 problems.append(f"scene {scene.id!r}: exit {exit_id!r} is not a scene")
 
@@ -428,7 +609,9 @@ def parse(raw: dict, path: Path) -> Module:
         seen, stack = {start}, [start]
         while stack:
             here = scenes[stack.pop()]
-            for exit_id in (*here.exits, here.on_success, here.on_failure):
+            onward = [*here.exits, here.on_success, here.on_failure]
+            onward += [a.leads_to for a in here.affordances]
+            for exit_id in onward:
                 if exit_id in scenes and exit_id not in seen:
                     seen.add(exit_id)
                     stack.append(exit_id)

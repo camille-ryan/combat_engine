@@ -274,6 +274,51 @@ where the page plainly says a secondary check earns one.
 `on_success` and `on_failure` are scene ids. Leave both empty if the adventure
 carries on regardless.
 
+**A roleplay scene** -- this is where the adventure actually gets played, so
+it needs two things the page will give you if you look for them.
+
+`npcs` is who is there to talk to:
+
+    {{"name": "the friar", "wants": "the party to take the job and not ask
+      who benefits", "voice": "warm, generous, never hurried",
+      "knows": ["the informant was taken openly, which reads as bait",
+                "he will pay a healing poultice each"],
+      "hides": ["he serves a snake god", "he wants the banker destroyed"]}}
+
+`knows` is what they may say out loud. **`hides` is never shown to the model
+at all** -- it is recorded so the thing stays written down and so a later
+scene can move it into `knows`, not so the model can be told to keep a
+secret. A small model given a secret and told not to tell it is one unlucky
+sample away from telling it.
+
+`affordances` is what a character can *try* here:
+
+    {{"id": "read-friar", "what": "study him for signs he is hiding
+      something", "skill": "insight", "band": "hard",
+      "win": "he is holding something back about the banker",
+      "lose": "nothing, and he notices the staring",
+      "once": true, "leads_to": ""}}
+
+This is the single most important thing you will write, and it is worth
+knowing why. The model is **not** asked to decide what needs a check -- asked
+to do that it got one of three right and called "ask a willing host a
+question" an intimidate check. It is asked to *match* a declared intent
+against this list or to "none", which it did 3 of 3 at temperature 0. So the
+quality of the scene is the quality of this list.
+
+Write one per thing the page says a character could attempt. `what` is a
+sentence a reader would recognise, not a label -- the matcher compares an
+intent against *that*, never against the id. `win` and `lose` are the only
+facts the DM may state afterwards, so write them as facts rather than as
+outcomes: "he names the two guards on the stair", not "the party learns
+more". `skill` only where there is real uncertainty; a thing a character can
+simply do gets no skill and still belongs in the list, because it tells the
+model that doing it is a thing this scene supports.
+
+`leads_to` on an affordance ends the scene and goes there -- use it for the
+one that moves the story on. `max_beats` (default 6) is the backstop when
+nothing does.
+
 **A rest scene** -- `extended: true` only for a full night. Five minutes is
 `false`.
 
