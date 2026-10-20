@@ -68,11 +68,20 @@ def validate(path: str) -> int:
     return 0
 
 
-def _print_step(made: run_mod.Step, *, quiet: bool) -> None:
+def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> None:
     head = f"-- {made.scene.id} [{made.scene.kind}]"
     if made.scene.name:
         head += f"  {made.scene.name}"
     print(head)
+    # With a model narrating, the module's own text is its source material
+    # and printing both says everything twice.
+    if narrated:
+        if made.outcome != "done":
+            print(f"   ({made.outcome}"
+                  + (f", {made.rounds} rounds" if made.rounds else "") + ")")
+        for note in made.notes:
+            print(f"   ! {note}")
+        return
     if not quiet:
         for line in made.lines:
             print(f"   {line}")
@@ -82,7 +91,8 @@ def _print_step(made: run_mod.Step, *, quiet: bool) -> None:
         print(f"   ! {note}")
 
 
-def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "") -> int:
+def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
+         with_dm: bool = False) -> int:
     """Play a module from the start, or pick one up where it was left."""
     if resume:
         campaign = save_mod.load(resume)
@@ -98,15 +108,35 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "") -
         campaign = run_mod.begin(module, seed=seed)
         print(f"=== {module.id}, seed {seed}, party level {module.party_level} ===")
 
+    narrator = None
+    if with_dm:
+        from combat_engine.story import dm as dm_mod
+
+        why = dm_mod.available()
+        if why:
+            # **Not a silent downgrade.** A run that quietly falls back to
+            # the written text would look like the model narrating badly.
+            print(why)
+            return 2
+        narrator = dm_mod.DM(campaign=campaign, module=module)
+        print(f"   dungeon master: {narrator.model}")
+
     print(f"   {run_mod.party_line(campaign)}")
     print()
 
     fights = rounds = 0
     played = 0
     while not campaign.finished and played < LIMIT:
-        made = run_mod.step(campaign, module)
+        scene = module.scene(campaign.scene)
+        choice = narrator.pick_exit(scene) if narrator else ""
+        made = run_mod.step(
+            campaign, module, choice=choice,
+            choose=narrator.choose if narrator else None,
+        )
         played += 1
-        _print_step(made, quiet=quiet)
+        _print_step(made, quiet=quiet, narrated=bool(narrator))
+        if narrator:
+            narrator.narrate(scene, made)
         if made.scene.kind == "combat" and made.outcome in ("won", "lost"):
             fights += 1
             rounds += made.rounds
@@ -122,6 +152,8 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "") -
         print(f"  fights          {fights}, {rounds / fights:.1f} rounds on average")
     alive = sum(1 for s in campaign.party.sheets if not s.down)
     print(f"  party           {alive} of {len(campaign.party.sheets)} standing")
+    if narrator:
+        print(f"  dm              {narrator.spend()}")
     if save_as:
         where = save_mod.save(campaign, save_as)
         print(f"  saved           {where}")
@@ -172,6 +204,13 @@ def main() -> int:
         "The default, and what check.py runs: an instrument that needs a "
         "network and a key goes red for the wrong reason (#794)",
     )
+    ap.add_argument(
+        "--dm", action="store_true",
+        help="have a model narrate the adventure, play the people in it and "
+        "make the choices a DM makes. Needs the optional anthropic SDK and "
+        "credentials; it never rolls a die or decides a fight, and it cannot "
+        "move the party to a scene the current one does not lead to (#794)",
+    )
     ap.add_argument("--quiet", action="store_true", help="outcomes only, no prose")
     args = ap.parse_args()
 
@@ -200,7 +239,7 @@ def main() -> int:
     if args.play:
         return play(
             args.play, seed=args.seed, save_as=args.save,
-            quiet=args.quiet, resume=args.resume or "",
+            quiet=args.quiet, resume=args.resume or "", with_dm=args.dm,
         )
     ap.print_help()
     return 0
