@@ -545,8 +545,16 @@ def p16467(c: Cast) -> None:
     dropped=("c.stealth_speed()",),
 )
 def p16545(c: Cast) -> None:
-    """Hiding is only offered if the shift ended beside somebody, which is
-    the printed condition rather than the entry requirement."""
+    """Hiding is only offered if the shift ended beside an ally, which is
+    the printed condition rather than the entry requirement.
+
+    **The marker is about the card's last line, which this note used to
+    leave out**: "for this check you ignore the -5 penalty for moving more
+    than 2 squares". That penalty is a real 4e rule -- checked at the end of
+    a move action, -5 past two squares and -10 if you ran -- and the engine
+    charges none of it, so there is nothing here to waive. #784, and the
+    gap runs deeper than a missing term: `c.hide` grants the hidden state
+    outright and rolls no check at all."""
     c.shift(c.speed_of())
     if _beside(c) is not None:
         c.hide()

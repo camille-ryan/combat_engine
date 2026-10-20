@@ -1243,7 +1243,7 @@ def i1201x1(c: Cast) -> None:
 
 
 @power("i1246x1", level=7, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, dropped=("story.skill_use()",))
 def i1246x1(c: Cast) -> None:
     """`c.set_origin` is exactly "you are considered to have that
     creature's origin and keywords", and `c.endable` is the printed minor
@@ -1254,9 +1254,11 @@ def i1246x1(c: Cast) -> None:
     board actually carry -- a word nobody here has is worth nothing, and
     "if doing so is beneficial" is the card saying the same.
 
-    Dropped: the Bluff bonus, which is narrowed to passing yourself off
-    as that creature and a skill check cannot be told what it is for. The
-    language half is out of combat."""
+    Dropped: the Bluff bonus, which is narrowed to passing yourself off as
+    that creature. **Deferred to the story engine** on Camille's call, not
+    held for a check context: a disguise is judged over a conversation, and
+    the fight's clock has no room for one. #787. The language half is out of
+    combat for the same reason."""
     words = sorted({
         word for who in c.within(20) if who != c.me for word in c.kinds_of(on=who)
     })

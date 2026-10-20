@@ -815,17 +815,23 @@ def i2689p1(c: Cast) -> None:
 
 
 @power("i2746x1", level=8, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.skill_circumstance()",))
+       reach=PERSONAL, target=SELF, todo=("story.skill_use()",))
 def i2746x1(c: Cast) -> None:
     """+2 to Athletics made to swim, and to Endurance made to hold your
     breath, swim or tread water.
 
-    **Re-pointed, and the premise needed splitting.** "Skill checks with no
-    combat consequence" is not the reason -- an Athletics check is rolled
-    in fights. The second half is: "a check context cannot be asked what
-    the check was for". That is `c.skill_circumstance()`, which four other
-    rows already wait on, so this joins them rather than claiming the
-    clause has no meaning.
+    **Re-pointed twice, and the second premise was wrong too.** "Skill
+    checks with no combat consequence" was the first reason and is false --
+    an Athletics check is rolled in fights. "A check context cannot be
+    asked what the check was for" was the second, and the printed rules
+    answer it: these checks are **per hour**, DC by water conditions and +2
+    for each additional hour, and holding your breath is five rounds free
+    then DC 10 + 1 per round. That is a span of time, not a missing context
+    key.
+
+    **Deferred to the story engine** on Camille's call: an hour of swimming
+    is a circumstance the fight's clock cannot reach, and
+    `docs/STORY_ENGINE.md` is the component that fields one. #787.
 
     Laying the +2 flat would be a row **stronger than its card** -- every
     Athletics check rather than the swimming ones -- which is the direction

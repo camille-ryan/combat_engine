@@ -139,7 +139,12 @@ FORGO = ("c.forgo_damage()",)
 # riders now test the aiming directly. The symbol is at zero rows.
 
 #: A skill bonus that applies only in a named circumstance.
-CIRCUMSTANCE = ("c.skill_circumstance()",)
+#: `f3447`'s two live gaps, named apart after #735 split. Opening a lock
+#: is a printed standard action the engine does not offer (#786); sleight
+#: of hand is Camille's deferral to the story engine (#787), because it
+#: palms an unattended object and is judged by onlookers, neither of which
+#: is on a board. The escape half of the same card already plays.
+CIRCUMSTANCE = ("actions.open_lock()", "story.skill_use()")
 
 #: Large and up, for the three feats that turn on a big enemy.
 BIG = (Size.LARGE, Size.HUGE, Size.GARGANTUAN)
@@ -717,23 +722,32 @@ def f3446(c: Cast) -> None:
 @power("f3447", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, dropped=CIRCUMSTANCE)
 def f3447(c: Cast) -> None:
-    """The escape half plays. The Thievery half is narrowed to opening
-    locks and sleight of hand, and a check's circumstance is not
-    sayable -- a blanket bonus to the skill would raise every use of it
-    -- so that clause is dropped rather than widened. Restraints other
-    than a grab are not a hold anything rolls against.
+    """The escape half plays -- escaping a grab is a move action the engine
+    offers and rolls, Acrobatics against the grabber's Reflex or Athletics
+    against its Fortitude. Restraints other than a grab are not a hold
+    anything rolls against.
 
-    **Re-aimed.** The marker read `c.check(circumstance=)`, which no
-    other row in the tree named; this file already declared
-    `c.skill_circumstance()` and never used it, so this row joins the ones
-    already waiting on it rather than minting a synonym.
+    **Re-aimed three times, and only the third reading is about the right
+    thing.** It was `c.check(circumstance=)`, then `c.skill_circumstance()`
+    -- both of which said the gap was that a check cannot be told what it is
+    for. The printed rules say otherwise: opening a lock and sleight of hand
+    are each a **standard action in combat**, adjacent to the lock or to the
+    object. They are named actions, not purposes, and the engine offers
+    neither.
 
-    **The count in this note was wrong, and correcting it here matters**
-    because this is the row the rest of the family defers to -- a reader
-    arriving will size the job off it. It said "eleven rows"; the tree holds
-    **five**: this one, `f946`, `i1246x1`, `i2746x1`, `i693x1`. #735's
-    figure of nine is the right one for the scope call it asks for, being
-    those five plus the four on `c.stealth_speed()`."""
+    So the Thievery half splits, on Camille's call (#735):
+
+    * **opening locks** is `actions.open_lock()`, and #786 says the honest
+      caveat out loud -- the action is buildable, but no square carries a
+      lock, so it would be legal nowhere until terrain grows one;
+    * **sleight of hand** goes to the story engine (#787), because it palms
+      an unattended object and is judged by onlookers, and neither of those
+      is on a board.
+
+    The +4 has to be **per check** either way. A blanket Thievery bonus
+    would raise every use of the skill, which is the fault this note has
+    warned about since its first version and the one thing all three
+    readings agreed on."""
     c.bonus("escape", 4, on=c.me, until=When.ENCOUNTER, kind="feat")
 
 

@@ -251,7 +251,7 @@ def f945(c: Cast) -> None:
 
 @power("f946", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.skill_circumstance()",))
+       todo=("actions.bluff()",))
 def f946(c: Cast) -> None:
     """A slide on a successful Bluff check made in combat to gain combat
     advantage, while bloodied.
@@ -268,11 +268,17 @@ def f946(c: Cast) -> None:
     on the event and in the reader. #735's body says to re-point this row
     "whatever is decided here", and this is that.
 
-    What is still missing is what the check was *made to do*: a check to
-    gain combat advantage and a check to tell a lie are one skill here. So
-    the marker stays and now names one gap rather than two, which is the
-    rule -- a symbol serving two needs cannot go red or green correctly for
-    either.
+    **Re-pointed again, and "what the check was for" was never the gap.**
+    4e makes this one *named action*: a standard action against an adjacent
+    enemy, Bluff opposed by that enemy's Insight, once per encounter, combat
+    advantage until the end of your next turn. So there is nothing for a
+    check context to carry -- there is simply no feint in
+    `engine/actions.py` for this trigger to answer.
+
+    `f2092` is the worked example of the contest itself, rolling
+    `c.check("bluff", c.passive("insight", of=foe))` -- it only gets to make
+    the check because its own card hands it one off a trigger. `f1270` names
+    the same absence from the other side. #785, Camille's call on #735.
     """
 
 

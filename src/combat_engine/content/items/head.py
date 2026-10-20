@@ -902,7 +902,7 @@ def i3470p1(c: Cast) -> None:
 
 @power("i693x1", level=8, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.skill_circumstance()",))
+       dropped=("story.skill_use()",))
 def i693x1(c: Cast) -> None:
     """Saving throws against ongoing **untyped** damage move to the start
     of the turn.
@@ -918,9 +918,11 @@ def i693x1(c: Cast) -> None:
     first would move a save against a daze, the second is true of every
     hold that burns nothing at all.
 
-    The light is narrative. The Charisma bonus is against one sort of
-    creature, which a check's context has no room for, and that is the
-    marker that stays."""
+    The light is narrative. The Charisma bonus is **deferred to the story
+    engine** on Camille's call: it is not a circumstance a check context
+    lacks room for, it is a *faction's* attitude, and nothing on a board
+    belongs to a faction. #787. Three clauses on one property, and only this
+    one is owed."""
     c.save_early(
         lambda ctx: bool(ctx.get("ongoing")) and ctx.get("dtype") is None,
         on=c.me, until=When.ENCOUNTER,
