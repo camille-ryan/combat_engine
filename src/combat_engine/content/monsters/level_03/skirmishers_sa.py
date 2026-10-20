@@ -2619,19 +2619,21 @@ def m5133a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignore_cover(concealment=)",),
 )
 def m5316a0(c: Cast) -> None:
     """It sees a wounded creature however well hidden, and the gate is read
     on the attack context's target.
 
-    `c.ignore_cover` waives cover **and** concealment together, and the card
-    waives only the second -- so this is the printed clause plus a little
-    more, which is the narrowing the marker names.
+    **No longer the printed clause plus a little more.** This waived cover
+    as well, because `cover_waived` answered one number for both halves of
+    the penalty and there was nothing to carve out. `concealment_only=True`
+    is the carve-out, so a wounded creature behind a wall is still behind a
+    wall. #770.
     """
     c.ignore_cover(
         on=c.me,
         until=When.ENCOUNTER,
+        concealment_only=True,
         when=lambda ctx: c.bloodied(on=ctx.get("target")),
     )
 

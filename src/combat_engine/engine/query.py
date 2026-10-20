@@ -1932,6 +1932,13 @@ def cover_waived(
     statement about the same penalty. `Cover.PARTIAL` waives the ordinary
     -2 and leaves superior cover standing, which is what "partial cover or
     partial concealment" prints.
+
+    **This is the waiver for cover specifically.** Four rows print sight
+    that passes concealment and *not* cover -- "sees a wounded creature
+    however well hidden" -- and `concealment_waived` is that one. Reading
+    one number for both is what made those four unwritable: laying the
+    broad waiver would let the creature shoot through a wall for free,
+    which `m5426a0`'s note calls "a bigger rule than the card".
     """
     ctx = ctx or {}
     mine = world.get(attacker, Mods)
@@ -1940,6 +1947,32 @@ def cover_waived(
         mine.total("ignore_cover", ctx) if mine is not None and mine.items else 0,
         theirs.total("no_cover", ctx) if theirs is not None and theirs.items else 0,
     )
+
+
+def concealment_waived(
+    world: World, attacker: int, target: int, ctx: dict[str, Any] | None = None
+) -> int:
+    """How much **concealment** this pairing does not count. #770.
+
+    Everything `cover_waived` answers, because "you ignore cover and
+    concealment" covers this half too -- plus the narrower sentence that
+    only exists here: `c.ignore_cover(concealment_only=True)`, which is
+    four monster and feat rows whose sight passes a fog bank and stops at a
+    wall.
+
+    So the two readers are deliberately **nested, not parallel**: anything
+    waiving cover waives concealment, and not the reverse. Written the
+    other way round, a creature printed as seeing through concealment
+    would have been handed cover too.
+    """
+    ctx = ctx or {}
+    mine = world.get(attacker, Mods)
+    narrow = (
+        mine.total("ignore_concealment", ctx)
+        if mine is not None and mine.items
+        else 0
+    )
+    return max(cover_waived(world, attacker, target, ctx), narrow)
 
 
 def cover_between(

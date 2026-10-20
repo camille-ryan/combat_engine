@@ -12957,6 +12957,142 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def concealment_without_cover(out: Result) -> None:
+    """Sight that passes a fog bank and stops at a wall. #770.
+
+    Four rows print "ignore concealment" and not one of them prints cover:
+    three monster traits and one feat. `resolve.situational_attack` took the
+    **larger** of cover and concealment first and then asked one waiver
+    about the pair, so the only sayable waiver was the broad one -- and two
+    of the four had been written with it, which is the printed clause plus a
+    wall. The other two refused to be written at all rather than over-grant,
+    and `m5426a0`'s note says why: *"laying the broad one would let the
+    creature shoot through a wall's cover for free."*
+
+    Each half is waived against its own number now, and only the remainder
+    is compared. `query.cover_waived` answers for cover,
+    `query.concealment_waived` for concealment, and the two are deliberately
+    **nested**: anything waiving cover waives concealment too, because "you
+    ignore cover and concealment" is one sentence. Written the other way
+    round, a creature printed as seeing through a fog bank would have been
+    handed the wall as well.
+
+    **The table is the whole proof**, and the middle cell is the one that
+    could not be produced before:
+
+    ```
+    state           no waiver   concealment_only   broad
+    concealed            -2             0            0
+    behind cover         -2            -2            0
+    both                 -2            -2            0
+    ```
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine import resolve
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        concealment_waived,
+        cover_waived,
+        enemies,
+    )
+
+    # **Posed on a row that is NOT one of these four.** `audit.board` arms
+    # every `action=NONE` row, and all four of these are traits -- so posing
+    # on `m5426a0` hands the caster its own narrow waiver before the
+    # baseline is read, and "concealed with no waiver costs -2" came back 0.
+    # `m1092a0` is a plain claw and waives nothing.
+    NEUTRAL = "m1092a0"
+
+    def penalty(state: str, waiver: str) -> int:
+        world, me, _armed = _posed(NEUTRAL, 1)
+        foe = sorted(enemies(world, me))[0]
+        c = Cast(world=world, me=me, ref="drivers:conceal")
+        if state in ("concealed", "both"):
+            c.conceal(on=foe, until=When.ENCOUNTER)
+        if state in ("cover", "both"):
+            c.cover(on=foe, until=When.ENCOUNTER)
+        if waiver == "narrow":
+            c.ignore_cover(until=When.ENCOUNTER, concealment_only=True)
+        elif waiver == "broad":
+            c.ignore_cover(until=When.ENCOUNTER)
+        return resolve.situational_attack(
+            world, me, foe, "drivers:conceal", {"target": foe})
+
+    WANT = {
+        ("concealed", "none"): -2, ("concealed", "narrow"): 0,
+        ("concealed", "broad"): 0,
+        ("cover", "none"): -2, ("cover", "narrow"): -2,
+        ("cover", "broad"): 0,
+        ("both", "none"): -2, ("both", "narrow"): -2, ("both", "broad"): 0,
+    }
+    for (state, waiver), want in WANT.items():
+        got = penalty(state, waiver)
+        why = ""
+        if (state, waiver) == ("cover", "narrow"):
+            why = (" -- THE cell that could not be produced before, and the"
+                   " whole point: a narrow waiver must leave a wall standing")
+        elif waiver == "none":
+            why = " -- the baseline, so the waivers have something to remove"
+        elif (state, waiver) == ("both", "narrow"):
+            why = (" -- the cover half survives, which is what 'waive each,"
+                   " then take the larger of what remains' buys")
+        out.that(got == want,
+                 f"{state} vs the {waiver} waiver costs {want}{why}",
+                 f"it cost {got}")
+
+    # -- the two readers are nested, not parallel ------------------------
+    world, me, _armed = _posed(NEUTRAL, 1)
+    foe = sorted(enemies(world, me))[0]
+    Cast(world=world, me=me, ref="drivers:broad").ignore_cover(
+        until=When.ENCOUNTER)
+    out.that(cover_waived(world, me, foe, {}) > 0
+             and concealment_waived(world, me, foe, {}) > 0,
+             "a broad waiver answers for BOTH readers -- 'you ignore cover"
+             " and concealment' is one sentence",
+             f"cover={cover_waived(world, me, foe, {})}"
+             f" conceal={concealment_waived(world, me, foe, {})}")
+
+    world, me, _armed = _posed(NEUTRAL, 1)
+    foe = sorted(enemies(world, me))[0]
+    Cast(world=world, me=me, ref="drivers:narrow").ignore_cover(
+        until=When.ENCOUNTER, concealment_only=True)
+    out.that(cover_waived(world, me, foe, {}) == 0
+             and concealment_waived(world, me, foe, {}) > 0,
+             "and a narrow one answers for concealment ONLY -- the control"
+             " for the nesting, and reversed it would hand a wall to every"
+             " creature printed as seeing through a fog bank",
+             f"cover={cover_waived(world, me, foe, {})}"
+             f" conceal={concealment_waived(world, me, foe, {})}")
+
+    # -- and through the four rows' own bodies ---------------------------
+    for ref in ("m5426a0", "m5477a0", "m5316a0", "f3517"):
+        world, me, _armed = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        REGISTRY[ref].body(Cast(world=world, me=me, ref=ref))
+        # Two of the four gate on "against bloodied creatures" and one on
+        # melee, so the context carries both facts -- without the wound the
+        # gate is False and every assertion below would read as a row that
+        # lays nothing.
+        hurt = world.get(foe, Health)
+        if hurt is not None:
+            hurt.hp = max(1, hurt.max_hp // 3)
+        ctx = {"target": foe, "ranged": False}
+        waived_conceal = concealment_waived(world, me, foe, ctx)
+        waived_cover = cover_waived(world, me, foe, ctx)
+        out.that(waived_conceal > 0,
+                 f"{ref}'s own body waives concealment",
+                 f"conceal={waived_conceal}")
+        out.that(waived_cover == 0,
+                 f"and {ref} waives NO cover -- two of these four were"
+                 " written with the broad verb and were quietly granting a"
+                 " wall, so this is the assertion that would have caught it",
+                 f"cover={waived_cover}")
+
+
 def another_legs_option(out: Result) -> None:
     """Standing on a leg chargen did not deal, which six feats need.
 
@@ -27167,6 +27303,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "concealment_without_cover": (
+        concealment_without_cover,
+        "a waiver of concealment that leaves cover standing, which four"
+        " rows print and none could say (#770)",
+    ),
     "another_legs_option": (
         another_legs_option,
         "standing on a build leg chargen did not deal, which is what six"

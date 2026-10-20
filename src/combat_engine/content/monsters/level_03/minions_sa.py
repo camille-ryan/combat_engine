@@ -500,13 +500,22 @@ def m5217a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignore_cover(concealment_only=True)",),
 )
 def m5477a0(c: Cast) -> None:
     """Its attacks see past *concealment* and only concealment, and only
-    against a bloodied creature. `c.ignore_cover` waives cover and concealment
-    together -- `resolve.situational` takes the larger of the two and there is
-    nothing to carve out -- so the whole trait waits on the narrower verb."""
+    against a bloodied creature.
+
+    **Written**: `concealment_only=True` is the narrow waiver and the
+    `when=` gate is the "against bloodied creatures" half, read off the
+    attack context's target the way `m5316a0` reads it. The two halves of
+    the penalty are waived separately now, so cover still stops this
+    creature. #770."""
+    c.ignore_cover(
+        on=c.me,
+        until=When.ENCOUNTER,
+        concealment_only=True,
+        when=lambda ctx: c.bloodied(on=ctx.get("target")),
+    )
 
 
 @power(

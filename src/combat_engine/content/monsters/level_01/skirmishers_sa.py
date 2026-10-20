@@ -1719,17 +1719,20 @@ def m5320a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignore_cover(concealment_only=True)",),
 )
 def m5426a0(c: Cast) -> None:
     """It sees past concealment and *only* past concealment.
 
-    `resolve.situational` takes the larger of cover and concealment and asks
-    one waiver about the pair, so `c.ignore_cover` cannot be narrowed to the
-    half this card prints. Laying the broad one would let the creature shoot
-    through a wall's cover for free, which is a bigger rule than the card has
-    and the sort of over-grant nothing ever catches again.
+    **Written.** `resolve.situational_attack` used to take the larger of
+    cover and concealment and then ask one waiver about the pair, so the
+    narrow half this card prints could not be said -- and laying the broad
+    one would have let the creature shoot through a wall's cover for free,
+    which is a bigger rule than the card has and the sort of over-grant
+    nothing ever catches again. Each half is waived against its own number
+    now and only then compared, so `concealment_only=True` leaves cover
+    standing. #770.
     """
+    c.ignore_cover(on=c.me, until=When.ENCOUNTER, concealment_only=True)
 
 
 @power(

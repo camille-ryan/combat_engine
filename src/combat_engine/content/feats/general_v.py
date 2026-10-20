@@ -1148,14 +1148,21 @@ def f3516(c: Cast) -> None:
 
 
 @power("f3517", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.ignore_cover(concealment=)",))
+       reach=PERSONAL, target=SELF)
 def f3517(c: Cast) -> None:
-    """`resolve.attack` takes the larger of cover and concealment and
-    `cover_waived` answers one number for both, so a waiver of one and not
-    the other cannot be laid. The gate narrows it to melee, which is the
-    half of the sentence that is sayable."""
-    c.ignore_cover(on=c.me, until=When.ENCOUNTER,
+    """"Your melee attacks take no penalties due to partial concealment or
+    total concealment."
+
+    **Both halves of the sentence are sayable now.** The gate was always
+    the easy one -- `not ctx.get("ranged")` is "melee". What could not be
+    said was *concealment and not cover*: `cover_waived` answered one
+    number for both, so this feat waived a wall too. `concealment_only=True`
+    is the carve-out. #770.
+
+    The card names partial **and** total concealment, which is the whole of
+    it, so no `partial=` narrowing: that parameter is for the rows printing
+    only the lesser one."""
+    c.ignore_cover(on=c.me, until=When.ENCOUNTER, concealment_only=True,
                    when=lambda ctx: not ctx.get("ranged"))
 
 

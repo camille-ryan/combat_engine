@@ -41,6 +41,7 @@ from .query import (
     attack_penalty,
     can_act,
     concealment_of,
+    concealment_waived,
     cover_between,
     cover_waived,
     deals_half,
@@ -145,29 +146,39 @@ def situational_attack(
     if charge:
         situational += 1   # the printed charge bonus
     if not ignore_cover:
-        # Cover and concealment do not add -- only the larger applies,
-        # which is the printed rule and also stops a creature in a fog
-        # bank behind a pillar being unhittable.
-        blocked = max(
-            int(cover_between(world, attacker, target,
-                              ranged=_is_ranged(power, branch, world, attacker),
-                              ctx=ctx)),
+        # **Each half is waived against its own number, and only then do
+        # they meet.** Cover and concealment still do not add -- the larger
+        # applies, which is the printed rule and stops a creature in a fog
+        # bank behind a pillar being unhittable -- but taking the larger
+        # *first* and asking one waiver about the pair made four printed
+        # sentences unwritable: sight that passes concealment and not
+        # cover. Waiving the pair would have let those creatures shoot
+        # through a wall. #770.
+        #
+        # A standing waiver -- `c.ignore_cover` on the attacker or
+        # `c.no_cover` on the target -- reads the same context the penalty
+        # does, so "against enemies in the zone" is a gate rather than an
+        # argument to one `c.strike`.
+        from_cover = int(cover_between(
+            world, attacker, target,
+            ranged=_is_ranged(power, branch, world, attacker), ctx=ctx))
+        # **Standing somewhere badly lit** is a fact about the square and
+        # about who is looking, so it cannot be a modifier the target
+        # carries the way `concealment_of` is. Reads `Grid.light`, which is
+        # empty on every board until a row darkens one, so it is a no-op
+        # until then. `query.light_concealment` cancels it for darkvision,
+        # low-light vision, blindsight and tremorsense. It is concealment,
+        # so the concealment waiver answers for it.
+        from_concealment = max(
             int(concealment_of(world, target, ctx)),
-            # **Standing somewhere badly lit**, which is a fact about the
-            # square and about who is looking -- so it cannot be a modifier
-            # the target carries the way the line above is. Reads `Grid.light`,
-            # which is empty on every board until a row darkens one, so this
-            # is a no-op until then. `query.light_concealment` cancels it for
-            # darkvision, low-light vision, blindsight and tremorsense.
             int(light_concealment(world, attacker, target)),
         )
-        # A standing waiver -- `c.ignore_cover` on the attacker or
-        # `c.no_cover` on the target -- reads the same context the
-        # penalty does, so "against enemies in the zone" is a gate
-        # rather than an argument to one `c.strike`.
-        if blocked <= cover_waived(world, attacker, target, ctx):
-            blocked = 0
-        situational -= blocked
+        if from_cover <= cover_waived(world, attacker, target, ctx):
+            from_cover = 0
+        if from_concealment <= concealment_waived(
+                world, attacker, target, ctx):
+            from_concealment = 0
+        situational -= max(from_cover, from_concealment)
     situational -= _long_range(world, attacker, target, power, branch, ctx)
     situational += _mark_penalty(world, attacker, among or (target,))
     return situational

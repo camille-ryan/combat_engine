@@ -6635,6 +6635,7 @@ class Cast:
         until: When = When.EONT,
         partial: bool = False,
         once: bool = False,
+        concealment_only: bool = False,
         when: Callable[[dict[str, Any]], bool] | None = None,
     ) -> Effect | None:
         """"You ignore cover and concealment when attacking."
@@ -6652,6 +6653,20 @@ class Cast:
         `partial=True` waives the ordinary -2 and leaves superior cover
         standing, which is the narrower line two rows print.
 
+        **`concealment_only=True` waives concealment and leaves cover
+        standing**, which four rows print and none could say: sight that
+        passes a fog bank and stops at a wall. `resolve.situational_attack`
+        took the larger of cover and concealment *first* and then asked one
+        waiver about the pair, so the broad waiver was the only thing
+        sayable -- and laying it would let the creature shoot through a
+        wall for free, which `m5426a0`'s note calls "a bigger rule than the
+        card". The two halves are waived separately now and only then
+        compared, and this lays the narrower key `ignore_concealment` that
+        `query.concealment_waived` reads. #770.
+
+        Darkness counts as concealment, so this waives that too -- which is
+        what "sees a wounded creature however well hidden" means.
+
         `once=True` is "your **next** attack ignores cover", spent on the
         roll that uses it. It passes straight through to `c.bonus`, which
         has always understood it -- a row wanting it wrote the underlying
@@ -6660,9 +6675,12 @@ class Cast:
         of the three changed here.
         """
         return self.bonus(
-            "ignore_cover", 2 if partial else 5,
+            "ignore_concealment" if concealment_only else "ignore_cover",
+            2 if partial else 5,
             on=on if on is not None else self.me,
-            until=until, kind="ignore cover", once=once, when=when,
+            until=until,
+            kind="ignore concealment" if concealment_only else "ignore cover",
+            once=once, when=when,
         )
 
     def no_cover(

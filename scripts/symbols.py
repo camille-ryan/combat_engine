@@ -641,7 +641,8 @@ READERS: dict[str, list[str]] = {
     ],
     "seeing and being seen": [
         "blinded", "concealment_of", "cover_between", "cover_granters",
-        "cover_waived", "has_sense", "hidden_from", "light_concealment",
+        "concealment_waived", "cover_waived", "has_sense", "hidden_from",
+        "light_concealment",
         "light_level", "sees_in", "sees_invisible", "sees_through",
         "sheltered_from", "sight_capped", "unseen_by",
     ],
