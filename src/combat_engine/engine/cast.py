@@ -847,8 +847,26 @@ class Cast:
         return stat_block(self.world, who)
 
     def is_kind(self, word: str, on: int | None = None) -> bool:
-        """Is this creature of that type? `c.is_kind("undead")`."""
-        return word.lower() in self.kinds_of(on)
+        """Is this creature of that type? `c.is_kind("undead")`.
+
+        **Or does the caster get to treat it as one.** `c.counts_as(word,
+        kind=...)` lays that permission on the attacker and
+        `query.kind_waived` answers it, so a feat reading "you can also
+        target creatures of the elemental origin" widens the twelve divine
+        rows that gate here without any of them being edited.
+
+        The waiver is skipped when the subject *is* the caster: these cards
+        widen what may be aimed at somebody else, and a character asking
+        `c.is_kind("undead", on=c.me)` is asking about itself.
+        """
+        if word.lower() in self.kinds_of(on):
+            return True
+        who = self._who(on)
+        if who is None or who == self.me:
+            return False
+        from .query import kind_waived
+
+        return kind_waived(self.world, self.me, who, word, self.ref)
 
     def living(self, on: int | None = None) -> bool:
         """Is this a living creature? `query.living`, defaulting to the target.
@@ -2343,7 +2361,9 @@ class Cast:
         self,
         satisfies: str,
         *,
-        holding: str,
+        holding: str | None = None,
+        kind: str | None = None,
+        keyword: Keyword | None = None,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -2357,8 +2377,46 @@ class Cast:
         Call it once per weapon the card names: two of these feats name a
         pair ("a warhammer **or** a throwing hammer"), which is two waivers
         and not a group.
+
+        **`kind=` is the same sentence about a creature's type**, and it is
+        the other half of this verb rather than a second one: *"when you use
+        a divine power that normally targets undead, you can also target
+        creatures of the elemental origin"* is `counts_as("undead",
+        kind="elemental", keyword=Keyword.DIVINE)`. `satisfies` is still
+        what the card asks for; `kind` is what the creature actually is.
+
+        **It is laid on the attacker**, so `on` defaults to the caster as it
+        does for `holding` -- the permission belongs to whoever is using the
+        power, not to the creature being aimed at. Read by `query.kind_waived`
+        through `c.is_kind`, which asks about the **target**: the one reader
+        in the tree where the waiver sits on one creature and the question is
+        about another.
+
+        The asymmetry is enforced in `c.is_kind`, which skips the waiver when
+        the subject is the caster -- not here by the `on=` default, which a
+        row writing `on=c.me` merely restates. Without that skip a feat
+        widening its owner's targets also widens what may be aimed at its
+        owner.
+
+        `keyword=` narrows it to powers carrying that keyword, which is the
+        commonest form of the printed sentence. Resolved through
+        `dsl.keywords_of`, so a power *granted* the keyword counts too.
         """
         who = on if on is not None else self.me
+        if kind is not None:
+            # **No component to write.** A kind waiver is read per check by
+            # `query.kind_waived`, which walks the asker's effects the way
+            # `kinds_of` already walks them for `origin:` -- so the label *is*
+            # the store and there is nothing to put back on resume. The ref
+            # leads it so `audit._claimed` credits the row (#374).
+            needs = str(getattr(keyword, "value", keyword or "")).lower()
+            return self.world.effects.apply(
+                who, self.me, until,
+                label=f"{self.ref} kindwaiver:{satisfies}>{kind}:{needs}",
+                by=self.ref,
+            )
+        if holding is None:
+            raise ValueError("counts_as needs holding= for a weapon or kind= for a type")
         gear = self.world.get(who, Gear)
         if gear is None:
             return None

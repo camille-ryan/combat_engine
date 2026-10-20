@@ -491,8 +491,21 @@ def f2030(c: Cast) -> None:
 
 
 @power("f2034", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:wizard-arcanist-f0c1", "c.counts_as(kind=)"))
+       reach=PERSONAL, target=SELF,
+       todo=("cf:wizard-arcanist-f0c1", "c.counts_as(usage=)"))
 def f2034(c: Cast) -> None:
     """Treats `f2023b` as an at-will wizard spell for one arcanist option.
     That option has a ref and no row, and nothing makes a row count as a
-    different sort."""
+    different sort.
+
+    **Split off `c.counts_as(kind=)`, which was never this row's gap.** That
+    symbol is about a creature's *type* -- "a power that targets undead may
+    also target the elemental origin" -- and landed for `f1509`/`f1511` with
+    #770. This row is about a *row's* usage and class: treating one card as
+    an at-will wizard spell so a class feature will accept it. One symbol
+    serving both could not have gone red or green correctly for either, and
+    it went green for neither.
+
+    So the usage half is `c.counts_as(usage=)` and the real hold is still
+    the first symbol: the arcanist option has a ref and no row, so there is
+    nothing for the treated card to be accepted *by*."""

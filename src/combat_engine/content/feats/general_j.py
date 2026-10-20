@@ -1019,17 +1019,43 @@ def f1503(c: Cast) -> None:
 
 
 @power("f1509", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(kind=)",))
+       reach=PERSONAL, target=SELF)
 def f1509(c: Cast) -> None:
-    """Widens what a whole family of rows may be aimed at. The
-    restriction lives inside each of those bodies as `c.is_kind`, and
-    nothing makes a creature count as another type for one attacker."""
+    """Widens what a whole family of divine rows may be aimed at: a card
+    that normally targets undead may also take the elemental origin.
+
+    **The ref in the spec was never a card.** The brief read "when you use
+    a p929 that normally targets undead", because the extractor's name index
+    resolved the generic phrase for a divine power to a cleric daily that
+    happens to be named that. Camille's ruling on #770: the clause means a
+    power with `Keyword.DIVINE`, and the propcase rule is how to tell -- a
+    specific power is always written in proper case and the generic phrase
+    never is.
+
+    **One waiver, twelve rows widened, none of them edited.** The
+    restriction lives inside each divine body as `c.is_kind("undead")`, and
+    `c.counts_as(kind=)` is read right there through `query.kind_waived`.
+    Measured before building it: the only two rows whose printed *target
+    line* names undead are monster abilities with no divine keyword, so no
+    waiver can reach `dsl._stands_right` and the pool filter needed no
+    change.
+
+    `on=c.me` is the verb's own default and is written out for the reader,
+    **not** as a guard -- a plant removing it changed nothing. What does the
+    work is `c.is_kind` skipping the waiver when the subject is the caster;
+    without that, this feat would widen what may be aimed at its own owner.
+    """
+    c.counts_as("undead", kind="elemental", keyword=Keyword.DIVINE,
+                on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1511", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.counts_as(kind=)",))
+       reach=PERSONAL, target=SELF)
 def f1511(c: Cast) -> None:
-    """Same gap as f1509, on a different origin word."""
+    """Same card as `f1509` on a different origin word -- see its note for
+    the ref that was never a card and for where the asymmetry is enforced."""
+    c.counts_as("undead", kind="immortal", keyword=Keyword.DIVINE,
+                on=c.me, until=When.ENCOUNTER)
 
 
 @power("f1513", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

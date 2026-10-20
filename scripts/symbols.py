@@ -628,7 +628,8 @@ READERS: dict[str, list[str]] = {
     "who, and whose side": [
         "active", "alive", "allies", "combatants", "conscious", "creatures",
         "enemies", "feat_categories", "feats_of", "is_", "is_conjuration",
-        "is_trap", "kinds_of", "level_term", "living", "on_build",
+        "is_trap", "kind_waived", "kinds_of", "level_term", "living",
+        "on_build",
         "printed_kinds",
         "race_of", "race_sizes", "race_skills", "races_sized", "scenery",
         "stat_block", "targetable", "team",

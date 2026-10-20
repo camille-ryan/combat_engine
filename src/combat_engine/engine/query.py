@@ -1995,6 +1995,66 @@ def concealment_waived(
     return max(cover_waived(world, attacker, target, ctx), narrow)
 
 
+def kind_waived(
+    world: World, asker: int, target: int, word: str, ref: str = ""
+) -> bool:
+    """Does `asker` get to treat `target` as `word` although it is not?
+
+    *"When you use a divine power that normally targets undead, you can also
+    target creatures of the elemental origin."* The restriction is checked
+    against the **target's** type words; the permission to widen it belongs
+    to the **attacker**. So this is the one reader where the waiver is laid
+    on one creature and asked about another, and getting that round the
+    wrong way makes the feat widen what can be aimed *at its owner*.
+
+    Laid by `c.counts_as(word, kind=...)`, which carries an optional
+    `keyword=` for the commonest form of the sentence -- "a *divine* power"
+    -- read off the row now running rather than the waiver. `dsl.keywords_of`
+    is used and not the header, so a power *granted* the keyword counts, which
+    is the more faithful reading of "a divine power".
+
+    **Only the body gate needs this, measured.** Two rows in the corpus
+    restrict their printed *target line* to undead and both are monster
+    abilities with no divine keyword, so no waiver can ever reach
+    `dsl._stands_right`. Every divine row that restricts to undead does it
+    in its body through `Cast.is_kind` -- twelve of them -- which is why this
+    is read there and `dsl` is left alone. Widen the measurement before
+    adding a second reader.
+    """
+    wanted = word.lower()
+    carried: frozenset[str] | None = None
+
+    for eff in world.effects.of(asker):
+        tag = eff.label
+        if "kindwaiver:" not in tag:
+            continue
+        spec = tag.split("kindwaiver:", 1)[1].split(" ", 1)[0]
+        asked, _, rest = spec.partition(">")
+        also, _, needs = rest.partition(":")
+        if asked.lower() != wanted:
+            continue
+        if needs:
+            if not ref:
+                continue
+            if carried is None:
+                # **`dsl.keywords_of`, never `Power.keywords`.** Its own
+                # docstring is the reason: 12 feats grant a row a keyword for
+                # one character, which header data cannot say, and a grant
+                # honoured at 21 of 22 readers is this component's commonest
+                # bug. Resolved once per call rather than per waiver.
+                from .dsl import get, keywords_of
+
+                carried = frozenset(
+                    str(getattr(k, "value", k)).lower()
+                    for k in keywords_of(world, asker, get(ref))
+                )
+            if needs.lower() not in carried:
+                continue
+        if also.lower() in kinds_of(world, target):
+            return True
+    return False
+
+
 def cover_between(
     world: World, attacker: int, target: int, *, ranged: bool = False,
     ctx: dict | None = None,

@@ -12957,6 +12957,135 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_kind_waived_for_one_attacker(out: Result) -> None:
+    """"You can also target creatures of the elemental origin." #770.
+
+    The restriction is a fact about the **target** -- its type words -- and
+    the permission to widen it belongs to the **attacker**. So this is the
+    one waiver in the tree laid on one creature and asked about another, and
+    the controls below are all about that asymmetry rather than about the
+    arithmetic.
+
+    **The negative controls are the point.** A waiver that merely made the
+    gate return True would pass a probe that only checks the happy path, and
+    would be wrong four ways: it would fire without the feat, fire for a
+    power carrying the wrong keyword, fire for a creature of some other
+    origin, and -- worst -- answer True when the caster asks about *itself*,
+    which is how a feat meant to widen its owner's targets comes to widen
+    what may be aimed at its owner.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, kind_waived
+    from combat_engine.engine.types import Keyword
+
+    def posed(ref: str, origin: str = "") -> tuple:
+        world, me, _armed = _posed(ref, 1)
+        foe = sorted(enemies(world, me))[0]
+        if origin:
+            Cast(world=world, me=me, ref="drivers:origin").set_origin(
+                origin, on=foe)
+        use = Cast(world=world, me=me, ref=ref, targets=[foe])
+        use.target = foe
+        return world, me, foe, use
+
+    # -- the gate before anything is laid ---------------------------------
+    world, me, foe, use = posed("p146", "elemental")
+    out.that("elemental" in use.kinds_of(on=foe),
+             "the board can field an elemental-origin enemy, which is what"
+             " the feat widens to", f"{sorted(use.kinds_of(on=foe))}")
+    out.that(not use.is_kind("undead"),
+             "and a divine row's gate refuses it -- the baseline, without"
+             " which every assertion below passes on a creature that was"
+             " already undead")
+
+    # -- f1509's own body lays it -----------------------------------------
+    world, me, foe, use = posed("p146", "elemental")
+    # **The caster gets the origin too, and that is what makes the next
+    # assertion bite.** Written without it first: the self-question answered
+    # False because the *caster* was not elemental, so the assertion passed
+    # on the board's shape rather than on the skip it claims to test, and a
+    # plant removing the skip left it green.
+    Cast(world=world, me=me, ref="drivers:origin").set_origin(
+        "elemental", on=me)
+    arm = Cast(world=world, me=me, ref="f1509")
+    arm.target = me
+    REGISTRY["f1509"].body(arm)
+    out.that(use.is_kind("undead"),
+             "f1509's own body widens the gate, rather than the verb being"
+             " right and the row not calling it")
+    out.that("elemental" in use.kinds_of(on=me),
+             "the caster is elemental-origin too, so the question below is"
+             " about the skip and not about the board",
+             f"{sorted(use.kinds_of(on=me))}")
+    out.that(not use.is_kind("undead", on=me),
+             "and the caster is still not undead *to itself* -- the control"
+             " that stops this widening what may be aimed at its owner",
+             f"{use.is_kind('undead', on=me)}")
+
+    # -- the wrong origin --------------------------------------------------
+    world, me, foe, use = posed("p146", "immortal")
+    arm = Cast(world=world, me=me, ref="f1509")
+    arm.target = me
+    REGISTRY["f1509"].body(arm)
+    out.that(not use.is_kind("undead"),
+             "f1509 does not widen to a different origin -- f1511's word is"
+             " not f1509's",
+             f"{sorted(use.kinds_of(on=foe))}")
+
+    # -- f1511 is the other word ------------------------------------------
+    world, me, foe, use = posed("p146", "immortal")
+    arm = Cast(world=world, me=me, ref="f1511")
+    arm.target = me
+    REGISTRY["f1511"].body(arm)
+    out.that(use.is_kind("undead"),
+             "f1511's body widens to the immortal origin")
+
+    # -- the keyword gate --------------------------------------------------
+    world, me, foe, _use = posed("p146", "elemental")
+    arm = Cast(world=world, me=me, ref="f1509")
+    arm.target = me
+    REGISTRY["f1509"].body(arm)
+    out.that(kind_waived(world, me, foe, "undead", "p146"),
+             "a divine row sees the waiver")
+    mundane = next(
+        (r for r, d in REGISTRY.items()
+         if Keyword.DIVINE not in (d.keywords or ()) and d.level <= 3),
+        "",
+    )
+    if mundane:
+        out.that(not kind_waived(world, me, foe, "undead", mundane),
+                 "a row without the keyword does not -- the printed clause is"
+                 " about a *divine* power, and without this gate the feat"
+                 " would widen an item's power too",
+                 f"tried {mundane}")
+    out.that(not kind_waived(world, me, foe, "undead", ""),
+             "and neither does a caller with no row to ask about, rather"
+             " than defaulting to allowed")
+
+    # -- no feat, no waiver ------------------------------------------------
+    world, me, foe, use = posed("p146", "elemental")
+    out.that(not use.is_kind("undead"),
+             "without either feat the gate stays shut -- the control for the"
+             " whole mechanism")
+
+    # -- and it waives only the word it names ------------------------------
+    world, me, foe, use = posed("p146", "elemental")
+    arm = Cast(world=world, me=me, ref="f1509")
+    arm.target = me
+    REGISTRY["f1509"].body(arm)
+    out.that(not use.is_kind("dragon"),
+             "a waiver for one word does not answer another -- it is keyed"
+             " on what the card asks for, not a blanket yes")
+
+    left = [r for r in ("f1509", "f1511")
+            if (getattr(REGISTRY[r], "todo", ()) or ())
+            + (getattr(REGISTRY[r], "dropped", ()) or ())]
+    out.that(not left, "and neither row waits on anything now", f"{left}")
+
+
 def a_flurry_traded_for_a_resistance(out: Result) -> None:
     """"Forgo dealing damage to negate the target's resistance." #780.
 
@@ -27986,6 +28115,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "kind_waived": (
+        a_kind_waived_for_one_attacker,
+        "a creature's type widened for one attacker's divine powers (#770)",
+    ),
     "flurry_traded": (
         a_flurry_traded_for_a_resistance,
         "a flurry's damage given up to negate a resistance, across all five"
