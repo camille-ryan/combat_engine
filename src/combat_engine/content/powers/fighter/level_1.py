@@ -153,12 +153,43 @@ def p992(c: Cast) -> None:
     given one clause of the three it is entitled to.
 
     `f3188`, `f977`, `f987` and `f993` are Arena Fighting and `f2356` and
-    `f2714` are Lesser Style; none are written yet, so this row still
-    needs one chain of each beside the three below.
+    `f2714` are Lesser Style. **`f993` is written now (#780)** and is the
+    whole of the Arena Fighting chain; the other three and both Lesser
+    Styles still want theirs.
+
+    **`f993` trades this row's damage for temporary hit points, and the
+    trade needed no new verb.** Its marker said a row cannot decline its
+    own damage. `c.strike()` rolls and does not pay -- the body pays, with
+    `c.damage` -- so declining is not calling it. Only `f3188`, `f977` and
+    `f987` are left off the `c.declare` list, because their clauses are
+    not written and a declaration that picks a feat paying nothing is
+    worse than no declaration.
+
+    **Which damage.** The card says "forgo dealing damage to an adjacent
+    enemy", and on a Melee 1 row both the creature struck *and* the second
+    one caught by the splash are adjacent, so the phrase does not settle
+    it on its own. Read as the damage dealt to the creature this use hit --
+    the attack's own damage, which is what "forgo dealing damage" means
+    everywhere else it is printed. The splash is a separate printed clause
+    of this power rather than anything the feat speaks to, so it still
+    lands. Said out loud because it is a reading and not a transcription.
+
+    **The board cannot see the traded branch.** `c.choose` takes its first
+    option here, and the first option is dealing the damage -- the printed
+    behaviour with no feat applied, which is the right default. So the
+    audit exercises the ordinary path and `drivers.damage_forgone_for_a_rider`
+    is what exercises the trade.
     """
+    arena = c.declare("Arena Fighting", "f993")
     if not c.strike():
         return
-    c.damage(c.w(1), c.str_mod)
+    traded = (arena == "f993" and c.adjacent()
+              and c.choose([False, True],
+                           "forgo the damage for temporary hit points"))
+    if traded:
+        c.temp_hp(c.con_mod, on=c.me)
+    else:
+        c.damage(c.w(1), c.str_mod)
     # And a second enemy beside you takes the modifier on its own.
     others = [e for e in c.within(1, side="enemy") if e != c.target]
     if others:

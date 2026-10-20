@@ -12957,6 +12957,103 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def damage_forgone_for_a_rider(out: Result) -> None:
+    """"You can forgo dealing damage to instead ...". #780.
+
+    Three rows print this trade and all three were refused on the premise
+    that a row cannot decline its own damage. It is false: `c.strike()`
+    rolls and does **not** pay, the body pays with `c.damage`, so declining
+    is not calling the verb. No facility was needed.
+
+    `f993`'s clause on `p992` is the first one written. It is
+    `[Arena Fighting]`, so it goes behind `c.declare` and is read as
+    `arena == "f993"` -- never `c.feat`, which is true for every feat held
+    and whose chains fall through, paying a second feat's clause when the
+    first one's condition missed (#554).
+
+    **The board cannot pose the traded branch**, because `c.choose` takes
+    its first option and the first option is dealing the damage -- the
+    printed behaviour with no feat applied, which is the right default. So
+    the trade is driven here by holding the feat and steering the choice,
+    and the control is the same board **without** the feat: the damage has
+    to come back.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+
+    def run(hold_feat: bool, take_trade: bool) -> tuple[int, int]:
+        world, me, _armed = _posed("p992", 1)
+        from combat_engine.engine.query import enemies
+        foe = sorted(enemies(world, me))[0]
+        use = Cast(world=world, me=me, ref="p992", targets=[foe])
+        use.target = foe
+        if hold_feat:
+            # A feat is an ordinary row in `Powers.known` -- `c.feat` says so
+            # and that is the only door. `use.feats` is the *method*, which
+            # the first draft assigned over.
+            world.need(me, Powers).known.append("f993")
+        # **Steered through `world.decider`, not by assigning over
+        # `use.choose`.** That is the documented hook -- three rules above
+        # use it -- and the monkeypatch this replaced put `types` three over
+        # its baseline, because forwarding `**kw` to a generic method cannot
+        # be typed. The body asks twice: `[False, True]` for the trade, and
+        # the splash's list of bystanders, which takes the first as always.
+        world.decider = (
+            lambda _actor, _kind, options, _prompt="":
+            take_trade if options == [False, True] else options[0]
+        )
+        world.rng.loaded = 20
+        mark = len(world.bus.log)
+        REGISTRY["p992"].body(use)
+        dealt = sum(int(getattr(e, "amount", 0) or 0)
+                    for e in world.bus.log[mark:]
+                    if isinstance(e, DamageApplied)
+                    and getattr(e, "target", None) == foe)
+        hp = world.get(me, Health)
+        return int(dealt), int(getattr(hp, "temp", 0) or 0)
+
+    # -- the control: no feat, so the trade is not on offer --------------
+    plain_dmg, plain_temp = run(hold_feat=False, take_trade=True)
+    out.that(plain_dmg > 0,
+             "without f993 the blow deals its damage even when the trade is"
+             " offered -- the control, and what a bare `c.feat` chain would"
+             " have got wrong",
+             f"dealt={plain_dmg}")
+    out.that(plain_temp == 0,
+             "and hands out no temporary hit points",
+             f"temp={plain_temp}")
+
+    # -- declining the trade while holding the feat ----------------------
+    kept_dmg, kept_temp = run(hold_feat=True, take_trade=False)
+    out.that(kept_dmg > 0 and kept_temp == 0,
+             "holding f993 and declining the trade is the ordinary row --"
+             " `can` is a choice, not a free upgrade",
+             f"dealt={kept_dmg} temp={kept_temp}")
+
+    # -- taking it --------------------------------------------------------
+    traded_dmg, traded_temp = run(hold_feat=True, take_trade=True)
+    out.that(traded_temp > 0,
+             "taking it pays temporary hit points equal to the modifier",
+             f"temp={traded_temp}")
+    out.that(traded_dmg < kept_dmg,
+             "and the damage to the creature struck is forgone -- the whole"
+             " price of the clause, and the half a row written without it"
+             " would have skipped",
+             f"dealt {kept_dmg} -> {traded_dmg}")
+
+    # -- the marker -------------------------------------------------------
+    f993 = REGISTRY.get("f993")
+    if f993 is not None:
+        waiting = (tuple(getattr(f993, "todo", ()) or ())
+                   + tuple(getattr(f993, "dropped", ()) or ()))
+        out.that("c.pre_empt(damage_of=)" not in waiting,
+                 "and f993 no longer waits on the symbol", f"{waiting}")
+
+
 def a_levitation_that_drifts(out: Result) -> None:
     """"Up to N squares vertically **and** one square horizontally". #778.
 
@@ -16576,9 +16673,10 @@ NO_CHAIN_YET = {
             " the three Lesser Style ones are not",
     "p2099": "one Arena Fighting clause written (f992); f973 and f3245 are"
              " not, nor either Lesser Style one",
-    "p992": "its three written clauses are all unbracketed, so they stack"
-            " and there is nothing to chain; its four Arena Fighting and"
-            " two Lesser Style feats are unwritten",
+    "p992": "one Arena Fighting clause written (f993, #780), so there is a"
+            " chain of one and nothing yet to be exclusive against; f3188,"
+            " f977 and f987 are not written, nor either Lesser Style one."
+            " Its three *unbracketed* clauses stack and are not a chain",
 }
 
 #: Feats of the exclusive category that name a migrated row and are **still
@@ -27790,6 +27888,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "damage_forgone": (
+        damage_forgone_for_a_rider,
+        "forgoing a row's own damage to buy a rider, which needed no verb"
+        " (#780)",
+    ),
     "levitation_drifts": (
         a_levitation_that_drifts,
         "a levitation's sideways square, which is a different axis from its"

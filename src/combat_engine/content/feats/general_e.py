@@ -121,9 +121,12 @@ def _shield_the_neighbour(c: Cast, ev: Any) -> None:
 _riders("f990", {"p971": _shift_after, "p2105": _shift_after,
                  "p919": _ally_shift, "p1063": _ally_shift})
 
+# The `p992` clause is **not** a rider: that power is migrated to #550's
+# shape, so its clause is written in its own body behind
+# `c.declare("Arena Fighting", "f993")`. The three below are on powers that
+# are not migrated and keep the rider. #780.
 _riders("f993", {"p4541": _temp_hp("con_mod"), "p2248": _intimidating},
-        used={"p4369": _companion_steps},
-        dropped=("c.pre_empt(damage_of=)",))
+        used={"p4369": _companion_steps})
 
 _riders("f991", {}, missed={"p917": _second_shot},
         used={"p970": _no_long_range})
