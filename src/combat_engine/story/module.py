@@ -81,9 +81,42 @@ RANKS = ("standard", "elite", "solo", "minion")
 #: makes with its separate `rank=` and `minion=` arguments.
 ROLES = ("soldier", "brute", "artillery", "skirmisher", "controller", "lurker")
 
-#: How many successes each complexity needs before three failures. The printed
-#: table, and the reason `challenge.py` does not hold its own copy.
-COMPLEXITY = {1: 4, 2: 6, 3: 8, 4: 10, 5: 12}
+#: `complexity -> (successes needed, moderate checks, hard checks)`.
+#:
+#: The printed table, read out of the compendium glossary rather than
+#: remembered -- `select Txt from Glossary where Name = 'Skill Challenge
+#: Complexity'`. The first draft of this had the success counts right and the
+#: **DCs wrong**: it assumed every primary check rolls at moderate, and the
+#: printed shape is a mix that escalates, from four moderate at complexity 1 to
+#: eight moderate and four hard at complexity 5. A challenge built from
+#: all-moderate checks is a materially easier thing than the one the book
+#: describes, and it would have looked correct forever.
+COMPLEXITY = {
+    1: (4, 4, 0),
+    2: (6, 5, 1),
+    3: (8, 6, 2),
+    4: (10, 7, 3),
+    5: (12, 8, 4),
+}
+
+#: What a successful secondary skill check is worth. Both readings are printed
+#: and a module says which it means; this is the default when it does not.
+#:
+#: **`bonus` is the default, and that is a measured call rather than a taste.**
+#: With `success`, the fixture challenge was won 5 times out of 5 and three of
+#: its four successes came from easy-DC secondary rolls -- the party finds its
+#: best secondary, rolls at a DC nine levels easier, and the primary skills the
+#: challenge is *about* barely come up. Capping each secondary at one use does
+#: not fix it, because there are usually three of them and a complexity-1
+#: challenge needs four successes.
+#:
+#: As a bonus to the next primary check, a secondary does what the word means:
+#: it helps, from an angle, and the challenge is still decided on the skills it
+#: named first.
+SECONDARY_GRANTS = ("bonus", "success")
+
+#: What a secondary success adds to the next primary check under `bonus`.
+SECONDARY_BONUS = 2
 
 
 class ModuleError(Exception):
@@ -156,6 +189,8 @@ class Scene:
     level: int = 0
     primary: tuple[str, ...] = ()
     secondary: tuple[str, ...] = ()
+    #: `"bonus"` or `"success"` -- see `SECONDARY_GRANTS`.
+    secondary_grants: str = "bonus"
     #: Where success and failure lead. Both fall back to `exits` when empty,
     #: so a challenge that only gates flavour needs neither.
     on_success: str = ""
@@ -172,7 +207,20 @@ class Scene:
     @property
     def needs(self) -> int:
         """Successes this challenge wants before three failures."""
-        return COMPLEXITY.get(self.complexity, 0)
+        return COMPLEXITY.get(self.complexity, (0, 0, 0))[0]
+
+    @property
+    def bands(self) -> tuple[str, ...]:
+        """The DC band of each primary check, in order, moderate first.
+
+        The printed mix laid out as a sequence, so a challenge escalates: the
+        hard checks are the last ones, which is where a party is already
+        carrying failures. `challenge.py` reuses the final band once the
+        sequence runs out, because failures mean more checks get rolled than
+        the table lists.
+        """
+        _, moderate, hard = COMPLEXITY.get(self.complexity, (0, 0, 0))
+        return ("moderate",) * moderate + ("hard",) * hard
 
 
 @dataclass(frozen=True)
@@ -283,6 +331,20 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     if kind == "skill_challenge" and not primary:
         problems.append(f"{where}: a skill challenge needs at least one primary skill")
 
+    grants = str(raw.get("secondary_grants", "bonus")).strip().lower()
+    if grants not in SECONDARY_GRANTS:
+        problems.append(
+            f"{where}: secondary_grants {grants!r} is not one of "
+            f"{', '.join(SECONDARY_GRANTS)}"
+        )
+        grants = "bonus"
+    overlap = set(primary) & set(secondary)
+    if overlap:
+        problems.append(
+            f"{where}: {', '.join(sorted(overlap))} listed as both primary and "
+            "secondary -- it would roll at two DCs"
+        )
+
     foes = tuple(
         _as_foe(f, where, problems) for f in raw.get("foes", ())
     )
@@ -318,6 +380,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         level=int(raw.get("level", 0) or 0),
         primary=primary,
         secondary=secondary,
+        secondary_grants=grants,
         on_success=str(raw.get("on_success", "")).strip(),
         on_failure=str(raw.get("on_failure", "")).strip(),
         extended=bool(raw.get("extended", False)),
