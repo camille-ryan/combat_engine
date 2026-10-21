@@ -139,31 +139,57 @@ R44 = ("p7441", "p7442", "p7443")
 #:   does it one line from a row that had this same wrong symbol.
 UNBUILT_CLASS = ("chargen.CLASSES.vampire",)
 BERSERKER_FORM = ("cf:barbarian-berserker-f0",)
-#: A feature **option** the card names by name and the brief prints in
-#: prose -- a school of magic, a divine domain, a weapon specialisation.
-#: Handing a declared feature over is `c.grant_row` now and picking one
-#: out of a list is `c.borrow_row`, so these rows are not waiting on the
-#: borrowing any more; they are waiting on there being anything to point
-#: at. None of the options is a ref in the tree.
+#: **Retired: `etl.build_sub_option()`. The taxonomy landed, and the seven
+#: rows that shared the symbol stopped sharing a gap.**
 #:
-#: **Re-pointed off `spec.feature_ref()`, which named the wrong layer.**
-#: The note above was right all along -- there is nothing to point at --
-#: and the symbol said the opposite, that a ref existed and the brief had
-#: failed to resolve it. Measured: `game.db` has **no** school or domain
-#: table among its 24, only these 6 feat specs mention either, and no
-#: `class_feature` or `power` spec mentions them at all. The taxonomy is
-#: absent, so there is no ref to resolve.
+#: What this note used to say was that `game.db` had no school or domain
+#: table among its 24 and that "the taxonomy is absent, so there is no ref
+#: to resolve". Both halves are false now -- #581's decision, imported as
+#: #584/#585/#586 and #589. Measured in the built database: **25** tables,
+#: and `class_feature` holds **342** refs of the form `-f<N>s<N>`, 88 of
+#: them under `cf:cleric-warpriest` and 24 under `cf:wizard-mage`.
+#: Tree-wide, 97 of the 342 are declared rows.
+#:
+#: Handing a declared feature over was already `c.grant_row` and picking
+#: one out of a printed list is `c.borrow_row(among=)`, so the borrowing
+#: was never the hold. With something to point at, each of the seven names
+#: what it is actually waiting on, because one symbol could not go green or
+#: red correctly for any of them:
+#:
+#: * `f3585` is **written**. All six `cf:wizard-mage-f0s<N>` are declared
+#:   and unmarked, so `among=` has something to hold.
+#: * `f3586`, `f3587`, `f3590` and `f3591` print "the <option> you chose
+#:   for your <earlier feat>", and nothing records which option a
+#:   `c.borrow_row` settled on. That verb's own docstring says so -- the
+#:   pick "is a build choice with nowhere to live" and goes to
+#:   `world.decide`. It *could* be read back off the row the earlier feat
+#:   granted, and that is the wrong row to write: `turns.arm_traits` walks
+#:   `Powers.all` in list order, so it would be correct only while arming
+#:   happened to reach the two feats in the order the character was dealt
+#:   them. The choice belongs where the other printed choices are recorded.
+#: * `f3589`, `f3590` and `f3591` want the nine options under each of
+#:   `cf:cleric-warpriest-f1`, `-f5` and `-f8`. All 27 are in the database
+#:   and **none** is declared, so these name the undeclared parent -- which
+#:   is `BERSERKER_FORM` above, and for the same reason.
+#: * `f3583` is the one row still partly an ETL question, and a much
+#:   narrower one than this symbol was. Its card names the options of two
+#:   builds. One build's three are in the database and undeclared
+#:   (`cf:fighter-knight-f9s0`-`s2`); the other build's three are **not in
+#:   the database at all**, because `etl.build._section_rows` drops any
+#:   feature section whose own prose matches `_POWER_LIST` -- "choose ... of
+#:   the following" -- a guard meant for a printed power list that also
+#:   catches a real feature introducing its options that way. Measured
+#:   across every class page: 94 sections dropped by that guard, **7 of
+#:   which carry sub-options**, 25 rows in all, across six builds. A
+#:   section with sub-options is never a power list.
+#:
+#: The leak argument the old note ended on is unaffected and still holds:
+#: importing the taxonomy removes the cause rather than detecting the
+#: symptom, which is what #494's budget ceiling asks for. #581.
 #:
 #: **Not #548, which is the sibling it was briefly merged with.** That one
-#: is `racial_trait`: sub-options printed *with* refs, 18 of which have no
-#: row. Here there are no refs. Checked, and the check is what separated
-#: them: all **125** `cf:` refs named in any spec do have a row, 0 missing.
-#:
-#: It is also why this family keeps leaking printed names into specs --
-#: `sanitise.scrub` has no table entry for a name with nothing behind it.
-#: Importing the taxonomy removes the cause rather than detecting the
-#: symptom, which is what #494's budget ceiling asks for. #581.
-BORROW = ("etl.build_sub_option()",)
+#: is `racial_trait`: `rt:<race>-s<N>` sub-options, 18 of which have no row.
+FEATURE_CHOICE = ("chargen.feature_choice()",)
 #: A suit of armour or a shield, which is not the same column as the
 #: weapons and implements `chargen.proficiency` deals.
 ARMOUR = ("chargen.armor_proficiency()",)
@@ -828,15 +854,31 @@ def f3582(c: Cast) -> None:
 
 
 @power("f3583", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF,
+       todo=("cf:fighter-knight-f9", "etl.build.keeps_sections_with_options"))
 def f3583(c: Cast) -> None:
-    """Another build's 7th-level class feature, chosen from a list the
-    brief prints in prose.
+    """One 7th-level class feature of either of two other builds, chosen
+    from the six options the two of them print between them.
 
-    Re-aimed off the multiclass symbol. The verb is there now --
-    `c.borrow_row(among=...)` picks one of a list and hands it over --
-    and what is missing is the list: the two options are named and
-    neither is a ref, so there is nothing to put in `among`."""
+    Re-aimed off the multiclass symbol, and then off the taxonomy symbol:
+    the verb is `c.borrow_row(among=...)` and the list is half there.
+
+    **Two gaps, and they are at different layers.** One build's three
+    options are `cf:fighter-knight-f9s0`-`s2`, in the database since #586
+    and declared nowhere, so the first symbol names their undeclared
+    parent. The other build's three are absent from the database
+    altogether: `etl.build._section_rows` skips the whole section on
+    `_POWER_LIST`, and the two sections are near-identical cards that
+    differ only in how their one introducing sentence is phrased. See the
+    note above `FEATURE_CHOICE` for the tree-wide count, and #812.
+
+    **The second symbol names the behaviour that does not exist, not the
+    regex that does.** It was `etl.build._POWER_LIST` for one commit and
+    `todo.py` was right to go red: that constant is present, so a marker
+    naming it can never be satisfied by its arrival, which is the whole job
+    of a marker. What is missing is a `_section_rows` that keeps a section
+    carrying sub-marks -- a power-list heading has none and a feature with
+    options always does -- so that is what the symbol says."""
 
 
 @power("f3584", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -849,32 +891,64 @@ def f3584(c: Cast) -> None:
 
 
 @power("f3585", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF)
 def f3585(c: Cast) -> None:
-    """Trades `cf:wizard-arcanist-f0` for a school benefit.
+    """Trades `cf:wizard-arcanist-f0` for one of the six benefits printed
+    under `cf:wizard-mage-f0`.
 
-    The half this feat *costs* is writable now -- that row is declared,
-    and `c.forbid` takes it away for the fight. The half it pays is a
-    school benefit the brief prints in prose with no ref, so writing the
+    Both halves, which is what the row was holding out for: writing the
     cost alone would leave a wizard strictly worse off than one who never
-    took the feat. Both halves or neither.
+    took the feat. The cost is a declared row and `c.forbid` takes it away
+    for the fight; the six benefits are declared in `features/arcanist.py`
+    and unmarked, so `among=` has a list to pick from.
 
-    Re-aimed: the hold is the missing ref for the school benefit, not
-    the borrowing -- `c.grant_row` would hand one over the day one is
-    declared."""
+    **`uses=0`, against `c.borrow_row`'s default of 1.** That default is
+    the multiclass sentence -- a borrowed at-will capped at one use per
+    fight -- and it works by forbidding the row after one `PowerUsed`. A
+    class feature prints no such cap, and these six are standing traits
+    that `turns.arm_traits` spends on arming, so the default would forbid
+    the benefit at the moment it arrived."""
+    c.forbid("cf:wizard-arcanist-f0", on=c.me, until=When.ENCOUNTER)
+    c.borrow_row(
+        among=(
+            "cf:wizard-mage-f0s0",
+            "cf:wizard-mage-f0s1",
+            "cf:wizard-mage-f0s2",
+            "cf:wizard-mage-f0s3",
+            "cf:wizard-mage-f0s4",
+            "cf:wizard-mage-f0s5",
+        ),
+        uses=0,
+        until=When.ENCOUNTER,
+    )
 
 
 @power("f3586", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, todo=FEATURE_CHOICE)
 def f3586(c: Cast) -> None:
-    """The second step of the `f3585` chain: no cost, and the same
-    unnamed school benefit to pay."""
+    """The second step of the `f3585` chain: no cost, and one of the six
+    benefits printed under `cf:wizard-mage-f4`.
+
+    All six are declared, so the list is not the hold any more. The card
+    says the benefit is the one belonging to *the school chosen for
+    `f3585`*, and that choice is not recorded anywhere this row can read
+    it. Offering the six over again is the shape to avoid: it would let a
+    character take a second school's benefit, which is a row stronger than
+    its printed line."""
 
 
 @power("f3587", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF,
+       todo=(*FEATURE_CHOICE, "cf:wizard-mage-f6s4", "cf:wizard-mage-f6s5"))
 def f3587(c: Cast) -> None:
-    """The third step of the `f3585` chain, and the same gap."""
+    """The third step of the `f3585` chain: `cf:wizard-mage-f6`'s benefit
+    for the school `f3585` chose.
+
+    The same unrecorded choice as `f3586`, **and** a second gap of its own:
+    four of the six options under that feature are declared and two are
+    not. `c.borrow_row` drops an option with no registry row silently, so
+    with only the first symbol closed this row would quietly offer four
+    schools out of six."""
 
 
 @power("f3588", level=1, cls="", usage=ENCOUNTER, action=NONE,
@@ -885,24 +959,43 @@ def f3588(c: Cast) -> None:
 
 
 @power("f3589", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF, todo=("cf:cleric-warpriest-f1",))
 def f3589(c: Cast) -> None:
-    """Trades `cf:cleric-templar-f1` -- a declared row -- for a domain
-    feature chosen from a list the brief prints in prose. Same shape as
-    `f3585`: the cost is sayable and the benefit is not, and the
-    missing half is a ref rather than a verb."""
+    """Trades `cf:cleric-templar-f1` -- a declared row -- for one of the
+    nine domain features printed under `cf:cleric-warpriest-f1`.
+
+    The same shape as `f3585` and not the same answer, because the nine
+    options are in the database and **none of them is declared**, so
+    `among=` would be filtered empty and `c.borrow_row` would return `""`.
+    The cost half alone leaves the cleric strictly worse off, so this stays
+    refused rather than part-written, and the symbol names the undeclared
+    parent the way `BERSERKER_FORM` does.
+
+    One clause to carry over when those rows land: *if the feature grants
+    powers, this feat does not grant them* -- so the benefit is the feature
+    only, never the cards printed beside it."""
 
 
 @power("f3590", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF,
+       todo=("cf:cleric-warpriest-f5", *FEATURE_CHOICE))
 def f3590(c: Cast) -> None:
-    """The second step of the `f3589` chain, and the same gap."""
+    """The second step of the `f3589` chain: the `cf:cleric-warpriest-f5`
+    feature of the domain `f3589` chose.
+
+    Two gaps rather than one. Its nine options are undeclared like `f1`'s,
+    and the domain `f3589` settled on is not recorded anywhere this row can
+    read -- `f3586`'s half of the chain has the second one alone, which is
+    why they are separate symbols."""
 
 
 @power("f3591", level=1, cls="", usage=ENCOUNTER, action=NONE,
-       reach=PERSONAL, target=SELF, todo=BORROW)
+       reach=PERSONAL, target=SELF,
+       todo=("cf:cleric-warpriest-f8", *FEATURE_CHOICE))
 def f3591(c: Cast) -> None:
-    """The third step of the `f3589` chain, and the same gap."""
+    """The third step of the `f3589` chain, and `f3590`'s two gaps one tier
+    up: the nine options under `cf:cleric-warpriest-f8` are undeclared, and
+    the domain is still the one `f3589` chose."""
 
 
 @power("f3592", level=1, cls="", usage=ENCOUNTER, action=NONE,

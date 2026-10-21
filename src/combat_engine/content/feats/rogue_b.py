@@ -1031,13 +1031,22 @@ _counts_as(
 
 @power("f826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Weapon.off_hand_anyway", "c.reload()"))
+       todo=("Gear.off(ranged=)", "c.reload()"))
 def f826(c: Cast) -> None:
     """A hand crossbow held in the off hand and reloaded one-handed.
-    `Gear.off` is the second *melee* weapon by construction, so there is
-    nowhere to put a shooter, and loading is not modelled at all -- which
-    makes "have a loaded one in your off hand" unaskable and the free
-    shot on a crit with it unreachable."""
+
+    **Re-pointed, not closed.** `Weapon.off_hand_anyway` was the wrong
+    symbol and is retired everywhere else: no two-weapon reader consults a
+    property at all -- `Gear.off` is `melee[1]`, `Gear.two_weapon` counts
+    melee weapons -- so writing the word onto this card's weapon would buy
+    nothing. What the card needs is for the slot itself to hold a shooter.
+    This weapon is ranged, `Gear.melee` excludes it, and so it can never be
+    `Gear.off` however its properties read. That is a `Gear` change, and
+    `Gear.off(ranged=)` names it.
+
+    Loading is the second gap and is untouched, so the free shot on a
+    critical has two unaskable halves: which weapon is in the off hand, and
+    whether it is loaded."""
 
 
 @power("f2073", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

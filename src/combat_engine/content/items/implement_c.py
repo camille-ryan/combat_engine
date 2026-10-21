@@ -1989,11 +1989,22 @@ def i1941p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.class_feature()",),
+    todo=("c.on_defiling()",),
 )
 def i1942x1(c: Cast) -> None:
-    """Arcane defiling is a class feature rather than a row, and nothing
-    announces a use of one."""
+    """Temporary hit points whenever an ally takes necrotic damage from
+    the holder's defiling.
+
+    **Re-aimed off `c.class_feature()`**, which was wrong twice and the
+    same way `f3190` and `i580x1` were. It is not a class feature: the
+    prerequisite parser files the ability under `q39`, `kind = 'power'`,
+    six feats share that term, and `game.db` holds no row of any kind
+    for it -- 0 in `power`, 0 in `class_feature`. So there is no `cf:`
+    ref to read and a general feature reader would not help.
+
+    What this clause rides on is the **act** of defiling, which nothing
+    announces, so the hook is the gap and `c.on_defiling()` is the one
+    five other rows already wait on."""
 
 
 @power(
@@ -2005,11 +2016,16 @@ def i1942x1(c: Cast) -> None:
     reach=Ranged(20),
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
-    todo=("c.class_feature()",),
+    todo=("c.on_defiling()",),
 )
 def i1942p1(c: Cast) -> None:
-    """The trigger is a use of arcane defiling, which nothing announces, so
-    the row cannot be declared at all."""
+    """The printed trigger is a use of the holder's defiling, which nothing
+    announces, so the row cannot be declared at all.
+
+    **Re-aimed off `c.class_feature()`** -- see `i1942x1` above for the
+    lookup. The payout half is already here: "necrotic damage equal to
+    half your healing surge value" is `c.surge_value() // 2`. Only the
+    trigger is missing, so one symbol names the whole gap."""
 
 
 @power(

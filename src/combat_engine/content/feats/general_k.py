@@ -734,20 +734,54 @@ def f1855(c: Cast) -> None:
 
 
 @power("f1863", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_racial_bonus()",),
-       trigger="you use p1628",
-       on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
+       reach=PERSONAL, target=SELF)
 def f1863(c: Cast) -> None:
-    """The p1628 half plays: "the target" is what `PowerUsed.targets`
-    carries. Dropped: raising the attack bonus a racial *trait* already
-    grants -- the trait is prose, and nothing reaches into a bonus some
-    other row laid to make it bigger."""
-    foes = list(c.trigger.targets)
-    if not foes:
-        return
-    foe = foes[0]
-    c.bonus("damage", 2, on=c.me, until=When.EONT, kind="power",
-            when=lambda ctx: ctx.get("target") == foe)
+    """Both clauses, and the row had to stop being a declared trigger for
+    the first one to exist at all.
+
+    **The trait half.** `rt:r8-t0` is written and lays +1 `kind="racial"`
+    to attack rolls, gated on the target being bloodied. Two bonuses of one
+    kind do not add and the larger wins -- `Mods.total` buckets by `kind`
+    and takes the max -- so "increases to +2" is a second racial bonus of
+    2, not a second +1. `f2398` makes the same argument about the same
+    trait and is the shape copied here; the one difference is that this
+    card narrows to nothing, where that one narrows to a quarry. Gated on
+    bloodied anyway, because the bonus this raises exists nowhere else: an
+    unbloodied enemy never had the +1 for the card to increase.
+
+    **It is a standing modifier, so it cannot live in a triggered body.**
+    `turns.arm_traits` skips an `action=NONE` row that declares a
+    `Trigger`, by design, so until now this row ran only when `p1628` went
+    off and the trait clause had no moment to be laid in. The `p1628` half
+    is a `c.watch` instead, which is what the rest of the file's standing
+    riders do.
+
+    **And that half had never fired.** It read `PowerUsed.targets` for "the
+    target", and `p1628` is `target=NO_TARGET` -- it damages the enemy off
+    its own trigger -- so `dsl._auto_targets` hands back an empty list and
+    the body returned on its first line in every fight. `PowerUsed.trigger`
+    is the event it was used *in answer to*, which the event's own docstring
+    names as the thing `targets` is not a stand-in for: here that is the
+    `Hit`, and its `attacker` is the creature `p1628` burned.
+    """
+    me = c.me
+    c.bonus(
+        "attack", 2, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            (foe := ctx.get("target")) is not None and c.bloodied(foe)
+        ),
+    )
+
+    def wrath(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p1628":
+            return
+        foe = getattr(ev.trigger, "attacker", None)
+        if foe is None:
+            return
+        c.bonus("damage", 2, on=me, until=When.EONT, kind="power",
+                when=lambda ctx: ctx.get("target") == foe)
+
+    c.watch(PowerUsed, wrath, on=me, until=When.ENCOUNTER)
 
 
 @power("f1869", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

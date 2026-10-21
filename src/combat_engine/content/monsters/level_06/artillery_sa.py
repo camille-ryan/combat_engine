@@ -2204,12 +2204,23 @@ def m5878a4(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target(side="ally", everyone=True, label="kobold allies in the burst"),
+    target=Target(side="ally", everyone=True, label="allies in the burst"),
     dropped=("etl.monster.species",),
 )
 def m5878a5(c: Cast) -> None:
     """The species restriction cannot be read **off this block**, so it is
     dropped rather than used to refuse the row for every ally regardless.
+
+    **The label says "allies in the burst" and not the species**, which is
+    the one rule: this file is tracked, and `drivers.py:1293` rules that a
+    species *is* a printed name -- "five of them reached 32 rows of mine
+    before `leaks.py` caught the sixth." The word was in a `Target(label=)`
+    here, which `leaks.py` passes clean over because the species is also an
+    ordinary word, and that is #476. Nothing reads `Target.label` -- checked
+    across the package -- so it was tier 2 and not tier 1, but a name in the
+    code is a name in the code. The restriction the word was describing is
+    the one this row drops, so the label was also wrong about what the row
+    does.
 
     Not because the engine cannot hold a species: `kinds_of` reads the
     `keywords`, `kind` and `origin` columns, 101 distinct words across the

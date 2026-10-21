@@ -353,16 +353,23 @@ def barbarian_thunderborn(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=PRIMAL,
-    dropped=("Weapon.off_hand_anyway",),
 )
 def barbarian_whirling(c: Cast) -> None:
     """The fourth option: a shift off bloodying a foe, and combat advantage.
 
-    `p5249` is the granted row and is dealt already. One dropped clause:
-    "you can wield a one-handed weapon in your off hand and treat it as an
-    off-hand weapon" is a fact about the gear rather than about the fight --
-    `c.w(hand="off")` reads the weapon's own properties and nothing
-    overrides them, which is the hold two feats already carry.
+    `p5249` is the granted row and is dealt already.
+
+    **The off-hand clause was a stale marker, and the reason it gave was
+    wrong both ways round.** "You can wield a one-handed weapon in your off
+    hand and treat it as an off-hand weapon" is a permission `Gear.wield`
+    already grants -- it keeps any second weapon that is not two-handed in
+    hand -- and nothing on the two-weapon side reads the property back:
+    `Gear.off` is `melee[1]` and `Gear.two_weapon` counts melee weapons,
+    neither of them testing `Weapon.properties`. The old note said
+    `c.w(hand="off")` reads the weapon's own properties; it goes through
+    `_swinging` to `Gear.off`, which tests none. So there was nothing to
+    lift and nothing a write would have bought. `cf:ranger-f0s4` retired the
+    identical printed sentence on the same grounds.
 
     The shift is printed as something you *can* do, so it is offered; the
     combat advantage is measured after it, from wherever the shift ended,

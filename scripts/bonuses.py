@@ -79,6 +79,18 @@ BORROWED = {
     ("f2095", "racial"),   # extends rt:r5-t0's save bonus
     ("f3163", "racial"),   # replaces rt:r24-t2's +2
     ("f2398", "racial"),   # raises rt:r8-t0' +1 to +2
+    # The same trait, raised by a second feat, and the same reading. Measured
+    # rather than argued, because `kind=` is load-bearing here: beside the
+    # trait's racial +1, a second *racial* 2 totals 2 -- the card's "increases
+    # to +2" -- while a *power* 2 would add and total 3. Probed both ways on a
+    # board; they differ by exactly 1.
+    #
+    # The card does print "power", once, for its *other* clause -- a +2 power
+    # bonus to damage, which the row lays with `kind="power"` and which is not
+    # what was flagged. So this is the by-ref cost the note above owns: the
+    # checker pools both clauses of one card and cannot see which sentence a
+    # call came from.
+    ("f1863", "racial"),   # raises rt:r8-t0's +1 to +2, as f2398 does
     # **A feat granting two *other feats'* benefits wholesale.** "You gain
     # the benefits of <f233> and <f1032> with all weapons you are proficient
     # with" prints no type word of its own -- correctly, because it hands out
@@ -182,6 +194,7 @@ BORROWED = {
 #: comment has wanted since the fifth is still the right fix, and the delta
 #: case says something the first five did not: the question is not only "which
 #: sentence names the type" but "is this call a printed bonus at all".
+#:
 ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4",
              "i3382p1"}
 

@@ -23,6 +23,7 @@ from combat_engine.engine import (
     SELF,
     WILL,
     ActionType,
+    AttackRolled,
     Cast,
     Dropped,
     Gear,
@@ -123,11 +124,50 @@ def f1493(c: Cast) -> None:
 
 
 @power("f1490", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_racial_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f1490(c: Cast) -> None:
-    """Extra damage equal to a bonus a racial power gave the attack roll.
-    The power is named by ref; what is missing is any record of how much
-    a particular modifier contributed to a particular roll."""
+    """Extra damage equal to what `p6186` put on the attack roll.
+
+    **The record the old marker said did not exist is `events.Boosted`.**
+    `c.boost_roll` routes all three of its paths through it, so `by` is the
+    ref that paid -- a boost somebody else's row bought is ignored -- `kind`
+    tells a boosted attack from a boosted save, and `amount` is the number
+    this card asks for.
+
+    **Which creature was attacked is the one thing it does not carry**, and
+    the log answers that: `p6186` is declared on `AttackRolled`, so its
+    boost is emitted inside that event's window and the newest
+    `AttackRolled` *is* the roll that was added to. `kind` is what makes
+    the read safe -- the same racial power boosts saving throws and skill
+    checks, and for one of those the newest attack roll belongs to some
+    older swing.
+
+    A damage modifier rather than a `c.flat` on the `Hit`: the extra damage
+    is part of the triggering attack's own blow, and the `Hit` window runs
+    before the body deals it. `once=True` is that one attack. It can outlive
+    its roll by a turn -- a boosted swing that *misses* deals no damage, so
+    nothing reads the modifier and it stands until the turn ends -- which
+    only pays twice if a second attack reaches the same sworn enemy in the
+    same turn.
+    """
+    from combat_engine.engine.events import Boosted
+
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.actor != me or ev.by != "p6186" or ev.kind != "attack":
+            return
+        shot = next(
+            (e for e in reversed(c.world.bus.log) if isinstance(e, AttackRolled)),
+            None,
+        )
+        if shot is None or shot.attacker != me or not sworn(c.world, me, shot.target):
+            return
+        foe = shot.target
+        c.bonus("damage", ev.amount, on=me, until=When.EOT, once=True,
+                when=lambda ctx: ctx.get("target") == foe)
+
+    c.watch(Boosted, paid, on=me, until=When.ENCOUNTER)
 
 
 @power("f1492", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

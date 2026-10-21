@@ -1921,7 +1921,7 @@ def m815a2(c: Cast) -> None:
     action=STANDARD,
     reach=Melee(1),
     target=ONE_CREATURE,
-    dropped=("etl.monster.attack_line()",),
+    dropped=("compendium.attack_line",),
 )
 def m815a3(c: Cast) -> None:
     """The two holds play and are exact. What is missing is the attack line
@@ -1929,6 +1929,19 @@ def m815a3(c: Cast) -> None:
     damage, so the Hit has nothing to be conditional on and the conditions are
     laid outright. The same ETL defect as the 98 rows of #360, one step
     worse -- there the defence alone is gone.
+
+    **Re-spelled off `etl.monster.attack_line()`, which blamed a parser that
+    cannot be at fault.** Measured: `monster_power.spec` for this ability
+    carries no `" vs"` at all, and neither do `m2245a0` or `m2783a3` -- while
+    `m2783a0`, `m2783a2` and `m2783a4`, siblings on that same stat block,
+    each carry one. A parser that extracted the siblings did not lose these.
+    So this is #360's finding -- *"the blanks are in `Monster.Txt` as
+    shipped, no parser change can recover them"* -- and a symbol naming an
+    ETL fix was naming a fix that cannot exist.
+
+    `compendium.attack_line`, not `compendium.attack_defence`: that one is a
+    missing *defence* on a line that exists, and here there is no line at
+    all. One marker, one gap.
 
     "Speed becomes 2" is what `c.slowed` is; the opportunity-attack penalty is
     gated on the attack context, which carries `opportunity`.

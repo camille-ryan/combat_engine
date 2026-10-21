@@ -2545,14 +2545,44 @@ def m5626a5(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points",
     on=Trigger(Dropped, about_me, "it drops to 0 hit points"),
-    todo=("etl.monster.summon_ref()",),
 )
 def m5626a6(c: Cast) -> None:
-    """The printed Effect is entirely "either two [kind] or two [other
-    kind] appear" -- a choice between two monster kinds this brief gives
-    no ref for. The destruction itself is already what `Dropped` is;
-    nothing else here is written without one."""
-    return
+    """Two of one kind or two of the other, on this creature's own count.
+
+    **The referral this row asked for, answered.** Its note read "a choice
+    between two monster kinds this brief gives no ref for" -- the brief an
+    authoring agent gets strips names, and the two kinds the card prints are
+    `m5624` and `m5625`, resolved against the compendium by the main
+    session. Both are declared, neither is defective, and they sit either
+    side of this creature's own level, which is what the card's pairing
+    implies.
+
+    **A real choice, so `c.choose`.** "Either two or two" is the creature's
+    to make and a monster's choice goes to the policy; taking the first
+    option silently would make one half of the card unreachable.
+
+    `after=c.me` is "these act on the m5626's initiative" -- the printed
+    line, and without it each newcomer rolls a count of its own.
+
+    "Hit points equal to its own bloodied value" is written straight onto
+    `Health.hp`, the idiom `m2612`'s splitter records: `c.summon(hp=)` was
+    the wrong gap, because the verb hands back the eid and a content body
+    may write a component. `max_hp` is left where the stat block put it --
+    the card sets what they start *with*, not what they are worth.
+
+    The destruction itself is already what `Dropped` is, so nothing here
+    repeats it.
+    """
+    kind = c.choose(["m5624", "m5625"], "which pair appears")
+    if kind is None:
+        return
+    for _ in range(2):
+        born = c.summon(kind, after=c.me)
+        if not born:
+            break
+        health = c.world.get(born, Health)
+        if health is not None:
+            health.hp = max(1, health.max_hp // 2)
 
 
 # ==========================================================================

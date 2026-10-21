@@ -36,7 +36,14 @@ already carries this exact gap elsewhere in the tree:
 * **`m2245a0` and `m2783a3` print no attack line at all** -- a roll, a
   defence, nothing. The same defect as `#360`'s 98 rows and
   `level_04/lurkers_sa.py`'s `m815a3`: the conditions are laid outright
-  because there is no `Hit` to gate them on. `dropped=("etl.monster.attack_line()",)`.
+  because there is no `Hit` to gate them on.
+  `dropped=("compendium.attack_line",)` -- **re-spelled off
+  `etl.monster.attack_line()`, which blamed a parser that cannot be at
+  fault.** `monster_power.spec` carries no `" vs"` for either, while
+  `m2783a0`, `m2783a2` and `m2783a4` on the same stat block each carry one;
+  a parser that extracted those did not lose these. #360's finding, and
+  `compendium.attack_defence` is the neighbouring spelling for a line that
+  exists but names no defence.
   `m4244a2` loses only the defence name -- "+12 vs or (whichever is lower)"
   -- and nothing to pick a defence from; that one is `todo=`, because its
   entire printed Effect is the attack it cannot make.
@@ -1325,13 +1332,17 @@ def m2243a4(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON, Keyword.MELEE],
     damage=Damage("1d12", 5),
-    dropped=("etl.monster.attack_line()",),
+    dropped=("compendium.attack_line",),
 )
 def m2245a0(c: Cast) -> None:
     """No attack bonus survived extraction at all -- the same defect as
     `#360`'s 98 rows, one step worse: there the defence alone is gone. The
     damage and the push are laid outright rather than gated on a `Hit` that
-    cannot be rolled."""
+    cannot be rolled.
+
+    `compendium.attack_line` rather than `etl.monster.attack_line()`: the
+    line is absent from the stored spec, not lost in parsing. See this
+    file's header."""
     c.hit()
     victim = c.target
     if victim is not None and c.size_of(on=victim) in NO_BIGGER_THAN_MEDIUM:
@@ -1508,11 +1519,15 @@ def m2783a2(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON, Keyword.MELEE],
     damage=Damage("1d10", 6),
-    dropped=("etl.monster.attack_line()",),
+    dropped=("compendium.attack_line",),
 )
 def m2783a3(c: Cast) -> None:
     """No attack line survived extraction -- the same defect `m2245a0`
-    carries, laid outright rather than gated on a `Hit`."""
+    carries, laid outright rather than gated on a `Hit`.
+
+    Measured against its own siblings: `m2783a0`, `m2783a2` and `m2783a4`
+    each carry an attack line in `monster_power.spec` and this one carries
+    none, which is what rules the parser out."""
     c.hit()
     c.slowed(until=When.SAVE_ENDS)
 

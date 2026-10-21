@@ -2298,17 +2298,45 @@ def f3786(c: Cast) -> None:
 
 
 @power("f3787", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.on_racial_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f3787(c: Cast) -> None:
-    """The critical half lands. "Double your racial bonus to damage" needs
-    to find a bonus somebody else laid and change its size, and a modifier
-    is a number with no handle on it once stored."""
+    """The critical half, and the doubling.
+
+    **"Double your racial bonus" needs no handle on the bonus.** The old
+    note asked for one -- a stored modifier is a number nothing can reach
+    back into -- and the stacking rule makes the question go away:
+    `Mods.split` buckets a damage modifier by `(type, kind)` and takes the
+    **max** within a bucket, so a second `kind="racial"` bonus of twice the
+    printed amount *is* the doubled total. It reads the same whether or not
+    `rt:r67-t0` is on the creature, which matters because nothing declares
+    that trait yet (`f3788` records the same debt for `rt:r67-t1`).
+    `ranger_c.f2398` is the precedent and argues it on the attack side.
+
+    The printed amount is read off `racial_trait` in `game.db` rather than
+    guessed: +1, rising at 11th and at 21st. Doubled, that is 2/4/6.
+
+    "Arcane attack powers" is two keys, not one: `ARCANE` off the row, and
+    `from_attack`, which is what keeps a zone's burn or an ongoing tick
+    from counting. "While you are bloodied" is `c.bloodied(me)` and not a
+    bare call -- the damage context's subject is whoever is being hit.
+    """
+    me = c.me
 
     def crit(ev: Any) -> None:
-        if ev.attacker == c.me and ev.critical and _keyword(ev.power, Keyword.ARCANE):
+        if ev.attacker == me and ev.critical and _keyword(ev.power, Keyword.ARCANE):
             c.prone(on=ev.target)
 
     c.watch(Hit, crit, until=When.ENCOUNTER)
+
+    doubled = 2 * (1 + (c.level >= 11) + (c.level >= 21))
+    c.bonus(
+        "damage", doubled, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(
+            ctx.get("from_attack")
+            and _keyword(ctx.get("power", ""), Keyword.ARCANE)
+            and c.bloodied(me)
+        ),
+    )
 
 
 @power("f3788", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

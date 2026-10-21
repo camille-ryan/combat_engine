@@ -105,8 +105,25 @@ from combat_engine.engine import (
 from combat_engine.engine.components import Position, Powers
 from combat_engine.engine.query import concealment_of, creatures, is_, team, unseen_by
 
-#: A class feature the benefit names in prose, with no `cf:` ref to read.
-FEATURE = ("c.class_feature()",)
+#: **Retired.** It read `c.class_feature()` -- "a class feature the benefit
+#: names in prose, with no `cf:` ref to read" -- and both halves of that are
+#: false for all four rows that carried it, `f3531` to `f3534`. The clause
+#: each one dropped is "if you are in `f3529`", and the ETL resolves it: a
+#: **feat** ref, not a feature named in prose, and `f3529b` below is the power
+#: `f3529` grants, declared and fully written. Nothing is unresolved and no
+#: reader is missing.
+#:
+#: What is in the way is the **tier**. `f3529`'s own gate is `level>=11` and
+#: it replaces one of the `r44` aspect options, so the clause is reachable
+#: only at paragon -- the same band in which those four rows already leave
+#: their 11th- and 21st-level damage steps, and an out-of-tier clause carries
+#: no marker here. So the four are finished and nothing waits on this symbol.
+#:
+#: Kept as a comment rather than deleted because `#577` group 1 still reads
+#: it the old way: that triage predates the ETL resolving the name to `f3529`,
+#: and the `c.in_form()`-or-a-sibling decision it proposes is moot. The
+#: `i1942` pair that shared this symbol was always a different gap and is now
+#: on `c.on_defiling()`, where five other rows already wait.
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
 #: **Retired.** It read `c.manifestation()` -- "which of this racial trait's
@@ -1391,7 +1408,7 @@ def f3530(c: Cast) -> None:
 
 
 @power("f3531", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3531(c: Cast) -> None:
@@ -1401,10 +1418,12 @@ def f3531(c: Cast) -> None:
     still true -- by `Moved` the shove has happened. `once=True` is the
     printed "the first time".
 
-    Dropped: the clause gating this on being in one of the class's own
-    manifestations -- a class feature the benefit names in prose, with no
-    `cf:` ref to read, which is what `FEATURE` says and `c.class_feature()`
-    collects. The 11th and 21st steps are out of scope.
+    **Un-marked off `c.class_feature()`, which was wrong about this row
+    twice.** The last clause is not a class feature named in prose: the
+    spec resolves it to `f3529`, a feat, whose granted power `f3529b`
+    is declared above. And nothing is waiting to be built -- `f3529`
+    gates on `level>=11`, so the clause sits in the same tier as this
+    card's own 11th- and 21st-level steps, which carry no marker either.
     """
     me = c.me
 
@@ -1422,14 +1441,16 @@ def f3531(c: Cast) -> None:
 
 
 @power("f3532", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3532(c: Cast) -> None:
     """"Targets you" is `AttackDeclared`, which names one `target` --
     the close-or-area half is asked of the row that is being used, the
-    way `p7441` asks it. Dropped: the aspect clause, a class feature in
-    prose."""
+    way `p7441` asks it.
+
+    The aspect clause is `f3529`, a feat gated on `level>=11` -- out of
+    tier, like this card's own 11th- and 21st-level steps. See `f3531`."""
     me = c.me
 
     def sting(ev: Any) -> None:
@@ -1446,7 +1467,6 @@ def f3532(c: Cast) -> None:
 
 @power("f3533", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=NO_TARGET,
-       dropped=FEATURE,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3533(c: Cast) -> None:
@@ -1454,9 +1474,11 @@ def f3533(c: Cast) -> None:
     gate rather than a guess at which row an opportunity attack is, and
     `Hit` carries the same as a plain attribute rather than a field.
 
-    One dropped clause left, the aspect. The two points are thunder and
-    carry that type, so a creature resisting thunder shrugs them off and
-    still takes the weapon.
+    The two points are thunder and carry that type, so a creature
+    resisting thunder shrugs them off and still takes the weapon.
+
+    The aspect clause is `f3529`, a feat gated on `level>=11` -- out of
+    tier, like this card's own 11th- and 21st-level steps. See `f3531`.
     """
     me = c.me
     opportune = lambda ctx: bool(ctx.get("opportunity"))  # noqa: E731
@@ -1471,12 +1493,14 @@ def f3533(c: Cast) -> None:
 
 
 @power("f3534", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=NO_TARGET, dropped=FEATURE,
+       reach=PERSONAL, target=NO_TARGET,
        trigger="you use a r44 racial power",
        on=Trigger(PowerUsed, _used_any(*R44), "you use a r44 racial power"))
 def f3534(c: Cast) -> None:
     """The melee half is read off the row that hit; `Hit` names it.
-    Dropped: the aspect clause."""
+
+    The aspect clause is `f3529`, a feat gated on `level>=11` -- out of
+    tier, like this card's own 11th- and 21st-level steps. See `f3531`."""
     me = c.me
 
     def burn(ev: Any) -> None:

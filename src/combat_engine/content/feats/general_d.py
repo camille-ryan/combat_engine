@@ -190,11 +190,28 @@ def f917(c: Cast) -> None:
 
 
 @power("f919", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Weapon.off_hand_anyway",))
+       reach=PERSONAL, target=SELF, out_of_combat=True)
 def f919(c: Cast) -> None:
-    """Lets any one-handed weapon count as an off-hand one. `Gear.off` and
-    `two_weapon` read the weapon's own properties and there is nothing
-    that rewrites them for a character."""
+    """Both clauses are settled before the fight starts, so the body has
+    nothing to do in one.
+
+    The skill training is a column: `feat.trains_from` holds the class this
+    card names and `chargen._from_class_list` takes the draw.
+
+    **The off-hand clause was a stale marker, and its stated reason was
+    false.** Letting any one-handed weapon count as an off-hand one is a
+    permission `Gear.wield` already grants -- a second weapon that is not
+    two-handed stays in hand -- and neither two-weapon reader consults the
+    property: `Gear.off` is `melee[1]` and `Gear.two_weapon` counts melee
+    weapons. `c.w(hand="off")` asks `Gear.off` and so tests nothing either.
+    `cf:ranger-f0s4` and `cf:barbarian-f1s3` print the same sentence and are
+    retired the same way.
+
+    Writing the word with `c.gains_property` would also be the wrong answer
+    rather than the missing one: nothing would read it, and the verb takes a
+    group or a ref and no hand count, so "any one-handed weapon" could only
+    be said as `every=True` -- which hands the word to two-handed weapons
+    too."""
 
 
 @power("f941", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

@@ -23,7 +23,9 @@ Conventions, inherited from `level_09/controllers_sa.py` and this level's own
   and the rest as keywords (`dropped=("Damage(dtypes=)",)`);
 * "+N vs <defence>, no roll at all" -- a card with no attack line and no
   defence to roll against lays its conditions outright
-  (`dropped=("etl.monster.attack_line()",)`), the established defect;
+  (`dropped=("compendium.attack_line",)`), the established defect -- the
+  line is missing in the source, so the symbol names the compendium and not
+  a parser;
 * "save ends both" is one `Effects.apply` call carrying every clause under
   one saving throw, never a condition plus a separately-timed penalty.
 
@@ -937,7 +939,8 @@ def m1522a1(c: Cast) -> None:
     this shape: the swing cannot be made and **none is invented**. So the
     `damage=` header is gone with it -- it was card data nothing could roll.
 
-    Re-marked off `etl.monster.attack_line()`, which blames this parser.
+    Re-marked off `etl.monster.attack_line()`, which blamed this parser --
+    a symbol since retired tree-wide for that reason.
     The defence is missing **in the source**, which is
     `compendium.attack_defence` and what six rows in
     `level_04/skirmishers_sa.py` already carry.
@@ -2574,17 +2577,40 @@ def m4008a1(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=FORT, printed=14),
     damage=Damage("3d10", 5),
-    dropped=("etl.monster.summon_ref()",),
 )
 def m4008a2(c: Cast) -> None:
-    """The damage lands. What the Effect line puts on the board is printed
-    as "see below" and carries no ref, so `c.summon` has nothing to name --
-    and the two words the card uses instead are a creature's printed name,
-    which is why they are not written here either. Referred up: the block
-    whose ref follows this one is a swarm of the right type at a plausible
-    level, and only the compendium can say whether it is this one."""
-    if c.strike():
-        c.hit()
+    """The damage lands, and the Effect now puts `m4009` on the board.
+
+    **The referral this row asked for, answered.** Its note read: "the
+    block whose ref follows this one is a swarm of the right type at a
+    plausible level, and only the compendium can say whether it is this
+    one." It is. `m4009` is the swarm the card's "see below" points at --
+    checked against the compendium rather than inferred from the numbering,
+    though the numbering agrees -- and it is declared with three abilities
+    and is not defective, so it can be spawned.
+
+    No `after=`: this card prints no initiative clause, so the swarm rolls
+    its own count. `m5626a6` is the row in this family that does print one.
+
+    Adjacent to the **target**, which is what the card says, so the swarm
+    is set down with `_put_beside(c, swarm, victim)` rather than at
+    `c.here`. That helper and not `_free_square_beside`: its own docstring
+    records why -- the other one measures the *caster's* footprint, and "a
+    Large body offered a square a Medium one fits in simply does not
+    arrive." The creature being placed is somebody else.
+
+    With nowhere free beside the target the swarm still arrives, wherever
+    `c.summon` first put it, rather than vanishing: the card's Effect is
+    not conditional on space and a swarm that failed to appear would be a
+    clause silently dropped.
+    """
+    victim = c.target
+    if not c.strike():
+        return
+    c.hit()
+    swarm = c.summon("m4009")
+    if swarm and victim is not None:
+        _put_beside(c, swarm, victim)
 
 
 @power(
