@@ -63,6 +63,7 @@ failing when nobody is serving.
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -121,6 +122,24 @@ ROLES: dict[str, Role] = {
     "companion": Role(temperature=0.9, max_tokens=250),
     "match": Role(temperature=0.0, max_tokens=200),
 }
+
+
+def warm(role: Role) -> float:
+    """Make the host load the model, and say how long it took.
+
+    **A cold load is minutes and looks exactly like a hang.** The 9 GB
+    model on the desktop took **3m26s** on its first call and 5-6s after
+    that -- and the first call lands in the middle of the opening scene,
+    after the party has spoken, with nothing on screen and nothing to say
+    why. Paying it at startup with a line on the screen is the same cost
+    bought somewhere a person can understand it.
+
+    One token, so this measures the load and not the model.
+    """
+    started = time.monotonic()
+    chat(Role(model=role.model, base_url=role.base_url, max_tokens=1,
+              temperature=0.0), [{"role": "user", "content": "hi"}])
+    return time.monotonic() - started
 
 
 def roles_for(campaign_id: str = "") -> dict[str, Role]:

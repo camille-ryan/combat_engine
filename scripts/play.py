@@ -283,8 +283,29 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
                 print(why)
                 return 2
             director = _b.Director(roles=roles)
-            print(f"   story: {roles['companion'].model} "
-                  f"at {roles['companion'].base_url}")
+            # **Every role, not just one.** A roles file can put the DM on
+            # another machine while the companions stay local, and the
+            # banner used to print one line naming the companion's model --
+            # so a session running half on a desktop said so nowhere.
+            for job in ("dm", "companion", "match"):
+                role = roles[job]
+                where = role.base_url.split("//")[-1]
+                print(f"   {job:10} {role.model} at {where}")
+            # Pay the cold load here, where it is visible, rather than in
+            # the middle of the opening scene where it is indistinguishable
+            # from a hang. Measured at 3m26s for a 9 GB model.
+            for model, role in {
+                (r.model, r.base_url): r for r in roles.values()
+            }.items():
+                note = "" if "127.0.0.1" in model[1] else \
+                    "  (a cold one is minutes, not seconds)"
+                print(f"   warming {model[0]}...{note}",
+                      end="", flush=True)
+                try:
+                    print(f" {llm.warm(role):.0f}s", flush=True)
+                except llm.NoModel as exc:
+                    print(f"\n{exc}")
+                    return 2
         played = sum(1 for i in range(len(campaign.party.sheets))
                      if campaign.controls(i) == "ai")
         print(f"   playing: {len(campaign.party.sheets) - played} human, {played} model")

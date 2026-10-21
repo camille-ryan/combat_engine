@@ -211,7 +211,9 @@ Work with what is actually in the scene. Do not introduce an object, a \
 person or a place that has not been mentioned to you. Reach for what is \
 there.
 
-Write in English.\
+**Write in English, every word of both fields.** Not a phrase, not a \
+clause, not one word in another script. If a word will not come in English, \
+use a simpler English word.\
 """
 
 _MATCH = """\
