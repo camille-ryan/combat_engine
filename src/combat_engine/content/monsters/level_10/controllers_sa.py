@@ -2392,8 +2392,8 @@ def m3788a3(c: Cast) -> None:
     # option every turn: it is part of sustaining, and offering it
     # separately would let the zone be walked on a turn the creature never
     # paid to sustain. One gap, and it is the sustain that has to carry a
-    # distance. #583
-    dropped=("c.sustain(moves=)",),
+    # distance -- and `c.on_sustain` is where that distance goes, not a
+    # `moves=` on the header. #583
 )
 def m3788a4(c: Cast) -> None:
     """The prone, blind and half-on-miss are exact; so is the re-attack on
@@ -2410,8 +2410,21 @@ def m3788a4(c: Cast) -> None:
     line is about every creature in there rather than one side of the
     fight.
 
-    What is left is the move action: nothing offers relocating a zone as a
-    choosable move, named in the module docstring."""
+    **The move is written and it hangs off the sustain, not off a menu.**
+    `zones._spawn` keeps the zone's hold as `Zone.effect`, which is what
+    `c.on_sustain` takes -- `p2979` and `p62` do the same -- so the
+    offer is made once per sustain actually paid for and never on a turn
+    the creature spent its move elsewhere. `c.may`, because the card says
+    *can*. `c.grant_action("move_zone", ...)` is the shape for the other
+    five rows in this family and would be wrong here for exactly that
+    reason: it is a standing option every turn.
+
+    **The re-attack reads the zone's live occupants, not the squares the
+    burst landed on.** That is the clause the move breaks if it is written
+    carelessly: `c.in_squares(area, ...)` closes over a frozenset taken at
+    cast time, so once the haboob had walked, entering it would be free and
+    standing on the old footprint would still be punished. `Zones` already
+    tracks membership and moves it with the zone."""
     if c.strike():
         c.hit()
         c.condition(Condition.PRONE, Condition.BLINDED, until=When.SAVE_ENDS)
@@ -2431,7 +2444,7 @@ def m3788a4(c: Cast) -> None:
 
     def tick(ev: Any) -> None:
         foe = ev.actor
-        if foe not in c.enemies() or foe not in c.in_squares(area, side="enemy"):
+        if foe not in c.enemies() or foe not in c.world.zones.occupants(haboob):
             return
         if c.strike(on=foe):
             c.hit(on=foe)
@@ -2443,6 +2456,18 @@ def m3788a4(c: Cast) -> None:
 
     c.watch(_ZE, tick, until=When.SUSTAIN, on=c.me, label=f"{c.ref} enter")
     c.watch(TurnStart, tick, until=When.SUSTAIN, on=c.me, label=f"{c.ref} start")
+
+    def wander() -> None:
+        """"...and can move it up to six squares by spending a move action."
+
+        Inside the sustain's payout, so the six squares cost the same move
+        action the sustain does rather than a second one.
+        """
+        if c.may("move the haboob up to six squares", who=c.me):
+            c.move_zone(haboob, 6)
+
+    held = c.world.get(haboob, Zone)
+    c.on_sustain(held.effect if held is not None else None, wander)
 
 
 @power(

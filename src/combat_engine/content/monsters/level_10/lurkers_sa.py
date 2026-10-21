@@ -65,6 +65,7 @@ from combat_engine.engine import (
     Condition,
     Damage,
     DamageType,
+    Defenses,
     Effect,
     Health,
     Ident,
@@ -78,6 +79,7 @@ from combat_engine.engine import (
     World,
     power,
 )
+from combat_engine.engine.components import Conjuration
 from combat_engine.engine.events import (
     AttackDeclared,
     AttackRolled,
@@ -91,7 +93,7 @@ from combat_engine.engine.events import (
     ZoneExited,
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
-from combat_engine.engine.query import enemies, hidden_from, unseen_by
+from combat_engine.engine.query import enemies, hidden_from, level_term, unseen_by
 from combat_engine.engine.triggers import (
     Trigger,
     about_me,
@@ -1626,16 +1628,82 @@ _M6367_HIT = "the m6367 is hit by an attack"
     keywords=[Keyword.ILLUSION, Keyword.TELEPORTATION],
     trigger=_M6367_HIT,
     on=Trigger(Hit, targets_me, _M6367_HIT),
-    dropped=("c.summon_inline(decoy=)",),
 )
 def m6367a5(c: Cast) -> None:
-    """The teleport and the invisibility play; leaving a double behind that
-    carries the m6367's own aura and vanishes if struck has no shorthand --
-    `c.summon_inline` defines a whole creature's stats, not a decoy with one
-    borrowed trait."""
+    """The teleport, the invisibility and the double all play now.
+
+    **`c.summon_inline` was the wrong verb to wait on.** It defines a whole
+    stat block; `c.conjure` is the one for a positioned thing without one,
+    and `defences=` (#714) is what makes it attackable -- four flat numbers,
+    a `Side` matching its creator's so enemies may aim at it, and one hit
+    point, which **is** the printed "disappears if hit", not an
+    approximation of it. It keeps a `Position`, so it is drawn and
+    targetable, and it is out of `query.allies` and `query.combatants`, so
+    it gets no turn: "it can take no actions" is true by construction.
+
+    Three readings worth stating.
+
+    *The square it left.* `c.here` is read **before** the teleport, because
+    after it the creature is somewhere else and the card is specific.
+
+    *"The illusion has the m6367's defenses"* is four numbers, not one, and
+    `defences=` takes a flat value -- so the copy is made over the top.
+    **The printed totals, with `scale="none"`, and not `values` + `scale`
+    copied across**, which is what `i925p1` does for the same sentence and
+    is wrong by the whole level term: the stored number carries no level
+    (see `engine/scaling.py`), `query.level_term` reads the level off
+    `Stats`, and a conjuration has no `Stats` -- so a copy that keeps
+    `scale="monster"` resolves at level 1. Measured: AC came out 14 against
+    the creature's 23 until this was written as a resolved total.
+
+    *The borrowed `m6367a0`.* That trait is self-concealment against
+    anything outside aura 1, so on the double it is `c.conceal` gated on
+    adjacency to the double -- `c.adjacent_to` measures between two named
+    entities and documents that it works for a conjuration. Its second
+    sentence, the radiant deactivation, is **not** written and needs no
+    marker: radiant damage that hits the double destroys it outright
+    through the one hit point, so there is no state left for a
+    deactivation to describe.
+
+    The pop is a watch as well as the hit point, and both are wanted. The
+    hit point covers a damaging hit through the ordinary damage path; the
+    watch covers "hit by an enemy attack power" that rolls no damage, which
+    the hit point cannot see -- `resolve.deal_damage` is never reached.
+    """
     me = c.me
+    left = c.here
     held = c.invisible(on=me, until=When.EONT)
     c.teleport(5)
+
+    double = c.conjure(
+        at=left, label=f"{c.ref} double", until=When.ENCOUNTER,
+        sustain=None, defences=10,
+    )
+    if double:
+        mine = c.world.get(me, Defenses)
+        theirs = c.world.get(double, Defenses)
+        if mine is not None and theirs is not None:
+            term = level_term(c.world, me, mine.scale)
+            theirs.values.update({d: mine.base(d) + term for d in mine.values})
+            theirs.scale = "none"
+        c.conceal(
+            on=double, until=When.ENCOUNTER,
+            when=lambda ctx: ctx.get("attacker") is not None
+            and not c.adjacent_to(double, ctx["attacker"]),
+        )
+        conj = c.world.get(double, Conjuration)
+        shell = c.world.effects.live.get(conj.effect) if conj is not None else None
+
+        def popped(ev: Hit) -> None:
+            if ev.target != double or shell is None:
+                return
+            if ev.attacker not in enemies(c.world, me):
+                return
+            c.world.effects.end(shell, "the illusion was struck")
+
+        c.watch(Hit, popped, until=When.ENCOUNTER, on=me, once=True,
+                label=f"{c.ref} double")
+
     if held is None:
         return
 

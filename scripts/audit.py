@@ -137,6 +137,39 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # "You hit a nonminion enemy with an at-will arcane attack power →
+    # repeat the attack against another enemy." Every gate in the body
+    # passes and the payout is refused by the engine:
+    #
+    #   trigger=Hit foe=2 power='p10069' usage=at-will foe_hp=38 others=[3,4,5,6]
+    #   choose([3, 4, 5, 6]) -> 3
+    #   grant_attack(me=1, on=3, ref='p10069', reentrant=True) -> False
+    #
+    # Traced into `usable`: 'cannot be used right now', because `p10069` is
+    # in `Powers.forbidden`. The board's caster holds `f277`, which borrows a
+    # wizard at-will with `uses=1`; the provocation spent that one use to
+    # produce the `Hit`, `grant_row`'s counter then forbade the row, and
+    # `reentrant` stands aside for the printed usage (`spent_ok`) but not for
+    # a forbid. #820, which has a ruling in it -- does a *repeat* consume a
+    # granted use -- so it is not a patch to make here.
+    #
+    # Two poses would each have avoided it and neither is reachable: #821
+    # (the search stops at the first pose that fires the row, so the lent
+    # arcane at-wills behind the borrowed one are never swung).
+    "i2002p1": "its repeat is refused because the board's arcane at-will was"
+               " borrowed with one use and the provocation spent it -- #820",
+    # "You hit a cursed target with an arcane power using this rod." The row
+    # is correct and `_pose_cursed` below now curses every enemy, verified at
+    # the moment it is laid -- but the one creature the provocation swings at
+    # has lost the relation by the time the body runs, while the effect that
+    # laid it is still standing and `Effects.end` is never called for it:
+    #
+    #   foe=2 cursed=False enemies=[(2, False), (3, True), (4, True), (5, True), (6, True)]
+    #
+    # #822. The pose is kept rather than reverted: it is right for the other
+    # 45 of the 46 `c.cursed(` read sites, and reverting it would hide this.
+    "i2339p1": "the posed curse is gone from foes[0] by the time the body"
+               " runs, with its effect still standing -- #822",
     # "You bloody an enemy with an attack that uses **the augmented
     # weapon**", and the gate is written now that `Bloodied.weapon` exists
     # (#653). Two separate board facts keep it quiet, both measured:
@@ -2311,6 +2344,46 @@ def _pose_conditions(world, caster: int, declared, src: str) -> None:  # noqa: A
     )
 
 
+#: A row whose **body** asks whether somebody is cursed.
+#:
+#: **Matched on the read, never on the write**, which is the discipline
+#: `_READS_FLOORED` above had to learn: `c.curse(` is the writer and belongs
+#: to every warlock row that *lays* one, where `c.cursed(` is the question
+#: and is exactly the 46 read sites across 28 files. Posing a curse for the
+#: writers would hand them a state their own clause is supposed to create.
+_READS_CURSED = re.compile(r"c\.cursed\(")
+
+
+def _pose_cursed(world, caster: int, declared, src: str) -> None:  # noqa: ANN001
+    """Curse the caster's enemies when the row asks whether they are cursed.
+
+    **Relational, so the direction is the whole of it.** `c.cursed` reads
+    `Relation.CURSED_BY` between *this* caster and the creature -- two
+    warlocks in a party curse separately and neither reads the other's -- so
+    a curse laid by anybody else answers False and the pose would do nothing
+    while looking like it had. It is laid from the caster's side for the same
+    reason `_pose_conditions` reads the enemy list from there.
+
+    Found by `i2339p1`, which fired on 4 of 8 attempts and did nothing every
+    time: it is gated on "you hit a **cursed** target", every other gate
+    passed, and nothing on any board had ever been cursed. 46 read sites were
+    in the same position.
+
+    `When.ENCOUNTER` rather than a shorter hold, and all the enemies rather
+    than one: a curse is the warlock's standing mark on whatever it is
+    fighting, and a row that reads it on its own target cannot be made to
+    agree with a pose that picked a different creature.
+    """
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.query import enemies as _enemies
+
+    if not _READS_CURSED.search(src):
+        return
+    hex_ = _Cast(world=world, me=caster, ref="audit:pose")
+    for foe in sorted(_enemies(world, caster)):
+        hex_.curse(on=foe, until=When.ENCOUNTER)
+
+
 def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
     """Put a configured dummy on the board when the row asks for one.
 
@@ -2412,6 +2485,14 @@ def _pose(world, caster: int, declared, foe_team) -> None:  # noqa: ANN001
             )
             if lit is not None:
                 _Cast(world=world, me=lit, ref="audit:pose").light(2, on=lit)
+
+    # **Last, because the loop above spawns creatures.** A dummy placed for
+    # the row under test is an enemy like any other and is usually the one
+    # the provocation then swings at, so a curse laid before the spawn
+    # reaches every creature except the one that matters: measured on
+    # `i2339p1`, enemies 3-6 came back cursed and the dummy at 2 -- the foe
+    # that was hit -- did not.
+    _pose_cursed(world, caster, declared, src)
 
 
 #: What starting a fight emits no matter who is in it. Subtracted from what

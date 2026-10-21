@@ -751,15 +751,55 @@ def f1279b(c: Cast) -> None:
 
 
 @_trait("f1288", usage=AT_WILL, proficiency=("w3663",),
-        dropped=("c.two_handed()",))
+        dropped=("c.weapon_group()",))
 def f1288(c: Cast) -> None:
     """The proficiency lands and the penalty hangs on the grab being made
     while that weapon is in hand -- `RelationSet` is the only event that
-    names both ends of a grab. The combat advantage clause turns on the
-    weapon being used *with two hands*, which is a fact about the grip
-    and not about the weapon; the light-blade clause re-files the weapon
-    into another group for a class feature's purposes."""
+    names both ends of a grab.
+
+    **"With two hands" is a fact about this weapon, and `c.two_handed()`
+    was a marker for a question already answerable.** The old note said the
+    clause "turns on the grip and not on the weapon". For `w3663` it is the
+    weapon: `game.db` records it `hands = 'two-handed'`, and
+    `Weapon.__post_init__` writes that word into `properties` as well --
+    deliberately, so a row gets one answer whichever field it reads --
+    which is the field `Weapon.two_handed` asks. So holding it *is* using
+    it with both hands, and `f650b` already reads the property this way.
+    It is asked rather than assumed, so the clause follows the weapon
+    rather than a constant.
+
+    **The grab is read, not sustained.** This module's own rule is that
+    "each turn you maintain the grab" is a sustained effect -- and that is
+    the rule for the rows that *make* the grab and pay for keeping it
+    (`f1291b` lays one). This feat makes no grab and may not add a sustain
+    cost to somebody else's, so what it needs is the standing record, which
+    is the `GRABBED_BY` relation `c.grabbing` reads. A gate consulted at
+    the moment of the swing is therefore true exactly while the grab is
+    still held, which is what maintaining it comes to.
+
+    `c.gains_advantage` rather than `c.grants_advantage`: the printed
+    sentence is "**you** have combat advantage against the target you are
+    grabbing", and the set it is about is whatever this character happens
+    to be holding at the time, which is not knowable when the trait arms.
+
+    One narrowing is not sayable and is **wider than print by nothing that
+    can happen**: the context carries `attacker`, `target` and `power`, so
+    "for the purpose of attacking again with the garrote" cannot be asked
+    of the weapon. It does not need to be -- `w3663` takes both hands, so
+    nothing else is in them, and every weapon attack made while the gate
+    holds is made with it.
+
+    Still dropped: the light-blade clause, which re-files the weapon's
+    group so `cf:rogue-scoundrel-f4` and the rogue's group-gated rows take
+    it. `Weapon.group` has no writer, and `c.counts_as(satisfies=,
+    holding=)` is not it -- that waives a printed weapon *Requirement*,
+    read by `wielding`, where what the card buys is what
+    `Weapon.is_light_blade` answers. `f1277` is the sibling with the same
+    clause and the same marker."""
     me = c.me
+
+    def garrote_in_both_hands() -> bool:
+        return any(w.ref == "w3663" and w.two_handed for w in c.held(on=me))
 
     def seized(ev: Any) -> None:
         if ev.kind_ is not Relation.GRABBED_BY or ev.source != me:
@@ -767,7 +807,11 @@ def f1288(c: Cast) -> None:
         if any(w.ref == "w3663" for w in c.held(on=me)):
             c.penalty("escape", 2, on=ev.target, until=When.ENCOUNTER)
 
+    def still_holding_it(ctx: dict[str, Any]) -> bool:
+        return ctx.get("target") in c.grabbing() and garrote_in_both_hands()
+
     c.watch(RelationSet, seized, until=When.ENCOUNTER, on=me)
+    c.gains_advantage(still_holding_it, until=When.ENCOUNTER, on=me)
 
 
 _swap("f1289", "f1289b")

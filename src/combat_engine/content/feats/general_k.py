@@ -631,8 +631,7 @@ def f1835(c: Cast) -> None:
 
 
 @power("f1836", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("power.keywords.spirit_in_headers",))
+       reach=PERSONAL, target=SELF)
 def f1836(c: Cast) -> None:
     """Swaps the die a racial power adds to a roll: 1d10 rather than 1d6.
 
@@ -654,21 +653,20 @@ def f1836(c: Cast) -> None:
     rather than two keywords' worth. `p6186` now says which kind of roll it
     is and which power rolled it, so the narrowing is exact.
 
-    **The spirit half is still dropped, and the marker moved one layer.** It
-    used to say `Keyword.SPIRIT`, which arrived with #589 -- the ETL's
-    keyword list had never been reconciled against the pages, and the word
-    is now recorded on **66 powers**.
+    **The spirit half is written now, and the marker's last layer paid
+    out.** It said `Keyword.SPIRIT` until #589 recorded the word on 66
+    powers in the database; it then said the *headers*, because the gate
+    reads `get(ref).keywords` -- `REGISTRY`, the content header -- and at
+    that point 66 in the database stood against 0 in the tree, so a widened
+    gate would have compiled, fired, and audited green off its Nature half
+    while the spirit half could never match anything. #486 closed and the
+    headers landed: `Keyword.SPIRIT` is now on 66 rows under
+    `powers/shaman/`, which is the database's count exactly.
 
-    That is not enough, and writing the clause on the strength of it would
-    have been **silently false**. The gate reads `get(ref).keywords`, which
-    is `REGISTRY` -- the *content header* -- and **no header declares the
-    keyword**: 66 in the database, 0 in the tree. So the widened gate
-    compiled, fired, and audited green off its Nature half while the spirit
-    half could never match anything.
-
-    So what this waits on is the 66 headers, which is `#486`'s family -- a
-    keyword the database names and no header declares -- and the marker now
-    says that instead of the enum.
+    Read off the row the context names rather than off this feat, for the
+    same reason `f718` does: `ctx["power"]` is the power that made the
+    attack roll, not the racial power adding to it, and the keyword is
+    printed on the former.
     """
 
     def narrowed(ctx: dict[str, Any]) -> bool:
@@ -677,7 +675,10 @@ def f1836(c: Cast) -> None:
         if ctx.get("roll_kind") != "attack":
             return False
         rolled = get(str(ctx.get("power", "")))
-        return bool(rolled and Keyword.BEAST_FORM in (rolled.keywords or ()))
+        return bool(
+            rolled
+            and {Keyword.BEAST_FORM, Keyword.SPIRIT} & set(rolled.keywords or ())
+        )
 
     c.change_dice("p6186", "1d10", when=narrowed)
 

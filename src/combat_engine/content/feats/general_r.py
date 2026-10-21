@@ -1253,7 +1253,15 @@ f3608 = _retarget("f3608", "mace", FORT)
 def f3609(c: Cast) -> None:
     """Pick is a printed group the weapon table carries and `chargen` now
     deals. Heroic tier, so +1 each. The damage half is gated on the
-    target being the larger creature, which is a comparison on `Size`."""
+    target being the larger creature, which is a comparison on `Size`.
+
+    **`.order` on both sides, and a bare `>` here was wrong for every
+    pair.** `Size` is a string enum, so `>` compared the words
+    alphabetically -- and the alphabetical order is nearly the exact
+    reverse of the size order, so this paid nothing against the Large foe
+    the card is for and paid against a Small one. 30 of 30 ordered pairs
+    compared wrongly. `general_f.py:112` and both `soldiers_sa.py` sites
+    already use `.order`; this was the one that skipped it. #817."""
     me = c.me
 
     def bigger(ctx: dict[str, Any]) -> bool:
@@ -1261,7 +1269,7 @@ def f3609(c: Cast) -> None:
         return (
             _holding(c, "pick")
             and who is not None
-            and c.size_of(who) > c.size_of(me)
+            and c.size_of(who).order > c.size_of(me).order
         )
 
     c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,

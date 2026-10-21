@@ -88,7 +88,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health
-from combat_engine.engine.events import PowerUsed
+from combat_engine.engine.events import PowerResolved, PowerUsed
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
 #: The `rt:r6-t3` choice: a 1st-level at-will borrowed from
@@ -142,6 +142,21 @@ def _used_any(*refs: str):  # noqa: ANN202
 
     def when(world, me: int, ev: Any) -> bool:  # noqa: ANN001
         return ev.actor == me and ev.power in refs
+
+    return when
+
+
+def _finished(ref: str):  # noqa: ANN202
+    """`PowerResolved`, for a row that must read what the use *left behind*.
+
+    `dsl.use` emits `PowerUsed` **above** the body -- its own comment says
+    so, and `powers/cleric/second_card.py` is declared here for the same
+    reason -- so a feat reaching for the effect another row laid finds
+    nothing in the `_used` window. This is the one after.
+    """
+
+    def when(world, me: int, ev: PowerResolved) -> bool:  # noqa: ANN001
+        return ev.actor == me and ev.power == ref
 
     return when
 
@@ -878,25 +893,63 @@ def f2617(c: Cast) -> None:
             c.restore_use(ref)
 
 
-@power("f2842", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2842", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.sustain_row()",))
+       trigger="you use p377",
+       on=Trigger(PowerResolved, _finished("p377"), "you use that racial power"))
 def f2842(c: Cast) -> None:
     """Bolts a sustain standard onto `p377`, which the prerequisite names
-    by ref -- so the naming gap is closed and so is one of the other two.
+    by ref.
 
-    Nothing adds a sustain clause to another row's effect: `sustain=` is
-    a header field of the row that lays the hold, and `c.on_sustain`
-    only says what an effect *this* row already made pays out. The `f651`
-    clause only changes the cost of a sustain that cannot be added, so it
-    is not a marker of its own.
+    **The old note's premise was wrong about where a sustain lives.** It
+    said `sustain=` is a header field of the row that lays the hold. It is
+    not: the header only seeds `Effect.sustain_cost`, a field on the
+    *effect*, and `actions._sustaining` offers the sustain to the effect's
+    source for any live one carrying a cost, whichever row set it. So
+    reaching into `p377`'s hold and giving it a cost is the whole sustain
+    clause, and `c.on_sustain` then has somewhere to hang the price.
 
-    **"Until you attack" is no longer a hold.** `c.end_effect` takes a
-    live effect off early and `p377` keeps its own in a local, so the
-    sustained hold ends from a `c.watch(AttackRolled, ...)` the way
-    `f3759` and three item blocks already end theirs. That symbol came off
-    without the row moving, because the sustain is what is in the way.
+    **`PowerResolved`, not `PowerUsed`, and that is the load-bearing
+    line.** `dsl.use` announces `PowerUsed` *above* the body -- its own
+    comment says the event "is right for 'when you use a power' and wrong
+    for anything reading a consequence" -- so a `_used("p377")` trigger
+    runs before `p377` has laid anything and finds no hold at all. `f719`
+    gets away with `_used` because it only arms watchers there and asks
+    `_under(c, "p377")` later; this row reads the effect in its own body,
+    so it needs the window after. `powers/cleric/second_card.py` is
+    declared on the same event for the same reason.
+
+    **"Until you attack" is re-armed here rather than left to `p377`.**
+    That power's own `_until_you_attack` watcher is `until=When.EONT`, so
+    it is gone by the second turn boundary -- which is exactly where a
+    sustained hold starts living. Without this watch the clause would stop
+    binding the moment sustaining began to matter.
+
+    `AT_WILL`, not `ENCOUNTER`: a declared trigger spends its usage when it
+    fires, and the card prints no limit of its own. The limit is `p377`'s
+    single encounter use, and `f2617`-style restores can hand that back.
+    `f719` is declared on the same power and reads the same way.
     """
+    me = c.me
+    # `c.invisible` labels `"p377 unseen"` and passes `by=self.ref`, so the
+    # laying row is asked by `by` rather than by parsing the label.
+    hold = next((eff for eff in c.world.effects.of(me) if eff.by == "p377"), None)
+    if hold is None:
+        return
+    hold.when = When.SUSTAIN
+    hold.sustain_cost = ActionType.STANDARD
+    # `sustained` is left alone: `effects.apply` set it to the round the hold
+    # was laid, which is what makes the first turn boundary free and the next
+    # one the one that charges -- the printed "until the end of your next
+    # turn" with nothing sustained.
+    price = 2 if c.feat(PLAGUE_FEAT) else 5
+    c.on_sustain(hold, lambda: c.flat(price, on=me))
+
+    def stop(ev: Any) -> None:
+        if ev.attacker == me:
+            c.end_effect(hold, why=f"{c.ref}: you attacked")
+
+    c.watch(AttackRolled, stop, until=When.ENCOUNTER, on=me, once=True)
 
 
 @power("f2871", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1820,19 +1873,30 @@ def f2793b(c: Cast) -> None:
 
 @power("f2794", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w3609", "w3633"),
-       dropped=("chargen.DOUBLE_SCIMITAR",))
+       proficiency=("w3609", "w3633", "w3668"))
 def f2794(c: Cast) -> None:
     """Three named weapons rather than a group, and the weapon table
-    carries two of them by ref -- so the bonus is gated exactly rather
+    carries all three by ref -- so the bonus is gated exactly rather
     than on heavy blade, which would hand it to every longsword in the
     game. Heroic tier, so +2.
 
-    Dropped: the double scimitar. It is a double weapon and a `Weapon`
-    has one end, so `chargen` deals none."""
+    **The third weapon is written now and the old note was wrong twice.**
+    It said a `Weapon` has one end so `chargen` deals none. `Weapon.hands`
+    carries `double` as its own hand count -- `exploits._double_weapon_
+    shift_after_first` already reads it, and 22 rows in the table have it --
+    and `chargen.proficiency` reads this header's `proficiency=` straight
+    out of `PRINTED`, where `w3668` sits like any other arm.
+
+    **Only the primary end is declared.** The table also holds each
+    double's off-hand end as a row of its own (`priced=0`), but the engine
+    models the weapon as *one* object with `hands="double"`; nothing deals
+    a secondary end into `Gear.held`. Naming it here would let
+    `chargen.wield_options` price the off-hand half as a separate arm and
+    put it in a hand on its own, which is not a thing the page describes.
+    """
     c.bonus(
         "damage", 2, on=c.me, until=When.ENCOUNTER, kind="feat",
-        when=lambda ctx: _ref_in(c, "w3609", "w3633"),
+        when=lambda ctx: _ref_in(c, "w3609", "w3633", "w3668"),
     )
 
 
@@ -2556,18 +2620,65 @@ def f2609(c: Cast) -> None:
 
 
 @power("f2610", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       todo=("c.trade_accuracy()",))
+       reach=PERSONAL, target=SELF)
 def f2610(c: Cast) -> None:
-    """"Take -2 to gain +2" is a choice made per attack that nothing
-    offers, and it is the whole of the row -- so there is no half to
-    write.
+    """"Take -2 to gain +2", elected per attack. Heroic tier, so 2 and 2.
 
-    **The weapon half was never the gap.** The old note said heavy thrown
-    was a printed property the table does not carry; `weapon.properties`
-    holds it for nine entries and the light-thrown spelling for eight
-    (#226), and `c.wielding("heavy thrown")` is live in the tree.
+    **The old note said nothing offers a per-attack choice. `c.may` does**,
+    and from inside an `AttackDeclared` handler: `powers/artificer/
+    level_2.py` asks the same question in the same window and lays a
+    `once=True` modifier on the attack being declared. `Window.BEFORE`, so
+    the penalty is standing when the roll is made.
+
+    **The weapon half was never the gap either.** `weapon.properties`
+    holds `heavy thrown` for nine entries (#226).
+
+    **Read off the attack rather than off the hand.** `c.wielding("heavy
+    thrown")` asks `Gear.main`, which is true for a character holding a
+    thrown weapon *and* a bow -- so every bowshot would have taken the
+    trade. `c.weapon_of(ev)` picks the weapon the way the attack did, and
+    with a bow in hand it answers the bow, which carries no such property.
+
+    **The damage half waits for the hit, and this is not fussiness.** The
+    card gives the bonus "if the attack hits"; a `once=True` damage bonus
+    is spent by `DamageRolled`, so laid at declaration it survives a clean
+    miss and is collected by the *next* throw -- a -2 paid once buying a
+    +2 twice. `elected` is the one blow the question was asked about, so
+    the payout can tell that blow from any other.
     """
+    me = c.me
+    #: The (target, power) of the attack the trade was elected for. A list
+    #: rather than a flag, because the payout has to tell this blow from
+    #: another one declared in between.
+    elected: list[tuple[int, str]] = []
+
+    def heavy_throw(ev: Any) -> bool:
+        arm = c.weapon_of(ev)
+        return (
+            _reach_kind(ev.power) == "ranged"
+            and arm is not None
+            and "heavy thrown" in arm.properties
+        )
+
+    def offer(ev: AttackDeclared) -> None:
+        # Cleared on every declaration, elected or not: a blow nobody paid
+        # for must not collect the previous one's bonus.
+        elected.clear()
+        if ev.attacker != me or not heavy_throw(ev):
+            return
+        if not c.may("take -2 to the attack for +2 damage", who=me,
+                     default=False):
+            return
+        c.penalty("attack", 2, on=me, until=When.EOT, once=True)
+        elected.append((ev.target, ev.power))
+
+    def pay(ev: Any) -> None:
+        if ev.attacker == me and (ev.target, ev.power) in elected:
+            elected.clear()
+            c.bonus("damage", 2, on=me, until=When.EOT, once=True)
+
+    c.watch(AttackDeclared, offer, until=When.ENCOUNTER, window=Window.BEFORE)
+    c.watch(Hit, pay, until=When.ENCOUNTER)
 
 
 @power("f2629", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

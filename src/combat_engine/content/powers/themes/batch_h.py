@@ -1963,14 +1963,50 @@ def p16046(c: Cast) -> None:
     "p16026", level=2, cls=X7_939, usage=DAILY, action=MINOR,
     reach=Ranged(5), target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.PRIMAL, Keyword.SUMMONING],
-    todo=("spec.summon_block()",),
 )
 def p16026(c: Cast) -> None:
-    """The spec carries the summon's behaviour and none of its numbers: no
-    defences, no hit points, no size, no speed. `c.summon` wants a ref and
-    `c.summon_inline` wants a `Summon` built from a block, and there is
-    neither -- so nothing can be put on the board, and the clause that costs
-    you a surge when it falls has nothing to fall."""
+    """**The block exists and the old note was looking in the wrong
+    table.** It said the spec carries the summon's behaviour and none of
+    its numbers. #459 built `associate`, and `x10_60` is the full line:
+    tiny fey, level 2, hit points equal to the summoner's healing surge
+    value, defences the summoner's, speed 4. `c.summon` routes an `x10_`
+    ref to `loader.spawn_associate`, which is handed the summoner the
+    block derives from. `p16476` had the same `defect=` for the same
+    reason and it came off at #766 with the same evidence.
+
+    Why the note was believable: the extractor substituted **this row's
+    own ref** into the summon sentence, because the creature is named
+    after the power -- so the spec reads as though the card named nothing
+    at all. `p16476`'s spec had the `x10_` ref in it; this one does not,
+    and the block is in the table either way.
+
+    Placed with no square, so `_free_square_near` picks one that is
+    passable and empty -- the printed "an unoccupied square" -- rather
+    than `at=c.origin`, which is a point the caster aimed at and may hold
+    somebody.
+
+    "It lacks actions of its own" is what a summon already is. The surge
+    the drop costs and the minor action to dismiss are `p16031`'s
+    arrangement, which prints the same two sentences: one watch, with
+    `c.endable` hanging the dismissal on the same hold, so dismissing it
+    also retires the clause about it falling.
+
+    **Not `c.dismiss_companion`, and that would have been a live bug.**
+    `spawn_associate` gives the creature no `Companion`, so `c.companion()`
+    answers with whatever companion the character already had -- measured:
+    it returned a different entity on a board where this row's summon was
+    standing. The despawn names the entity this row made.
+    """
+    made = c.summon("x10_60")
+    if not made:
+        return
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == made and not c.spend_surge(on=c.me):
+            c.flat(c.surge_value(of=c.me), on=c.me)
+
+    watching = c.watch(Dropped, fell, until=When.ENCOUNTER)
+    c.endable(watching, MINOR, then=lambda: c.world.despawn(made))
 
 
 @power(

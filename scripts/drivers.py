@@ -12957,6 +12957,101 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_size_comparison_reads_the_order(out: Result) -> None:
+    """A size comparison must go through `Size.order`, not the enum itself.
+
+    `Size` is a string enum, so a bare `<` / `>` compares the **words
+    alphabetically** -- and the alphabetical order is nearly the exact
+    reverse of the size order, so the comparison is wrong for every pair:
+    `medium < large` is False and `medium < small` is True. #817 measured
+    30 of 30 ordered pairs wrong.
+
+    **Asserted through `f3609`'s body, not through `c.size_of`**, because
+    the verb was never the bug -- it returns the right `Size` and the row
+    compared it the wrong way, which is exactly the shape a rule on the
+    facility cannot see.
+
+    **Larger and smaller on one board, which is the whole design.** #817's
+    own note is that "a single-size board cannot tell the two readings
+    apart". Measured by planting the bare `>` back, with the character
+    Medium:
+
+        large       pays 0, should pay 1
+        gargantuan  pays 0, should pay 1
+        small       pays 1, should pay 0
+        medium      pays 0, correct by accident
+
+    So the broken reading fails **three** of the four and gets the
+    equal-size case right by luck -- and a board with only a large victim
+    would have read it as an under-payment, which is what every other
+    instrument here would have called an unfinished clause.
+
+    The delta between the two reads rather than either total, so a pooled
+    `mods.total("damage", ctx)` that is already non-zero on a posed board
+    cannot be mistaken for the row's own payout -- the trap `paid()` in
+    `a_raging_barbarian_pays_the_named_row` had to be corrected for twice.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Mods, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Size
+
+    world, me, _ = _board("f3609", 1)
+    foe = enemies(world, me)[0]
+    mine = world.get(me, Position)
+    if mine is not None:
+        mine.size = Size.MEDIUM
+
+    # **The pick has to be drawn, not merely owned.** `c.as_weapon` lays the
+    # profile into `Gear.stowed` -- `a_weapon_profile_is_laid_as_an_effect`
+    # above asserts exactly that -- and the row's gate is `_holding`, which
+    # reads `Gear.held`. Without the `wield` every assertion below read 0
+    # and blamed the row, which is the plant being wrong rather than the
+    # code.
+    arm = Cast(world=world, me=me, ref="drivers:f3609")
+    arm.as_weapon(damage="1d6", group="pick", proficiency=2)
+    gear = world.get(me, Gear)
+    pick = next((w for w in gear.weapons if w.ref == "drivers:f3609"), None)
+    if gear is None or pick is None:
+        out.skip("no pick could be put in hand")
+        return
+    gear.wield(pick)
+
+    REGISTRY["f3609"].body(Cast(world=world, me=me, ref="f3609"))
+    mods = world.get(me, Mods)
+
+    def paid(size: Size) -> int:
+        there = world.need(foe, Position)
+        there.size = size
+        if mods is None:
+            return 0
+        return mods.total("damage", {"power": "", "target": foe})
+
+    base = paid(Size.MEDIUM)
+    big = paid(Size.LARGE)
+    huge = paid(Size.GARGANTUAN)
+    small = paid(Size.SMALL)
+
+    out.that(big - base == 1,
+             "a Medium character with a pick pays +1 damage against a LARGE"
+             " target -- the case the card is printed for, and the one the"
+             " alphabetical comparison refused",
+             f"base {base}, large {big}")
+    out.that(huge - base == 1,
+             "and against a Gargantuan one, two steps up rather than one",
+             f"base {base}, gargantuan {huge}")
+    out.that(small - base == 0,
+             "and NOTHING against a SMALL target. This is the negative"
+             " control that fails under a bare `>`: 'small' > 'medium' is"
+             " True alphabetically, so the broken row paid here",
+             f"base {base}, small {small}")
+    out.that(base - base == 0 and paid(Size.MEDIUM) - base == 0,
+             "and nothing against an equal-sized one -- the card says"
+             " larger, not 'not smaller'",
+             f"medium {paid(Size.MEDIUM)}")
+
+
 def milestones_carry_across_a_day(out: Result) -> None:
     """Milestones are a fact about the day, and seven rows read them. #666.
 
@@ -24830,7 +24925,13 @@ def a_conjuration_a_creature_can_attack(out: Result) -> None:
              "i2437p1 carries no marker at all now: the card's whole second"
              " paragraph is one parameter",
              f"{REGISTRY['i2437p1'].unfinished}")
-    out.that(REGISTRY["i2208p2"].unfinished == ("c.zone(ends_on=)",),
+    # **The spelling moved to match this assertion's own words.** It read
+    # `c.zone(ends_on=)` and described the gap, correctly, as "a creature
+    # touching it" -- so the prose and the symbol disagreed, and the symbol
+    # was the vaguer of the two: `ends_on=` is a parameter on the zone where
+    # what is missing is the *moment*, which nothing announces. The row now
+    # carries `actions.touch()` and the two agree.
+    out.that(REGISTRY["i2208p2"].unfinished == ("actions.touch()",),
              "and i2208p2 keeps the one marker it still earns -- the other"
              " way its illusion pops, which is a creature touching it",
              f"{REGISTRY['i2208p2'].unfinished}")
@@ -26490,6 +26591,25 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
     out.that(in_beast_form(world, me),
              "the druid is in beast form, which this row gates on",
              f"{in_beast_form(world, me)}")
+
+    # **The row's own contribution, not the board's total**, and the three
+    # assertions below read `premium()` for that reason. They used to compare
+    # against `plain + 1` outright, and that was only ever true while this
+    # board's druid happened to hold no other charge feat -- a chargen draw
+    # this rule does not control and must not depend on. Un-marking rows in
+    # a content wave made more feats drawable (#783), the draw moved, the
+    # druid came up holding `f6` -- "+2 speed while charging", laid as
+    # `f6 speed+2` and perfectly correct -- and all three went red on
+    # working code, reading 8 where they wanted 6.
+    #
+    # So: measure how much running the body *changes* the charge premium.
+    # That is the row's own +1 whatever else the board is carrying, and it
+    # still catches both of the old faults below.
+    def premium() -> int:
+        """How much more the creature moves on a charge than off one."""
+        return speed(world, me, {"charge": True}) - speed(world, me)
+
+    before = premium()
     REGISTRY["i726x1"].body(Cast(world=world, me=me, ref="i726x1"))
     plain = speed(world, me)
     charged = speed(world, me, {"charge": True})
@@ -26498,9 +26618,11 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
              " -- `actions._charges` asks before the charge exists, which is"
              " why this row needs the context key and not the state",
              f"{charging(world, me)}")
-    out.that(charged == plain + 1,
-             "and its speed is one higher for a charge's measurement only",
-             f"{plain} -> {charged}")
+    out.that(premium() == before + 1,
+             "and its speed is one higher for a charge's measurement only"
+             " -- the row's own square, over whatever the board already had",
+             f"premium {before} -> {premium()} (plain {plain}, charged"
+             f" {charged})")
 
     # -- the two faults the old shape of i726x1 had ----------------------
     #
@@ -26514,18 +26636,18 @@ def a_creature_in_the_middle_of_a_charge(out: Result) -> None:
             world.effects.end(eff, "drivers: back to the humanoid")
     out.that(not in_beast_form(world, me),
              "out of beast form again")
-    out.that(speed(world, me, {"charge": True}) == plain,
+    out.that(premium() == before,
              "and the bonus is gone -- the old shape kept paying for the"
              " rest of the fight once the shape had been taken",
-             f"{speed(world, me, {'charge': True})} want {plain}")
+             f"premium {premium()} want {before}")
 
     c.effect(BEAST, on=me, until=When.ENCOUNTER)
     c.effect(BEAST, on=me, until=When.ENCOUNTER)
-    out.that(speed(world, me, {"charge": True}) == plain + 1,
+    out.that(premium() == before + 1,
              "and shaping twice is still worth one square, not two -- two"
              " untyped bonuses stack, so the old shape gave +2 to a druid"
              " that shifted out and back",
-             f"{speed(world, me, {'charge': True})} want {plain + 1}")
+             f"premium {premium()} want {before + 1}")
 
     for ref in ("m5084a0", "i1515x1", "i726x1"):
         out.that("charging" not in str(REGISTRY[ref].unfinished),
@@ -28484,6 +28606,11 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "size_order": (
+        a_size_comparison_reads_the_order,
+        "a size comparison goes through Size.order, not the string enum"
+        " (#817)",
+    ),
     "milestones": (
         milestones_carry_across_a_day,
         "a milestone counted across a day, and the seven rows that read it"

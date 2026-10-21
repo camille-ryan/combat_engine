@@ -37,6 +37,7 @@ from combat_engine.engine import (
     DamageType,
     Hit,
     Keyword,
+    PowerRecharged,
     PowerUsed,
     SecondWind,
     Trigger,
@@ -252,12 +253,40 @@ def f1858(c: Cast) -> None:
 
 
 @power("f1991", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("feat.category",))
+       reach=PERSONAL, target=SELF)
 def f1991(c: Cast) -> None:
-    """A damage bonus while raging that grows with how many nearby
-    allies have taken a feat of a particular category. `c.feat(ref)`
-    asks about one feat by ref; nothing groups feats into the families
-    the prerequisite lines name."""
+    """+1 to damage rolls while raging, and +1 more for each nearby ally
+    holding a feat of this feat's own printed category.
+
+    **The old note was half right and the half that mattered was wrong.**
+    `c.feat(ref)` does ask about one feat by ref, but feats are not
+    ungrouped: `feat.category` is a column in `game.db` -- the bracket
+    after a printed name -- and `c.feats(category=, on=)` reads it for
+    somebody *else*, which is the half that makes "nearby allies" askable
+    rather than only "you". #692. Ten feats carry this one.
+
+    **One gated +1 per ally, not one bonus of a counted size.** The count
+    is read when the damage is rolled, not when the trait is armed, and
+    allies move; `c.bonus` takes a fixed `value`, so the live read has to
+    sit in a `when=` gate, and untyped bonuses add -- which is what makes a
+    stack of +1s come to the printed total. The *pool* is walked once at
+    arming, because who holds which feat cannot change inside a fight,
+    where who is standing within 10 squares can.
+
+    No melee narrowing and no bonus type, both as printed: the card says
+    "damage rolls" and puts no word in front of "bonus".
+    """
+    c.bonus("damage", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx: in_rage(c))
+    for mate in c.allies():
+        if not c.feats(category="Tribal", on=mate):
+            continue
+        c.bonus(
+            "damage", 1, on=c.me, until=When.ENCOUNTER,
+            when=lambda ctx, who=mate: (
+                in_rage(c) and who in c.within(10, side="ally")
+            ),
+        )
 
 
 @power("f2296", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -581,13 +610,37 @@ def f1843(c: Cast) -> None:
     """
 
 
-# -- an event nothing emits ------------------------------------------------
+# -- the event the bus now carries -----------------------------------------
 
 
 @power("f1992", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("events.Recharged",))
+       reach=PERSONAL, target=SELF)
 def f1992(c: Cast) -> None:
     """A damage bonus against an adjacent enemy that recharges a power.
-    `actions.recharge` rolls the die and puts the row back silently --
-    it emits nothing at all, so the moment this feat turns on is not
-    one the bus ever mentions."""
+
+    **The premise was true when this was written and is not now.** The
+    note said `actions.recharge` puts the row back silently; `#605` minted
+    `PowerRecharged` and emits it on *both* recharge paths, and the event
+    carries `actor`, `ref` and `rolled`, which is everything this needs.
+    `m6180a3` watches it the same way.
+
+    `ev.rolled` is the printed "at the start of its turn". The die is
+    rolled by `actions.recharge`, which `policy.take_turn` calls before
+    the creature acts, and it is reported as the number that brought the
+    row back; `triggers.Triggers` restores a row whose printed *condition*
+    fired at any other moment and reports 0. Without that gate the feat
+    would pay on a mid-round condition recharge, which the card does not
+    print.
+    """
+    step = 2 + (c.level >= 11) + (c.level >= 21)
+
+    def boost(ev: PowerRecharged) -> None:
+        foe = ev.actor
+        if not ev.rolled or foe not in c.enemies() or not c.adjacent(foe):
+            return
+        c.bonus(
+            "damage", step, on=c.me, until=When.EONT,
+            when=lambda ctx: ctx.get("target") == foe,
+        )
+
+    c.watch(PowerRecharged, boost, until=When.ENCOUNTER, on=c.me, label=c.ref)

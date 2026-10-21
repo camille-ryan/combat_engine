@@ -578,10 +578,9 @@ def shair_element(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("spec.feat_ref()",),
 )
 def shair_familiar(c: Cast) -> None:
-    """The sha'ir has a familiar, which is the whole of it in a fight.
+    """A familiar. The bonus feat that says so is written but not landed.
 
     A dozen wizard rows open with `pet = c.familiar()` and return when
     there is none, and nothing in the tree has ever put one on the board --
@@ -589,16 +588,58 @@ def shair_familiar(c: Cast) -> None:
     `c.call_companion` relocates rather than accumulates, so arming the
     trait twice is still one familiar.
 
-    **The bonus feat's ref is dropped.** The card names the feat in prose
-    and the spec prints no id, so there is nothing for `c.feat` to be
-    handed; what the feat *does* -- you have a familiar -- is written
-    above, and the choice of which one is a species the engine does not
-    model.
+    **The bonus feat is granted now, and the old note's premise is
+    false twice over.** It said the spec prints no id: the spec prints
+    `f738`, which is #628/#340's ETL residual repaired -- and `f738` is a
+    declared row. And it said the only thing the feat does is already
+    written above, which is the half that is true of its *first* sentence
+    and not of its second: `f738` also carries the familiar-feat chain's
+    defence rider, and that rider never armed for a sha'ir because the
+    character did not hold the row that lays it.
 
-    The power replacement is an extended-rest action with no combat
-    consequence, so it is not a clause this row is missing.
+    `c.grant_row` is what hands it over, and its own docstring settles the
+    ordering worry: `turns.arm_traits_of` re-reads between passes, so a
+    trait granted during arming is armed. **After `c.call_companion`**,
+    because `f738`'s body reads `c.familiar()` and lays its bonus on the
+    creature it finds -- granted first, the rider would land on nobody.
+
+    **It moves all seven replay fixtures, and it moves them by insertion
+    only.** Measured against the recorded logs with effect ids and event
+    references normalised out, which is the comparison that decides it:
+
+        every fixture   +4 events, 0 removed, party byte-identical
+        level-3-full    +6, because `f1288` inserts two of its own
+
+    The four are the grant's `EffectApplied`, `f738` arming
+    (`PowerUsed`/`PowerResolved`, `rolls=[]`), and its expiry. **No
+    `AttackRolled`, `DamageRolled`, `DamageApplied` or `SavingThrow` figure
+    moves in any of the seven**, and nothing present in a recorded log is
+    absent from the new one.
+
+    A first pass read this as the dice moving in five of the seven and held
+    the grant back for it. That was a measurement artefact: the diff
+    normalised `effect=\\d+` but **not** the effect ids printed inside a
+    label (`e74[...]` -> `e75[...]`) or the event references a trigger
+    carries (`Miss#338` -> `Miss#339`), both of which the inserted event
+    bumps by one for the whole rest of the log. Those re-numberings aligned
+    as `replace` blocks and every figure inside them was identical.
+    Comparing the event *multisets* under the right normalisation is what
+    tells a renumbering from a real move; a line-diff cannot.
+
+    `replay._drawn`'s "**under which a real regression could ride in
+    unseen**" is satisfied rather than waived: an insertion-only re-record
+    with an identical party is the case it was written to permit.
+
+    `c.grant_row` goes **immediately below `c.call_companion`** -- the order
+    matters, since `f738`'s body reads `c.familiar()` and lays its bonus on
+    the creature it finds, and granted first the rider lands on nobody.
+
+    What is *not* a clause this row is missing: "which familiar" is a species
+    the engine does not model, and the power replacement is an extended-rest
+    action with no combat consequence.
     """
     c.call_companion(kind="familiar", speed=6)
+    c.grant_row("f738")
 
 
 @power(

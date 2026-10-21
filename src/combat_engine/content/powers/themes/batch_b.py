@@ -963,13 +963,34 @@ def _my_save_failed(world: World, me: int, ev: SavingThrow) -> bool:
     keywords=MARTIAL,
     trigger="you fail a saving throw",
     on=Trigger(SavingThrow, _my_save_failed, "you fail a saving throw"),
-    todo=("c.unsave(succeed=)",),
 )
 def p14211(c: Cast) -> None:
-    """`c.unsave` turns a success into a failure and there is no other
-    half: nothing anywhere writes `saved = True`. Spending the surge
-    without the success would be a row that plays and only costs."""
-    ...
+    """The surge buys the success, and the write is `c.unsave`'s own door
+    read the other way.
+
+    **"Nothing anywhere writes `saved = True`" was false when it was
+    written.** `durations.save` announces the throw and then reads it back
+    -- `saved = rolled.saved`, and the effect ends if it is True -- which
+    is the whole of what `c.unsave` sets `ev.saved = False` through. Ten
+    content rows already write the success direction; `p4063` is the
+    nearest.
+
+    A declared `on=Trigger(...)` reaches it as surely as a `c.watch` does.
+    `triggers.WINDOW_OF` puts an `action=NONE` row with a printed Trigger
+    in `Window.AFTER`, and `Bus.emit` runs that window before it returns
+    the event -- so the body runs inside the emit `durations.save` is
+    still waiting on, and `c.trigger` is that live event.
+
+    **The surge is paid first and the success only follows if it was.**
+    Flipping first would hand a character with no surges left a free save.
+    Nothing refuses the *offer* for want of one -- the card prints no
+    Requirement -- so that is the one way this can cost its encounter use
+    and pay nothing, and it is what the page says.
+    """
+    ev = c.trigger
+    if ev is None or not c.spend_surge(on=c.me):
+        return
+    ev.saved = True
 
 
 # ==========================================================================

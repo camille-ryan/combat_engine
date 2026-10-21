@@ -50,6 +50,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.feats.paladin import _shaken_off
 from combat_engine.content.features.warlock import FELL
 from combat_engine.content.powers.druid.forms import in_beast_form
 from combat_engine.content.powers.monk.level_0 import FLURRIES
@@ -1420,6 +1421,26 @@ def i1825x1(c: Cast) -> None:
     `c.bonus("range", ...)` -- which the old marker pointed at -- is the
     wrong lever: it lengthens a row's own printed range line, which p6855
     already gets right.
+
+    **The marker is right about the obstacle and wrong about the answer,
+    and the answer is one line in another file.** This tree does not teach
+    a modifier to reach a literal; it teaches the laying row to *read a
+    raise*. #715 settled it -- "the answer is for the laying row to READ a
+    raise rather than for this one to reach into it, which is what
+    `c.change_amount` / `c.amount_for` has always been for" -- and
+    `i1986p1`, this row's own sibling, is written exactly that way.
+
+    So the finished shape is: `p6855` asks
+    `c.within(c.amount_for(SPREAD, 3), of=victim, side="enemy")` and this
+    row adds `c.change_amount(SPREAD, 5, on=c.me, until=When.ENCOUNTER)`
+    beside the bonus below. `amount_for` takes the largest, so the printed
+    3 and the raised 5 coexist, and the ordering is not a trap here -- this
+    is a standing trait and `p6855` reads the amount when its body runs,
+    which is the half `i1986p1` had to declare a trigger for.
+
+    Not written because `p6855` lives in `powers/warlock/level_1_c.py`,
+    which this wave did not own. The marker stays naming the symbol that
+    does not exist, rather than being re-pointed at a verb that does.
     """
     me = c.me
 
@@ -2582,13 +2603,54 @@ def i2610p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.RADIANT],
-    todo=("query.lit_by(world, ref)",),
 )
 def i2612p1(c: Cast) -> None:
-    """Re-aimed. `p1225` is printed and declared, so the ref is no longer
-    the hold. The whole row measures the radius that row lights -- which
-    square is lit, and for how long -- and nothing on the board is lit or
-    unlit. Same hold as `i630p2` and `i1533p1`."""
+    """**The old note was wrong that nothing on the board is lit or unlit,
+    and wrong about both siblings it named.** The board has recorded
+    lighting since #685/#686: `query.light_level` is the reader, a carried
+    radius is a `light_radius` modifier, and `i1533p1` (above) and `i630p2`
+    (below) each *lay* one.
+
+    `c.total("light_radius")` rather than the literal, and read inside the
+    handler rather than closed over: the card says "within the radius of
+    the light", so a feat or a second source that widens the light widens
+    the burn, and the two numbers cannot drift apart.
+
+    **`query.light_level` is the wrong reader here**, which is worth saying
+    because it is the obvious one. It answers `BRIGHT` for every square on
+    a board nobody has darkened -- deliberately, so the attack path's light
+    term costs nothing -- so a burn gated on "is this square lit" would
+    cook every undead on every map. The question is the *radius*, not the
+    level.
+
+    The light itself is laid here. The printed Requirement is that the
+    spell is on **this staff**, and a staff is carried, so the staff's
+    light is a radius on the wielder -- `i1533p1`'s shape exactly. It is
+    laid rather than read because `p1225` is declared `out_of_combat` with
+    a `c.note` and sheds nothing; **if `p1225` is ever given its own
+    `c.light`, this line must go**, since two carried radii add and the
+    light would double.
+
+    `ev.ghost` is skipped the way `m6367a0`'s own turn watcher skips it: a
+    dead creature's turn is ticked so durations can reach their end, and
+    nothing should be burned on it.
+    """
+    me = c.me
+    # p1225's printed radius, which is the one thing about the spell this
+    # card borrows.
+    c.light(4, on=me, until=When.ENCOUNTER)
+    burn = c.enhancement
+
+    def dawn(ev: TurnStart) -> None:
+        who = ev.actor
+        if ev.ghost or who == me or not c.is_kind("undead", on=who):
+            return
+        radius = c.total("light_radius")
+        if radius and c.distance(who) <= radius:
+            c.flat(burn, dtype=DamageType.RADIANT, on=who)
+
+    c.watch(TurnStart, dawn, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} glare")
 
 
 @power(
@@ -4503,7 +4565,6 @@ def i2768x1(c: Cast) -> None:
         and not getattr(ev, "saved", True),
         "you fail a saving throw",
     ),
-    todo=("c.suspend_effect()",),
 )
 def i2796p1(c: Cast) -> None:
     """The trigger is real now -- `SavingThrow` carries `actor`, `saved`
@@ -4511,11 +4572,39 @@ def i2796p1(c: Cast) -> None:
     once-per-encounter row answering a failure is the printed "first"
     closely enough.
 
-    The payout is still missing. `c.ignore_condition` is the near
-    neighbour and suppresses a *condition* without ending it, but
-    `against` is a label and nothing reads back which conditions or
-    which burn an effect is carrying, so "that effect does not affect
-    you" cannot be aimed at the one that was failed."""
+    **The payout is written, and both halves of the old note were wrong.**
+
+    *Aiming at the hold that was failed.* `against` is not a bare label:
+    `durations.save` sets it to `str(eff)`, which opens with the effect's
+    own id, so the hold is findable again and the window is early enough
+    that it is still live. `feats.paladin._shaken_off` is that read and is
+    imported rather than copied -- one parser for one format.
+
+    *Lifting it without ending it.* `Effects.suspend`/`resume` is the pair
+    and `c.suspend_effect` was the wrong thing to wait for; `p16414` is the
+    same operation written out and its docstring argues the verb choice.
+    `c.end_effect` would be wrong twice here: the card says the effect
+    comes back, and ending a save-ends hold would stop it owing the throws
+    it still owes. A suspended effect keeps being saved against -- nothing
+    in `durations` skips one -- which is what makes the suppression a
+    reprieve rather than a cure.
+
+    The resumption hangs on a bookkeeping hold clocked at the printed
+    moment, `p16414`'s shape. A hold that ended on its own in the meantime
+    is skipped by `resume`, which refuses an ended effect.
+
+    The second printed sentence -- a changing effect not counting as the
+    first failure -- is the card narrowing which throw triggers this, and
+    `usage=ENCOUNTER` is already stricter than it: one firing a fight,
+    whatever changes.
+    """
+    hold = _shaken_off(c, getattr(c.trigger, "against", "") or "")
+    if hold is None:
+        return
+    if not c.world.effects.suspend(hold, f"{c.ref} shrugged it off"):
+        return
+    clock = c.world.effects.apply(c.me, c.me, When.EONT, label=f"{c.ref} respite")
+    clock.on_end.append(lambda: c.world.effects.resume(hold))
 
 
 @power(

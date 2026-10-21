@@ -114,6 +114,7 @@ from combat_engine.engine.query import (
     enemies,
     has_combat_advantage,
     is_,
+    is_trap,
     squares,
     team,
 )
@@ -1283,6 +1284,24 @@ def m1526a2(c: Cast) -> None:
             return
 
 
+_M1526_SPRUNG = "a trap within 2 squares of it is triggered"
+
+
+def _trap_sprung_within_two(world: World, me: int, ev: AttackDeclared) -> bool:
+    """A trap going off **is** its attack, so there is no second event to wait
+    for and `events.TrapTriggered` was the wrong thing to ask for.
+
+    `terrain.dress` sets `Trap.sprung` and rolls the plate's attack in one
+    breath, with the trap itself as the attacker -- so the only moment a trap
+    announces anything is the `AttackDeclared` that comes out of
+    `resolve.attack`. `p14166` reads the same moment the same way. #74.
+    """
+    return (
+        is_trap(world, ev.attacker)
+        and distance_between(world, me, ev.attacker) <= 2
+    )
+
+
 @power(
     "m1526a3",
     level=6,
@@ -1290,12 +1309,18 @@ def m1526a2(c: Cast) -> None:
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=PERSONAL,
     target=NO_TARGET,
-    trigger="a trap within 2 squares of it is triggered",
-    todo=("events.TrapTriggered",),
+    trigger=_M1526_SPRUNG,
+    on=Trigger(AttackDeclared, _trap_sprung_within_two, _M1526_SPRUNG),
 )
 def m1526a3(c: Cast) -> None:
-    """No event announces a trap being triggered, so the window this shift
-    answers never opens."""
+    """An interrupt, so the shift lands before the plate rolls -- which is
+    the whole of what the card buys and why the action column matters here.
+
+    The trap, not the creature: `m1526`'s block repeats its own ref for the
+    plate throughout (see this file's header), and `is_trap` is what tells
+    the two apart without the word.
+    """
+    c.shift(2)
 
 
 @power(

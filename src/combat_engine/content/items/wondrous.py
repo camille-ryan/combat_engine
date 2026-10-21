@@ -78,6 +78,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    Moved,
     PowerResolved,
     PowerUsed,
     Ranged,
@@ -2556,7 +2557,6 @@ def i3068p1(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION],
-    dropped=("i3111p1.hit_rider",),
 )
 def i3111p1(c: Cast) -> None:
     """The d8 table modifies a base creature, and the base is `m3111c0`.
@@ -2564,27 +2564,46 @@ def i3111p1(c: Cast) -> None:
     Before the block was importable this hand-built a 1-hit-point Tiny
     `Summon` and the printed AC 18, the three non-AC defences and the
     `+6 vs AC` attack were simply absent -- so five of the eight faces had
-    nothing to modify. Now the creature is a real row and the faces that
-    are **properties of the creature** all land: a fly speed, darkvision,
-    not provoking, a flat attack bonus, a climb speed.
+    nothing to modify. Now the creature is a real row and every face lands.
 
-    Still dropped, and it is now one clause rather than five: faces 3, 5
-    and 8 change what the creature's *hit* does -- prone, extra poison,
-    ongoing poison -- which is a rider on somebody else's attack row
-    (`m3111c0a0`), and nothing scopes a hit rider onto another creature's
-    row. That is a different gap from the missing block and gets its own
-    symbol, per "one marker names one gap".
+    **The last three were not a missing facility.** The note here said
+    nothing scopes a hit rider onto another creature's row; `c.watch` takes
+    `on=`, and the subscription is owned by the effect laid on *that*
+    creature, so it lapses with the conjuration and needs no unwiring.
+    Three battlemind rows already watch somebody else's `Hit` that way.
+    `Hit` carries both ends, so `ev.attacker == made` is the scope -- the
+    beast's own attack row and not every hit on the board.
+
+    Face 5 wants no watcher at all. A typed `c.bonus("damage", ...)` rider
+    is carried as its own part of the blow (`resolve.deal_damage`), which
+    is what "also deals 2 poison damage" means on a creature whose own
+    damage is untyped: the two points meet a poison resistance and the
+    other four do not.
     """
     roll = c.roll("1d8")
     made = _conjured(c, "m3111c0", surge=False)
     if not made:
         return
+
+    def rider(ev: Hit) -> None:
+        if ev.attacker != made:
+            return
+        if roll == 3:
+            c.prone(on=ev.target)
+        else:
+            c.ongoing(1, DamageType.POISON, on=ev.target)
+
     if roll == 1:
         c.mode("fly", 6, on=made, until=When.ENCOUNTER)
     elif roll == 2:
         c.darkvision(on=made, until=When.ENCOUNTER)
+    elif roll in (3, 8):
+        c.watch(Hit, rider, until=When.ENCOUNTER, on=made, label=c.ref)
     elif roll == 4:
         c.no_provoke(on=made, until=When.ENCOUNTER)
+    elif roll == 5:
+        c.bonus("damage", 2, on=made, until=When.ENCOUNTER,
+                dtype=DamageType.POISON)
     elif roll == 6:
         c.bonus("attack", 1, on=made, until=When.ENCOUNTER, kind="untyped")
     elif roll == 7:
@@ -3028,26 +3047,63 @@ def i3352x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.shift_through_enemies()",),
+    dropped=("c.may_enter(kind=)",),
 )
 def i3441x1(c: Cast) -> None:
-    """Dropped, and re-aimed off `c.move_through_enemies()`, which is three
-    different sentences in the tree. This one is a **standing permission on
-    the mover** and there is nothing to lay it on: `share=True` is a
-    permission on one *step*, passed by whoever calls `movement.shift`, and
-    `movement._occupied` consults only the occupant's `shares_space` -- so a
-    property cannot change what a shift the player chooses later is allowed
-    to do. `c.overrun` is a trample, which this card does not print, and
-    `c.phasing` goes through walls rather than through people. Without the
-    movement the acid damage has no trigger either.
-
-    The escape bonus is written and is not a skill bonus: `escape.attempt`
-    sums an `escape` key off the struggling creature -- deliberately not
+    """The escape bonus is not a skill bonus: `escape.attempt` sums an
+    `escape` key off the struggling creature -- deliberately not
     `skill:acrobatics`, because a bonus to getting out of a grab is not a
     bonus to tumbling -- which is exactly "skill checks made as part of the
-    escape action"."""
+    escape action".
+
+    **The old note missed the verb and the new marker is narrower.** It
+    refused `c.shares_space` (the occupant's side of the question, which
+    would open this character's own square to the board), `c.overrun` (a
+    stated move, which this card does not print) and `c.phasing` (walls,
+    not people), all correctly, and then concluded nothing fits. The
+    mover's own standing permission is `c.may_enter` (#626), read by
+    `movement._clear` for every square of a path -- and since #684
+    `Cast.shift` walks its path, so it governs a shift too. `i2137x1`'s
+    docstring records making this exact mistake.
+
+    What is still missing is one word of narrowing. The card permits a
+    *shift* through an enemy's space; `may_enter` is a permission on
+    movement of any kind, and nothing can narrow it to one kind: the
+    context it gates on carries `mover` and `occupant` and no word for how
+    the creature is travelling, and `_clear` takes no `kind`. A `when=`
+    reading a flag set at `MoveStart` would be worse than wrong -- the
+    shift's options are computed by `reachable_paths` *before* `MoveStart`
+    fires, so the gate would be False exactly when the move is being
+    offered and the row would audit green and never work. So the
+    permission is laid as written and reads one word wider than the page.
+
+    The acid half is narrowed properly, because `Moved` carries `kind_`
+    where `EnterSquare` does not: one `Moved` per step of the walked path,
+    so an intermediate square of a multi-square shift is a moment this can
+    happen in. `grid.place` never overwrites an occupant, so the enemy is
+    still the indexed occupant of the square the mover has just stepped
+    into -- which is why `occupant(ev.to)` answers the enemy and not the
+    mover, and why the `who == c.me` guard is what covers the ordinary
+    empty square. `Moved.to` is the mover's anchor square, so a Large
+    wielder entering an enemy's space on a flank square of its footprint
+    would not pay; every wielder of this is Medium.
+    """
     c.set_origin("elemental", until=When.ENCOUNTER)
     c.bonus("escape", 5, on=c.me, until=When.ENCOUNTER, kind="item")
+    c.may_enter(side="enemy", on=c.me, until=When.ENCOUNTER)
+
+    def crossed(ev: Moved) -> None:
+        if ev.actor != c.me or ev.kind_ != "shift":
+            return
+        who = c.world.grid.occupant(ev.to)
+        if who is None or who == c.me or who not in c.enemies():
+            return
+        if c.latched(c.ref, per_turn=True):
+            return
+        c.latch(c.ref, per_turn=True)
+        c.flat(5, dtype=DamageType.ACID, on=who)
+
+    c.watch(Moved, crossed, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(

@@ -1211,7 +1211,7 @@ def i2208p1(c: Cast) -> None:
 
 @power("i2208p2", level=7, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(40), target=NO_TARGET, keywords=[Keyword.ILLUSION],
-       dropped=("c.zone(ends_on=)",))
+       dropped=("actions.touch()",))
 def i2208p2(c: Cast) -> None:
     """The illusion stands on the board as a conjuration, sustained by a
     minor.
@@ -1236,11 +1236,38 @@ def i2208p2(c: Cast) -> None:
     first of the two printed pops, and it is the one that needed an engine
     change (#714).
 
-    Still dropped: the other pop, a creature touching it or entering its
-    space. That is `c.zone(ends_on=)` and a different mechanism -- the
-    illusion occupies no square it could be entered through until a zone
-    is laid over it.
+    **The third pop is written, and `c.zone(ends_on=)` was a marker read
+    off a stale component docstring.** The old note here said the illusion
+    "occupies no square it could be entered through until a zone is laid
+    over it". `c.conjure`'s own docstring says the opposite and says why:
+    claiming the square always was the old behaviour, which made "when an
+    enemy enters its space" permanently false, and `solid=True` is now
+    what a wall of fire passes. This row conjures with the default, so its
+    square is enterable, `EnterSquare` fires for whoever steps in, and no
+    zone is wanted. `p13331` is the sibling doing exactly this, comparing
+    `ev.square` to the conjuration's own `Position`.
+
+    Ending it needs nothing new either: the hold whose id sits in
+    `Conjuration.effect` is the thing's life, which is the same bridge the
+    sustain half above already crosses.
+
+    **The illusion is excluded from its own watch**, which is load-bearing
+    rather than tidy: the sustain walks it ten squares, every step of that
+    emits `EnterSquare` for the illusion into the square it is arriving in,
+    and without the test the first sustain would pop the thing it was
+    sustaining.
+
+    The watch outlives the illusion and is inert once it is gone, rather
+    than being hung on the conjuration's own `When.SUSTAIN` -- a second hold
+    at that duration would print a second sustain cost the card does not.
+
+    Still dropped: "until a creature touches it". There is no action in the
+    menu by which a creature touches a thing, and adjacency is not it --
+    anything walking past would pop an illusion whose whole job is to be
+    approached.
     """
+    from combat_engine.engine.events import EnterSquare
+
     where = _free_near(c, of=c.me)
     if where is None:
         return
@@ -1253,10 +1280,18 @@ def i2208p2(c: Cast) -> None:
         c.move(10, who=illusion)
 
     conj = c.world.get(illusion, Conjuration)
-    c.on_sustain(
-        c.world.effects.live.get(conj.effect) if conj is not None else None,
-        drift,
-    )
+    hold = c.world.effects.live.get(conj.effect) if conj is not None else None
+    c.on_sustain(hold, drift)
+
+    def entered(ev: EnterSquare) -> None:
+        if ev.actor == illusion or hold is None or hold.ended:
+            return
+        pos = c.world.get(illusion, Position)
+        if pos is None or ev.square != pos.square:
+            return
+        c.world.effects.end(hold, f"{c.ref}: a creature entered its space")
+
+    c.watch(EnterSquare, entered, until=When.ENCOUNTER, label=f"{c.ref} entered")
 
 
 @power("i3469x1", level=8, cls=ITEM, action=ActionType.NONE,

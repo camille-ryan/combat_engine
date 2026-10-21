@@ -1644,15 +1644,45 @@ def m5848a1(c: Cast) -> None:
     keywords=[Keyword.CHARM],
     requires=_has_been_hurt,
     requires_text="must have taken damage this encounter",
-    dropped=("c.untargetable()",),
+    dropped=("c.spend_action(who, cost)",),
 )
 def m5848a2(c: Cast) -> None:
     """A plain "+5 power bonus" against close and area attacks only, so the
     bonus is gated on the reach of whatever rolls it.
 
-    "Enemies think it is dead and cannot attack it without an Insight check"
-    is the clause with nowhere to go: nothing bars a creature from being a
-    target, and a check that unlocks one would need that first.
+    **The refusal is written, and the old note was wrong that nothing bars a
+    creature from being a target.** `m5746a3` in this file writes "cannot be
+    attacked" as one `AttackDeclared` watch in `Window.BEFORE` -- cancel
+    there and nothing is rolled and no rider fires -- and its docstring says
+    why the watch beats a `c.cannot_attack(on=foe, against=me)` per enemy:
+    the per-enemy spelling covers whoever is standing there now and misses
+    anything that arrives afterwards.
+
+    Narrower here than there, in two ways the card insists on.
+
+    **The reach gate is the complement of the bonus's**, not a melee/ranged
+    allow-list. One printed sentence partitions every attack -- close and
+    area ones get the +5, melee and ranged ones get the bar -- so writing
+    the bar as `not in _SPREADING` is what keeps the two halves from ever
+    disagreeing. An allow-list reads the same on any declared row and
+    differs on one the registry does not hold, where `_reach_kind` answers
+    `""`: it would let that attack through while the bonus also declined to
+    apply, which is neither half of the card.
+
+    **"An enemy cannot"**, so the attacker's side is asked. That is what
+    keeps a trap out of it -- a plate `terrain.arm` lays carries no `Side`
+    at all, so it is nobody's enemy and is not a creature that can be
+    fooled into thinking anything.
+
+    One Insight check per enemy, latched: the card unlocks that enemy, not
+    the fight, and a creature that saw through it does not have to see
+    through it again on its next swing.
+
+    Still dropped: the check costs the enemy a minor action and nothing
+    charges one creature for another's action -- `c.spend_action(who, cost)`,
+    the symbol `m4323a0` already waits on. So the roll happens when the
+    attack is declared, for free, which is a real and stated looseness: an
+    enemy with no minor left gets the check anyway.
     """
     _recharge_when_using(c, "m5848a3")
     c.prone(on=c.me)
@@ -1660,6 +1690,26 @@ def m5848a2(c: Cast) -> None:
         c.bonus(
             defence, 5, on=c.me, until=When.SONT, kind="power", when=_spreading_blow
         )
+
+    me, ref = c.me, c.ref
+    convinced: set[int] = set()
+
+    def looks_dead(ev: AttackDeclared) -> None:
+        if ev.target != me or ev.attacker in convinced:
+            return
+        if _reach_kind(getattr(ev, "power", "")) in _SPREADING:
+            return
+        if ev.attacker not in enemies(c.world, me):
+            return
+        if c.check("insight", 20, who=ev.attacker, against=me):
+            convinced.add(ev.attacker)
+            return
+        ev.cancel(f"{ref}: it looks dead")
+
+    c.watch(
+        AttackDeclared, looks_dead, until=When.SONT, on=me,
+        window=Window.BEFORE, label=f"{ref} looks dead",
+    )
 
 
 @power(

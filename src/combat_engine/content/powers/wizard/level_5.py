@@ -788,11 +788,26 @@ def p4078(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.SUMMONING],
-    todo=("cf:wizard-expert-mage",),
+    todo=("spec.summon_block()",),
 )
 def p13984(c: Cast) -> None:
-    """Which creature is summoned is read off the caster's Expert Mage
-    benefit, and that class feature is not in the tree -- so there is no
-    block for `summon=` to declare and nothing for `c.summon_inline` to
-    place. Everything else on the card is the standard summoning rules the
-    engine already applies to a `summon=` line."""
+    """**Re-aimed: the class feature landed and was never the whole of
+    it.** The old note said the feature the summon is read off is not in
+    the tree. `cf:wizard-mage-f4` and `cf:wizard-mage-f4s0`..`s5` are all
+    in `class_feature` now and all seven are declared rows in
+    `features/arcanist.py`, so that premise is false -- #581, #584, #585.
+
+    What stops the row is the source. The spec is 1145 characters of
+    effect paragraph and an errata line and prints **no stat block for
+    either creature it can summon**: no defences, no hit points, no size,
+    no speed, no attack. `c.summon` wants a ref and `c.summon_inline`
+    wants a `Summon` built from a block, and there is neither -- so
+    nothing can be put on the board and the clause that costs a surge when
+    it drops has nothing to drop. `p16026` is the same hold under the same
+    symbol.
+
+    Behind that, and smaller: which of the two creatures arrives branches
+    on which `f4sN` the character holds, so it is a body branch on
+    `c.summon_inline(spec, at=)` rather than a `summon=` header line.
+    Nothing to write until there is a block to branch between.
+    """

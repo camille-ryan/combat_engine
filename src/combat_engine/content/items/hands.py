@@ -931,7 +931,7 @@ def i806x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a weapon attack, before you deal damage",
        on=Trigger(Hit, by_me, "you hit with a weapon attack"),
-       dropped=("c.strip_resistance()",))
+       dropped=("c.ignore_resistance(save_ends_on=)",))
 def i806p1(c: Cast) -> None:
     """Re-aimed, and now it plays. "Reduce the resistance the target has
     **against your attack**" is an ignore read off the attacker, and
@@ -942,10 +942,24 @@ def i806p1(c: Cast) -> None:
     strips the resistance for everybody. A negative gated resist does
     nothing at all -- `deal_damage` clamps that term at zero.
 
-    Dropped: the printed hold is "(save ends)" on the target, and an
-    ignore lives on the attacker, where a save-ends clock would be the
-    wrong creature rolling. It runs to the end of the turn instead, which
-    is the attack the power is used for."""
+    **The marker said `c.strip_resistance()` and that named the wrong
+    gap.** Stripping resistance is written, twice over. What is still
+    dropped is the clock: the printed hold is "(save ends)" on the target
+    while the ignore is a `Mod` on the *attacker*, and
+    `durations.save` reads `eff.owner` for all three of the saver, the
+    save bonus and the `SavingThrow` it announces -- so a `SAVE_ENDS`
+    duration here would have the attacker rolling to end its own benefit.
+    `Effect.clock` can be reassigned to the target and that moves only
+    *when* the throw is taken, not whose it is.
+
+    `p2919` is the near miss worth not copying: it carries a save-ends
+    hold for somebody else by laying a **relation** on the target, which
+    works because a relation is directional. A `Mod` is not -- it is read
+    off the creature it sits on -- so the ignore cannot move to the target
+    and the trick does not transfer.
+
+    So it runs to the end of the turn instead, which is the attack the
+    power is used for."""
     foe = _foe(c)
     if foe is None:
         return

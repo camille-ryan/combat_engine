@@ -1355,7 +1355,9 @@ def p16059(c: Cast) -> None:
     **Measured as adjacency**, which is reach 1 and so right for all but
     a reach weapon; `movement._threat` is what knows better and is engine
     side. Before and after off the event's own `from_`/`to`, the way
-    `_fled_from_me` below reads a retreat.
+    `_backed_away_this_turn` below reads a retreat -- except that this one
+    really is about the step, since an opportunity window answers the
+    square being left.
 
     Still dropped: "you must make every opportunity attack you can". That
     takes the choice away from whoever is deciding, and nothing content
@@ -2186,15 +2188,36 @@ def p16019(c: Cast) -> None:
     c.see_invisible(on=c.me, until=When.ENCOUNTER)
 
 
-def _fled_from_me(world: World, me: int, ev: Moved) -> bool:
-    """An enemy that was within 10 and has moved further off than it was."""
-    if ev.actor == me or ev.actor not in query.enemies(world, me):
+def _backed_away_this_turn(world: World, me: int, ev: TurnEnd) -> bool:
+    """An enemy that began its turn within 10 of me and is ending it off.
+
+    **The turn, not the step.** `Moved` is the only event carrying where a
+    creature came from, so the obvious declaration fires on any one step
+    away -- which pays out for an enemy that walks a square back and then
+    four squares in. The square the turn began in is on the log all the
+    same: `query.since_turn_began` is bounded by this creature's own
+    `TurnStart` and skips a ghost turn, so the first `Moved` it holds for
+    the mover starts where the turn did.
+
+    Both ends are measured anchor-to-my-footprint, which is how the rest of
+    this file reads a retreat, and "farther away" is farther than it began
+    rather than farther than 10.
+    """
+    if ev.ghost or ev.actor == me or ev.actor not in query.enemies(world, me):
         return False
     mine = query.squares(world, me)
     if not mine:
         return False
-    was = min(distance(ev.from_, sq) for sq in mine)
-    now = min(distance(ev.to, sq) for sq in mine)
+    steps = [
+        past for past in query.since_turn_began(world, ev.actor)
+        if isinstance(past, Moved) and past.actor == ev.actor
+    ]
+    # An enemy that never moved has not backed away, and there is no start
+    # square to read -- so this is the guard and not merely a shortcut.
+    if not steps:
+        return False
+    was = min(distance(steps[0].from_, sq) for sq in mine)
+    now = min(distance(steps[-1].to, sq) for sq in mine)
     return was <= 10 and now > was
 
 
@@ -2208,13 +2231,16 @@ def _fled_from_me(world: World, me: int, ev: Moved) -> bool:
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL, Keyword.TELEPORTATION],
     trigger="an enemy that started its turn within 10 squares ends it farther away",
-    on=Trigger(Moved, _fled_from_me, "an enemy backs away from you"),
-    dropped=("query.distance_at_turn_start()",),
+    on=Trigger(TurnEnd, _backed_away_this_turn, "an enemy backs away from you"),
 )
 def p16020(c: Cast) -> None:
-    """The printed trigger is measured across a whole turn; `Moved` is the
-    only event carrying where the creature came from, so the row fires on
-    one step away instead of on the turn's net distance.
+    """**`query.distance_at_turn_start()` was a reader that already
+    existed.** The old note said `Moved` is the only event carrying where
+    the creature came from, so the row could only fire on one step away
+    instead of on the turn's net distance -- and the turn's first `Moved`
+    answers the same question once the log walk is bounded by the mover's
+    own turn, which is `query.since_turn_began`. `TurnEnd` is an ordinary
+    declared trigger; nineteen rows in the tree already react to one.
 
     The teleport names its square, which is how it ignores line of sight.
     """

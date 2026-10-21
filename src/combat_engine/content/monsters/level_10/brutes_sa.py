@@ -91,6 +91,7 @@ from combat_engine.engine.events import (
     Dropped,
     EffectApplied,
     Escaped,
+    ForcedMove,
     Hit,
     Moved,
     MoveStart,
@@ -1023,20 +1024,105 @@ def _on_line(c: Cast, who: int, sq: Square) -> bool:
     return any(_d(sq, s) <= 1 for s in _sq(c.world, who))
 
 
+_M2331_SPLITS = "it takes forced movement, or it drops to 0 hit points"
+_FORCED_STEP = frozenset(("push", "pull", "slide"))
+
+
+def _shoved_me(world: World, me: int, ev: Moved) -> bool:
+    """One step of a shove taken by this creature.
+
+    `movement.forced` announces `ForcedMove` **before** the shove and emits
+    no `MoveEnd` at all, so neither of those can answer "which squares has
+    it left": the first fires while it still occupies all of them and the
+    second never fires. `Moved` carries both ends of each step and its
+    `kind_` is the `Forced` word, which is what makes it the one readable
+    moment here.
+    """
+    return ev.actor == me and getattr(ev, "kind_", "") in _FORCED_STEP
+
+
+def _shove_began_at(world: World, me: int, ev: Moved) -> Square:
+    """The square this creature stood on when the shove it is taking began.
+
+    **Read off the log rather than off the step.** `ev.from_` is the start
+    of *one* square of travel, and "each square it formerly occupied" is
+    about the footprint the shove found the creature in -- so a push of 3
+    answered step by step would pay out for every square the body swept,
+    which is 15 rioters where the card gives 9. `ForcedMove` is announced
+    once per shove and bounds the walk.
+    """
+    anchor = ev.from_
+    for past in reversed(world.bus.log):
+        if isinstance(past, ForcedMove) and past.target == me:
+            break
+        if (isinstance(past, Moved) and past.actor == me
+                and getattr(past, "kind_", "") in _FORCED_STEP):
+            anchor = past.from_
+    return anchor
+
+
 @power(
     "m2331a2",
     level=10,
     usage=AT_WILL,
-    action=MOVE,
+    action=FREE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.summon(count=)",),
+    trigger=_M2331_SPLITS,
+    on=(Trigger(Moved, _shoved_me, "it is pushed, pulled or slid"),
+        Trigger(Dropped, about_me, "it drops to 0 hit points")),
 )
 def m2331a2(c: Cast) -> None:
-    """"Each square it formerly occupied now contains one m2332" splits
-    one creature into several at once -- `c.summon` makes exactly one
-    creature per call and names nowhere for the vacated footprint to
-    go."""
+    """One creature of this size leaving a square is one m2332 standing in
+    it, which is nine of them when the whole footprint goes.
+
+    **`c.summon(count=)` was never the gap.** The old note said the verb
+    "names nowhere for the vacated footprint to go", and `at=` is its
+    second parameter; the repeated call is the sanctioned shape for a row
+    that makes several at once -- `m3788a6` makes its pair that way, and a
+    hand-written walk over the squares mints no rows. `after=me` is the
+    printed "acts just after", which `c.summon` takes.
+
+    **The header was a move action with no declared trigger**, so the row
+    sat in the action menu and the card's two moments -- a shove and a
+    death -- reached nothing. Both are declared now, which is also why the
+    action is FREE rather than MOVE: nothing is spent on it.
+
+    The footprint the shove began in is read as the **translation of the
+    one it stands in now**, not from its size: `movement.step` moves
+    `pos.spans` by the step's own delta, so doing the same thing backwards
+    is exact for a creature whose footprint is not a plain square and needs
+    no size lookup.
+
+    A shove is several steps and this row answers each of them, so the
+    square is skipped when something already stands in it -- which after
+    step one is the rioter this row put there. That, with the bound
+    `_shove_began_at` gives, is what keeps a push of 3 at nine rioters
+    rather than one per square the body swept.
+
+    On a death the footprint is still standing: `resolve._check_down`
+    announces `Dropped` before `_die` lifts the body off the grid, so every
+    square the creature is about to leave is readable here and nowhere
+    later. That is also why the occupancy test lets *this* creature's own
+    squares through -- on that branch it is still in all nine of them."""
+    from combat_engine.engine.query import squares as _sq
+
+    me = c.me
+    ev = c.trigger
+    standing = set(_sq(c.world, me))
+    if not standing:
+        return
+    if isinstance(ev, Moved):
+        began = _shove_began_at(c.world, me, ev)
+        dx, dy = began[0] - ev.to[0], began[1] - ev.to[1]
+        vacated = sorted({(x + dx, y + dy) for x, y in standing} - standing)
+    else:
+        vacated = sorted(standing)
+    for sq in vacated:
+        sitting = c.world.grid.occupant(sq)
+        if sitting is not None and sitting != me:
+            continue
+        c.summon("m2332", at=sq, after=me)
 
 
 # ==========================================================================
@@ -1764,18 +1850,39 @@ def m4448a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("query.zones_near()",),
 )
 def m4448a6(c: Cast) -> None:
-    """Destroying an adjacent conjuration plays. A plain terrain zone has
-    no "near me" query the way a conjuration does -- `c.conjurations`
-    exists for the first half and nothing mirrors it for the second."""
+    """Both printed halves play, and `query.zones_near()` was a marker for
+    a reader that already existed.
+
+    The old note said a plain terrain zone has no "near me" query the way a
+    conjuration does. `c.conjurations` **is** that query for both: its loop
+    is `world.having(Zone)` followed by `world.having(Conjuration)`, and
+    `within` is measured off `zone.squares` for the first of the two. So is
+    the other end -- `c.dispel` routes a thing carrying a `Zone` to
+    `world.zones.end` and despawns a conjuration instead.
+
+    `within=1` is "in or adjacent to": `c.conjurations` measures from this
+    creature's own squares to the nearest square of the thing, so a zone
+    being stood in is 0 and one square off is 1.
+
+    **An aura is skipped, and that is not pedantry.** `c.conjurations`
+    answers with auras too -- an aura is a `Zone` carrying a radius -- and
+    the printed line names a zone or a conjuration. Left in, this creature
+    stripped the aura off every adjacent creature at the end of each of its
+    turns, which on a solo rolling one initiative per opponent is several
+    times a round."""
     me = c.me
 
     def check(ev: TurnEnd) -> None:
+        from combat_engine.engine.zones import Zone
+
         if ev.ghost or ev.actor != me:
             return
         for cid in c.conjurations(within=1, side="any"):
+            zone = c.world.get(cid, Zone)
+            if zone is not None and zone.aura is not None:
+                continue
             c.dispel(cid)
 
     c.watch(TurnEnd, check, until=When.ENCOUNTER, on=me, label=f"{c.ref} destroy")

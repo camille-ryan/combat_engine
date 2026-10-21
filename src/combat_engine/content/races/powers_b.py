@@ -78,11 +78,13 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     RelationSet,
+    SavingThrow,
     Size,
     Trigger,
     TurnEnd,
     TurnStart,
     When,
+    Window,
     about_me,
     both,
     by_charge,
@@ -95,7 +97,7 @@ from combat_engine.engine import (
     spread,
     targets_me,
 )
-from combat_engine.engine.query import bloodied
+from combat_engine.engine.query import bloodied, enemies
 
 if TYPE_CHECKING:
     from combat_engine.engine import Square, World
@@ -1373,12 +1375,59 @@ def p15842(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CHARM],
-    todo=("Effect.keywords", "c.save_disadvantage()"),
+    dropped=("Gear.carried",),
 )
 def p15845(c: Cast) -> None:
-    """The aura's whole content is a penalty on saves against charm effects.
-    An effect carries no keywords, so which save is a charm save cannot be
-    asked, and there is no way to make one roll twice and keep the lower."""
+    """Both premises of the old note are false, and the card is roll-twice,
+    not the numeric penalty that note described.
+
+    *Which save is a charm save* **is** askable. `durations.keywords_of`
+    puts the effect's keywords in the save context and on the
+    `SavingThrow` event itself, which is what #580 was for -- `f3451` reads
+    exactly this key for "a +2 bonus to saving throws against charm
+    effects".
+
+    *Roll twice and keep the lower* is `c.reroll_save(keep="worst")`: it
+    rolls a fresh d20, takes `min` with the printed natural, and recomputes
+    `saved` inline. `Window.BEFORE` because `durations.save` announces the
+    throw and then reads `rolled.saved` back off the event -- a listener
+    heard in that window changes the outcome, which is the whole reason the
+    event is announced before it is acted on.
+
+    Asked live rather than laid on whoever is standing there when the aura
+    goes up: an aura's members change every time anybody walks, and
+    `Zones.refresh` is wired to the movement events, so `zones.occupants`
+    is current at the moment of the throw. `f3291` reads a zone's
+    membership the same way and for the same reason.
+
+    "Any enemy", so the caster's own saves are untouched -- the aura is not
+    a general charm-dampener and a bard standing in it keeps its dice.
+
+    Still dropped: the Requirement and the clause that deactivates the aura
+    both turn on *playing a musical instrument*, which is ordinary kit --
+    `Gear` records weapons, a shield, armour, worn magic and ammunition and
+    has no slot for the rest, so there is no ref to ask for. Same gap and
+    same symbol as `p16442`, whose note sets it out. The consequence is
+    that the aura, once up, is never deactivated.
+    """
+    me = c.me
+    ring = c.aura(5, until=When.ENCOUNTER, on=me)
+    if not ring:
+        return
+
+    def worse(ev: SavingThrow) -> None:
+        if Keyword.CHARM not in ev.keywords:
+            return
+        if ev.actor not in enemies(c.world, me):
+            return
+        if ev.actor not in c.world.zones.occupants(ring):
+            return
+        c.reroll_save(ev=ev, keep="worst")
+
+    c.watch(
+        SavingThrow, worse, until=When.ENCOUNTER, on=me,
+        window=Window.BEFORE, label=f"{c.ref} refrain",
+    )
 
 
 # -- r66 --------------------------------------------------------------------
