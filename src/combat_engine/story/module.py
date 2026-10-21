@@ -176,9 +176,32 @@ class Affordance:
     """
 
     id: str
-    #: What trying it looks like, in the fiction. This is what the matcher
-    #: compares an intent against, so it is written for a reader rather than
-    #: as a label: "study him for signs he is hiding something", not "insight".
+    #: **The words a player would type.** This is the only thing the matcher
+    #: compares an intent against, so it is not a label ("insight") and it is
+    #: not a note to the DM either -- it is the phrasing somebody at a
+    #: keyboard would actually use, and listing two or three phrasings is
+    #: normal and helps.
+    #:
+    #: The second half of that was learnt expensively. A tavern scene ran
+    #: four beats in which **every one of eight intents matched `none`**,
+    #: including "go to bed" three times, while an affordance to leave sat
+    #: open the whole time. Its text was *"take the rooms and go, blind or
+    #: otherwise"* -- where "blind or otherwise" means whether the party
+    #: spotted the ambush waiting outside, which is a distinction the DM has
+    #: and the player does not. Nobody types that.
+    #:
+    #: Replaying those exact strings against *"go to bed, turn in, take the
+    #: room, or leave the tavern for the night"*, with nothing else changed,
+    #: took it from 0 of 4 to 3 of 4 -- and the fourth, "check outside",
+    #: correctly stayed `none`. **The matcher was right and the text was
+    #: wrong**, which is worth knowing before anyone tunes the matcher: it
+    #: scores 3 of 3 on a driver and 0 of 8 here, and the difference is the
+    #: module.
+    #:
+    #: **Transitions are the worst offenders, every time.** Ending a scene
+    #: is the thing most naturally described from outside it -- "stop asking
+    #: and let the host come to his point", "cross the last of the ground to
+    #: the well house". All five in the first chapter were written that way.
     what: str = ""
     skill: str = ""
     band: str = "moderate"
@@ -219,6 +242,25 @@ class Npc:
     knows: tuple[str, ...] = ()
     hides: tuple[str, ...] = ()
     voice: str = ""
+    #: The affordance that has to be **won** before this person is in the
+    #: scene at all. Empty means they are there from the first beat, which
+    #: is almost everybody.
+    #:
+    #: **`hides` hides facts; this hides the person**, and the gap between
+    #: those two cost a whole scene. A watcher planted in a tavern -- whose
+    #: entire function is to be noticed by a Perception check, bolt, and
+    #: lead to an ambush -- was in the cast list from beat one, so the DM
+    #: gave him a friendly speaking line in all four beats. He greeted the
+    #: party, complimented the room, and "slipped away unnoticed" three
+    #: times while remaining at the door. His `wants` said *not to be
+    #: noticed*. Nothing could act on that, because a name in the cast list
+    #: is an invitation to write them a line.
+    #:
+    #: The player's verdict was the plainest statement of the bug: *"who is
+    #: he and why do I care?"* -- which is exactly right, because the reveal
+    #: that was supposed to make him matter never fired, and he had been
+    #: chatting pleasantly for four beats before it would have.
+    unseen: str = ""
 
 
 @dataclass(frozen=True)
@@ -405,6 +447,7 @@ def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
         name=name, wants=str(raw.get("wants", "")).strip(),
         knows=lines("knows"), hides=lines("hides"),
         voice=str(raw.get("voice", "")).strip(),
+        unseen=str(raw.get("unseen", "")).strip(),
     )
 
 
@@ -547,6 +590,15 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
             f"{where}: an affordance may not be called 'none' -- the matcher "
             "uses that word for an intent that needs no roll"
         )
+    # **An `unseen` naming nothing leaves the person out of the scene for
+    # good**, silently -- the worst shape of bug this file can emit, since
+    # the scene plays and the character simply never appears.
+    for person in npcs:
+        if person.unseen and person.unseen not in seen_ids:
+            problems.append(
+                f"{where}: npc {person.name!r} is unseen until "
+                f"{person.unseen!r}, which is not an affordance here"
+            )
     beats = raw.get("max_beats", MAX_BEATS)
     if not isinstance(beats, int) or beats < 1:
         problems.append(f"{where}: max_beats must be a positive integer")

@@ -28501,6 +28501,74 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"{spoke(bt.Director(scripted=True), 16)}",
     )
 
+    # **A person who is not noticed yet is not in the prompt.** `hides`
+    # hides a fact; nothing hid a person, so a planted watcher whose whole
+    # function is to be spotted was in the cast from beat one and the DM
+    # gave him a friendly line in all four beats of a live scene.
+    lurk = mod.parse({
+        "id": "probe", "party_level": 2, "party_size": 3, "start": "bar",
+        "scenes": [{
+            "id": "bar", "kind": "roleplay", "name": "Bar", "sets": "A bar.",
+            "exits": [], "max_beats": 1,
+            "npcs": [
+                {"name": "the barkeep", "wants": "to pour"},
+                {"name": "the watcher", "wants": "not to be seen",
+                 "unseen": "look-around"},
+            ],
+            "affordances": [
+                {"id": "look-around", "what": "look around the room",
+                 "skill": "perception", "band": "easy",
+                 "win": "somebody by the door is listening", "lose": "nothing"},
+            ]}]}, Path("<driver>")).scene("bar")
+
+    hidden = bt.Playing(scene=lurk)
+    out.that(
+        [n.name for n in hidden.cast()] == ["the barkeep"],
+        "an npc who has not been noticed is not in the scene's cast",
+        f"{[n.name for n in hidden.cast()]}",
+    )
+    hidden.found.add("look-around")
+    out.that(
+        [n.name for n in hidden.cast()] == ["the barkeep", "the watcher"],
+        "and winning the affordance that finds them puts them in it",
+        f"{[n.name for n in hidden.cast()]}",
+    )
+    # **Won, not merely attempted, and asserted through `one_beat`.** The
+    # first version of this set `found` by hand, which tests the property
+    # and not the line that fills it -- so breaking "won" to "attempted"
+    # left it green. A driver has to go in by the door the bug came in.
+    class Looks(bt.Director):
+        def match(self, playing: bt.Playing,
+                  intents: list[bt.Intent]) -> dict:
+            del playing
+            return {i.slot: "look-around" for i in intents[:1]}
+
+    def after_a_roll(seed: int) -> tuple[bool, list[str]]:
+        board = tbl.lay(party, seed=seed)
+        try:
+            live = bt.Playing(scene=lurk)
+            made = bt.one_beat(live, board, actors, Looks(scripted=True),
+                               ask_human=bt.silent, party_level=2)
+            won = any(r.won for r in made.rulings if r.affordance)
+            return won, [n.name for n in live.cast()]
+        finally:
+            board.strike()
+
+    rolls = [after_a_roll(s) for s in range(40, 72)]
+    passed = [names for won, names in rolls if won]
+    failed = [names for won, names in rolls if not won]
+    out.that(
+        bool(passed) and all("the watcher" in n for n in passed),
+        "a beat that wins the roll puts them in the cast",
+        f"{len(passed)} passing roll(s) of {len(rolls)}",
+    )
+    out.that(
+        bool(failed) and all("the watcher" not in n for n in failed),
+        "while a beat that rolls and fails leaves them out",
+        f"{len(failed)} failing roll(s), "
+        f"{sum('the watcher' in n for n in failed)} revealed anyway",
+    )
+
     # The control: nothing taken runs to the cap and ends nowhere.
     table = tbl.lay(party, seed=7)
     playing = bt.play_scene(scene, table, actors, bt.Director(scripted=True),
@@ -28645,6 +28713,56 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         and "host is pouring" in dm_prompt,
         "no prompt is given the brief, the DM's included",
         f"the DM prompt carries {dm_prompt[:60]!r}",
+    )
+
+    # **The cast reaching the prompt, not just `Playing.cast()`.** The
+    # property having the right answer proves nothing about the two prompts
+    # that build their own `who` list, and those are where a watcher who
+    # should not be visible got four friendly speaking lines.
+    lurker = mod.parse({
+        "id": "probe2", "party_level": 1, "party_size": 2, "start": "bar",
+        "scenes": [{
+            "id": "bar", "kind": "roleplay", "name": "Bar", "sets": "A bar.",
+            "exits": [], "max_beats": 1,
+            "npcs": [
+                {"name": "the barkeep", "wants": "to pour"},
+                {"name": "the watcher", "wants": "not to be seen",
+                 "unseen": "look-around"},
+            ],
+            "affordances": [{
+                "id": "look-around", "what": "look around the room",
+                "skill": "perception", "band": "easy",
+                "win": "somebody is listening", "lose": "nothing"}]}]},
+        Path("<driver>")).scene("bar")
+
+    asked: list[str] = []
+
+    def tap2(role: llm.Role, messages: list[dict],
+             schema: dict | None = None) -> str:
+        del role, schema
+        asked.append(messages[-1]["content"])
+        return "The barkeep pours."
+
+    llm.chat = tap2  # ty: ignore[invalid-assignment]
+    try:
+        quiet = bt.Playing(scene=lurker)
+        bt.Director(roles=llm.ROLES).react(quiet, [], [])
+        before = asked[-1]
+        quiet.found.add("look-around")
+        bt.Director(roles=llm.ROLES).react(quiet, [], [])
+        after = asked[-1]
+    finally:
+        llm.chat = real
+
+    out.that(
+        "the watcher" not in before and "the barkeep" in before,
+        "an unnoticed npc is not in the DM's prompt at all",
+        f"{before[:90]!r}",
+    )
+    out.that(
+        "the watcher" in after,
+        "and is once the party has found them",
+        f"{after[:90]!r}",
     )
 
 

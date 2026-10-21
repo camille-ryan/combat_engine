@@ -480,6 +480,19 @@ scene can move it into `knows`, not so the model can be told to keep a
 secret. A small model given a secret and told not to tell it is one unlucky
 sample away from telling it.
 
+`affordances` is what a character can *try* here.
+
+**Write `what` in the words a player would type**, not as a label and not
+as a note to yourself. It is the only text the matcher sees. A scene once
+ran four beats with every intent unmatched -- "go to bed", three times --
+because the affordance to leave read "take the rooms and go, blind or
+otherwise", and "blind or otherwise" is a distinction the DM has and the
+player does not. Two or three phrasings separated by semicolons is normal.
+
+**Check the transitions hardest.** Ending a scene is the thing most
+naturally written from outside it, and in the first chapter converted here
+all five were wrong that way.
+
 `affordances` is what a character can *try* here:
 
     {{"id": "read-friar", "what": "study him for signs he is hiding

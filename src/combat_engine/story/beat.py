@@ -173,7 +173,24 @@ class Playing:
     spent: set[str] = field(default_factory=set)
     #: Facts the party has learnt, which later beats may refer back to.
     learnt: list[str] = field(default_factory=list)
+    #: Affordance ids actually **won**. `spent` is not the same thing -- it
+    #: includes failures, and a failed Perception does not reveal anybody.
+    found: set[str] = field(default_factory=set)
     leads_to: str = ""
+
+    def cast(self) -> tuple:
+        """Who is in the scene as far as anybody can tell.
+
+        An NPC with `unseen` set is not here until that affordance is won.
+        **Not "here but keep quiet about them"** -- withheld from the prompt
+        entirely, which is the call `Npc.hides` already makes for a fact and
+        this file keeps re-learning: a name in a cast list is an invitation
+        to write them a line, and no instruction above it outweighs that.
+        """
+        return tuple(
+            n for n in self.scene.npcs
+            if not n.unseen or n.unseen in self.found
+        )
 
     @property
     def over(self) -> bool:
@@ -440,7 +457,8 @@ class Director:
             )
         scene = playing.scene
         who = [
-            f"{n.name} -- {n.voice or 'speaking plainly'}" for n in scene.npcs
+            f"{n.name} -- {n.voice or 'speaking plainly'}"
+            for n in playing.cast()
         ]
         told = [f"The scene: {scene.seen}"]
         if who:
@@ -536,7 +554,7 @@ class Director:
             f"{n.name}: wants {n.wants}."
             + (f" Speaks {n.voice}." if n.voice else "")
             + ("" if not n.knows else " May say: " + "; ".join(n.knows))
-            for n in scene.npcs
+            for n in playing.cast()
         ]
         # `hides` is not here and never is. See `module.Npc`.
         #
@@ -684,6 +702,8 @@ def one_beat(
             beat.exit_line = beat.rulings[-1].fact
 
     playing.learnt += [r.fact for r in beat.rulings if r.won and r.fact]
+    # Won, not merely attempted: a failed Perception reveals nobody.
+    playing.found |= {r.affordance for r in beat.rulings if r.won}
 
     # -- react
     beat.reaction = director.react(playing, beat.intents, beat.rulings)
