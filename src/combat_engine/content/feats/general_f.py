@@ -45,6 +45,7 @@ from combat_engine.engine import (
     PowerUsed,
     SecondWind,
     Size,
+    TempHP,
     Trigger,
     When,
     ally_within,
@@ -530,18 +531,44 @@ def f469(c: Cast) -> None:
 
 
 @power("f470", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:bard-f1s2",))
+       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s2",))
 def f470(c: Cast) -> None:
     """Rides on the virtue that grants temporary hit points.
 
-    **Re-pointed off `TempHP.power`, which landed and is not the
-    blocker.** The event names the row that paid now -- and the row it
-    would name is `cf:bard-f1s2`'s *holder*, not `cf:bard-f1s2`, because
-    `cf:bard-f1` writes that virtue inline on its leg and nothing
-    declares the sub-option as a row of its own. So there is no ref to
-    gate on, and gating on the leg would catch every virtue it writes.
-    The missing ref is the gap.
+    **Written, and the gate names the holder on purpose.** The old note
+    here said gating on `cf:bard-f1` "would catch every virtue it writes",
+    and that is the half that is wrong: `features/leaders_sb.py`'s
+    `bard_virtue` returns at the end of its `f1s0` leg and returns again
+    unless `c.build("f1s2")`, so the row's *only* `c.temp_hp` sits inside
+    the `f1s2` branch. A `TempHP` carrying `power == "cf:bard-f1"` is
+    therefore this option paying, exactly rather than merely nearly --
+    `f1009` banked the same argument on `cf:barbarian-f1`, and it stops
+    being exact the day the feature pays a pool on a second leg.
+
+    `ev.source` is checked because the card says "when **you** grant": a
+    second bard's virtue paying an ally is not this feat, and `c.watch`'s
+    `on=` is ownership rather than a filter.
+
+    `When.EOTNT` and not `EONT`: the card carries a revision replacing
+    "your next turn" with "his or her next turn", so the clock is the
+    ally's. `once=True` is "the next damage roll". Untyped, because the
+    card prints no word in front of the bonus.
+
+    **Dropped: the feat still cannot be dealt**, and that is not a clause
+    here. Its printed prerequisite is `{"ref": "cf:bard-f1s2"}`, which
+    `chargen.meets` answers against the dealt list, and no row declares
+    the sub-option -- #416's inline-leg gap, whose comments refuse
+    declaring the legs because it would put the same card in a menu twice.
+    `dropped=` rather than `todo=` for `f1009`'s reason: the row plays if
+    it is ever held, and `legal_feats` refuses a `todo=` row outright.
     """
+
+    def paid(ev: TempHP) -> None:
+        if ev.source != c.me or ev.power != "cf:bard-f1" or ev.target == c.me:
+            return
+        c.bonus("damage", 2, on=ev.target, until=When.EOTNT, once=True)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f472", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

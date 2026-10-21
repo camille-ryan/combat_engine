@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Window,
     about_me,
     after_forced_reroll,
+    after_reroll_by,
     get,
     hits_me,
     power,
@@ -731,17 +732,25 @@ def f2578(c: Cast) -> None:
 
 
 @power("f2579", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus('skill:any')",))
+       reach=PERSONAL, target=SELF)
 def f2579(c: Cast) -> None:
-    """The attack half. "Or skill check" is dropped for the reason
-    `general_b.f629b` dropped it: a skill bonus is keyed `skill:<name>`
-    and the card names no skill."""
+    """Both halves. The old note deferred to `general_b.f629b` and that row
+    has since reversed itself, so the later reading is the one that stands:
+    `engine/skills.py` reads a bare `skill` key beside `skill:<name>` and
+    says so outright -- "a blanket `skill` modifier applies to every check"
+    -- which is exactly a bonus the card declines to pin to one skill.
+
+    The printed "or" is a choice made when the bonus is spent and nothing
+    carries that, so both one-shots are laid, as `f629b` lays them: a
+    character who both attacks and rolls a skill before the end of its next
+    turn takes it twice."""
     me = c.me
     mine = _slid_by_the_aura(c)
 
     def slid(ev: Any) -> None:
         if mine(ev):
             c.bonus("attack", 2, on=me, until=When.EONT, once=True)
+            c.bonus("skill", 2, on=me, until=When.EONT, once=True)
 
     c.watch(ForcedMove, slid, on=me, until=When.ENCOUNTER)
 
@@ -963,25 +972,67 @@ def f2846(c: Cast) -> None:
         c.hide(from_=foe, until=When.EONT)
 
 
-@power("f2849", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2849", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.ignore_cover(reroll=)", "c.retype_damage(dtypes=)"))
+       trigger="an attack p1450 made you roll again hits",
+       on=Trigger(Hit, after_reroll_by("p1450"),
+                  "the attack you rerolled hit"),
+       dropped=("c.ignore_cover(reroll=)",))
 def f2849(c: Cast) -> None:
-    """**Re-pointed. The reroll is announced now (#496) and neither clause
-    was waiting on that.** Two symbols, because the row prints two things
-    this engine cannot say and they fail for unrelated reasons.
+    """Two of the three clauses are written and the cover one is not.
 
-    The rerolled attack **ignores cover and concealment**. `c.ignore_cover`
-    takes a `when=` gate, so the obvious version is a gate on `reroll_by` --
-    and it would be silently false: cover is read inside `defence()` with
-    `resolve`'s own context, where `reroll` is always False. The reroll's
-    context exists only for the attack re-sum.
+    **The retype was never the gap the old note claimed.**
+    `DamageRolled.dtypes` is writable for exactly this, and "in addition to
+    its normal damage types" is the printed wording of what it says --
+    `(*ev.types(), ...)` rather than a replacement. What was genuinely
+    missing was a *moment*: `reroll_by` lives only in the attack context
+    (`cast.reroll_attack` builds it to re-sum the roll) and never reaches
+    the damage one, so a gated modifier could not see the reroll. The
+    settled `Hit` can: `after_reroll_by` reads `AttackResult.rerolled_by`,
+    and a `Hit` is announced before the body that rolled it deals its
+    damage. So the row declares that outcome and arms the retype for the
+    blow about to land. #496 is what made this sayable.
 
-    And it **adds two damage types** to whatever the rerolled attack already
-    deals. That is `f1231`'s gap and the same symbol: nothing retypes damage
-    another row is about to deal. The `f651` clause rides on top of that
-    one, so it is not separately blocked.
+    **Gated on the triggering power's ref, not just on the target**, which
+    is what keeps the `f651` burst below out of it: that is `c.flat` from
+    this row and would otherwise be the first `DamageRolled` the listener
+    saw, spending itself on damage that is already both types.
+
+    Spent by the blow it recolours, so an ongoing tick or a second rider
+    from the same power later in the turn is left alone -- the card speaks
+    about the attack's damage.
+
+    **Still dropped: the rerolled roll ignores cover and concealment.**
+    `c.ignore_cover` takes a `when=` gate and the obvious version is a gate
+    on `reroll_by` -- silently false, because cover is read inside
+    `defence()` with `resolve`'s own context, where `reroll` is always
+    False. `reroll_attack` re-sums modifiers and nothing else; the target
+    defence it compares against was settled at the first roll.
     """
+    me = c.me
+    foe = getattr(c.trigger, "target", None)
+    blow = getattr(c.trigger, "power", "")
+    if foe is None:
+        return
+    spent = False
+
+    def also(ev: DamageRolled) -> None:
+        nonlocal spent
+        if spent or ev.source != me or ev.target != foe or ev.detail != blow:
+            return
+        spent = True
+        ev.dtypes = (*ev.types(), DamageType.FIRE, DamageType.NECROTIC)
+
+    c.watch(DamageRolled, also, until=When.EOT, on=me,
+            window=Window.BEFORE, label=c.ref)
+    if not c.feat("f651"):
+        return
+    # "The target of that roll and each creature adjacent to it" -- no side
+    # is printed, so an ally standing next to the victim takes it too, and
+    # `c.within` centred on the victim already includes the victim.
+    for who in c.within(1, of=foe):
+        c.flat(1 + c.level // 2,
+               dtypes=(DamageType.FIRE, DamageType.NECROTIC), on=who)
 
 
 # -- the racial powers that are refs, so the rider is ordinary --------------

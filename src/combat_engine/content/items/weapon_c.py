@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.features.strikers import pay_extra
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -113,12 +114,22 @@ ITEM = "item"
 #: The four defences, for the cards printing "all defenses".
 _DEFENCES = (AC, FORT, REF, WILL)
 
+#: The rogue's extra damage, by the label `strikers.extra_damage` latches
+#: and pays under -- which is what `i3096x1` lifts the cap on. `i1340x1`
+#: raises the same feature's size through the `"<this> damage"` key.
+_SNEAK = "cf:rogue-scoundrel-f4"
+
 
 # -- gates on a context -----------------------------------------------------
 
 
 def _against(c: Cast, *words: str):  # noqa: ANN202
-    """Gate: the creature this damage or attack is aimed at is one of these."""
+    """Gate: the creature this is aimed at is one of these.
+
+    Serves a **skill check** as well as damage and attacks, because
+    `skills.modifier` puts the creature a check is about under the same
+    `target` key -- see `i3555x1`.
+    """
 
     def gate(ctx: dict[str, Any]) -> bool:
         foe = ctx.get("target")
@@ -2608,20 +2619,55 @@ def i3055p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.extra_damage(applies=)",),
 )
 def i3096x1(c: Cast) -> None:
-    """Lifts the once-a-turn latch on `cf:rogue-scoundrel-f4`.
+    """Lifts the once-a-turn cap on `cf:rogue-scoundrel-f4` for a critical.
 
-    The feature is declared and its *size* is reachable -- `i1340x1` above
-    raises it through the `"<ref> damage"` key. Its **latch** is not: a
-    `paid` dict in `features.strikers.extra_damage`'s closure, keyed on
-    the round and the initiative slot, with nothing to clear or bypass it.
+    **The latch is reachable now and the old note's premise is gone.** It
+    was a `paid` dict inside `features.strikers.extra_damage`'s closure;
+    it is `Powers.latched` on the creature, and `c.latched`, `c.unlatch`
+    and the shared `strikers.pay_extra` are the three doors. #569.
 
-    Paying a second helping from here instead would double up rather than
-    guarantee one: on a critical the feature's own `Hit` watcher fires
-    too, and if it has not yet paid this turn the rogue would collect
-    twice. Which of the two watchers runs first is not ordered."""
+    **The double-pay the old note feared is real, and the gate against it
+    is the log and not the latch.** On a critical the feature's own `Hit`
+    watcher fires too, and which of the two runs first is not ordered --
+    so asking `c.latched` here cannot tell "the rogue already paid earlier
+    this turn" from "the feature just paid, on this very hit". The log
+    can: anything after the `Hit`'s own `seq` happened inside this hit, so
+    a payout found there means the feature got its ordinary use and the
+    card adds nothing. If instead this row pays first, `pay_extra` latches
+    and the feature then declines. Either order, exactly one payout.
+
+    `c.unlatch` before paying is what makes "even if you have already done
+    so this round or this encounter" true, and `pay_extra` re-latching is
+    what makes "does not count toward its use restriction" true: the cap
+    ends the fight in the state it was already in, so the ordinary use the
+    rogue had already spent is not handed back.
+
+    Paid through `pay_extra` rather than a bare `c.damage` so the feats
+    that raise the striker's dice and the one that forgoes a die are read
+    here as well -- that helper is where both live.
+
+    `cf:rogue-thief-f2` is the card's other build and is declared nowhere
+    in the tree, so there is no second label to pay; a rogue holding this
+    one is the whole of what can be asked.
+    """
+    me = c.me
+
+    def crit(ev: Hit) -> None:
+        if ev.attacker != me or not ev.critical or not c.feat(_SNEAK, on=me):
+            return
+        if any(
+            later.kind == "DamageRolled"
+            and later.source == me
+            and later.detail == _SNEAK
+            for later in c.world.bus.log[ev.seq:]
+        ):
+            return
+        c.unlatch(_SNEAK, on=me)
+        pay_extra(c, _SNEAK, c.sneak_damage(), on=ev.target, per_turn=True)
+
+    c.watch(Hit, crit, on=me, until=When.ENCOUNTER, label=c.ref)
 
 
 @power(
@@ -2861,16 +2907,29 @@ def i3510p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(against=)", "c.immune_power()"),
+    dropped=("c.immune_power()",),
 )
 def i3555x1(c: Cast) -> None:
     """The resistance gates on `source`, which the damage context carries.
-    A skill check has no target, so an Intimidate bonus "against draconians
-    and dragons" is laid for every check instead; and nothing makes a
-    weapon proof against one named monster row."""
+
+    **"A skill check has no target" was false, and `_against` already
+    reads the key.** `skills.modifier` puts `target` -- who the check is
+    *about* -- into the modifier context expressly so a gate can be hung
+    on it, and `c.check(..., against=foe)` is the door a row uses to say
+    who it is intimidating. So the same helper that narrows a damage or
+    attack gate here narrows this one, on the same dictionary key.
+
+    A check about a fact leaves `target` None, and `_against` is false
+    there -- which is the right way round: the bonus is printed "against
+    draconians and dragons" and a check about nobody is not that.
+
+    Still dropped: nothing makes a weapon proof against one named monster
+    row.
+    """
     c.resist(5, on=c.me, when=_dealt_by(c, "dragon", "draconian"))
     c.bonus(
-        "skill:intimidate", c.enhancement, kind="item", on=c.me, until=When.ENCOUNTER
+        "skill:intimidate", c.enhancement, kind="item", on=c.me,
+        until=When.ENCOUNTER, when=_against(c, "dragon", "draconian"),
     )
 
 

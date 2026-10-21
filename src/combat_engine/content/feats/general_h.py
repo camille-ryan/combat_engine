@@ -103,7 +103,9 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    Moved,
     MoveEnd,
+    PowerResolved,
     PowerUsed,
     Ranged,
     Relation,
@@ -121,7 +123,12 @@ from combat_engine.engine import (
 from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import ForcedMove
 from combat_engine.engine.grid import Square
-from combat_engine.engine.query import allies, bloodied, distance_between
+from combat_engine.engine.query import (
+    allies,
+    bloodied,
+    distance_between,
+    since_turn_began,
+)
 
 #: The racial zone `p2473` lays, by the label it carries.
 CLOUD = "p2473"
@@ -1623,24 +1630,48 @@ _riders("f1300", {
 }, granted={"p1061": _ally_adds_con})
 
 
-@_trait("f1301", dropped=("query.moved_this_turn()",))
+@_trait("f1301")
 def f1301(c: Cast) -> None:
-    """Two clauses, each rewriting the movement its row prints. One lands.
+    """Two clauses, each rewriting the movement its row prints. Both land.
 
     **`p919`: a move of 2 in place of its shift of 1.** Written as a
     substitution -- `p919` reads `c.instead_of("shift", ...)` at its own
     shift now -- rather than as a rider, which would have moved *and*
     shifted and given the ranger three squares where the card gives two.
 
-    **`p971`: still held, and the marker is re-aimed.** Its clause is "if
-    you didn't move before the attack, you can shift 1 as a free action
-    after", and `p971`'s move is an unconditional `c.move(2)` on its first
-    use. Nothing records whether a creature moved this turn, so the
-    condition cannot be asked -- which is `query.moved_this_turn()` and not
-    the rider verb this row was marked for. A rider hung on the hit would
-    pay the shift whether the move was taken or not.
+    **`p971`: written, and `query.moved_this_turn()` was a dead symbol.**
+    The note here read "nothing records whether a creature moved this
+    turn", and the log held every `Moved` the whole time:
+    `query.since_turn_began` bounds this creature's own turn off
+    `world.bus.log`, which is `drivers.squares_moved`'s ruling and #645.
+
+    **"You didn't move before the attack" is the whole turn, and that is
+    where this parts company with `f1303`'s clause on the same row.** That
+    card prints "chose not to move before the attack *while using this
+    exploit*" -- `p971`'s own walk and nothing else -- where this one is
+    unqualified, so a rogue who stepped in with a move action has moved
+    before the attack and collects nothing here.
+
+    `PowerResolved` is the printed "after the attack", and it is also the
+    earliest window that can see whether `p971`'s own `c.move(2)` was
+    taken: the use is announced *before* the body runs, so a `PowerUsed`
+    rider would read the turn as it stood before the walk.
     """
+    me = c.me
     c.pre_empt("p919", "shift", lambda using: using.move(2))
+
+    def shift_after(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p971":
+            return
+        if any(isinstance(past, Moved) and past.actor == me
+               for past in since_turn_began(c.world, me)):
+            return
+        # A free action costs nothing, so the printed "you can" is the only
+        # gate -- `exploits._forgo_shift_instead` reads its twin the same way.
+        if c.may("shift 1 square", who=me):
+            c.shift(1, who=me)
+
+    c.watch(PowerResolved, shift_after, on=me, until=When.ENCOUNTER)
 
 
 @_trait("f1302", dropped=("query.provoked_by()",))
@@ -1676,11 +1707,11 @@ def f1302(c: Cast) -> None:
     c.watch(PowerUsed, on_use, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1303", dropped=("query.moved_this_turn()",))
+@_trait("f1303", dropped=("c.within(extend=)",))
 def f1303(c: Cast) -> None:
     """All four refs resolve. p2099 goes in the place of the melee basic a
-    charge swings; p971 and p620 rewrite the movement and the targeting
-    their own rows print.
+    charge swings; p971 rewrites the movement its row prints and p620 the
+    pool its Special line picks from.
 
     **p1505 is written, and the old marker was looking at the wrong
     thing.** It named a field on the opportunity window, and no field was
@@ -1691,15 +1722,48 @@ def f1303(c: Cast) -> None:
     -- nothing evaluates it speculatively the way a `c.bonus` gate is
     evaluated.
 
-    What is left of that clause is "if you move **after** using this
-    exploit": nothing records whether the move came before or after the
-    swing, so a character who had already walked in gets the waiver too.
+    **"If you move after using this exploit" needs nothing recorded, and
+    the note here said it did.** The waiver is laid from inside the
+    `PowerUsed` handler, so it does not exist until the exploit is used --
+    a character who had already walked in cannot have spent it, because
+    there was nothing standing to spend. The ordering is the laying time
+    and not a fact about the move.
+
+    **p971: written, and `query.moved_this_turn()` was a dead symbol** --
+    `query.since_turn_began` has bounded the turn off `world.bus.log` all
+    along (`drivers.squares_moved`, #645). This card's gate is the
+    narrower of the two printings: "chose not to move *while using this
+    exploit*" is `p971`'s own `c.move(2)` declined and not the turn's
+    travel, so the span walked back here is from that row's `PowerUsed` to
+    its `PowerResolved` -- the only window the row's own walk can be in.
+    `f1301` prints the unqualified sentence and reads the whole turn.
+
+    **Still dropped, and it is p620's clause, not p971's.** "The ally you
+    allow to shift can be within 2 squares of you, instead of adjacent to
+    you or the target" rewrites the pool `warlord/level_1._beside` builds
+    out of two literal `c.within(1, ...)` calls inside `p620`'s own body,
+    and no modifier reaches a literal -- `i1825x1` is the same gap on the
+    same symbol. Note for whoever lands it: this card **substitutes** the
+    pool rather than growing it, so a parameter that only widens a radius
+    would give "within 2 of you *or* of the target", which is wider than
+    printed.
 
     No gate on possessing p2099: `dsl.basic_options` refuses a row the
     character does not have, which is the same question asked later and
     once."""
     c.as_basic("p2099", window="charge")
     me = c.me
+
+    def moved_after(ev: Any) -> None:
+        if ev.actor != me or ev.power != "p971":
+            return
+        for past in reversed(c.world.bus.log[:ev.seq]):
+            if isinstance(past, Moved) and past.actor == me:
+                return
+            if (past.kind == "PowerUsed" and past.actor == me
+                    and past.power == "p971"):
+                break
+        c.move(2, who=me)
 
     def hit_and_run(ev: Any) -> None:
         if ev.actor != me or ev.power != "p1505":
@@ -1720,6 +1784,7 @@ def f1303(c: Cast) -> None:
         c.no_provoke(on=me, until=When.EOT, when=leaving)
 
     c.watch(PowerUsed, hit_and_run, on=me, until=When.ENCOUNTER)
+    c.watch(PowerResolved, moved_after, on=me, until=When.ENCOUNTER)
 
 
 # p4541's clause rides the basic attack that row hands an ally -- which

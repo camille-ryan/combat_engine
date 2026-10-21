@@ -48,6 +48,7 @@ from combat_engine.engine import (
     ActionType,
     Bloodied,
     Cast,
+    CloseBlast,
     Condition,
     DamageApplied,
     DamageType,
@@ -1086,20 +1087,44 @@ def f2983(c: Cast) -> None:
 
 
 @power("f2177", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("dsl.aiming_option()",))
+       reach=PERSONAL, target=SELF)
 def f2177(c: Cast) -> None:
-    """**`todo=` was wrong and was throwing the working half away.** One of
-    the two clauses is sayable: `c.counts_as_keyword` makes one named row
-    count as divine and the body has been laying it. `todo=` refuses the row
-    in play, so the line never ran -- `dropped=` is the marker for a row that
-    plays with one clause missing.
+    """Both clauses written.
 
-    Still dropped: turning a burst into a close blast 3 changes the header's
-    `reach` for one use, and `c.widen_areas` grows an area rather than
-    reshaping one.
+    **The second half's premise is stale.** The note read "`c.widen_areas`
+    grows an area rather than reshaping one", and `c.reshape_area` is that
+    one word wider: it takes a callable on the printed `Range` and so can
+    turn a burst into a blast, which no integer on the size could say.
+    #614.
+
+    **`optional=True`, because the card says "you can choose to make it X
+    instead of Y".** A replacing reshape would take the printed area
+    aiming *away* from every invoker burst the character owns, which is
+    worse than the card rather than different; the contributed form has
+    `dsl.branches_for` offer the close blast 3 beside the printed aiming
+    and the player picks at targeting time.
+
+    **Gated by `cls` and not by a keyword**, which is the distinction
+    `c.reshape_area`'s own narrowing list draws: the card says an attack
+    power *of this class*, and the divine keyword would also catch rows a
+    multiclass feat carries over. `kinds=("area_burst",)` is the printed
+    "has a burst area of effect ... instead of an area power" -- a close
+    burst is not an area power and is left alone.
+
+    This is the one case the feat convention leaves in the feat's own
+    body: the clause names a *class* of powers, so there is no finite list
+    of rows to write it into.
     """
     # "Considered a divine attack power" -- the mirror of `f2175`.
     c.counts_as_keyword("p1448", Keyword.DIVINE)
+    c.reshape_area(
+        lambda _r: CloseBlast(3),
+        cls="invoker",
+        kinds=("area_burst",),
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 def _rerolled_a_big_power(world: World, me: int, ev: Any) -> bool:

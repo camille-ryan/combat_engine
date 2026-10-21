@@ -95,6 +95,7 @@ from combat_engine.engine import (
     SkillCheck,
     SurgeSpent,
     Swap,
+    TempHP,
     Trigger,
     TurnEnd,
     TurnStart,
@@ -173,7 +174,18 @@ NO_COMPANION_CARD = (
 )
 #: The animal companion a different class feature grants, whose printed
 #: line is a *combined* attack -- one the character and the creature make
-#: together. Nothing pairs two attacks that way.
+#: together.
+#:
+#: **"Nothing pairs two attacks that way" is what this used to say and it
+#: is false now.** `p13506` makes both swings inside one body -- `c.strike()`
+#: for the character and `c.basic(who=beast)` for the companion -- and both
+#: hand back a bool, so "you hit *and* your companion hit" is two locals in
+#: one scope. What `f3797` is waiting on is not a facility: it is the #550
+#: clause in `p13506`, which lives in another component file. See that row.
+#:
+#: The symbol is left alone because it is doing duty for a second and
+#: unrelated need one tier up (`m3842a3`, level 13), and re-pointing half of
+#: a flattened symbol is worth less than retiring this half outright.
 COMBINED = ("c.combined_attack()",)
 #: A printed weapon the engine has no group and no ref for.
 WEAPON_REF = ("spec.weapon_ref()",)
@@ -2186,23 +2198,65 @@ def f3780(c: Cast) -> None:
 
 
 @power("f3781", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("cf:bard-f1s2",))
+       reach=PERSONAL, target=SELF, dropped=("cf:bard-f1s2",))
 def f3781(c: Cast) -> None:
-    """`cf:bard-f1s2` is a ref the prerequisite prints and no row carries:
-    `cf:bard-f1` writes that virtue inline on its `second-con` leg.
+    """A shift for the bard and for everybody standing next to it.
 
-    **Re-pointed off `TempHP.power`, which landed and is not the
-    blocker.** The event names the row that paid now -- and the row it
-    would name is `cf:bard-f1s2`'s *holder*, not `cf:bard-f1s2`, because
-    `cf:bard-f1` writes that virtue inline on its leg and nothing
-    declares the sub-option as a row of its own. So there is no ref to
-    gate on, and gating on the leg would catch every virtue it writes.
-    The missing ref is the gap.
+    **The gate names the holder, and "it would catch every virtue it
+    writes" was the wrong half.** `features/leaders_sb.py`'s `bard_virtue`
+    returns at the end of its `f1s0` leg and returns again unless
+    `c.build("f1s2")`, so its only `c.temp_hp` is inside the `f1s2`
+    branch: a `TempHP` whose `power` is `cf:bard-f1` is this option and no
+    other. `f1009` and `f470` bank the same argument.
 
-    The trigger here is *using* the virtue rather than the pool it lays,
-    so even `TempHP.power` was the wrong half -- a `PowerUsed` on the
-    sub-option is what this wants, and that needs the row to exist.
+    **"Using the feature" is the moment it pays, and that identification
+    is the one load-bearing reading here.** The old note wanted a
+    `PowerUsed` on the sub-option. There is no such use: the virtue is a
+    printed "you can" asked inside `reward`, capped by `once_this_round`,
+    and its whole observable act is the pool. One honest hole follows from
+    that and is recorded rather than papered over -- `resolve.temp_hp`
+    returns without emitting when the new pool is no larger than a
+    standing one, so a use swallowed by a bigger pool spends the round and
+    grants no shift. The fix for that belongs to the event, not here.
+
+    **The eligible allies are collected before anybody moves** -- "each
+    ally adjacent to you" is the board at the moment the virtue pays --
+    and the bard goes first, so the allies finish beside wherever it ended
+    up. That is the reading that makes the two sentences agree; nothing on
+    the card orders them.
+
+    "Your allies must end the shift in a square adjacent to you" is a hard
+    filter and not a preference: `c.shift(toward=)` only offers the near
+    squares first and would still allow a step out of reach, which is
+    `exploits._shift_beside`'s own note. Squares the ally already stands
+    in are excluded for its other reason -- standing still satisfies
+    adjacency and is never what a granted shift is for.
     """
+
+    def paid(ev: TempHP) -> None:
+        if ev.source != c.me or ev.power != "cf:bard-f1":
+            return
+        beside = [f for f in c.within(1, side="ally") if f != c.me]
+        if c.may("shift 1 square"):
+            c.shift(1)
+        mine = squares_of(c.world, c.me)
+        for friend in beside:
+            if not c.may("shift 1 square", who=friend):
+                continue
+            theirs = squares_of(c.world, friend)
+            spots = sorted(
+                sq
+                for sq in c.world.reachable_squares(friend, 1)
+                if sq not in theirs
+                and min(distance(sq, t) for t in mine) <= 1
+            )
+            # Asked of the bard: `c.choose` has no `who=`, and the square
+            # has to be computed here because the printed line narrows it.
+            where = c.choose(spots, f"{c.ref}: where that ally ends up")
+            if where is not None:
+                c.shift(1, who=friend, to=where)
+
+    c.watch(TempHP, paid, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power("f3782", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
@@ -2550,7 +2604,23 @@ def f3797(c: Cast) -> None:
     pairing of the two attacks rather than the creature.
 
     Re-aimed off `c.use_power()`: firing `p6189` is one line now, and
-    the whole remaining hold is the combined attack this rides on."""
+    the whole remaining hold is the combined attack this rides on.
+
+    **Read again, and the hold is no longer a facility.** `p13506`
+    (`powers/druid/level_0.py`) makes both swings in one body and both
+    return a bool, so the pairing the marker names is already there; the
+    remaining work is the #550 clause written *into* that row -- gated on
+    `c.feat("f3797")`, priced with `c.expend_row("p6189")`, paying
+    `p6189`'s own die to each of the two targets -- after which this row
+    becomes an `implemented_in=("p13506",)` pointer and the marker goes.
+    Left marked rather than half-written because the clause belongs in a
+    file this wave did not own, and a rider hung here instead would be the
+    pre-#550 shape the convention exists to retire.
+
+    The one judgement that edit still has to make is whether the
+    companion's basic counts as a weapon attack, which decides `c.w()`
+    against `"1d8"` for its half -- the same test `p6189`'s body makes off
+    the triggering row's keywords."""
 
 
 @power("f3798", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -980,16 +980,64 @@ def f1699(c: Cast) -> None:
 
 
 @power("f1702", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.reroll_check(standing=)",))
+       reach=PERSONAL, target=SELF)
 def f1702(c: Cast) -> None:
-    """A trait with a watch, not a triggered row: the skill bonus is a
+    """A trait with two watches, not a triggered row: the skill bonus is a
     standing modifier and would never be laid from inside a trigger.
-    `c.reroll_check` answers a check that has already been rolled and
-    needs `c.trigger`, so a standing "reroll each such check once" has
-    nowhere to live."""
+
+    **`c.reroll_check(standing=)` was a stale marker.** The old note said
+    the verb answers a check that has already been rolled and needs
+    `c.trigger`, so a standing "reroll each such check once" has nowhere to
+    live. It takes `ev=` now, and its own docstring says that argument is
+    for exactly this -- a banked reroll armed as a `c.watch`, whose handler
+    closes over this row's `Cast` and so has somebody else's `trigger`.
+
+    **`Window.BEFORE`, and that is the whole of the care this row needs.**
+    `events.Bus.emit` runs BEFORE, then the resolve callback, then AFTER,
+    and `skills.check` passes `finish` as that callback -- `finish` is what
+    computes `total` and `success` from `natural`. `c.reroll_check` assigns
+    `natural` and recomputes nothing (its `boost_check` call reads
+    `c.trigger`, not the `ev=` it was handed, so it is a no-op here). So a
+    reroll in the AFTER window changes the die and leaves the outcome
+    settled on the old one: the check is announced as rerolled and comes
+    out the same. **A sibling in the tree does it that way and is inert for
+    this reason** -- see the report against `items/consumable.py`'s
+    `bad_check`. Rerolling here instead lets `finish` settle `success` from
+    the new die.
+
+    The two watchers then compose in the printed order without being
+    sequenced: this one changes the die, `finish` settles the outcome, and
+    `slip` below reads that settled value in the ordinary window.
+
+    `keep="new"` is the card's "you must use the second result".
+
+    **Offered rather than taken, with the printed die as the default.** In
+    this window `success` is not settled yet, so the sibling's trick --
+    reroll only a check that failed -- is not available, and choosing a
+    threshold off `natural` would be inventing policy in a row. So it is a
+    `c.may`, and a headless fight keeps the first die.
+
+    **The card narrows to checks "made to gain combat advantage" and this
+    does not.** That circumstance is #785, which nothing rolls yet;
+    `SkillCheck.target` is the field intended for it. The `+3` and the
+    `slip` handler have always been at the wide "any bluff check" grain, so
+    the reroll joins them there rather than introducing the approximation.
+    Narrowing all three is one change against #785, not three."""
     me = c.me
     c.bonus("skill:bluff", 3, on=me, until=When.ENCOUNTER)
+
+    def retry(ev: Any) -> None:
+        if ev.actor != me or ev.skill != "bluff":
+            return
+        if c.may("reroll the check, and use the second result",
+                 who=me, default=False):
+            # Once per check by construction: `c.watch` does not re-enter a
+            # handler on an event it caused, and a reroll announces
+            # `Rerolled` rather than a second `SkillCheck`.
+            c.reroll_check(ev=ev, keep="new")
+
+    c.watch(SkillCheck, retry, on=me, until=When.ENCOUNTER,
+            window=Window.BEFORE, label=f"{c.ref} reroll")
 
     def slip(ev: Any) -> None:
         if ev.actor == me and ev.skill == "bluff" and ev.success:

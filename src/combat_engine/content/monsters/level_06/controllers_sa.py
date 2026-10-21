@@ -89,7 +89,8 @@ from combat_engine.engine import (
     World,
     power,
 )
-from combat_engine.engine.components import Health, Ident, Trap
+from combat_engine.engine.components import Conjuration, Health, Ident, Trap
+from combat_engine.engine.durations import keywords_of
 from combat_engine.engine.events import (
     AdjacencyGained,
     AttackDeclared,
@@ -107,11 +108,13 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.monster_math import LIMITED, MINION
 from combat_engine.engine.query import (
+    alive,
     bloodied,
     distance_between,
     enemies,
     has_combat_advantage,
     is_,
+    squares,
     team,
 )
 from combat_engine.engine.triggers import (
@@ -1875,18 +1878,60 @@ def m2539a1(c: Cast) -> None:
     keywords=[Keyword.IMPLEMENT],
     attack=Attack(vs=REF, printed=9),
     damage=Damage("1d6", 4, kind=LIMITED),
-    dropped=("c.douse(zone=)",),
 )
 def m2539a2(c: Cast) -> None:
-    """Push, prone and the difficult-terrain area all land. Extinguishing
-    mundane fire and the fire-keyed zone or conjuration of whoever made it
-    is the gap `c.douse(zone=)` already names elsewhere in the tree."""
+    """Push, prone and the difficult-terrain area all land.
+
+    "Normal fire is extinguished within the area" walks the map's own
+    fires and puts out the ones the burst covers -- `p16244`'s loop without
+    its `loose=True`, because this card prints no "not controlled by a
+    creature" clause.
+
+    The last sentence is a Secondary Attack line with no ref of its own:
+    one roll per fire-keyed zone or conjuration against whoever made it,
+    the printed total taken back to a bonus by `scaling.trim` the way the
+    header's `Attack(printed=)` is. "Of fire" is asked of the row that laid
+    the thing -- `durations.keywords_of` off a zone's label, which is that
+    ref by convention, and off a conjuration's own ref -- and the creator
+    is `Zone.owner` or `Conjuration.by`. `p2273` is the sibling that
+    unmakes either this way; a conjuration goes out by ending the effect
+    it lives on, which is what despawns it.
+    """
     if c.strike():
         c.hit()
         c.push(2, anchor=c.origin)
         c.prone()
-    if c.first:
-        c.zone(c.area(), difficult=True, until=When.EONT, label=c.ref)
+    if not c.first:
+        return
+    area = c.area()
+    # Before this row lays its own zone, so the walk below has only other
+    # people's to consider.
+    for fire in c.scenery("fire"):
+        if squares(c.world, fire) & area:
+            c.douse(on=fire)
+    plus = c.world.scaling.trim(10, c.level)
+    # There is no creator to roll against for a zone the terrain laid, and
+    # none to roll against for one whose maker has already dropped -- so
+    # those are left standing rather than rolled at nobody.
+    for zid, zone in c.world.zones.all():
+        if not (zone.squares & area) or not alive(c.world, zone.owner):
+            continue
+        if Keyword.FIRE in keywords_of(zone.label) and c.attack(
+            plus, WILL, on=zone.owner
+        ):
+            c.world.zones.end(zid, c.ref)
+    # Materialised: `World.each` walks the live set, and unmaking a
+    # conjuration despawns it out from under the walk.
+    for eid, conj in list(c.world.each(Conjuration)):
+        if not (squares(c.world, eid) & area) or not alive(c.world, conj.by):
+            continue
+        if Keyword.FIRE in keywords_of(conj.ref) and c.attack(
+            plus, WILL, on=conj.by
+        ):
+            held = c.world.effects.live.get(conj.effect)
+            if held is not None:
+                c.world.effects.end(held, c.ref)
+    c.zone(area, difficult=True, until=When.EONT, label=c.ref)
 
 
 @power(

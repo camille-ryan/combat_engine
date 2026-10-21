@@ -35,6 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from combat_engine.content.features.sorcerer import STORM_FACES
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -2436,13 +2437,37 @@ def i2490x1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("cf:sorcerer-soul-nat20",),
 )
 def i2693x1(c: Cast) -> None:
-    """The whole benefit widens a trigger that is not laid. The storm
-    source is `cf:sorcerer-f0s2`, which plays -- but the natural-20 rider
-    this card loosens to a 16 is that row's own dropped clause, so there
-    is nothing standing for a wider trigger to fire."""
+    """Widens `cf:sorcerer-f0s2`'s natural-20 rider to a 16, on a swing
+    bought with an action point.
+
+    **The rider it loosens is laid now**, which is the whole of what this
+    row was waiting for. That clause reads its threshold through
+    `c.amount_for(STORM_FACES, 1)` rather than comparing against 20, so
+    this is one `c.change_amount` and no new verb.
+
+    **Five, because the stored number is a count of faces and not the
+    floor.** `c.amount_for` takes the largest entry, so a floor of 16 would
+    lose to the printed 20 and this property would read as applied while
+    doing nothing. Five faces is 16 through 20. `features.sorcerer.
+    STORM_FACES` carries the argument in full.
+
+    **The action-point half is the printed narrowing and is a gate, not a
+    separate trigger.** The card does not widen every arcane attack -- only
+    one made with a point -- and `c.change_amount` takes a `when=` that the
+    feature asks at the moment it reads the threshold, with
+    `resolve.spent_action_point` on the context. Laid as its own watcher it
+    would be a second copy of the rider, and holding both would surge
+    twice.
+
+    Not gated on holding the feature. A raise nothing reads changes
+    nothing, which is the same bargain every `c.change_amount` in the tree
+    makes."""
+    c.change_amount(
+        STORM_FACES, 5, on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: bool(ctx.get("action_point")),
+    )
 
 
 @power("i2708x1", level=8, cls=ITEM, action=ActionType.NONE,

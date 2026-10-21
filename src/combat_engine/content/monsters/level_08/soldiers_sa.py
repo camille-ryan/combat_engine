@@ -1727,7 +1727,7 @@ def m4382a2(c: Cast) -> None:
 
 @power(
     "m4382a3", level=8, usage=ENCOUNTER, action=MOVE, reach=PERSONAL, target=SELF,
-    dropped=("c.ignores_difficult(hazardous=)",),
+    dropped=("c.ignore_hazards()",),
 )
 def m4382a3(c: Cast) -> None:
     """Shift 6, through enemies and over liquid, ignoring rough ground.
@@ -1740,15 +1740,32 @@ def m4382a3(c: Cast) -> None:
     and nothing noticed because the shift still happened -- just not through
     anybody.
 
-    The two exemptions left are the marker. `kind` on
-    `c.ignores_difficult` is a terrain **label** -- the word the map and
-    `c.zone(difficult=)` give a square, like "web" or "mud" -- so there is
-    no label for hazardous terrain, which is damaging ground rather than
-    slow ground, and none for a squeezing penalty either. Marked rather
-    than approximated, because `ignores_difficult("hazardous")` would be a
-    label nothing writes and so silently nothing.
+    **The squeezing half is written and the note above it was stale.** It
+    said `kind` on `c.ignores_difficult` is a terrain label, which is true,
+    and then that there is "none for a squeezing penalty either" -- which
+    `c.waive` (#508) falsifies. Its whole premise is that a condition's
+    cost is several knobs and the cards turn them one at a time:
+    `conditions.RULES[Condition.SQUEEZING]` is `attack=-5`, `halve_speed`
+    and `grants_ca`, and "takes no penalties for squeezing" is all three.
+    Not `c.suppress` or `c.ignore_condition` -- the creature is still
+    wedged into the space, which is what makes the move legal at all.
+
+    **The hazardous half is a real gap and the marker is re-pointed to the
+    symbol that already names it.** `c.ignore_hazards()` is what `m6073a0`
+    carries for this same sentence, so the two rows group rather than
+    waiting on a synonym. `Grid` holds no hazardous category to be exempt
+    from, and `c.ignores_difficult` is a movement-**cost** waiver -- it is
+    driven entirely through `world.reachable_squares` -- so it cannot stop
+    damage however it is called. `m2960a5` is this card at level 8, is
+    finished with no marker, and its docstring claims hazardous terrain is
+    "the other half of `c.ignores_difficult`"; that is wrong and the row
+    over-claims.
     """
     c.ignores_difficult(on=c.me, until=When.EOT)
+    c.waive(
+        Condition.SQUEEZING, "attack", "halve_speed", "grants_ca",
+        on=c.me, until=When.EOT,
+    )
     c.shift(6, share=True)
 
 

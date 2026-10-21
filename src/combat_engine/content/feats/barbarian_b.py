@@ -379,22 +379,44 @@ def f1834(c: Cast) -> None:
 
 
 @power("f1878", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.movement_instead(squares=)",))
+       reach=PERSONAL, target=SELF)
 def f1878(c: Cast) -> None:
     """Shift Dexterity modifier squares instead of 2, on `cf:barbarian-f1s3`.
 
-    **Re-pointed at the group that holds the same gap.** The engine half
-    landed under another name: `c.extend_move(ref, n)` is "make a named row
-    move you further", entries add so `dex_mod - 2` says "instead of 2", and
-    `c.squares_for` is the read. What is missing is the read -- that feature
-    says `c.shift(2, who=me)` with the number in hand -- which is the
-    identical complaint `f980` files against p971, p2105 and p1505, so this
-    waits on the same symbol rather than on a verb of its own.
+    **`c.extend_every`, not `c.extend_move`, and that is the whole of what
+    unblocked it.** The old note was right that the feature says
+    `c.shift(2, who=me)` with the number in hand and so reads no
+    `c.squares_for` -- and that only blocks the ref-keyed verb.
+    `c.extend_every` is read inside `c.shift` itself and asks its gate with
+    `ctx["power"]`, which is the **moving row's own ref**, so the one row
+    this card names is sayable as a gate and the feature needs no change at
+    all. `f2263` and `f2469` are the same arrangement for "a swordmage
+    power" and "a martial encounter or daily power"; a single ref is the
+    narrowest case of it, not a different problem.
 
-    Not written as a second shift off the same `Bloodied`, the way `f1880`
-    duplicates a burn: the feature measures who grants combat advantage
-    *from where its shift ended*, so stepping further afterwards would read
-    the wrong squares and prompt twice for one printed shift."""
+    `dex_mod - 2` because the entries add: the card replaces the printed 2
+    rather than adding to it. Guarded at positive, so a barbarian whose
+    modifier is below 2 keeps the printed shift -- the card says "you can",
+    and nothing printed is made worse by holding a feat.
+
+    The budget is raised rather than a second step taken, for the reason
+    the old note gave and which still holds: the feature measures who
+    grants combat advantage *from where its shift ended*, so stepping
+    further afterwards would read the wrong squares and prompt twice for
+    one printed shift.
+
+    The feature's own prompt still reads "shift 2 squares" while the
+    budget is larger. That text is in a file this change does not touch
+    and it is wording, not distance -- `c.shift` offers every square the
+    raised budget reaches."""
+    extra = c.dex_mod - 2
+    if extra <= 0:
+        return
+
+    def the_whirl(ctx: dict[str, Any]) -> bool:
+        return ctx.get("power", "") == "cf:barbarian-f1s3"
+
+    c.extend_every("shift", extra, on=c.me, when=the_whirl)
 
 
 @power("f1880", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

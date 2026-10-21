@@ -1252,7 +1252,7 @@ def _hit_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger=_M82_STRUCK,
     on=Trigger(Hit, when=_hit_with_a_copy_to_hand, text=_M82_STRUCK),
-    dropped=("c.redirect(riders=)",),
+    dropped=("c.pass_on(attack=)",),
 )
 def m82a5(c: Cast) -> None:
     """The copy takes it instead.
@@ -1264,17 +1264,20 @@ def m82a5(c: Cast) -> None:
     the body's `c.hit()` has not run yet -- a reaction to a `Hit` resolves
     before the damage the hit is about to deal.
 
-    "Any effects or secondary attacks are also deflected" is not written:
-    nothing on `Cast` can move a rider from one creature to another, and the
-    riders are applied by the attacking row's own body.
+    **"Any effects ... are also deflected" is written now.** The note this
+    replaces said nothing on `Cast` could move a rider from one creature to
+    another; `c.pass_on` is that verb and was written for this moment. A
+    reaction resolves before the blow, so there is nothing to `c.transfer`
+    yet and it arms instead: every condition the triggering power lays on
+    this creature while that power is still resolving is handed over
+    intact, saving throw and all, and it stands down as soon as another
+    power is used.
 
-    **That clause now has a marker and for a while it did not.** The
-    paragraph above has always admitted the gap and the header named
-    nothing, so `blocked.py` counted this row finished and `todo.py` could
-    never report it ready. `c.redirect(riders=)` is the symbol, shared with
-    `m1742a5` -- the same card one level down, which was marked
-    `c.redirect(dtype=)` until the Bin D authoring agent wrote it and found
-    this half left over.
+    **Still dropped: "or secondary attacks".** A second attack line is not
+    a condition, so `pass_on` cannot carry it, and nothing re-aims an
+    attack roll a resolving body is about to make. The symbol is
+    `c.pass_on(attack=)`, shared with `m1742a5` -- the same card one tier
+    down -- and with two rows that already wait on it.
 
     A docstring that confesses a missing clause the marker tuple does not
     list is a shape worth watching for: no instrument reads prose.
@@ -1299,4 +1302,5 @@ def m82a5(c: Cast) -> None:
             label=f"{c.ref} deflect",
         )
     )
+    c.pass_on(c.trigger, to=dup)
     c.note("m82a5: the blow is turned onto a duplicate")

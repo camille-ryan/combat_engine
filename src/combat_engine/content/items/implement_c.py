@@ -29,8 +29,9 @@ Two traps this wave walked into, recorded so the next one does not:
   row that needs it carries `query.is_summoned()`.
 
 The recurring gaps, each named with the symbol it wants rather than
-approximated: `c.class_feature()`, `c.reshape_area()`, `c.tome_powers()`
-and `c.item_set()`.
+approximated: `c.class_feature()`, `c.tome_powers()` and `c.item_set()`.
+`c.reshape_area()` was on that list and landed on #614; `i1979p1` calls
+it.
 
 Three of the old recurring gaps closed once the specs gained refs and the
 engine was read rather than its prose:
@@ -86,6 +87,7 @@ from combat_engine.engine import (
     AttackRolled,
     Cast,
     CloseBlast,
+    CloseBurst,
     Condition,
     DamageApplied,
     DamageRolled,
@@ -542,21 +544,25 @@ def i744p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("cf:sorcerer-f0s3",),
 )
 def i859x1(c: Cast) -> None:
     """The bonus and the vulnerability are one bargain, so the second is
     armed off the hit that pays the first.
 
-    **One of the two exemptions plays now.** Having a class feature is
-    knowing its row, which is what `c.feat` reads off `Powers.all`, and
-    `cf:warlock-f1s5` is declared -- so a character with that feature is
-    let off the vulnerability, which is the printed line.
+    **Both exemptions play.** Having a class feature is knowing its row,
+    which is what `c.feat` reads off `Powers.all`, and `cf:warlock-f1s5`
+    is declared -- so a character with that feature is let off the
+    vulnerability, which is the printed line.
 
-    Dropped, and re-aimed a second time: the other exemption names
-    `cf:sorcerer-f0s3`, and no row in the tree declares it. The spec prints
-    the ref now, so `spec.feature_ref()` is no longer what is missing --
-    the marker names the undeclared ref itself, which is."""
+    **The second exemption is a build, not a row, and the marker was
+    waiting for a row that will never be written.** `cf:sorcerer-f0s3` has
+    no row of its own because that source is written inside
+    `cf:sorcerer-f0`, on the `wild` leg of `chargen.BUILDS["sorcerer"]` --
+    `feats/sorcerer.py`'s module note says so and `f1001` asks exactly
+    `c.build("wild")` for the same feature. `c.feat("cf:sorcerer-f0s3")`
+    would have been a correctly spelled ref with nothing behind it, which
+    is the silent form of this mistake; `f2175` retired the sibling marker
+    `cf:sorcerer-f0s1` on the same reasoning."""
     c.bonus(
         "damage",
         c.enhancement,
@@ -571,7 +577,7 @@ def i859x1(c: Cast) -> None:
             return
         if Keyword.PSYCHIC not in _keywords_of(ev.power):
             return
-        if c.feat("cf:warlock-f1s5", on=c.me):
+        if c.feat("cf:warlock-f1s5", on=c.me) or c.build("wild", on=c.me):
             return
         c.vulnerable(5, DamageType.PSYCHIC, on=c.me, until=When.SONT)
 
@@ -849,11 +855,49 @@ def i1958p1(c: Cast) -> None:
     action=FREE,
     reach=PERSONAL,
     target=SELF,
-    todo=("dsl.reshape_in_flight()",),
 )
 def i1979p1(c: Cast) -> None:
-    """A power's reach is header data read before the body runs; nothing
-    turns a declared blast into a burst of another size."""
+    """The blast becomes a burst two squares smaller, minimum 1.
+
+    **"A power's reach is header data read before the body runs" was the
+    hold and #614 answered it.** `c.reshape_area` lays the shape on the
+    creature and `dsl.reach_of` resolves it per caster per use, so nothing
+    rewrites the header and the wielder still throws a burst. `i683p1` is
+    the same card with an arcane narrowing and carries the longer note; the
+    two judgements worth repeating here:
+
+    * **`into` is a callable so the new size can be derived from the old.**
+      "2 smaller than the blast" belongs to whichever power is thrown.
+    * **No `on=Trigger` for the printed "use this power when you use a
+      close blast power.**" `dsl.use` picks the targets and the area before
+      `cast.used()` announces `PowerUsed`, so a reshape laid in answer to
+      that event would reach the blast *after* it was aimed. The free
+      action is spent first instead and the blast arrives reshaped.
+
+    Unnarrowed by keyword or class, because this card prints neither: any
+    close blast through this implement. It ends on the use it was bought
+    for rather than on being measured -- `dsl.area_of` is a query the
+    renderer calls, so a one-shot spent by measurement would be gone before
+    the power was thrown."""
+    held = c.reshape_area(
+        lambda r: CloseBurst(max(r.size - 2, 1), from_=r.from_),
+        kinds=("close_blast",),
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
+
+    def spent(ev: Any) -> None:
+        if getattr(ev, "actor", None) != c.me:
+            return
+        row = get(getattr(ev, "power", ""))
+        # The printed line, so still a blast: `Power.reach_of` answers the
+        # header and only `dsl.reach_of` sees the reshape.
+        if row is None or row.reach_of().kind != "close_blast":
+            return
+        if held is not None:
+            c.world.effects.end(held, "spent")
+
+    c.watch(PowerUsed, spent, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(

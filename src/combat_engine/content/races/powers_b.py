@@ -388,10 +388,15 @@ def p14393(c: Cast) -> None:
     action=MINOR,
     reach=CloseBurst(5),
     target=ONE_ALLY,
-    dropped=("c.bonus('skill:any')",),
 )
 def p13689(c: Cast) -> None:
-    """Four printed choices; the skill-check one has no key to be read off."""
+    """All four printed choices. The skill one does have a key: `skills.py`
+    reads a blanket `skill` modifier beside `skill:<name>` and applies it to
+    every check, which is what a choice the card declines to pin to one
+    skill wants. Its bonus is **+4** where the attack one is +2.
+
+    Each branch defaults to `c.target`, which is the ally this was aimed at
+    -- the card gives every benefit to that one creature."""
     pick = c.choose(["save", "shift", "attack", "skill"], "which benefit")
     if pick == "save":
         c.save()
@@ -399,6 +404,8 @@ def p13689(c: Cast) -> None:
         c.shift(2, who=c.target)
     elif pick == "attack":
         c.bonus("attack", 2, kind="power", until=When.EOTNT, once=True)
+    elif pick == "skill":
+        c.bonus("skill", 4, kind="power", until=When.EOTNT, once=True)
 
 
 @power(

@@ -1360,13 +1360,29 @@ def i2744p1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with an attack using this weapon",
     on=Trigger(Hit, by_me, "you hit an enemy with this weapon"),
-    todo=("c.reroll_attacks_against()",),
 )
 def i2821p1(c: Cast) -> None:
     """A standing "roll twice and use either" against one creature.
-    `c.reroll_attack` rerolls the attack being answered and `c.grants_advantage`
-    is a flat +2 -- neither is this, and substituting one would be a
-    different number in every fight."""
+
+    `c.reroll_attack(ev=)` is the shape: the premise this row rested on --
+    that the verb only mends the roll being answered -- is retired by that
+    parameter, and the verb is attacker-agnostic (it re-totals the
+    modifiers for `ctx["attacker"]`), so an ally's roll is mended with the
+    ally's numbers. `keep="best"` is *"use either result"*, which is the
+    holder picking, and not `"new"`.
+
+    No `once=`: the card puts no limit on how many of those rolls get the
+    second die, only a window and a victim."""
+    foe = c.target
+
+    def twice(ev: AttackRolled) -> None:
+        if getattr(ev, "target", None) != foe:
+            return
+        if getattr(ev, "attacker", None) not in {c.me, *c.allies()}:
+            return
+        c.reroll_attack(ev=ev, keep="best")
+
+    c.watch(AttackRolled, twice, until=When.EONT)
 
 
 @power(

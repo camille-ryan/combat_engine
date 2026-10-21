@@ -352,12 +352,41 @@ def m3134a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.douse_lights()",),
 )
 def m3134a5(c: Cast) -> None:
-    """Extinguishing every light source in the encounter has no verb at all
-    -- `c.light()` is the reused symbol for the whole gap -- so nothing in
-    this row works yet."""
+    """Every light source it can see goes out.
+
+    **"No verb at all" was false, and so was the premise under it.** Light
+    is modelled -- `Grid.light`, `query.light_level`, `c.light`, `c.dim` --
+    and #685/#686 both closed as *content* bugs for exactly this error.
+
+    **Suspended, not ended**, which is what `Effects.suspend` is for (#470)
+    and what the card's own second sentence requires: "new sources of
+    illumination may be ignited after this ability is activated", so this
+    is a one-time sweep of what is burning now and not a standing ban.
+    `until the end of encounter` then needs nothing of its own, because a
+    carried light lasts the encounter too and is never resumed.
+
+    **Found by the effect's mods, not its label**, as `i1014p1` does: a
+    carried light is a `light_radius` entry whatever row laid it. Both keys
+    are tested, because the card says *all forms* of illumination and a
+    dimmer is one -- `i1014p1` tests only `light_radius`, so a carried
+    dimmer survives a card that says every light goes out, and that row
+    should be widened to match when somebody is next in `items/wondrous.py`.
+
+    A **range of sight** rather than a radius, which is the one difference
+    from that sibling: `c.can_see` is the whole gate, and the caster's own
+    lights are included because it is a light source like any other.
+
+    Nothing else on the board sheds light: `query.light_level` reads the
+    terrain, dark zones and carried radii, and a terrain square is not a
+    source anybody could re-ignite."""
+    for who in [c.me, *(o for o in sorted(c.world.entities)
+                        if o != c.me and c.can_see(o))]:
+        for eff in list(c.world.effects.of(who)):
+            # `Effect.mods` is `[(eid, Mod)]`, not `[Mod]`.
+            if any(m.what in ("light_radius", "dim_radius") for _, m in eff.mods):
+                c.world.effects.suspend(eff)
 
 
 # ==========================================================================

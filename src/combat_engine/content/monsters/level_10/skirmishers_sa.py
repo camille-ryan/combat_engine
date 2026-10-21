@@ -775,23 +775,43 @@ def m1173a3(c: Cast) -> None:
     target=NO_TARGET,
     trigger="it drops to 0 hit points and is killed",
     on=Trigger(Dropped, about_me, "it drops"),
-    dropped=("c.grant_kind()",),
 )
 def m1173a4(c: Cast) -> None:
-    """"Remains standing ... until the end of its next turn" -- held open by
-    refusing to let the drop stick, the shape `m5183a3` settled nine levels
-    down. The undead keyword it also gains has nowhere to go: no verb adds a
-    kind word to a creature at runtime."""
+    """"Remains standing ... until the end of its next turn", written the way
+    `m2066a3` settled the identical sentence a level down.
+
+    **The hit points go back inline and not from a `c.watch`.** The old shape
+    armed a watch on `Dropped` from inside the dispatch of the very `Dropped`
+    that offered this row, so the handler was never called for it: the row
+    fired, laid its subscription, and the creature died anyway -- while
+    auditing green, because laying the effect counts as doing something.
+    `resolve._check_down` reads the hit points **again** after the emit, with
+    a comment saying it does so for exactly this shape, so the body only has
+    to set them.
+
+    The keyword is `c.set_origin`; `query.kinds_of` merges it with the stat
+    block's own type words, additively, which is the whole of what gaining
+    one can mean here.
+
+    `c.flat` at the end of its own next turn is what makes the window a
+    window -- the death goes through the ordinary pipeline. The guard is for
+    that second `Dropped`: this row is at-will, so without it the creature
+    props itself up again every turn, for ever."""
     me = c.me
+    guard = f"{c.ref} risen"
+    if any(e.label == guard for e in c.world.effects.of(me)):
+        return
+    c.effect(guard, until=When.ENCOUNTER, on=me)
+    health = c.world.get(me, Health)
+    if health is not None:
+        health.hp = 1
+    c.set_origin("undead", on=me, until=When.EONT)
 
-    def propped(ev: Dropped) -> None:
-        if ev.actor != me:
-            return
-        health = c.world.get(me, Health)
-        if health is not None and health.hp <= 0:
-            health.hp = 1
+    def expire(ev: TurnEnd) -> None:
+        if ev.actor == me and not ev.ghost:
+            c.flat(999, on=me)
 
-    c.watch(Dropped, propped, until=When.EONT, on=me, label=f"{c.ref} propped")
+    c.watch(TurnEnd, expire, until=When.EONT, on=me, once=True, label=c.ref)
 
 
 # ==========================================================================

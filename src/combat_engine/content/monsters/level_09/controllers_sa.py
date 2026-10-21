@@ -98,6 +98,7 @@ from typing import Any
 
 from combat_engine.content.monsters.level_02.artillery_sa import ALL_DEFENCES
 from combat_engine.content.monsters.level_02.controllers_sa import _swing_reach
+from combat_engine.content.monsters.level_03.controllers_sa import _ally_used
 from combat_engine.content.monsters.level_03.soldiers_sa import _secondary
 from combat_engine.content.monsters.level_04.lurkers_sa import _hit_me_since_my_turn
 from combat_engine.content.monsters.level_08.brutes_sa import _two_turns
@@ -1753,15 +1754,37 @@ def m3617a2(c: Cast) -> None:
     action=ActionType.IMMEDIATE_REACTION,
     reach=Ranged(10),
     target=NO_TARGET,
-    todo=("etl.monster.trigger_text()",),
+    trigger="an ally uses m3617a5",
+    on=Trigger(PowerUsed, _ally_used("m3617a5"), "an ally uses m3617a5"),
+    dropped=("compendium.shared_trait_ref",),
 )
 def m3617a3(c: Cast) -> None:
-    """The printed trigger reads "when an ally uses m3617a5" -- a ref
-    local to this stat block, which an ally cannot "use." No coherent
-    reading of what this is actually gated on survived extraction, the
-    same shape as `level_08/controllers_sa.py`'s `m2787a2` naming itself
-    mid-sentence. Not written rather than guessed."""
-    return
+    """"When an ally uses m3617a5", which is coherent after all.
+
+    **The old note's premise was false**: it read "a ref local to this stat
+    block, which an ally cannot *use*". An ally can. Two creatures of one
+    stat block both hold that block's refs -- `loader.spawn` does it
+    routinely, and a board fielding two of these is the ordinary case -- so
+    "an ally uses m3617a5" is an ally of the same kind using its own copy.
+    `m1056a4` is the settled precedent for the exact pair and
+    `_ally_used` is its reader.
+
+    That note predates the 2026-10-12 glossary change, which is what makes
+    this readable: a brief now marks the row's own ref, so a self-reference
+    can be told from a reference to somebody else. This one is neither --
+    it names a *sibling* ability of the same block.
+
+    **What is still dropped**: the printed trait is one trait across many
+    stat blocks, each extracted under its own ref, so an ally of a
+    *different* block running the same ability does not match. The narrow
+    reading is strictly weaker than the card and never wrong -- it fires for
+    this creature's own kin and stays quiet otherwise.
+    """
+    mate = getattr(c.trigger, "actor", None)
+    if mate is None:
+        return
+    c.shift(2, who=mate)
+    c.grant_action("attack", ActionType.FREE, on=mate)
 
 
 @power(
@@ -2947,6 +2970,14 @@ def m5721a4(c: Cast) -> None:
 # ==========================================================================
 
 
+#: One printed trait, five stat blocks, five refs. Read out of
+#: `monster_power.spec`: every one of the five prints "adjacent to a
+#: creature that has <itself>", with its own ref substituted for the
+#: printed name. Any of them satisfies any other's clause, so a mixed
+#: group of them is not five creatures that cannot see each other.
+_ENDURING_KIN = ("m5778a1", "m5779a0", "m5780a0", "m5781a0", "m5782a0")
+
+
 @power(
     "m5779a0",
     level=9,
@@ -2954,14 +2985,50 @@ def m5721a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("etl.monster.trigger_text()",),
 )
 def m5779a0(c: Cast) -> None:
-    """The printed condition is "adjacent to a creature that has
-    m5779a0" -- its own ref, named as something another creature
-    possesses. No reading of that survived extraction with confidence;
-    the same shape as `m3617a3`."""
-    return
+    """"Adjacent to a creature that has <this trait>" -- a saving throw at
+    the start of its turn.
+
+    **Its own ref, and that is the point rather than the obstacle.** The
+    card names a trait another creature possesses, and the ETL substituted
+    this block's ref for the printed name. So the clause is "next to
+    somebody with the same trait", and on a board with two of these both
+    hold `m5779a0`.
+
+    **The kin list was read, not assumed.** All five blocks print the
+    identical sentence with their own ref substituted -- checked in
+    `monster_power.spec` for `m5778a1`, `m5780a0`, `m5781a0` and `m5782a0`
+    as well as this one -- so they are one printed trait under five refs and
+    any of them satisfies the card. Written as the whole set rather than
+    this ref alone, which would have refused a mixed group of them.
+
+    The old note said no reading survived extraction. It predates the
+    2026-10-12 glossary change, which is exactly what makes a
+    self-naming clause legible.
+    """
+    me = c.me
+
+    def tick(ev: TurnStart) -> None:
+        if getattr(ev, "actor", None) != me:
+            return
+        # `c.within(1, of=me, side="other")` and not `query.adjacent`:
+        # that reader asks whether **two** named creatures are adjacent and
+        # takes both, so calling it as a neighbour lookup raised. The audit
+        # caught it on the first run -- `RAISED  m5779a0`.
+        #
+        # `side="other"` because the card says *a creature*, not an ally:
+        # the trait is shared by its own kind and nothing says they have to
+        # be on one side. It also excludes the creature itself, which would
+        # otherwise satisfy its own clause by standing still.
+        for mate in c.within(1, of=me, side="other"):
+            known = c.world.get(mate, Powers)
+            if known is not None and any(r in known.all for r in _ENDURING_KIN):
+                c.save(on=me)
+                return
+
+    c.watch(TurnStart, tick, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} vigil")
 
 
 @power(

@@ -253,6 +253,22 @@ KNOWN_SILENT = {
     # Writing the clause is what made it visible, which is the right
     # direction. The dummy posing a character in light armour would retire
     # both entries (#437).
+    # **Measured both ways before being excused here**, because an excuse
+    # that blames the board is how a real bug hides. The board's barbarian
+    # is dealt DEX 15, a modifier of exactly **+2**, and the card is "shift
+    # your Dexterity modifier squares instead of 2" -- so at +2 it grants
+    # nothing and the row returning is correct, not inert. Raised to DEX 18
+    # on the same board it lays `f1878 moves move:shift +2` and emits
+    # `EffectApplied`, gated to `cf:barbarian-f1s3` and refusing another
+    # row's shift.
+    #
+    # The first probe of this read `Mods` and found nothing, which looked
+    # like a dead row: `c.extend_every` delegates to `extend_move`, which
+    # lays an **Effect** under the reserved `MOVE_KIND` key. Checking the
+    # wrong store is the same trap as excusing without a measurement.
+    "f1878": "shifts its Dexterity modifier instead of 2; the board's"
+             " barbarian is dealt a modifier of exactly 2, so the card"
+             " grants nothing",
     "f1873": "holds only out of heavy armour; the board deals heavy armour",
     # **Four shield rows, and the same shape as `f1873` above.** Each lays
     # its bonus only when a shield is held -- "your shield bonus also

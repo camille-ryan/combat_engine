@@ -881,19 +881,31 @@ def i1872x1(c: Cast) -> None:
 
 
 @power("i2137x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.move_through()",))
+       reach=PERSONAL, target=SELF)
 def i2137x1(c: Cast) -> None:
-    """Two of the three clauses turn on *who* rather than on the attack, and
-    both are askable: `dmg_ctx` has carried `source` since #302, and
-    `OpportunityWindow`'s context names whoever would swing. The creature
-    being a swarm is `query.kinds_of`.
+    """All three clauses turn on *who* rather than on the attack, and all
+    three are askable: `dmg_ctx` has carried `source` since #302,
+    `OpportunityWindow`'s context names whoever would swing, and
+    `may_enter`'s names the occupant of the square being crossed. The
+    creature being a swarm is `query.kinds_of`.
 
-    The move-through clause stays dropped, and `c.overrun` is not it: that
-    tramples whoever is in the way, where this is a standing *permission*
-    to cross a square. `c.shares_space` is the nearest thing and sits on the
-    creature being entered, so laying it on the swarm would open its square
-    to everybody on the board -- strictly stronger than print."""
+    **The move-through clause is written and the old note was two thirds
+    right.** It refused `c.overrun`, correctly -- that is a stated move
+    that tramples whoever is in the way, where this is a standing
+    permission -- and it refused `c.shares_space`, also correctly, since
+    that sits on the creature being *entered* and laying it on the swarm
+    would open its square to everybody on the board. What it missed is the
+    mover's side of the same question: `c.may_enter` (#626), narrowed by a
+    `when=` gate since #673, which is the whole of this sentence.
+    `items/waist.py`'s `i591p1` is the identical shape with minions in
+    place of swarms.
+
+    `ctx["occupant"]` is the key `movement.may_enter` passes, and
+    `movement._clear` asks it for every square of a path -- so the
+    permission covers moves other rows and the AI policy take, which is
+    what a Property has to do. "You cannot end your move in an occupied
+    space" needs nothing written: `movement._can_stop` refuses one whatever
+    the permission says."""
     c.resist(
         5, on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _is_swarm(c.world, ctx.get("source")),
@@ -901,6 +913,10 @@ def i2137x1(c: Cast) -> None:
     c.no_provoke(
         on=c.me, until=When.ENCOUNTER,
         when=lambda ctx: _is_swarm(c.world, ctx.get("actor")),
+    )
+    c.may_enter(
+        when=lambda ctx: _is_swarm(c.world, ctx.get("occupant")),
+        on=c.me, until=When.ENCOUNTER,
     )
 
 

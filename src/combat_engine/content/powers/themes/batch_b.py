@@ -79,6 +79,7 @@ from combat_engine.engine import (
     Ranged,
     Relation,
     SavingThrow,
+    SkillCheck,
     Target,
     Trigger,
     TurnEnd,
@@ -2213,13 +2214,70 @@ def p16649b(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=ARCANE,
-    todo=("c.reroll_check(standing=)",),
 )
 def p16650(c: Cast) -> None:
     """A standing offer to buy a triple reroll with a healing surge, on
-    every roll for a turn. Every reroll verb in the vocabulary answers one
-    trigger and none of them can be left lying in wait."""
-    ...
+    every roll for a turn.
+
+    **`c.reroll_check(standing=)` was a stale marker.** It said every
+    reroll verb answers one trigger and none can be left lying in wait.
+    All three take `ev=` now -- `c.reroll_attack`, `c.reroll_check`,
+    `c.reroll_save` -- and each docstring says that argument exists for
+    exactly this: a banked reroll is a `c.watch`, and a watch handler
+    closes over this row's `Cast`, whose `trigger` is not the roll being
+    watched.
+
+    **`Window.BEFORE` for all three, and the check branch is why.**
+    `events.Bus.emit` runs BEFORE, then the resolve callback, then AFTER.
+    `skills.check` passes `finish` as that callback and `finish` is what
+    turns `natural` into `total` and `success`; `c.reroll_check` assigns
+    `natural` and recomputes neither, so an AFTER-window reroll changes
+    the die and leaves the old outcome standing. The attack and save
+    branches work in either window -- both of those verbs recompute the
+    outcome inline -- so one window for the three is correct rather than
+    a compromise.
+
+    **Three `keep="best"` calls, not one of something cleverer.** Each
+    rolls a fresh die and keeps the larger, so three of them leave
+    `max(printed, d1, d2, d3)` -- which is "reroll three times, taking
+    the highest result", read literally.
+
+    `c.spend_surge` is "spend a surge and gain nothing for it" in its own
+    docstring, which is this card's "spend a healing surge but regain no
+    hit points" exactly. It comes **before** the rerolls and its False
+    stops them: a reroll that happened and then found no surge left would
+    be free.
+
+    One handler over three events rather than three handlers, because the
+    three branches differ by one verb. `me not in (actor, attacker)` is
+    how one gate reads both field names -- `AttackRolled` says attacker
+    and the other two say actor.
+
+    Offered with the printed roll as the default, like every other
+    surge-priced option in the tree: a headless fight keeps its dice and
+    its surges."""
+    me = c.me
+
+    def thrice(ev: Any) -> None:
+        if me not in (getattr(ev, "actor", None),
+                      getattr(ev, "attacker", None)):
+            return
+        if not c.may("spend a healing surge to reroll three times, taking"
+                     " the highest", who=me, default=False):
+            return
+        if not c.spend_surge(on=me):
+            return
+        for _ in range(3):
+            if isinstance(ev, AttackRolled):
+                c.reroll_attack(ev=ev, keep="best")
+            elif isinstance(ev, SkillCheck):
+                c.reroll_check(ev=ev, keep="best")
+            else:
+                c.reroll_save(ev=ev, keep="best")
+
+    for event in (AttackRolled, SkillCheck, SavingThrow):
+        c.watch(event, thrice, on=me, until=When.EONT,
+                window=Window.BEFORE, label=f"{c.ref} {event.__name__}")
 
 
 @power(

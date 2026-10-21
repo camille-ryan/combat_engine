@@ -211,9 +211,28 @@ def p653(c: Cast) -> None:
     requires_text="needs a crossbow, a light blade or a sling",
 )
 def p971(c: Cast) -> None:
-    """The walk is an Effect line, so it happens once and before the roll."""
+    """The walk is an Effect line, so it happens once and before the roll.
+
+    **Two feats speak to that walk and neither could reach it**, because
+    the distance was a literal and the clause read no substitution. Both
+    halves are here now and they are different mechanisms, not one:
+
+    * `c.squares_for` is the read half of `c.extend_move`, which is how
+      `f980` says "move 3 squares instead of 2". The entries add, so the
+      feat lays one square and the printed two stay in this body.
+    * `c.instead_of` is the read half of `c.pre_empt`, which is how `f976`
+      replaces the walk with a check. The whole clause is substitutable
+      rather than just its distance, because that card declines the move
+      outright.
+
+    Both feats are `[Arena Fighting]` and so only one may apply to a use,
+    and nothing here declares between them -- which is sound rather than
+    an oversight: taking `f976`'s substitution means the walk does not
+    happen, so the lengthened distance it would have had is never asked
+    for. The two cannot both pay.
+    """
     if c.first:
-        c.move(2)
+        c.instead_of("move", lambda: c.move(c.squares_for(c.ref, 2)))
     if c.strike():
         c.damage(c.w(1), c.dex_mod)
 

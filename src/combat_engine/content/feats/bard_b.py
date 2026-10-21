@@ -32,6 +32,7 @@ from combat_engine.engine import (
     ActionType,
     Cast,
     Condition,
+    DamageRolled,
     DamageType,
     Hit,
     Keyword,
@@ -41,6 +42,7 @@ from combat_engine.engine import (
     SurgeSpent,
     Trigger,
     When,
+    Window,
     after_forced_reroll,
     power,
 )
@@ -402,26 +404,61 @@ def f1145(c: Cast) -> None:
     c.grants_advantage(on=foe, to="ally", until=When.EONT, once=True)
 
 
+#: The five powers the Associated Powers line names. Every one of them
+#: prints the same sentence: the damage becomes that power's own type
+#: **and** necrotic, and the power gains the necrotic keyword.
+_NECROTIC_TOO = ("p1725", "p3705", "p1458", "p1167", "p2780")
+
+
 @power("f1231", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.retype_damage(dtypes=)",))
+       reach=PERSONAL, target=SELF)
 def f1231(c: Cast) -> None:
-    """**Re-aimed twice, and the marker is now the real gap.**
+    """**Written. The third note said "both halves are missing" and both
+    halves were already here.**
 
-    The first two notes were about the ETL and both were wrong: the list
-    resolves and the spec carries `<ref> : <clause>` with the clause intact,
-    478 of 478. So `spec.associated_clause()` named nothing, and this row
-    read as blocked on an instrument when it was blocked on an engine verb.
+    The damage half is `DamageRolled.dtypes`, which is documented writable
+    and documented for exactly this -- "set this to say *and*, not
+    *instead*". `f2847` and `f2855` in `general_l.py` are the same shape
+    on a single power; this is five of them under one watcher, because the
+    sentence is identical five times over. The keyword half is
+    `c.counts_as_keyword`, which edits this creature's copy of a named row
+    rather than the shared header tuple.
 
-    What it actually wants, across all five of its riders identically: the
-    damage the named power deals becomes a second type **as well**, and the
-    power gains that keyword. Both halves are missing. `c.flat` and
-    `c.damage` take `dtype`/`dtypes` where the damage is dealt, so a row can
-    choose its own type -- but nothing retypes damage *another* row is about
-    to deal, and `Power.keywords` is header data no trait can add to.
+    **Laid from here rather than written into the five powers.** #550's
+    convention is for a clause the power has to *ask* about; a listener on
+    the blow needs no cooperation from the row that threw it, and `f1098`
+    makes the same argument for the same reason.
+
+    **A watcher rather than `c.deals(ref=, add=)`, which looks like the
+    purpose-built verb and would be short of the card.** `c.deals` is read
+    through `Cast._typed`, and only `c.damage` and `c.half_damage` call
+    that -- `c.flat` goes straight to `deal_damage`. Two of these five deal
+    part or all of their damage flat, so the tidier call would have
+    recoloured the hit line and left the rider the card speaks about
+    untouched. `DamageRolled` is emitted by every route.
 
     One symbol for five riders, which is usually the trap `CLAUDE.md`
-    warns about and here is not: the gap is the same sentence five times, so
-    the marker goes red and green honestly for every one of them. #299."""
+    warns about and here was not: the gap was the same sentence five
+    times, so it went red and green honestly for every one of them. #299."""
+    me = c.me
+
+    def rot(ev: DamageRolled) -> None:
+        if ev.source != me or ev.detail not in _NECROTIC_TOO:
+            return
+        # `p1725` is the one rider with a condition in front of it -- the
+        # target stepping away at the start of its own next turn -- and
+        # that moment is a turn later than the weapon damage. The thunder
+        # rider is the only blow dealt then, so it is the only blow the
+        # clause can be about.
+        if ev.detail == "p1725" and DamageType.THUNDER not in ev.types():
+            return
+        ev.dtypes = (*ev.types(), DamageType.NECROTIC)
+
+    c.watch(DamageRolled, rot, until=When.ENCOUNTER, on=me,
+            window=Window.BEFORE, label=c.ref)
+    for ref in _NECROTIC_TOO:
+        c.counts_as_keyword(ref, Keyword.NECROTIC, on=me,
+                            until=When.ENCOUNTER)
 
 
 @power("f2091", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

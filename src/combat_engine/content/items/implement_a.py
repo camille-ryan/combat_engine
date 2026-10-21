@@ -85,6 +85,7 @@ from combat_engine.engine import (
     AttackRolled,
     Bloodied,
     Cast,
+    CloseBurst,
     Condition,
     ConditionApplied,
     DamageApplied,
@@ -2607,11 +2608,31 @@ def i1832p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("dsl.aiming_option()",),
 )
 def i1836x1(c: Cast) -> None:
-    """The ref is given, but a row's reach is header data: `c.widen_areas`
-    grows a burst and nothing turns one shape into another."""
+    """`p1169`'s close blast 3, offered as a close burst 1 instead.
+
+    **"Nothing turns one shape into another" is stale.** `c.reshape_area`
+    takes a callable on the printed `Range`, so a blast becomes a burst --
+    and `c.reshape_area`'s own narrowing list names this row as the `ref`
+    case. #614.
+
+    **`optional=True` is the printed "you can make it".** Replacing would
+    take the blast away from a wizard who still has it printed on the
+    card; contributed, `dsl.branches_for` offers the burst beside it and
+    `dsl.reach_of` resolves whichever index was aimed.
+
+    `ref="p1169"` is the row the property names, and deliberately not
+    `i1836p1` as well: that block is the item's own grant of the same
+    power for somebody who does not have it, and the card's sentence is
+    about the power this wand is named for."""
+    c.reshape_area(
+        lambda _r: CloseBurst(1),
+        ref="p1169",
+        optional=True,
+        on=c.me,
+        until=When.ENCOUNTER,
+    )
 
 
 @power(

@@ -728,7 +728,7 @@ _granted("f2103", "f2103b", swap=Swap(3, Usage.ENCOUNTER))
 
 @power("f2103b", level=1, cls="", usage=ENCOUNTER, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
-       attack=Attack(REF, vs=WILL), dropped=("c.pick_pocket()",))
+       attack=Attack(REF, vs=WILL), narrative=("skill:thievery",))
 def f2103b(c: Cast) -> None:
     """"Dexterity or Charisma" with one ability in the header: the roll
     carries the difference as `plus=` and the damage line reads the
@@ -736,8 +736,13 @@ def f2103b(c: Cast) -> None:
 
     "Grants combat advantage to **all** attackers" is `to="team"` --
     the relation names one beneficiary at a time, and my side is who it
-    matters to. Picking the pocket is a free-action Thievery check with
-    no combat consequence and nowhere to put its result.
+    matters to.
+
+    **The marker is `narrative=`, not a verb waiting to be built.**
+    Picking the pocket is a free-action Thievery check with no combat
+    consequence and nowhere to put its result -- which is the field's
+    whole definition, and the old `dropped=("c.pick_pocket()",)` named a
+    verb that should not exist and reported the row as work owed.
     """
     edge = max(0, c.cha_mod - c.dex_mod)
     if c.strike(plus=edge):
@@ -769,11 +774,16 @@ _granted("f2105", "f2105b", swap=Swap(9, Usage.DAILY))
 @power("f2105b", level=1, cls="", usage=DAILY, action=STANDARD,
        reach=Melee(1), target=ONE_CREATURE, keywords=WEAPON,
        attack=Attack(REF, vs=AC),
-       dropped=("c.pick_pocket()",))
+       narrative=("skill:thievery",))
 def f2105b(c: Cast) -> None:
     """The Effect runs first, as printed: the shift is what brings you
-    into reach. The free-action Thievery check is dropped, and was going
-    unsaid here while f2103b named it.
+    into reach.
+
+    **The free-action Thievery check is `narrative=`.** It has no combat
+    consequence and nowhere to put its result, which is what that field
+    means; `dropped=("c.pick_pocket()",)` named a verb that should not be
+    built and counted the row as work owed. `f2103b` carries the same
+    sentence and the same marker.
 
     **Both halves of "during this shift can move through the target's
     space" are written now.** The permission never was the blocker --

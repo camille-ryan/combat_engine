@@ -880,7 +880,7 @@ def _struck_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger=_M1742_STRUCK,
     on=Trigger(Hit, when=_struck_with_a_copy_to_hand, text=_M1742_STRUCK),
-    dropped=("c.redirect(riders=)",),
+    dropped=("c.pass_on(attack=)",),
 )
 def m1742a5(c: Cast) -> None:
     """The copy takes the blow instead, and takes it as psychic.
@@ -893,9 +893,19 @@ def m1742a5(c: Cast) -> None:
     announced and torn down by the packet it catches, because a reaction to a
     `Hit` resolves before the damage that hit is about to deal.
 
-    "Any effects or secondary attacks included in the attack are also
-    deflected" is the one half left: nothing moves a rider from one creature
-    to another, and the riders are laid by the attacking row's own body.
+    **"Any effects ... are also deflected" is written now, and it is
+    `c.pass_on`.** That verb was written for this exact moment and says so:
+    the reaction resolves before the blow, so there is nothing to
+    `c.transfer` yet, and it arms instead -- every condition the triggering
+    power puts on this creature while that power is still resolving is
+    picked up and handed over intact, saving throw and all. Bounded by the
+    log and by the event rather than by a clock, so it stands down the
+    moment another power is used.
+
+    **Still dropped: "or secondary attacks".** A second attack line is not a
+    condition, so `pass_on` cannot carry it, and nothing re-aims an attack
+    roll a resolving body is about to make. `c.pass_on(attack=)` is the
+    symbol two other rows already wait on.
     """
     me = c.me
     pack = _copies(c)
@@ -917,6 +927,7 @@ def m1742a5(c: Cast) -> None:
             label=f"{c.ref} deflect",
         )
     )
+    c.pass_on(c.trigger, to=dup)
     c.note(f"{c.ref}: the blow is turned onto a copy")
 
 

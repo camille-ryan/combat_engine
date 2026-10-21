@@ -60,6 +60,7 @@ from combat_engine.engine import (
     Keyword,
     Miss,
     Mod,
+    PowerResolved,
     PowerUsed,
     ShortRested,
     TurnStart,
@@ -69,12 +70,27 @@ from combat_engine.engine import (
     power,
     query,
 )
+from combat_engine.engine.resolve import spent_action_point
 
 #: The armour the resilience clause rules out, in the page's own wording --
 #: "not heavy armor" rather than the inverse of the light list.
 _HEAVY = ("chain", "scale", "plate")
 
 ARCANE = [Keyword.ARCANE]
+
+#: The key `i2693x1` widens, and the number is **how many d20 faces fire
+#: the third source's rider** -- not the floor those faces start at.
+#:
+#: `c.amount_for` takes the largest entry, and a lower floor is a *wider*
+#: window, so written as a floor a card loosening 20 to 16 would lose to the
+#: printed 20 every time and read as though it had applied. One face is the
+#: card as printed; five is 16 and up. Two items widening it take the wider,
+#: which is the rule `amount_for` already holds for every other grant.
+#:
+#: Spelled as a plain key and not as a `cf:` ref, like
+#: `controllers.IMPOSITION_RAISE` beside it: a `cf:` string reads as a
+#: declared row, and this is a mechanic inside one.
+STORM_FACES = "sorcerer:storm-faces"
 
 #: The four legs, in the order the class page lists the specialties. The
 #: order is load-bearing: the specialty rows and the escalations are
@@ -340,7 +356,6 @@ def sorcerer_f0s0(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=ARCANE,
-    dropped=("cf:sorcerer-soul-nat20",),
 )
 def sorcerer_f0s2(c: Cast) -> None:
     """The third source: a damage modifier and two resistances at once.
@@ -376,8 +391,24 @@ def sorcerer_f0s2(c: Cast) -> None:
     Within one fight it never comes back, the printed return being on a
     rest.
 
-    One clause is still dropped: the natural-20 rider,
-    `cf:sorcerer-soul-nat20`.
+    **The natural-20 rider is written now and `cf:sorcerer-soul-nat20` is
+    retired.** Its premise was "a moment nothing announces" -- the rider
+    fires *after* the attack's other effects, and `PowerUsed` is announced
+    before the body runs. `events.PowerResolved` is that moment and says so
+    in its own docstring, and it carries `rolls`, every `AttackResult` the
+    use produced in order, so the faces are all readable in one watch
+    rather than one per swing. `AttackResult.natural` is the die and
+    `AttackResult.target` is who the blow finally landed on, which is the
+    creature to push -- not `ev.targets`, since an interrupt may have moved
+    the blow onto somebody else.
+
+    **The push is per qualifying roll and the flight is once per use.** The
+    card gives one distance and one gust; a two-target power that rolls two
+    twenties surges around both enemies and moves the caster once.
+
+    The threshold is read through `c.amount_for` rather than written as 20,
+    because `i2693x1` loosens it. See `STORM_FACES` for why the stored
+    number is a count of faces and not the floor.
     """
     if not c.build("f0s2"):
         return
@@ -411,6 +442,45 @@ def sorcerer_f0s2(c: Cast) -> None:
         cost=ActionType.IMMEDIATE_INTERRUPT,
         until=When.ENCOUNTER, on=c.me, label=f"{c.ref} trade",
     )
+
+    def surged(ev: PowerResolved) -> None:
+        if ev.actor != c.me:
+            return
+        # `_arcane_power` is the gate the two clauses above use. It takes a
+        # modifier context rather than an event, so it is fed the one key it
+        # reads -- one reading of "arcane power" for all three halves of
+        # this feature, which cannot then drift apart.
+        if not _arcane_power({"power": ev.power}):
+            return
+        # `spent_action_point` is true for the whole turn the point was
+        # spent on, which is the reading four other rows already take. It is
+        # here rather than in `i2693x1` because the gate is asked where the
+        # amount is read.
+        faces = max(1, c.amount_for(STORM_FACES, 1, {
+            "power": ev.power,
+            "action_point": spent_action_point(c.world, c.me),
+        }))
+        caught = [r for r in ev.rolls
+                  if getattr(r, "natural", 0) >= 21 - faces]
+        if not caught:
+            return
+        if not c.may("push the target and ride the wind", who=c.me):
+            return
+        for roll in caught:
+            victim = getattr(roll, "target", 0)
+            if victim:
+                c.push(1, on=victim)
+        far = 1 + c.dex_mod
+        if far > 0:
+            # A sorcerer has no fly mode of its own, so the mode is lent for
+            # the gust and taken back with the turn. `c.move(at=)` measures
+            # the mode rather than the ground speed, which is the whole
+            # reason the pair is written this way everywhere else.
+            c.mode("fly", far, on=c.me, until=When.EOT)
+            c.move(far, at="fly", who=c.me)
+
+    c.watch(PowerResolved, surged, until=When.ENCOUNTER, on=c.me,
+            label=f"{c.ref} storm")
 
 
 # -- the elementalist ------------------------------------------------------
