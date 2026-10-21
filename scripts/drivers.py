@@ -13015,6 +13015,62 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_sustain_cost_is_asked_of_the_encounter(out: Result) -> None:
+    """A `When.SUSTAIN` effect survives on any cost the creature can pay.
+
+    `durations._sustain_by_default` read the slot off `Budget` by name --
+    `getattr(budget, cost.value, 0) <= 0` -- and **five of the eight
+    `ActionType` members name no field**, so each read as a slot already at
+    zero and the effect was dropped at the first turn-end of a later round.
+    One live row prints `sustain=FREE`. #776.
+
+    **`free` and `opportunity` are the two that matter**, because `minor`
+    passed all along: a rule that only drove a minor-cost sustain would have
+    been green through the whole bug. That is why the control here is a cost
+    that *works*, measured beside two that did not.
+
+    The fourth assertion is the half the issue did not mention: a creature
+    with a standard in hand and no minor may pay a minor, which `DOWNGRADES`
+    knows and a single-slot read cannot -- so a sustain could lapse with an
+    action still available.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.types import ActionType
+
+    def kept(cost: ActionType, *, empty_minor: bool = False) -> bool:
+        world, me, _ = _board()
+        c = Cast(world=world, me=me, ref="drivers:sustain")
+        if empty_minor:
+            budget = world.need(me, Budget)
+            budget.minor = 0
+            budget.standard = 1
+        eff = c.effect("drivers grip", until=_When.SUSTAIN, on=me,
+                       sustain=cost)
+        return bool(eff is not None
+                    and world.effects._sustain_by_default(eff))
+
+    out.that(kept(ActionType.MINOR),
+             "a minor-cost sustain is kept -- the control, and the one cost"
+             " that worked before the fix",
+             f"{kept(ActionType.MINOR)}")
+    out.that(kept(ActionType.FREE),
+             "a FREE-cost sustain is kept: free names no `Budget` slot, so"
+             " it used to read as exhausted and the effect was dropped",
+             f"{kept(ActionType.FREE)}")
+    out.that(kept(ActionType.OPPORTUNITY),
+             "and an OPPORTUNITY-cost one is kept -- that cost is held on a"
+             " turn stamp, not a count, so decrementing a field was never"
+             " the right question",
+             f"{kept(ActionType.OPPORTUNITY)}")
+    out.that(kept(ActionType.MINOR, empty_minor=True),
+             "and a creature with a standard but no minor still sustains a"
+             " minor-cost effect -- the downgrade, which a one-slot read"
+             " cannot see",
+             f"{kept(ActionType.MINOR, empty_minor=True)}")
+
+
 def every_granted_word_has_a_reader(out: Result) -> None:
     """`c.grant_action` may only hand out a word `actions` reads.
 
@@ -28804,6 +28860,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "sustain_cost": (
+        a_sustain_cost_is_asked_of_the_encounter,
+        "a sustain survives on any cost the creature can pay (#776)",
+    ),
     "granted_words": (
         every_granted_word_has_a_reader,
         "c.grant_action hands out only words actions.py reads (#762)",

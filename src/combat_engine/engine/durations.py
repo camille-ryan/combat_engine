@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from .components import Budget, Conditions, Health, Mod, Mods
+from .components import Conditions, Health, Mod, Mods
 from .events import (
     ConditionApplied,
     ConditionEnded,
@@ -529,7 +529,7 @@ class Effects:
                 # The row that laid the effect. `by` is defaulted from the
                 # label, so this is the ref for all 333 call sites without
                 # any of them saying anything.
-                power=eff.by,
+                power=eff.by,  # type: ignore[attr-defined]
             ),
             eff,
         ))
@@ -590,7 +590,7 @@ class Effects:
                     _with_weapon(
                         ConditionApplied(
                             source=source, target=eff.owner, condition=c,
-                            duration=duration, power=eff.by,
+                            duration=duration, power=eff.by,  # type: ignore[attr-defined]
                         ),
                         eff,
                     )
@@ -947,14 +947,39 @@ class Effects:
 
         Two effects both wanting a minor means the second one lapses, which
         is right: there is only one minor, and spending it here spends it.
+
+        **Asked through `Encounter.spend` rather than off `Budget` by name**,
+        and the old `getattr(budget, cost.value, 0) <= 0` was wrong twice:
+
+        * **five of the eight `ActionType` members name no `Budget` field.**
+          `Budget` has `standard`, `move`, `minor`, `immediate_round` and
+          `opportunity_turn`; `free`, `immediate_interrupt`,
+          `immediate_reaction`, `opportunity` and `none` are not fields, so
+          the `getattr` default fired and each read as a slot already at
+          zero. Measured before and after on the same board:
+
+              sustain=free          kept by default:  False -> True
+              sustain=minor         kept by default:  True  -> True
+              sustain=opportunity   kept by default:  False -> True
+
+          A `sustain=FREE` effect was therefore dropped at the first
+          turn-end of a later round, and one live row prints that cost.
+        * **it missed the downgrades.** A creature with a standard left and
+          no minor may pay a minor, which `DOWNGRADES` knows and a direct
+          read of one slot cannot -- so a sustain could lapse with an action
+          still in hand.
+
+        `Encounter.spend` is the one place that answers both, and it stamps
+        the round and turn markers that the immediate and opportunity costs
+        are kept on rather than decrementing a count that does not exist.
+        #776.
         """
         cost = eff.sustain_cost
         if cost is None:
             return False
-        budget = self.world.get(eff.source, Budget)
-        if budget is None or getattr(budget, cost.value, 0) <= 0:
+        held = self.world.encounter
+        if held is None or not held.spend(eff.source, cost):
             return False
-        setattr(budget, cost.value, getattr(budget, cost.value) - 1)
         self.sustain(eff)
         self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True

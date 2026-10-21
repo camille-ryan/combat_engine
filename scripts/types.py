@@ -74,13 +74,45 @@ def _baseline() -> dict[str, int]:
 
 
 def _per_file(text: str) -> dict[str, int]:
-    """How many errors each file owns, from `ty`'s own output."""
+    """How many errors each file owns, from `ty`'s own output.
+
+    **The first `-->` after each `error[`, and only that one.** A diagnostic
+    carries its primary location *and* any number of `info:` back-pointers
+    -- "Type variable defined here", "function defined here" -- each on its
+    own `-->` line. Counting every one of them charged a file for errors it
+    does not own, and two things followed:
+
+    * **a file could go over its baseline because somebody edited another
+      file.** `engine/events.py` read 3 against a baseline of 1 on a commit
+      that did not touch it: one real error, plus two `info:` pointers at
+      `events.py:1592` where `Bus.emit`'s type variable is declared, both
+      belonging to errors in `engine/durations.py`. Proved by bisect --
+      reverting the `events.py` edit left the count at 3.
+    * **`scripts/drivers.py:70` was charged twice for `Result.that`'s own
+      `def` line**, which is the definition a bad call points back at.
+
+    So the count was never "errors this file owns"; it was "times this file
+    was mentioned". `ty` prints one `error[` line per diagnostic, so arming
+    on that and taking the next location is exactly ownership.
+
+    Fixing this makes every affected count **fall**, which the baseline
+    permits -- it may shrink and must not grow -- so no bless is needed and
+    none should be done on this run: a bless here would record the new,
+    correct numbers as the ceiling and that is the right move only once
+    somebody has read them.
+    """
     out: dict[str, int] = {}
+    want = False
     for line in text.splitlines():
+        if line.startswith("error["):
+            want = True
+            continue
+        if not want:
+            continue
         m = re.match(r"\s*-->\s*([^:]+\.py):", line)
         if m:
-            rel = m.group(1)
-            out[rel] = out.get(rel, 0) + 1
+            out[m.group(1)] = out.get(m.group(1), 0) + 1
+            want = False
     return out
 
 
