@@ -13015,6 +13015,75 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_feat_waives_only_ordinary_concealment(out: Result) -> None:
+    """`f1832` waives the -2 for an ally in the aura, and not the -5.
+
+    The card is *"each ally affected by your `rt:r4-t3` racial trait doesn't
+    take the -2 penalty for attacking an enemy that has concealment"*, so the
+    clause is written into `rt:r4-t3` -- the row it names -- per #550, and
+    this feat carries `implemented_in=`.
+
+    **The third assertion is the one worth having.** `concealment_waived` is
+    a *threshold*: `resolve.attack` does
+    `if from_concealment <= concealment_waived(...)`, so the number is the
+    largest penalty waived. 5 would clear total concealment too, which is a
+    strictly stronger feat than the printed one -- and that is the mistake
+    the row's own old note warned about for cover. With 2, darkness still
+    costs the ally its -5.
+
+    The ally and not the caster, because the grant is `side="ally"`: a rule
+    that measured the caster would pass with the side word wrong.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position, Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import allies, enemies, squares
+    from combat_engine.engine.resolve import situational_attack
+    from combat_engine.engine.types import Light
+
+    def penalty(has_feat: bool) -> tuple[int, int, int]:
+        """(bright, dim, dark) attack penalties for an ally in the aura."""
+        world, caster, _ = _board("rt:r4-t3", 1)
+        mate = next((a for a in allies(world, caster) if a != caster), None)
+        foe = enemies(world, caster)[0]
+        if mate is None:
+            return (0, 0, 0)
+        if has_feat:
+            known = world.get(caster, Powers)
+            if known is not None and "f1832" not in known.known:
+                known.known.append("f1832")
+        # Stand the ally next to the caster so it is inside the aura 5.
+        here = world.need(caster, Position).square
+        world.need(mate, Position).square = (here[0] + 1, here[1])
+        REGISTRY["rt:r4-t3"].body(
+            Cast(world=world, me=caster, ref="rt:r4-t3")
+        )
+        square = next(iter(squares(world, foe)))
+
+        def at(level: Light) -> int:
+            world.grid.light[square] = level
+            return situational_attack(world, mate, foe, "drivers:f1832", {})
+
+        return at(Light.BRIGHT), at(Light.DIM), at(Light.DARK)
+
+    bare_bright, bare_dim, _ = penalty(False)
+    feat_bright, feat_dim, feat_dark = penalty(True)
+
+    out.that(bare_dim == bare_bright - 2,
+             "without the feat, an ally takes the printed -2 against a"
+             " concealed enemy -- the control",
+             f"bright {bare_bright:+d}, dim {bare_dim:+d}")
+    out.that(feat_dim == feat_bright,
+             "with the feat, that -2 is gone for the ALLY, which is the side"
+             " word doing its job",
+             f"bright {feat_bright:+d}, dim {feat_dim:+d}")
+    out.that(feat_dark == feat_bright - 5,
+             "and total concealment STILL costs the ally -5: the waiver is a"
+             " threshold and 2 is not 5, so the feat stays as wide as the"
+             " card and no wider",
+             f"bright {feat_bright:+d}, dark {feat_dark:+d}")
+
+
 def a_size_comparison_reads_the_order(out: Result) -> None:
     """A size comparison must go through `Size.order`, not the enum itself.
 
@@ -28668,6 +28737,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "concealment_feat": (
+        a_feat_waives_only_ordinary_concealment,
+        "f1832 waives ordinary concealment for an ally and not total",
+    ),
     "size_order": (
         a_size_comparison_reads_the_order,
         "a size comparison goes through Size.order, not the string enum"

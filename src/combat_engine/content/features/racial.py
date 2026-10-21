@@ -401,9 +401,26 @@ def rt_r4_t3(c: Cast) -> None:
         who = ctx.get("actor")
         return who is not None and c.race_of(on=who) != "r4"
 
-    c.grants_in(c.aura(5, label=c.ref, until=_HOLDS),
-                "skill:perception", 1, side="ally", kind="racial",
+    ring = c.aura(5, label=c.ref, until=_HOLDS)
+    c.grants_in(ring, "skill:perception", 1, side="ally", kind="racial",
                 when=not_kin)
+    # **`f1832`'s clause, written here because it names this row** (#550):
+    # "each ally affected by your <this> racial trait doesn't take the -2
+    # penalty for attacking an enemy that has concealment."
+    #
+    # **2 and not 5, because the waiver is a threshold.** `resolve.attack`
+    # does `if from_concealment <= concealment_waived(...)`, so the number
+    # is the largest penalty waived -- 2 clears ordinary concealment and
+    # leaves total concealment's 5 standing, which is what the card's
+    # "the -2 penalty" says. `c.ignore_cover(partial=True,
+    # concealment_only=True)` lays the same pair for a single creature.
+    #
+    # Not `c.ignore_cover` itself: that sits on one creature, and this has
+    # to reach whoever is standing in the aura and let go when they leave,
+    # which is what `c.grants_in` is for.
+    if c.feat("f1832"):
+        c.grants_in(ring, "ignore_concealment", 2, side="ally",
+                    kind="ignore concealment")
 
 
 @power("rt:r4-t4", level=0, cls="", usage=AT_WILL,

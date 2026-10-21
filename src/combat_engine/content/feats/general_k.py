@@ -597,19 +597,22 @@ def f1773(c: Cast) -> None:
 
 
 @power("f1832", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.ignore_concealment()",))
+       reach=PERSONAL, target=SELF, implemented_in=("rt:r4-t3",))
 def f1832(c: Cast) -> None:
-    """`rt:r4-t3` is declared and lays an aura, so "each
-    ally affected by it" is the creatures standing in that aura, and
-    `c.grants_in` would carry a modifier to them.
+    """Written into `rt:r4-t3`, the row this feat names (#550).
 
-    What is missing is **narrower** than the docstring here used to
-    claim. `c.ignore_cover` does waive the concealment -2 -- it is one
-    modifier for cover and concealment together, taken as the larger by
-    `query.cover_waived` -- so the verb is not absent. It cannot be held
-    to concealment alone, and a version that also waived cover is a
-    strictly stronger feat than the one printed. `p1831` wants the same
-    narrowing."""
+    **The narrowing it waited for landed.** This note said `c.ignore_cover`
+    "cannot be held to concealment alone, and a version that also waived
+    cover is a strictly stronger feat than the one printed" -- exactly
+    right, and `concealment_only=True` is that narrower key, with
+    `query.concealment_waived` reading it separately from cover (#771).
+    `p1831` wanted the same narrowing and was re-pointed when it landed;
+    this row was missed.
+
+    The clause reaches allies standing in the aura rather than the
+    character, so it is `c.grants_in` on the aura `rt:r4-t3` already lays,
+    not `c.ignore_cover` on one creature. The number is 2 and the reason it
+    is not 5 is in the comment beside it."""
 
 
 @power("f1835", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

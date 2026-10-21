@@ -2871,12 +2871,24 @@ def m5321a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.ignore_concealment()",),
 )
 def m5427a0(c: Cast) -> None:
-    """Concealment is not cover: `c.ignore_cover` reads the cover table and
-    nothing reads a concealment exemption, so the whole of this row waits on
-    one verb and there is nothing to half-write."""
+    """Its attacks see past concealment, and only concealment.
+
+    **The marker was right when written and went stale.** It said
+    `c.ignore_cover` "reads the cover table and nothing reads a concealment
+    exemption" -- true of the one pooled modifier, and `concealment_only=`
+    is the narrow waiver that landed with #771. It lays the separate
+    `ignore_concealment` key that `query.concealment_waived` reads, so cover
+    still stops this creature.
+
+    `m5477a0` is the written sibling and this is its shape without the
+    bloodied gate, which that card prints and this one does not.
+
+    `on=c.me` because the row has no target: a bare call would waive
+    concealment for nobody."""
+    c.ignore_cover(on=c.me, until=When.ENCOUNTER,
+                   concealment_only=True)
 
 
 @power(
