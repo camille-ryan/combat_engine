@@ -49,6 +49,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     STANDARD,
+    WILL,
     Ability,
     ActionType,
     Attack,
@@ -73,7 +74,12 @@ from combat_engine.engine.events import (
     TurnEnd,
     TurnStart,
 )
-from combat_engine.engine.query import adjacent, distance_between, team
+from combat_engine.engine.query import (
+    adjacent,
+    distance_between,
+    team,
+)
+from combat_engine.engine.query import defence as defence_of
 from combat_engine.engine.triggers import Trigger, targets_me
 
 #: The kinds of step a creature takes of its own accord. The rest -- push,
@@ -140,23 +146,36 @@ def m5452a0(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[Keyword.WEAPON],
     damage=Damage("", 3),
-    dropped=("c.grab(dc_from=)",),
 )
 def m5452a1(c: Cast) -> None:
     """As m5452a0, and the grab's escape DC is the master's Will rather than
-    the holder's own defence -- which `c.grab` cannot be told.
+    the holder's own defence.
 
-    **Re-aimed off `c.grab(dc=)`**, which is the 58-row group wanting a flat
-    printed number. This wants a *defence read off a named creature*, and a
-    `dc=int` would never satisfy it: `escape.py` offers REF or FORT with
-    `grab_vs_fort` the only override, and neither is somebody else's Will. One
-    symbol, one gap."""
+    **Written through `c.grab(dc=)`, and the note that said it could not be
+    was wrong about which channel runs first.** That note argued
+    `escape.py` offers REF or FORT with `grab_vs_fort` the only override, so
+    nothing could make the DC somebody else's Will. True of the *defence*
+    path and not of the printed-DC override that sits in front of it:
+    `escape.attempt` reads `base = printed if printed else defence(...)`, so
+    a stamped `Effect.escape_dc` **replaces** the grabber's defence rather
+    than pairing with it. `query.defence` is the live, levelled read of any
+    creature's defence, so "equals the master's Will" is sayable exactly.
+
+    The number is taken when the hold is laid rather than at each escape
+    attempt, which is the one thing `dc=int` cannot do and the only
+    difference left: a penalty landing on the master mid-fight does not
+    loosen a grab already made. The `bonus is None` guard above has already
+    proved there is a master to read."""
     bonus = _master_mod(c, Ability.INT)
     if bonus is None:
         return
     if c.attack(bonus, REF):
         c.hit()
-        c.grab()
+        boss = c.master()
+        if boss is not None:
+            # Aliased on import: `defence` is a loop variable three rows
+            # down, where it is the four defence keys and not this reader.
+            c.grab(dc=defence_of(c.world, boss, WILL))
 
 
 @power(

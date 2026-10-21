@@ -106,7 +106,7 @@ from combat_engine.engine import (
 #: package does not re-export. It is the only place "you miss **every**
 #: target" can be asked, so it is imported from the module it lives in
 #: rather than approximated off a single `Miss`.
-from combat_engine.engine.events import DamageRolled, PowerResolved
+from combat_engine.engine.events import Boosted, DamageRolled, PowerResolved
 from combat_engine.engine.query import shifted
 
 ITEM = "item"
@@ -2573,22 +2573,43 @@ def i3001p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("PowerUsed.result",),
 )
 def i3055x1(c: Cast) -> None:
-    """The bonus is "equal to the result of the 1d6 roll" that m4421a6 made
-    and `PowerUsed` carries no result, so the die is rolled again here --
-    the same distribution and a different number."""
+    """The bonus is "equal to the result of the 1d6 roll", and that number
+    is on the record rather than lost.
+
+    **`events.Boosted` is the record the old marker said did not exist.**
+    `p6186` pays its die through `c.boost_roll`, which routes all three of
+    its paths through `Cast._boosted`, so `by` is the ref that paid and
+    `amount` is the number after the row decided it. `PowerUsed` carries
+    no result -- that much of the old note was true -- but it was the
+    wrong event to be reading. `f1490` takes the same number off the same
+    row.
+
+    **And the old watcher was armed on the wrong power**, so it had never
+    fired once: it waited on `m4421a6`, which the ETL writes as
+    `x_m4421a6` -- its mark for a ref it could not resolve -- and which is
+    declared nowhere in the tree. The item's own spec names `p6186`.
+
+    No `kind=` filter, unlike `f1490`. That row's card is about a boosted
+    *attack*; this one says "when you use your racial power", and the
+    power boosts a skill check or a saving throw just as readily. What the
+    item hands back is an attack bonus either way.
+    """
     c.as_implement(on=c.me)
 
-    def racial(ev: PowerUsed) -> None:
-        if ev.actor == c.me and ev.power == "m4421a6":
-            c.bonus(
-                "attack", c.roll("1d6"), kind="item", on=c.me, until=When.EONT,
-                once=True,
-            )
+    def paid(ev: Boosted) -> None:
+        # `actor` is the payer, which for this card is the wearer. See
+        # `Cast._boosted`: `rolled_by` is whose roll it was, and the two
+        # differ for a row that boosts somebody else's die.
+        if ev.actor != c.me or ev.by != "p6186":
+            return
+        c.bonus(
+            "attack", ev.amount, kind="item", on=c.me, until=When.EONT,
+            once=True,
+        )
 
-    c.watch(PowerUsed, racial, until=When.ENCOUNTER)
+    c.watch(Boosted, paid, until=When.ENCOUNTER)
 
 
 @power(

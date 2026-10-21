@@ -560,33 +560,64 @@ def f1792(c: Cast) -> None:
 
 
 @power("f2228", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.lend_skills()",),
+       reach=PERSONAL, target=SELF,
        trigger="you use p7546 and succeed on the check",
        on=Trigger(PowerUsed, _used("p7546"), "you use that power"))
 def f2228(c: Cast) -> None:
-    """No reprisals from whatever a named racial power fooled.
+    """No reprisals from whatever a named racial power fooled, and the
+    skill it is fooled by is the assassin's choice.
 
     The check is rolled inside `p7546`'s own body and `PowerUsed` fires
     before that body, so success is waited for rather than read -- the
     same shape `assassin_c`'s f2824 uses against this power, and
     `SkillCheck` carries `success` finished.
 
-    The substitution is dropped: the card lets a Stealth check stand in
-    for the Bluff one, and nothing puts one skill in another's place
-    inside a row it does not own. So the no-reprisal half keys off the
-    Bluff check `p7546` actually rolls, which is the printed effect
-    whenever the assassin does not take the option.
+    **The substitution is written now, and the old note's premise was
+    false.** `skills.check` announces `SkillCheck` *before* its modifiers
+    are totalled and its `finish` callback reads `ev.skill` back off the
+    event, so writing the other skill onto it in the interrupt window is
+    the substitution itself rather than a bonus standing in for one.
+    `f3028` does exactly this against this same power; it needs
+    `PowerUsed`/`PowerResolved` bookkeeping because it is a standing trait,
+    and this row does not -- it is armed by `p7546`'s own use, one line
+    above the body that rolls.
+
+    "You **can** use" is a real choice, so it is offered rather than taken.
+
+    **The latch closes on that check, landed or not.** The card's second
+    clause says "if *that* check succeeds", so a later check in the same
+    turn is not the subject -- and keying the payout off the skill means
+    the one that was rolled has to be settled rather than waited for
+    again. The old body latched on success alone and would have paid a
+    second check.
     """
     me, foes = c.me, list(c.trigger.targets)
     done: list[bool] = []
+    #: What the check is actually rolled with: "bluff" as printed, or
+    #: "stealth" once the option below has been taken. The payout reads
+    #: this rather than a literal, because the substitution has moved it.
+    rolled_as = ["bluff"]
+
+    def instead(ev: SkillCheck) -> None:
+        if done or ev.actor != me or ev.skill != "bluff":
+            return
+        if c.may(f"roll stealth in place of bluff for {c.ref}"):
+            ev.skill = "stealth"
+            rolled_as[0] = "stealth"
 
     def on_check(ev: SkillCheck) -> None:
-        if ev.actor != me or done or ev.skill != "bluff" or not ev.success:
+        if done or ev.actor != me or ev.skill != rolled_as[0]:
             return
         done.append(True)
+        if not ev.success:
+            return
         for foe in foes:
             c.no_provoke(from_=foe, on=me, until=When.EONT)
 
+    # BEFORE, and `Bus._run` runs that whole window first, so the rewrite
+    # lands before `finish` totals the modifiers and before the payout
+    # below reads the skill back.
+    c.watch(SkillCheck, instead, until=When.EOT, on=me, window=Window.BEFORE)
     c.watch(SkillCheck, on_check, until=When.EOT, on=me)
 
 

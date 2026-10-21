@@ -772,7 +772,7 @@ def m3441a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d8", 1),
-    dropped=("c.amount_for('m305')",),
+    dropped=("c.amount_for('m305a0')",),
 )
 def m3519a0(c: Cast) -> None:
     """The hold, the two defences it buys and the narrowed claw all play, and
@@ -792,12 +792,28 @@ def m3519a0(c: Cast) -> None:
     from the aura" -- it edits a *different* block's aura from here.
 
     **Re-aimed off `c.aura_effect()`, which named a verb that is not the
-    blocker.** `c.change_amount("m305", 6, on=...)` already exists and is
+    blocker.** `c.change_amount("m305a0", 6, on=...)` already exists and is
     exactly this sentence; it is inert, because `change_amount`'s own
     docstring says a row must *read* the modifier with `c.amount_for` to be
-    changed by it, and `m305`'s aura hands out its number in the clear.
+    changed by it, and `m305a0`'s aura hands out its number in the clear.
     Laying the modifier here would be a finished-looking no-op, so the
-    marker names the reader that has to land in `m305` instead.
+    marker names the reader that has to land in `m305a0` instead.
+
+    **Confirmed, and it is two content lines in two files.** Nothing in
+    `engine/` has to move: `c.change_amount(ref, amount, on=, until=,
+    when=)` appends to `Powers.amounts` on whoever it is laid on, and
+    `c.amount_for(ref, default, who=)` reads somebody else's store through
+    `query.granted_amount` -- largest wins, and the default is a fallback
+    rather than a floor. The other line is
+    `content/monsters/level_04/brutes.py`, where `m305a0`'s `scour` watcher
+    ends in a bare `c.flat(2, on=ev.actor)` and has to become
+    `c.flat(c.amount_for("m305a0", 2, who=ev.actor), on=ev.actor)`. Both
+    sites must agree on the key; `m305a0` is the row that hands the number
+    out, where this marker used to say `m305`.
+
+    Left for whoever owns both files: a parallel authoring wave owns one
+    file each, and writing the raise here while the reader is still absent
+    is the no-op the paragraph above refuses.
     """
     victim = c.target
     held = c.grabbing()

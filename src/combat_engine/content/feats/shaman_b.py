@@ -745,10 +745,55 @@ def f3056(c: Cast) -> None:
     c.watch(Hit, landed, until=When.EOT, on=me, once=True, label=c.ref)
 
 
+def _beside_a_bloodied_foe(c: Cast) -> bool:
+    """"Your spirit companion is adjacent to a bloodied enemy" -- **any**
+    bloodied enemy, and not necessarily the one being swung at, which is
+    what the card prints and the narrower reading would get wrong."""
+    return any(c.bloodied(foe) for foe in beside(c, side="enemy"))
+
+
 @power("f2300", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.raise_bonus()",))
+       reach=PERSONAL, target=SELF)
 def f2300(c: Cast) -> None:
-    """Doubles the bonus a racial trait grants while the spirit stands
-    beside a bloodied enemy. Two things are absent: `m1031a4` is not in
-    the tree, so there is no bonus standing to be raised, and nothing
-    lets one row change the size of the modifier another row laid."""
+    """Raises the bonus a racial trait grants while the spirit stands beside
+    a bloodied enemy. **Both of the old note's holds are gone, and the first
+    was the `x_` trap `feats/ranger_c.py` warns about.**
+
+    The note said the trait "is not in the tree". The token it was reading
+    is the extractor's, not a ref: `chargen._RACIAL_POWER` strips a bare id
+    on its own line out of a block heading, and no row has ever matched it.
+    The trait is `rt:r8-t0`, it is declared, and it lays
+    `c.bonus("attack", 1, kind="racial", ...)` gated on the creature being
+    swung at being bloodied -- which is the thing this card raises.
+
+    The second hold was that nothing lets one row change the size of a
+    modifier another laid. True, and not needed: `Mods.total` buckets typed
+    bonuses and **the larger of a kind applies**, so a second `kind="racial"`
+    attack bonus of 2 gated per-attack *is* the printed increase -- +2 while
+    the gate holds, +1 from the trait otherwise, and never +3. No modifier is
+    edited and no new facility is wanted.
+
+    The gate asks two questions and both are the card's. The spirit being
+    beside *a* bloodied enemy is this feat's own condition; the creature
+    being swung at being bloodied is the trait's, and it has to be asked
+    here too, because a raise of a bonus that is not applying would
+    otherwise pay +2 against an unbloodied target where the trait pays
+    nothing.
+
+    `c.bloodied(foe)` asks about that creature -- the bare call asks about
+    this row's target, which is the character.
+
+    The same raise of the same trait is also waiting under
+    `c.bonus(of_ref=)` on `f2129b` in `feats/general_n.py`: two symbols over
+    one need, worth filing."""
+    me = c.me
+
+    def raised(ctx: dict[str, Any]) -> bool:
+        foe = ctx.get("target")
+        return (
+            foe is not None
+            and c.bloodied(foe)
+            and _beside_a_bloodied_foe(c)
+        )
+
+    c.bonus("attack", 2, kind="racial", on=me, until=When.ENCOUNTER, when=raised)

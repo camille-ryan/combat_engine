@@ -1337,38 +1337,79 @@ def m4014a0(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=Melee(2),
-    target=Target(side="enemy", count=1, label="immobilized by it"),
+    target=Target(
+        side="enemy", count=1, label="immobilized by it",
+        conditions=(Condition.IMMOBILIZED,),
+        affected_by="m4014a2",
+    ),
     attack=Attack(vs=FORT, printed=11),
-    dropped=("Relation.IMMOBILIZED_BY", "c.sight_range(shared_only=)"),
+    dropped=("c.sight_range(shared_only=)",),
 )
 def m4014a1(c: Cast) -> None:
     """The restrained hold and the recurring damage both play.
 
-    The printed target is "a creature immobilized by it", which `Relation`
-    has no member for -- the six it carries are the grab, the mark,
-    domination, hiding, the curse and the quarry -- so `Target.relation`
-    cannot say this one and the pick stays in the body. Filtering on the
-    bare `Condition.IMMOBILIZED` would be wider than the card: it would
-    accept a creature held by somebody else entirely.
+    **"A creature immobilized by it" is `Target.affected_by`, and the old
+    note was hunting the wrong field.** It was right that `Relation` has no
+    member for being immobilised -- and it should not grow one, because the
+    field that says this already exists under another name. `affected_by`
+    names the *row* whose effect the target must be carrying, read off
+    `Effect.by`, and `m4014a2` is the sibling of this stat block that does
+    the immobilising. So the note's own worry -- that a bare
+    `Condition.IMMOBILIZED` would accept a creature held by somebody else
+    entirely -- is exactly what this rules out, and the pick comes out of
+    the body. It is in `dsl.candidates`' guard list, so the offer path
+    honours it rather than only the explicit-target arm.
 
-    "Line of sight and line of effect only to the m4014, and no creature
-    has it to the target" has no vision gate narrow enough to lay only
-    between two named creatures -- `c.sight_range` shrinks a radius, not
-    a line to one other creature."""
-    victim = next((f for f in c.grabbing() if c.is_(Condition.IMMOBILIZED, on=f)), None)
-    if victim is None or not c.strike(on=victim):
+    **Two faults fixed alongside it, neither named by the marker.** The body
+    threw `c.target` away and picked off `c.grabbing()` instead, so it swung
+    at whoever was being held rather than at whoever was offered; and the
+    printed "the target is no longer grabbed or immobilized" was never
+    honoured, so the hold this replaces stayed standing beside it.
+    `c.cure` is the removal, and it reaches both -- the grab is a relation
+    and the immobilisation is an effect, and `Effects.cure` clears either.
+
+    **The tick hangs off the engulf hold rather than carrying a `SAVE_ENDS`
+    of its own.** `c.watch(until=When.SAVE_ENDS, on=me)` lays a save-ends
+    effect on *this creature*, and `SAVE_ENDS` clocks on whoever carries it
+    -- so the damage stopped when the monster made a save it is not owed and
+    went on after the victim made the one it is.
+
+    The closing clause -- the target reappearing in a square of its choice
+    when this creature dies or it saves -- has nothing to undo: the victim
+    is never moved into this creature's space, so there is nowhere to put it
+    back from. Writing the displacement is a bigger change than the line of
+    sight the remaining marker names, and it is not what that marker is
+    about.
+
+    "Line of sight and line of effect only to the m4014, and no creature has
+    it to the target" still has no verb. One note for whoever takes it:
+    `c.sight_range` shrinks a radius and is probably the wrong symbol here
+    too -- `m6572a2` prints the second half of this sentence word for word
+    and is written as a refusal in the `AttackDeclared` window, which is a
+    shape that would serve both halves."""
+    victim = c.target
+    if victim is None or not c.strike():
         return
+    # Printed as a replacement: the engulf takes over from whatever hold
+    # brought the creature here, rather than stacking on top of it.
+    c.cure(Condition.GRABBED, Condition.IMMOBILIZED, on=victim)
     # No damage on the hit itself: the printed 3d8 + 5 lands at the start of
     # this creature's turn while the hold lasts, which is the `tick` below.
     # `c.hit()` raises without a damage line and was the wrong call here.
-    c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)
+    hold = c.condition(Condition.RESTRAINED, until=When.SAVE_ENDS, on=victim)
+    if hold is None:
+        return
     me = c.me
 
     def tick(ev: TurnStart) -> None:
-        if not ev.ghost and ev.actor == me:
-            c.flat(c.roll("3d8") + 5, dtype=DamageType.NECROTIC, on=victim)
+        if hold.ended or ev.ghost or ev.actor != me:
+            return
+        c.flat(c.roll("3d8") + 5, dtype=DamageType.NECROTIC, on=victim)
 
-    c.watch(TurnStart, tick, until=When.SAVE_ENDS, on=me, label=f"{c.ref} {victim}")
+    watcher = c.watch(
+        TurnStart, tick, until=When.ENCOUNTER, on=me, label=f"{c.ref} {victim}",
+    )
+    hold.on_end.append(lambda: c.world.effects.end(watcher, "the hold ended"))
 
 
 @power(

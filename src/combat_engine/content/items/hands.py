@@ -65,6 +65,7 @@ from combat_engine.engine import (
     WILL,
     ActionType,
     Attack,
+    AttackRolled,
     Bloodied,
     Cast,
     Condition,
@@ -623,12 +624,49 @@ def i1437p1(c: Cast) -> None:
 
 
 @power("i1743x1", level=5, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.roll_gate()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.boost_roll(kind_of_bonus=)",))
 def i1743x1(c: Cast) -> None:
     """"When your attack roll is 20 or lower" is a condition on the die,
-    and a modifier is decided before the die is read."""
-    c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="item",
-            when=_defence_gate(FORT))
+    and the old note was right that a modifier is decided before the die
+    is read -- and wrong that nothing else can say it. `c.boost_roll`
+    (#495) adds to a roll already made and `ev=` reaches it from inside a
+    watcher (#679), so the cap is written rather than dropped. The row as
+    shipped paid its +1 on **every** Fort attack, which is stronger than
+    print.
+
+    **"20 or lower" is the total, not the die.** A natural d20 is twenty
+    or lower in every fight, so reading it as the face would make the
+    clause a tautology and the whole sentence decoration. `result.total`
+    rather than `ev.total` for the same reason `resolve.attack` re-reads
+    it: an interrupt in this window may have moved the die, and the
+    locals were summed before that.
+
+    **`ev.vs` rather than `_defence_gate(FORT)`.** The event carries the
+    defence the attack actually went after, so a row whose secondary
+    attack goes after a different defence than its printed Attack line is
+    exact here -- which is the one imprecision the gate ships with.
+
+    What is given up, and the marker: a boost is a number added to the
+    total and carries no bonus *type*, so this +1 stacks with another item
+    bonus to attack rolls where the printed rule says the larger of the
+    two applies. 23 rows in the tree lay one, across different slots, so
+    the overlap is rare rather than impossible.
+    """
+    me = c.me
+
+    def cap(ev: AttackRolled) -> None:
+        # `result` rides on the event as a plain attribute rather than a
+        # field -- `resolve.attack` hangs it there to keep it off the wire
+        # -- so it is read the way `c.boost_roll` reads it.
+        result = getattr(ev, "result", None)
+        if ev.attacker != me or result is None or result.total > 20:
+            return
+        if ev.vs is not FORT or not _has_keyword(ev.power, Keyword.WEAPON):
+            return
+        c.boost_roll(1, kind="attack", ev=ev)
+
+    c.watch(AttackRolled, cap, until=When.ENCOUNTER)
 
 
 @power("i1895x1", level=5, cls=ITEM, action=ActionType.NONE,

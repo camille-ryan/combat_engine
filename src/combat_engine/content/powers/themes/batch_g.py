@@ -1039,12 +1039,31 @@ def p14221(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.ARCANE],
-    dropped=("c.recharge_roll()",),
+    dropped=("actions.recharge(disadvantage=)",),
 )
 def p14222(c: Cast) -> None:
     """The penalty is laid on each enemy with a live "am I inside" gate, so
     a creature that walks in later is covered and one that walks out is
-    not. Nothing touches a recharge roll."""
+    not.
+
+    **Still dropped, and re-aimed to the symbol the sibling row uses.** The
+    clause is a *disadvantage on somebody else's* recharge roll -- "enemies
+    in the aura must roll twice and use the lower result when attempting to
+    recharge a power" -- and not this row declaring a recharge of its own.
+    A triage pass read it the second way and judged the row writable off
+    `dsl.recharge` / `recharge_when` / `recharge_while`, which are header
+    data about the row that owns them and answer a different sentence.
+
+    `actions.recharge` is the one reader: it rolls `world.rng.roll("1d6")`
+    flat against the number in the header and consults no modifier of any
+    kind, so there is nowhere for either shape of this to go. `m2555a4`
+    reached the same line from the other end -- it wants a +1 and its note
+    says so -- which is why the symbol names that function rather than a
+    `Cast` verb. Two shapes of one hole, so two symbols: a bonus hook would
+    not let this row say "twice, keep the lower".
+
+    `c.reroll_attack(keep="worst")` and `c.damage_disadvantage` are the two
+    rolls that *do* have it, and neither reaches a recharge."""
     c.aura(2, label=c.ref, until=When.EONT, on=c.me)
     for foe in c.enemies():
         c.penalty(

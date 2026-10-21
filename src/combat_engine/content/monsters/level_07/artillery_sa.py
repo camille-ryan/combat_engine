@@ -646,6 +646,19 @@ def m3378a4(c: Cast) -> None:
         c.teleport(5)
 
 
+#: The five the card offers, in the order it prints them.
+_M3378_TYPES = (
+    DamageType.ACID,
+    DamageType.COLD,
+    DamageType.FIRE,
+    DamageType.LIGHTNING,
+    DamageType.THUNDER,
+)
+#: "Any one of his powers" -- every row of this block that rolls damage.
+#: a5 itself rolls none, so it is not among them.
+_M3378_ROWS = ("m3378a0", "m3378a1", "m3378a2", "m3378a3", "m3378a4")
+
+
 @power(
     "m3378a5",
     level=7,
@@ -653,19 +666,44 @@ def m3378a4(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.retype()",),
+    dropped=("c.deals(riders=)",),
 )
 def m3378a5(c: Cast) -> None:
-    """Refused in play: no verb overrides a row's own declared damage type
-    at cast time, which is this trait's entire printed effect. Confirmed
-    absent: `grep -n "def retype" src/combat_engine/engine/cast.py` and
-    `uv run scripts/vocab.py --brief | grep retype` both empty.
+    """`c.deals` is the verb, and the old note missed it by searching for a
+    name: it confirmed `grep -n "def retype"` empty and `vocab.py | grep
+    retype` empty, and the facility is filed under another word. It is an
+    *override* rather than an addition, which is this card and not
+    `f1231`'s, and `ref=` narrows it to the one named row -- the field
+    `_retyped` compares against the row being rolled, which is exactly
+    "any one of his powers".
 
-    A separate symbol from `f1231`'s `c.retype_damage(dtypes=)` on purpose:
-    that one adds a second type to what a named row deals, this one
-    *replaces* the type outright, for a duration. Same missing machinery --
-    reaching another row's damage type -- but one symbol going green would
-    falsely finish the other, so they stay apart."""
+    `through` steps aside when `ref` is given, so the default
+    `Keyword.WEAPON` scope does not quietly exclude the four implement and
+    fire rows here.
+
+    Two choices, in the order the card makes them: which power, then which
+    of the five types. `c.choose` offers both, so the first option is the
+    answer on a headless board rather than the only one.
+
+    Dropped: a chosen row's **rider** does not recolour. `_typed` is read by
+    `c.damage` and `c.half_damage` and by nothing else, so a0's and a1's
+    whole damage changes type and a2's splash, a3's ongoing and a4's recoil
+    stay the type they were printed. Measured: aiming the retype at a2 and
+    asking for cold gives one cold blow and two fire splashes from the one
+    use. It is `dropped=` rather than a finished row because one printed
+    sentence comes out partly honoured, and the symbol names the retype
+    rather than the two verbs, because the hole is the retype's reach --
+    nothing is wrong with `c.flat` or `c.ongoing` where a row declares its
+    own type. 72 sites in the tree call `c.deals` and none of them is
+    marked for it; this is the row where the shortfall is visible, since
+    the riders it aims at are three lines up in the same block."""
+    row = c.choose(list(_M3378_ROWS), "which power changes its damage type")
+    if row is None:
+        return
+    dtype = c.choose(list(_M3378_TYPES), "the type it deals instead")
+    if dtype is None:
+        return
+    c.deals(dtype, ref=row, on=c.me, until=When.EONT)
 
 
 # ==========================================================================
@@ -750,22 +788,34 @@ def m3643a0(c: Cast) -> None:
     keywords=[Keyword.NECROTIC],
     attack=Attack(vs=WILL, printed=11),
     damage=Damage("1d10", 5, dtype=DamageType.NECROTIC),
-    dropped=("c.insubstantial(to=)",),
 )
 def m3643a1(c: Cast) -> None:
     """"Treats the m3643 as insubstantial" is insubstantial against one
     named foe only, and applying it broadly would halve damage from
     everybody rather than from this target.
 
-    **Re-pointed from `c.insubstantial(when=)` to `(to=)`.** The gap is a
-    *scope*, not a condition -- the trait is never switched off, it only
-    faces one way -- and `c.invisible` already spells a one-sided version of
-    itself `to=`. Filed under the old symbol it would have reported ready
-    when #470's suspension landed, which answers a different sentence
-    entirely.
-    """
+    **The re-pointing was right about the gap being a scope and wrong about
+    where that scope would live.** This row was moved off
+    `c.insubstantial(when=)` and onto a hypothetical `(to=)` on the
+    reasoning that a one-sided trait is not a condition -- and #747 then
+    built exactly that scope onto `when=`: it is asked the **damage**
+    context, so `source` answers who is swinging, and the answer is kept in
+    `Defences.half_when` where `query.takes_half` reads it. Nothing is
+    switched on and off; the one gate simply faces one creature.
+
+    `source`, not `attacker`: the attack context's name for the swinger was
+    never in this one, which is #380 and what made `m115875a0`'s identical
+    one-sided resist apply to nobody.
+
+    The printed duration is "the end of its next turn" and the effect sits
+    on the m3643, so `EONT` and `EOTNT` name the same moment here -- both
+    read the clock off the creature carrying the trait. `EONT` is what the
+    worked sibling uses."""
+    victim = c.target
     if c.strike():
         c.hit()
+        c.insubstantial(on=c.me, until=When.EONT,
+                        when=lambda ctx: ctx.get("source") == victim)
 
 
 @power(

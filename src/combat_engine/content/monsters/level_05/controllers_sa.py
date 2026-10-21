@@ -1835,18 +1835,35 @@ def m5602a2(c: Cast) -> None:
     reach=Melee(1),
     target=NO_TARGET,
     keywords=[Keyword.CONJURATION, Keyword.IMPLEMENT, Keyword.NECROTIC, Keyword.POISON],
-    dropped=("c.conjure(side=)", "c.conjuration_hp()"),
+    dropped=("c.conjuration_hp()",),
 )
 def m5602a3(c: Cast) -> None:
     """Conjures the viper, retiring an older one first -- "can have only one
-    at a time." Allies passing through its square while enemies cannot, and the
-    ten-damage destruction that pays ten back to m5602, have no verb. The
-    opportunity bite when an enemy leaves its side is real.
+    at a time." The ten-damage destruction that pays ten back to m5602 has
+    no verb. The opportunity bite when an enemy leaves its side is real.
 
     **"She can also move the viper up to 6 squares" is `speed=`**, which
     `c.conjure` already takes -- its docstring says so in as many words. An
     earlier version of this row marked it `dropped=("c.move_zone()",)`, which
-    was wrong twice: that verb exists too, and nothing here needed it."""
+    was wrong twice: that verb exists too, and nothing here needed it.
+
+    **"Enemies can't move through its space, but allies can" is written as
+    the permission and not as the bar.** `solid=True` already closes the
+    square to everybody -- `place` indexes the viper in `grid.occupants`, so
+    `movement._clear` refuses it -- and the printed sentence is therefore one
+    waiver on top of that, which is `c.may_enter` and not `c.blocks_entry`.
+    The gate names *this* viper, so the permission opens one square rather
+    than every occupied square on the board.
+
+    Laid on the caster as well as on her allies: the card divides the world
+    into enemies and allies and only the enemies are barred, so the creature
+    the viper came out of is not.
+
+    Two honest limits. The holders are enumerated now, so an ally arriving
+    later does not get the waiver. And a permission outlives the viper it
+    names, which is inert rather than wrong -- `World.spawn` counts upward
+    and never reissues an id, so a gate comparing against a despawned one
+    can never match again."""
     me = c.me
     for old in c.conjurations():
         c.world.despawn(old)
@@ -1854,6 +1871,10 @@ def m5602a3(c: Cast) -> None:
                       speed=6, label=c.ref)
     if not viper:
         return
+
+    for friend in (me, *c.allies()):
+        c.may_enter(on=friend, until=When.ENCOUNTER,
+                    when=lambda ctx, v=viper: ctx.get("occupant") == v)
 
     def bit(ev: AdjacencyLost) -> None:
         if ev.other != viper or team(c.world, ev.actor) is team(c.world, me):
@@ -2799,13 +2820,22 @@ def m6473a1(c: Cast) -> None:
     reach=Ranged(10),
     target=ONE_CREATURE,
     attack=Attack(vs=WILL, printed=9),
-    dropped=("c.no_walk(toward=)",),
 )
 def m6473a2(c: Cast) -> None:
-    """The grant is exact. Barring the target from closing the distance
-    specifically has no directional movement verb, so that half is dropped."""
+    """Both halves. The old note said barring the target from closing the
+    distance had no directional movement verb; `c.cannot_approach` is that
+    verb and was built for this sentence -- `c.leash` with the comparison
+    reversed, enforced in `movement.reachable` as a destination filter.
+
+    Two things read off the card rather than taken from the verb's
+    defaults: the duration is the printed `EONT` and not `SAVE_ENDS`, and
+    the anchor is the caster, which here is printed rather than assumed.
+
+    "Willingly" needs nothing: a push, a pull or a slide never goes through
+    `reachable`, so a forced move still closes the gap."""
     if c.strike():
         c.grants_advantage(until=When.EONT)
+        c.cannot_approach(until=When.EONT)
 
 
 @power(

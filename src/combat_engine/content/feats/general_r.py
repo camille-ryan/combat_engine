@@ -84,6 +84,7 @@ from combat_engine.engine import (
     PowerResolved,
     PowerUsed,
     Ranged,
+    Relation,
     SavingThrow,
     SecondWind,
     SkillCheck,
@@ -102,7 +103,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.basic import MELEE as BASIC_MELEE
-from combat_engine.engine.components import Health
+from combat_engine.engine.components import Health, Mods
 from combat_engine.engine.query import (
     creatures,
     defence,
@@ -586,20 +587,51 @@ def f3564(c: Cast) -> None:
 
 @power("f3565", level=1, cls="", usage=ENCOUNTER, action=NONE,
        reach=PERSONAL, target=SELF,
-       proficiency=("w:holy-symbol",), dropped=("c.no_advantage(unless=)",))
+       proficiency=("w:holy-symbol",))
 def f3565(c: Cast) -> None:
     """The attack bonus plays -- heroic tier, so +1 -- and so does the
     rider: `c.no_advantage` is exactly "your enemies cannot gain combat
     advantage against you", laid on the swing. A standing modifier and a
     printed trigger on one card, so the trigger is a `c.watch`.
 
-    Dropped: the carve-out, "unless you use a power or another ability
-    that states that you grant combat advantage". `c.no_advantage` shuts
-    every branch at once and nothing reopens one for a later grant."""
+    **The carve-out is written, and the old note had the mechanism right
+    and the shape wrong.** It said `c.no_advantage` shuts every branch at
+    once and nothing reopens one -- true, and the clause does not want a
+    branch reopened. "Unless you use a power or another ability that states
+    that you grant combat advantage" wants the whole suppression to stand
+    down while such a grant exists, which is what a `when=` gate says.
+    `query.advantage` asks the `no_advantage` key **first** and returns on
+    it, so a gate that answers False there drops straight through to the
+    routes below and the grant wins.
+
+    Which routes count is the load-bearing part. An explicit grant lands
+    either as `Relation.GRANTS_CA_TO` or as the `grants_ca_to` mod, and both
+    are read here. A **condition** -- prone, dazed, stunned -- goes through
+    `query.grants_ca` instead and is untouched by the gate, so it stays
+    suppressed. That is the card: the carve-out names powers and abilities,
+    not conditions, and the printed line is otherwise absolute."""
     me = c.me
 
     def holding(ctx: dict[str, Any]) -> bool:
         return _wielding(c, "w:holy-symbol")
+
+    def not_granted(ctx: dict[str, Any]) -> bool:
+        """True while nothing has explicitly granted this attacker the
+        advantage -- so the suppression stands.
+
+        Both routes are asked of **me** as the granter and the swinging
+        creature as the beneficiary, which is the direction
+        `query.advantage` reads them. The mod gets the same context, since
+        a gated grant narrows on `attacker`.
+        """
+        foe = ctx.get("attacker")
+        if foe is None:
+            return True
+        if c.world.relations.holds(Relation.GRANTS_CA_TO, me, foe):
+            return False
+        mods = c.world.get(me, Mods)
+        return not (mods is not None and mods.items
+                    and mods.total("grants_ca_to", ctx) > 0)
 
     c.bonus("attack", 1, kind="feat", on=me, until=When.ENCOUNTER,
             when=holding)
@@ -612,7 +644,7 @@ def f3565(c: Cast) -> None:
             and Keyword.IMPLEMENT in row.keywords
             and _wielding(c, "w:holy-symbol")
         ):
-            c.no_advantage(on=me, until=When.SONT)
+            c.no_advantage(on=me, until=When.SONT, when=not_granted)
 
     c.watch(AttackDeclared, swung, until=When.ENCOUNTER)
 

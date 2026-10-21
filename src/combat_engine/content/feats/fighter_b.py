@@ -1178,35 +1178,55 @@ def f1743(c: Cast) -> None:
 
 
 @power("f1969", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.reroll_ones(tries=)",))
+       reach=PERSONAL, target=SELF,
+       todo=("cast.reroll_pick_honours_when",))
 def f1969(c: Cast) -> None:
     """Lets the ally you flank with reroll damage dice showing a 1.
 
-    **Re-pointed: `when=` landed and is not what this card needs.** Three
-    of the four rows that carried `c.reroll_ones(when=)` wanted the victim
-    narrowed and are written now. This one needs a **third shape of
-    reroll**, and the printed sentence is the last one: *"The ally can
-    reroll each die once."*
+    **Re-pointed: `c.reroll_ones(tries=)` landed, as `pick=EVERY_DIE`, and
+    the row is still refused -- for a different reason one level down.**
 
-    `c.reroll_ones` has two shapes and neither says that. The loop
-    (`below=`) rerolls a low die *until it is no longer low* --
-    `_rolled_above`'s own first line, "replace each die under `floor` until
-    it is not" -- which is **stronger** than one reroll. `pick=N` is the
-    other printed shape and is weaker in a different direction: it rerolls
-    N dice once and the new face stands, but it is "pick one of them", a
-    count of dice rather than one try each.
+    The old note asked for every low die rerolled exactly once and said
+    neither existing shape could say it. #703 built that shape:
+    `_rolled_pick` is "reroll at most `count` of the dice under `floor`,
+    **once each**", and with the default `below=2` the floor is 2, so every
+    die showing a 1 is rerolled once and the second face stands whatever it
+    is. That half of the note is closed.
 
-    What this wants is every low die rerolled **exactly once**.
-    `_rolled_above` already counts `tries` internally -- as a termination
-    guard, not an option -- so the number exists in the right place and is
-    not exposed. Hence `c.reroll_ones(tries=)`.
+    **What refuses the row now is that `pick=` and `when=` do not compose.**
+    `Cast._reroll_pick` reads the floor through its own `best()` helper,
+    which passes `ctx=seen`, and then reads the **count** with two bare
+    `self.total("...#n")` calls that pass no context at all. `Mod.applies`
+    is handed `{}`, so any gate reading a key is False and the count comes
+    back 0 -- and `_rolled_pick(dice, floor, 0)` rerolls nothing. Measured
+    on a fresh board:
 
-    Writing it with the loop instead would make the row stronger than its
-    printed line, which is the direction that matters, so it stays refused
-    rather than approximated. The rest of the card -- the flanking gate,
-    the two-handed gate, and laying the hold on the ally rather than on the
-    holder -- is all writable: `query.flankers` answers who holds the other
-    side, `c.wielding("two-handed")` the grip, and `when=` the victim.
+        pick=EVERY_DIE, no gate                 floor 2, count 99
+        pick=EVERY_DIE, gated on ctx.attacker   floor 2, count  0
+
+    So the gated form lays two effects, audits as having done something, and
+    changes no die in any fight -- the exact failure the paragraph below
+    refused this row over once already. The fix is to pass `ctx=seen` to the
+    two `#n` lookups the way the floor's are; it is an engine change and not
+    this row's to make. #818.
+
+    **The symbol names the behaviour, not the parameter.**
+    `c.reroll_ones(pick=, when=)` was the spelling for one commit and
+    `todo.py` was right to go red on it: both parameters *exist*, so a
+    marker naming them can never be satisfied by their arrival, which is the
+    whole job of a marker. What is absent is a `_reroll_pick` whose count
+    lookups honour the gate, so that is what it says.
+
+    **The gate cannot be dropped to get round it.** Two of its four halves
+    are only answerable at the roll: the reroll is for a melee attack
+    *against the flanked enemy*, and `Cast._reroll_ctx` is where `target`
+    and `power` arrive. Laying it ungated gives the ally the reroll against
+    every enemy and on ranged attacks too, which is stronger than print.
+
+    The rest is writable and waits on that one line: `_flanking_pair`-style
+    reads name the exact pair where `query.flanked_by` would answer for any
+    partner, `c.wielding("two-handed")` is the grip asked live, and the hold
+    goes on the ally rather than on the holder.
 
     **Re-aimed from `dropped` to `todo`.** The whole printed benefit is
     the reroll; what was written beside the marker was a flanking gate

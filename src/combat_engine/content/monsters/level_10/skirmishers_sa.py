@@ -3576,12 +3576,28 @@ def m5813a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.dim_light()",),
 )
 def m5950a0(c: Cast) -> None:
-    """The radius is real; nothing in this engine tracks light levels, so
-    there is no verb to dim bright light within it."""
+    """Bright light inside the radius is reduced to dim.
+
+    **The old note -- "nothing in this engine tracks light levels" -- was
+    true and stopped being so** (#686, #687). `c.dim` is the verb and not
+    `c.light`: that one makes a square bright however dark it is
+    underneath, where this only ever darkens, which is the order `c.dim`'s
+    own docstring states for this exact sentence. It is carried on the
+    creature rather than painted on the grid, so the radius travels with it
+    the way the aura does.
+
+    The aura stays beside it. It is what the board draws and what a row
+    asking "inside the aura" would read; the dimming is a radius and has no
+    membership of its own.
+
+    Not inert: `query.light_concealment` turns dim light into a `Cover` that
+    `resolve.attack_mods` takes the larger of, so this conceals whoever
+    stands in it -- including the creature itself.
+    """
     c.aura(5, label=c.ref, until=When.ENCOUNTER, on=c.me)
+    c.dim(5, on=c.me, until=When.ENCOUNTER)
 
 
 @power(

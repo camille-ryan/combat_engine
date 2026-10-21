@@ -16375,13 +16375,31 @@ def a_reroll_floor_can_be_narrowed_by_the_victim(out: Result) -> None:
                  f"{ref2} no longer waits on a reroll symbol ({narrows})",
                  f"{REGISTRY[ref2].unfinished}")
 
-    # **`f1969` is the one left, and it is a different shape.** Asserted so
-    # the symbol cannot quietly go back to the one that landed: its card
-    # says "the ally can reroll each die **once**", where the loop rerolls
-    # until the die clears -- stronger than print, which is the direction
-    # that matters.
-    out.that(REGISTRY["f1969"].unfinished == ("c.reroll_ones(tries=)",),
-             "and f1969 waits on reroll-each-die-once, not on the gate",
+    # **`f1969` is the one left, and what it waits on has moved.** This
+    # asserted `c.reroll_ones(tries=)` -- "the ally can reroll each die
+    # **once**", where the loop rerolled until the die cleared. #703 built
+    # exactly that as `pick=EVERY_DIE`: `_rolled_pick` is "reroll at most
+    # `count` of the dice under `floor`, once each", and with the default
+    # `below=2` every die showing a 1 is rerolled once and the second face
+    # stands. So that half closed and this assertion went stale with it.
+    #
+    # **The intent is kept rather than dropped.** The point was that the
+    # symbol must not quietly collapse back onto the one that landed, so the
+    # test is now two-sided: the row must *not* name the parameters that
+    # exist, and must name the behaviour that does not. What refuses it now
+    # is one level down -- `_reroll_pick` reads the floor with `ctx=seen` and
+    # the **count** with two bare `self.total("...#n")` calls, so any gate
+    # reading a key is False and the count comes back 0. Measured:
+    # ungated `(floor 2, count 99)`, gated on the attacker `(floor 2,
+    # count 0)`. #818.
+    waiting = tuple(REGISTRY["f1969"].unfinished or ())
+    out.that(not any("tries=" in w or "pick=" in w for w in waiting),
+             "f1969 no longer waits on a parameter that has landed -- the"
+             " control against the symbol collapsing back onto `tries=`",
+             f"{waiting}")
+    out.that(waiting == ("cast.reroll_pick_honours_when",),
+             "and names the behaviour that is absent rather than the two"
+             " parameters that are present, which `todo.py` would reject",
              f"{REGISTRY['f1969'].unfinished}")
 
 def a_feats_swap_is_written_where_it_is_read(out: Result) -> None:

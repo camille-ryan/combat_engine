@@ -1151,13 +1151,29 @@ def f2405(c: Cast) -> None:
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.change_distance(ref, n)",))
+       reach=PERSONAL, target=SELF, todo=("cf:rogue-scoundrel-f1s2",))
 def f2429(c: Cast) -> None:
     """Shortens the distance `cf:rogue-scoundrel-f1s2` asks a move to
     cover. That row is declared, so the name is not the hold -- the 3 is
     a literal inside its printed text and that feature is itself
     unwritten, so there is neither a number to rewrite nor a check to
-    move it on."""
+    move it on.
+
+    **Re-aimed off `c.change_distance(ref, n)`, which has existed all
+    along under another name.** `c.extend_move(ref, squares)` is "make a
+    named row move you further", keyed by ref, and `c.squares_for` is its
+    read half -- the entries add, so a *negative* entry shortens, which is
+    this card exactly. Its own docstring names what is actually missing:
+    "a row must read it to be changed, with `squares_for`. An
+    `extend_move` on a row whose body still hard-codes its distance is a
+    modifier nothing consults."
+
+    So the hold is the sibling row, not a verb, and the marker names the
+    sibling. `cf:rogue-scoundrel-f1s2` has an empty body and waits on
+    `c.stealth_speed()` and `c.hide(cover=)`; marking either of those here
+    would report this feat ready the day a symbol lands, which is one step
+    early -- the feature has to be *written* before there is a 3 to take a
+    square off."""
 
 
 @power("f2459", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

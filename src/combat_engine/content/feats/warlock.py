@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.content.powers.warlock.level_1 import one_d20_bonus
 from combat_engine.engine import (
     AT_WILL,
     ENCOUNTER,
@@ -203,13 +204,17 @@ def f695(c: Cast) -> None:
 def f292(c: Cast) -> None:
     """A second +1 on the roll that boon buys.
 
-    Re-read: nothing has to reach inside `p2263`. It lays an untyped
-    one-shot attack bonus and untyped bonuses stack, so an identical one
-    laid beside it comes to the +2 the card describes and is spent on
-    the same roll. Printed as a bonus to any d20 roll; only attack rolls
-    can carry a modifier here, which is the choice `p2263` itself made.
+    Re-read: nothing has to reach inside `p2263`. It lays untyped one-shots
+    and untyped bonuses stack, so an identical set laid beside it comes to
+    the +2 the card describes and is spent by the same roll.
+
+    **Widened with `p2263`.** This said only attack rolls could carry a
+    modifier, which was the shape that row had been forced into and is no
+    longer true: `one_d20_bonus` lays all four keys a d20 modifier is read
+    under, so the second +1 follows the first onto whichever roll it lands
+    on rather than only onto a swing.
     """
-    c.bonus("attack", 1, on=c.me, until=When.EONT, once=True)
+    one_d20_bonus(c)
 
 
 @power("f293", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

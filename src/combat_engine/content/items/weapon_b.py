@@ -81,6 +81,7 @@ from combat_engine.engine import (
     Keyword,
     Melee,
     Miss,
+    Mod,
     MoveStart,
     OpportunityWindow,
     Position,
@@ -4909,17 +4910,35 @@ def i1566p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus(compute=)",),
 )
 def i1623p1(c: Cast) -> None:
-    """The card counts the enemies afresh at each swing; a modifier carries
-    a fixed number or a die expression and nothing else, so the count is
-    taken once when the minor action is spent."""
-    c.bonus(
-        "damage",
-        len(c.within(1, side="enemy")),
-        on=c.me,
-        until=When.EOT,
+    """**Re-pointed: `Mod.roll` already counts afresh at each read.** The
+    old note said a modifier carries a fixed number or a die expression and
+    nothing else, so the count had to be taken once when the minor action
+    was spent. `Mod.roll` is a callable consulted inside `Mod.amount`, and
+    both `Mods.total` and `Mods.split` read through that -- so it is called
+    once per time the modifier is read, which is once per roll, and a crowd
+    that changes between swings is counted at each one.
+
+    `c.bonus` only reaches `roll` through a dice string, which cannot say
+    "count the enemies". A body may build its own `Mod` and hand it to
+    `effects.apply(mods=)` instead; `features/sorcerer.py` does exactly this
+    for the same printed shape ("a bonus equal to the number of conscious
+    enemies adjacent to you") and nothing on `Cast` was in the way.
+
+    Untyped and `value=0`: the whole number comes out of `roll`."""
+    me = c.me
+
+    def crowd() -> int:
+        return len(c.within(1, side="enemy"))
+
+    c.world.effects.apply(
+        me,
+        me,
+        When.EOT,
+        label=c.ref,
+        by=c.ref,
+        mods=[(me, Mod(what="damage", value=0, label=c.ref, roll=crowd))],
     )
 
 

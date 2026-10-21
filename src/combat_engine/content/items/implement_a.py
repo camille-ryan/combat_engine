@@ -60,6 +60,7 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.content.features.arcanist import STAFF_DEFENCE_RAISE
 from combat_engine.content.features.controllers import IMPOSITION_RAISE
 from combat_engine.content.features.strikers import extra_damage
+from combat_engine.content.features.warlock import BOON, BOONS, CURSE
 from combat_engine.engine import (
     AC,
     ANY_FACE,
@@ -3261,41 +3262,82 @@ def i2291p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.decline_boon()",),
+    dropped=("warlock.boon_instead_of()",),
 )
 def i2296x1(c: Cast) -> None:
-    """A pact boon is announced after all: it pays when an enemy under this
-    character's curse drops, which is a `Dropped` guarded by
-    `cursed_by_me`, the pair every boon in `features/warlock.py` declares
-    on.
+    """"Instead of taking its normal benefit" is written now, and the row
+    stopped being its own `Dropped` watcher to say it.
 
-    The transfer is written. `c.curse` only sets the state, so the curse's
-    extra damage is armed here too, as `cf:warlock-f1c11` does -- **one**
-    watch over the whole set, because one per creature carries its own latch
-    and would pay the printed once-a-round damage several times in a round.
+    **The old shape paid beside the boon, not in place of it**, because the
+    only moment it had was the same `Dropped` the boon pays on -- so the
+    trade was free where the card charges. `c.pre_empt` is the register-
+    before-the-event half (#641) and each leg's payout offers itself as the
+    clause `warlock.BOON`, so the substitution is registered here as a trait
+    and the boon's own payout runs it. `f3444` (feats/general_u.py:644) is
+    the worked twin and carries the same reshape for the same reason.
 
-    Dropped: "instead of taking its normal benefit". The benefit is paid by
-    `cf:warlock-f1`'s own watch and by rows of its own, and nothing lets a
-    row forgo it, so this pays on top of the boon rather than in place of
-    it."""
+    **Registered against every ref in `BOONS`**, because the card's own
+    words are "your pact boon" and name no pact -- the extractor resolved
+    that phrase to a class-feature ref, which is why the brief reads as
+    though one leg were named. A registration against a leg the character
+    does not stand on never fires, which is `c.pre_empt`'s own instruction.
 
-    def boon(ev: Dropped) -> None:
-        if not cursed_by_me(c.world, c.me, ev):
+    **The creature that dropped comes off the bus log, not off `using`.**
+    The two legs that offer `BOON` reach the clause by different routes --
+    `cf:warlock-f1c10` through `c.instead_of` from a declared `Dropped`
+    trigger, `cf:warlock-f1s4` through `c.instead_of_now` from inside a
+    watcher of its own -- so the second has no `c.trigger` to read and
+    `using.target` is the leg's own, which is the warlock. Both run inside
+    the dispatch of the `Dropped`, so the newest one in the log *is* "the
+    original target". `f1490` reads an `AttackRolled` the same way.
+
+    `c.curse` only sets the state, so the curse's extra damage is armed
+    here too, as `cf:warlock-f1c11` does -- **one** watch over the whole
+    set under the shared `CURSE` label, because one per creature carries
+    its own latch and would pay the printed once-a-round damage several
+    times in a round.
+
+    Nothing is asked in the body: `instead_of_now` puts the offer itself,
+    and `instead_of` reads a menu entry already chosen. The `c.may` that
+    stood here would have been a second question for one trade.
+
+    **One residual of that shape, driven and left standing.** The offer is
+    put before this clause runs, so a trade accepted when every enemy
+    within 5 squares is already cursed forgoes the boon and gains nothing.
+    `f3444` closes its version of this by only registering once there is
+    something to regain; here the answer depends on the board at the moment
+    the enemy drops, which registration cannot know. The question is asked
+    first, so a player can see the board; the AI policy cannot, which is
+    `instead_of_now`'s own recorded cost.
+
+    Still `dropped=`, on the residual `f3444` already names: the clause
+    reaches **two of the five** boon refs. `cf:warlock-f1`'s three legs pay
+    inline in `features/strikers.py` and `p16254` pays in
+    `powers/warlock/pacts.py`, neither offering the clause; `cf:warlock-f1c12`
+    pays nothing at all until `c.active_vestige()` lands. A warlock on one
+    of those keeps the printed boon and is offered nothing -- a narrowing,
+    where the old shape was a widening."""
+
+    def transfer(using: Cast) -> None:
+        fell = next(
+            (e for e in reversed(c.world.bus.log) if isinstance(e, Dropped)),
+            None,
+        )
+        if fell is None or not cursed_by_me(c.world, c.me, fell):
             return
         moved = [
             foe
-            for foe in c.within(5, of=ev.actor, side="enemy")
+            for foe in c.within(5, of=fell.actor, side="enemy")
             if not c.cursed(on=foe)
         ]
-        if not moved or not c.may("move the curse to the enemies around it"):
+        if not moved:
             return
         for foe in moved:
             c.curse(on=foe)
-        extra_damage(
-            c, "1d6", applies=lambda who: who in moved, label="cf:warlock-f4"
-        )
+        extra_damage(c, "1d6", applies=lambda who: who in moved, label=CURSE)
 
-    c.watch(Dropped, boon, until=When.ENCOUNTER, on=c.me)
+    for boon in BOONS:
+        c.pre_empt(boon, BOON, transfer, until=When.ENCOUNTER)
 
 
 @power(
@@ -3364,6 +3406,22 @@ def i2332p1(c: Cast) -> None:
     c.no_provoke(on=c.me, until=When.EOT)
 
 
+def _hit_one_unseeing_me(world: World, me: int, ev: Event) -> bool:
+    """I hit an enemy that cannot see me.
+
+    Asked inside the `Hit` emit, which is the only moment it can be asked:
+    `resolve.attack` clears `Relation.HIDDEN_FROM` for the attacker
+    immediately *after* that emit (resolve.py:553), so by the time the
+    body's damage is rolled the answer is False for everybody.
+    """
+    foe = getattr(ev, "target", None)
+    return (
+        getattr(ev, "attacker", None) == me
+        and foe is not None
+        and foe in query.hidden_from(world, me)
+    )
+
+
 @power(
     "i2442x1",
     level=3,
@@ -3371,22 +3429,54 @@ def i2332p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.once_per_round_bonus()",),
+    trigger="you hit an enemy from which you are hidden",
+    on=Trigger(
+        Hit, _hit_one_unseeing_me, "you hit an enemy that cannot see you"
+    ),
 )
 def i2442x1(c: Cast) -> None:
-    """Re-aimed: `c.bonus(dtype=)` exists and is the type of the *extra*
-    damage, which is this line exactly, so the typing half was waiting
-    for something already there. What is still dropped is the latch --
-    it pays out on every qualifying hit rather than once a round per
-    enemy."""
+    """The latch landed, and finding it found that the standing form this
+    replaces could never have paid at all.
+
+    **The old shape was a modifier gated on `c.is_hidden(from_=target)`,
+    and that gate is read when the damage is rolled** -- which is after
+    `resolve.attack` has emitted the `Hit` and then cleared
+    `Relation.HIDDEN_FROM` for the attacker (resolve.py:553, "attacking
+    gives you away"). So the gate answered False on every blow the property
+    was written for, and the row was inert rather than merely unlatched.
+    The trigger is what puts the question back inside the window where it
+    can be answered -- `#446`'s problem, solved here by asking early rather
+    than by remembering.
+
+    **A property with a printed trigger is a real shape, not a trait.**
+    `triggers.WINDOW_OF` maps `ActionType.NONE` to `Window.AFTER`, so this
+    body runs inside the `Hit` emit; `i1341x1` (items/waist.py:1550) is the
+    same header. And `Hit` is announced before the damage is rolled, so a
+    modifier laid here still reaches the roll it is meant to --
+    `i1407p2` (items/hands.py:422) is that argument.
+
+    "Only once per round" **per enemy**, which is why the latch is laid
+    `on=foe` rather than on the wielder: `c.latch` stores
+    `c.payment_window()` on that creature's own `Powers`, so one label
+    across many enemies is one allowance each. A foe with no `Powers`
+    component latches nothing and reads False, in which case the clause
+    pays every hit -- no worse than the inert row it replaces.
+
+    The target gate on the modifier is not redundant with `once=True`: a
+    power hitting two enemies in one swing emits two `Hit`s, and without it
+    the first payout could be spent on the second enemy's damage roll."""
+    foe = c.trigger.target
+    if foe is None or c.latched(c.ref, on=foe):
+        return
+    c.latch(c.ref, on=foe)
     c.bonus(
         "damage",
         4 + c.enhancement,
         dtype=DamageType.NECROTIC,
         on=c.me,
-        until=When.ENCOUNTER,
-        when=lambda ctx: ctx.get("target") is not None
-        and c.is_hidden(from_=ctx["target"]),
+        until=When.EOT,
+        once=True,
+        when=lambda ctx: ctx.get("target") == foe,
     )
 
 

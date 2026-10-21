@@ -42,12 +42,12 @@ from combat_engine.engine import (
     When,
     power,
 )
-from combat_engine.engine.events import DamageApplied, Miss, SecondWind
+from combat_engine.engine.events import DamageApplied, Hit, Miss, SecondWind
 from combat_engine.engine.query import team
 
 from .builds import on_leg
 from .controllers_sd import out_of_heavy_armour
-from .strikers import BEAST_STYLE, MARAUDER_STYLE
+from .strikers import BEAST_STYLE, MARAUDER_STYLE, pay_extra
 
 #: The two thrown properties, which is how a weapon says it is one of the
 #: pair the seeker's second bond pays for.
@@ -185,31 +185,67 @@ def ranger_style_ranged(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg(BEAST_STYLE),
     requires_text="needs the fighting style that keeps a beast",
-    todo=("c.beast_attacks()", "c.quarry(nearest=False)"),
 )
 def ranger_style_beast(c: Cast) -> None:
     """The companion style. The beast itself is already on the board --
     `cf:ranger-f0` calls `c.call_beast()` on this leg -- so what is left
-    here is the pair of clauses that change `cf:ranger-f1`, and both of
-    them need the beast to act.
+    here is the pair of clauses that change `cf:ranger-f1`, and **both
+    markers were resting on premises that have since been falsified.**
 
-    "Your quarry can be the enemy nearest to your beast companion" is a
-    second origin for the nomination; `c.quarry` measures from the ranger
-    and takes no other anchor, and `ranger_c` already named
-    `c.quarry(nearest=False)` for the same hold.
+    **"The beast never takes a turn" is no longer true.** The note cited
+    #212's body for it; #212's last comment reverses that body. The command
+    action landed and was driven: the beast swings with its own `bmba`,
+    rolls its own modifier, the owner's standard is spent, and
+    `Companion.commanded` is stamped so `turns._uncommanded` does not also
+    run it on instinct. So the beast's hit is a real case and the rider has
+    one.
 
-    "You or your beast companion can deal the extra damage, but only one of
-    you per round" is the half that cannot be faked. The companion is
-    correct on every number and never takes a turn (issue #212), so a rider
-    paying out on the beast's hit would be a clause with no case, and a
-    once-a-round budget shared between two creatures when only one of them
-    ever swings is the ranger's own rider with extra machinery. Marked
-    rather than written.
+    **The shared budget needs no new machinery.** `extra_damage` keeps its
+    latch on `Powers.latched` keyed by the *label* and not in a closure, and
+    `pay_extra` is the door -- so a payout filed under `cf:ranger-f1` from
+    here lands on the same latch, on the same creature, that the ranger's
+    own rider spends. That *is* "only one of you per round", and it is why
+    the label is written out rather than taken from `c.ref`.
+
+    **Whose hit it is, is `ev.attacker`, and the beast is not always it.**
+    A ranger power declared `Attack(..., by="companion")` -- `p4369` is one
+    -- emits a `Hit` whose attacker is the *ranger*, so `cf:ranger-f1`'s own
+    rider already pays for those. The gate here is the beast's own swings,
+    which is the half that had nobody. No restriction to basic attacks: this
+    card names no attack type, unlike the eight `_leash` feats in
+    `feats/ranger_c.py` whose cards do.
+
+    Three things must stay quiet, and the gate is written for them rather
+    than for the one case that pays: the ranger's own hit (`ev.attacker` is
+    the ranger, and paying here would double `cf:ranger-f1`), the beast
+    hitting anything that is not the quarry, and the beast hitting the
+    quarry in a round the ranger has already been paid -- the last answered
+    by `pay_extra` returning False off the shared latch rather than by
+    anything here.
+
+    `c.beast()` is asked inside the handler, not at arming time: the beast
+    can be dismissed and called again, and the ref would go stale.
+
+    **`c.quarry(nearest=False)` was stale too, and in the other direction.**
+    `cf:ranger-f1` (features/strikers.py:629) is `target=ONE_CREATURE` over
+    `Ranged(10)` and its own docstring says the nomination "is a choice the
+    ranger makes and the interface offers" -- there is no nearest
+    restriction in the engine to relax, so naming the enemy nearest the
+    beast is already legal. If anything the engine is looser than every
+    ranger's card there, which is `cf:ranger-f1`'s business and not this
+    row's.
 
     The exclusivity -- this style gives up the shared ranged bonus -- is
     already `_keeps_prime_shot` on `cf:ranger-f2`, and the ritual is not a
     combat clause.
     """
+    def landed(ev: Hit) -> None:
+        pet = c.beast()
+        if pet is None or ev.attacker != pet or not c.is_quarry(ev.target):
+            return
+        pay_extra(c, "cf:ranger-f1", c.quarry_damage(), on=ev.target)
+
+    c.watch(Hit, landed, on=c.me, until=When.ENCOUNTER, label=c.ref)
 
 
 @power(

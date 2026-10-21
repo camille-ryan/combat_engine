@@ -973,10 +973,30 @@ def i3216p1(c: Cast) -> None:
 
 
 @power("i3218x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.move_through_enemies()",))
+       reach=PERSONAL, target=SELF)
 def i3218x1(c: Cast) -> None:
-    """Only the overhead modes pass over an occupied square, and nothing
-    lets a walker through one."""
+    """**Re-pointed: a walker's permission exists, since #626/#673.** The
+    old note said only the overhead modes pass over an occupied square.
+    `movement._clear` asks two questions where it used to ask one --
+    `shares_space`, which is the *occupant's* property, and `may_enter`,
+    which is the mover's -- and this card is the second one.
+
+    `c.may_enter` is a standing property rather than a stated move, which is
+    what an `action=NONE` trait needs: it has to hold for moves the AI policy
+    and other rows take, where `c.overrun` is a move a body performs.
+
+    **"Larger than yours" is a `when=`, not `sizes=`.** That argument is an
+    absolute list -- the card it was built for prints two named categories --
+    and this one is relative, so the gate reads both participants out of the
+    context `may_enter` builds and compares `Size.order`, which is the
+    reader for "a category larger" (`squares` is not: Tiny, Small and Medium
+    all occupy one square)."""
+    c.may_enter(
+        side="enemy", on=c.me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            c.size_of(ctx["occupant"]).order > c.size_of(ctx["mover"]).order
+        ),
+    )
 
 
 @power("i751p1", level=9, cls=ITEM, usage=ENCOUNTER, action=MINOR,

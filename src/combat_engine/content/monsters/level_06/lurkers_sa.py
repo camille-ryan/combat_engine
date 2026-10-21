@@ -101,9 +101,11 @@ from combat_engine.engine.events import (
     DamageRolled,
     Dropped,
     Hit,
+    Moved,
     PowerUsed,
     TurnStart,
 )
+from combat_engine.engine.grid import distance
 from combat_engine.engine.monster_math import LIMITED
 from combat_engine.engine.query import adjacent, creatures, has_sense, team
 from combat_engine.engine.triggers import Trigger, about_me, both, by_power, targets_me
@@ -734,10 +736,11 @@ def m3557a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.leash(anchor_ref=)", "c.leash(forced=)"),
+    dropped=("c.leash(anchor_ref=)",),
 )
 def m3557a2(c: Cast) -> None:
-    """A 5-square tether, laid where the creature is fielded.
+    """A 5-square tether, laid where the creature is fielded, and the state
+    it falls into when something drags it out.
 
     **"Cannot *voluntarily* move"** is the word that makes `c.leash` the
     right verb rather than a penalty on arrival: the leash is read in
@@ -745,18 +748,53 @@ def m3557a2(c: Cast) -> None:
     push or a slide -- which do not consult that menu -- carry it out
     regardless, exactly as the card allows.
 
-    Dropped, both halves of the same sentence:
+    **Written: the second half.** The row's own note said the state
+    "depends on *being* outside the radius, which nothing re-asks once the
+    leash stops offering the squares" -- which is the diagnosis and not a
+    gap, because `Moved` is emitted for every step including a forced one.
+    So it is re-asked here, on arrival, in both directions: out of the
+    radius lays the pair, back inside takes them off again, which is the
+    printed "until it moves back within range".
 
-    * the anchor is the trap, and no ref names it, so this anchors where
-      the haunt stands when the trait arms. Right whenever it is fielded at
-      its trap, which is how the block reads, and wrong by however far it
-      is fielded away from one.
-    * "if it is forced beyond this range it is weakened and cannot use
-      `m3557a1` until it moves back" -- a state that depends on *being*
-      outside the radius, which nothing re-asks once the leash stops
-      offering the squares.
+    **Asked of the square, not of `Moved.kind_`.** The card says "if it is
+    forced" because a voluntary step out is already impossible, so any
+    arrival beyond the tether was not voluntary; reading the word instead
+    would leave the creature healthy after a teleport, which the leash does
+    not govern either.
+
+    Still dropped on the anchor: it is the trap, no ref names one, so this
+    anchors where the haunt stands when the trait arms. Right whenever it
+    is fielded at its trap, which is how the block reads, and wrong by
+    however far it is fielded away from one.
     """
-    c.leash(5, on=c.me, until=When.ENCOUNTER)
+    if c.leash(5, on=c.me, until=When.ENCOUNTER) is None:
+        return
+    me = c.me
+    # The square the leash just anchored itself to. Given neither `to=` nor
+    # `square=` it anchors where the creature stands, so the row already
+    # knows the point and never has to read the `Leash` component back --
+    # which is what the triage of this row had down as the open question.
+    anchor = c.here
+    held: list[Effect] = []
+
+    def dragged(ev: Moved) -> None:
+        if ev.actor != me:
+            return
+        out = distance(ev.to, anchor) > 5
+        if out and not held:
+            held.extend(
+                hold
+                for hold in (c.weakened(on=me, until=When.ENCOUNTER),
+                             c.forbid("m3557a1", on=me, until=When.ENCOUNTER))
+                if hold is not None
+            )
+        elif not out and held:
+            for hold in held:
+                c.end_effect(hold, why="back inside the tether")
+            held.clear()
+
+    c.watch(Moved, dragged, until=When.ENCOUNTER, on=me,
+            label=f"{c.ref} tether")
 
 
 # ==========================================================================

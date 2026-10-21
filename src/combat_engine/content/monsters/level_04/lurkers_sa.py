@@ -716,19 +716,32 @@ def m4185a3(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.no_mode(name)", "Grid.aperture"),
+    dropped=("Grid.aperture",),
 )
 def m4185a4(c: Cast) -> None:
     """Everything the shape installs is tied to the form's own hold, or the
     bans outlive it; the free action out is `revert=FREE`, and what happens on
     the way out is hung on the same hold.
 
-    Two clauses are dropped. Nothing takes a movement mode **away** --
-    `c.mode` keeps the larger of the old and new speeds, by design -- so
-    "cannot fly" has no expression. Nor has folding through an aperture a Tiny
-    creature could manage: the grid has no apertures.
+    **"Cannot fly" is written now and the premise was stale.** The old note
+    said nothing takes a movement mode away because `c.mode` keeps the
+    larger of the two speeds. `c.lose_mode` (cast.py:6002) is the mirror of
+    that verb, including its undo, and **pops** the mode rather than zeroing
+    it -- which it has to, since `query.phasing` tests membership and not
+    the value. Five monster rows already call it; this one was missed when
+    the family was swept.
 
-    **Re-aimed, not written.** The second symbol was `c.move_through()`, and
+    Hung in the same tuple as the other three bans, so the form's own
+    `on_end` unwinds it with the rest -- the free-action revert has to give
+    the fly speed back, not only the clock. `c.lose_mode` returning `None`
+    for a creature that never had the mode is documented as not a fault,
+    which is the right behaviour for a form clause; this block prints
+    fly 6, so here it returns a hold.
+
+    One clause is still dropped: folding through an aperture a Tiny
+    creature could manage. The grid has no apertures.
+
+    **Re-aimed, not written.** That symbol was `c.move_through()`, and
     `movement.overrun` -- which exists, and which `level_11`'s `_through_them`
     already calls -- is not this clause: a trample covers a stated distance
     straight *through creatures*, where this is fitting through a gap in the
@@ -741,6 +754,7 @@ def m4185a4(c: Cast) -> None:
         c.cannot_attack(on=me, until=When.EONT),
         c.ignores_difficult(on=me, until=When.EONT),
         c.no_provoke(on=me, until=When.EONT),
+        c.lose_mode("fly", until=When.EONT, on=me),
     ):
         if held is not None:
             shape.on_end.append(lambda h=held: c.world.effects.end(h, "form ended"))

@@ -1902,18 +1902,62 @@ def p16451(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.ARCANE, Keyword.ILLUSION],
-    dropped=("c.invisible(sustain=)",),
 )
 def p16452(c: Cast) -> None:
-    """The invisibility and its end on an attack are exact. `c.invisible`
-    takes no `sustain=`, so the minor action that would carry it past the
-    end of your next turn -- and the clause about moving costing you that
-    -- have nowhere to go."""
-    held = c.invisible(on=c.me, until=When.EONT)
-    c.on_attack(
-        lambda ev: c.end_effect(held, on=c.me, why="attacked"),
-        by=c.me, once=True, until=When.EONT,
-    )
+    """All three clauses. The sustain needed no parameter on `c.invisible`:
+    it is a plain field on the effect that verb hands back.
+
+    `Effect.sustain_cost` (durations.py:135) is what `actions._sustaining`
+    offers as an action and what `_sustain_by_default` spends, and an
+    `Effect` is a mutable dataclass that rows already rewrite -- `m4448a5`
+    rewrites `when`/`clock`/`latch` on a live hold. So the hold is laid
+    `When.SUSTAIN` and the cost written on afterwards.
+
+    **One wart, said out loud rather than left to be found.** `apply` runs
+    `_warn_sustainless` before this line can set the field, so the log
+    carries one `Note` saying this hold costs nothing to sustain. It is
+    false by the next statement. A `sustain=` pass-through on `c.invisible`
+    -- which `c.aura`, `c.zone` and `c.effect` all take -- would remove it,
+    and that is an engine line rather than a content one.
+
+    **`When.SUSTAIN` gives the printed base duration for free, which it
+    looked as though it would not.** The card is "until the end of your
+    next turn", with the sustain extending it, and a sustained hold lapses
+    at a turn end -- so this reads one turn short. It is not:
+    `Effects.apply` stamps `sustained` with the current round, and
+    `_on_turn_end` only considers a hold whose `sustained < round`. So the
+    round it is cast in is free and `_sustaining` offers the minor from the
+    next round on. Driven over two turn ends rather than reasoned about,
+    because the first reading of it was wrong.
+
+    **"If you move, you cannot sustain it" is the cost coming off**, not a
+    clause of its own: with no `sustain_cost` nothing can keep the hold
+    going, `_sustain_by_default` refuses it and `_sustaining` offers
+    nothing, so it runs out at the end of the next turn and not before --
+    which is the printed sentence exactly. Forced movement is excluded: the
+    card is about the character moving, and being pushed is not that."""
+    held = c.invisible(on=c.me, until=When.SUSTAIN)
+    if held is None:
+        return
+    held.sustain_cost = MINOR
+
+    def seen(ev: Any) -> None:
+        if not held.ended:
+            c.end_effect(held, on=c.me, why="attacked")
+
+    def grounded(ev: Any) -> None:
+        if ev.actor != c.me or ev.kind_ == "forced" or held.ended:
+            return
+        held.sustain_cost = None
+        c.note(f"{c.ref}: moved, so the hold can no longer be sustained")
+
+    # **Both watchers are `When.ENCOUNTER` and guard on `held.ended`
+    # instead.** A `When.SUSTAIN` watcher is the trap `_warn_sustainless`
+    # names: `c.watch` and `c.on_attack` take no `sustain_cost`, so the
+    # watcher would lapse after a round and the hold would outlive the
+    # thing that is supposed to end it.
+    c.on_attack(seen, by=c.me, once=True, until=When.ENCOUNTER)
+    c.watch(MoveEnd, grounded, on=c.me, until=When.ENCOUNTER)
 
 
 def _i_rolled_initiative(world: World, me: int, ev: InitiativeRolled) -> bool:
@@ -1952,14 +1996,39 @@ def p16453(c: Cast) -> None:
     reach=CloseBurst(1),
     target=Target("any", 1),
     keywords=ARCANE,
-    dropped=("c.reroll_attack(standing=)",),
 )
 def p16582(c: Cast) -> None:
-    """The blood price is exact. "Roll twice and use the higher result on
-    one attack roll you make this turn" is `c.reroll_attack(keep="best")`
-    held open for an attack that has not been declared, and that method
-    only answers a trigger."""
+    """The blood price, and the banked reroll it bought.
+
+    **The old note was wrong that the method "only answers a trigger".**
+    `c.reroll_attack` takes `ev=` for exactly this -- a roll that is not
+    the trigger -- and its own docstring names the case: a row that fires
+    now so a reroll can happen later is written as a `c.watch`, because a
+    handler closes over the `Cast` the *row* was built with and `c.trigger`
+    there is this minor action, not the swing. `keep="best"` is "roll twice
+    and use the higher result". `p14463` (bard/level_5_b.py:102) is the
+    worked sibling.
+
+    **`until=When.EOT` is the printed "one attack roll you make this
+    turn"**, and `once=True` is the "one". The hold is spent by the handler
+    doing something, so a declined offer leaves it armed for a later roll
+    this turn -- which is what lets the player choose *which* attack, the
+    choice the card is about. `c.reroll_attack` emits `Rerolled` (#496), so
+    the bus moves and the hold spends itself; `p14463`'s note about needing
+    a `c.note` to spend it predates that announcement.
+
+    `on=c.me` on the watch and a gate on the attacker, because this row has
+    a target and it is not necessarily the caster -- the damage is paid by
+    somebody willing, the reroll is the caster's."""
     c.flat(c.level)
+
+    def twice(ev: Any) -> None:
+        if ev.attacker != c.me:
+            return
+        if c.may(f"{c.ref}: roll this attack twice and keep the higher"):
+            c.reroll_attack(keep="best", ev=ev)
+
+    c.watch(AttackRolled, twice, on=c.me, until=When.EOT, once=True)
 
 
 @power(

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from combat_engine.chargen import ARMOUR_SPEED
 from combat_engine.engine import (
     AC,
     AT_WILL,
@@ -1454,13 +1455,31 @@ def f3121(c: Cast) -> None:
 
 
 @power("f3122", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reroll_ones(group=)",))
+       reach=PERSONAL, target=SELF)
 def f3122(c: Cast) -> None:
-    """Axe is a real group, so the attack bonus plays. Rerolling a
-    damage die that came up 1 is read where the dice are rolled, and
-    `DamageRolled` carries a total with no dice behind it."""
+    """Axe is a real group, so the attack bonus plays. The reroll plays too:
+    the old note said the dice were unreachable, and `c.reroll_ones` is read
+    inside `_roll_damage` where they are in hand.
+
+    **`pick=1`, not the loop.** The card says "reroll **one** damage die
+    that results in a 1, but you must use the second result" -- one die, one
+    try, and a second 1 stands. `pick=0` is the stronger card, "until it
+    shows a different number", and would be a free upgrade.
+
+    **The gate is split in two and that is not a style choice.** The axe
+    half rides on `when=`, which reads live `Gear` and never touches the
+    context; the weapon half rides on `keyword=`, which the engine answers
+    off the row being rolled. It cannot be one `_weapon_attack` gate:
+    `_reroll_pick` asks the floor hold with `_reroll_ctx()` but asks the
+    **count** hold (`#n`) with no context at all, so a gate reading
+    `ctx["power"]` answers False there and the count comes back 0 -- which
+    `_roll_damage` reads as no clause. Measured over 600 rolls of 1d6 with
+    an axe in hand: this shape leaves 16 ones (one reroll of a 1 in 36, as
+    printed), the single-gate shape leaves 102, and so does a mace."""
     c.bonus("attack", 1, on=c.me, until=When.ENCOUNTER, kind="feat",
             when=_weapon_attack(c, "axe"))
+    c.reroll_ones(pick=1, keyword=Keyword.WEAPON, on=c.me,
+                  until=When.ENCOUNTER, when=lambda ctx: _group(c, "axe"))
 
 
 @power("f3123", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1707,11 +1726,26 @@ def f3139(c: Cast) -> None:
 
 
 @power("f3140", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Gear.armour_speed",))
+       reach=PERSONAL, target=SELF)
 def f3140(c: Cast) -> None:
-    """Waives the speed penalty for heavy armour. `Gear` carries the
-    armour as a word and `Movement.speed` never looks at it, so there is
-    no penalty here to waive."""
+    """Waives the speed penalty for heavy armour.
+
+    **The old note said `Movement.speed` never looks at the armour, so
+    there was no penalty to waive. It is levied once, at build time:**
+    `chargen.spawn` writes `speed=speed + ARMOUR_SPEED.get(line.armour, 0)`,
+    so giving it back is a square of speed rather than a rule about armour.
+    `rt:r2-t3` is the same sentence and reads it the same way.
+
+    Read off `ARMOUR_SPEED` rather than off a hand-kept tuple of the heavy
+    weights, which is `rt:r2-t3`'s #713: only `chain`, `scale` and `plate`
+    carry the -1 there and those are exactly heavy armour, so the table is
+    the narrowing and a second list agreeing with it by hand is what got
+    chain wrong once already. Laid only when there is a penalty to undo, or
+    the same character in leather would walk a square too fast."""
+    gear = c.world.get(c.me, Gear)
+    cost = ARMOUR_SPEED.get(gear.armour, 0) if gear is not None else 0
+    if cost:
+        c.bonus("speed", -cost, on=c.me, until=When.ENCOUNTER)
 
 
 @power("f3141", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

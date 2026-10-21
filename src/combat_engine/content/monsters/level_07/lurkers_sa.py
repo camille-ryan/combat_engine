@@ -914,12 +914,23 @@ def m3782a3(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.POLYMORPH],
-    dropped=("c.phasing(porous=)",),
 )
 def m3782a4(c: Cast) -> None:
-    """Entering a porous obstacle a solid one would block is the clause
-    with nowhere to go -- `c.phasing` passes through creatures and solid
-    terrain alike and has no narrower "only the porous kind" of its own.
+    """**The porous obstacle, written now, and `c.phasing` was never the
+    clause.** The old note said `c.phasing` had no narrower "only the
+    porous kind"; `c.squeeze_through` is exactly that, and what made it
+    writable was the grid being able to say *why* a square blocks --
+    `Grid.porous` labels the blockers with a gap and `movement._clear`
+    reads the permission. #674.
+
+    So the `c.phasing` hold is **replaced** rather than joined. The card
+    prints insubstantial, a hover speed and this one sentence; it prints no
+    phasing at all, and `c.squeeze_through`'s own docstring says why the
+    difference matters -- phasing would let this creature leave through a
+    solid wall. `m1062a4` and `m2245a4` are the landed twins and neither
+    grants it either. No gap sort named, because the card names the
+    property and not a sort.
+
     The insubstantial form and the sustain are exact.
 
     **`c.hover`'s first argument is a HEIGHT, not a fly speed.** Its body is
@@ -936,11 +947,9 @@ def m3782a4(c: Cast) -> None:
     held = c.insubstantial(on=me, until=When.SUSTAIN)
     c.mode("fly", 8, on=me, until=When.SUSTAIN)
     c.hover(on=me, until=When.SUSTAIN, sustain=STANDARD)
-    phase = c.phasing(on=me, until=When.SUSTAIN)
+    c.squeeze_through(on=me, until=When.SUSTAIN)
     if held is not None:
         c.on_sustain(held, lambda: None)
-    if phase is not None:
-        c.on_sustain(phase, lambda: None)
 
 
 @power(

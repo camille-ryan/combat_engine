@@ -807,7 +807,7 @@ def f3701(c: Cast) -> None:
 @power("f3702", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
        proficiency=("w3597",),
-       todo=("c.redirect_damage()",))
+       todo=("monk.flurry_ongoing_instead()",))
 def f3702(c: Cast) -> None:
     """**Both of this row's old markers were false.** It claimed the sickle
     could not be asked for and that the flurry had no ref. Neither holds:
@@ -830,10 +830,33 @@ def f3702(c: Cast) -> None:
     chosen target "instead takes ongoing damage equal to the damage that you
     would have dealt". `PowerUsed` is announced before the body runs, so there
     is nothing to subtract yet, and by the time the damage lands it is already
-    paid. `c.pre_empt(ref, clause)` is that window and 29 rows wait on it -- the
-    largest group in the tree and the right one to join rather than mint a
-    thirtieth spelling. A watch written now could only *add* the ongoing damage
-    on top, making the row stronger than its card."""
+    paid. A watch written here could only *add* the ongoing damage on top,
+    making the row stronger than its card.
+
+    **Re-pointed, and the old symbol was wrong twice over.** It said
+    `c.pre_empt(ref, clause)` was the window and that 29 rows waited on it.
+    `c.pre_empt` **landed** -- engine/cast.py:9069, with its read half
+    `c.instead_of` at 9165 -- so nothing is waiting on a verb. And it is the
+    wrong route here, which `drivers.flurry_traded` rules on in as many
+    words: this card names the monk's *feature*, a monk holds whichever of
+    the five flurries its tradition granted, and five is a finite list -- so
+    `content/CLAUDE.md`'s rule applies and the clause is written into each
+    of the five bodies behind `c.feat`, not registered from outside.
+    `c.pre_empt` is for a feat naming a *class* of powers with no list to
+    edit. `f3171` is the worked twin and
+    `powers/monk/level_0._forgo_for_necrotic` is the shape: one helper, five
+    call sites, each gating the body's own `c.flat`.
+
+    So what is owed is a sibling of that helper -- gated on `c.feat("f3702")`,
+    `_holding_ref(c, "w3597")` and the printed choice, paying
+    `c.ongoing(<the amount the body was about to deal>)` and returning True
+    so each flurry skips its damage line. The amount is computed inside each
+    flurry body, which is why the five bodies change and this one does not;
+    f3702 then carries `implemented_in=` rather than a marker, the
+    convention at `content/feats/exploits.py:1099`.
+
+    "Choose one target of the power that is adjacent to you" needs no
+    choosing: all five flurries are `target=ONE_CREATURE` over `Melee(1)`."""
 
 
 # -- runepriest -------------------------------------------------------------

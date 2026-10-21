@@ -41,6 +41,7 @@ from combat_engine.engine import (
     SavingThrow,
     SurgeSpent,
     Trigger,
+    TurnEnd,
     When,
     Window,
     after_forced_reroll,
@@ -349,7 +350,7 @@ def f1120(c: Cast) -> None:
 
 
 @power("f1144", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.bonus(clock=)",),
+       reach=PERSONAL, target=SELF,
        trigger="you use p1628",
        on=Trigger(PowerUsed, _used("p1628"), "you use that racial power"))
 def f1144(c: Cast) -> None:
@@ -357,20 +358,39 @@ def f1144(c: Cast) -> None:
     opposite direction from `c.can_see` -- so the sight is asked with the
     ally as the watcher, the way `warlord/level_7_c.py` asks it.
 
-    `PowerUsed` fires above the body, but the targets are chosen before
-    it, so "the triggering enemy" is readable here.
+    **"The triggering enemy" is on `p1628`'s own trigger, and this row
+    was reading an empty list.** That power is `NO_TARGET` and aims itself
+    at whoever hit its holder, so `PowerUsed.targets` is `[]` for it
+    always -- the old body's first line therefore found `None` and
+    returned, every time, which is why the row has been silent. `f827`,
+    `f767` and `f1543` all read through `PowerUsed.trigger` instead and
+    say so in their own notes; this is the fourth.
 
-    The window is dropped: the printed one is the *enemy's* next turn and
-    an effect's clock is its owner or its source, so a bonus sitting on
-    an ally cannot be timed by a third creature. `once=True` carries the
-    substance -- it is spent by that ally's next attack on the enemy --
-    and only an attack made out of turn late in the round would get it
-    when the card says it should have lapsed.
+    **The window is written now, and it does not come from `until=`.**
+    The old note was right about that half: `Effects.apply` sets
+    `clock = owner if when in _TARGET_CLOCKED else source`, so an
+    `EOTNT` hold sitting on an *ally* is timed by that ally and never by a
+    third creature -- it said "the enemy's next turn" and meant the
+    ally's. So the holds are kept in a local and ended from a
+    `c.watch(TurnEnd, ...)`, which is the half `c.end_effect` exists for.
+
+    **The latch is not optional here.** `p1628` answers a *hit* on its
+    holder, so it fires on the attacking enemy's own turn far more often
+    than not -- and the enemy's first `TurnEnd` after that is the end of
+    *that* turn, not of its next one. `Effects.apply` writes exactly this
+    latch for `EOTNT` (`world.turn == clock`); ending on the first
+    turn-end without it would make the bonus shorter than the broken
+    version it replaces.
+
+    `once=True` still carries the other half of the sentence -- it is
+    spent by that ally's next attack on the enemy -- and `c.end_effect` is
+    idempotent, so a hold already spent that way is left alone.
     """
-    foe = next(iter(c.trigger.targets), None)
+    foe = getattr(getattr(c.trigger, "trigger", None), "attacker", None)
     if foe is None:
         return
     me = c.me
+    held: list[Any] = []
     for friend in allies(c.world, me):
         if friend == me:
             continue
@@ -378,10 +398,29 @@ def f1144(c: Cast) -> None:
             continue
         if unseen_by(c.world, friend, me):
             continue
-        c.bonus(
-            "attack", 1, on=friend, until=When.EOTNT, kind="power", once=True,
-            when=lambda ctx: ctx.get("target") == foe,
+        laid = c.bonus(
+            "attack", 1, on=friend, until=When.ENCOUNTER, kind="power",
+            once=True, when=lambda ctx: ctx.get("target") == foe,
         )
+        if laid is not None:
+            held.append(laid)
+    if not held:
+        return
+
+    #: How many of the enemy's turn-ends to let past -- see the latch note.
+    waiting = [2 if c.world.turn == foe else 1]
+
+    def lapsed(ev: TurnEnd) -> None:
+        if ev.actor != foe or not held:
+            return
+        waiting[0] -= 1
+        if waiting[0] > 0:
+            return
+        for hold in held:
+            c.end_effect(hold)
+        held.clear()
+
+    c.watch(TurnEnd, lapsed, until=When.ENCOUNTER)
 
 
 @power("f1145", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

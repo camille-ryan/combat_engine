@@ -115,7 +115,7 @@ def p997(c: Cast) -> None:
     clause is once per encounter, which a body has no latch for, so it
     cannot come here at all.
     """
-    arena = c.declare("Arena Fighting", "f994", "f972")
+    arena = c.declare("Arena Fighting", "f994", "f972", "f971")
     if c.strike():
         c.damage(c.w(1), c.str_mod)
         return
@@ -133,7 +133,26 @@ def p997(c: Cast) -> None:
             and c.use_power("p1448")):
         return
     # A miss still does something, and a two-handed weapon does more.
-    c.flat(c.str_mod if c.wielding("two-handed") else c.str_mod // 2)
+    figure = c.str_mod if c.wielding("two-handed") else c.str_mod // 2
+    if arena == "f971" and c.target is not None:
+        # f971: "deal damage to the target **or** one enemy adjacent to the
+        # target". An *or*, so the figure is paid once and the only question
+        # is where -- written as a rider it would pay both, which is a row
+        # stronger than its card. It is this row's own printed miss damage
+        # being redirected, so it has to be decided here and not registered
+        # from outside, which is what the feat's old marker was asking for.
+        #
+        # `side="enemy"` is read from the caster, so this is "an enemy of
+        # mine standing next to my target" and not the target's own side.
+        beside = [
+            foe for foe in c.within(1, of=c.target, side="enemy")
+            if foe != c.target
+        ]
+        picked = c.choose([c.target, *beside],
+                          "f971: who takes the miss damage")
+        c.flat(figure, on=picked if picked is not None else c.target)
+    else:
+        c.flat(figure)
     # **Two, not Strength modifier + 2.** The line above already pays the
     # modifier on a two-handed miss, so the full printed figure would pay
     # it twice. #299's trap, and the reason this row was read before the

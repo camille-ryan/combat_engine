@@ -68,6 +68,7 @@ from combat_engine.engine import (
     Bloodied,
     Cast,
     CloseBurst,
+    Condition,
     DamageRolled,
     DamageType,
     Dropped,
@@ -1520,19 +1521,60 @@ def f1642(c: Cast) -> None:
     c.set_origin(instead_of="living", until=When.ENCOUNTER)
 
 
-@power("f1643", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.dying_as()",))
+@power("f1643", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
+       reach=PERSONAL, target=NO_TARGET,
+       trigger="you drop to 0 hit points or fewer",
+       on=Trigger(Dropped, about_me, "you drop to 0 hit points or fewer"))
 def f1643(c: Cast) -> None:
-    """A minor action on the turn a racial trait buys by staying up at 0
-    hit points. `c.extra_action` is the payout and `Dropped` is the
-    moment, so neither half is what is missing.
+    """A minor action on each turn `rt:r47-t3` buys by keeping you up at 0
+    hit points.
 
-    **Re-aimed at the trait this hangs off.** The condition is "if you
-    choose to remain conscious due to `rt:r47-t3`", and
-    that row is itself unwritten on `c.dying_as()` -- `resolve` applies
-    the dying condition and nothing chooses what comes with it. Until it
-    does, there is no choice to have made and this row would pay out on
-    every knockdown."""
+    **The marker's premise is dead.** It said the trait this hangs off was
+    itself unwritten on `c.dying_as()`; `features/racial.py` has written
+    it and it carries no marker. `c.ignore_condition` *suppresses* the
+    unconsciousness without ending the effect that carries it, so the
+    softening is standing, unconditional and complete -- there is no
+    choice left to have made. Nor is there a "do you hold the trait"
+    question: the prerequisite is the race and `chargen.meets` enforces
+    it, so a character holding this feat holds that trait.
+
+    `ev.dead` keeps it off a creature killed outright, which has no dying
+    condition to soften -- the same guard the trait writes, for the same
+    reason.
+
+    **The grant waits for a `TurnStart` rather than being made now.**
+    `c.extra_action` drops an action into the budget the turn is already
+    spending, and `Encounter._begin` calls `Budget.refresh` *before* it
+    announces the turn -- so a grant made during the enemy's turn, which
+    is when a drop usually happens, would be wiped before it could be
+    spent. `p16431` waits for the same reason.
+
+    **Each such turn, not only the first**, because the card's condition
+    is the state and not the moment. The state is read back off the board:
+    dying with the unconsciousness suppressed is what `rt:r47-t3` makes
+    and nothing else does. Being healed out of it ends the "dropped"
+    effect, so the gate closes on its own and the watcher does not have to
+    be told.
+
+    `AT_WILL` and not `ENCOUNTER`: with a declared trigger an encounter
+    usage would spend the feat on the first knockdown of the fight, and
+    the card prints no such limit.
+    """
+    ev = c.trigger
+    if ev is None or getattr(ev, "dead", False):
+        return
+    me = c.me
+
+    def still_up(turn: TurnStart) -> None:
+        if turn.ghost or turn.actor != me:
+            return
+        if not c.is_(Condition.DYING, on=me) or c.is_(
+            Condition.UNCONSCIOUS, on=me
+        ):
+            return
+        c.extra_action(MINOR, on=me)
+
+    c.watch(TurnStart, still_up, until=When.ENCOUNTER)
 
 
 _granted("f1644", "f1644b")

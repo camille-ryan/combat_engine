@@ -91,6 +91,19 @@ BORROWED = {
     # checker pools both clauses of one card and cannot see which sentence a
     # call came from.
     ("f1863", "racial"),   # raises rt:r8-t0's +1 to +2, as f2398 does
+    # Two more feats raising that same trait, found by this check the moment
+    # they were written. Four cards now, one trait, one reading: `Mods.total`
+    # takes the max within a `kind` bucket, so a second *racial* bonus is the
+    # raise and an untyped one would add. `f2129b` and `f2300` are the same
+    # raise as each other -- two symbols over one need, noted on both rows.
+    #
+    # **Four instances is the point at which the by-ref list is the wrong
+    # shape here too**, exactly as the `ELSEWHERE` note above concluded for
+    # its own six: the rule is "a call that raises another row's typed bonus
+    # takes that row's type", and the checker would have to follow the
+    # reference to know. Recorded rather than inferred, again.
+    ("f2129b", "racial"),  # raises rt:r8-t0, as f1863/f2398/f2300 do
+    ("f2300", "racial"),   # the same raise as f2129b, different card
     # **A feat granting two *other feats'* benefits wholesale.** "You gain
     # the benefits of <f233> and <f1032> with all weapons you are proficient
     # with" prints no type word of its own -- correctly, because it hands out

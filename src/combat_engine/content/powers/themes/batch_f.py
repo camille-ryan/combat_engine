@@ -664,17 +664,62 @@ def p16098(c: Cast) -> None:
     reach=CloseBurst(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.CONJURATION, Keyword.ELEMENTAL],
-    dropped=("c.conjure(porous=)", "c.opportunity_from(square)"),
+    dropped=("c.opportunity_from(square)",),
 )
 def p16099(c: Cast) -> None:
     """Three solid conjurations that move on a move action, which `speed=`
-    already gives them. A guardian your allies can walk through but enemies
-    cannot is one wall for one side, and swinging from a guardian's square
-    is a standing leave `c.strike(from_=)` cannot be given."""
+    already gives them, and a wall that is a wall for one side only.
+
+    **The one-sided wall is the mover's permission, not the blocker's
+    property.** `c.may_enter` (cast.py:5786) took a `when=` gate in #673
+    and the context it is handed carries `mover` and `occupant`; a solid
+    conjuration is indexed in `grid.occupants` by `place` (cast.py:5554),
+    so it *is* the occupant the predicate is asked about.
+    `movement._clear` consults it on the way past. `i591p1`
+    (items/waist.py:711) is the worked sibling, with the same shape of gate.
+
+    **`c.shares_space` on the guardians is the wrong verb and would widen
+    the card.** It is read by `_can_stop` as well as by `_clear`, so it
+    would let any creature *end* its move in a guardian's square, and
+    `c.blocks_entry` does not take that back -- `_can_stop` never asks it.
+    Granting the mover's side instead leaves `_can_stop` refusing everybody,
+    which is what "move through" means: `i591p1`'s note settles that
+    reading.
+
+    **Granted per ally at cast time, which is an honest limit**, the same
+    one `c.swap_sight` records: an ally that arrives afterwards is not
+    covered. `When.ENCOUNTER` rather than `When.SUSTAIN` on the permission
+    is deliberate -- `c.bonus` carries no `sustain_cost`, so a sustained
+    modifier would lapse after one round and emit
+    `durations._warn_sustainless`'s note. A permission naming eids that
+    have been banished grants nothing, since nothing occupies their
+    squares.
+
+    Swinging from a guardian's square is still a standing leave
+    `c.strike(from_=)` cannot be given, and that is the remaining symbol.
+
+    **Found while writing this and not fixed here**: each `c.conjure` gets
+    its own effect carrying `sustain_cost=MINOR` (cast.py:5560), and
+    `durations._sustain_by_default` spends a minor out of the budget per
+    effect -- so of three guardians wanting a minor a round, one is kept and
+    two lapse at the first turn end. That is a fault in every row conjuring
+    more than one sustained thing, not in this clause, and closing it means
+    one carrier governing three conjurations rather than three carriers."""
     spots = [sq for sq in sorted(c.area()) if not c.in_squares([sq])][:3]
-    for sq in spots:
-        c.conjure(
-            at=sq, label=c.ref, until=When.SUSTAIN, sustain=MINOR, speed=3, solid=True
+    guards = tuple(
+        eid
+        for sq in spots
+        if (
+            eid := c.conjure(
+                at=sq, label=c.ref, until=When.SUSTAIN, sustain=MINOR,
+                speed=3, solid=True,
+            )
+        )
+    )
+    for friend in (c.me, *c.allies()):
+        c.may_enter(
+            when=lambda ctx, g=guards: ctx.get("occupant") in g,
+            on=friend, until=When.ENCOUNTER,
         )
 
 

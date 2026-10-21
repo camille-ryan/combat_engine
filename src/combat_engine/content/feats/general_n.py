@@ -1210,12 +1210,26 @@ def f2129(c: Cast) -> None:
 
 
 @power("f2129b", level=1, cls="", usage=DAILY, action=MINOR,
-       reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH],
-       dropped=("c.bonus(of_ref=)",))
+       reach=PERSONAL, target=SELF, keywords=[Keyword.POLYMORPH])
 def f2129b(c: Cast) -> None:
-    """Raising the attack bonus that *another* row grants is the dropped
-    clause: m1031a4's bonus lives inside its own effect and nothing can
-    reach in and rewrite one.
+    """**The last clause needed no reach into another row's effect.** The
+    old note said the trait whose bonus this raises is `m1031a4` and that
+    nothing could rewrite a number living inside its effect. The first half
+    is simply the wrong ref -- the card names `rt:r8-t0`, the racial trait
+    (features/racial.py:542); `m1031a4` is a monster's own copy of the same
+    clause and is nothing to do with this card. The second half is the
+    wrong question: `Mods.total` buckets bonuses by `kind` and takes the
+    **max** within a bucket (components.py:838), so "increases to +2" is a
+    second `kind="racial"` bonus of 2 and the +1 loses. Nothing is
+    rewritten.
+
+    `f2398` (ranger_c.py:461) and `f1863` (general_k.py:736) both argue
+    this about this same trait; this card is the unnarrowed one, so the only
+    gate is the trait's own.
+
+    **Gated on bloodied, because the bonus this raises exists nowhere
+    else**: against an unbloodied enemy `rt:r8-t0` lays nothing, so there
+    is no +1 for the card to increase and a flat +2 would be inventing one.
 
     "**Increase** fire resistance by 5" is read off `c.resistances` and
     added. A bare `c.resist(5)` was right while the method added; it
@@ -1228,6 +1242,12 @@ def f2129b(c: Cast) -> None:
     standing = c.resistances(on=me).get(DamageType.FIRE, 0)
     c.resist(standing + 5, DamageType.FIRE, on=me, until=When.ENCOUNTER)
     c.bonus("damage", 2, on=me, until=When.ENCOUNTER)
+    c.bonus(
+        "attack", 2, kind="racial", on=me, until=When.ENCOUNTER,
+        when=lambda ctx: (
+            (foe := ctx.get("target")) is not None and c.bloodied(foe)
+        ),
+    )
     c.grant_row("f2129c", on=me, until=When.ENCOUNTER)
 
 
@@ -2049,12 +2069,27 @@ def f1217(c: Cast) -> None:
 
 @power("f1351", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.alignment()", "Mods.applied()"))
+       todo=("c.alignment()",))
 def f1351(c: Cast) -> None:
-    """Adds whatever a named power put on an attack roll to the damage
-    roll too, and only against an evil immortal. Alignment is not a thing
-    a creature carries, and nothing reads back how much a modifier
-    contributed to a roll that is already made."""
+    """Adds whatever `p6186` put on an attack roll to the damage roll too,
+    and only against an evil immortal creature.
+
+    **`Mods.applied()` is off the marker: that record exists.** It is
+    `events.Boosted` (events.py:1024), which carries `by` -- the ref that
+    paid -- `kind` to tell a boosted attack from a boosted save, and
+    `amount`, which is the number this card asks for. `f1490`
+    (feats/avenger.py:126) is this same card against a different narrowing
+    and is written that way: a `c.watch(Boosted, ...)`, and the creature
+    that was attacked read off the newest `AttackRolled` in the bus log,
+    which is safe because `p6186` is declared on that event.
+
+    Half the narrowing is readable too -- immortal is an origin, so
+    `c.is_kind("immortal", on=...)` answers it.
+
+    What is left is alignment, and nothing carries one: no component, no
+    column, no reader. Writing the immortal half alone would *widen* the
+    card, paying against every immortal rather than the evil ones, so the
+    row stays refused rather than playing wrong."""
 
 
 @power("f1352", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

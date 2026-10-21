@@ -665,13 +665,31 @@ def _one(token: str, have: dict[str, object]) -> bool:
     registry rather than on the `Cast` surface. A row waiting on another
     row is the same kind of wait as a row waiting on a method, and the
     instrument should go red on the day either arrives.
+
+    **But a declared row is not a written one, and that distinction is the
+    whole of this wait.** `declared()` holds every row that has a header,
+    including rows with an empty body carrying markers of their own -- so
+    `token in declared()` reported *arrived* for a sibling that has not been
+    written. `f2429` is the case: it shortens a distance that is a literal
+    inside `cf:rogue-scoundrel-f1s2`'s printed text, and that feature has an
+    empty body and waits on two symbols of its own. Its own note says why
+    pointing this marker at those symbols instead would be wrong -- it would
+    "report this feat ready the day a symbol lands, which is one step early".
+    There is nothing to take a chunk out of until the sibling is written.
+    So a ref has arrived when it is declared **and not itself unfinished**.
+
+    This narrows a false arrival rather than widening an excuse: a sibling
+    that is finished still counts, which is the case the docstring above is
+    about.
     """
     import re as _re
 
     if _re.fullmatch(r"[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+", token):
         from combat_engine.content import declared
 
-        return token in declared()
+        rows = declared()
+        got = rows.get(token)
+        return got is not None and not got.unfinished
     head, _, rest = token.partition("(")
     head = head.strip()
     if head in have:

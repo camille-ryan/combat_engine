@@ -281,11 +281,21 @@ def _vs_ac_by_me(world: World, me: int, ev: Any) -> bool:
     return getattr(ev, "attacker", None) == me and getattr(ev, "vs", None) == AC
 
 
-def _used_by_me(ref: str):  # noqa: ANN202
+def _used_by_me(*refs: str):  # noqa: ANN202
+    """"When you use <ref>", for one row or for any of a named few."""
+
     def check(world: World, me: int, ev: Any) -> bool:
-        return getattr(ev, "actor", None) == me and getattr(ev, "power", "") == ref
+        return getattr(ev, "actor", None) == me and getattr(ev, "power", "") in refs
 
     return check
+
+
+#: The three cards `cf:artificer-f2` deals from. The feature itself is a
+#: declared row and is never *used* -- it is the budget, `action=NONE` --
+#: so "when you use that class feature" is a use of one of these.
+#: `feats/artificer_b.py` keeps the same tuple for the same reason, and
+#: says why a local copy beats a cross-file hook for one predicate.
+_INFUSIONS = ("p4128", "p7635", "p10187")
 
 
 def _resolved_by_me(*words: Keyword):  # noqa: ANN202
@@ -2523,10 +2533,30 @@ def i2607p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.healing_infusion()",),
+    trigger="you use cf:artificer-f2 on an ally",
+    on=Trigger(PowerUsed, _used_by_me(*_INFUSIONS),
+               "you use that class feature on an ally"),
 )
 def i2610x1(c: Cast) -> None:
-    """The trigger is one named class feature nothing models."""
+    """The old note said the trigger was one named class feature nothing
+    models. It is modelled: `cf:artificer-f2` is declared, a feat grants it,
+    and its three cards -- `p4128`, `p7635`, `p10187` -- are all declared
+    rows that announce a `PowerUsed`.
+
+    All three, not the heal alone. The card says "your cf:artificer-f2 class
+    feature", where the three feats riding on this feature elsewhere each
+    name one of the cards; the feature itself is the budget row and is never
+    used, so a use of it is a use of one of the three.
+
+    `PowerUsed` because the targets are picked before the body runs, which
+    is the one thing that event can be trusted for -- and nothing here reads
+    what the infusion laid, which is the case that needs `PowerResolved`
+    instead. "On an ally" needs no gate: all three declare `ONE_ALLY`.
+
+    Resistance with no type named is resistance to all damage, the way
+    `i2610p1` writes the same word."""
+    for who in c.trigger.targets:
+        c.resist(c.enhancement, on=who, until=When.EONT)
 
 
 @power(

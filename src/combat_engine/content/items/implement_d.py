@@ -83,6 +83,7 @@ from combat_engine.engine import (
     DamageRolled,
     DamageType,
     Dropped,
+    Gear,
     Hit,
     Initiative,
     Keyword,
@@ -114,6 +115,7 @@ from combat_engine.engine import (
     targets_me,
     would_hit_me,
 )
+from combat_engine.engine.events import WeaponHeld
 
 ITEM = "item"
 
@@ -482,23 +484,51 @@ def i3028p1(c: Cast) -> None:
     action=MINOR,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Dropped.was_held",),
 )
 def i3166p1(c: Cast) -> None:
-    """Bright light out to 4 squares, until extinguished or dropped.
+    """Bright light out to 4 squares, until extinguished or let go of.
 
     **"Bright light in a radius is the lamp case: no combat consequence of
     its own" was the reason and it stopped being true** -- bright light
     removes the concealment a dark square confers, which is a real
     consequence on any board that has one. #686.
 
-    "Until you extinguish it as a minor action" is `c.endable`. "Or until
-    you are no longer holding the candle" is the dropped clause: `Dropped`
-    is announced for a creature, not for an item leaving a hand, so there
-    is no moment to hang it on."""
+    "Until you extinguish it as a minor action" is `c.endable`.
+
+    **"Or until you are no longer holding it" is written now, and the old
+    note named the wrong event.** `Dropped` is indeed a creature falling
+    over; the moment wanted is `WeaponHeld`, which says that what is in a
+    hand changed and carries `drawn=False` for putting away. This item sits
+    in the implement slot, and an implement is a `Weapon` in `Gear` with
+    `group == "implement"`, so `Gear.implement` is the thing in hand.
+
+    The ref is **snapshotted at arming**, not read inside the handler: by
+    the time the stow is announced `Gear.implement` already answers
+    something else, or nothing.
+
+    Two soft edges, stated rather than papered over. Nothing records that
+    *this* item is the implement being held -- only that it occupies the
+    implement slot -- so a character carrying two implements would have
+    either of them end the light. And the holder the audit board deals has
+    no implement in `Gear` at all, so the watch is not armed there: the
+    light is what that board exercises, and the letting-go was measured by
+    hand through `c.stow` instead.
+    """
     held = c.light(4, on=c.me, until=When.ENCOUNTER)
-    if held is not None:
-        c.endable(held, ActionType.MINOR)
+    if held is None:
+        return
+    c.endable(held, ActionType.MINOR)
+    gear = c.world.get(c.me, Gear)
+    arm = gear.implement if gear is not None else None
+    if arm is None:
+        return
+    mine, ref, light = c.me, arm.ref, held
+
+    def let_go(ev: WeaponHeld) -> None:
+        if ev.actor == mine and ev.ref == ref and not ev.drawn:
+            c.end_effect(light, why="no longer held")
+
+    c.watch(WeaponHeld, let_go, until=When.ENCOUNTER, on=c.me, label=c.ref)
 
 
 @power(

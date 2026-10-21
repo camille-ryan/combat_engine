@@ -936,17 +936,48 @@ def i883x1(c: Cast) -> None:
     c.bonus(WILL, 1, on=c.me, until=When.ENCOUNTER)
 
 
+def _dazed_by_a_will_attack(world: World, me: int, ev: ConditionApplied) -> bool:
+    """"Dazed by an attack that targets your Will defense."
+
+    Which defence the attack went after is not on the event and does not
+    have to be: `ConditionApplied.power` is the ref of the row that laid
+    the condition and which defence a row goes after is header data,
+    `Power.attack.vs`. That is the same route `hands._defence_gate` takes
+    for a modifier's context, and it carries the same one imprecision --
+    a row whose *secondary* attack goes after a different defence than its
+    printed Attack line reads as the printed one.
+
+    **An empty `power` is a relation** -- a grab, a domination -- which
+    the event's own docstring says must be read as "nothing to ask about".
+    Not a Will attack, so no match, which is right rather than merely
+    cheap.
+    """
+    row = get(ev.power or "")
+    return (
+        ev.target == me
+        and ev.condition is Condition.DAZED
+        and row is not None
+        and row.attack is not None
+        and row.attack.vs is WILL
+    )
+
+
 @power("i933p1", level=8, cls=ITEM, usage=ENCOUNTER, action=INTERRUPT,
        reach=PERSONAL, target=SELF,
        trigger="you would be dazed by an attack against your Will",
-       on=Trigger(ConditionApplied,
-                  lambda world, me, ev: (
-                      ev.target == me and ev.condition is Condition.DAZED),
-                  "you would be dazed"),
-       dropped=("ConditionApplied.vs",))
+       on=Trigger(ConditionApplied, _dazed_by_a_will_attack,
+                  "you would be dazed by an attack against your Will"))
 def i933p1(c: Cast) -> None:
-    """Which defence the attack went after is not on the event, so this
-    answers a daze from any source."""
+    """The defence narrowing is written now -- see the gate above; it was
+    marked as unsayable while the ref of the laying row had been on the
+    event all along.
+
+    Still a cure rather than a prevention, and that is the event's
+    ordering rather than this row's choice: `Effects.apply` installs the
+    condition and *then* announces it, deliberately, so an interrupt on
+    `ConditionApplied` can only take it back off. Nothing has acted on the
+    daze in between. The `Level 18:` and `Level 28:` lines are out of
+    scope."""
     c.cure(Condition.DAZED, on=c.me)
 
 

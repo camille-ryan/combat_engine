@@ -82,6 +82,7 @@ from combat_engine.engine import (
     Dropped,
     Effect,
     EffectApplied,
+    EffectExpired,
     Healed,
     Hit,
     InitiativeRolled,
@@ -112,6 +113,7 @@ from combat_engine.engine import (
     both,
     by_bull_rush,
     by_charge,
+    by_keyword,
     by_me,
     by_melee,
     by_ranged,
@@ -2044,9 +2046,49 @@ def i2017x1(c: Cast) -> None:
 
 
 @power("i2017p1", level=4, cls=ITEM, usage=AT_WILL, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("c.charges()",))
+       reach=PERSONAL, target=SELF,
+       trigger="you use an arcane power and make an attack roll",
+       on=Trigger(AttackRolled, both(by_me, by_keyword(Keyword.ARCANE)),
+                  "you roll an attack for an arcane power"))
 def i2017p1(c: Cast) -> None:
-    """An item with a pool of its own is not a thing `Magic` carries."""
+    """**Re-pointed: a counted pool keyed by a string already exists.** The
+    old note said an item with a pool of its own was not a thing `Magic`
+    carries, which is true and is not the question -- the pool is
+    `Powers.per_day`, which `c.per_day_left` and `c.spend_per_day` reach by
+    any key at all. The key is the **item's** ref rather than this block's,
+    because the charges belong to the suit: `i2017x1` is the Property that
+    declares them and this is the only thing that spends them.
+
+    An extended rest is exactly what a per-day count refreshes on, so the
+    cadence is the printed one and not the per-encounter `c.charge_left`.
+
+    How many charges there are is a column and never a number to write
+    down: `c.enhancement` finds the plus of the piece this row came off.
+
+    "Any number of unused charges" is a real choice and is offered as one.
+    The engine with nobody playing takes the first option, so the list runs
+    upward from one -- the cheap answer is the headless default and spending
+    the lot stays available to whoever asks.
+
+    `c.boost_roll` and not `c.bonus("attack")`: the roll that triggered this
+    has already been summed, so a modifier laid here would be read by the
+    *next* attack. The declared trigger is what binds `c.trigger`, which is
+    where `boost_roll` looks for the roll. The one thing it cannot carry is
+    the printed bonus *type* -- it adds to `AttackResult.total` directly --
+    which costs nothing unless a second power bonus reaches the same roll.
+    """
+    pool = "i2017"
+    limit = c.enhancement
+    left = c.per_day_left(pool, limit)
+    if left <= 0:
+        return
+    wanted = c.choose(list(range(1, left + 1)), "charges to spend", optional=True)
+    if wanted is None:
+        return
+    spent = 0
+    while spent < wanted and c.spend_per_day(pool, limit):
+        spent += 1
+    c.boost_roll(spent, kind="attack")
 
 
 @power("i2023x1", level=4, cls=ITEM, action=ActionType.NONE,
@@ -2856,8 +2898,7 @@ def i3425x1(c: Cast) -> None:
 @power("i3425p1", level=5, cls=ITEM, usage=ENCOUNTER, action=REACTION,
        reach=PERSONAL, target=SELF,
        trigger="you take damage that has a type",
-       on=Trigger(DamageApplied, targets_me, "you take damage"),
-       dropped=("c.on_expire()",))
+       on=Trigger(DamageApplied, targets_me, "you take damage"))
 def i3425p1(c: Cast) -> None:
     """**Re-pointed: `c.bonus` does carry a damage type.** `dtype=` is on the
     signature and is read for `"damage"` and `"crit_damage"`, so the extra
@@ -2869,13 +2910,44 @@ def i3425p1(c: Cast) -> None:
     untyped blow gives nothing to copy and the row pays nothing. It is asked
     in the body because `targets_me` is shared with four other rows here.
 
-    Still dropped: the clause that turns the die back on you if you do not
-    swing, which wants something to run when a one-shot expires unspent."""
+    **The unspent half is written, and needed no new verb.** `Effects.end`
+    emits `EffectExpired(what=str(eff), why=...)` for every non-instant
+    effect, and the two endings this row has to tell apart carry different
+    words: a spent `once=True` damage bonus is ended by `spend_damage` with
+    `why="used"`, and the clock running out is ended by the turn-end sweep
+    with `why="end of turn"`. So the test is for the sweep's word rather
+    than merely "not used" -- any other ending (the fight finishing,
+    somebody stripping the hold) is not the card's "you do not make an
+    attack" and pays nothing.
+
+    `str(eff)` is `e{id}[label, when]`, so the tag identifies this one hold
+    and a leftover watcher can never fire for somebody else's.
+
+    **The watcher is armed on the encounter and not on the hold.** An
+    effect's own subscriptions are torn down in `end` *before* it announces
+    its expiry, so a watch hung on the hold would never hear it -- `p10250`
+    carries the same note for the same reason.
+
+    "The power is not expended" is `c.restore_use`, which hands back the
+    use this firing spent."""
     hurt = getattr(c.trigger, "dtype", None)
     if hurt is None or hurt is DamageType.UNTYPED:
         return
-    c.bonus("damage", 0, dice="1d6", dtype=hurt, on=c.me,
-            until=When.EONT, once=True)
+    me, ref = c.me, c.ref
+    hold = c.bonus("damage", 0, dice="1d6", dtype=hurt, on=me,
+                   until=When.EONT, once=True)
+    if hold is None:
+        return
+    tag = str(hold)
+
+    def unspent(ev: EffectExpired) -> None:
+        if ev.what != tag or ev.why != "end of turn":
+            return
+        c.damage("1d6", dtype=hurt, on=me)
+        c.restore_use(ref, on=me)
+
+    c.watch(EffectExpired, unspent, until=When.ENCOUNTER, on=me,
+            label=f"{ref} unspent")
 
 
 @power("i461x1", level=5, cls=ITEM, action=ActionType.NONE,

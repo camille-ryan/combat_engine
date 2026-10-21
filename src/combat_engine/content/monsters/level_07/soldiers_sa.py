@@ -2816,7 +2816,11 @@ def m884a1(c: Cast) -> None:
     if c.attack(bonus, AC, on=c.target):
         c.damage("3d10", 5)
     for caught in c.overrun():
-        if c.size_of(on=caught) < c.size_of(on=me):
+        # **`.order`, not a bare `<`.** `Size` is a `StrEnum`, so the plain
+        # comparison that stood here compared the *words*: "large" <
+        # "medium" is True, so on this Large creature the push and the prone
+        # never fired on a Medium victim and did fire on a Gargantuan one.
+        if c.size_of(on=caught).order < c.size_of(on=me).order:
             c.push(1, on=caught)
             c.prone(on=caught)
     c.effect("m884a1 rampage", on=me, until=When.EOT)
@@ -2870,12 +2874,40 @@ def m884a3(c: Cast) -> None:
 
 @power(
     "m884a4", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL,
-    target=NO_TARGET, todo=("c.passes_through()",),
+    target=NO_TARGET,
 )
 def m884a4(c: Cast) -> None:
-    """Moving through a smaller creature's space -- while still refusing to
-    end its own move there -- has no verb; `c.phasing` is for terrain, not
-    for other creatures' squares."""
+    """It may cross a smaller creature's square, and still not stop there.
+
+    The old note was right that `c.phasing` is terrain and not another
+    creature's square, and `c.may_enter` is the verb that was missing when
+    it was written (#673): the **mover's** own permission, consulted by
+    `movement._clear`. `c.shares_space` is the mirror and would be wrong
+    here -- it opens this creature's square to the whole board and still
+    refuses it a step through anybody.
+
+    **`when=` rather than `sizes=`.** The card says smaller *than it*,
+    which is relative; `sizes=` is an absolute list. The gate is handed
+    `occupant` and closes over this `Cast` for the rest.
+
+    **`Size.order`, not a bare `<`.** `Size` is a `StrEnum`, so comparing
+    two of them compares the words -- "large" < "medium" is True -- and
+    `order` exists for exactly this.
+
+    The second printed clause needs nothing written: "it cannot end its
+    movement in an occupied space" is `movement._can_stop`, which refuses
+    one whatever the entry permission allows.
+    """
+    me = c.me
+
+    def smaller(ctx: dict[str, Any]) -> bool:
+        them = ctx.get("occupant")
+        return (
+            them is not None
+            and c.size_of(on=them).order < c.size_of(on=me).order
+        )
+
+    c.may_enter(when=smaller, on=me, until=When.ENCOUNTER)
 
 
 @power("m884a5", level=7, usage=AT_WILL, action=ActionType.NONE, reach=PERSONAL, target=NO_TARGET)
