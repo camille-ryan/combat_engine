@@ -203,7 +203,27 @@ def _ollama(role: Role, messages: list[dict], schema: dict | None) -> str:
             "Start it with `ollama serve`, or play with --no-llm, which needs "
             "no model at all."
         ) from exc
-    return str((got.get("message") or {}).get("content", ""))
+    said = got.get("message") or {}
+    text = str(said.get("content", ""))
+    # **A reasoning model spends `num_predict` on thinking first.** ollama
+    # keeps the chain in a separate `thinking` field, so nothing leaks into
+    # the reply -- but the budget is shared, and `deepseek-r1:14b` at the
+    # DM role's 200 tokens burned all 200 on thought and returned an empty
+    # string. Empty content is then indistinguishable from a model with
+    # nothing to say, and `beat.py` quietly prints "The moment passes."
+    #
+    # So say it. The fix is the caller's -- `max_tokens` has to cover
+    # thinking *and* answer, which for this model is about 800 where the
+    # 7B wants 200 -- and it cannot make it without being told.
+    if not text.strip() and said.get("thinking"):
+        raise NoModel(
+            f"{role.model} spent its whole {role.max_tokens}-token budget "
+            f"thinking and left no answer "
+            f"({len(str(said['thinking']))} characters of it).\n"
+            f"A reasoning model needs `max_tokens` to cover thinking as "
+            f"well: set it in saves/<campaign>.roles.json."
+        )
+    return text
 
 
 def _anthropic(role: Role, messages: list[dict], schema: dict | None) -> str:

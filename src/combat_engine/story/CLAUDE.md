@@ -144,6 +144,32 @@ And a third, about fixing a model rather than measuring it: **a prompt
 addition is not free.** The clause that recovered two dropped facts relapsed
 the echo five-fold. Start from a reproduction, not from a paragraph.
 
+### A bigger model is not the fix either, and reasoning models cost twice
+
+Measured over Tailscale against a 14B reasoning model on another host, same
+scene, same facts, same prompt, judged by the local 7B held to controls:
+
+```
+qwen2.5:7b local        echo  2/20   covered 15/20    9.6s per beat
+deepseek-r1:14b desk    echo  0/20   covered 15/20   18.7s per beat
+```
+
+**Identical coverage at twice the latency.** So #809 is not a capability
+gap and will not be closed by a bigger model -- the three directions in
+that issue are structural for a reason.
+
+Two things to know before pointing a role at a reasoning model:
+
+* **`max_tokens` covers thinking *and* answer.** ollama keeps the chain in
+  a separate `thinking` field, so nothing leaks into the reply -- but the
+  budget is shared, and the DM role's 200 tokens bought 906 characters of
+  thought and an **empty string**. `beat.py` would have printed "The moment
+  passes." `_ollama` now raises `NoModel` naming the budget instead. About
+  800 is the floor for this model where the 7B wants 200.
+* **A cold load is minutes, not seconds.** First call to the 9 GB model was
+  **3m26s**; warm it is 5-6s. Do not read a first-call timing as the
+  model's speed, in either direction.
+
 ## The name is tried first, and that is the measurement to keep
 
 `cast_list` resolves a module's own word for a creature against the
