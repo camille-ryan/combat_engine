@@ -15,7 +15,10 @@ edition's vocabulary.
 
 So this does the part a machine is better at -- splitting 154 pages into files,
 pulling the embedded outline, and working out which pages each section spans --
-and writes a brief asking for the part a machine is worse at.
+and writes a brief asking for the part a machine is worse at. It also pulls
+the adventure's italicised boxed text into `read-aloud.json` -- the half of
+an adventure already written for the player, which plain extraction flattens
+into the DM's prose and loses.
 
 ## What the outline buys
 
@@ -44,6 +47,7 @@ import itertools
 import json
 import re
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 
 from combat_engine.db import ROOT
@@ -114,6 +118,115 @@ def kind_of(title: str) -> str:
     return ""
 
 
+#: Shortest italic block worth calling read-aloud.
+#:
+#: An adventure sets three different things in italics and only one of them
+#: is boxed text: the running head on every page, a power's one-line flavour
+#: in a stat block ("Frigid water washes out, chilling all it touches."), and
+#: the thing we want. Length separates them cleanly -- the real boxed text on
+#: the module in hand runs 400-2,800 characters and the impostors run 20-65.
+READ_ALOUD = 150
+
+
+#: An x gap wider than this starts a new column.
+#:
+#: The module in hand sets boxed text in two columns whose line starts sit at
+#: x=53.9 and x=316.4 -- a gutter of 262 -- and every other gap on the page
+#: is a word space. Anything in the low hundreds separates the two cleanly.
+GUTTER = 120
+
+
+def read_aloud(page: object) -> list[str]:
+    """The italicised boxed text on one page: what the DM reads out.
+
+    **This is the half of an adventure written for the player**, and nothing
+    was pulling it. `extract` wrote `page.extract_text()`, which flattens
+    every font to one plain string, so the one passage on the page that is
+    already player-facing arrived indistinguishable from the DM's prose
+    around it. Chapter 1 was then authored by paraphrasing the DM's text --
+    both worse writing and the wrong voice, when the adventure had written
+    the right words and the only signal saying so was being discarded.
+
+    Three things have to be undone to read it back, and each was found by
+    getting the output wrong:
+
+    * **Every line is drawn twice**, at the same baseline and the same
+      offset, so a naive join gives "Redolent with the smell of swamp,
+      Redolent with the smell of swamp". Keying by `(y, x)` collapses the
+      duplicate onto itself.
+    * **Two columns interleave.** Sorting a row's runs by x alone reads
+      straight across the gutter and produces a sentence from one column
+      spliced into a sentence from the other -- which looked like prose and
+      was gibberish. Columns are separated first, by `GUTTER`.
+    * **Runs arrive in draw order.** Baseline descending, then x.
+
+    Blocks split where the baseline jumps more than a line's height, so two
+    boxes in one column stay apart.
+    """
+    runs: list[tuple[float, float, str]] = []
+
+    def visit(text: str, _cm: object, tm: list, font: dict, _size: object) -> None:
+        if not font or "Italic" not in str(font.get("/BaseFont", "")):
+            return
+        if text.strip():
+            runs.append((round(tm[5], 1), round(tm[4], 1), text))
+
+    page.extract_text(visitor_text=visit)  # type: ignore[attr-defined]
+    if not runs:
+        return []
+
+    # Column bands: sorted x starts, cut wherever the gap is a gutter.
+    xs = sorted({x for _, x, _ in runs})
+    edges = [xs[0]]
+    for near, far in pairwise(xs):
+        if far - near > GUTTER:
+            edges.append(far)
+
+    def column(x: float) -> int:
+        return max(i for i, edge in enumerate(edges) if x >= edge)
+
+    cells: dict[tuple[int, float], dict[float, str]] = {}
+    for y, x, text in runs:
+        cells.setdefault((column(x), y), {})[x] = text
+
+    out: list[str] = []
+    for col in range(len(edges)):
+        lines = [
+            (y, "".join(cells[(col, y)][x] for x in sorted(cells[(col, y)])).strip())
+            for (c, y) in sorted(cells, key=lambda k: -k[1]) if c == col
+        ]
+        block: list[str] = []
+        last: float | None = None
+        for y, line in lines:
+            if last is not None and abs(last - y) > 20 and block:
+                out.append(" ".join(" ".join(block).split()))
+                block = []
+            block.append(line)
+            last = y
+        if block:
+            out.append(" ".join(" ".join(block).split()))
+    return [_mend(b) for b in out if len(b) >= READ_ALOUD]
+
+
+def _mend(text: str) -> str:
+    """Undo what the typesetter did to words, as far as is safe.
+
+    **Only the unambiguous half.** A hyphen with a space after it inside a
+    word is always a line break -- "apart- ment", "vis- ible", "scoun-
+    drels" -- because a real hyphenated compound has no space, so joining is
+    safe and there is no English word it damages.
+
+    **The `fl` ligature is left alone, deliberately.** It comes out as two
+    characters with a space between them -- "f loor", "half ling", "f lash"
+    -- and the obvious rule, join "f l" into "fl", also turns "of large"
+    into "oflarge" and "if left" into "ifleft". There is no way to tell the
+    two apart from the text alone, and silently corrupting a correct phrase
+    to fix a broken one is the worse trade. The author sees it and fixes it
+    by hand; `BRIEF.md` says to look for it.
+    """
+    return re.sub(r"(\w)- (\w)", r"\1\2", text)
+
+
 def extract(pdf: Path, into: Path) -> tuple[int, list[Heading]]:
     """Split a PDF into per-page text files and pull its outline.
 
@@ -134,8 +247,14 @@ def extract(pdf: Path, into: Path) -> tuple[int, list[Heading]]:
     reader = PdfReader(str(pdf))
     pages = into / "pages"
     pages.mkdir(parents=True, exist_ok=True)
+    boxed: dict[str, list[str]] = {}
     for i, page in enumerate(reader.pages):
         (pages / f"{i:04d}.txt").write_text(page.extract_text() or "")
+        found = read_aloud(page)
+        if found:
+            boxed[str(i)] = found
+    (into / "read-aloud.json").write_text(
+        json.dumps(boxed, indent=2, ensure_ascii=False) + "\n")
     outline = read_outline(reader)
     (into / "outline.json").write_text(
         json.dumps(
@@ -235,6 +354,24 @@ the most expensive mistake available in this file.
 * `sets` is **what a character standing there can see, hear and be told.**
   This is the one that gets printed and the one the party's own companions
   are given.
+
+  **Look in `read-aloud.json` before writing a word of it.** An adventure
+  sets its player-facing boxed text in italics, and the import pulls every
+  such block out, keyed by page -- so for most scenes the right `sets` is
+  already written, by the people who wrote the adventure, in the voice it
+  is meant to be read in. Match it to the scene by `_pages`. On the module
+  in hand that covered **11 of 15** scenes in the first chapter.
+
+  The first pass at this file did not have that, and chapter 1 was authored
+  by paraphrasing the DM's prose instead: worse writing, wrong voice, and
+  one brief that spanned a whole session so the party discussed a cave they
+  had not reached. Paraphrase only where there is no box.
+
+  Two things to fix by hand when you copy a block. The `fl` ligature comes
+  out split -- "f loor", "half ling", "f lash" -- and is left that way on
+  purpose, because the rule that joins it also turns "of large" into
+  "oflarge". And a page with two boxes gives you two blocks: check you took
+  the right one.
 * `brief` is **what the DM needs to run it**, which is usually the page as
   written: who is lying, what they actually want, what is waiting in the
   next room.

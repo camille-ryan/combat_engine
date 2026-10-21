@@ -39,6 +39,7 @@ gave no word of its own.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -105,26 +106,47 @@ def choose_exit(scene: module_mod.Scene, module: module_mod.Module) -> str:
         print(f"     a number from 0 to {len(exits) - 1}, or Enter.")
 
 
+#: Speech inside a single typed answer: anything in quotes.
+SPOKEN = re.compile(r'[“"\u2018\'](.+?)[”"\u2019\']')
+
+
 def declare(actor: beat_mod.Actor, situation: str) -> tuple[str, str]:
-    """Ask a person what their character says and does.
+    """Ask a person what their character does. One prompt, not two.
 
-    Two lines rather than one, because the beat loop keeps speech and action
-    apart all the way through -- the matcher reads them together and the DM
-    is shown them separately, and collapsing them here would make the person
-    the only actor whose intent arrives in a different shape.
+    **It used to ask twice -- `say:` then `do:` -- and that was awkward to
+    answer.** The split exists inside the loop for a good reason: the
+    matcher reads speech and action together while the DM is shown them
+    apart, so an intent carries both. But that is the loop's business. At
+    the keyboard it meant deciding, before typing anything, which half of
+    a sentence you were in, and answering a second prompt with nothing to
+    say in it.
 
-    Enter on both means they sit this beat out, which is a real thing to do
-    in a conversation and costs nothing.
+    One line now, and the quotes do the splitting -- which is how people
+    write this anyway:
+
+        > I lean on the gate. "Who actually runs this place?"
+          speech: Who actually runs this place?
+          doing:  I lean on the gate.
+
+    No quotes means it is all action, which is the common case and costs
+    the typist nothing. Enter means sit this beat out, which is a real
+    thing to do in a conversation.
     """
+    del situation
     if not sys.stdin.isatty():
         return "", ""
-    print(f"\n  {actor.name} ({actor.cls})")
     try:
-        speech = input('    say:  ').strip()
-        doing = input('    do:   ').strip()
+        said = input(f"\n  {actor.name} ({actor.cls}) -- "
+                     f"what do you do? ").strip()
     except EOFError:
         return "", ""
-    return speech, doing
+    if not said:
+        return "", ""
+    spoken = SPOKEN.findall(said)
+    if not spoken:
+        return "", said
+    doing = SPOKEN.sub("", said).strip(" .,;")
+    return " ".join(spoken).strip(), doing
 
 
 def _print_head(scene: module_mod.Scene) -> None:
