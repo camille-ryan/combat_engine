@@ -13015,6 +13015,59 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def one_sustain_pays_for_the_whole_power(out: Result) -> None:
+    """Two conjurations from one row survive on one minor action.
+
+    Every `c.conjure` makes its own effect carrying `sustain_cost=MINOR`,
+    and the turn-end sweep charged the budget **once per effect**. A
+    creature has one minor a turn, so a row conjuring two kept one and lost
+    the other at that very turn end, and a row conjuring three lost two.
+    The printed rule is one sustain action for the *power*. #819.
+
+    **The control is two effects from DIFFERENT rows**, and it is the half
+    that makes this a rule rather than a licence: those are two powers,
+    there is one minor, and the second must still lapse. `durations`'
+    own docstring says so -- *"Two effects both wanting a minor means the
+    second one lapses, which is right"* -- and a fix that simply stopped
+    charging would turn that sentence false.
+
+    A single conjuration passes under either reading, which is why the
+    issue could not be seen from any one-conjuration row.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Budget
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.events import TurnEnd
+    from combat_engine.engine.types import ActionType
+
+    def survivors(same_row: bool) -> int:
+        world, me, _ = _board()
+        budget = world.need(me, Budget)
+        budget.minor, budget.standard, budget.move = 1, 0, 0
+        first = Cast(world=world, me=me, ref="drivers:conj")
+        second = Cast(world=world, me=me,
+                      ref="drivers:conj" if same_row else "drivers:other")
+        a = first.effect("drivers one", until=_When.SUSTAIN, on=me,
+                         sustain=ActionType.MINOR)
+        b = second.effect("drivers two", until=_When.SUSTAIN, on=me,
+                          sustain=ActionType.MINOR)
+        if a is None or b is None:
+            return -1
+        # A later round, so the sweep asks rather than skipping.
+        world.round += 1
+        world.effects._on_turn_end(TurnEnd(actor=me, round=world.round))
+        return sum(1 for e in (a, b) if e.id in world.effects.live)
+
+    out.that(survivors(same_row=True) == 2,
+             "two effects laid by ONE row both survive the turn end on a"
+             " single minor -- one sustain for the power",
+             f"{survivors(same_row=True)} of 2")
+    out.that(survivors(same_row=False) == 1,
+             "and two laid by DIFFERENT rows keep only one: that is two"
+             " powers and one minor, which must still cost",
+             f"{survivors(same_row=False)} of 2")
+
+
 def a_retype_reaches_unrolled_damage(out: Result) -> None:
     """A standing `c.deals` retype recolours a flat rider, not just a swing.
 
@@ -28915,6 +28968,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "one_sustain": (
+        one_sustain_pays_for_the_whole_power,
+        "one sustain action pays for every effect a power laid (#819)",
+    ),
     "retype_unrolled": (
         a_retype_reaches_unrolled_damage,
         "a standing c.deals retype reaches c.flat too (#795)",

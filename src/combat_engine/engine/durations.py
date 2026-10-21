@@ -883,6 +883,15 @@ class Effects:
                     self.end(eff, "start of turn")
 
     def _on_turn_end(self, ev: TurnEnd) -> None:
+        # **One sustain action per power, not per thing it put on the
+        # board.** Every `c.conjure` makes its own effect carrying
+        # `sustain_cost=MINOR`, and this charged the budget once each -- so
+        # a row conjuring two kept one and lost the other at this very turn
+        # end, and a row conjuring three lost two. The printed rule is one
+        # sustain for the power. Carried across the sweep rather than inside
+        # `_sustain_by_default`, because the ledger belongs to *this* turn
+        # end and not to any one effect. #819.
+        paid: set[tuple[int, str]] = set()
         for eff in list(self.live.values()):
             if eff.clock != ev.actor:
                 continue
@@ -915,7 +924,7 @@ class Effects:
             elif (
                 eff.when is When.SUSTAIN
                 and eff.sustained < self.world.round
-                and not self._sustain_by_default(eff)
+                and not self._sustain_by_default(eff, paid)
             ):
                 self.end(eff, "not sustained")
 
@@ -935,7 +944,9 @@ class Effects:
                           "to sustain, so nothing can keep it going")
             )
 
-    def _sustain_by_default(self, eff: Effect) -> bool:
+    def _sustain_by_default(
+        self, eff: Effect, paid: set[tuple[int, str]] | None = None
+    ) -> bool:
         """Keep a sustained effect going if its action was never spent.
 
         The printed rule makes forgetting the default: sustain it or lose it.
@@ -977,9 +988,19 @@ class Effects:
         cost = eff.sustain_cost
         if cost is None:
             return False
+        # The row that laid it, so two conjurations from one power share one
+        # action. `by` falls back to the label for an effect that reached
+        # here without going through `apply`.
+        row = (eff.source, getattr(eff, "by", "") or eff.label)
+        if paid is not None and row in paid:
+            self.sustain(eff)
+            self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
+            return True
         held = self.world.encounter
         if held is None or not held.spend(eff.source, cost):
             return False
+        if paid is not None:
+            paid.add(row)
         self.sustain(eff)
         self.world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True
