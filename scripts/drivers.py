@@ -28432,6 +28432,24 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         "an affordance that leads somewhere ends the scene on the spot",
         f"{playing.leads_to!r} after {len(playing.beats)} beat(s)",
     )
+
+    # **And its text is narration, not a note for the DM.** A transition's
+    # `win` is written as the party going somewhere, which is the one thing
+    # the DM prompt forbids twice -- and when it was in the note list the
+    # model wrote three party members acting in a single reply. Withheld
+    # rather than forbidden, like `Npc.hides`. #807.
+    left = playing.beats[0]
+    gone = next(r for r in left.rulings if r.affordance == "out")
+    out.that(
+        gone.exit and left.exit_line == "they go",
+        "the fact that ends a scene is carried as narration",
+        f"exit={gone.exit} line={left.exit_line!r}",
+    )
+    out.that(
+        "they go" not in left.reaction,
+        "and is kept out of what the DM is handed",
+        f"the DM said {left.reaction!r}",
+    )
     table.strike()
 
     # The control: nothing taken runs to the cap and ends nowhere.
@@ -28444,6 +28462,108 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"{len(playing.beats)} beats, leads_to {playing.leads_to!r}",
     )
     table.strike()
+
+
+def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
+    """Who each of a scene's two descriptions is written for. #805.
+
+    A converted module's `brief` is the **adventure's** text, and an
+    adventure is written for the DM: it says who is lying and what is in the
+    next room. For as long as one field served all three readers, chapter 1
+    of the local module opened by printing, before anybody spoke, that the
+    friendly patron served a dark god and meant to set two enemies on each
+    other -- and then handed the same paragraph to four companions, who
+    played characters who knew it.
+
+    `Npc.hides` was built against exactly this and works. The brief beside it
+    was unguarded, which is the thing worth a driver: a careful mechanism on
+    one field proves nothing about the field next to it.
+
+    No model. The three assertions are about which string reaches which
+    reader, which is code.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+
+    def scene(**extra: str) -> mod.Scene:
+        raw = {
+            "id": "probe", "party_level": 2, "party_size": 3, "start": "talk",
+            "scenes": [{"id": "talk", "kind": "roleplay", "name": "Talk",
+                        "brief": "The host is lying about the cellar.",
+                        "exits": [], **extra}]}
+        return mod.parse(raw, Path("<driver>")).scene("talk")
+
+    bare = scene()
+    out.that(
+        bare.seen == bare.brief == "The host is lying about the cellar.",
+        "a scene with only a brief shows the brief, as every module did",
+        f"{bare.seen!r}",
+    )
+
+    split = scene(sets="Dinner, and the host is pouring.")
+    out.that(
+        split.seen == "Dinner, and the host is pouring."
+        and split.brief == "The host is lying about the cellar.",
+        "and once it has both, the two stay apart",
+        f"seen {split.seen!r} brief {split.brief!r}",
+    )
+
+    # Through the callers, not the property. The bug was never that `seen`
+    # computed the wrong string -- it did not exist. It was that three
+    # readers reached past it to `brief`, so the assertions have to go in
+    # by the front door: the printed step, and the two prompts as built.
+    from combat_engine.story import run as run_mod
+
+    raw = {
+        "id": "probe", "party_level": 1, "party_size": 2, "start": "talk",
+        "scenes": [{
+            "id": "talk", "kind": "roleplay", "name": "Talk",
+            "sets": "Dinner, and the host is pouring.",
+            "brief": "The host is lying about the cellar.",
+            "exits": [],
+            "npcs": [{"name": "the host", "wants": "you downstairs"}]}]}
+    module = mod.parse(raw, Path("<driver>"))
+    campaign = run_mod.begin(module, seed=3)
+    campaign.control = ["human"] * len(campaign.party.sheets)
+    made = run_mod.step(campaign, module, record=False,
+                        director=bt.Director(scripted=True))
+    printed = " ".join(made.lines)
+    out.that(
+        "host is pouring" in printed and "lying about the cellar" not in printed,
+        "what the step prints is what a character can see, not what the DM knows",
+        f"{made.lines[:1]}",
+    )
+
+    # The two prompts, caught on the wire. A canned reply keeps this offline
+    # -- the question is what was asked, not what came back.
+    from combat_engine.story import llm
+
+    seen_prompts: list[str] = []
+    real = llm.chat
+
+    def wiretap(role: llm.Role, messages: list[dict],
+                schema: dict | None = None) -> str:
+        del role, schema
+        seen_prompts.append(messages[-1]["content"])
+        return "The host refills a cup."
+
+    # Same signature; `ty` refuses any rebinding of a module attribute.
+    llm.chat = wiretap  # ty: ignore[invalid-assignment]
+    try:
+        director = bt.Director(roles=llm.ROLES)
+        scene_both = module.scene("talk")
+        director.react(bt.Playing(scene=scene_both), [], [])
+    finally:
+        llm.chat = real
+
+    dm_prompt = seen_prompts[0] if seen_prompts else ""
+    out.that(
+        "lying about the cellar" in dm_prompt,
+        "and the DM is still told the part the player was not",
+        "the DM prompt does not carry the brief",
+    )
 
 
 def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:
@@ -28518,6 +28638,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "scene_audience": (
+        a_scene_shows_the_player_less_than_it_tells_the_dm,
+        "a scene's brief is the DM's and its sets is the player's (#805)",
     ),
     "affordance_match": (
         a_model_matches_an_intent_to_the_right_affordance,

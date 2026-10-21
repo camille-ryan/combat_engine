@@ -235,10 +235,28 @@ class Scene:
     id: str
     kind: str
     name: str = ""
-    #: The module's own prose for this scene: what the DM would read out, or
-    #: paraphrase. Shown as-is in `--no-dm`; handed to the model as context
-    #: otherwise. Git-ignored either way.
+    #: The module's own prose for this scene, **written for the DM** --
+    #: because that is what an adventure is made of. It routinely states the
+    #: plot: who is lying, what they actually want, what is waiting in the
+    #: next room. Only the DM prompt sees it.
     brief: str = ""
+    #: What a character standing here can see, hear and be told. This is the
+    #: half that is printed and the half the companions are given.
+    #:
+    #: **It falls back to `brief`, and the fallback is a known hazard rather
+    #: than a convenience.** Every module converted before this field existed
+    #: has only a brief, so defaulting keeps them playing exactly as they did
+    #: -- and chapter 1 of the local module opened by printing, in its own
+    #: words, that the friendly friar serves a snake god and means to set two
+    #: enemies on each other. That is the whole chapter, read out before
+    #: anybody speaks, and then handed to four companions who proceed to play
+    #: characters who know it.
+    #:
+    #: `Npc.hides` was built against exactly this and works: the friar's three
+    #: secrets sit in `hides` and never reach a prompt. The brief handed them
+    #: over regardless. A careful mechanism on one field is worth nothing while
+    #: the field beside it is unguarded. #805.
+    sets: str = ""
     #: Which chapter and session of the published adventure this came from.
     #: Carried for reporting only -- the graph is what plays.
     chapter: str = ""
@@ -281,6 +299,16 @@ class Scene:
     def affordance(self, wanted: str) -> Affordance | None:
         """One by id, or `None`. `"none"` is a legal answer and means nothing."""
         return next((a for a in self.affordances if a.id == wanted), None)
+
+    @property
+    def seen(self) -> str:
+        """What is shown and what the companions are told.
+
+        One accessor rather than `scene.sets or scene.brief` at each of the
+        three call sites, because the whole bug was that the three sites did
+        not agree about who they were writing for.
+        """
+        return self.sets or self.brief
 
     @property
     def share(self) -> float:
@@ -545,6 +573,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         id=scene_id, kind=kind,
         name=str(raw.get("name", "")).strip(),
         brief=str(raw.get("brief", "")),
+        sets=str(raw.get("sets", "")),
         chapter=str(raw.get("chapter", "")).strip(),
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
         npcs=npcs,

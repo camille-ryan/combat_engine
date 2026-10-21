@@ -116,6 +116,10 @@ class Ruling:
     def rolled(self) -> bool:
         return self.roll is not None
 
+    #: This ruling ended the scene, so its fact is narration rather than
+    #: something anybody in the room said or did. #807.
+    exit: bool = False
+
     def __str__(self) -> str:
         if self.affordance == "none":
             return f"  {self.name}: no roll"
@@ -140,6 +144,9 @@ class Beat:
     reaction: str = ""
     #: Set when an affordance ended the scene; the id it leads to.
     leads_to: str = ""
+    #: The closing line, when the affordance that ended the scene had one.
+    #: Printed as narration. **Not given to the DM** -- see `Ruling.exit`.
+    exit_line: str = ""
 
 
 @dataclass
@@ -222,6 +229,33 @@ something it is not.\
 #: writes -- and forbidding a party line outright -- fixed it in one go: the
 #: friar answers, uses a fact he was given, and the party's words appear
 #: nowhere.
+#: **Measured, n=10 per arm, `qwen2.5:7b` at 0.6, judged by a model held to
+#: a positive and a negative control first.** Two facts per reply; `echo`
+#: counts a note coming back word for word, `covered` a judge saying it got
+#: across however worded:
+#:
+#:     old   echo 20/20   covered 20/20
+#:     v2    echo  1/20   covered 14/20     <- this prompt
+#:     v3    echo  5/20   covered 16/20
+#:
+#: `old` is not a DM. It is a copier: 10 of 10 samples came back *character
+#: for character identical*, because restating a list needs no model at all.
+#: That is what the live chapter-1 session read like -- three bullet facts
+#: with blank lines between them, under the heading "DM:".
+#:
+#: Neither replacement dominates, so this is a choice and not an
+#: improvement: v3 buys two more facts for a five-fold echo relapse. The
+#: echo is the worse fault, so v2. **The 6 facts in 20 that v2 drops are a
+#: real cost and are #809** -- they stay in `playing.learnt` and in the
+#: campaign log, so nothing is lost from the record, but a player does not
+#: hear them. v3 is the evidence that more prompt words trade one fault for
+#: the other rather than fixing either; the answer there is structural.
+#:
+#: Word overlap cannot score coverage here, and the first version of this
+#: probe used it and reported a collapse that was not there -- the arms
+#: differ precisely in how much they re-word, so overlap is biased against
+#: the one under test. A judge answers it; a judge with controls answers it
+#: honestly.
 _DM = """\
 You write the replies of the people the party is talking to. Nobody else.
 
@@ -233,9 +267,18 @@ Never write a line for a party member.
 Never say whether anything worked; that is already decided.
 Never describe the party moving, arriving or leaving.
 
+**The facts you are given are notes, not lines.** Each one is something that
+is now true. Deliver all of them the way the people here would -- in speech,
+in what they do, in what shows on a face. Never copy a note back as a
+sentence and never present them as a list. One short paragraph.
+
 **A party member's line is what they said, not what is true.** If one of \
 them refers to a thing that is not in the scene, that thing is not there and \
 you do not describe it. The scene and the facts below are all that exists.
+
+**Only the people listed under WHO IS HERE are here.** The scene will \
+mention others -- who runs the place, who is feared, who has gone missing. \
+They are elsewhere. Do not give them a line, an entrance or an action.
 
 Write in English.\
 """
@@ -300,7 +343,7 @@ class Director:
         who = [
             f"{n.name} -- {n.voice or 'speaking plainly'}" for n in scene.npcs
         ]
-        told = [f"The scene: {scene.brief}"]
+        told = [f"The scene: {scene.seen}"]
         if who:
             told.append("Who is here, speaking to you: " + "; ".join(who))
         if playing.learnt:
@@ -387,7 +430,7 @@ class Director:
     def react(self, playing: Playing, intents: list[Intent],
               rulings: list[Ruling]) -> str:
         if self.scripted:
-            facts = [r.fact for r in rulings if r.fact]
+            facts = [r.fact for r in rulings if r.fact and not r.exit]
             return " ".join(facts) if facts else "The moment passes."
         scene = playing.scene
         who = [
@@ -397,6 +440,11 @@ class Director:
             for n in scene.npcs
         ]
         # `hides` is not here and never is. See `module.Npc`.
+        # **`brief` here and `seen` everywhere else, deliberately.** This is
+        # the one reader that is allowed the DM's text -- who is lying, what
+        # is in the next room -- because it is the DM. Pointing this at
+        # `seen` would leave the DM knowing less than the module wrote down.
+        # #805.
         told = [f"THE SCENE: {scene.brief}"]
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
@@ -407,10 +455,11 @@ class Director:
         # and an action for a party member, which the prompt forbids in as
         # many words. A fact is a thing that is now true, not a thing
         # somebody did.
-        facts = [r.fact for r in rulings if r.fact]
+        facts = [r.fact for r in rulings if r.fact and not r.exit]
         told.append(
-            "WHAT IS NOW TRUE. These are things the people here say or do, "
-            "never things a party member does. State only these:\n"
+            "NOTES ON WHAT IS NOW TRUE. Things the people here say or do, "
+            "never things a party member does. Cover every note, in their "
+            "voices, in your own words. Add nothing beyond them:\n"
             + "\n".join(f"- {f}" for f in facts)
             if facts else
             "NOTHING NEW IS TRUE. Nobody learnt anything; react only."
@@ -436,8 +485,8 @@ def one_beat(
     """Declare, match, roll, react. One exchange."""
     scene = playing.scene
     situation = (
-        playing.beats[-1].reaction if playing.beats else scene.brief
-    ) or scene.brief
+        playing.beats[-1].reaction if playing.beats else scene.seen
+    ) or scene.seen
     beat = Beat(n=len(playing.beats) + 1, situation=situation)
 
     # -- declare. Humans first, so a person is never waiting on a model only
@@ -479,20 +528,32 @@ def one_beat(
         if not chosen.rolls:
             # A thing a character can simply do. It still matters: the module
             # said it was possible, so its `win` text is now a fact.
-            beat.rulings.append(Ruling(
-                slot=intent.slot, name=intent.name, affordance=chosen.id,
-                won=True, fact=chosen.win))
+            won, rolled, target = True, None, 0
         else:
             level = scene.level or party_level
             target = dc_for(level, chosen.band)
             rolled = table.check(intent.slot, chosen.skill, target)
-            beat.rulings.append(Ruling(
-                slot=intent.slot, name=intent.name, affordance=chosen.id,
-                skill=chosen.skill, dc=target, roll=rolled,
-                won=rolled.success,
-                fact=chosen.win if rolled.success else chosen.lose))
-        if chosen.leads_to and beat.rulings[-1].won:
+            won = rolled.success
+        leaving = bool(chosen.leads_to) and won
+        beat.rulings.append(Ruling(
+            slot=intent.slot, name=intent.name, affordance=chosen.id,
+            skill=chosen.skill if chosen.rolls else "",
+            dc=target, roll=rolled, won=won,
+            fact=chosen.win if won else chosen.lose,
+            exit=leaving))
+        if leaving:
             beat.leads_to = chosen.leads_to
+            # **A transition's `win` is a stage direction, not a note.** It
+            # is written as the party going somewhere -- "the party steps out
+            # into the square" -- because that is what ending a scene is.
+            # Handed to the DM under a heading reading "things the people
+            # here say or do, never things a party member does", it made the
+            # model write three party members acting in one reply, against
+            # two prohibitions stated in the prompt verbatim. The data won.
+            #
+            # Withheld rather than forbidden, which is the call `Npc.hides`
+            # already made for the same reason. #807.
+            beat.exit_line = beat.rulings[-1].fact
 
     playing.learnt += [r.fact for r in beat.rulings if r.won and r.fact]
 

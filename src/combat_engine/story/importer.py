@@ -182,6 +182,7 @@ def draft(module_id: str, outline: list[Heading], total_pages: int) -> dict:
             "kind": kind,
             "name": head.title.strip(),
             "chapter": chapter,
+            "sets": "",
             "brief": "",
             "_pages": f"{head.page}-{max(ends - 1, head.page)}",
             "exits": [],
@@ -228,11 +229,27 @@ vocabulary you miss, so you should not need this file to look a word up.
 
 ## What to fill in
 
-**Every scene** -- `brief` is what the DM would read out or paraphrase, in your
-own words or the page's. `name` is already set from the heading; fix it if the
-heading was a label rather than a title. Correct `exits`: the draft chains
-scenes in document order, which is right for a linear adventure and wrong
-wherever the adventure branches.
+**Every scene** -- two descriptions, and getting them the wrong way round is
+the most expensive mistake available in this file.
+
+* `sets` is **what a character standing there can see, hear and be told.**
+  This is the one that gets printed and the one the party's own companions
+  are given.
+* `brief` is **what the DM needs to run it**, which is usually the page as
+  written: who is lying, what they actually want, what is waiting in the
+  next room.
+
+A page of an adventure is written for the DM, so copying it into `brief`
+alone is the natural thing to do -- and then `sets` falls back to it and the
+scene opens by printing the plot. That is not hypothetical: the first chapter
+of the first module converted here began by announcing that its friendly
+patron served a dark god and meant to set two enemies on each other, before
+anybody had spoken a line. Write both, every time.
+
+`name` is already set from the heading; fix it if the heading was a label
+rather than a title. Correct `exits`: the draft chains scenes in document
+order, which is right for a linear adventure and wrong wherever the adventure
+branches.
 
 **A combat scene** -- `foes` is the important part, one entry per line of
 opposition:

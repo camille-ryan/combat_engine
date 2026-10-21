@@ -356,6 +356,10 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
                 step.say(str(ruling))
         if made.reaction:
             step.say(f"  DM: {made.reaction}")
+        # After the reaction, because it is the scene closing rather than
+        # anybody answering. The DM is not given it -- #807.
+        if made.exit_line:
+            step.say(f"  {made.exit_line}")
     if playing.leads_to:
         step.next_id = playing.leads_to
 
@@ -391,8 +395,8 @@ def step(
     scene = module.scene(campaign.scene)
     made = Step(scene=scene)
 
-    if scene.brief:
-        made.say(scene.brief)
+    if scene.seen:
+        made.say(scene.seen)
 
     if scene.kind == "roleplay":
         _roleplay(campaign, module, scene, made, director, ask_human)
