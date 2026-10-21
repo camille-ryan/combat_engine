@@ -419,8 +419,13 @@ def step(
     scene = module.scene(campaign.scene)
     made = Step(scene=scene, echo=narrate)
 
-    if scene.seen:
-        made.say(scene.seen)
+    # One line per paragraph. The read-aloud text an adventure prints is
+    # several paragraphs and `importer.read_aloud` keeps the breaks, so
+    # saying it as a single line puts a bare newline in the middle of an
+    # indented block and loses the indent for everything after it.
+    for paragraph in scene.seen.split("\n\n"):
+        if paragraph.strip():
+            made.say(paragraph.strip())
 
     if scene.kind == "roleplay":
         _roleplay(campaign, module, scene, made, director, ask_human)

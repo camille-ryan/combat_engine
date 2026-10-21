@@ -195,17 +195,52 @@ def read_aloud(page: object) -> list[str]:
             (y, "".join(cells[(col, y)][x] for x in sorted(cells[(col, y)])).strip())
             for (c, y) in sorted(cells, key=lambda k: -k[1]) if c == col
         ]
-        block: list[str] = []
+        block: list[tuple[float, str]] = []
         last: float | None = None
         for y, line in lines:
             if last is not None and abs(last - y) > 20 and block:
-                out.append(" ".join(" ".join(block).split()))
+                out.append(_paragraphs(block))
                 block = []
-            block.append(line)
+            block.append((y, line))
             last = y
         if block:
-            out.append(" ".join(" ".join(block).split()))
+            out.append(_paragraphs(block))
     return [_mend(b) for b in out if len(b) >= READ_ALOUD]
+
+
+#: A line this much shorter than the column's measure may end a paragraph.
+SHORT = 0.85
+
+
+def _paragraphs(block: list[tuple[float, str]]) -> str:
+    """Put the paragraph breaks back, from where the lines run short.
+
+    **The box is set justified with no indent** -- every line in it starts at
+    the same x -- so the only thing left saying where a paragraph ended is
+    that its last line does not reach the measure. Without this the opening
+    read-aloud arrives as one 986-character wall, which is legible on a page
+    and is not legible in a terminal.
+
+    Length alone is not enough and says so twice on the first page tried. "A
+    thin, bald human friar named Venn approached you" is 50 characters
+    against a 65 measure and **begins** a paragraph; so does "First, I want
+    you to go to the prison grotto". Both are short because the font is
+    proportional and character count is a poor proxy for width.
+
+    What separates them is punctuation: a line that *ends* a paragraph ends a
+    sentence. Short **and** closing is right on all nine real breaks on that
+    page and rejects both impostors.
+    """
+    widest = max(len(line) for _, line in block)
+    paras: list[list[str]] = [[]]
+    for _, line in block:
+        paras[-1].append(line)
+        short = len(line) < widest * SHORT
+        if short and line.rstrip().endswith((".", "?", "!", "\u201d", '"')):
+            paras.append([])
+    return "\n\n".join(
+        " ".join(" ".join(p).split()) for p in paras if any(p)
+    )
 
 
 def _mend(text: str) -> str:
