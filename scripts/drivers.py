@@ -13015,6 +13015,92 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def an_aura_strips_invisibility_on_arrival(out: Result) -> None:
+    """`c.no_invisibility_in` catches whoever is in the zone, and lets go.
+
+    `c.no_invisibility` landed with #774 and sits on the creature being
+    looked at, which is the right direction; what `p16019` was missing was
+    the **geometry**. A plain `c.no_invisibility` would strip invisibility
+    from whoever stood there when the aura was laid and keep stripping it
+    wherever they walked -- a stronger rule than standing in the aura.
+
+    **The bounds are what a hand-rolled copy fails, not the arrival** --
+    measured, by planting `for who in self._side(side, self.me):
+    self.no_invisibility(on=who)` in place of the geometry. That reddens
+    the *second* and *fourth* assertions and leaves the third green: a
+    loop at lay time grants to every creature on the board, so one that
+    "walks in" already had it. So the load-bearing pair is **outside
+    keeps it** and **leaving gives it back**.
+
+    Worth recording because the obvious intuition is the other way round.
+    `c.grants_in`'s docstring warns about the arrival case -- *"an ally who
+    walks in later does not pick it up ... a hand-rolled copy is a zone
+    that stops being a zone"* -- and that is the failure of a loop over
+    the zone's *current occupants*. A loop over a **side** fails the
+    opposite way, by over-granting, and an arrival assertion cannot see
+    it.
+
+    `world.zones.refresh()` is what the engine calls and what emits
+    `ZoneEntered`, which is the only thing `_while_inside` listens to.
+    Rewriting the grid alone moves the creature without the engine
+    noticing -- the trap `a_zone_grants_a_die`'s note above records.
+
+    Read through `query.unseen_by`, which is what the clause is about: an
+    invisible creature in the aura is not unseen, so it grants no combat
+    advantage and can be targeted.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When as _When
+    from combat_engine.engine.query import enemies, unseen_by
+
+    world, me, _ = _board()
+    foe = enemies(world, me)[0]
+    here = world.need(me, Position).square
+
+    Cast(world=world, me=foe, ref="drivers:hide").invisible(
+        until=_When.ENCOUNTER, on=foe
+    )
+    out.that(unseen_by(world, me, foe),
+             "an invisible enemy is unseen -- the control, before any aura",
+             f"{unseen_by(world, me, foe)}")
+
+    # Stand it well clear, so arrival is what catches it rather than the
+    # lay. `refresh` first, so the zone's idea of who is inside is current.
+    far = (here[0] + 9, here[1] + 9)
+    world.grid.lift(foe)
+    world.need(foe, Position).square = far
+    world.grid.place(foe, frozenset({far}))
+    c = Cast(world=world, me=me, ref="drivers:noinvis")
+    zid = c.aura(1, label="drivers:noinvis", until=_When.ENCOUNTER, on=me)
+    c.no_invisibility_in(zid, side="any")
+    world.zones.refresh()
+    out.that(unseen_by(world, me, foe),
+             "still unseen while it stands outside the aura, which is the"
+             " bound the card draws",
+             f"{unseen_by(world, me, foe)}")
+
+    step = (here[0] + 1, here[1])
+    world.grid.lift(foe)
+    world.need(foe, Position).square = step
+    world.grid.place(foe, frozenset({step}))
+    world.zones.refresh()
+    out.that(not unseen_by(world, me, foe),
+             "and NOT unseen once it is inside: a creature arriving after"
+             " the aura was laid is caught, which a hand-rolled loop over"
+             " the squares would miss",
+             f"{unseen_by(world, me, foe)}")
+
+    world.grid.lift(foe)
+    world.need(foe, Position).square = far
+    world.grid.place(foe, frozenset({far}))
+    world.zones.refresh()
+    out.that(unseen_by(world, me, foe),
+             "and unseen again once it leaves -- the waiver is given back,"
+             " which is what makes this a zone and not a one-off",
+             f"{unseen_by(world, me, foe)}")
+
+
 def one_sustain_pays_for_the_whole_power(out: Result) -> None:
     """Two conjurations from one row survive on one minor action.
 
@@ -29004,6 +29090,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "no_invis_aura": (
+        an_aura_strips_invisibility_on_arrival,
+        "c.no_invisibility_in catches a creature that walks in (#774)",
+    ),
     "one_sustain": (
         one_sustain_pays_for_the_whole_power,
         "one sustain action pays for every effect a power laid (#819)",

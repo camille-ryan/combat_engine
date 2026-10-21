@@ -2154,7 +2154,6 @@ def p16018(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.PRIMAL],
-    dropped=("c.cannot_hide()",),
 )
 def p16019(c: Cast) -> None:
     """The concealment half plays, for everybody inside.
@@ -2172,20 +2171,28 @@ def p16019(c: Cast) -> None:
     `side="any"` because the printed word is "creatures", not allies or
     enemies; `_side` has had that pool all along.
 
-    **Still dropped: invisibility.** That is a `HIDDEN_FROM` relation and
-    `cover_waived` never consults it -- only `query.sees_through` does, on
-    the watcher. So "cannot benefit from invisibility" would need
-    something standing on the creature that stops it being hidden from
-    anybody, and the surface has only the per-watcher shapes:
-    `c.see_invisible`, `c.truesight(of=)`, `c.unhide` on oneself. The
-    marker is `m6644a2`'s, which is the same gap said about one creature
-    rather than a zone -- every hide method stops at doing or reading a
-    hide, never at refusing one. The caster's own sense is kept below as
-    the half of it that can be said.
+    **The invisibility half is written now, and this note's premise is
+    false twice over.** It said the surface *"has only the per-watcher
+    shapes: `c.see_invisible`, `c.truesight(of=)`, `c.unhide` on
+    oneself"*. `c.no_invisibility` landed with #774 and sits on whoever is
+    being looked at, which is exactly the direction the card needs; what
+    was genuinely missing was the geometry, and `c.no_invisibility_in` is
+    that -- `c.conceal_in`'s shape, taken on entering and given back on
+    leaving, so a creature walking in later is caught.
+
+    **`c.see_invisible(on=c.me)` is gone, and it was wider than print.**
+    It was kept here as *"the half of it that can be said"*, and it says a
+    different thing: the caster saw every invisible creature on the board,
+    aura or no aura. The card is about creatures *in the aura* and says
+    nothing about the caster's sight.
+
+    No marker: the card prints two clauses and both are written. The
+    `c.cannot_hide()` it carried is `m6644a2`'s gap -- that card forbids a
+    creature from *hiding*, which this one does not mention.
     """
     zid = c.aura(1, label=c.ref, until=When.ENCOUNTER, on=c.me)
     c.grants_in(zid, "no_cover", 5, side="any", kind="ignore cover")
-    c.see_invisible(on=c.me, until=When.ENCOUNTER)
+    c.no_invisibility_in(zid, side="any")
 
 
 def _backed_away_this_turn(world: World, me: int, ev: TurnEnd) -> bool:

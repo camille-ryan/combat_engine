@@ -12141,6 +12141,42 @@ class Cast:
             side,
         )
 
+    def no_invisibility_in(self, zone: int, *, side: str = "any") -> None:
+        """"Creatures in the zone cannot benefit from invisibility."
+
+        The fourth zone-bounded grant, beside `c.conceal_in`,
+        `c.cover_in` and `c.ignores_difficult_in`, and written for the
+        reason each of those was: `c.no_invisibility` is per-creature and
+        lasts a duration, so a row printing this as a plain
+        `c.no_invisibility` would strip invisibility from whoever happened
+        to be standing there at the moment the zone was laid and keep
+        stripping it wherever they walked -- a different and stronger rule
+        than standing in the aura.
+
+        Hung on the geometry like its three siblings: taken on entering,
+        given back on leaving, taken off everybody when the zone ends. A
+        creature that walks in later is caught, which is what
+        `_while_inside` asks per arrival rather than once.
+
+        **`side="any"` by default**, where the other three default to
+        `"team"`, and the difference is the printed difference: those three
+        are benefits a caster hands its allies, and this is a thing done to
+        whoever is in the zone. `p16019` prints "creatures", not allies or
+        enemies, and its own note records that `_side` has had that pool
+        all along -- so the caster's own invisibility goes too, which is
+        what the card says.
+
+        Not a flag on `c.no_invisibility`, for the reason `c.conceal_in` is
+        not a flag on `c.conceal`: the zone-bounded form has to listen to
+        `ZoneEntered` and `ZoneExited`, which a per-creature duration knows
+        nothing about. #774's verb, given the geometry it was missing.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.no_invisibility(on=who, until=When.ENCOUNTER),
+            side,
+        )
+
     def ignores_difficult_in(self, zone: int, *, side: str = "team") -> None:
         """"You and your allies can ignore difficult terrain in the zone."
 

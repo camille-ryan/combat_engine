@@ -292,7 +292,8 @@ CATEGORIES: dict[str, dict] = {
                 "damage_disadvantage",
                 "gains_advantage", "grants_advantage", "had_advantage",
                 "hide", "ignore_cover", "ignores_long_range", "invisible",
-                "no_advantage", "no_cover", "no_invisibility", "unhide",
+                "no_advantage", "no_cover", "no_invisibility",
+                "no_invisibility_in", "unhide",
             ]),
             # Not cover either: a relation between two creatures, where one
             # is answering for the other. Beside cover only because both end

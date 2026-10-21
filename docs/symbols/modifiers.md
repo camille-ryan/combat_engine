@@ -102,6 +102,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "The target does not benefit from cover or concealment."
 - `c.no_invisibility(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">) -> 'Effect | None'`
   - "The target cannot benefit from invisibility."
+- `c.no_invisibility_in(self, zone: 'int', *, side: 'str' = 'any') -> 'None'`
+  - "Creatures in the zone cannot benefit from invisibility."
 - `c.unhide(self) -> 'None'`
   - Give yourself away deliberately.
 
