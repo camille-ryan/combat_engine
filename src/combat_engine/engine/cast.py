@@ -3344,6 +3344,23 @@ class Cast:
         who = self._who(on)
         if who is None:
             return 0
+        # **A standing retype reaches unrolled damage too**, which it did
+        # not: `_typed` had exactly two callers, both in the rolled path
+        # (`c.damage` and `c.half_damage`), so *"all damage dealt by this
+        # weapon is fire damage"* recoloured a card's swing and left the
+        # flat rider on the same card the type it was printed. The same
+        # `if not dtypes` guard as `c.damage`: a card naming two types has
+        # already said what it deals. #795.
+        #
+        # Measured by reflavouring a level-3 board: 50 of 57 blows
+        # converted, and the misses were this method and `c.ongoing`.
+        # `c.ongoing` is deliberately left alone -- by the time it ticks
+        # the row that laid it is gone, so its type would have to be
+        # settled when the ongoing is *laid*, which is a design call and
+        # stays on #795.
+        if not dtypes:
+            dtype, *rest = self._typed(dtype)
+            dtypes = (dtype, *rest) if rest else ()
         return deal_damage(
             self.world, self.me, who, amount, dtype, self.ref,
             dtypes=dtypes, unpreventable=unpreventable,

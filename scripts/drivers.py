@@ -13015,6 +13015,61 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def a_retype_reaches_unrolled_damage(out: Result) -> None:
+    """A standing `c.deals` retype recolours a flat rider, not just a swing.
+
+    `c.deals` is an override -- *"all damage dealt by this weapon is fire
+    damage"* beats the type the power printed -- and it is read by
+    `Cast._typed`, which had exactly **two** callers, both in the rolled
+    path. So a card printing a swing *and* a flat rider recoloured the
+    swing and left the rider alone. #795 found it by reflavouring a
+    level-3 board: 50 of 57 blows converted, and the misses were
+    `c.flat` and `c.ongoing`.
+
+    **`c.ongoing` is deliberately still missing and is asserted as such**,
+    which is the honest half of this rule: by the time an ongoing ticks the
+    row that laid it is gone, so its type would have to be settled when it
+    is *laid*. That is a design call, it stays on #795, and a rule that
+    quietly asserted the current behaviour as correct would make the gap
+    invisible.
+
+    The control is the same call with no retype standing -- without it, a
+    method that hard-coded one type would pass.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    def dealt(retype: bool, how: str) -> object:
+        world, me, _ = _board()
+        foe = enemies(world, me)[0]
+        seen: list[object] = []
+        world.bus.on(DamageApplied, lambda ev: seen.append(ev.dtype),
+                     owner=-1)
+        c = Cast(world=world, me=me, ref="drivers:retype")
+        if retype:
+            c.deals(DamageType.NECROTIC, on=me)
+        if how == "flat":
+            c.flat(3, dtype=DamageType.FIRE, on=foe)
+        else:
+            c.damage("1d4", dtype=DamageType.FIRE, on=foe)
+        return seen[-1] if seen else None
+
+    out.that(dealt(False, "flat") is DamageType.FIRE,
+             "with no retype standing, a flat rider deals the type it"
+             " printed -- the control",
+             f"{dealt(False, 'flat')}")
+    out.that(dealt(True, "flat") is DamageType.NECROTIC,
+             "and a standing retype recolours it, which is what two callers"
+             " of `_typed` could not do",
+             f"{dealt(True, 'flat')}")
+    out.that(dealt(True, "rolled") is DamageType.NECROTIC,
+             "the rolled path still converts -- it always did, and is here"
+             " so a regression in it cannot hide behind the new half",
+             f"{dealt(True, 'rolled')}")
+
+
 def a_sustain_cost_is_asked_of_the_encounter(out: Result) -> None:
     """A `When.SUSTAIN` effect survives on any cost the creature can pay.
 
@@ -28860,6 +28915,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "retype_unrolled": (
+        a_retype_reaches_unrolled_damage,
+        "a standing c.deals retype reaches c.flat too (#795)",
+    ),
     "sustain_cost": (
         a_sustain_cost_is_asked_of_the_encounter,
         "a sustain survives on any cost the creature can pay (#776)",
