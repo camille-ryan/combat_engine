@@ -137,6 +137,29 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # Summons one of two creatures, chosen by which school benefit the
+    # character holds (Camille's ruling, 2026-10-21, #826). It fires 48
+    # times and returns on its first gate, because **this board's wizard is
+    # an arcanist/sha-ir build**: it holds `cf:wizard-arcanist-f0*` and
+    # `cf:wizard-sha-ir-f*` and no `cf:wizard-mage-f4s*` at all, so neither
+    # arm of the branch can be reached.
+    #
+    # So SILENT here is a statement about the board and not about the row.
+    # The row is proved by `drivers.school_summon` instead, which grants the
+    # feature and asserts through the body: necromancy summons `x10_27`,
+    # nethermancy `x10_28`, neither summons nothing, and the level-19
+    # `x10_29` never arrives. Planted by collapsing the branch to one
+    # creature -- red on the nethermancy arm and on the negative control.
+    #
+    # **The general fix is a pose, not more entries like this one.** A knob
+    # granting the `cf:`/feat ref a row gates on would reach this and
+    # `i3036p1` (which returns unless the wearer holds `f650b`, and the
+    # moved draw means this board's character does not) and every other row
+    # whose gate is "do I hold this". It moves verdicts in bulk, so it is
+    # not a change to make beside content work.
+    "p13984": "its branch needs a cf:wizard-mage-f4s3/s4 school benefit and"
+              " this board's wizard is an arcanist/sha-ir build -- proved in"
+              " drivers.school_summon instead",
     # "You hit a nonminion enemy with an at-will arcane attack power →
     # repeat the attack against another enemy." Every gate in the body
     # passes and the payout is refused by the engine:

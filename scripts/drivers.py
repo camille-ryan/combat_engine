@@ -11819,6 +11819,64 @@ def disease(out: Result) -> None:
              "and a DC shape, because the pages print four of them")
 
 
+def a_school_decides_which_creature_is_summoned(out: Result) -> None:
+    """`p13984` summons one of two creatures, chosen by the school benefit.
+
+    Camille's ruling, 2026-10-21: `cf:wizard-mage-f4s4` gets `x10_28` and
+    `cf:wizard-mage-f4s3` gets `x10_27`. `x10_29` *"should become available
+    at level 19"*, so it must never arrive from this row.
+
+    **This rule exists because `audit` cannot see the row at all.** It fires
+    48 times and returns on its first gate, because the board's wizard is an
+    arcanist/sha-ir build and holds no `cf:wizard-mage-f4s*` -- so SILENT
+    there is a statement about the board, not the row. Asserted through the
+    body with the feature granted, which is the only way to tell a working
+    branch from a dead one.
+
+    **Both arms, and the negative control is the one that matters.** A rule
+    that granted only one school would pass with the branch collapsed to a
+    single `c.summon`, which is exactly the shape the card does not have.
+    The third assertion -- neither school held, nothing summoned -- is what
+    catches a body that ignores the gate, and the fourth guards the ruling's
+    other half: the level-19 creature is not this row's.
+    """
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Ident
+    from combat_engine.engine.dsl import REGISTRY
+
+    def summons(feature: str) -> str:
+        """Run the body with that school held; return the summoned ref."""
+        world, me, _ = _board("p13984", 1)
+        if feature:
+            Cast(world=world, me=me, ref="drivers:grant").grant_row(
+                feature, on=me
+            )
+        before = {eid for eid, _ in world.each(Ident)}
+        REGISTRY["p13984"].body(Cast(world=world, me=me, ref="p13984"))
+        fresh = [world.get(eid, Ident).ref
+                 for eid, _ in world.each(Ident) if eid not in before]
+        return next((r for r in fresh if r.startswith("x10_")), "")
+
+    necro = summons("cf:wizard-mage-f4s3")
+    nether = summons("cf:wizard-mage-f4s4")
+    neither = summons("")
+
+    out.that(necro == "x10_27",
+             "the necromancy school summons x10_27", f"{necro!r}")
+    out.that(nether == "x10_28",
+             "and the nethermancy school summons x10_28 -- a different"
+             " creature, which is what makes the branch load-bearing",
+             f"{nether!r}")
+    out.that(neither == "",
+             "and a wizard holding NEITHER school summons nothing, which is"
+             " the printed Prerequisite and the control a one-armed rule"
+             " cannot provide", f"{neither!r}")
+    out.that("x10_29" not in (necro, nether),
+             "and x10_29 never arrives from this row -- it is the level-19"
+             " creature, and reading it off the errata line is the mistake"
+             " this row's two earlier markers were built on")
+
+
 def summoned(out: Result) -> None:
     r"""A character's summon takes its numbers from the summoner. #459.
 
@@ -28602,6 +28660,10 @@ DRIVERS = {
     "aftereffect": (aftereffect, "a clause that lands when the first one ends"),
     "crit_kill": (crit_kill, "a crit drops it to 0, and that is not damage"),
     "forms": (forms, "which shape a creature is in, and two at once"),
+    "school_summon": (
+        a_school_decides_which_creature_is_summoned,
+        "which creature a wizard's school benefit summons (#826)",
+    ),
     "summoned": (summoned,
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,

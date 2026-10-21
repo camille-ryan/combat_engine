@@ -78,8 +78,13 @@ from combat_engine.engine import (
     power,
     spread,
 )
-from combat_engine.engine.components import Conjuration
-from combat_engine.engine.events import OpportunityWindow, RelationSet, ZoneEntered
+from combat_engine.engine.components import Conjuration, Powers
+from combat_engine.engine.events import (
+    Dropped,
+    OpportunityWindow,
+    RelationSet,
+    ZoneEntered,
+)
 from combat_engine.engine.zones import Zone
 
 ARCANE_IMPLEMENT = [Keyword.ARCANE, Keyword.IMPLEMENT]
@@ -788,63 +793,65 @@ def p4078(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.SUMMONING],
-    defect="the card summons the creature associated with the character's "
-           "necromancy or nethermancy school benefit, and no entry records "
-           "which of the two creatures either school is associated with",
 )
 def p13984(c: Cast) -> None:
-    """**Re-pointed twice, and the block is not the problem.**
+    """Summons one of two creatures, decided by which school benefit the
+    character took.
 
-    The first note said the feature the summon is read off is not in the
-    tree. False: `cf:wizard-mage-f4` and `cf:wizard-mage-f4s0`..`s5` are
-    all in `class_feature` and all seven are declared in
-    `features/arcanist.py` -- #581, #584, #585.
+    **Camille's ruling, 2026-10-21, and it is the whole of what was
+    blocked**: `cf:wizard-mage-f4s4` summons `x10_28` and
+    `cf:wizard-mage-f4s3` summons `x10_27`. `x10_29` *"should become
+    available at level 19"*, so it is not this row's and not this tier's.
 
-    The second said the source prints **no stat block for either creature**
-    and named `spec.summon_block()`. Also false, and the same blind spot
-    that kept `p16476`'s marker alive through #459: the blocks are not on
-    this card and were never meant to be. They are in the **associate**
-    table, and they are already in `game.db` -- `x10_28` and `x10_29`, both
-    `summoned creature`, medium, shadow origin, hit points the summoner's
-    healing surge value, defences the summoner's. Those are the two the
-    card's own errata line names as changed in the October 2011 update.
-    `c.summon` routes an `x10_` ref to `loader.spawn_associate`, so either
-    one could be put on the board today with a single line, exactly as
-    `p16026` and `p16476` do.
+    **Two earlier markers on this row were both wrong, and the second was
+    mine.** The first said the feature the summon reads off is not in the
+    tree -- all seven `cf:wizard-mage-f4*` rows are declared (#581, #584,
+    #585). The second said the source prints no stat block and named
+    `spec.summon_block()`; the blocks are in the `associate` table and in
+    `game.db`, which is the blind spot that kept `p16476`'s marker alive
+    through #459.
 
-    **What is actually missing is the mapping, and it is a source gap.**
-    The card's Prerequisite is the Expert Mage benefit "associated with
-    necromancy or nethermancy" and its Effect summons "a creature
-    associated with your" benefit -- so *which* of the two arrives is
-    decided by which school the character took, and **nothing in the
-    compendium records that association**. Searched every table it could
-    be in: only the creature's own `Associate` row and this power's errata
-    line mention either creature at all, and the `Class` entries for the
-    two benefits name neither. `cf:wizard-mage-f4s3` and `f4s4` are the two
-    schools in question and their printed benefit is two skill bonuses
-    each, nothing more.
+    **What was genuinely missing was the association, and reading the
+    errata line is what got it wrong.** The card names no creature; its
+    update note names two, and I took those for "the two it can summon".
+    They are the two that *changed in that update* -- one of which belongs
+    to a level-19 power. So the errata line is not a cast list, and the
+    only association anywhere was the ruling above.
 
-    So the row cannot choose, and the choice is not a coin toss: the two
-    creatures are very different -- one insubstantial and phasing with a
-    close-burst obscuring reaction, the other flying with an aura that
-    feeds on bloodied enemies. Guessing which school gets which would be
-    inventing a rules fact, which is the one thing an unreadable line may
-    not become. So `defect=` and plain words rather than a symbol: no verb
-    will ever close this, and `todo=`/`dropped=` would both report the row
-    ready the day some unrelated symbol landed.
+    `Powers.all` on the caster rather than `c.knows`, which is the near
+    miss and is wrong here: it scans every creature on the board and
+    returns whoever holds the row, so on a board with a second wizard it
+    answers about them. `i3036p1` reads its own gate the same way.
 
-    **It drops the whole entry, which is the right cost and worth stating
-    plainly**: nothing here is garbled -- every number both creatures need
-    is present and correct, and only one association is absent. But the
-    test this file sets is whether anything survives without it, and
-    nothing does: the row *is* the summon. A wizard who cannot be told
-    which creature answers is a wizard holding a daily that does nothing.
-    If Camille settles the association, this row is one `c.summon` call
-    and a two-way branch.
+    **Only the `f4` tier is asked, and that is not an omission.** The
+    second school's Expert tier carries `f5s0`-`f5s2` and no more, so
+    there is no necromancy or nethermancy secondary to hold -- the
+    compendium prints three, which `features/arcanist.py` records as the
+    page's own pattern rather than a truncation.
 
-    The branch itself wants a reader that does not exist either, and it is
-    a smaller gap worth naming separately rather than hand-rolling here:
-    "does the **caster** hold this row" has no verb. `c.knows` is the near
-    miss and is wrong -- it scans every creature on the board and returns
-    whoever has the row, which is #806's bug in nine rows.
+    The surge the drop costs and the minor action to dismiss are
+    `p16026`'s arrangement, which prints the same two sentences: one
+    watch, with `c.endable` hanging the dismissal on the same hold so
+    dismissing it also retires the clause about it falling. Placed with no
+    square, so a passable empty one is picked -- the printed "an
+    unoccupied space".
     """
+    me = c.me
+    known = c.world.get(me, Powers)
+    held = set(known.all) if known is not None else set()
+    if "cf:wizard-mage-f4s3" in held:
+        which = "x10_27"
+    elif "cf:wizard-mage-f4s4" in held:
+        which = "x10_28"
+    else:
+        return
+    made = c.summon(which, after=me)
+    if not made:
+        return
+
+    def fell(ev: Dropped) -> None:
+        if ev.actor == made and not c.spend_surge(on=me):
+            c.flat(c.surge_value(of=me), on=me)
+
+    watching = c.watch(Dropped, fell, until=When.ENCOUNTER)
+    c.endable(watching, MINOR, then=lambda: c.world.despawn(made))
