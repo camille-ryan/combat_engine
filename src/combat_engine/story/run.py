@@ -359,13 +359,22 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     seed = seed_for(campaign, scene, "beats")
     table = table_mod.lay(campaign.party, seed=seed)
     def tell(made: beat_mod.Beat) -> None:
+        # **A companion's intent is not printed.** It goes to the DM, which
+        # writes it into the paragraph below -- so what a reader sees is one
+        # piece of prose in which those things happened, not four captioned
+        # declarations and then a reply to them. The person's own line is
+        # printed because they typed it and it is theirs.
         for intent in made.intents:
-            step.say(f"  {intent}")
+            if not intent.played:
+                step.say(f"  {intent}")
+        if made.reaction:
+            step.say(f"  {made.reaction}")
+        # The dice after the prose, not before it: a roll is the result of
+        # the moment and reads as one. Before, it pre-announced the outcome
+        # of a paragraph nobody had read yet.
         for ruling in made.rulings:
             if ruling.affordance != "none":
                 step.say(str(ruling))
-        if made.reaction:
-            step.say(f"  DM: {made.reaction}")
         # After the reaction, because it is the scene closing rather than
         # anybody answering. The DM is not given it -- #807.
         if made.exit_line:

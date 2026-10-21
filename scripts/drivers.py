@@ -28452,6 +28452,55 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
     )
     table.strike()
 
+    # **Not everybody acts every beat, and the human always does.** The
+    # clunkiest thing about playing this was four declarations and a reply,
+    # four more declarations and a reply, whether or not three of those
+    # characters had anything to add.
+    class Quiet2(bt.Director):
+        def joins(self, playing: bt.Playing,
+                  actors: list[bt.Actor]) -> list[int]:
+            del playing, actors
+            return []
+
+    class JustOne(bt.Director):
+        def joins(self, playing: bt.Playing,
+                  actors: list[bt.Actor]) -> list[int]:
+            del playing
+            return [actors[1].slot]
+
+    human = [
+        bt.Actor(slot=a.slot, name=a.name, cls=a.cls,
+                 control="human" if a.slot == 0 else "ai")
+        for a in actors
+    ]
+
+    def spoke(director: bt.Director, seed: int) -> list:
+        board = tbl.lay(party, seed=seed)
+        try:
+            beat = bt.one_beat(
+                bt.Playing(scene=scene), board, human, director,
+                ask_human=lambda a, _s: ("I speak up.", "steps forward"),
+                party_level=2)
+            return [i.slot for i in beat.intents]
+        finally:
+            board.strike()
+
+    out.that(
+        spoke(Quiet2(scripted=True), 11) == [0],
+        "a beat where the DM turns to nobody is the human alone",
+        f"{spoke(Quiet2(scripted=True), 12)}",
+    )
+    out.that(
+        spoke(JustOne(scripted=True), 13) == [0, 1],
+        "and turning to one companion brings in exactly that one",
+        f"{spoke(JustOne(scripted=True), 14)}",
+    )
+    out.that(
+        len(spoke(bt.Director(scripted=True), 15)) == len(actors),
+        "while scripted turns to everyone, so an instrument sees it all",
+        f"{spoke(bt.Director(scripted=True), 16)}",
+    )
+
     # The control: nothing taken runs to the cap and ends nowhere.
     table = tbl.lay(party, seed=7)
     playing = bt.play_scene(scene, table, actors, bt.Director(scripted=True),
@@ -28527,13 +28576,35 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
     module = mod.parse(raw, Path("<driver>"))
     campaign = run_mod.begin(module, seed=3)
     campaign.control = ["human"] * len(campaign.party.sheets)
-    made = run_mod.step(campaign, module, record=False,
-                        director=bt.Director(scripted=True))
+    campaign.control = ["human"] + ["ai"] * (len(campaign.party.sheets) - 1)
+    made = run_mod.step(
+        campaign, module, record=False,
+        director=bt.Director(scripted=True),
+        ask_human=lambda a, _s: ("I ask about the cellar.", "watches him"),
+    )
     printed = " ".join(made.lines)
     out.that(
         "host is pouring" in printed and "lying about the cellar" not in printed,
         "what the step prints is what a character can see, not what the DM knows",
         f"{made.lines[:1]}",
+    )
+
+    # **A companion's declaration is not printed; the human's is.** The
+    # companion's goes to the DM, which writes it into the paragraph -- so a
+    # reader gets one piece of prose rather than four captioned declarations
+    # and then a reply to them.
+    beats = made.played.beats if made.played else []
+    played = [i for b in beats for i in b.intents if i.played]
+    out.that(
+        bool(played) and all(i.speech not in printed for i in played),
+        "a companion's own declaration never reaches the page",
+        f"{len(played)} companion intent(s), "
+        f"{sum(i.speech in printed for i in played)} leaked",
+    )
+    out.that(
+        "I ask about the cellar." in printed,
+        "and the line the person typed does",
+        f"{printed[:70]!r}",
     )
 
     # The two prompts, caught on the wire. A canned reply keeps this offline
@@ -28559,10 +28630,21 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         llm.chat = real
 
     dm_prompt = seen_prompts[0] if seen_prompts else ""
+    # **This assertion is the inverse of the one it replaces**, and the
+    # reversal is the finding. #805 gave the DM prompt the brief on the
+    # grounds that this reader *is* the DM. Playing it refuted that in one
+    # scene: handed a brief saying the patron is not what he appears, the
+    # model put the line in a gate sergeant's mouth and told the player so
+    # in the opening conversation.
+    #
+    # The error was calling it a reader. Everything it produces is shown, so
+    # it is a **writer of player-facing text** -- the same thing `Npc.hides`
+    # already refuses to trust, routed around by the field beside it. #829.
     out.that(
-        "lying about the cellar" in dm_prompt,
-        "and the DM is still told the part the player was not",
-        "the DM prompt does not carry the brief",
+        "lying about the cellar" not in dm_prompt
+        and "host is pouring" in dm_prompt,
+        "no prompt is given the brief, the DM's included",
+        f"the DM prompt carries {dm_prompt[:60]!r}",
     )
 
 

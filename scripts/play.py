@@ -106,8 +106,15 @@ def choose_exit(scene: module_mod.Scene, module: module_mod.Module) -> str:
         print(f"     a number from 0 to {len(exits) - 1}, or Enter.")
 
 
-#: Speech inside a single typed answer: anything in quotes.
-SPOKEN = re.compile(r'[“"\u2018\'](.+?)[”"\u2019\']')
+#: Speech inside a single typed answer: anything in **double** quotes.
+#:
+#: Single quotes are not delimiters, and including them was a bug with a
+#: one-keystroke repro: typing `"And what is the Serpent's Eye worth?"` came
+#: back as speech `And what is the Serpent` and action `s Eye worth?"`,
+#: because the apostrophe closed the quote. An apostrophe inside a spoken
+#: line is ordinary English; a single-quoted line is not something people
+#: type at a prompt.
+SPOKEN = re.compile(r'[“"](.+?)[”"]')
 
 
 def declare(actor: beat_mod.Actor, situation: str) -> tuple[str, str]:

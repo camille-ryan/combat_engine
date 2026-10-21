@@ -89,6 +89,17 @@ class Intent:
     name: str
     speech: str = ""
     doing: str = ""
+    #: True for a companion the model plays. **The DM treats the two
+    #: differently**: a companion's intent is raw material it writes into
+    #: prose, because the player never saw it; the person's own typed line is
+    #: already on their screen and must come back untouched.
+    #:
+    #: **Last, not third.** Added in the middle, it silently took the
+    #: `speech` argument of every positional `Intent(slot, name, speech,
+    #: doing)` in the tree -- including the three in `affordance_match`,
+    #: the driver that holds a live model to 3 of 3. Nothing went red;
+    #: `ty` named it.
+    played: bool = False
 
     def __str__(self) -> str:
         said = f'"{self.speech}"' if self.speech else ""
@@ -142,6 +153,9 @@ class Beat:
     intents: list[Intent] = field(default_factory=list)
     rulings: list[Ruling] = field(default_factory=list)
     reaction: str = ""
+    #: Which companions were asked to come in this beat. Empty is normal and
+    #: is the common case -- see `Director.joins`.
+    joined: list[int] = field(default_factory=list)
     #: Set when an affordance ended the scene; the id it leads to.
     leads_to: str = ""
     #: The closing line, when the affordance that ended the scene had one.
@@ -258,16 +272,42 @@ something it is not.\
 #: differ precisely in how much they re-word, so overlap is biased against
 #: the one under test. A judge answers it; a judge with controls answers it
 #: honestly.
+_TURN_TO = """\
+You decide who the next moment belongs to.
+
+Most of the time a scene is carried by one or two people and the rest are \
+listening. Answer "nobody" when nothing has happened that the others would \
+react to -- that is the common case and it is not a failure. Name one \
+person when the moment is theirs: somebody addressed them, or it touches \
+what they want, or their skill is the thing the situation needs. Answer \
+"everyone" only when the whole party is being asked something or the \
+situation has changed for all of them.
+
+Do not spread turns around to be fair. You are not taking turns.\
+"""
+
+
 _DM = """\
 You write the replies of the people the party is talking to. Nobody else.
 
 Write what THEY say back and what THEY do. Two or three sentences, in their \
 voice.
 
-Never repeat or restate what a party member said -- the reader just heard it.
-Never write a line for a party member.
 Never say whether anything worked; that is already decided.
 Never describe the party moving, arriving or leaving.
+
+**Two kinds of party member, and they are handled oppositely.**
+
+THE PLAYER's line was typed by the person reading you and is already on \
+their screen. Never repeat it, never restate it, never write another one \
+for them.
+
+THE COMPANIONS' lines were not shown to anybody. They are **yours to \
+write**: work what each of them said and did into your paragraph, in their \
+voice, as part of what happens. Do not list them and do not caption them \
+with their names on separate lines -- it is one piece of prose in which \
+those things happen. Say only what they actually said or did; you are \
+putting it into words, not deciding it.
 
 **The facts you are given are notes, not lines.** Each one is something that
 is now true. Deliver all of them the way the people here would -- in speech,
@@ -331,13 +371,70 @@ class Director:
 
     # -- declaring ---------------------------------------------------------
 
+    def joins(self, playing: Playing, actors: list[Actor]) -> list[int]:
+        """Which companions speak up this beat. The human always does.
+
+        **Everyone acting every beat is not how a table works**, and it was
+        the clunkiest thing about playing this: four declarations and a
+        reply, four more declarations and a reply, whether or not three of
+        those characters had anything to add. In real play the DM mostly
+        talks to whoever is driving the scene and turns to the others when
+        the moment is actually theirs.
+
+        So the human is asked every beat -- they are the one at the keyboard
+        and the scene is theirs to drive -- and this decides who else comes
+        in. One name, everyone, or nobody.
+
+        It is a **classification over a closed set**, which is the side of
+        the line a small model is on: 3 of 3 matching against a list where
+        it was 1 of 3 judging freely (#801). The enum means it cannot name
+        somebody who is not in the party.
+        """
+        played = [a for a in actors if a.played]
+        if self.scripted or not played:
+            # Everyone, so an instrument sees the whole loop and the
+            # existing assertions about a four-actor beat still hold.
+            return [a.slot for a in played]
+        by_name = {a.name: a.slot for a in played}
+        schema = {
+            "type": "object",
+            "properties": {"who": {
+                "enum": [*by_name, "everyone", "nobody"]}},
+            "required": ["who"],
+        }
+        told = [
+            f"THE SCENE: {playing.scene.seen}",
+            "THE PARTY MEMBERS YOU MAY TURN TO:\n" + "\n".join(
+                f"- {a.name}, a {a.cls}"
+                + (f", who wants {a.wants}" if a.wants else "")
+                for a in played
+            ),
+        ]
+        if playing.recent():
+            told.append("WHAT JUST HAPPENED:\n" + playing.recent())
+        got = llm.structured(
+            self.roles["match"],
+            [
+                {"role": "system", "content": _TURN_TO},
+                {"role": "user", "content": "\n\n".join(told)},
+            ],
+            schema,
+        )
+        self.spend.note("turn", ok=bool(got))
+        who = str(got.get("who", "nobody"))
+        if who == "everyone":
+            return [a.slot for a in played]
+        if who in by_name:
+            return [by_name[who]]
+        return []
+
     def declare(self, actor: Actor, playing: Playing, situation: str) -> Intent:
         if self.scripted:
             # Deterministic, and deliberately plain: an instrument reading
             # this should be able to tell a loop that ran from a loop that
             # produced interesting noise.
             return Intent(
-                slot=actor.slot, name=actor.name,
+                slot=actor.slot, name=actor.name, played=True,
                 speech=f"{actor.name} has something to say.",
                 doing=f"{actor.name} looks around.",
             )
@@ -374,7 +471,7 @@ class Director:
         )
         self.spend.note("companion", ok=bool(got))
         return Intent(
-            slot=actor.slot, name=actor.name,
+            slot=actor.slot, name=actor.name, played=True,
             speech=str(got.get("speech", "")).strip(),
             doing=str(got.get("doing", "")).strip(),
         )
@@ -442,15 +539,39 @@ class Director:
             for n in scene.npcs
         ]
         # `hides` is not here and never is. See `module.Npc`.
-        # **`brief` here and `seen` everywhere else, deliberately.** This is
-        # the one reader that is allowed the DM's text -- who is lying, what
-        # is in the next room -- because it is the DM. Pointing this at
-        # `seen` would leave the DM knowing less than the module wrote down.
-        # #805.
-        told = [f"THE SCENE: {scene.brief}"]
+        #
+        # **`seen`, not `brief`, and that reverses what #805 decided.** The
+        # reasoning there was that this reader *is* the DM, so it should have
+        # the DM's text. Playing it refuted that in one scene: handed a brief
+        # saying the friendly patron is not what he appears, the model put
+        # the line in a gate sergeant's mouth and told the player, in the
+        # opening conversation, that he is "a genial sort, but not what he
+        # seems."
+        #
+        # The mistake was treating "the DM" as a reader. **Everything this
+        # call produces is shown to the player**, so it is a writer of
+        # player-facing text and the secrets have no business in its prompt
+        # -- the same reasoning `Npc.hides` already rests on, which this
+        # reader was routing around. A secret withheld from one field and
+        # handed over in the field beside it is not withheld. #829.
+        #
+        # So **no prompt in this file gets `brief`.** It stays what a person
+        # reading the module reads. What the DM needs to stay in character --
+        # who is here, what they want, what they may say -- is below, and is
+        # written for exactly that.
+        told = [f"THE SCENE: {scene.seen}"]
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
-        told.append("WHAT THE PARTY JUST DID:\n" + "\n".join(str(i) for i in intents))
+        mine = [i for i in intents if not i.played]
+        theirs = [i for i in intents if i.played]
+        if mine:
+            told.append(
+                "THE PLAYER -- already on their screen, do not rewrite:\n"
+                + "\n".join(str(i) for i in mine))
+        if theirs:
+            told.append(
+                "THE COMPANIONS -- not shown to anybody, write these into "
+                "your paragraph:\n" + "\n".join(str(i) for i in theirs))
         # **Unattributed, and that is a fix.** Labelling each fact with the
         # party member who earned it -- "Pike: she adds a map to the fee" --
         # read to the model as *Pike* doing it, and the DM duly wrote a line
@@ -498,9 +619,14 @@ def one_beat(
             continue
         speech, doing = ask_human(actor, situation)
         if speech or doing:
-            beat.intents.append(
-                Intent(slot=actor.slot, name=actor.name, speech=speech, doing=doing))
-    played = [a for a in actors if a.played]
+            beat.intents.append(Intent(
+                slot=actor.slot, name=actor.name, played=False,
+                speech=speech, doing=doing))
+    # **Not everybody acts every beat.** The DM decides who comes in; the
+    # human was asked above regardless. See `Director.joins`.
+    joining = set(director.joins(playing, actors))
+    played = [a for a in actors if a.played and a.slot in joining]
+    beat.joined = [a.slot for a in played]
     for intent in llm.fan_out(
         [(lambda a=a: director.declare(a, playing, situation)) for a in played]
     ):
