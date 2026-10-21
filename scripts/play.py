@@ -127,11 +127,21 @@ def declare(actor: beat_mod.Actor, situation: str) -> tuple[str, str]:
     return speech, doing
 
 
-def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> None:
-    head = f"-- {made.scene.id} [{made.scene.kind}]"
-    if made.scene.name:
-        head += f"  {made.scene.name}"
-    print(head)
+def _print_head(scene: module_mod.Scene) -> None:
+    """The scene's banner, printed before anything in it happens."""
+    head = f"-- {scene.id} [{scene.kind}]"
+    if scene.name:
+        head += f"  {scene.name}"
+    print(head, flush=True)
+
+
+def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False,
+                already: bool = False) -> None:
+    """What the scene did. `already` means the lines went out as they
+    happened and only the tail -- notes, outcome, the log path -- is left.
+    """
+    if not already:
+        _print_head(made.scene)
     # With a model narrating, the module's own text is its source material
     # and printing both says everything twice.
     if narrated:
@@ -143,7 +153,9 @@ def _print_step(made: run_mod.Step, *, quiet: bool, narrated: bool = False) -> N
         if made.transcript:
             print(f"   log {made.transcript}")
         return
-    if not quiet:
+    if already:
+        pass
+    elif not quiet:
         for line in made.lines:
             print(f"   {line}")
     elif made.outcome != "done":
@@ -301,13 +313,27 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
             narrator.pick_exit(scene) if narrator
             else choose_exit(scene, module)
         )
+        # **Live when a person is playing, batched otherwise.** A scene is
+        # assembled and then printed, which is right for an instrument and
+        # unplayable by hand: the first thing the CLI does is ask the human
+        # what their character says, *before* the scene text has been
+        # printed, because that text is waiting in `lines` for the scene to
+        # end. You answer three prompts blind and then read what you were
+        # answering. `check.py` is not a tty and keeps the batched form the
+        # drivers assert on.
+        live = sys.stdin.isatty() and not quiet and not narrator
+        if live:
+            _print_head(scene)
         made = run_mod.step(
             campaign, module, choice=choice,
             choose=narrator.choose if narrator else None,
             director=director, ask_human=declare,
+            narrate=(lambda line: print(f"   {line}", flush=True))
+            if live else None,
         )
         played += 1
-        _print_step(made, quiet=quiet, narrated=bool(narrator))
+        _print_step(made, quiet=quiet, narrated=bool(narrator),
+                    already=live)
         if narrator:
             narrator.narrate(scene, made)
         if made.scene.kind == "combat" and made.outcome in ("won", "lost"):

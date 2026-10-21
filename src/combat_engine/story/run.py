@@ -35,6 +35,7 @@ like it worked.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from random import Random
@@ -125,8 +126,24 @@ class Step:
     #: The beats, for a roleplay scene that had any. Empty otherwise.
     played: beat_mod.Playing | None = None
 
+    #: Where a line goes the moment it happens, as well as into `lines`.
+    #:
+    #: **A scene is assembled and then printed, which is right for an
+    #: instrument and unplayable by a person.** Driving the CLI by hand, the
+    #: first thing it does is ask the human what their character says --
+    #: before the scene text has been printed, because that text is sitting
+    #: in `lines` waiting for the scene to finish. You answer three prompts
+    #: blind and then read what you were answering.
+    #:
+    #: Set this and every line is out the moment it exists. `play.py` sets
+    #: it when there is a terminal and nothing else does, so `check.py` and
+    #: the drivers keep the batched behaviour they assert on.
+    echo: Callable[[str], None] | None = None
+
     def say(self, line: str) -> None:
         self.lines.append(line)
+        if self.echo is not None:
+            self.echo(line)
 
 
 #: Who joins when a module wants more than the standard four, in order.
@@ -341,14 +358,7 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         return
     seed = seed_for(campaign, scene, "beats")
     table = table_mod.lay(campaign.party, seed=seed)
-    playing = beat_mod.play_scene(
-        scene, table, actors_for(campaign),
-        director or beat_mod.Director(scripted=True),
-        ask_human=ask_human, party_level=module.party_level,
-    )
-    table.strike()
-    step.played = playing
-    for made in playing.beats:
+    def tell(made: beat_mod.Beat) -> None:
         for intent in made.intents:
             step.say(f"  {intent}")
         for ruling in made.rulings:
@@ -360,6 +370,19 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # anybody answering. The DM is not given it -- #807.
         if made.exit_line:
             step.say(f"  {made.exit_line}")
+
+    # Said as each beat lands rather than after the scene, so a person
+    # playing sees beat 1 before being asked about beat 2. With no echo set
+    # this is the same list in the same order, which is what the drivers
+    # and `check.py` assert on.
+    playing = beat_mod.play_scene(
+        scene, table, actors_for(campaign),
+        director or beat_mod.Director(scripted=True),
+        ask_human=ask_human, party_level=module.party_level,
+        after=tell,
+    )
+    table.strike()
+    step.played = playing
     if playing.leads_to:
         step.next_id = playing.leads_to
 
@@ -383,6 +406,7 @@ def step(
     choice: str = "", choose: Chooser | None = None, record: bool = True,
     director: beat_mod.Director | None = None,
     ask_human: beat_mod.AskHuman = beat_mod.silent,
+    narrate: Callable[[str], None] | None = None,
 ) -> Step:
     """Play the scene the campaign is on and advance it.
 
@@ -393,7 +417,7 @@ def step(
     if campaign.finished:
         raise SystemExit("this campaign is over.")
     scene = module.scene(campaign.scene)
-    made = Step(scene=scene)
+    made = Step(scene=scene, echo=narrate)
 
     if scene.seen:
         made.say(scene.seen)

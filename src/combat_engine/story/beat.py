@@ -568,12 +568,23 @@ def one_beat(
 def play_scene(
     scene: Scene, table: Table, actors: list[Actor], director: Director,
     *, ask_human: AskHuman, party_level: int,
+    after: Callable[[Beat], None] | None = None,
 ) -> Playing:
-    """Run a roleplay scene to its end."""
+    """Run a roleplay scene to its end.
+
+    `after` is called with each beat the moment it finishes. **A person
+    playing needs it and nothing else does**: without it the whole scene is
+    assembled before a word of it is printed, so a human is asked what they
+    say in beat 2 having seen nothing of beat 1 -- not the companions'
+    lines, not their own roll, not the reply. Four prompts into a
+    conversation that has not visibly started.
+    """
     playing = Playing(scene=scene)
     while not playing.over:
-        one_beat(playing, table, actors, director,
-                 ask_human=ask_human, party_level=party_level)
+        made = one_beat(playing, table, actors, director,
+                        ask_human=ask_human, party_level=party_level)
+        if after is not None:
+            after(made)
     return playing
 
 

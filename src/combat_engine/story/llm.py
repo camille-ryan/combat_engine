@@ -134,6 +134,12 @@ def roles_for(campaign_id: str = "") -> dict[str, Role]:
     An unknown role name or field is **reported by raising**, not ignored. A
     typo'd key in a config that silently does nothing is the same failure as a
     gate on a word no board carries -- it reads exactly like it worked.
+
+    A key starting with `_` is a comment and is skipped, the convention a
+    module file already uses for `_note` and `_pages`. JSON has nowhere else
+    to write down *why* a host was chosen, and the first thing I wanted to
+    record in one of these files was which model needs what token budget and
+    why -- which the strictness above refused, correctly and unhelpfully.
     """
     out = dict(ROLES)
     if not campaign_id:
@@ -144,6 +150,8 @@ def roles_for(campaign_id: str = "") -> dict[str, Role]:
     raw = json.loads(where.read_text())
     known = set(Role.__dataclass_fields__)
     for name, over in raw.items():
+        if name.startswith("_"):
+            continue
         if name not in out:
             raise SystemExit(
                 f"{where}: no role {name!r}. Known: {', '.join(sorted(out))}"
