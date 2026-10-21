@@ -493,7 +493,7 @@ player does not. Two or three phrasings separated by semicolons is normal.
 naturally written from outside it, and in the first chapter converted here
 all five were wrong that way.
 
-`affordances` is what a character can *try* here:
+The shape:
 
     {{"id": "read-friar", "what": "study him for signs he is hiding
       something", "skill": "insight", "band": "hard",

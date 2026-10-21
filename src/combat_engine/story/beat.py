@@ -580,16 +580,43 @@ class Director:
         told = [f"THE SCENE: {scene.seen}"]
         if who:
             told.append("WHO IS HERE:\n" + "\n".join(who))
+        # **An intent that matched nothing changes nothing**, and the DM
+        # has to be told which those were. It was not, and the result was
+        # that the one thing this layer refuses -- the model deciding what
+        # is true -- came back in through the door marked "reaction":
+        #
+        #   "I fly up to the rafters"  ->  "Well done, my friend. Up there,
+        #                                   you can keep an eye on the place."
+        #
+        # A 1st-level fighter granted flight, in prose, with no roll and no
+        # affordance. "I set the tavern on fire" was likewise treated as
+        # having happened and then waved away. The matcher had answered
+        # `none` to all of it, correctly; `none` means *no dice*, and
+        # nothing downstream read it as *no effect*.
+        nothing = {
+            r.slot for r in rulings
+            if not r.affordance or r.affordance == "none"
+        } | {i.slot for i in intents
+             if not any(r.slot == i.slot for r in rulings)}
         mine = [i for i in intents if not i.played]
         theirs = [i for i in intents if i.played]
+        def mark(i: Intent) -> str:
+            return f"{i}" + ("   [ATTEMPTED ONLY]" if i.slot in nothing else "")
+
         if mine:
             told.append(
                 "THE PLAYER -- already on their screen, do not rewrite:\n"
-                + "\n".join(str(i) for i in mine))
+                + "\n".join(mark(i) for i in mine))
         if theirs:
             told.append(
                 "THE COMPANIONS -- not shown to anybody, write these into "
-                "your paragraph:\n" + "\n".join(str(i) for i in theirs))
+                "your paragraph:\n" + "\n".join(mark(i) for i in theirs))
+        if nothing:
+            told.append(
+                "[ATTEMPTED ONLY] means it did not work and nothing in the "
+                "world changed. Show them trying and show what they meet -- "
+                "a refusal, an obstacle, somebody's reaction, or simply that "
+                "it does not happen. Never show it succeeding.")
         # **Unattributed, and that is a fix.** Labelling each fact with the
         # party member who earned it -- "Pike: she adds a map to the fee" --
         # read to the model as *Pike* doing it, and the DM duly wrote a line

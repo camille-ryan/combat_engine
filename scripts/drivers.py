@@ -28765,6 +28765,50 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         f"{after[:90]!r}",
     )
 
+    # **An intent that matched nothing is marked as attempted.** Whether
+    # the model then obeys is a prompt question and is measured separately;
+    # this asserts the only half that is code, which is that the DM is told
+    # at all. It was not, and "I fly up to the rafters" came back as "the
+    # Fighter, who has just flown up to the rafters".
+    asked.clear()
+    llm.chat = tap2  # ty: ignore[invalid-assignment]
+    try:
+        plain = bt.Playing(scene=lurker)
+        bt.Director(roles=llm.ROLES).react(
+            plain,
+            [bt.Intent(0, "Fighter", doing="I fly up to the rafters")],
+            [bt.Ruling(0, "Fighter")],
+        )
+        unmatched = asked[-1]
+        bt.Director(roles=llm.ROLES).react(
+            plain,
+            [bt.Intent(0, "Fighter", doing="I look around")],
+            [bt.Ruling(0, "Fighter", affordance="look-around", won=True,
+                       fact="somebody is listening")],
+        )
+        matched = asked[-1]
+    finally:
+        llm.chat = real
+
+    # **On the intent's own line, not anywhere in the prompt.** The first
+    # version searched the whole prompt, and the prompt also carries a
+    # paragraph *explaining* what the marker means -- so deleting the
+    # marker entirely left the driver green. It was matching the glossary.
+    def marked(prompt: str, needle: str) -> bool:
+        return any("[ATTEMPTED ONLY]" in line
+                   for line in prompt.splitlines() if needle in line)
+
+    out.that(
+        marked(unmatched, "rafters"),
+        "an intent that matched nothing is marked as attempted, not done",
+        "the DM is not told the intent came to nothing",
+    )
+    out.that(
+        not marked(matched, "look around"),
+        "and one that landed is not",
+        "a successful intent is marked as merely attempted",
+    )
+
 
 def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:
     """The bet the whole story layer rests on, asked of whatever is serving.
