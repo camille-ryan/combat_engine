@@ -42,6 +42,37 @@ class Event:
     cancelled: bool = field(default=False, init=False, kw_only=True)
     reason: str = field(default="", init=False, kw_only=True)
 
+    def __init_subclass__(cls, **kw: Any) -> None:
+        """Refuse a field that would shadow one of `Event`'s own properties.
+
+        **`Boosted` declared `kind: str` and nothing noticed for the life of
+        the event.** `kind` is the property below -- the class name, which is
+        how the bus, the save format and every "did this row do it" test
+        name an event -- and a dataclass field of the same name silently
+        wins. So `Boosted(...).kind` answered `"check"`, `"attack"` or
+        `"save"`, `audit.DID_SOMETHING` could never match it, and 20 of the
+        38 rows whose only output is a boost reported SILENT while working
+        perfectly. `Event.wire()` shipped the wrong `kind` to the page too.
+
+        A rename fixes that one event; this stops the next one. Checked at
+        class creation, so it fires at import rather than in a verdict
+        nobody reads.
+        """
+        super().__init_subclass__(**kw)
+        taken = {
+            name
+            for name, value in vars(Event).items()
+            if isinstance(value, property)
+        }
+        clash = taken.intersection(cls.__annotations__)
+        if clash:
+            raise TypeError(
+                f"{cls.__name__} declares {sorted(clash)}, which would shadow "
+                f"Event's own property of that name. `kind` in particular is "
+                f"how the bus and the save format identify an event -- pick "
+                f"another name (`Boosted.roll_kind` is the worked example)."
+            )
+
     @property
     def kind(self) -> str:
         return type(self).__name__
@@ -1051,7 +1082,19 @@ class Boosted(Event):
     actor: int = 0
     amount: int = 0
     by: str = ""
-    kind: str = ""
+    #: Which kind of roll was added to -- "attack", "save" or "check".
+    #:
+    #: **Not `kind`, and the collision was silent and expensive.**
+    #: `Event.kind` is a property returning the class name, and this was the
+    #: one event class in the package declaring a *field* of that name --
+    #: which shadowed the property, so `Boosted(...).kind` answered
+    #: `"check"` and never `"Boosted"`. Two things read the class name off
+    #: that property and both were wrong for the whole life of the event:
+    #: `audit.DID_SOMETHING`, so every row whose only output is a boost
+    #: reported SILENT while working (20 of 38 such rows), and
+    #: `Event.wire()`, which ships `{"kind": self.kind}` to the page.
+    #: `Event.__init_subclass__` now refuses the name outright.
+    roll_kind: str = ""
     #: Whose roll was added to. Last because it has a default and because it
     #: arrived after the other four.
     rolled_by: int = -1

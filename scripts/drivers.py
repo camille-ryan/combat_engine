@@ -22976,7 +22976,7 @@ def a_charge_banked_in_somebody_elses_weapon(out: Result) -> None:
     world, me, mate = rested(())
     boosts: list[tuple[str, int, int, str]] = []
     world.bus.on(Boosted, lambda ev: boosts.append(
-        (ev.by, ev.actor, ev.rolled_by, ev.kind)))
+        (ev.by, ev.actor, ev.rolled_by, ev.roll_kind)))
     foe = next((f for f in enemies(world, me) if adjacent(world, mate, f)), None)
     out.that(foe is not None, "and an enemy standing next to that ally",
              f"{sorted(enemies(world, me))}")

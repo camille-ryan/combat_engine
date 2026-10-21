@@ -4390,8 +4390,8 @@ class Cast:
         **payer**, which is what a rider keyed to its own caster reads.
         """
         self.world.bus.emit(
-            Boosted(actor=self.me, amount=amount, by=self.ref, kind=kind,
-                    rolled_by=whose)
+            Boosted(actor=self.me, amount=amount, by=self.ref,
+                    roll_kind=kind, rolled_by=whose)
         )
         return True
 

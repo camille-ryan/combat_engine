@@ -986,7 +986,7 @@ def f3046(c: Cast) -> None:
     def boosted(ev: Any) -> None:
         if getattr(ev, "by", "") != "cf:artificer-f0s0":
             return
-        if getattr(ev, "kind", "") != "attack":
+        if getattr(ev, "roll_kind", "") != "attack":
             return
 
         def landed(hit: Any) -> None:

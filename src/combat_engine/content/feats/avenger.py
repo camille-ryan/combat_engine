@@ -155,7 +155,7 @@ def f1490(c: Cast) -> None:
     me = c.me
 
     def paid(ev: Any) -> None:
-        if ev.actor != me or ev.by != "p6186" or ev.kind != "attack":
+        if ev.actor != me or ev.by != "p6186" or ev.roll_kind != "attack":
             return
         shot = next(
             (e for e in reversed(c.world.bus.log) if isinstance(e, AttackRolled)),
