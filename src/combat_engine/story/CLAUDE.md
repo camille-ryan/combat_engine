@@ -19,6 +19,10 @@ between all of them. The combat engine is a thing this drives.
 | `table.py` | a board with nobody to fight on it, so a conversation can roll. |
 | `challenge.py` | successes against three failures. |
 | `dc.py` | what a check has to beat, by level and band. |
+| `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what it changes. |
+| `llm.py` | the model. A `Role` per job, two backends, a URL that can be a Tailscale host. |
+| `dm.py` | the Anthropic DM. Predates `llm.py` and is **unexercised live** (#794). |
+| `maker.py` | a character built by answering questions instead of being dealt. |
 | `save.py`, `run.py` | the campaign, written down and played one scene at a time. |
 | `scripts/play.py` | the way in. `check.py` runs it. |
 
@@ -64,10 +68,21 @@ when nothing happened is the bug.
   12,197 rows, about forty minutes. Nothing in this component needed one:
   `c.set_origin`, `c.deals`, `c.resist` and `skills.check` already existed.
   When something is genuinely missing, file it — #795 is the pattern.
-* **`--no-dm` is load-bearing, not a fallback.** `check.py` runs it. An
-  instrument that needs a network and an API key goes red for the wrong
-  reason. Any feature added to the model path needs an answer for the path
-  without one.
+* **`--no-dm` and `--no-llm` are load-bearing, not fallbacks.** `check.py`
+  runs `--solo --no-llm`, and the `--solo` half matters: without it every
+  character defaults to human, nobody declares, and the beat loop spins
+  empty exchanges -- driven without being exercised. An instrument that
+  needs a network goes red for the wrong reason. Any feature added to the
+  model path needs an answer for the path without one.
+* **A driver that does need a model reports a skip and counts it.**
+  `affordance_match` is the pattern: `llm.reachable()` first, `out.skip()`
+  with the reason, and the arithmetic still reconciles. `scripts/CLAUDE.md`
+  is explicit that a quiet skip is not a check.
+* **A secret is withheld from a prompt, never forbidden in one.** `Npc.hides`
+  is not in the prompt at all; a transition's `win` text is not in the fact
+  list at all. A 7B told a secret and told not to tell it is one unlucky
+  sample from telling it -- and the field *beside* a guarded one is where
+  this has actually gone wrong (#805).
 * **A clamp is printed.** When the budget cuts a module's stated count, or a
   creature is deferred for being out of tier, it goes in `Step.notes` and the
   CLI prints it. `scripts/CLAUDE.md`: a silent cap reads as "covered
@@ -75,6 +90,59 @@ when nothing happened is the bug.
 * **Every scene draws from its own stream.** `Random(f"{seed}:{module}:{scene}")`.
   A single stream threaded through a campaign would make adding a conversation
   change the monsters in the fight after it.
+
+## The model is good at voice and unreliable at judgement
+
+Measured before anything was built on it, and every design choice in
+`beat.py` follows from it. Asked to **adjudicate** three declared intents
+freely, `qwen2.5:7b` got **one of three** right, and the wrong one broke an
+instruction that was in its system prompt verbatim. Asked to **match** the
+same intents against a closed list, it got **3 of 3, three runs of three**,
+at temperature 0.
+
+So: the module carries the judgement, the model carries the voice. An
+affordance is matched by an enum-constrained call, the DC comes from
+`dc.py`, the roll from `skills.check`, and the fact the DM may then state is
+the affordance's own `win`/`lose` text. **Nothing the model writes becomes
+true.**
+
+### What playing it then found, which no instrument could
+
+Five faults, all from reading a live chapter-1 transcript, none of them a
+crash and none of them red anywhere:
+
+* **The scene's brief was printed to the player**, and an adventure's prose
+  is written for the DM. Chapter 1 opened by stating its own plot. `sets`
+  against `brief`, #805.
+* **The DM was copying its notes back** -- 20 of 20 word for word, 10 of 10
+  samples identical. A list restated is not a DM.
+* **A transition's `win` is a stage direction** and was in the fact list, so
+  the DM wrote three party members acting in one reply, against two
+  prohibitions it had been given. #807.
+* **`once` was not once within a beat**, so two characters took the same
+  affordance and the DM was handed contradictory facts.
+* **A character at 0 hp kept talking and rolling.** #808.
+
+**Read a transcript after changing anything here.** The component's failure
+mode is output that reads as correct.
+
+### Two rules about measuring a model
+
+Both were learnt by getting it wrong first, in one session:
+
+* **A metric that cannot tell the two behaviours apart is not a
+  measurement.** Word overlap scored coverage while the arms under test
+  differed precisely in how much they re-worded; a word search scored a
+  person being *mentioned* the same as a person being put in the room. Both
+  produced plausible numbers and both were noise.
+* **A judge needs a positive and a negative control before any arm runs.**
+  The first judge here scored a *verbatim* restatement at 6 of 12. The
+  controls are one call each and they are what makes the arms mean
+  anything.
+
+And a third, about fixing a model rather than measuring it: **a prompt
+addition is not free.** The clause that recovered two dropped facts relapsed
+the echo five-fold. Start from a reproduction, not from a paragraph.
 
 ## The name is tried first, and that is the measurement to keep
 
@@ -108,14 +176,25 @@ elegance of what replaced it.
 uv run scripts/play.py --validate <module>        every problem at once
 uv run scripts/play.py --play <module> --seed 7   a whole adventure
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
-    challenge_refusal training_bonus challenge_costs_nothing
+    challenge_refusal training_bonus challenge_costs_nothing \
+    beat_loop scene_audience affordance_match
 uv run scripts/check.py --only play,drivers
 ```
 
-Six drivers cover this component and **each was proven by breaking what it
+Nine drivers cover this component and **each was proven by breaking what it
 watches** — the retype, the word grant, the three-failure cap, the refusal of
-an unlisted skill, the read of `Skills.trained`, and the arming-is-not-spending
-rule. All six went red.
+an unlisted skill, the read of `Skills.trained`, the arming-is-not-spending
+rule, the `once` rule, the scene ending, whose text becomes a fact, and both
+halves of the brief/sets split. All went red.
+
+`affordance_match` is the one that needs a model and **skips** when none is
+serving; the rest run offline.
+
+**Clear `__pycache__` between a break and its restore.** A restore that
+lands in the same second as the `.pyc` does not invalidate it, so the tree
+reads correct and runs broken — two drivers failed that way here and the
+first three diagnoses were all aimed at the source. `find . -name
+__pycache__ -type d -exec rm -rf {} +`.
 
 One honest limit, because it is the kind of thing that rots: `training_bonus`
 asserts the difference equals `TRAINING`, so changing the constant moves both
