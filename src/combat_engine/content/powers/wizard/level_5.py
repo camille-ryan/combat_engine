@@ -788,26 +788,63 @@ def p4078(c: Cast) -> None:
     reach=Ranged(5),
     target=NO_TARGET,
     keywords=[Keyword.ARCANE, Keyword.SHADOW, Keyword.SUMMONING],
-    todo=("spec.summon_block()",),
+    defect="the card summons the creature associated with the character's "
+           "necromancy or nethermancy school benefit, and no entry records "
+           "which of the two creatures either school is associated with",
 )
 def p13984(c: Cast) -> None:
-    """**Re-aimed: the class feature landed and was never the whole of
-    it.** The old note said the feature the summon is read off is not in
-    the tree. `cf:wizard-mage-f4` and `cf:wizard-mage-f4s0`..`s5` are all
-    in `class_feature` now and all seven are declared rows in
-    `features/arcanist.py`, so that premise is false -- #581, #584, #585.
+    """**Re-pointed twice, and the block is not the problem.**
 
-    What stops the row is the source. The spec is 1145 characters of
-    effect paragraph and an errata line and prints **no stat block for
-    either creature it can summon**: no defences, no hit points, no size,
-    no speed, no attack. `c.summon` wants a ref and `c.summon_inline`
-    wants a `Summon` built from a block, and there is neither -- so
-    nothing can be put on the board and the clause that costs a surge when
-    it drops has nothing to drop. `p16026` is the same hold under the same
-    symbol.
+    The first note said the feature the summon is read off is not in the
+    tree. False: `cf:wizard-mage-f4` and `cf:wizard-mage-f4s0`..`s5` are
+    all in `class_feature` and all seven are declared in
+    `features/arcanist.py` -- #581, #584, #585.
 
-    Behind that, and smaller: which of the two creatures arrives branches
-    on which `f4sN` the character holds, so it is a body branch on
-    `c.summon_inline(spec, at=)` rather than a `summon=` header line.
-    Nothing to write until there is a block to branch between.
+    The second said the source prints **no stat block for either creature**
+    and named `spec.summon_block()`. Also false, and the same blind spot
+    that kept `p16476`'s marker alive through #459: the blocks are not on
+    this card and were never meant to be. They are in the **associate**
+    table, and they are already in `game.db` -- `x10_28` and `x10_29`, both
+    `summoned creature`, medium, shadow origin, hit points the summoner's
+    healing surge value, defences the summoner's. Those are the two the
+    card's own errata line names as changed in the October 2011 update.
+    `c.summon` routes an `x10_` ref to `loader.spawn_associate`, so either
+    one could be put on the board today with a single line, exactly as
+    `p16026` and `p16476` do.
+
+    **What is actually missing is the mapping, and it is a source gap.**
+    The card's Prerequisite is the Expert Mage benefit "associated with
+    necromancy or nethermancy" and its Effect summons "a creature
+    associated with your" benefit -- so *which* of the two arrives is
+    decided by which school the character took, and **nothing in the
+    compendium records that association**. Searched every table it could
+    be in: only the creature's own `Associate` row and this power's errata
+    line mention either creature at all, and the `Class` entries for the
+    two benefits name neither. `cf:wizard-mage-f4s3` and `f4s4` are the two
+    schools in question and their printed benefit is two skill bonuses
+    each, nothing more.
+
+    So the row cannot choose, and the choice is not a coin toss: the two
+    creatures are very different -- one insubstantial and phasing with a
+    close-burst obscuring reaction, the other flying with an aura that
+    feeds on bloodied enemies. Guessing which school gets which would be
+    inventing a rules fact, which is the one thing an unreadable line may
+    not become. So `defect=` and plain words rather than a symbol: no verb
+    will ever close this, and `todo=`/`dropped=` would both report the row
+    ready the day some unrelated symbol landed.
+
+    **It drops the whole entry, which is the right cost and worth stating
+    plainly**: nothing here is garbled -- every number both creatures need
+    is present and correct, and only one association is absent. But the
+    test this file sets is whether anything survives without it, and
+    nothing does: the row *is* the summon. A wizard who cannot be told
+    which creature answers is a wizard holding a daily that does nothing.
+    If Camille settles the association, this row is one `c.summon` call
+    and a two-way branch.
+
+    The branch itself wants a reader that does not exist either, and it is
+    a smaller gap worth naming separately rather than hand-rolling here:
+    "does the **caster** hold this row" has no verb. `c.knows` is the near
+    miss and is wrong -- it scans every creature on the board and returns
+    whoever has the row, which is #806's bug in nine rows.
     """
