@@ -22863,6 +22863,42 @@ def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
              " ordering two cards of the family depend on",
              f"one die {worst:.2f}, every die {every:.2f}")
 
+    # **`pick=` and a context-reading `when=` TOGETHER**, which this rule
+    # covered one at a time and never together -- and that is exactly how
+    # the combination came to be silently inert. `_reroll_pick` asked the
+    # floor with `_reroll_ctx()` and the three count keys with **no**
+    # context, so any gate reading the context answered False for the
+    # count, the count came back 0, and `_roll_damage` skipped the clause.
+    # The hold was laid, the row looked written, and the dice were
+    # untouched. #818.
+    #
+    # Asserted on the *count* rather than on an average, because that is
+    # where the two reads diverge: a mean would also move for a dozen
+    # unrelated reasons and would need thousands of rolls to separate
+    # "inert" from "slightly weaker".
+    def picked(gate: object) -> tuple[int, int]:
+        world, me, _ = _board()
+        c = Cast(world=world, me=me, ref="drivers:reroll")
+        c.reroll_ones(below=2, pick=1, on=me, when=gate)
+        return c._reroll_pick()
+
+    gated = picked(lambda ctx: ctx.get("attacker") is not None)
+    out.that(gated == (2, 1),
+             "a `pick=` hold with a gate that reads the damage context"
+             " answers BOTH its floor and its count -- the count used to"
+             " come back 0 and the clause was skipped entirely",
+             f"floor/count {gated}")
+    ungated = picked(None)
+    out.that(ungated == (2, 1),
+             "and an ungated one still does, which is the half that always"
+             " worked and is here so the fix cannot have broken it",
+             f"floor/count {ungated}")
+    shut = picked(lambda ctx: False)
+    out.that(shut == (0, 0),
+             "and a gate that refuses answers neither, so the context is"
+             " really being consulted rather than ignored on both keys",
+             f"floor/count {shut}")
+
     # **The control that says `ANY_FACE` is read as a break-even and not as
     # "all of them".** Rerolling every die blind is worth nothing; if this
     # figure matched `every` above, the constant would be doing the naive

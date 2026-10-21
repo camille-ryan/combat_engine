@@ -12364,12 +12364,26 @@ class Cast:
             return 0, 0
         # The count hangs off the same three keys with `#n` on the end, so
         # whichever qualifier answered the floor answers the count too.
-        got = max(self.total("reroll_damage_pick#n"),
-                  self.total(f"reroll_damage_pick@{self.ref}#n"))
+        #
+        # **With the same `ctx` as the floor, which it did not have.** The
+        # floor was asked with `_reroll_ctx()` and all three count keys were
+        # asked with nothing, so a `when=` reading anything from the damage
+        # context answered False for the count, the count came back 0, and
+        # `_roll_damage` skipped the clause -- `pick=` and `when=` together
+        # were silently inert. Measured on a `1d6` weapon over 600 rolls:
+        # 102 ones with a context-reading gate, which is what no hold at all
+        # gives, against the printed 16. #818.
+        #
+        # The pair is returned together precisely so the floor and the count
+        # cannot be answered by two different holds, and asking them with
+        # two different contexts was that same fault by another route.
+        got = max(self.total("reroll_damage_pick#n", ctx=seen),
+                  self.total(f"reroll_damage_pick@{self.ref}#n", ctx=seen))
         p = get(self.ref)
         if p is not None:
             for k in self.keywords_of(p):
-                got = max(got, self.total(f"reroll_damage_pick:{k.value}#n"))
+                got = max(got, self.total(f"reroll_damage_pick:{k.value}#n",
+                                          ctx=seen))
         return floor, got
 
     def _rolled_pick(self, dice: str | int, floor: int, count: int) -> int:
