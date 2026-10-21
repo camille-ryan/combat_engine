@@ -1325,7 +1325,7 @@ def m4012a0(c: Cast) -> None:
     ),
     once_per_round=True, keywords=[Keyword.FIRE],
     attack=Attack(vs=FORT, printed=13), damage=Damage("1d6", 5),
-    dropped=("c.grant_action(move_grabbed)",),
+    dropped=("actions.move_grabbed()",),
 )
 def m4012a1(c: Cast) -> None:
     """The third clause -- for the rest of its turn it may haul the captive for

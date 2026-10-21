@@ -1198,7 +1198,7 @@ def p14214(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.SHADOW, Keyword.TELEPORTATION],
-    dropped=("c.grant_action('teleport')",),
+    dropped=("actions.teleport_at_will()",),
 )
 def p14216(c: Cast) -> None:
     """The opening teleport, with the printed requirement on it.
@@ -1208,8 +1208,9 @@ def p14216(c: Cast) -> None:
     zone. `c.teleport(into=)` carries it. #685.
 
     The standing once-a-round 3-square teleport is the marker that stays --
-    it is an action `actions.legal` does not know and `c.grant_action`
-    silently eats the word. When that lands it will want the same
+    it is an action `actions.legal` does not know, and `c.grant_action`
+    changes a cost rather than adding a kind (it now raises on an unknown
+    word, #762). When that lands it will want the same
     requirement, which is the half of this clause the restriction is
     "on both" of."""
     c.teleport(

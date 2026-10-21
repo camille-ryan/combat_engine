@@ -1289,7 +1289,7 @@ def m3230a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.grant_action('mount')",),
+    todo=("actions.mount()",),
 )
 def m3230a2(c: Cast) -> None:
     """The whole of this line is "a creature of that size may ride it".

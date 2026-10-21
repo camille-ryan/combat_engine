@@ -1724,7 +1724,7 @@ def m3227a1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.grant_action('mount')",),
+    todo=("actions.mount()",),
 )
 def m3227a2(c: Cast) -> None:
     """The whole of this line is "a creature of that size may ride it".
@@ -1734,10 +1734,14 @@ def m3227a2(c: Cast) -> None:
     rather than approximated: setting the relation from here would put a
     rider on it that nobody chose.
 
-    `c.grant_action` is the right verb and the word is not in it: its own
-    docstring says anything outside `actions.legal`'s five words "is carried,
-    costs nothing and does nothing", so the word and the menu reader have to
-    land together, and both are engine work."""
+    **`c.grant_action` is not the right verb, and this note said it was.**
+    That verb changes the *cost* of an action the menu already offers --
+    `actions.legal` has 21 kinds and none of them is riding -- so there is
+    nothing here for a word to cheapen. Being ridden has to become an
+    action before any of that applies, which is #749. Measured while
+    draining #763: all six words that issue proposed turned out to want an
+    action that does not exist, which is the opposite of the cheap cluster
+    it was filed as. Re-pointed to `actions.mount()`."""
 
 
 # --------------------------------------------------------------------------

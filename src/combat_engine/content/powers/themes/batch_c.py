@@ -1249,7 +1249,7 @@ def p16589(c: Cast) -> None:
 @power("p16590", level=6, cls="x7_1004", usage=ENCOUNTER, action=MINOR,
        reach=CloseBurst(2), target=NO_TARGET,
        keywords=[Keyword.ARCANE, Keyword.ZONE],
-       dropped=("c.grant_action(move)",))
+       dropped=("actions.move_in_zone()",))
 def p16590(c: Cast) -> None:
     """"Difficult for your enemies" is the zone being rough plus the
     caster's side exempted inside it; `c.ignores_difficult` alone would

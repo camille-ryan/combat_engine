@@ -928,7 +928,7 @@ def f2108b(c: Cast) -> None:
 # not a standing effect. `c.light` exists now and writing it here would
 # shed the light permanently, which is a different and better feat.
 _granted("f2117", "f2117b", swap=Swap(2, utility=True),
-         dropped=("c.grant_action('light')",))
+         dropped=("actions.shed_light()",))
 
 
 @power("f2117b", level=1, cls="", usage=ENCOUNTER, action=FREE,
@@ -1677,9 +1677,9 @@ def f2258(c: Cast) -> None:
     **The third unrelated thing the old symbol held.** Switching is a
     `Cast` verb, not an entry in the action menu, so it has no declared
     cost for a feat to cheapen -- "a free action instead of a minor" has
-    nothing to change. `c.grant_action` understands `shift` and `stand`
-    and silently eats anything else, so writing it that way would look
-    finished and do nothing. #620."""
+    nothing to change. `c.grant_action` changes the cost of an
+    action the menu already has and now raises on a word no reader looks
+    for (#762), so it was never the road here. #620."""
 
 
 # -- riders on a racial power named only in prose ---------------------------

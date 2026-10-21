@@ -2792,12 +2792,19 @@ def f2725(c: Cast) -> None:
 
 @power("f2726", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.grant_action('mount')",))
+       dropped=("actions.mount()",))
 def f2726(c: Cast) -> None:
     """`c.ride` is the printed sentence and the size test is `Size.order`
-    -- `Size` is a `StrEnum`, so a bare `>` sorts the words. Mounting as
-    a move action is dropped: `c.grant_action` eats anything that is not
-    a shift or a stand."""
+    -- `Size` is a `StrEnum`, so a bare `>` sorts the words.
+
+    **Mounting as a move action is dropped, and the old note named the
+    wrong gap.** It said `c.grant_action` "eats anything that is not a
+    shift or a stand" -- true then, false now (it raises, #762), and
+    beside the point either way. `c.grant_action` changes the **cost** of
+    an action the menu already offers, and the menu has 21 kinds with no
+    `mount` among them. So there is no cost to cheapen: mounting has to
+    become an action first, which is #749. Re-pointed to
+    `actions.mount()`."""
     beast = c.companion()
     if beast is None:
         return
