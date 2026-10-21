@@ -3714,15 +3714,36 @@ class Cast:
 
         "Allies within 3 squares of you can stand up as a minor action" is
         not a bonus, a condition or a power -- it is a line in the action
-        menu that is normally a constant. `what` is `shift`, `stand`,
-        `escape` or `second_wind`; anything else is carried, costs nothing
-        and does nothing, so add the reader in `actions` at the same time
-        as the word.
+        menu that is normally a constant.
+
+        **An unrecognised word raises**, for the reason `c.bonus(once=)` and
+        `c.wearing` do: this lays a bonus under `"<what> as <cost>"`, and a
+        word no reader looks for is carried, costs nothing and does nothing
+        -- so the row fires, audits green, and grants nothing for the whole
+        life of the fight. That is #583, which cost nine rows, and the old
+        version of this docstring described the trap in prose
+        (*"anything else is carried, costs nothing and does nothing"*)
+        while letting it through.
+
+        It was still live when the gate landed: `m3617a3` handed an ally
+        `grant_action("attack", FREE)`, and nothing has ever read `attack`
+        as a granted word, so the ally never got the attack its card
+        promises. `actions.GRANTABLE` is the authority and lives beside the
+        readers, so a new word and its reader land in one file.
 
         Follows `c.target`, because the printed lines grant it to somebody
         else -- `on=c.me` for a stance about yourself, which is what
         `c.shift_as` passes.
         """
+        from .actions import GRANTABLE
+
+        if what not in GRANTABLE:
+            raise ValueError(
+                f"{self.ref}: c.grant_action({what!r}) is a word no reader "
+                f"in `actions` looks for, so it would cost nothing and do "
+                f"nothing. Pick one of {sorted(GRANTABLE)}, or add the "
+                f"reader and the word together -- see `actions.GRANTABLE`."
+            )
         who = self._who(on)
         if who is None:
             return None

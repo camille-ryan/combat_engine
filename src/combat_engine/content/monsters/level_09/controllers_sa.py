@@ -1784,7 +1784,20 @@ def m3617a3(c: Cast) -> None:
     if mate is None:
         return
     c.shift(2, who=mate)
-    c.grant_action("attack", ActionType.FREE, on=mate)
+    # **`c.grant_attack` and not `c.grant_action("attack")`**, which is what
+    # this row did and which granted nothing: no reader in `actions` has
+    # ever looked for an `attack` word, so the ally shifted and then stood
+    # there. #583's shape, caught by the gate `actions.GRANTABLE` now puts
+    # on `c.grant_action` (#762).
+    #
+    # The victim is read **after** the shift and off the *ally*, not off the
+    # caster: the two squares are what bring somebody into its reach, and
+    # `on=` defaulting through `Cast._who` would aim at the caster's target
+    # on a row whose `target` is NO_TARGET -- the ten-row fault
+    # `_foe_beside`'s docstring records.
+    foe = next((f for f in c.enemies() if c.adjacent_to(mate, f)), None)
+    if foe is not None:
+        c.grant_attack(mate, on=foe)
 
 
 @power(

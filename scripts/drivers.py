@@ -13015,6 +13015,73 @@ def one_rows_burst_grows_by_a_modifier(out: Result) -> None:
              f"{paid(True, ROAR, rolling=bare_row)} on {bare_row}")
 
 
+def every_granted_word_has_a_reader(out: Result) -> None:
+    """`c.grant_action` may only hand out a word `actions` reads.
+
+    The verb lays a bonus under `"<what> as <cost>"`, so a word no reader
+    looks for is carried, costs nothing and does nothing -- and the row
+    still fires and still audits green. That is #583, worth nine rows, and
+    it was **live on `m3617a3`** when this rule was written: it handed an
+    ally `grant_action("attack", FREE)` and the ally never got an attack.
+
+    **The first assertion is the one that matters**, and it is not the
+    raise. A gate that refuses unknown words is worth nothing if a word is
+    added to `GRANTABLE` without its reader -- that is the same bug with a
+    longer fuse. So this greps `actions.py` for the comparison that proves
+    each word is consulted, and the set and the readers have to agree.
+
+    Matched on the comparison rather than on the bare word, because
+    `"charge"` and `"attack"` both appear in that file for unrelated
+    reasons -- a first count of mentions said `attack` was read 1 time and
+    `charge` 8, and both were wrong.
+    """
+    import re
+
+    from combat_engine.engine.actions import GRANTABLE
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.types import ActionType
+
+    src = (Path(__file__).parent.parent
+           / "src/combat_engine/engine/actions.py").read_text()
+    read = set(re.findall(r'what\s*[=!]=\s*"([a-z_]+)"', src))
+    for group in re.findall(r'what\s+in\s+\(([^)]*)\)', src):
+        read |= set(re.findall(r'"([a-z_]+)"', group))
+
+    missing = sorted(GRANTABLE - read)
+    out.that(not missing,
+             "every word `GRANTABLE` offers is consulted in `actions.py` --"
+             " a word without a reader grants nothing and looks written",
+             f"no reader for {missing}" if missing else f"{len(GRANTABLE)} words")
+
+    spare = sorted(read - GRANTABLE)
+    out.that(not spare,
+             "and `actions.py` reads no granted word the verb refuses to"
+             " hand out, which would be a reader nothing can reach",
+             f"read but not grantable: {spare}" if spare else "none")
+
+    # -- the raise, and a positive control beside it ------------------------
+    world, me, _ = _board()
+    c = Cast(world=world, me=me, ref="drivers:granted")
+    try:
+        c.grant_action("attack", ActionType.MINOR, on=me)
+    except ValueError as exc:
+        out.that("no reader" in str(exc),
+                 "an unrecognised word raises, naming the row and the"
+                 " permitted set", f"{str(exc)[:60]}")
+    else:
+        out.that(False, "an unrecognised word raises", "it did not")
+
+    laid = c.grant_action("stand", ActionType.MINOR, on=me)
+    mods = world.get(me, Mods)
+    out.that(laid is not None
+             and mods is not None
+             and mods.total("stand as minor", {}) >= 1,
+             "and a recognised one still lays its bonus -- the control, so"
+             " the gate is not refusing everything",
+             f"{laid is not None}")
+
+
 def a_feat_waives_only_ordinary_concealment(out: Result) -> None:
     """`f1832` waives the -2 for an ally in the aura, and not the -5.
 
@@ -28737,6 +28804,10 @@ DRIVERS = {
                  "a summon derives its numbers from its summoner"),
     "defective_entry": (defective_entry,
                         "a defective part drops the whole compendium entry"),
+    "granted_words": (
+        every_granted_word_has_a_reader,
+        "c.grant_action hands out only words actions.py reads (#762)",
+    ),
     "concealment_feat": (
         a_feat_waives_only_ordinary_concealment,
         "f1832 waives ordinary concealment for an ally and not total",

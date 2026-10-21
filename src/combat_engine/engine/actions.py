@@ -673,6 +673,32 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     return out
 
 
+#: The words `Cast.grant_action` may hand out -- **every one of them read in
+#: this file**, which is the whole point of the set living here.
+#:
+#: `c.grant_action` lays a bonus under `"<what> as <cost>"` and nothing
+#: validated the word, so a row could carry one nothing reads: it costs
+#: nothing, does nothing, and the row still fires and still audits green.
+#: That is #583, which cost nine rows, and it was **still live on one row**
+#: when this set was written -- `m3617a3` handed an ally
+#: `grant_action("attack", FREE)` and the ally never got an attack, because
+#: no reader has ever looked for that word.
+#:
+#: So the rule is the one #583's own write-up asked for: *"add the reader in
+#: `actions` at the same time as the word"*. Adding a word here without a
+#: reader below is the same bug with a longer fuse, and
+#: `drivers.granted_words` greps this file for the comparison that proves
+#: each word is consulted -- planted both ways.
+#:
+#: `Cast.recast` deliberately does **not** come through `grant_action`: its
+#: `what` is a power's ref, not a word, so it builds the same carrier by
+#: hand and this set does not constrain it.
+GRANTABLE = frozenset({
+    "aid_attack", "aid_defence", "command", "escape", "instinctive",
+    "move_zone", "second_wind", "shift", "stand",
+})
+
+
 def _granted(world: World, actor: int) -> dict[tuple[str, ActionType], int]:
     """`query.granted_actions`, with the cost as an `ActionType`."""
     from .query import granted_actions
