@@ -806,7 +806,7 @@
   "Moved(actor=5, from_=(8, 3), to=(7, 2))",
   "EffectApplied(source=1, target=5, duration='end of encounter', label='p10479')",
   "ConditionApplied(source=1, target=5, condition=<Condition.PRONE: 'prone'>, duration='end of encounter', power='p10479')",
-  "PowerResolved(actor=1, power='p10479', targets=[5], rolls=[AttackResult(hit=True, critical=False, natural=19, total=22, target_defence=12, advantage=False, cancelled=False, forced=False, target=5, treated='', rolls=[19], rerolled_by=[])])",
+  "PowerResolved(actor=1, power='p10479', targets=[5], rolls=[AttackResult(hit=True, critical=False, natural=13, total=16, target_defence=12, advantage=False, cancelled=False, forced=False, target=5, treated='', rolls=[13], rerolled_by=[]), AttackResult(hit=True, critical=False, natural=19, total=22, target_defence=12, advantage=False, cancelled=False, forced=False, target=5, treated='', rolls=[19], rerolled_by=[])])",
   "ActionSpent(actor=1, cost=<ActionType.MINOR: 'minor'>)",
   "PowerUsed(actor=1, power='p12670', targets=[6, 7, 8])",
   "EffectApplied(source=1, target=6, duration=\"end of source's next turn\", label='p12670 attack-5')",
