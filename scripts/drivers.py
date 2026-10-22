@@ -22887,6 +22887,121 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def a_prohibition_the_actor_consults(out: Result) -> None:
+    """Two refusals recorded on the creature they protect, because the verb
+    that would act has nowhere else to ask (#764, #740).
+
+    Both rows are standing traits and neither makes the call it wants to
+    change -- `c.coup_de_grace` is invoked by somebody else's body, and a
+    second wind is taken by the action menu. So neither could be written as
+    a parameter the row passes, and `c.pre_empt` does not reach either: it
+    keys on a **row ref** and the row being changed has to read it, and
+    second wind is not a row at all.
+
+    `c.no_provoke` is the precedent both follow -- the immunity lives on
+    the creature it protects and the actor's verb consults it -- with one
+    difference worth writing down: that verb hangs on the opportunity
+    *window* and vetoes an event. Neither of these has a window. Finishing
+    a helpless creature goes straight from a body, and the second wind's
+    heal is a line inside the one implementation, so in both cases the only
+    place to consult is the verb and the only thing to consult is a hold.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Condition
+
+    # -- #764: a helpless creature that may not be finished ---------------
+    def finish(protect: bool) -> bool | None:
+        world, me, _ = audit_board("i2163x1", 1)
+        foes = enemies(world, me)
+        if not foes:
+            return None
+        victim = foes[0]
+        Cast(world=world, me=me, ref="drivers:cdg").condition(
+            Condition.HELPLESS, on=victim, until=When.ENCOUNTER)
+        if protect:
+            use = Cast(world=world, me=victim, ref="i2163x1")
+            use.target = victim
+            REGISTRY["i2163x1"].body(use)
+        world.rng.loaded = 15
+        killer = Cast(world=world, me=me, ref="p1000")
+        killer.target = victim
+        return killer.coup_de_grace(on=victim)
+
+    plain = finish(protect=False)
+    if plain is None:
+        out.skip("an enemy to make helpless, for the coup de grace")
+    else:
+        out.that(plain is True,
+                 "a helpless creature with nothing protecting it can be"
+                 " finished -- the control, and the half that makes the"
+                 " next assertion mean something",
+                 f"coup_de_grace returned {plain}")
+        guarded = finish(protect=True)
+        out.that(guarded is False,
+                 "and i2163x1's body stops it, through a hold on the"
+                 " victim that `c.coup_de_grace` asks about. There is no"
+                 " event to veto here, which is why `c.no_provoke`'s"
+                 " interrupt shape could not be copied",
+                 f"coup_de_grace returned {guarded}")
+
+    # -- #740: a second wind that restores nothing ------------------------
+    def wind(forgo: bool) -> tuple[int, int] | None:
+        # **A board posed for somebody else**, and the first version used
+        # `f2868`'s own. That character *holds* the feat, so emitting
+        # `SecondWind` fires it, it lays the refusal, and the heal is
+        # skipped -- the row working exactly as designed, and a "control"
+        # that was never one. The same trap `f2162` set two rules ago.
+        world, me, _ = audit_board("i2163x1", 1)
+        health = world.get(me, Health)
+        if health is None:
+            return None
+        health.hp = max(1, health.max_hp // 3)
+        before = health.hp
+        c = Cast(world=world, me=me, ref="drivers:wind")
+        if forgo:
+            c.forgo_second_wind_heal(on=me)
+        c.second_wind(on=me)
+        return before, world.need(me, Health).hp
+
+    got = wind(forgo=False)
+    if got is None:
+        out.skip("a creature with Health, for the second wind")
+    else:
+        before, after = got
+        out.that(after > before,
+                 "a second wind restores hit points -- the control",
+                 f"{before} -> {after}")
+        b2, a2 = wind(forgo=True)
+        out.that(a2 == b2,
+                 "and `c.forgo_second_wind_heal` leaves them exactly where"
+                 " they were, which is the refusal the printed trade needs"
+                 " before it can pay an ally instead",
+                 f"{b2} -> {a2}")
+
+        # -- and f2868 end to end, through its own declared trigger ------
+        world, me, _ = audit_board("f2868", 1)
+        health = world.get(me, Health)
+        if health is None:
+            out.skip("f2868's own board, for the trade end to end")
+        else:
+            health.hp = max(1, health.max_hp // 3)
+            was = health.hp
+            Cast(world=world, me=me, ref="drivers:wind").second_wind(on=me)
+            out.that(world.need(me, Health).hp == was,
+                     "**and on f2868's own board the holder keeps none of"
+                     " it**, fired by the row's own `SecondWind` trigger"
+                     " rather than by anything this rule lays. That is the"
+                     " trade working end to end -- and it is why the"
+                     " control above had to be posed somewhere else",
+                     f"{was} -> {world.need(me, Health).hp}")
+
+
 def a_riders_own_amount(out: Result) -> None:
     """`c.part_of` answers how much of a blow is one damage type, which is a
     component of somebody else's roll (#619's densest successor).
@@ -29786,6 +29901,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "actor_asks": (
+        a_prohibition_the_actor_consults,
+        "a refusal recorded on the protected creature, asked by the acting"
+        " verb (#764, #740)",
     ),
     "rider_amount": (
         a_riders_own_amount,

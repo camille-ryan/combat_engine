@@ -5093,6 +5093,38 @@ class Cast:
                                   kind_="aid_another"))
         return True
 
+    def no_coup_de_grace(
+        self, *, on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"Enemies cannot perform a coup de grace against you." A standing
+        prohibition laid on the would-be victim.
+
+        `c.no_provoke` is the precedent and the shape is deliberately the
+        same: the immunity lives on the creature it protects, and the
+        *actor's* verb consults it. `c.coup_de_grace` consulted nothing on
+        its victim, so a printed prohibition had nowhere to be recorded.
+
+        `on=` defaults to the **caster**, because every printed line of
+        this shape is about its own wearer.
+
+        `when` narrows it, and the context carries `actor` -- whoever is
+        trying to finish you -- so "no creature other than X may" is
+        sayable. Without it the only sentence was "never, by anybody",
+        which is what the card prints and is why the default is no gate.
+
+        **A hold rather than an interrupt**, which is where it parts from
+        `c.no_provoke`. That one hangs on the opportunity *window*, an
+        event it can veto. Finishing a helpless creature goes through no
+        window -- `c.coup_de_grace` is called straight from a body -- so
+        the only place to consult is the verb itself, and the only thing
+        to consult is a recorded hold.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("no_coup_de_grace", 1, on=who, until=until,
+                          stacks=False, when=when)
+
     def coup_de_grace(self, *, on: int | None = None) -> bool:
         """Finish a helpless creature. An automatic critical, and nothing added.
 
@@ -5133,6 +5165,14 @@ class Cast:
 
         who = self._who(on)
         if who is None or not any(rules(c).helpless for c in active(self.world, who)):
+            return False
+        # **The victim's own prohibition, consulted here because there is
+        # nowhere else.** `c.no_provoke` can hang on the opportunity window
+        # and veto it; finishing a helpless creature opens no window, so
+        # the verb has to ask. `ctx["actor"]` is whoever is trying, which
+        # is what lets a card exempt one creature. #764.
+        if self.total("no_coup_de_grace", on=who,
+                      ctx={"actor": self.me, "target": who}) > 0:
             return False
         row = get(self.ref)
         if row is None or row.attack_of(self.branch) is None:
@@ -7162,7 +7202,8 @@ class Cast:
         )
 
     def second_wind(
-        self, *, on: int | None = None, cost: ActionType = ActionType.STANDARD
+        self, *, on: int | None = None, cost: ActionType = ActionType.STANDARD,
+        heal: bool = True,
     ) -> bool:
         """Take a second wind: a surge, and +2 to AC until your next turn.
 
@@ -7180,6 +7221,25 @@ class Cast:
         a minor action and a printed feat reads that.
 
         Returns False if it has already been taken this fight.
+
+        **`heal=False` takes the surge and puts nothing back**, which is
+        the printed trade one feat prints: *"you can choose to regain no
+        hit points, but allow an ally to regain hit points equal to your
+        healing surge value."* The moment was always reachable --
+        `SecondWind` is announced here and nowhere else -- and the refusal
+        was not: this spent the surge and healed, and nothing on the path
+        could be told not to, so the row paid twice.
+
+        `c.pre_empt` does not reach it, which is why this is a parameter
+        rather than a row-to-row arrangement: that verb keys on a **row
+        ref** and the row being changed has to read it with
+        `c.instead_of`. Second wind is not a row.
+
+        The surge is still spent and `SecondWind` still carries the
+        `healed` figure the ally's half needs -- the announcement says
+        what the surge was *worth*, which is the number the card hands
+        over, not what this creature kept. The defences still go up: the
+        card declines the hit points and nothing else. #740.
         """
         from .components import Health, Powers
         from .events import SecondWind
@@ -7205,7 +7265,14 @@ class Cast:
             self.world, who, source=who, power="second-wind", healed=worth
         ):
             return False
-        self.world.heal(who, who, worth)
+        # **A hold as well as the parameter, because the row that declines
+        # the healing does not call this.** `heal=False` serves a body that
+        # takes its own second wind; `f2868` is a standing trait and the
+        # call comes from the action menu, so the only thing it can do is
+        # record the refusal on the creature and let this ask. Same shape
+        # as `no_coup_de_grace` and for the same reason.
+        if heal and self.total("no_second_wind_heal", on=who) <= 0:
+            self.world.heal(who, who, worth)
         # **All four defences, not just AC.** The printed rule is "+2 to
         # all defences until the start of your next turn" and this gave
         # AC alone, so every creature that took a second wind has been
@@ -7217,6 +7284,33 @@ class Cast:
         for defence in DEFENCES:
             self.bonus(defence, 2, until=When.SONT, on=who, kind="untyped")
         return True
+
+    def forgo_second_wind_heal(
+        self, *, on: int | None = None, until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """"You can choose to regain no hit points" from your second wind.
+
+        Recorded on the creature rather than passed in, because the row
+        that declines the healing is a **standing trait** and the second
+        wind is taken by the action menu -- so there is no call for it to
+        pass an argument to. `Cast.second_wind` asks.
+
+        The surge is still spent and `SecondWind` still carries the
+        `healed` figure, which is the number the printed trade hands to an
+        ally: the announcement says what the surge was *worth*, not what
+        this creature kept. The defences still go up, because the card
+        declines the hit points and nothing else.
+
+        **Not a choice per use.** The printed line is "you *can* choose",
+        and this is a standing refusal for as long as it is held. Modelling
+        the per-use decision would mean a `c.choose` inside
+        `Cast.second_wind`, which is the one implementation every door
+        comes through; the row says so rather than implying otherwise.
+        #740.
+        """
+        who = on if on is not None else self.me
+        return self.bonus("no_second_wind_heal", 1, on=who, until=until,
+                          stacks=False)
 
     def total_defence(
         self,

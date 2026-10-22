@@ -130,10 +130,14 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "Your <row> is considered an arcane attack power."
 - `c.forbid(self, ref: 'str' = '', *, keyword: 'Keyword | None' = None, lacking: 'Keyword | None' = None, usage: 'Usage | Sequence[Usage] | None' = None, only: 'str | Sequence[str]' = (), attacks_only: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.SAVE_ENDS: 'save ends'>) -> 'Effect | None'`
   - Take a row away for a while. "Loses the ability to use ..."
+- `c.forgo_second_wind_heal(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - "You can choose to regain no hit points" from your second wind.
 - `c.gains_property(self, prop: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, held: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Lay a printed weapon property on that creature's weapons. Returns how many.
 - `c.no_basic(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Take away what this creature's basic attack *is*, not the ability.
+- `c.no_coup_de_grace(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "Enemies cannot perform a coup de grace against you." A standing
 - `c.no_healing(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "The creature cannot heal."
 - `c.no_provoke(self, *, from_: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

@@ -306,7 +306,8 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("refusals", [
                 "cannot_attack", "cannot_be_flanked", "counts_as",
-                "counts_as_keyword", "forbid", "gains_property", "no_basic",
+                "counts_as_keyword", "forbid", "forgo_second_wind_heal",
+                "gains_property", "no_basic", "no_coup_de_grace",
                 "no_healing", "no_provoke", "no_surges", "waive",
             ]),
         ],

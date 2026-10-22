@@ -983,10 +983,23 @@ def i1455x1(c: Cast) -> None:
 
 
 @power("i2163x1", level=9, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.no_coup_de_grace()",))
+       reach=PERSONAL, target=SELF)
 def i2163x1(c: Cast) -> None:
-    """`c.coup_de_grace` consults nothing on its victim, and who may take a
-    belt off a corpse is not a fight."""
+    """Enemies cannot finish the wearer while it is helpless.
+
+    `c.no_coup_de_grace` is the prohibition, laid on the creature it
+    protects and consulted by the *actor's* verb -- `c.no_provoke`'s shape,
+    which #764 named as the precedent. `c.coup_de_grace` now asks before it
+    finishes anybody.
+
+    **A hold rather than an interrupt**, which is where it parts from
+    `c.no_provoke`: that one hangs on the opportunity window and vetoes it,
+    and finishing a helpless creature opens no window at all, so the verb
+    itself is the only place to consult.
+
+    No gate, because the card names none -- it is every enemy. Who may take
+    a belt off a corpse is the other printed sentence and is not a fight."""
+    c.no_coup_de_grace(on=c.me)
 
 
 @power("i643p1", level=9, cls=ITEM, action=MINOR,

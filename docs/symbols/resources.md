@@ -9,7 +9,7 @@ Things a creature spends, and the budget it spends them from.
 
 - `c.regain_surge(self, count: 'int' = 1, *, on: 'int | None' = None) -> 'int'`
   - "Each target regains a healing surge." Returns how many it now has.
-- `c.second_wind(self, *, on: 'int | None' = None, cost: 'ActionType' = <ActionType.STANDARD: 'standard'>) -> 'bool'`
+- `c.second_wind(self, *, on: 'int | None' = None, cost: 'ActionType' = <ActionType.STANDARD: 'standard'>, heal: 'bool' = True) -> 'bool'`
   - Take a second wind: a surge, and +2 to AC until your next turn.
 - `c.spend_surge(self, *, on: 'int | None' = None) -> 'bool'`
   - Spend a surge and gain nothing for it.

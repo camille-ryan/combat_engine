@@ -88,7 +88,7 @@ from combat_engine.engine import (
     power,
 )
 from combat_engine.engine.components import Health
-from combat_engine.engine.events import PowerResolved, PowerUsed
+from combat_engine.engine.events import PowerResolved, PowerUsed, SecondWind
 from combat_engine.engine.query import alive, allies, distance_between, holding, team
 
 #: The `rt:r6-t3` choice: a 1st-level at-will borrowed from
@@ -2813,22 +2813,51 @@ def f2726(c: Cast) -> None:
         c.ride(on=beast)
 
 
-@power("f2868", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
+@power("f2868", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("c.second_wind(instead_of=)",))
+       trigger="you use your second wind",
+       on=Trigger(SecondWind, lambda w, me, ev: ev.actor == me,
+                  "you take your second wind"))
 def f2868(c: Cast) -> None:
-    """`SecondWind` is the moment. What is left is the trade: nothing
-    refuses the hit points `Cast.second_wind` puts back, and without that
-    the ally is paid for free.
+    """Decline the hit points your second wind would restore; an ally
+    within 5 squares regains that many instead.
 
-    **Re-pointed, not re-diagnosed.** The marker used to read
-    `c.forgo_healing()`, which f2005 carried too -- and f2005 wanted
-    `c.pre_empt`, a verb that has existed since #479. One symbol for two
-    mechanisms made this row report as half of a pair when it is a single
-    card with a gap of its own: `c.pre_empt` keys on a **row ref** and the
-    row has to read the clause, and second wind is not a row. It is
-    `Cast.second_wind`, which is deliberately the only implementation and
-    has no `c.instead_of` on it. #740, and #739 for the other half."""
+    `SecondWind` was always the moment -- the note below has said so for
+    as long as the row existed -- and the trade is now sayable.
+    `c.forgo_second_wind_heal` records the refusal on the creature and
+    `Cast.second_wind` asks before it heals, because the row that declines
+    is a **standing trait** and the second wind is taken by the action
+    menu: there is no call here for it to pass an argument to. #740.
+
+    `ev.healed` is what the surge was **worth**, not what this creature
+    kept, which is exactly the number the card hands over -- so the ally's
+    half reads the announcement and needs no second arithmetic.
+
+    **Not a choice per use, and that is a narrowing the row owns.** The
+    card says "you *can* choose"; this declines for the whole encounter
+    once armed. The per-use decision would mean a `c.choose` inside
+    `Cast.second_wind`, which is the one implementation every door comes
+    through, and that is a larger change than this card justifies.
+
+    Why `c.pre_empt` was never the answer, kept from the old note: that
+    verb keys on a **row ref** and the row being changed has to read the
+    clause with `c.instead_of`. Second wind is not a row. #739 is the other
+    half of the symbol this one was split from.
+
+    **`AT_WILL`, not `ENCOUNTER`, and `lint` caught the difference.** A
+    triggered trait declared `ENCOUNTER` is spent on its first firing, and
+    this card prints no limit of its own -- the once-per-fight bound is
+    the second wind's, counted in `Powers`. The row carried `ENCOUNTER`
+    for as long as it carried a marker, where `lint` does not look;
+    un-marking it is what audited the header."""
+    me = c.me
+    c.forgo_second_wind_heal(on=me)
+    worth = getattr(c.trigger, "healed", 0)
+    if worth <= 0:
+        return
+    friends = [a for a in c.within(5, side="ally") if a != me]
+    if friends:
+        c.heal(worth, on=c.choose(friends, f"{c.ref}: which ally is healed"))
 
 
 @power("f2845", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
