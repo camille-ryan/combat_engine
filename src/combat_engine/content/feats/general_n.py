@@ -1726,10 +1726,9 @@ def f2097(c: Cast) -> None:
 
 
 @power("f2099", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Weapon.brutal",))
+       reach=PERSONAL, target=SELF)
 def f2099(c: Cast) -> None:
-    """The range lands; brutal has no reader.
+    """Both halves land: the longer range, and brutal 2.
 
     Both halves are about one named weapon, which is why this asks by
     **ref** and not by group: the group holds more than one bow and the
@@ -1740,13 +1739,25 @@ def f2099(c: Cast) -> None:
     and `resolve._long_range` and `dsl._reach` both read that field, so the
     20/40 is consulted rather than merely recorded.
 
-    **Brutal stays dropped, and for a sharper reason than "nothing carries
-    it".** `c.gains_property` would put the word on the weapon happily --
-    `properties` is a free-form set -- and nothing in `engine/` reads it.
-    Writing it would be a property nothing consults, which is this
-    component's named failure mode, so the symbol names the **reader** that
-    is missing rather than the write that is easy."""
-    c.weapon_range(ranged=(20, 40), ref="w3630", on=c.me)
+    **Brutal is written now, and the old note had the diagnosis exactly
+    right**: *"`c.gains_property` would put the word on the weapon happily
+    -- `properties` is a free-form set -- and nothing in `engine/` reads
+    it. Writing it would be a property nothing consults."* So the gap was
+    the **reader**, and `Cast._brutal_floor` is it, folded into
+    `_reroll_floor` where the dice are in hand.
+
+    `"brutal 2"` on the weapon becomes a floor of **3**, because the
+    threshold is exclusive -- "2 or less" is "below 3", the same reading
+    `c.reroll_ones(below=3)` has for "a 1 or a 2". The operation was never
+    missing: `_rolled_above` replaces each low die individually and keeps
+    the faces that came up fine, which is what brutal prints.
+
+    No new field and no ETL change: `Weapon` has no `brutal` column and
+    neither does `game.db`, so the property set is the carrier, which is
+    the one the content tree can reach today. #840."""
+    me = c.me
+    c.weapon_range(ranged=(20, 40), ref="w3630", on=me)
+    c.gains_property("brutal 2", ref="w3630", on=me)
 
 
 @power("f2101", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

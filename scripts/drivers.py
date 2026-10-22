@@ -23953,6 +23953,78 @@ def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
              " ordering two cards of the family depend on",
              f"one die {worst:.2f}, every die {every:.2f}")
 
+    # -- a weapon's printed "brutal N", which had the operation and no
+    # -- reader at all (#840) --------------------------------------------
+    def brutal(lay: bool, ref: str = "p1000", tries: int = 800) -> tuple:
+        from combat_engine.engine.components import Gear
+
+        world, me, _ = audit_board("f2099", 1)
+        world.rng.loaded = None
+        gear = world.get(me, Gear)
+        arm = gear.main if gear else None
+        if arm is None:
+            return None, None
+        if lay:
+            Cast(world=world, me=me, ref="drivers:brutal").gains_property(
+                "brutal 2", ref=arm.ref, on=me)
+        roller = Cast(world=world, me=me, ref=ref)
+        roller.target = me
+        got = sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
+        return roller._reroll_floor(), got
+
+    off, plain_mean = brutal(lay=False)
+    if off is None:
+        out.skip("a weapon in hand, for a brutal property")
+    else:
+        on, raised = brutal(lay=True)
+        out.that(off == 0 and on == 3,
+                 "`\"brutal 2\"` on the held weapon reads as a floor of"
+                 " **3** -- the threshold is exclusive, so \"2 or less\" is"
+                 " \"below 3\", the same reading `c.reroll_ones(below=3)`"
+                 " has for \"a 1 or a 2\"",
+                 f"floor {off} -> {on}")
+        out.that(raised - plain_mean > 2.0,
+                 "and it reaches the dice: the operation was never missing"
+                 " -- `_rolled_above` already replaces each low die -- only"
+                 " a reader for the printed word",
+                 f"3d6 mean {plain_mean:.2f} -> {raised:.2f}")
+        no_kw, _ = brutal(lay=True, ref="p10069")
+        out.that(no_kw == 0,
+                 "and a row **without** the weapon keyword is left alone,"
+                 " which the card requires: those dice are not the"
+                 " weapon's",
+                 f"floor on a non-weapon power {no_kw}")
+
+        # **On a weapon that is carried but not in hand**, which the first
+        # pass did not cover: planting the loop to read `gear.weapons`
+        # instead of `gear.held` left every assertion green, because the
+        # only weapon carrying the property on that board was the held one.
+        from combat_engine.engine.components import Gear as _Gear
+
+        world, me, _ = audit_board("f2099", 1)
+        world.rng.loaded = None
+        g = world.get(me, _Gear)
+        # Posed rather than hoped for: this board holds everything it
+        # carries, so a first pass skipped here and left the held/carried
+        # distinction unasserted -- and planting the loop to read
+        # `gear.weapons` walked through it.
+        stowed = g.main if g else None
+        if stowed is not None:
+            g.stowed = set(g.stowed) | {stowed.ref}
+        if stowed is None:
+            out.skip("a weapon to put on the belt, for the held-only half")
+        else:
+            Cast(world=world, me=me, ref="drivers:brutal").gains_property(
+                "brutal 2", ref=stowed.ref, on=me)
+            belt = Cast(world=world, me=me, ref="p1000")
+            belt.target = me
+            out.that(belt._reroll_floor() == 0,
+                     "and brutal on a weapon **on the belt** sets no floor"
+                     " -- it is a property of the thing in your hand, and"
+                     " reading every carried weapon would hand a character"
+                     " its whole pack's properties at once",
+                     f"stowed {stowed.ref}, floor {belt._reroll_floor()}")
+
     # **`pick=` and a context-reading `when=` TOGETHER**, which this rule
     # covered one at a time and never together -- and that is exactly how
     # the combination came to be silently inert. `_reroll_pick` asked the

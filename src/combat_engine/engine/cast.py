@@ -6384,14 +6384,24 @@ class Cast:
         about a mark somebody else laid; until now nothing could lay one.
 
         **`lapses=True` is the printed "the mark ends if you do not attack
-        it".** A mark laid for the encounter never ended early, so two rows
-        were stuck on opposite sides of the same missing rule: `p16374`
-        needed the lapse, and `i2762p1` -- *"your divine challenge remains
-        in effect ... even if it would normally end"* -- needed the
-        **exception**, which had nothing to prevent. Its note said so:
-        *"nothing ends it early, so 'even if it would normally end' has
-        nothing to prevent."* So the exception is simply this flag left
-        off, which is why both rows close on one parameter.
+        it".** A mark laid for the encounter never ended early, which is
+        what `p16374` needed.
+
+        **It does not close `i2762p1`, and this docstring used to say it
+        did.** The claim here was that the exception -- *"your divine
+        challenge remains in effect ... even if it would normally end"* --
+        *"is simply this flag left off, which is why both rows close on one
+        parameter"*. That row's own note is later than this paragraph and
+        refutes it: `p805` lays its mark `until=When.ENCOUNTER` and
+        deliberately does **not** use the lapse, because its card reads
+        "the mark lasts until the power is used again". So leaving the flag
+        off changes nothing about a mark that was never going to lapse, and
+        what the clause wants is a way to **suppress** a lapse for a while
+        -- `c.mark(keeps=)`, which does not exist. #834.
+
+        Worth keeping as a warning rather than deleting: a verb's docstring
+        written while its second caller was still marked can outlive the
+        diagnosis, and the row is the thing that gets re-read.
 
         Watched on the **marker's** turn ending, not the marked creature's:
         the sentence is about what the marker did with its turn.
@@ -12642,6 +12652,48 @@ class Cast:
             for k in self.keywords_of(p):
                 best = max(best,
                            self.total(f"reroll_damage_below:{k.value}", ctx=seen))
+        return max(best, self._brutal_floor(p))
+
+    def _brutal_floor(self, row: Any) -> int:
+        """The floor a held weapon's printed "brutal N" sets, for *this* row.
+
+        "Brutal 2" is *"reroll each weapon damage die showing 2 or less and
+        keep the new face"*, which is `_rolled_above`'s operation exactly --
+        per die, keeping the faces that came up fine. So the mechanism was
+        never missing; what was missing is anybody **reading** the word.
+
+        `f2099`'s note is why this is a reader and not a write: *"nothing in
+        `engine/` reads it. Writing it would be a property nothing consults,
+        which is this component's named failure mode, so the symbol names
+        the reader that is missing rather than the write that is easy."*
+        #840.
+
+        **Carried in `properties`, not in a field of its own, and
+        deliberately.** `Weapon` has no `brutal` column and neither does
+        `game.db`, so a field would mean an ETL change and a rebuild for one
+        row. `properties` is the free-form set `c.gains_property` already
+        writes, which is the carrier the content tree can reach today.
+
+        **Weapon damage only**, which the card says: the floor applies when
+        the row being rolled is a weapon attack. A row without the keyword
+        rolls dice the weapon had no part in, and brutal must not touch
+        those.
+
+        `brutal 2` yields 3, because `_reroll_floor`'s threshold is
+        exclusive -- "2 or less" is "below 3", the same reading
+        `c.reroll_ones(below=3)` has for "a 1 or a 2".
+        """
+        if row is None or Keyword.WEAPON not in set(self.keywords_of(row)):
+            return 0
+        gear = self.world.get(self.me, Gear)
+        if gear is None:
+            return 0
+        best = 0
+        for weapon in gear.held:
+            for prop in weapon.properties:
+                head, _, tail = prop.partition(" ")
+                if head == "brutal" and tail.strip().isdigit():
+                    best = max(best, int(tail.strip()) + 1)
         return best
 
     def part_of(self, dtype: DamageType, *, ev: Any = None) -> int:
