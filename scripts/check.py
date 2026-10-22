@@ -894,7 +894,21 @@ _EXCLUSIVE: tuple[frozenset[str], ...] = (
 #: Costs almost nothing. `browser` is last in `CHECKS`, so by the time its
 #: turn comes the other lanes have largely drained; the full run measured
 #: 195s with it parallel and the same within noise with it solo.
-_SOLO: frozenset[str] = frozenset({"browser"})
+#: **`audit` is here because four lanes made a wide run 70% slower**, which
+#: is the opposite of the point and was measured only after the lanes
+#: landed:
+#:
+#:     wide, serial loop    ~1792s   (audit 1312 + the other twenty at 480)
+#:     wide, 4 lanes         3049s   audit alone went 1312s -> 2937s
+#:
+#: `audit._run_all` already runs one worker process per core, so during a
+#: wide sweep every core is busy and three more lanes do not find idle
+#: capacity -- they take it from the audit. It cost ~1625s on the audit to
+#: save ~330s elsewhere.
+#:
+#: Solo costs nothing narrow, where `--changed` on a clean tree is 0.6s, and
+#: it is the whole sweep wide either way.
+_SOLO: frozenset[str] = frozenset({"audit", "browser"})
 
 _LOCKS: dict[frozenset[str], threading.Lock] = {
     group: threading.Lock() for group in _EXCLUSIVE
