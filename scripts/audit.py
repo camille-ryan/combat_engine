@@ -193,6 +193,49 @@ KNOWN_SILENT = {
     # 45 of the 46 `c.cursed(` read sites, and reverting it would hide this.
     "i2339p1": "the posed curse is gone from foes[0] by the time the body"
                " runs, with its effect still standing -- #822",
+    # **The two rows #703 wrote, and the board cannot pose either.** Both
+    # answer a `DamageRolled` -- `c.trigger` is `None` when the auditor
+    # fires them, so `c.reroll_faces` is handed no event and there is
+    # nothing to reroll. Measured: firing each body on the board emits no
+    # `DamageRolled` at all.
+    #
+    # Each also gates on a property of *the blow* rather than of itself, so
+    # even a posed roll has to be of the right shape: `p16373` wants an
+    # arcane attack power, `i1756p1` a melee weapon attack. Proved working
+    # in `drivers.reroll_after` instead -- 12 assertions, with the gates
+    # plant-tested in both directions over 250 boards each.
+    "p16373": "answers a DamageRolled the board never poses, and gates on"
+              " the blow being arcane -- proved in drivers.reroll_after",
+    "i1756p1": "answers a DamageRolled the board never poses, and gates on"
+               " a melee weapon attack -- proved in drivers.reroll_after",
+    # **Correct code, silenced by the chargen draw moving.** This fired and
+    # did something at `81f5229a1` and is quiet at `00429a9e4`, and the
+    # cause is #783 rather than anything in the row: its body returns early
+    # unless the wearer knows `f650b`, and 63 rows left the refused set over
+    # those 28 commits, which re-rolls every draw.
+    #
+    # Measured at both shas in a throwaway worktree, **same seed**:
+    #
+    #   81f5229a1  seed 1: f650b known? True   (38 rows)
+    #   00429a9e4  seed 1: f650b known? False  (37 rows)
+    #
+    # So this is the documented un-marking effect, not a regression. It will
+    # come back on its own the next time the draw moves, which is the reason
+    # the entry says what to re-check rather than claiming the row is wrong.
+    "i3036p1": "returns early unless the wearer knows f650b, and the draw"
+               " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
+    # **Became usable and is still quiet, which is two different facts.** At
+    # `81f5229a1` the auditor reported this UNUSED -- it could not be used on
+    # the board at all -- so it was never on the silent list. It is reachable
+    # now and does nothing, because `c.trigger` is `None`: the body reads
+    # `c.trigger.power` to know which use to hand back, gets `""`, and
+    # `c.restore_use("")` returns False.
+    #
+    # The board would have to pose a `PowerResolved` in which **every**
+    # target was missed, on a power whose use was spent. It poses neither.
+    "i1676p1": "reads c.trigger.power to know which use to restore and the"
+               " board poses no all-missed PowerResolved -- UNUSED at"
+               " 81f5229a1, reachable and quiet now",
     # "You bloody an enemy with an attack that uses **the augmented
     # weapon**", and the gate is written now that `Bloodied.weapon` exists
     # (#653). Two separate board facts keep it quiet, both measured:
