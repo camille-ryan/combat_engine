@@ -15414,8 +15414,19 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
 
         p = self._declared()
         reach = p.reach_of(self.branch) if p is not None else None
+        from .dsl import within_of
+
         size = size or (reach.size if reach is not None else 5)
-        within = reach.within if reach is not None else 10
+        # Through `within_of` rather than the field, so a row lengthening
+        # where an area line may be placed moves the wall too -- and so this
+        # agrees with the `aim_points` that offered the action. #738.
+        within = (
+            within_of(self.world, self.me, reach,
+                      {"power": p.ref if p is not None else "",
+                       "range_kind": reach.kind})
+            if reach is not None
+            else 10
+        )
         grid = self.world.grid
         # Offered nearest-the-trouble first rather than in raster order: a
         # decider that takes the head of the list put every wall in the

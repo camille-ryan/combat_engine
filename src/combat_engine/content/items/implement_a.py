@@ -3876,7 +3876,6 @@ def i2762p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.bonus('within')",),
 )
 def i2771x1(c: Cast) -> None:
     """The ranged half is written; the area half is the one clause in the
@@ -3894,12 +3893,18 @@ def i2771x1(c: Cast) -> None:
     plus of the item this row belongs to rather than whatever magic is in
     hand, which matters for a character carrying two.
 
-    **32 divine rows print an area burst and those are dropped**, because
-    the card lengthens the `within` a burst may be placed at and
-    `"blast_size"` is the burst's own radius -- a different number, and
-    laying the plus there would widen the blast instead of moving it.
-    f1995 is the other row printing this clause. #737, and the area half is
-    #738."""
+    **The 32 divine rows printing an area burst are written now, on
+    `"within"`.** The card lengthens the `within` an area line may be placed
+    at; `"blast_size"` is the burst's own radius -- a different number, and
+    laying the plus there would widen the blast instead of moving it. f1995
+    is the other row printing this clause. #737 was the ranged half, #738
+    this one.
+
+    **The card's own example is a burst and its rule says "area", so both
+    area kinds take it.** A wall is the other one, and p2860 is the divine
+    wall that shows it. The example also settles that the plus goes on the
+    placement distance rather than the radius: it moves a `burst 5 within
+    10` to `burst 5 within 13` and leaves the 5 alone."""
     me = c.me
     plus = c.enhancement
 
@@ -3911,7 +3916,16 @@ def i2771x1(c: Cast) -> None:
             and Keyword.DIVINE in p.keywords
         )
 
+    def an_area_prayer(ctx: dict[str, Any]) -> bool:
+        p = get(ctx.get("power", ""))
+        return (
+            ctx.get("range_kind") in ("area_burst", "wall")
+            and p is not None
+            and Keyword.DIVINE in p.keywords
+        )
+
     c.bonus("range", plus, on=me, until=When.ENCOUNTER, when=a_ranged_prayer)
+    c.bonus("within", plus, on=me, until=When.ENCOUNTER, when=an_area_prayer)
 
 
 @power(

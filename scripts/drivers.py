@@ -28793,12 +28793,26 @@ def a_range_that_is_longer_than_printed(out: Result) -> None:
     `action=NONE` row the creature holds, so a board built for `f1995` has
     `f1995` already standing -- the first run of this measured a doubled
     stretch and read it as the right answer at the wrong distance.
+
+    **The area half is the second half of the rule, #738**, and it is a
+    different number: the `within` an area line may be *placed* at, not the
+    radius. Both cards extend their range clause to area powers in as many
+    words and one works the example -- "an area burst 1 within 10 becomes an
+    area burst 1 within 12". The load-bearing assertion there is the one
+    that says the **radius did not move**, since `"blast_size"` was the
+    tempting place to lay the plus and would have taken a burst from 9
+    squares to 49.
     """
     import combat_engine.content  # noqa: F401
     from audit import board as _posed
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Position
-    from combat_engine.engine.dsl import REGISTRY, _within_reach
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        _within_reach,
+        aim_points,
+        area_of,
+    )
     from combat_engine.engine.query import distance_between, enemies
     from combat_engine.engine.types import Keyword
 
@@ -28936,21 +28950,162 @@ def a_range_that_is_longer_than_printed(out: Result) -> None:
              " a modifier has to be standing before the area is taken",
              f"size {Cast(world=world, me=me, ref='x').size_of(me)}")
 
-    for ref, want in (("f1995", "within"), ("i2771x1", "within"),
-                      ("i2962x1", ""), ("m6579a1", "")):
+    # -- the area half: the `within` a line may be placed at. #738 -------
+    #
+    # **On a widened grid, and the reason is a measurement.** The audit
+    # board is 24x16 with the caster at (6, 8), so the furthest in-grid
+    # square is 17 away and every `within` of 17 or more reads 17 -- which
+    # made the 20 band's two edges indistinguishable from each other and
+    # from the 10 band's. Widening to 80x80 is what lets both bands be
+    # asserted through `aim_points`, the reader, instead of one level down
+    # at `within_of`, the helper.
+    def areas(on_row: str, row: str, arm: str):  # noqa: ANN202
+        """`row`'s placement reach and area, before and after arming `arm`.
+
+        The pair is `(furthest placement, len(area_of))`, and the second
+        number means two different things by kind on purpose: for a burst it
+        is the **radius**, which must not move, and for a wall it is the
+        placement set itself, which must.
+        """
+        world, me, _foe = posed(on_row, 1)
+        world.grid.width = world.grid.height = 80
+        here = world.need(me, Position).square
+        p = REGISTRY[row]
+
+        def shape() -> tuple[int | None, int]:
+            pts = aim_points(world, me, p)
+            far = max((max(abs(x - here[0]), abs(y - here[1]))
+                       for x, y in pts), default=None)
+            return far, len(area_of(world, me, p))
+
+        was = shape()
+        c = Cast(world=world, me=me, ref=arm)
+        REGISTRY[arm].body(c)
+        return was, shape(), c
+
+    def burst(cls: str, within: int) -> str:
+        """A row of this class printing an area burst at this `within`."""
+        return next(
+            d.ref for d in REGISTRY.values()
+            if d.cls == cls
+            and d.reach_of().kind == "area_burst"
+            and d.reach_of().within == within
+        )
+
+    # The two rows are each other's negative control: the wizard burst is
+    # arcane, the cleric burst is divine, and each feat moves one of them.
+    arcane10, arcane20 = burst("wizard", 10), burst("wizard", 20)
+    divine10 = burst("cleric", 10)
+
+    for row, printed, grant in ((arcane10, 10, 2), (arcane20, 20, 5)):
+        was, now, _ = areas(board_row, row, "f1995")
+        wrong = printed + (5 if grant == 2 else 2)
+        out.that(was[0] == printed,
+                 f"a wizard area burst printing within {printed} may be put"
+                 f" {printed} squares off unaided -- the control for the"
+                 " line below",
+                 f"{was[0]}")
+        out.that(now[0] == printed + grant,
+                 f"and {printed + grant} with f1995 standing, not {wrong}:"
+                 " the band is read off the printed `within`, which is what"
+                 ' the card\'s word "range" means for an area line, and the'
+                 " card works that example itself",
+                 f"{was[0]} -> {now[0]}")
+        out.that(now[1] == was[1],
+                 "**and the burst's own radius does not move.** This is the"
+                 " assertion the symbol exists for: the same plus laid on"
+                 " `blast_size` turns a burst 1 from 9 squares into 49,"
+                 " which is a different and much stronger card",
+                 f"{was[1]} -> {now[1]}")
+
+    was, now, _ = areas(board_row, divine10, "f1995")
+    out.that(was == now,
+             "a burst of another class is not lengthened at all -- the gate"
+             " is read off the row being measured, not off the creature",
+             f"{divine10}: {was} -> {now}")
+
+    close = next(d.ref for d in REGISTRY.values() if d.cls == "wizard"
+                 and d.reach_of().kind == "close_burst")
+    was, now, _ = areas(board_row, close, "f1995")
+    out.that(was == now and was[0] is None,
+             "and a close burst takes nothing from it: a close line is"
+             " measured from the body and has no `within` to lengthen, so"
+             " the modifier has no site on it",
+             f"{close}: {was} -> {now}")
+
+    was, now, c = areas(board_row, divine10, "i2771x1")
+    plus = c.enhancement
+    out.that(plus >= 1, "the symbol answers a plus at all", f"{plus}")
+    out.that(now[0] == was[0] + plus and now[1] == was[1],
+             "a divine area burst is placed the symbol's own plus further,"
+             " and its radius is untouched -- the item's half of the same"
+             " gap, gated on the keyword rather than the class",
+             f"{divine10}: {was} -> {now}, plus {plus}")
+
+    was, now, _ = areas(board_row, "p2860", "i2771x1")
+    out.that(now[0] == was[0] + plus and now[1] > was[1],
+             'a divine **wall** is lengthened too, because the card says'
+             ' "area" and a wall is the other area kind. Here the second'
+             " number IS the placement set rather than a radius, so it"
+             " grows where the burst's stayed still",
+             f"p2860: {was} -> {now}")
+
+    was, now, _ = areas(board_row, arcane10, "i2771x1")
+    out.that(was == now,
+             "while an arcane burst takes nothing from the symbol -- the"
+             " other direction of the same pair",
+             f"{arcane10}: {was} -> {now}")
+
+    def wall_reach(arm: str) -> int:
+        """The furthest square `c.wall` offers to stand a divine wall at.
+
+        **The third reader, and the one a plant proved uncovered.** Removing
+        the stretch from `Cast.wall` left this rule green when `area_of` and
+        `aim_points` were the only things asserted: it hand-rolled its own
+        `spread` over the raw field, so a row lengthening the placement
+        distance moved what the interface offered and not where the wall
+        could actually go. Captured off `World.decider`, which is what
+        `c.wall` asks.
+
+        A fresh world per measurement rather than arming inside one -- the
+        first wall goes into `Grid.blocking` and would change what the
+        second measurement finds passable.
+        """
+        world, me, _foe = posed(board_row, 1)
+        world.grid.width = world.grid.height = 80
+        here = world.need(me, Position).square
+        if arm:
+            REGISTRY[arm].body(Cast(world=world, me=me, ref=arm))
+        seen: list[tuple[int, int]] = []
+
+        def record(_actor: int, _kind: str, options: list, prompt: str = ""):  # noqa: ANN202
+            if "where the wall stands" in prompt:
+                seen.extend(options)
+            return options[0]
+
+        world.decider = record
+        Cast(world=world, me=me, ref="p2860").wall(size=1)
+        return max(max(abs(x - here[0]), abs(y - here[1])) for x, y in seen)
+
+    bare, armed = wall_reach(""), wall_reach("i2771x1")
+    out.that(bare == 10 and armed == 10 + plus,
+             "and `c.wall` itself offers the further square, not only the"
+             " two readers that light the interface up. It is the third"
+             " reader of the same number and the plant that deleted its"
+             " stretch left every other assertion here green",
+             f"{bare} -> {armed}, plus {plus}")
+
+    for ref in ("f1995", "i2771x1", "i2962x1", "m6579a1"):
         marks = str(REGISTRY[ref].unfinished)
         out.that("range" not in marks and "reach" not in marks,
                  f"{ref} waits on no range or reach symbol",
                  f"{REGISTRY[ref].unfinished}")
-        if want:
-            out.that(want in marks,
-                     f"{ref} still names the area half, which is #738 and is"
-                     " a different number from the one that landed",
-                     f"{REGISTRY[ref].unfinished}")
-        else:
-            out.that(not marks or marks == "()",
-                     f"{ref} carries no marker at all",
-                     f"{REGISTRY[ref].unfinished}")
+        out.that(not marks or marks == "()",
+                 f"{ref} carries no marker at all. f1995 and i2771x1 held a"
+                 " `within` residue until #738 and this loop pinned it;"
+                 " the area half has landed, so the pin now records that"
+                 " instead",
+                 f"{REGISTRY[ref].unfinished}")
 
 
 def resistance_instead_of_the_extra_hit_points(out: Result) -> None:

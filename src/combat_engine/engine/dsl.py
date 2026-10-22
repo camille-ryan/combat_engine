@@ -2118,7 +2118,8 @@ def area_of(
     elif r.kind == "wall":
         # Everywhere the wall may be put, which is what an interface lights
         # up and what `c.wall` picks its run of squares out of.
-        out = spread(mine, r.within)
+        out = spread(mine, within_of(world, actor, r,
+                                     {"power": p.ref, "range_kind": r.kind}))
     elif r.kind in ("melee", "ranged"):
         out = spread(mine, _reach_of(world, actor, r, p.ref, stretch=stretch))
     else:
@@ -2447,8 +2448,17 @@ def _stretched(
     Melee reads `"reach"` and a ranged line reads `"range"`. A blast or a
     burst reads `"blast_size"`: its size is the blast itself, so "increase
     the size of your blasts and bursts by 1" is that number and not the
-    `within` an area burst may be placed at, which no printed line of this
-    shape lengthens.
+    `within` an area burst may be placed at.
+
+    **Two printed lines lengthen that `within`, and this docstring used to
+    say none did.** `f1995` and `i2771x1` each state a range increase and
+    then extend it to area powers in as many words, one with a worked
+    example -- "an area burst 1 within 10 becomes an area burst 1 within
+    12". They are a **third** kind, `"within"`, and not `"blast_size"`:
+    laying their plus on the radius turns 9 squares into 49, which is a
+    different and much stronger clause than print. Read through
+    `within_of`, which is the one door all three placement readers use.
+    #738.
 
     `ctx` carries the row being measured, so "the range of your **arcane**
     powers" is a gate on the modifier rather than a blanket stretch of
@@ -2466,7 +2476,30 @@ def _stretched(
         return max(0, mods.total("range", ctx))
     if kind in ("close_burst", "close_blast", "area_burst"):
         return max(0, mods.total("blast_size", ctx))
+    if kind == "within":
+        return max(0, mods.total("within", ctx))
     return 0
+
+
+def within_of(
+    world: World, actor: int, r: Range, ctx: dict[str, Any] | None = None
+) -> int:
+    """How far from this creature an area line may be **placed**.
+
+    `Range.within` plus whatever lengthens it. Three readers ask this
+    question and before #738 all three read the field raw -- and one of
+    them, `Cast.wall`, hand-rolled the `spread` as well. They have to agree
+    or the longer range is offered and then refused one question later,
+    which is the failure both waiting rows' notes describe from #533: a
+    stretch that reached `area_of` and not the gate `actions.perform`
+    re-asks was worth nothing.
+
+    `aim_points` is the authority on whether a placement is legal -- it is
+    what `actions.legal` offers from and what `use` refuses against -- so a
+    stretch missing from it would light up a square the action then
+    declined.
+    """
+    return max(0, r.within + _stretched(world, actor, "within", ctx))
 
 
 def measured_from(world: World, actor: int, r: Range) -> int:
@@ -2565,9 +2598,11 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Squ
     if reach.kind == "close_blast":
         return sorted(blast_placements(mine, reach.size))
     if reach.kind in ("area_burst", "wall"):
+        far = within_of(world, actor, reach,
+                        {"power": p.ref, "range_kind": reach.kind})
         return sorted(
             sq
-            for sq in spread(mine, reach.within)
+            for sq in spread(mine, far)
             if world.grid.inside(sq)
             and any(world.grid.line_of_effect(src, sq) for src in mine)
         )
