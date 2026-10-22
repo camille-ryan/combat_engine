@@ -423,6 +423,17 @@ rather than a title. Correct `exits`: the draft chains scenes in document
 order, which is right for a linear adventure and wrong wherever the adventure
 branches.
 
+**One name per character, and the page's own.** A character who appears in
+two scenes must carry the same `name` in both, taken from the adventure's
+text. Written with role words instead -- "the friar", "the spy" -- a player
+dined with Benwick and then spoke to "the friar" in the very next scene,
+and "the friar" was ambiguous on top, because the read-aloud says the friar
+is *Venn* and Benwick is his teacher.
+
+There is **no gate for this**: an NPC's name being findable in the scene's
+own prose passes for every entry in the module, since "friar" and "spy" are
+in the text as role words. It is on the author to read across scenes.
+
 **A combat scene** -- `foes` is the important part, one entry per line of
 opposition:
 

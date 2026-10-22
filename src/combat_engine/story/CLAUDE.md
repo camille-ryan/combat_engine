@@ -134,6 +134,32 @@ crash and none of them red anywhere:
 **Read a transcript after changing anything here.** The component's failure
 mode is output that reads as correct.
 
+### A judge is not always buildable, and six tries is enough
+
+The faults in this component are found by **reading a transcript**, and
+every real one this session was found that way. An automated judge was
+tried six ways for one question -- did the DM narrate the player's own
+character -- and the sequence is the argument against trusting one:
+
+* a boolean judge failed both of its own controls, twice;
+* an enum of `"the Fighter"` against `"somebody else"` scored 3/4 on a 7B
+  and **3/5 on a 14B, failing identically** -- the tell that the model was
+  not the problem. One option was a name and the other a description, and
+  it reaches for the name. Naming both sides: 6/6;
+* that judge then scored **0/8 on both arms** of the fix, because a probe
+  with one intent and no companions cannot reproduce what a live scene
+  with four declarations and eight lore facts does;
+* pointed at the real transcript it reported **11%**, every instance a
+  false positive on an NPC acting *toward* the player;
+* given a category for that, it passed 5/6 synthetic cases and reported
+  **22% on the same data it had called 11%**, top hit still plainly an NPC.
+
+0%, 11%, 22% on one transcript, by prompt wording. That is not a
+measurement, and the instrument was deleted rather than tuned -- the same
+call `scripts/CLAUDE.md` demands for a check that cannot give a stable
+answer. **Hand-reading found the real result in one pass**: the fault did
+not recur in 11 replies.
+
 ### Two rules about measuring a model
 
 Both were learnt by getting it wrong first, in one session:
