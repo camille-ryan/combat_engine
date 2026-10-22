@@ -24008,12 +24008,11 @@ def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
         # carries, so a first pass skipped here and left the held/carried
         # distinction unasserted -- and planting the loop to read
         # `gear.weapons` walked through it.
-        stowed = g.main if g else None
-        if stowed is not None:
-            g.stowed = set(g.stowed) | {stowed.ref}
-        if stowed is None:
+        stowed = g.main if g is not None else None
+        if g is None or stowed is None:
             out.skip("a weapon to put on the belt, for the held-only half")
         else:
+            g.stowed = set(g.stowed) | {stowed.ref}
             Cast(world=world, me=me, ref="drivers:brutal").gains_property(
                 "brutal 2", ref=stowed.ref, on=me)
             belt = Cast(world=world, me=me, ref="p1000")
