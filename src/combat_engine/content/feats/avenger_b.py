@@ -45,6 +45,7 @@ from combat_engine.engine import (
     Cast,
     DamageType,
     Hit,
+    Keyword,
     Miss,
     PowerResolved,
     PowerUsed,
@@ -258,25 +259,29 @@ def f2163(c: Cast) -> None:
 
 
 @power("f2162", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.floor_damage_dice()",))
+       reach=PERSONAL, target=SELF,
+       dropped=("c.floor_damage_dice(against=)",))
 def f2162(c: Cast) -> None:
     """Treats a 1 or 2 on a damage die as a 3.
 
-    Re-read against `c.reroll_ones(below=3)`, which is the nearest thing
-    in the tree and is **not** this card twice over.
+    **`c.floor_damage_dice` is the verb and it is deliberately not
+    `c.reroll_ones(below=3)`**, which is the nearest thing in the tree and
+    would be this feat better than its card. That one *rerolls* each low
+    die, so a 1 on a d6 becomes 2-6; this pins it. Measured over 400,000
+    rolls of a d6: plain 3.50, floored at 3 **4.00**, rerolled above 3
+    **4.50**. The old note said "averages 4" for the reroll and that was
+    the floor's figure, not the reroll's -- the gap is half a point a die,
+    not nothing. #742.
 
-    `Cast._rolled_above` is the right hook and the wrong operation: it
-    *rerolls* each die under the floor, so a 1 on a d6 becomes 2-6 and
-    averages 4, where the printed line pins it to exactly 3. Flooring is
-    strictly weaker than rerolling on every die the game prints, so
-    writing one as the other would be a feat better than its card. What is
-    wanted is the same loop taking `max(face, floor)` and no reroll.
-
-    The narrowing does not reach either. `_reroll_floor` is asked inside
-    `_roll_damage` with the row being rolled and nothing else, so
-    "with a weapon attack" has `keyword=` but "against a target of your
-    p3069" has nothing -- there is no target in hand at that point.
-    """
+    The weapon narrowing lands as `keyword=`. **What is still dropped is
+    the other half of the same sentence**: "against a target of your
+    p3069". `_reroll_ctx` is what a gated hold is asked at the moment the
+    dice are rolled, and it carries the row, its keywords and the roller
+    -- not the victim, because `c.damage` has not chosen one yet when the
+    dice come up. So the floor applies to every weapon attack this
+    character makes rather than only to the sworn enemy, which is wider
+    than print, and the row says so rather than reading as finished."""
+    c.floor_damage_dice(3, keyword=Keyword.WEAPON, on=c.me)
 
 
 @power("f2165", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

@@ -11978,6 +11978,32 @@ class Cast:
         if pick_floor > 1 and pick_n > 0:
             picked = self._rolled_pick(dice, pick_floor, pick_n)
             return picked.total, picked
+        # **Fourth hold, read last, and the order is measured rather than
+        # guessed.** The comment above explains why these are separate
+        # holds and not parameters on one: a creature carrying two cards
+        # should get the stronger, and `max()`-ing their numbers together
+        # would come out weaker than either alone.
+        #
+        # So this one's position had to be priced the same way. Per die on
+        # a d6, over 400,000 rolls each:
+        #
+        #     plain                  3.50
+        #     floor at 3             4.00
+        #     loop above 3           4.50
+        #
+        # and on 3d6, which is where the pick can be compared at all:
+        #
+        #     plain                 10.48
+        #     floor at 3            11.998
+        #     pick 1 below par      12.055
+        #     loop above 3          13.50
+        #
+        # The floor is the **weakest** of the three, so it is read after
+        # both and a creature holding any pair gets the better card. #742.
+        face = self._floor_face()
+        if face > 1:
+            pinned = self._rolled_floored(dice, face)
+            return pinned.total, pinned
         first = self.world.rng.roll(dice)
         # **Both rolls still happen**, in the same order, so the random
         # stream is untouched -- `min(first, rng.roll(dice).total)` always
@@ -12523,6 +12549,140 @@ class Cast:
                 best = max(best,
                            self.total(f"reroll_damage_below:{k.value}", ctx=seen))
         return best
+
+    def set_damage_faces(self, face: int, *, ev: Any = None) -> int:
+        """"All damage dice rolled for the triggering attack are considered
+        to have a result of 1." Sets every face of a roll already made.
+        Returns how many dice were set.
+
+        The reactive sibling of `c.floor_damage_dice`, and **downward**: a
+        floor is `max(face, n)` and this is an assignment, so it is the one
+        shape of this family that makes a blow smaller.
+
+        Reads the live `Roll` off the event, the way `c.reroll_faces` does,
+        and reprices through the recipe the event carries so the halving
+        inside `c.half_damage` is honoured -- a raw delta would be wrong by
+        a factor of two there. Adds the difference rather than assigning
+        the recipe's answer, so an earlier listener's edit to `ev.amount`
+        survives.
+
+        **This row was marked unwritable and the marker's premise expired.**
+        `p10044` said *"the blow has been rolled to a single number by the
+        time it is announced; the dice that made it are gone"*, which was
+        true until `DamageRolled` started carrying its roll (#703). The row
+        is declared on exactly that event. #742 asked whether an interrupt
+        on "you take damage" runs *before* the dice are rolled, as the only
+        way the card could work; it does not have to -- the dice are still
+        there afterwards.
+
+        `0` and no change when the event carries no dice, which is every
+        critical and every flat damage line: a critical maximised the faces
+        and there is nothing left to set.
+        """
+        if ev is None:
+            ev = self.trigger
+        roll = getattr(ev, "roll", None)
+        if roll is None or not roll.dice:
+            return 0
+        price = getattr(ev, "reprice", None)
+        was = price(roll.total) if price is not None else 0
+        set_ = 0
+        for i, had in enumerate(roll.dice):
+            if had != face:
+                roll.dice[i] = face
+                set_ += 1
+        if price is not None:
+            ev.amount += price(roll.total) - was
+        return set_
+
+    def floor_damage_dice(
+        self,
+        face: int,
+        *,
+        keyword: Keyword | None = None,
+        ref: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+        when: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> Effect | None:
+        """"Treat all rolls of a 1 or 2 on the damage dice as though the
+        result were a 3." A floor on each die's face.
+
+        **Not `c.reroll_ones`, and the difference is the whole card.** That
+        one *rerolls* a low die until it is not low, so a 1 on a d6 becomes
+        2-6; this pins it to the printed number. Measured over 400,000
+        rolls of a d6: plain 3.50, floored at 3 **4.00**, rerolled above 3
+        **4.50**. Half a point a die apart, and the printed sentences are
+        different sentences.
+
+        A fourth hold rather than a parameter on the reroll pair, for the
+        reason `c.reroll_ones` gives about the other two: the holds are read
+        with `total()`, which takes a `max`, so folding two cards' numbers
+        into one key would come out **weaker than either card alone**. Read
+        last of the four, because it is measured weakest -- on 3d6, plain
+        10.48, floored 11.998, one pick 12.055, the loop 13.50 -- so a
+        creature holding any pair gets the better card.
+
+        `keyword` and `ref` narrow it exactly as the reroll holds do: a card
+        flooring only one power's dice, or only weapon damage, says so.
+        `f2162`'s "a target of your p3069" is a `when=`.
+
+        **Downward is a different verb and deliberately not this one.**
+        `p10044` prints "all damage dice are considered to have a result of
+        1", which is a *set*, not a floor, and its own blocker is a
+        different question entirely -- whether an interrupt on taking damage
+        runs before the dice are rolled. #742 says so and this verb does not
+        pretend to cover it.
+        """
+        who = on if on is not None else self.me
+        what = "floor_damage_face"
+        if ref:
+            what = f"{what}@{ref}"
+        elif keyword is not None:
+            what = f"{what}:{keyword.value}"
+        # `stacks=False` for `reroll_ones`' reason: the value is read with a
+        # `max`, so a second identical hold changes nothing and would only
+        # pile up effects -- and a trait that floors its own dice lays one
+        # per swing otherwise.
+        return self.bonus(what, face, on=who, until=until, stacks=False,
+                          when=when)
+
+    def _floor_face(self) -> int:
+        """The face a damage die is treated as showing at minimum, for
+        *this* row. 0 for everybody with nothing recorded.
+
+        Read exactly as `_reroll_floor` is, with the same three
+        qualifications -- unqualified, `@ref` and `:keyword` -- so a card
+        that floors only one power's dice or only a weapon's can say so.
+        """
+        seen = self._reroll_ctx()
+        best = self.total("floor_damage_face", ctx=seen)
+        best = max(best, self.total(f"floor_damage_face@{self.ref}", ctx=seen))
+        from .dsl import get
+
+        p = get(self.ref)
+        if p is not None:
+            for k in self.keywords_of(p):
+                best = max(best,
+                           self.total(f"floor_damage_face:{k.value}", ctx=seen))
+        return best
+
+    def _rolled_floored(self, dice: str | int, floor: int) -> Roll:
+        """Roll, then treat any die under `floor` as showing `floor`.
+
+        The operation `_rolled_above` is not. That one *rerolls* a low die,
+        so a 1 on a d6 becomes 2-6 and the die averages 4.5; this pins it,
+        and the die averages 4.0. The printed cards are different sentences
+        and the difference is half a point a die.
+        """
+        rolled = self.world.rng.roll(dice)
+        faces = _faces_of(dice)
+        if faces <= 1:
+            return rolled
+        for i, face in enumerate(rolled.dice):
+            if face < floor:
+                rolled.dice[i] = min(floor, faces)
+        return rolled
 
     def _reroll_ctx(self) -> dict[str, Any]:
         """What a gated reroll hold is asked, at the moment the dice are rolled.

@@ -22887,6 +22887,141 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def a_damage_die_is_pinned(out: Result) -> None:
+    """A floor on a damage die's face is not a reroll of it, and a set is
+    not a floor (#742).
+
+    Three operations on the same dice and the cards are different
+    sentences, half a point a die apart on a d6:
+
+        plain          3.50
+        floor at 3     4.00     "treat a 1 or 2 as a 3"
+        loop above 3   4.50     "reroll until it is not low"
+
+    So `f2162` written as `c.reroll_ones(below=3)` would be a feat better
+    than its card, which is why it waited for its own verb rather than
+    being spelled with the nearest one.
+
+    **The fourth hold's position in `_roll_damage_dice` is measured, not
+    argued.** On 3d6: plain 10.48, floored 11.998, one pick 12.055, the
+    loop 13.50. The floor is weakest, so it is read last and a creature
+    holding any pair gets the better card -- the same principle the
+    existing loop-before-pick order was built on.
+
+    **And `p10044` is written, which #742 said might be impossible.** That
+    issue asked whether an immediate interrupt on "you take damage" runs
+    *before* the dice are rolled, as the only way the card could work. It
+    does not have to: `DamageRolled` carries its live `Roll` since #703, so
+    the dice are still there afterwards and a set is a plain write.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import enemies
+
+    # A board posed for somebody else, so `turns.arm_traits` has not already
+    # laid f2162's hold -- on its own board it has, and a first pass measured
+    # 12.10 both with and without the row because of it.
+    NEUTRAL = "p1000"
+
+    def mean(lay, ref: str = "drivers:floor",  # noqa: ANN001
+             tries: int = 800) -> float:
+        world, me, _ = audit_board(NEUTRAL, 1)
+        world.rng.loaded = None
+        if lay is not None:
+            lay(Cast(world=world, me=me, ref="drivers:lay"), me)
+        roller = Cast(world=world, me=me, ref=ref)
+        roller.target = me
+        return sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
+
+    plain = mean(None)
+    floored = mean(lambda c, me: c.floor_damage_dice(3, on=me))
+    looped = mean(lambda c, me: c.reroll_ones(below=3, on=me))
+    out.that(10.0 < plain < 11.0,
+             "3d6 unmodified averages about 10.5 -- the baseline the two"
+             " figures below are read against",
+             f"{plain:.2f}")
+    out.that(floored - plain > 1.0,
+             "a floor at 3 is worth better than a point on 3d6, so the"
+             " clause is not inert",
+             f"{plain:.2f} -> {floored:.2f}, predicted ~12.0")
+    out.that(looped - floored > 1.0,
+             "**and rerolling is worth more again**, which is the whole"
+             " reason this is its own verb: writing the floor as"
+             " `c.reroll_ones(below=3)` would be the feat better than its"
+             " card, by about a point and a half on 3d6",
+             f"floored {floored:.2f}, rerolled {looped:.2f}")
+
+    both = mean(lambda c, me: (c.floor_damage_dice(3, on=me),
+                               c.reroll_ones(below=3, on=me)))
+    out.that(abs(both - looped) < 0.6,
+             "a creature holding both cards gets the **reroll**, not the"
+             " floor and not some average of the two -- the floor is read"
+             " last because it is measured weakest, and `total()` taking a"
+             " `max` over one shared key would have come out weaker than"
+             " either card alone",
+             f"both {both:.2f}, reroll alone {looped:.2f},"
+             f" floor alone {floored:.2f}")
+
+    # -- f2162's own body, and its keyword gate ---------------------------
+    def row_mean(ref: str, tries: int = 800) -> float:
+        world, me, _ = audit_board(NEUTRAL, 1)
+        world.rng.loaded = None
+        c = Cast(world=world, me=me, ref="f2162")
+        c.target = me
+        REGISTRY["f2162"].body(c)
+        roller = Cast(world=world, me=me, ref=ref)
+        roller.target = me
+        return sum(roller._roll_damage("3d6") for _ in range(tries)) / tries
+
+    on_weapon = row_mean(NEUTRAL)
+    on_arcane = row_mean("p10069")
+    out.that(on_weapon - plain > 1.0,
+             "f2162's own body floors the dice of a **weapon** attack",
+             f"{plain:.2f} -> {on_weapon:.2f}")
+    out.that(abs(on_arcane - plain) < 0.6,
+             "and leaves a power without the keyword alone, which is the"
+             " `keyword=` half of the printed sentence",
+             f"arcane {on_arcane:.2f} against a plain {plain:.2f}")
+
+    # -- p10044: a set, downward, on a roll already announced -------------
+    world, me, _ = audit_board("p10044", 1)
+    world.rng.loaded = None
+    foe = enemies(world, me)[0]
+    mine: list[tuple[list[int], int]] = []
+    theirs: list[list[int]] = []
+
+    def watch(ev: DamageRolled) -> None:
+        roll = getattr(ev, "roll", None)
+        if roll is None:
+            return
+        if ev.target == me:
+            mine.append((list(roll.dice), ev.amount))
+        else:
+            theirs.append(list(roll.dice))
+
+    world.bus.on(DamageRolled, watch)
+    Cast(world=world, me=foe, ref="drivers:blow").damage("4d8", on=me)
+    Cast(world=world, me=me, ref="drivers:blow").damage("4d8", on=foe)
+    if not mine or not theirs:
+        out.skip("a blow at the caster and one away from it, for p10044")
+    else:
+        dice, amount = mine[0]
+        out.that(dice == [1, 1, 1, 1],
+                 "p10044 sets every die of an incoming blow to 1, fired by"
+                 " its own declared trigger on `DamageRolled` -- the row's"
+                 " note said the dice were gone by then and #703 made that"
+                 " false",
+                 f"dice {dice}, amount {amount}")
+        out.that(theirs[0] != [1, 1, 1, 1],
+                 "and does nothing to a blow the caster is **dealing**,"
+                 " which `targets_me` is what narrows -- the half a row"
+                 " reading the event without a gate would get wrong",
+                 f"the outgoing blow rolled {theirs[0]}")
+
+
 def a_weapon_is_re_filed(out: Result) -> None:
     """`c.weapon_group` makes a weapon count as another group without ceasing
     to be its own, and `c.weapon_proficiency` sets a figure the swing reads
@@ -29459,6 +29594,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "pinned_die": (
+        a_damage_die_is_pinned,
+        "a damage die floored, and one set downward on a roll already"
+        " announced (#742)",
     ),
     "weapon_refiled": (
         a_weapon_is_re_filed,

@@ -97,8 +97,10 @@ CATEGORIES: dict[str, dict] = {
             # the difference can be read at a glance. #682.
             ("dealing it", [
                 "absorb", "apply_poison", "b", "burns", "cushion", "damage",
-                "deals", "flat", "half_damage", "halve", "high_crit",
+                "deals", "flat", "floor_damage_dice", "half_damage",
+                "halve", "high_crit",
                 "maximise", "no_miss_damage", "ongoing", "quarry_damage",
+                "set_damage_faces",
                 "reduce", "sneak_damage", "w",
             ]),
             ("undoing it", [

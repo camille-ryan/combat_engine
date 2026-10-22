@@ -23,6 +23,8 @@ Points off and points back on, and the dice behind them.
   - This creature's weapon attacks deal that type from now on.
 - `c.flat(self, amount: 'int', *, dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, dtypes: 'Sequence[DamageType]' = (), unpreventable: 'bool' = False, on: 'int | None' = None) -> 'int'`
   - Damage that is not rolled. `dtypes` is one blow of several types.
+- `c.floor_damage_dice(self, face: 'int', *, keyword: 'Keyword | None' = None, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
+  - "Treat all rolls of a 1 or 2 on the damage dice as though the
 - `c.half_damage(self, dice: 'str | int' = 0, bonus: 'int' = 0, *, dtype: 'DamageType' = <DamageType.UNTYPED: 'untyped'>, dtypes: 'Sequence[DamageType]' = (), on: 'int | None' = None) -> 'int'`
   - "Miss: half damage" -- rolled, then halved, as the rule reads.
 - `c.halve(self, ev: 'Any' = None) -> 'int'`
@@ -39,6 +41,8 @@ Points off and points back on, and the dice behind them.
   - The dice the ranger's quarry rider pays out, as an expression.
 - `c.reduce(self, amount: 'int', ev: 'Any' = None) -> 'int'`
   - Take a number off damage that has been rolled but not yet dealt.
+- `c.set_damage_faces(self, face: 'int', *, ev: 'Any' = None) -> 'int'`
+  - "All damage dice rolled for the triggering attack are considered
 - `c.sneak_damage(self) -> 'str'`
   - The dice the rogue's once-a-round rider pays out, as an expression.
 - `c.w(self, count: 'int' = 1, *, hand: 'str' = 'main', ranged: 'bool | None' = None) -> 'str'`

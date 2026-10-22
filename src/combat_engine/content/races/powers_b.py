@@ -822,11 +822,27 @@ def p2485(c: Cast) -> None:
     target=NO_TARGET,
     trigger="you take damage",
     on=Trigger(DamageRolled, targets_me, "you take damage"),
-    todo=("c.floor_damage_dice()",),
 )
 def p10044(c: Cast) -> None:
-    """The blow has been rolled to a single number by the time it is
-    announced; the dice that made it are gone, so there is nothing to floor."""
+    """"All damage dice rolled for the triggering attack are considered to
+    have a result of 1."
+
+    **The old note's premise expired.** It said *"the blow has been rolled
+    to a single number by the time it is announced; the dice that made it
+    are gone"*, which was true until `DamageRolled` started carrying its
+    live `Roll` (#703). This row is declared on exactly that event, so the
+    dice are in hand after all.
+
+    A **set**, not a floor, and the only clause of this family that makes a
+    blow smaller -- which is why it is `c.set_damage_faces` and not
+    `c.floor_damage_dice`. The amount is repriced through the recipe the
+    event carries, so a miss-half blow is reduced by the right amount
+    rather than by twice it.
+
+    #742 asked whether an immediate interrupt on "you take damage" runs
+    *before* the dice are rolled, as the only way this card could work. It
+    does not have to."""
+    c.set_damage_faces(1)
 
 
 @power(

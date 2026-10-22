@@ -222,6 +222,17 @@ KNOWN_SILENT = {
     # So this is the documented un-marking effect, not a regression. It will
     # come back on its own the next time the draw moves, which is the reason
     # the entry says what to re-check rather than claiming the row is wrong.
+    # **Written and quiet, and the board is why.** `p10044` is an
+    # immediate interrupt declared on `Trigger(DamageRolled, targets_me)`,
+    # so it needs somebody to hit the caster with a dice-rolled blow. The
+    # auditor fires a row on its own; `_provoke` poses attacks the row
+    # *makes*, not ones it takes, so the trigger never comes.
+    #
+    # Proved in `drivers.pinned_die` instead, which deals the blow itself:
+    # every face of an incoming 4d8 is set to 1, and a blow the caster is
+    # *dealing* is left alone. Both halves plant red.
+    "p10044": "an interrupt on taking damage, and the board poses no"
+              " incoming blow -- proved in drivers.pinned_die",
     "i3036p1": "returns early unless the wearer knows f650b, and the draw"
                " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
     # **Became usable and is still quiet, which is two different facts.** At
