@@ -187,6 +187,22 @@ class Effect:
     #: its printed kind. Without it a wand that reshapes "the next area
     #: burst" would reshape a melee swing.
     reshape_when: Callable[[dict[str, Any]], bool] | None = None
+    #: A standing replacement for a row's **target line**, beside the
+    #: replacement for its shape above.
+    #:
+    #: Two heroic weapon blocks turn a single-target ranged basic attack into
+    #: "a burst 1 centered on the target", and the sentence goes on to say
+    #: "each **target** hit" -- so the line itself widens. Reshaping the
+    #: range alone left `_auto_targets` honouring the printed
+    #: `ONE_CREATURE`, which made the burst hit exactly one creature: the
+    #: right shape drawn on the board and the wrong number of rolls. A board
+    #: with only one enemy in the burst cannot tell those apart, and a plant
+    #: is what found it.
+    #:
+    #: Read by `dsl.target_of`, the door the way `dsl.reach_of` is the door
+    #: for `reshape`. Shares `reshape_when`, because a card rewriting both
+    #: rewrites them for the same attack. #712.
+    retarget: Any = None
     #: **Does the reshape replace the printed shape, or offer an alternative
     #: to it?** `False` replaces, which is what every caller meant until now
     #: and what `i2467p1` needs: the wand's *activation* is the choice, and
@@ -342,6 +358,7 @@ class Effects:
         drop_cost: ActionType | None = None,
         reshape: Callable[[Any], Any] | None = None,
         reshape_when: Callable[[dict[str, Any]], bool] | None = None,
+        retarget: Any = None,
         reshape_optional: bool = False,
         by: str = "",
         weapon: str = "",
@@ -425,6 +442,7 @@ class Effects:
             drop_cost=drop_cost,
             reshape=reshape,
             reshape_when=reshape_when,
+            retarget=retarget,
             reshape_optional=reshape_optional,
         )
         # **The ref of the row that laid this, as a plain attribute.**

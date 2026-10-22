@@ -2433,6 +2433,40 @@ def _reshaped(
     return None
 
 
+def target_of(
+    world: World, actor: int, p: Power, augment: int = 0
+) -> Target:
+    """This row's target line **for this creature**, replacement applied.
+
+    `Power.target_of` is the printed line; this is the per-creature door, the
+    way `reach_of` is for the range. One mechanism writes it --
+    `Cast.becomes_burst`, through `Effect.retarget` -- because a card that
+    turns a single-target attack into an area says in the same sentence that
+    each creature in the area is a target.
+
+    **Read in `_auto_targets` and nowhere else, deliberately.** The other
+    three readers of the printed line are `candidates` and `actions`, which
+    offer and draw, and `Power.target_of`'s own caller inside `Power`. The
+    widened line is strictly more permissive -- a bigger `count` and
+    `everyone` -- so a site that keeps reading the print offers *fewer*
+    targets than the card, never more, and `_stands_right` (the filter on an
+    explicitly handed target) reads neither field. Pointing the offer path
+    at this as well is a fair next step and is not needed by either row.
+    #712.
+    """
+    printed = p.target_of(augment)
+    for eff in world.effects.of(actor):
+        if eff.retarget is None or eff.suspended:
+            continue
+        gate = eff.reshape_when
+        if gate is not None and not gate(
+            {"power": p.ref, "range_kind": p.reach_of(0, augment).kind}
+        ):
+            continue
+        return eff.retarget
+    return printed
+
+
 def _stretched(
     world: World, actor: int, kind: str, ctx: dict[str, Any] | None = None
 ) -> int:
@@ -2594,7 +2628,17 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Squ
     # The form being used, not the printed base: an augment that turns a
     # melee swing into an area burst has a `within` the base row has not
     # got, and asking the base here offered the burst nowhere to land.
-    reach = switched(world, actor, p.reach_of(0, augment))
+    #
+    # **Through `reach_of` and not `switched` alone**, which is the same
+    # sentence one step further: `switched` applies a state-switched size and
+    # `reach_of` is "the door for reshapes" in its own words, so asking
+    # `switched` here saw a `c.reshape_area` that every other reader honoured.
+    # Measured: a reshape turning a ranged line into an area burst gave
+    # `reach_of` "Area burst 1 within 10" and `area_of` nine squares while
+    # this returned **nothing at all** -- so `use` refused the placement one
+    # question after the interface offered it, which is #533's failure and
+    # #738's. #712.
+    reach = reach_of(world, actor, p, 0, augment)
     if reach.kind == "close_blast":
         return sorted(blast_placements(mine, reach.size))
     if reach.kind in ("area_burst", "wall"):
@@ -3763,7 +3807,7 @@ def _auto_targets(
     dropped the zone on the caster's own feet and the damage somewhere else
     entirely. Two answers to "where is this power" is one too many.
     """
-    want = p.target_of(augment)
+    want = target_of(world, actor, p, augment)
     if origin is None and p.reach_of(branch, augment).kind in ("area_burst", "close_blast"):
         best: list[int] = []
         chosen: Square | None = None

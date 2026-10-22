@@ -33,7 +33,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Move a zone or a conjuration, keeping its shape.
 - `c.origin: Square | None`
   - the square an area was aimed at.
-- `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', optional: 'bool' = False, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.reshape_area(self, into: 'Callable[[Range], Range]', *, ref: 'str' = '', kinds: 'Sequence[str]' = (), keyword: 'Keyword | None' = None, cls: 'str' = '', optional: 'bool' = False, retarget: 'Any' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Replace the **shape** of another row's area, for as long as this lasts.
 - `c.resize_aura(self, label: 'str' = '', *, plus: 'int' = 0, to: 'int' = 0, cap: 'int' = 0) -> 'int'`
   - Change a standing aura's radius in place, and say so.

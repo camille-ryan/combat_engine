@@ -1164,6 +1164,26 @@ class Powers:
     pre_empts: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
         default_factory=dict
     )
+    #: The same substitutions, **imposed rather than offered**.
+    #:
+    #: `pre_empts` above is "you **can** X instead of Y": each registration
+    #: is its own action-menu entry and `Cast.instead_of` reads the chosen
+    #: one off `Cast.variant`. Two heroic weapon blocks print the other
+    #: mood -- *"**Instead of** normal damage, each target hit takes ongoing
+    #: 5 fire damage"* -- where there is no choice to click and no variant to
+    #: settle, and the clause must apply to a swing nobody picked from a
+    #: menu at all: `Cast.basic` calls `dsl.use` with no `variant`, so an
+    #: optional registration is read as variant 0 and the printed clause
+    #: stands. The substitution was registered, offered nowhere, and silent.
+    #:
+    #: Keyed and shaped exactly like `pre_empts` so `instead_of` can read
+    #: both, and consulted **first**: an imposed clause is not a choice, so
+    #: it cannot be one of the options a variant indexes.
+    #:
+    #: Written by `c.pre_empt(forced=True)`. #712.
+    forced_clauses: dict[tuple[str, str], list[tuple[Callable[[], Any], str]]] = field(
+        default_factory=dict
+    )
     #: A spellbook: rows the creature **owns and has not prepared**.
     #:
     #: `known` is what can be used, and it was the only list there was -- so

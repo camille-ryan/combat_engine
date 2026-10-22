@@ -3204,6 +3204,36 @@ class Cast:
         # to be exempt from, so a row whose whole content is "when it drops,
         # it makes a basic attack" emitted `PowerUsed` and no
         # `AttackDeclared`: finished-looking and inert.
+        # **An area-shaped basic attack is centred on the creature it was
+        # aimed at**, which is what "becomes a burst 1 centered on the
+        # target" prints and the only way an explicit target survives a
+        # reshape. `use`'s explicit-target arm filters by `_within_reach`,
+        # and an area line measured against one creature keeps nobody --
+        # so without this the swing silently did not happen: no
+        # `AttackDeclared`, no damage, and the hold not even spent.
+        #
+        # Handing the square as `origin` with no `targets` lets
+        # `_auto_targets` fill in everyone standing in the burst, which is
+        # the card's "each target hit". Reads through `dsl.reach_of` because
+        # the reshape is per-creature and the printed header still says
+        # ranged. #712.
+        from .dsl import get as _get
+        from .dsl import reach_of as _reach_of_for
+        from .query import squares as _squares
+
+        p = _get(ref)
+        origin: Square | None = None
+        if p is not None and _reach_of_for(
+            self.world, attacker, p, 0
+        ).kind in ("area_burst", "wall"):
+            there = sorted(_squares(self.world, target))
+            origin = there[0] if there else None
+        if origin is not None:
+            return use(
+                self.world, attacker, ref, origin=origin, spend=False,
+                trigger=self.trigger,
+                granted_by=self.me, granted_via=self.ref,
+            )
         return use(
             self.world, attacker, ref, targets=[target], spend=False,
             trigger=self.trigger,
@@ -6075,6 +6105,126 @@ class Cast:
 
         return self.bonus("may_enter", 1, on=who, until=until, when=allowed)
 
+    def becomes_burst(
+        self,
+        size: int = 1,
+        *,
+        vs: Defense | None = None,
+        damage: Callable[[Any], Any] | None = None,
+        ranged: bool = True,
+        on: int | None = None,
+        until: When = When.EOT,
+    ) -> list[Effect]:
+        """The next basic attack becomes a burst centred on its target.
+
+        One printed sentence rewrites three things about an attack that has
+        not been declared yet -- its **shape**, its **defence** and its
+        **damage** -- and two heroic weapon blocks print it:
+
+            "The next ranged basic attack you make with this weapon before
+            the end of your turn becomes a burst 1 centered on the target.
+            Use your normal attack bonus, but against Reflex. Instead of
+            normal damage, each target hit takes ongoing 5 fire damage."
+
+        **One verb for the three because it is one narrowing**, which is the
+        thing #711 split and #712 was filed not to repeat: shape, defence and
+        damage all have to apply to *the same* attack, and three separate
+        calls would each have to re-derive which attack that is and could
+        drift apart. The three edits go through the three doors that already
+        exist -- `c.reshape_area`, `c.attacks_defence`, `c.pre_empt` -- and
+        what this adds is the shared gate and the one-shot.
+
+        The gate is the creature's **own** basic attack ref, read off
+        `Powers`, not the engine's generic one: a monster points
+        `Powers.ranged` at one of its printed rows and a hold scoped to
+        `"rba"` would never fire for it. That is #398's bug, in a new place.
+
+        `damage` is handed the `Cast` of the attack being made, so it can
+        read that attack's target and its own numbers:
+
+            c.becomes_burst(1, vs=Defense.REFLEX,
+                            damage=lambda using: using.ongoing(5, FIRE))
+
+        With no `damage` the printed damage stands, which is what a card
+        changing only the shape would want. With no `vs` the printed defence
+        stands.
+
+        **Ends on the attack, not only on the clock.** `until` is the printed
+        duration -- "before the end of your turn" -- but a hold that outlived
+        its own use would rewrite the second basic attack too. So the verb
+        watches for the qualifying use and lifts all three together, which
+        also keeps them from drifting apart: `_reshaped` is a **read** with no
+        side effect, called once per candidate origin while the renderer
+        previews squares, so a one-shot spent there would burn on a preview.
+        Its docstring says so and names the row that does it this way.
+
+        Returns the effects it laid, so a row can end them early.
+        """
+        from .components import Powers
+
+        who = on if on is not None else self.me
+        known = self.world.get(who, Powers)
+        if known is None:
+            return []
+        from .basic import MELEE, RANGED
+        from .dsl import EACH_ENEMY
+
+        ref = (known.ranged or RANGED) if ranged else (known.basic or MELEE)
+        laid: list[Effect] = []
+
+        def _is_it(ctx: dict[str, Any]) -> bool:
+            return ctx.get("power") == ref
+
+        shape = self.reshape_area(
+            # `within` off the printed range's own size, because the card
+            # does not restate how far the weapon throws -- the burst lands
+            # where the basic attack could already have reached.
+            lambda r: replace(r, kind="area_burst", size=size,
+                              within=r.within if r.kind == "area_burst"
+                              else (r.size or r.within)),
+            ref=ref, on=who, until=until,
+            # **The target line widens with the shape, in one effect.**
+            # "Each target hit" is the card's own next clause, and
+            # reshaping the range alone left `_auto_targets` honouring the
+            # printed `ONE_CREATURE` -- the right burst drawn on the board
+            # and exactly one roll inside it. One effect rather than two so
+            # the two can never come apart, and they are gated by the same
+            # `reshape_when`.
+            retarget=EACH_ENEMY,
+        )
+        if shape is not None:
+            laid.append(shape)
+        if vs is not None:
+            moved = self.attacks_defence(vs, when=_is_it, on=who, until=until)
+            if moved is not None:
+                laid.append(moved)
+        if damage is not None:
+            swap = self.pre_empt(ref, "damage", damage, forced=True,
+                                 on=who, until=until)
+            if swap is not None:
+                laid.append(swap)
+
+        def _spent(ev: Any) -> None:
+            if getattr(ev, "ref", "") != ref and getattr(ev, "power", "") != ref:
+                return
+            for effect in laid:
+                self.end_effect(effect)
+
+        # **`PowerResolved` and not `PowerUsed`, which cost an hour.**
+        # Measured order inside one use: `PowerUsed`, `AttackDeclared`,
+        # `DamageApplied`, `PowerResolved`. Spending on `PowerUsed` lifted
+        # the defence swap and the damage substitution *before the attack
+        # was declared*, and left only the reshape working -- because the
+        # shape is read during targeting, which happens earlier still. The
+        # symptom was a burst that rolled against the printed defence for
+        # the printed damage: two thirds of the card silently missing, with
+        # the third that showed making it look wired up.
+        from .events import PowerResolved
+
+        self.watch(PowerResolved, _spent, until=until, on=who,
+                   label=f"{self.ref} spent")
+        return laid
+
     def reshape_area(
         self,
         into: Callable[[Range], Range],
@@ -6084,6 +6234,7 @@ class Cast:
         keyword: Keyword | None = None,
         cls: str = "",
         optional: bool = False,
+        retarget: Any = None,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -6168,6 +6319,7 @@ class Cast:
         return self.world.effects.apply(
             who, self.me, until, label=self.ref, by=self.ref,
             reshape=into, reshape_when=gate, reshape_optional=optional,
+            retarget=retarget,
         )
 
     def shares_space(
@@ -9363,6 +9515,7 @@ class Cast:
         what: str,
         clause: Callable[[Any], Any],
         *,
+        forced: bool = False,
         on: int | None = None,
         until: When = When.ENCOUNTER,
     ) -> Effect | None:
@@ -9410,7 +9563,8 @@ class Cast:
         )
         if effect is None:
             return None
-        known.pre_empts.setdefault(key, []).insert(0, entry)
+        table = known.forced_clauses if forced else known.pre_empts
+        table.setdefault(key, []).insert(0, entry)
         # Side state, so it lifts and comes back with the effect (#470). A
         # suspended registration must not keep offering its menu entry:
         # the option would still be clickable and would then run a clause
@@ -9421,10 +9575,10 @@ class Cast:
         # and its own note says why: one undo named once, so a verb holding
         # side state cannot subtract twice.
         effect.on_suspend.append(
-            lambda: _drop_entry(known.pre_empts, key, entry)
+            lambda: _drop_entry(table, key, entry)
         )
         effect.on_resume.append(
-            lambda: known.pre_empts.setdefault(key, []).insert(0, entry)
+            lambda: table.setdefault(key, []).insert(0, entry)
         )
         return effect
 
@@ -9478,6 +9632,23 @@ class Cast:
         """
         from .components import Powers
 
+        # **An imposed substitution is read first and is not a choice.**
+        # "Instead of normal damage, each target hit takes ongoing 5 fire
+        # damage" has no variant to settle -- nobody clicked anything, and
+        # `Cast.basic` calls `use` with no `variant` at all -- so a clause
+        # registered here applies whatever the menu said. Checked before the
+        # variant fast path below, which would otherwise return the printed
+        # clause and leave the registration silent. #712.
+        imposed = self.world.get(self.me, Powers)
+        if imposed is not None:
+            forced = imposed.forced_clauses.get((self.ref, what))
+            if forced:
+                # Latest first, as `pre_empts` is ordered, and only one
+                # applies: two cards replacing one clause is a choice among
+                # them and `forced` is by definition not a choice, so the
+                # most recent registration wins rather than composing.
+                clause, _source = forced[0]
+                return clause(self)
         # A fast path and **not** the guard: nearly every use in a fight is
         # variant 0, and this spares it building `flat`. Reverting it leaves
         # the driver green, because the range check below rejects 0 on its

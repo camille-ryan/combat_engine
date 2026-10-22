@@ -3217,6 +3217,215 @@ def rough_ground_that_knows_who_made_it(out: Result) -> None:
     )
 
 
+def a_basic_attack_that_becomes_a_burst(out: Result) -> None:
+    """*"The next ranged basic attack you make with this weapon before the
+    end of your turn becomes a burst 1 centered on the target. Use your
+    normal attack bonus, but against Reflex. Instead of normal damage, each
+    target hit takes ongoing 5 fire damage."*
+
+    One printed sentence rewriting three things about an attack not yet
+    declared -- shape, defence and damage -- and two heroic weapon blocks
+    print it. #712 insisted the three land together rather than as three
+    narrowings, because #711 had just been split for exactly that.
+
+    **Four things had to be true and three of them were silently false.**
+
+    * `aim_points` read `Power.reach_of` where `dsl.reach_of` is "the door
+      for reshapes" in its own words, so a reshaped range gave nine squares
+      from `area_of` and **nowhere to aim** -- `use` then refused the
+      placement one question after the interface offered it.
+    * `use`'s explicit-target arm filters by `_within_reach`, and an area
+      line measured against one creature keeps nobody -- so the swing did
+      not happen at all: no `AttackDeclared`, no damage, and the hold not
+      even spent. `Cast.basic` centres an area-shaped basic attack on the
+      creature it was aimed at, which is what the card prints.
+    * `c.pre_empt` is "you **can** X instead of Y" -- an action-menu entry
+      read off `Cast.variant` -- and these cards impose their clause with
+      nothing to click. `Cast.basic` calls `use` with no variant, so the
+      registration was read as variant 0 and the printed damage stood.
+      `forced=True` is the mood the table was missing.
+    * the hold was spent on `PowerUsed`, which fires **before**
+      `AttackDeclared`. Measured order: `PowerUsed`, `AttackDeclared`,
+      `DamageApplied`, `PowerResolved`. So it lifted the defence and the
+      damage mid-use and left only the reshape -- which is read during
+      targeting, earlier still. Two thirds of the card missing, with the
+      third that worked making it look wired up.
+
+    A bow is put in the caster's hands, because `Power.can_branch` reads the
+    **printed** kind and correctly demands something to fire -- the audit
+    board's character for both rows carries none, and `usable` answered
+    `(False, 'requirement not met')` before any of this.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.chargen import LONGBOW
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY, aim_points, reach_of, usable
+    from combat_engine.engine.events import AttackDeclared, DamageApplied
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    rba = REGISTRY["rba"]
+
+    def armed(ref: str):  # noqa: ANN202
+        """`ref`'s board with a bow in hand, which the card requires."""
+        world, me, _ = _posed(ref, 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [LONGBOW]
+        gear.stowed = set()
+        return world, me, sorted(enemies(world, me))
+
+    def crowd(world, foe: int, friend: int) -> None:  # noqa: ANN001
+        """Stand `friend` next to `foe`, so a burst 1 catches both.
+
+        **Without this the rule could not tell the two routes apart**, and a
+        plant proved it: `use`'s explicit-target arm accepts a creature for
+        an area line and connects -- with *that one creature*. The card says
+        "each target hit", so centring the burst on the target and letting
+        `_auto_targets` fill it is the difference, and it is invisible on a
+        board where only one enemy stands in the burst.
+
+        Lift, move, re-index: `Position.square` alone leaves `Grid`'s
+        occupant index naming the old square.
+        """
+        from combat_engine.engine.components import Position
+
+        there = world.need(foe, Position).square
+        beside = (there[0] + 1, there[1])
+        world.grid.lift(friend)
+        world.need(friend, Position).square = beside
+        world.grid.place(friend, frozenset({beside}))
+
+    def swing(world, me: int, ref: str, foe: int):  # noqa: ANN001, ANN202
+        """Make the basic attack and report what was declared and dealt."""
+        said: list[tuple[int, str]] = []
+        dealt: list[tuple[int, str]] = []
+        world.bus.on(AttackDeclared, lambda ev: said.append((ev.target, str(ev.vs))))
+        world.bus.on(
+            DamageApplied,
+            lambda ev: dealt.append((ev.amount, str(getattr(ev, "dtype", "?")))),
+        )
+        world.rng.loaded = 20
+        made = Cast(world=world, me=me, ref=ref).basic(on=foe, ranged=True)
+        return made, said, dealt
+
+    def burns(world) -> list[tuple[int, str]]:  # noqa: ANN001
+        return [
+            (e.ongoing[0], str(e.ongoing[1]))
+            for e in world.effects.live.values()
+            if getattr(e, "ongoing", None)
+        ]
+
+    # -- the control: no hold, so the printed card stands -----------------
+    world, me, foes = armed("i1300p1")
+    out.that(usable(world, me, rba)[0],
+             "a ranged basic attack is usable with a bow in hand -- the"
+             " premise of everything below, and false on the bare board",
+             f"{usable(world, me, rba)}")
+    out.that(str(reach_of(world, me, rba, 0)) == "Ranged 10"
+             and not aim_points(world, me, rba),
+             "and is a Ranged line with nothing to aim at: a single-target"
+             " row has no placement squares, which is the gap the symbol"
+             " names",
+             f"{reach_of(world, me, rba, 0)}, {len(aim_points(world, me, rba))} aims")
+    made, said, dealt = swing(world, me, "i1300p1", foes[0])
+    out.that(made and said and said[0][1] == "ac" and dealt,
+             "unaided it rolls against AC for ordinary weapon damage -- the"
+             " negative control, and the thing all three edits move",
+             f"{said}, {dealt}")
+
+    # -- i1300p1: shape, defence and damage, all three --------------------
+    world, me, foes = armed("i1300p1")
+    REGISTRY["i1300p1"].body(Cast(world=world, me=me, ref="i1300p1"))
+    shape = reach_of(world, me, rba, 0)
+    out.that(shape.kind == "area_burst" and shape.size == 1,
+             "with the daily spent the basic attack is a burst 1,"
+             " `within` the distance the weapon already threw",
+             f"{shape}")
+    out.that(len(aim_points(world, me, rba)) > 0,
+             "**and it has somewhere to land.** `aim_points` read the"
+             " printed header, so a reshape gave an area with no placement"
+             " and `use` refused what the interface had offered",
+             f"{len(aim_points(world, me, rba))} aims")
+    crowd(world, foes[0], foes[1])
+    # Everybody a burst 1 centred on the target would actually catch,
+    # derived rather than counted by hand: a third enemy already stood
+    # inside it on this board and a literal 2 was wrong for that reason.
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.grid import spread
+    from combat_engine.engine.query import squares as _sq
+
+    inside = spread({world.need(foes[0], Position).square}, 1)
+    caught = {f for f in foes if _sq(world, f) & inside}
+    made, said, dealt = swing(world, me, "i1300p1", foes[0])
+    out.that(made, "the swing happens", f"{made}")
+    out.that(len(said) == len(caught) and len(caught) > 1,
+             "**and it catches both enemies standing in the burst**, which"
+             " is \"each target hit\". The explicit-target arm of `use`"
+             " accepts a creature for an area line and connects with that"
+             " one creature only -- so this is the assertion that tells the"
+             " two routes apart, and a plant showed nothing else does",
+             f"{len(said)} declared of {len(caught)} in the burst: {said}")
+    out.that(said and all(vs == "ref" for _t, vs in said),
+             "it rolls against Reflex, which the card says and the printed"
+             " line does not",
+             f"{said}")
+    out.that(not dealt,
+             "**and deals no ordinary damage**, which is the whole of"
+             " \"instead of normal damage\" and the clause `c.pre_empt`"
+             " could not impose because it is an offered menu entry",
+             f"{dealt}")
+    out.that((5, "fire") in burns(world),
+             "the burn is there instead: ongoing 5 fire, save ends by"
+             " `c.ongoing`'s own default",
+             f"{burns(world)}")
+    out.that(str(reach_of(world, me, rba, 0)) == "Ranged 10",
+             "and the hold is spent by the attack, so the *next* basic"
+             " attack is the printed one again. Spent on `PowerResolved`:"
+             " `PowerUsed` fires before `AttackDeclared` and lifted two of"
+             " the three edits mid-use",
+             f"{reach_of(world, me, rba, 0)}")
+
+    # -- i2878p1: the same card, the other defence, damage retyped --------
+    world, me, foes = armed("i2878p1")
+    REGISTRY["i2878p1"].body(Cast(world=world, me=me, ref="i2878p1"))
+    out.that(reach_of(world, me, rba, 0).kind == "area_burst",
+             "i2878p1 reshapes the same way")
+    made, said, dealt = swing(world, me, "i2878p1", foes[0])
+    out.that(said and all(vs == "fort" for _t, vs in said),
+             "against Fortitude where its twin says Reflex -- the pair is"
+             " what shows the defence is read off the card and not fixed in"
+             " the verb",
+             f"{said}")
+    out.that(dealt and all(t == "thunder" for _a, t in dealt),
+             "and it *does* deal damage, retyped thunder: \"equal to the"
+             " normal damage\" is a replacement whose recipe is the basic"
+             " attack's own, read off the Cast of the attack being made",
+             f"{dealt}")
+    out.that(dealt and dealt[0][0] > 0,
+             "a real number rather than nothing -- the two rows differ in"
+             " exactly this, and a verb that dropped the damage for both"
+             " would pass i1300p1's assertion above",
+             f"{dealt}")
+
+    # -- the gate: a melee basic attack is not touched --------------------
+    world, me, foes = armed("i1300p1")
+    REGISTRY["i1300p1"].body(Cast(world=world, me=me, ref="i1300p1"))
+    mba = REGISTRY["mba"]
+    out.that(str(reach_of(world, me, mba, 0)) == "Melee 1",
+             "the melee basic attack is left alone -- the card says"
+             " *ranged*, and the hold is scoped to the creature's own ranged"
+             " basic ref rather than to basic attacks at large",
+             f"{reach_of(world, me, mba, 0)}")
+
+    for ref, want in (("i1300p1", Defense.REF), ("i2878p1", Defense.FORT)):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} waits on nothing", f"{REGISTRY[ref].unfinished}")
+        out.that(want in (Defense.REF, Defense.FORT),
+                 f"and the defence {ref} names is one the engine has")
+
+
 def ground_made_harder_for_one_creature(out: Result) -> None:
     """*"Each enemy that you hit treats all squares as difficult terrain."*
 
@@ -26421,14 +26630,22 @@ def a_retype_names_its_keyword_its_sources_and_one_use(out: Result) -> None:
                  f"{ref} carries no marker now",
                  f"{REGISTRY[ref].unfinished}")
 
-    # -- the two rows the symbol was ALSO covering, now pointed elsewhere --
+    # -- the two rows the symbol was ALSO covering, now written ------------
+    #
+    # This pin used to assert they still carried *a* marker and merely not
+    # this one, which was the evidence that #711's symbol had been split
+    # rather than silently widened. #712 then wrote both, so the pin records
+    # the finished state instead: they must still not name the retype
+    # symbol, and they must now name nothing at all.
     for ref in ("i1300p1", "i2878p1"):
-        out.that(bool(REGISTRY[ref].unfinished)
-                 and "c.next_attack_becomes()" not in str(
-                     REGISTRY[ref].unfinished),
-                 f"{ref} no longer shares a symbol with the retype rows --"
-                 " it turns a single-target attack into a burst, which is"
+        out.that("c.next_attack_becomes()" not in str(REGISTRY[ref].unfinished),
+                 f"{ref} does not share a symbol with the retype rows -- it"
+                 " turns a single-target attack into a burst, which was"
                  " #712 and a different mechanism",
+                 f"{REGISTRY[ref].unfinished}")
+        out.that(not REGISTRY[ref].unfinished,
+                 f"and {ref} is written: the split was the right call and"
+                 " both halves have landed",
                  f"{REGISTRY[ref].unfinished}")
 
 
@@ -30984,6 +31201,9 @@ DRIVERS = {
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,
                        "an aura can be difficult ground, waived for a side"),
+    "becomes_burst": (a_basic_attack_that_becomes_a_burst,
+                      "a basic attack rewritten into a burst: shape,"
+                      " defence and damage together (#712)"),
     "harder_for_one": (ground_made_harder_for_one_creature,
                        "rough ground imposed on one creature, and it"
                        " follows the creature it is measured from (#831)"),

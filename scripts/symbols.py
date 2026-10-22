@@ -75,6 +75,7 @@ CATEGORIES: dict[str, dict] = {
                 "add_target", "drop_target", "also_hits", "as_basic", "as_implement",
                 "as_ranged", "as_though_hit_by", "as_weapon", "attack",
                 "attack_with", "attacks_defence", "autohit", "basic",
+                "becomes_burst",
                 "cast_from", "coup_de_grace", "crit", "disarm",
                 "flurry_of_blows", "grant_attack", "hit", "landed",
                 "provoke", "redirect", "retarget_defence", "strike",

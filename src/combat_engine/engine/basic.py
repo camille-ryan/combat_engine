@@ -69,8 +69,22 @@ def _melee_basic(c: Cast) -> None:
 def _ranged_basic(c: Cast) -> None:
     # See `_melee_basic` for why the damage reads `c.attack_mod`: it has to
     # follow whichever ability the line above resolved to.
+    #
+    # **The damage goes through `c.instead_of` so another row can replace
+    # it**, which is what "instead of normal damage, each target hit takes
+    # ongoing 5 fire damage" needs: the clause being replaced belongs to
+    # *this* row, and `c.pre_empt` requires the row being changed to read
+    # the clause by name. Two heroic weapon blocks print that sentence and
+    # neither could be written. #712.
+    #
+    # Inert for everybody else, and that is the contract rather than a
+    # hope: `instead_of` opens `if not self.variant: return default()`, and
+    # `variant` is settled by `dsl.use` from the chosen menu entry before
+    # the body runs -- so with nothing registered this is one attribute read
+    # and no decision. A mid-body prompt here would have cost every basic
+    # attack in every fight a choice.
     if c.strike():
-        c.damage(c.w(1), c.attack_mod)
+        c.instead_of("damage", lambda: c.damage(c.w(1), c.attack_mod))
 
 
 @power(

@@ -70,6 +70,7 @@ from combat_engine.engine import (
     DamageApplied,
     DamageRolled,
     DamageType,
+    Defense,
     Dropped,
     Effect,
     EffectApplied,
@@ -2813,13 +2814,34 @@ def i2853p1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.THUNDER],
-    todo=("c.becomes_burst()",),
 )
 def i2878p1(c: Cast) -> None:
     """The same card as `i1300p1` a level up, against Fortitude and with
-    the weapon's own damage rather than an ongoing burn. Re-pointed with
-    it: see that row for why `c.next_attack_becomes()` was two mechanisms
-    and this is the other one. #712."""
+    the weapon's own damage rather than an ongoing burn. Written with it:
+    see that row for why `c.next_attack_becomes()` was two mechanisms and
+    this is the other one.
+
+    **"Thunder damage equal to the normal damage" is a replacement and not
+    a retype**, which is why it goes through `damage=` rather than
+    `c.deals(dtypes=)`. The two read the same on this card and would come
+    apart on the next: a retype standing on the creature would also colour
+    the *next* basic attack, and the hold here is spent by this one.
+
+    The recipe is `_ranged_basic`'s own -- `c.w(1)` and `c.attack_mod`, read
+    off the `Cast` of the attack being made rather than off this row's, so
+    it follows whichever ability the weapon in hand resolved to and
+    whichever weapon that is. Writing the numbers here would have frozen
+    both at the moment the daily was spent.
+
+    The burst stays 1: `burst 2` is Level 14 and `burst 3` is Level 24,
+    which is out of band. #712."""
+    c.becomes_burst(
+        1,
+        vs=Defense.FORT,
+        damage=lambda using: using.damage(
+            using.w(1), using.attack_mod, dtype=DamageType.THUNDER
+        ),
+    )
 
 
 @power(

@@ -62,6 +62,7 @@ from combat_engine.engine import (
     Cast,
     CloseBlast,
     DamageType,
+    Defense,
     EffectApplied,
     Forced,
     Healed,
@@ -1796,7 +1797,6 @@ def i1295x1(c: Cast) -> None:
     reach=PERSONAL,
     target=SELF,
     keywords=[Keyword.FIRE],
-    todo=("c.becomes_burst()",),
 )
 def i1300p1(c: Cast) -> None:
     """Rewrites the next ranged basic attack into a burst 1 centred on the
@@ -1811,7 +1811,27 @@ def i1300p1(c: Cast) -> None:
     want an edit to the shape, the defence and the damage of an attack not
     yet declared -- one symbol for the three together, because they are one
     printed sentence and splitting them would be the same mistake again.
-    #712."""
+
+    **Written on `c.becomes_burst`, which is that one symbol.** The three
+    edits go through the three doors that already existed --
+    `c.reshape_area`, `c.attacks_defence` and `c.pre_empt` -- and what the
+    verb adds is the shared gate (this creature's own ranged basic attack
+    ref, not the engine's generic one) and the one-shot that lifts all three
+    on the use rather than only on the clock.
+
+    The burst stays 1: the card's `burst 2` and `burst 3` lines are Level 14
+    and 24, which is out of band.
+
+    `c.ongoing` defaults to `When.SAVE_ENDS`, which is what the card prints,
+    so the duration is not restated here. It replaces the damage rather than
+    adding to it -- the whole of "instead of normal damage" -- and that is
+    what the `damage=` callable is: the clause `_ranged_basic` now reads
+    through `c.instead_of("damage", ...)`. #712."""
+    c.becomes_burst(
+        1,
+        vs=Defense.REF,
+        damage=lambda using: using.ongoing(5, DamageType.FIRE),
+    )
 
 
 @power(

@@ -29,6 +29,8 @@ Making an attack, and what the attack turns out to be.
   - Make the attack being answered simply hit. It cannot be rolled away.
 - `c.basic(self, *, on: 'int | None' = None, who: 'int | None' = None, ranged: 'bool' = False, window: 'str' = '') -> 'bool'`
   - Make a basic attack -- whichever row that creature's actually is.
+- `c.becomes_burst(self, size: 'int' = 1, *, vs: 'Defense | None' = None, damage: 'Callable[[Any], Any] | None' = None, ranged: 'bool' = True, on: 'int | None' = None, until: 'When' = <When.EOT: 'end of this turn'>) -> 'list[Effect]'`
+  - The next basic attack becomes a burst centred on its target.
 - `c.cast_from(self, who: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Determine line of sight and effect for your ranged and area
 - `c.coup_de_grace(self, *, on: 'int | None' = None) -> 'bool'`
