@@ -3132,14 +3132,29 @@ def m5534a3(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("Target.creature_kind",),
+    dropped=("etl.monster.species",),
 )
 def m5749a0(c: Cast) -> None:
     """The aura's grants go to the whole of its side: `c.grants_in` filters on
     `side` and on nothing a creature *is*, so the card's narrowing to allies
-    of one type word is the dropped half -- `Target.creature_kind`, read off
-    the compendium row -- and every ally inside gets the resistance and the
-    bonus. `kind=` is the word the card prints, which here is "power"."""
+    of one type word is the dropped half -- and every ally inside gets the
+    resistance and the bonus. `kind=` below is `c.grants_in`'s **bonus
+    type**, which the card also prints, and is a different word from the one
+    the narrowing wants.
+
+    **Re-pointed off `Target.creature_kind`, which was wrong twice over.**
+    This row is `target=NO_TARGET`: the narrowing is on an aura's grants and
+    not on any target line, so no `Target` field could ever reach it. And the
+    species word the card narrows to appears in **no stat block in the
+    corpus** -- 0 of them carry it in `kind`, `keywords` or `origin`,
+    measured across all three columns. A filter built today would therefore
+    match nobody and the aura would grant to nobody, which is worse than the
+    present too-wide grant rather than merely narrower.
+
+    So it is the same gap `m5878a5` already carries: for these blocks the
+    species word is in the creature's **name**, and a name cannot enter a
+    tracked file, so there is nothing to extract. #570.
+    """
     ring = c.aura(1, label=f"{c.ref} aura", until=When.ENCOUNTER, on=c.me)
     c.resist_in(ring, 5, DamageType.FIRE, side="team")
     c.grants_in(ring, AC, 2, side="team", kind="power")
