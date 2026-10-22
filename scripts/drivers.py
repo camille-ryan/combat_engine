@@ -16690,9 +16690,11 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              " note predicted would be left when a range verb arrived"
              " (#837)",
              f"{REGISTRY['f1277'].unfinished}")
-    out.that(REGISTRY["f2099"].unfinished == ("Weapon.brutal",),
-             "and f2099 to a property with no reader, which is the gap worth"
-             f" naming rather than the write ({REGISTRY['f2099'].unfinished})")
+    out.that(REGISTRY["f2099"].unfinished == (),
+             "and f2099 waits on nothing: its range landed here and its"
+             " brutal got the **reader** the old marker named, which is"
+             " `Cast._brutal_floor` read inside `_reroll_floor` (#840)."
+             f" ({REGISTRY['f2099'].unfinished})")
 
     world2, me2, _ = _posed("f1277", 1)
     c2 = Cast(world=world2, me=me2, ref="f1277")
