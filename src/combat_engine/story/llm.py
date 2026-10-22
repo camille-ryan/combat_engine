@@ -308,6 +308,41 @@ def structured(role: Role, messages: list[dict], schema: dict) -> dict:
 # -- running several at once ------------------------------------------------
 
 
+class Later:
+    """Work already running. `get()` waits for it and returns the answer.
+
+    **For overlapping model time with human time**, which is the only idle
+    time in a beat worth reclaiming. `fan_out`'s docstring is clear that
+    running companions together buys nothing against a default ollama,
+    because the server generates one at a time -- but a person deciding
+    what to say and type is several seconds during which the GPU does
+    nothing at all, and that is free.
+    """
+
+    def __init__(self, job: Callable[[], Any]) -> None:
+        self._pool = ThreadPoolExecutor(max_workers=1)
+        self._future = self._pool.submit(job)
+
+    def get(self) -> Any:
+        """The answer, or `None` if the job raised.
+
+        Swallowed for the same reason `fan_out` swallows: a companion
+        failing to answer should cost that character their turn, not end
+        the session.
+        """
+        try:
+            return self._future.result()
+        except Exception:
+            return None
+        finally:
+            self._pool.shutdown(wait=False)
+
+
+def start(job: Callable[[], Any]) -> Later:
+    """Begin now, collect later."""
+    return Later(job)
+
+
 def fan_out(jobs: list[Callable[[], Any]], *, limit: int = 8) -> list[Any]:
     """Run them together and keep the order. A job that raises yields `None`.
 

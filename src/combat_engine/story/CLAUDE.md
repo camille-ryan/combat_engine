@@ -191,6 +191,30 @@ hard -- two facts made materially harder than the author set them. `dc` on
 `Lore` and on `Affordance`, with the band as the fallback for a page that
 stated nothing.
 
+## Everybody declares at once, which is a rule and not an ordering
+
+Nobody sees anybody else's intent in a beat: the human and each companion
+declare blind, and the DM adjudicates the set. That is Camille's design and
+it is **load-bearing**, because it is what lets the companions' model calls
+start *before* the human is prompted -- `situation` is fixed at the top of
+the beat and `declare` reads only previous beats, so a companion's answer
+cannot depend on the human's line and never could.
+
+The payoff is the only idle stretch in a beat. `fan_out` buys nothing
+against a default ollama, which generates one request at a time, but a
+person composing a line is several seconds of a GPU doing nothing.
+Interleaved repeats, 6s of simulated typing: **median 23.7s against 26.8s,
+so 3.1s saved against a 6s ceiling**, and the ceiling is the think itself --
+a real person takes longer than 6s, so both grow. The model's own variance
+is wider than the effect (17.9-26.3s within one arm), so treat 3.1s as soft
+and the direction as solid; a single uninterleaved pair reported 12.5s,
+which is arithmetically impossible as overlap and was mostly drift.
+
+`drivers.py beat_loop` asserts the invariant rather than the speed: a
+companion is handed the identical scene whether the human typed nothing or
+kicked the table over. Breaking it -- moving the work after the prompt and
+feeding the human's intent in -- goes red.
+
 ## The name is tried first, and that is the measurement to keep
 
 `cast_list` resolves a module's own word for a creature against the

@@ -28505,6 +28505,49 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"{spoke(bt.Director(scripted=True), 16)}",
     )
 
+    # **A companion's declaration cannot depend on the human's line**, and
+    # that invariant is what makes starting the companions before the
+    # prompt safe rather than merely faster. Everybody declares at once and
+    # nobody sees anybody else's intent -- which is the design, not an
+    # accident of ordering -- so this records exactly what `declare` is
+    # handed and asserts two runs with different typing agree.
+    class Spies(bt.Director):
+        # A plain attribute rather than a constructor argument: `Director`
+        # is a dataclass, so overriding `__init__` fights its generated one
+        # and loses the field types.
+        seen: list = []  # noqa: RUF012
+
+        def declare(self, actor: bt.Actor, playing: bt.Playing,
+                    situation: str) -> bt.Intent:
+            self.seen.append((actor.name, situation,
+                              tuple(str(i) for b in playing.beats
+                                    for i in b.intents)))
+            return bt.Intent(actor.slot, actor.name, played=True,
+                             doing="looks around")
+
+    def handed(said: tuple[str, str]) -> list:
+        board = tbl.lay(party, seed=31)
+        seen: list = []
+        try:
+            cast = [bt.Actor(0, "A", "fighter", "human"),
+                    bt.Actor(1, "B", "cleric", "ai"),
+                    bt.Actor(2, "C", "rogue", "ai")]
+            spy = Spies(scripted=True)
+            spy.seen = seen
+            bt.one_beat(bt.Playing(scene=scene), board, cast, spy,
+                        ask_human=lambda a, _s: said, party_level=2)
+            return seen
+        finally:
+            board.strike()
+
+    quiet = handed(("", "waits"))
+    loud = handed(("I draw my sword and shout.", "kicks the table over"))
+    out.that(
+        bool(quiet) and quiet == loud,
+        "a companion is handed the same scene whatever the human typed",
+        f"{len(quiet)} declaration(s); identical: {quiet == loud}",
+    )
+
     # **A companion cannot end the scene.** Playing solo, both transitions
     # in one scene were taken by model-played characters while the person
     # at the keyboard was mid-conversation.

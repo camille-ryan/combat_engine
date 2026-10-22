@@ -708,8 +708,34 @@ def one_beat(
         beat.recalled = _recall(playing, table, actors, party_level)
         playing.learnt += [r.fact for r in beat.recalled if r.knew]
 
-    # -- declare. Humans first, so a person is never waiting on a model only
-    # to find the scene already moved under them.
+    # -- declare. **The companions think while the person is typing.**
+    #
+    # Everybody declares at once and nobody sees anybody else's intent --
+    # that is the design, and it is what makes this safe: `situation` is
+    # fixed above and `declare` reads only previous beats, so a companion's
+    # answer does not depend on the human's line and never did. Starting
+    # the work before the prompt is therefore **identical in behaviour** and
+    # reclaims the one genuinely idle stretch in a beat.
+    #
+    # Worth being precise about where the saving comes from. `fan_out` buys
+    # nothing against a default ollama, which generates one request at a
+    # time -- but a person deciding what to say is several seconds of a GPU
+    # doing nothing, and that is the time this takes back. Both the `joins`
+    # call and the declarations it leads to run inside one background job,
+    # so the whole chain overlaps the typing rather than just its tail.
+    def companions() -> tuple[list[int], list[Intent | None]]:
+        joining = set(director.joins(playing, actors))
+        chosen = [a for a in actors if a.played and a.slot in joining]
+        return (
+            [a.slot for a in chosen],
+            llm.fan_out([
+                (lambda a=a: director.declare(a, playing, situation))
+                for a in chosen
+            ]),
+        )
+
+    pending = llm.start(companions)
+
     for actor in actors:
         if actor.played:
             continue
@@ -718,14 +744,11 @@ def one_beat(
             beat.intents.append(Intent(
                 slot=actor.slot, name=actor.name, played=False,
                 speech=speech, doing=doing))
-    # **Not everybody acts every beat.** The DM decides who comes in; the
-    # human was asked above regardless. See `Director.joins`.
-    joining = set(director.joins(playing, actors))
-    played = [a for a in actors if a.played and a.slot in joining]
-    beat.joined = [a.slot for a in played]
-    for intent in llm.fan_out(
-        [(lambda a=a: director.declare(a, playing, situation)) for a in played]
-    ):
+
+    got = pending.get()
+    slots, theirs = got if got is not None else ([], [])
+    beat.joined = slots
+    for intent in theirs:
         if intent is not None and (intent.speech or intent.doing):
             beat.intents.append(intent)
     beat.intents.sort(key=lambda i: i.slot)
