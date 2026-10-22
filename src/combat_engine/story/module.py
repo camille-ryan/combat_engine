@@ -331,6 +331,18 @@ class Npc:
     #: `voice` is how they speak and was never meant to carry this. A
     #: description belongs on the person, not in the prose of whichever
     #: scene happened to introduce them.
+    #:
+    #: **Lead with the pronoun.** Measured, n=10 per arm, by exact search
+    #: rather than a judge: the DM used a pronoun for a described character
+    #: **2 of 10** times with the description written as prose, 4 of 10
+    #: with no description at all, and **8 of 10** with "a man, he/him"
+    #: first. The rest were vague constructions that avoid referring to
+    #: the person.
+    #:
+    #: It is **not** a fix for a wrong pronoun, and the field does not
+    #: claim to be: zero of thirty samples misgendered anybody, while live
+    #: play produced it twice. The probe cannot reproduce it, which is true
+    #: of every probe in this component.
     looks: str = ""
     #: The affordance that has to be **won** before this person is in the
     #: scene at all. Empty means they are there from the first beat, which

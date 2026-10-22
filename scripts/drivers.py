@@ -29163,6 +29163,33 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         f"{pal_sees[:110]!r}",
     )
 
+    # **A beat where nobody spoke says so.** With no party lines the prompt
+    # was silent about their absence, and the model answered a proposal
+    # nobody had made: "I appreciate your enthusiasm, but I insist we wait
+    # until morning", with nothing on the table.
+    asked.clear()
+    llm.chat = tap2  # ty: ignore[invalid-assignment]
+    try:
+        hush = bt.Playing(scene=described)
+        bt.Director(roles=llm.ROLES).react(hush, [], [])
+        empty = asked[-1]
+        bt.Director(roles=llm.ROLES).react(
+            hush, [bt.Intent(0, "Fighter", played=False, doing="waits")], [])
+        spoken = asked[-1]
+    finally:
+        llm.chat = real
+
+    out.that(
+        "NOBODY IN THE PARTY SAID OR DID ANYTHING" in empty,
+        "a beat with no party lines tells the DM there is nothing to answer",
+        "the DM is not told the party was silent",
+    )
+    out.that(
+        "NOBODY IN THE PARTY SAID OR DID ANYTHING" not in spoken,
+        "and does not when somebody did speak",
+        "a beat with a line claims nobody spoke",
+    )
+
     # **An intent that matched nothing is marked as attempted.** Whether
     # the model then obeys is a prompt question and is measured separately;
     # this asserts the only half that is code, which is that the DM is told

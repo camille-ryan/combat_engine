@@ -659,6 +659,19 @@ class Director:
                 "their own words, as part of your paragraph:\n"
                 + "\n".join(
                     f"- {r.knew[0][1]} knows: {r.fact}" for r in theirs_known))
+        # **Nobody spoke, so there is nothing to answer.** With the
+        # scripted input exhausted, a beat with no intents at all still
+        # drew "I appreciate your enthusiasm, but I insist we wait until
+        # morning" -- an answer to a proposal nobody had made. The prompt
+        # listed no party lines and said nothing about their absence, and
+        # the model filled the gap, which is what it does with a gap.
+        if not intents:
+            told.append(
+                "NOBODY IN THE PARTY SAID OR DID ANYTHING this beat. Do "
+                "not answer them, do not thank them, do not agree or "
+                "refuse -- there is nothing to answer. Write what the "
+                "people here do in the silence: wait, fill it, press, lose "
+                "patience, turn to something else.")
         if nothing:
             # **"Show them trying" is an invitation to write the player**,
             # and it was taken: typing "(I wait and eat.)" came back as the

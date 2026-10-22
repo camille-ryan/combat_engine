@@ -134,6 +134,29 @@ crash and none of them red anywhere:
 **Read a transcript after changing anything here.** The component's failure
 mode is output that reads as correct.
 
+### A synthetic probe does not reproduce a fault this component produces
+
+**Seven for seven**, across five rounds of play-and-fix. Every fault found
+by reading a transcript, put to an isolated probe, came back zero:
+
+| fault, seen in play | probe said |
+|---|---|
+| the DM stages an off-stage person | 0/20 |
+| the DM grants an impossible action | 1/9, and the 1 was a judge error |
+| the DM narrates the player's character | 0/8, both arms |
+| the DM uses the wrong pronoun | 0/30, three arms |
+
+A live beat carries four companion declarations, eight lore rows, three
+beats of recall and a cast of three. A probe carries one intent and one
+NPC, and the fault lives in the difference. So **the transcript is the
+instrument** -- `logs/<module>.campaign.jsonl`, read by eye -- and a probe
+is only good for something already deterministic.
+
+What probes *are* good for, and it is not nothing: measuring a quality that
+varies rather than a fault that is rare. The pronoun arms found 2/10 against
+8/10 on *whether the DM refers to a character at all*, which is real and
+shipped, while finding nothing at all about the fault that prompted it.
+
 ### A judge is not always buildable, and six tries is enough
 
 The faults in this component are found by **reading a transcript**, and
