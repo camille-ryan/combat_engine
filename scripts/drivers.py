@@ -28569,6 +28569,133 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"{sum('the watcher' in n for n in failed)} revealed anyway",
     )
 
+    # **Lore: everybody rolls, and who passed decides how it is told.**
+    # Measured before building it: five characters at level 1 pass an easy
+    # check 100% of the time and a moderate one 97-100%, so a band does not
+    # gate availability -- it routes delivery. Hard stays real at 52-89%.
+    lored = mod.parse({
+        "id": "probe3", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 2,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "lore": [
+                {"fact": "the jewel was stolen", "skill": "history",
+                 "band": "easy"},
+                {"fact": "the cult is a quiet one", "skill": "religion",
+                 "band": "hard"},
+            ]}]}, Path("<driver>")).scene("t")
+
+    def opening(seed: int) -> bt.Beat:
+        board = tbl.lay(party, seed=seed)
+        try:
+            live = bt.Playing(scene=lored)
+            return bt.one_beat(live, board, actors, bt.Director(scripted=True),
+                               ask_human=bt.silent, party_level=1)
+        finally:
+            board.strike()
+
+    first = opening(3)
+    easy = next(r for r in first.recalled if r.skill == "history")
+    out.that(
+        len(easy.knew) >= 1,
+        "an easy fact is known by somebody when the whole party rolls",
+        f"{len(easy.knew)} of {len(actors)} knew it",
+    )
+    out.that(
+        len({r.skill for r in first.recalled}) == 2,
+        "every lore row is rolled, not just the first",
+        f"{[r.skill for r in first.recalled]}",
+    )
+
+    # The control that matters: a hard row is *not* a formality, so across
+    # seeds somebody must sometimes fail to know it. A row that is always
+    # known is a row with no band.
+    hard = [next(r for r in opening(s).recalled if r.skill == "religion")
+            for s in range(20, 44)]
+    nobody = sum(1 for r in hard if not r.knew)
+    out.that(
+        0 < nobody < len(hard),
+        "and a hard one is sometimes known and sometimes not",
+        f"nobody knew it in {nobody} of {len(hard)} campaigns",
+    )
+
+    # Rolled once per campaign: walking back in does not re-decide it.
+    board = tbl.lay(party, seed=9)
+    try:
+        twice = bt.Playing(scene=lored)
+        bt.one_beat(twice, board, actors, bt.Director(scripted=True),
+                    ask_human=bt.silent, party_level=1)
+        second = bt.one_beat(twice, board, actors, bt.Director(scripted=True),
+                             ask_human=bt.silent, party_level=1)
+    finally:
+        board.strike()
+    out.that(
+        not second.recalled,
+        "a once-only lore row is not rolled twice",
+        f"{len(second.recalled)} row(s) re-rolled on the second beat",
+    )
+
+    # **And a repeatable row still fires only when the scene opens.** The
+    # two guards look redundant and are not: `once` stops a row recurring
+    # across visits, and the first-beat check stops *any* row recurring
+    # beat to beat. Asserting only the first left the second untested, and
+    # breaking it stayed green.
+    again = mod.parse({
+        "id": "probe5", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 2,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "lore": [{"fact": "the jewel was stolen", "skill": "history",
+                      "band": "easy", "once": False}]}]},
+        Path("<driver>")).scene("t")
+    board = tbl.lay(party, seed=12)
+    try:
+        over = bt.Playing(scene=again)
+        one = bt.one_beat(over, board, actors, bt.Director(scripted=True),
+                          ask_human=bt.silent, party_level=1)
+        two = bt.one_beat(over, board, actors, bt.Director(scripted=True),
+                          ask_human=bt.silent, party_level=1)
+    finally:
+        board.strike()
+    out.that(
+        len(one.recalled) == 1 and not two.recalled,
+        "and a repeatable one still only fires on the opening beat",
+        f"beat 1 rolled {len(one.recalled)}, beat 2 rolled {len(two.recalled)}",
+    )
+
+    # **A revisit does not re-decide what you know.** `Playing` is rebuilt
+    # every time a scene is entered, so this is tracked on the campaign;
+    # it was on `Playing` first and the docstring claimed per-campaign
+    # while the code gave per-visit.
+    from combat_engine.story import run as run_mod
+
+    twice_over = mod.parse({
+        "id": "probe6", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "lore": [{"fact": "the jewel was stolen", "skill": "history",
+                      "band": "easy"}]}]},
+        Path("<driver>"))
+    camp2 = run_mod.begin(twice_over, seed=6)
+    visit1 = run_mod.step(camp2, twice_over, record=False,
+                          director=bt.Director(scripted=True))
+    camp2.scene = "t"
+    visit2 = run_mod.step(camp2, twice_over, record=False,
+                          director=bt.Director(scripted=True))
+    rolled1 = sum(len(b.recalled) for b in (visit1.played.beats
+                                            if visit1.played else []))
+    rolled2 = sum(len(b.recalled) for b in (visit2.played.beats
+                                            if visit2.played else []))
+    out.that(
+        rolled1 == 1 and rolled2 == 0,
+        "and walking back into the room does not re-roll it",
+        f"first visit rolled {rolled1}, second rolled {rolled2}",
+    )
+
     # The control: nothing taken runs to the cap and ends nowhere.
     table = tbl.lay(party, seed=7)
     playing = bt.play_scene(scene, table, actors, bt.Director(scripted=True),
@@ -28674,6 +28801,7 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         "and the line the person typed does",
         f"{printed[:70]!r}",
     )
+
 
     # The two prompts, caught on the wire. A canned reply keeps this offline
     # -- the question is what was asked, not what came back.
@@ -28808,6 +28936,62 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         "and one that landed is not",
         "a successful intent is marked as merely attempted",
     )
+
+    # **The player's own recall is printed verbatim and never routed
+    # through the model.** A fact handed to the DM comes back paraphrased
+    # and in somebody else's mouth, which is the whole reason the
+    # companion half is a separate list.
+    asked.clear()
+    recall = mod.parse({
+        "id": "probe4", "party_level": 1, "party_size": 2, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "lore": [{"fact": "the jewel was stolen from a temple",
+                      "skill": "history", "band": "easy"}]}]},
+        Path("<driver>"))
+    camp = run_mod.begin(recall, seed=4)
+    camp.control = ["human"] * len(camp.party.sheets)
+    made2 = run_mod.step(camp, recall, record=False,
+                         director=bt.Director(scripted=True),
+                         ask_human=lambda a, _s: ("", "waits"))
+    lines2 = " ".join(made2.lines)
+    knew = [r for b in (made2.played.beats if made2.played else [])
+            for r in b.recalled if r.mine]
+    out.that(
+        bool(knew) and "You know: the jewel was stolen from a temple" in lines2,
+        "what the player recalls is told to them in their own words",
+        f"{made2.lines}",
+    )
+
+    llm.chat = tap2  # ty: ignore[invalid-assignment]
+    try:
+        solo = bt.Playing(scene=recall.scene("t"))
+        bt.Director(roles=llm.ROLES).react(
+            solo, [], [],
+            [bt.Recalled("the jewel was stolen from a temple", "history", 8,
+                         knew=[(0, "Fighter")], mine=True)])
+        mine_prompt = asked[-1]
+        bt.Director(roles=llm.ROLES).react(
+            solo, [], [],
+            [bt.Recalled("the jewel was stolen from a temple", "history", 8,
+                         knew=[(1, "Sela")], mine=False)])
+        theirs_prompt = asked[-1]
+    finally:
+        llm.chat = real
+
+    out.that(
+        "jewel was stolen" not in mine_prompt,
+        "and is never handed to the DM to paraphrase",
+        "the player's own recall reached the DM prompt",
+    )
+    out.that(
+        "jewel was stolen" in theirs_prompt and "Sela knows" in theirs_prompt,
+        "while a companion's recall is the DM's to deliver, named",
+        f"{theirs_prompt[-110:]!r}",
+    )
+
 
 
 def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:

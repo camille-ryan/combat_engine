@@ -359,6 +359,15 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
     seed = seed_for(campaign, scene, "beats")
     table = table_mod.lay(campaign.party, seed=seed)
     def tell(made: beat_mod.Beat) -> None:
+        # **The player's own recall, before anything else in the beat and
+        # in their own second person.** It is what their character already
+        # knew walking in, so it comes first, and it is not handed to the
+        # DM -- a fact routed through the model comes back in somebody
+        # else's mouth, paraphrased, which is the whole reason the
+        # companion half is separate.
+        for knew in made.recalled:
+            if knew.mine:
+                step.say(f"  You know: {knew.fact}")
         # **A companion's intent is not printed.** It goes to the DM, which
         # writes it into the paragraph below -- so what a reader sees is one
         # piece of prose in which those things happened, not four captioned
@@ -388,8 +397,11 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         scene, table, actors_for(campaign),
         director or beat_mod.Director(scripted=True),
         ask_human=ask_human, party_level=module.party_level,
-        after=tell,
+        after=tell, asked=set(campaign.recalled),
     )
+    # Back onto the campaign, so a `once` row stays rolled across a revisit
+    # and across a save. `Playing` does not survive the scene.
+    campaign.recalled = sorted(playing.asked)
     table.strike()
     step.played = playing
     if playing.leads_to:

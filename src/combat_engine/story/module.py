@@ -227,6 +227,39 @@ class Affordance:
 
 
 @dataclass(frozen=True)
+class Lore:
+    """Something a character may simply know, rolled for when a scene opens.
+
+    **Nobody declares this.** An affordance is matched against a stated
+    intent; this fires on its own, because recalling what you know about a
+    stolen jewel is not a thing you announce. Every character rolls their
+    own check and each who passes learns it independently -- which is how a
+    table does it, and which makes the interesting output *who* knew rather
+    than whether anybody did.
+
+    That reframing is forced by the arithmetic. With five characters rolling
+    at level 1, the chance somebody passes is **100% at easy and 97-100% at
+    moderate**; only hard stays a real question, at 52-89% depending on the
+    skill. So a band here does not withhold anything and must not be used to
+    try: it decides how likely the party is to have it and, through that,
+    whose mouth it comes out of. **A fact that must stay unavailable gets no
+    `Lore` row at all** -- it belongs to an NPC who knows it, or to an
+    affordance that prises it out of them.
+
+    This is the shape the source material is already in. 78 of 143 DC sites
+    in the module in hand gate a fact rather than an action, most of them
+    written as a skill heading with a ladder of numbered facts beneath it.
+    """
+
+    fact: str
+    skill: str
+    band: str = "moderate"
+    #: Rolled once per campaign rather than once per visit. A thing you
+    #: either know or do not is not re-rolled because you walked back in.
+    once: bool = True
+
+
+@dataclass(frozen=True)
 class Npc:
     """Somebody in the scene for the model to play.
 
@@ -312,6 +345,8 @@ class Scene:
     #: What can be tried. An empty list makes the scene a read-aloud that
     #: advances, which is what every scene was before this existed.
     affordances: tuple[Affordance, ...] = ()
+    #: What a character may already know, rolled for when the scene opens.
+    lore: tuple[Lore, ...] = ()
     max_beats: int = MAX_BEATS
 
     # -- combat ------------------------------------------------------------
@@ -451,6 +486,37 @@ def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
     )
 
 
+def _as_lore(raw: Any, where: str, problems: list[str]) -> Lore | None:
+    if not isinstance(raw, dict):
+        problems.append(f"{where}: a lore entry must be an object")
+        return None
+    fact = str(raw.get("fact", "")).strip()
+    if not fact:
+        problems.append(f"{where}: a lore entry needs a 'fact'")
+        return None
+    skill = str(raw.get("skill", "")).strip().lower()
+    if skill not in SKILLS:
+        # **A lore row without a skill is refused, where an affordance
+        # without one is fine.** An affordance with no skill is a thing a
+        # character may simply do; lore with no skill is a fact nobody
+        # rolls for, which is not knowledge-you-might-have, it is just a
+        # sentence -- and it would arrive every scene for everybody.
+        problems.append(
+            f"{where}: lore {fact[:40]!r} needs a skill to recall it by; "
+            f"one of: {', '.join(sorted(SKILLS))}"
+        )
+        return None
+    band = str(raw.get("band", "moderate")).strip().lower()
+    if band not in BANDS:
+        problems.append(
+            f"{where}: lore {fact[:40]!r} has band {band!r}; "
+            f"one of: {', '.join(BANDS)}"
+        )
+        band = "moderate"
+    return Lore(fact=fact, skill=skill, band=band,
+                once=bool(raw.get("once", True)))
+
+
 def _as_affordance(raw: Any, where: str, problems: list[str]) -> Affordance | None:
     if not isinstance(raw, dict):
         problems.append(f"{where}: an affordance must be an object")
@@ -579,6 +645,10 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         (_as_affordance(x, where, problems) for x in raw.get("affordances", ()))
         if a is not None
     )
+    lore = tuple(
+        x for x in (_as_lore(y, where, problems) for y in raw.get("lore", ()))
+        if x is not None
+    )
     seen_ids = [a.id for a in affordances]
     for aid in sorted({a for a in seen_ids if seen_ids.count(a) > 1}):
         problems.append(f"{where}: two affordances share the id {aid!r}")
@@ -615,7 +685,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         "skill_challenge": ("foes", "terrain", "affordances"),
         "combat": ("complexity", "primary", "secondary", "affordances"),
         "rest": ("foes", "terrain", "complexity", "primary", "secondary",
-                 "affordances", "npcs"),
+                 "affordances", "npcs", "lore"),
     }[kind]
     for name in unused:
         if raw.get(name):
@@ -630,6 +700,7 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
         exits=tuple(str(e).strip() for e in raw.get("exits", ()) if str(e).strip()),
         npcs=npcs,
         affordances=affordances,
+        lore=lore,
         max_beats=beats,
         difficulty=difficulty,
         xp=int(raw.get("xp", 0) or 0),

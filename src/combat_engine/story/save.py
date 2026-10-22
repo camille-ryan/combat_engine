@@ -115,6 +115,12 @@ class Campaign:
     #: Campaign resources a module names -- a reputation score, a door left
     #: unlocked. Declared by the module with its starting values.
     flags: dict[str, int] = field(default_factory=dict)
+    #: Lore rows already rolled, as `<scene>:<fact>`. **On the campaign and
+    #: not on `Playing`**, which is rebuilt every time a scene is entered --
+    #: so a `once` row tracked there was re-rolled on a revisit while its
+    #: docstring claimed otherwise. Whether a character knows a thing is not
+    #: re-decided by walking back into the room.
+    recalled: list[str] = field(default_factory=list)
     #: One line per scene played, for a recap. Not a transcript: a fight's
     #: blow-by-blow goes to `logs/` and is re-runnable from its seed.
     log: list[str] = field(default_factory=list)
@@ -172,6 +178,7 @@ def to_dict(campaign: Campaign) -> dict:
         "visited": list(campaign.visited),
         "flags": dict(campaign.flags),
         "log": list(campaign.log),
+        "recalled": list(campaign.recalled),
         "party": [asdict(s) for s in campaign.party.sheets],
         "personas": [asdict(p) for p in campaign.personas],
         "control": list(campaign.control),
@@ -193,6 +200,7 @@ def from_dict(raw: dict) -> Campaign:
         visited=[str(s) for s in raw.get("visited", ())],
         flags={str(k): int(v) for k, v in (raw.get("flags") or {}).items()},
         log=[str(line) for line in raw.get("log", ())],
+        recalled=[str(k) for k in raw.get("recalled", ())],
         party=Party(sheets=[_sheet(s) for s in raw.get("party", ())]),
         personas=[
             Persona(**{k: str(v) for k, v in p.items()

@@ -144,6 +144,28 @@ class Ruling:
         )
 
 
+@dataclass(frozen=True)
+class Recalled:
+    """A fact somebody in the party simply knew, and who knew it.
+
+    **Who matters more than whether.** Five characters rolling at level 1
+    pass an easy check 100% of the time and a moderate one 97-100%, so the
+    band does not decide availability -- it decides whose mouth the fact
+    comes out of, and that is what shapes the prose. The player's own
+    recall is told to them directly; a companion's is something the
+    companion says.
+    """
+
+    fact: str
+    skill: str
+    dc: int
+    #: Every character who passed, in party order. Empty means nobody did
+    #: and the fact is not in the scene.
+    knew: list[tuple[int, str]] = field(default_factory=list)
+    #: True when one of the knowers is the person at the keyboard.
+    mine: bool = False
+
+
 @dataclass
 class Beat:
     """One exchange."""
@@ -153,6 +175,9 @@ class Beat:
     intents: list[Intent] = field(default_factory=list)
     rulings: list[Ruling] = field(default_factory=list)
     reaction: str = ""
+    #: What the party already knew, rolled when the scene opened. Only the
+    #: first beat of a scene has any.
+    recalled: list[Recalled] = field(default_factory=list)
     #: Which companions were asked to come in this beat. Empty is normal and
     #: is the common case -- see `Director.joins`.
     joined: list[int] = field(default_factory=list)
@@ -173,6 +198,9 @@ class Playing:
     spent: set[str] = field(default_factory=set)
     #: Facts the party has learnt, which later beats may refer back to.
     learnt: list[str] = field(default_factory=list)
+    #: Lore facts already rolled for, so a `once` row is not re-rolled on
+    #: a second visit. Carried in from the campaign, not reset per scene.
+    asked: set[str] = field(default_factory=set)
     #: Affordance ids actually **won**. `spent` is not the same thing -- it
     #: includes failures, and a failed Perception does not reveal anybody.
     found: set[str] = field(default_factory=set)
@@ -545,9 +573,11 @@ class Director:
     # -- reacting ----------------------------------------------------------
 
     def react(self, playing: Playing, intents: list[Intent],
-              rulings: list[Ruling]) -> str:
+              rulings: list[Ruling],
+              recalled: list[Recalled] | None = None) -> str:
         if self.scripted:
             facts = [r.fact for r in rulings if r.fact and not r.exit]
+            facts += [r.fact for r in (recalled or []) if r.knew and not r.mine]
             return " ".join(facts) if facts else "The moment passes."
         scene = playing.scene
         who = [
@@ -611,6 +641,19 @@ class Director:
             told.append(
                 "THE COMPANIONS -- not shown to anybody, write these into "
                 "your paragraph:\n" + "\n".join(mark(i) for i in theirs))
+        # **Only a companion's recall is the DM's to deliver.** What the
+        # player themselves remembered is printed to them directly, in
+        # their own second person -- handing it here would get it
+        # paraphrased into somebody else's mouth, which is the fault the
+        # `[ATTEMPTED ONLY]` split already exists for one row up.
+        theirs_known = [r for r in (recalled or [])
+                        if r.knew and not r.mine]
+        if theirs_known:
+            told.append(
+                "WHAT A COMPANION KNOWS, unprompted. Have them say it, in "
+                "their own words, as part of your paragraph:\n"
+                + "\n".join(
+                    f"- {r.knew[0][1]} knows: {r.fact}" for r in theirs_known))
         if nothing:
             told.append(
                 "[ATTEMPTED ONLY] means it did not work and nothing in the "
@@ -656,6 +699,12 @@ def one_beat(
         playing.beats[-1].reaction if playing.beats else scene.seen
     ) or scene.seen
     beat = Beat(n=len(playing.beats) + 1, situation=situation)
+
+    # -- what the party already knows. First beat only: this is "what do you
+    # know walking in", not something re-rolled each exchange.
+    if not playing.beats:
+        beat.recalled = _recall(playing, table, actors, party_level)
+        playing.learnt += [r.fact for r in beat.recalled if r.knew]
 
     # -- declare. Humans first, so a person is never waiting on a model only
     # to find the scene already moved under them.
@@ -733,17 +782,52 @@ def one_beat(
     playing.found |= {r.affordance for r in beat.rulings if r.won}
 
     # -- react
-    beat.reaction = director.react(playing, beat.intents, beat.rulings)
+    beat.reaction = director.react(playing, beat.intents, beat.rulings,
+                                   beat.recalled)
     playing.beats.append(beat)
     if beat.leads_to:
         playing.leads_to = beat.leads_to
     return beat
 
 
+def _recall(playing: Playing, table: Table, actors: list[Actor],
+            party_level: int) -> list[Recalled]:
+    """Everybody rolls what they might know. Whoever passes, knows it.
+
+    **Every character rolls their own**, rather than one roll for the party
+    or the best modifier standing in for everyone. Two reasons and the
+    second is the point of the feature: a character who is bad at History
+    should be able to not know something, and the *set* of who knew is what
+    decides how the fact reaches the player -- their own recall, or a
+    companion telling them.
+
+    A row whose `once` is set is rolled a single time per campaign, tracked
+    on `Playing.asked`, because whether you know a thing is not re-decided
+    by walking back into the room.
+    """
+    out: list[Recalled] = []
+    for row in playing.scene.lore:
+        key = f"{playing.scene.id}:{row.fact}"
+        if row.once and key in playing.asked:
+            continue
+        playing.asked.add(key)
+        target = dc_for(playing.scene.level or party_level, row.band)
+        knew: list[tuple[int, str]] = []
+        mine = False
+        for actor in actors:
+            if table.check(actor.slot, row.skill, target).success:
+                knew.append((actor.slot, actor.name))
+                mine = mine or not actor.played
+        out.append(Recalled(fact=row.fact, skill=row.skill, dc=target,
+                            knew=knew, mine=mine))
+    return out
+
+
 def play_scene(
     scene: Scene, table: Table, actors: list[Actor], director: Director,
     *, ask_human: AskHuman, party_level: int,
     after: Callable[[Beat], None] | None = None,
+    asked: set[str] | None = None,
 ) -> Playing:
     """Run a roleplay scene to its end.
 
@@ -754,7 +838,7 @@ def play_scene(
     lines, not their own roll, not the reply. Four prompts into a
     conversation that has not visibly started.
     """
-    playing = Playing(scene=scene)
+    playing = Playing(scene=scene, asked=set(asked or ()))
     while not playing.over:
         made = one_beat(playing, table, actors, director,
                         ask_human=ask_human, party_level=party_level)
