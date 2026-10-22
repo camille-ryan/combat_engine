@@ -345,7 +345,9 @@ Never describe the party moving, arriving or leaving.
 
 THE PLAYER's line was typed by the person reading you and is already on \
 their screen. Never repeat it, never restate it, never write another one \
-for them.
+for them. **Never narrate their character at all** -- not their words, not \
+their actions, not their face, not what they are thinking. They decide what \
+their character does; you decide what the world does back.
 
 THE COMPANIONS' lines were not shown to anybody. They are **yours to \
 write**: work what each of them said and did into your paragraph, in their \
@@ -655,11 +657,36 @@ class Director:
                 + "\n".join(
                     f"- {r.knew[0][1]} knows: {r.fact}" for r in theirs_known))
         if nothing:
+            # **"Show them trying" is an invitation to write the player**,
+            # and it was taken: typing "(I wait and eat.)" came back as the
+            # Fighter gripping the table, narrowing their eyes, and saying
+            # "I ain't trustin' this banker no more than I trust a snake in
+            # the grass" -- a speech and a hostile action from two words of
+            # input. Nothing in the prompt licensed that except this
+            # sentence, which asked for exactly it.
+            #
+            # So the instruction splits the way everything else about the
+            # two kinds of party member already does: for a companion the
+            # DM writes the attempt, for the person at the keyboard it
+            # writes only what they meet.
+            #
+            # **Unmeasured, deliberately recorded as such.** Three attempts
+            # at a detector failed: a judge got both of its own controls
+            # wrong twice, and an enum over "who acts" managed 3 of 4 --
+            # calling "Benwick sets down his cup and waits" an action by
+            # the Fighter. An exact search for the character's name cannot
+            # tell narration from an NPC addressing them, which is wanted.
+            # So this ships on one observed fault and three precedents in
+            # this same prompt where the player/companion split did hold,
+            # and the next playthrough is the evidence.
             told.append(
                 "[ATTEMPTED ONLY] means it did not work and nothing in the "
-                "world changed. Show them trying and show what they meet -- "
-                "a refusal, an obstacle, somebody's reaction, or simply that "
-                "it does not happen. Never show it succeeding.")
+                "world changed. Write only what they MEET -- a refusal, an "
+                "obstacle, somebody's reaction, or simply that it does not "
+                "happen. Never show it succeeding.\n"
+                "For THE PLAYER, do not write what their character does or "
+                "says at all, not even the attempt: they typed it and it is "
+                "on their screen. Write the world's answer to it.")
         # **Unattributed, and that is a fix.** Labelling each fact with the
         # party member who earned it -- "Pike: she adds a map to the fee" --
         # read to the model as *Pike* doing it, and the DM duly wrote a line
@@ -894,14 +921,34 @@ def silent(_actor: Actor, _situation: str) -> tuple[str, str]:
 
 
 def as_json(playing: Playing) -> list[dict]:
-    """A scene's beats, for the campaign log (#799)."""
+    """A scene's beats, for the campaign log (#799).
+
+    **Everything a reader needs to tell who did what**, which it did not
+    carry. `played` was absent, so nothing downstream could distinguish the
+    person at the keyboard from a model-played companion -- and an
+    instrument written to ask "did the DM narrate the player's own
+    character" read the first intent in the file and judged the wrong
+    character for the whole run. A log that cannot answer who is who cannot
+    answer anything about this loop.
+    """
     return [
         {
             "beat": b.n,
             "situation": b.situation,
             "intents": [
-                {"who": i.name, "speech": i.speech, "doing": i.doing}
+                {"who": i.name, "slot": i.slot, "played": i.played,
+                 "speech": i.speech, "doing": i.doing}
                 for i in b.intents
+            ],
+            # Who the DM turned to, and what the party already knew. Both
+            # are decisions the loop makes and neither was recorded, so a
+            # transcript could not show an empty beat was *chosen* rather
+            # than a failure, nor that a fact arrived by recall.
+            "joined": list(b.joined),
+            "recalled": [
+                {"fact": r.fact, "skill": r.skill, "dc": r.dc,
+                 "knew": [n for _, n in r.knew], "mine": r.mine}
+                for r in b.recalled
             ],
             "rulings": [
                 {
