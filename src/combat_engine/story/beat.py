@@ -753,7 +753,7 @@ def one_beat(
             won, rolled, target = True, None, 0
         else:
             level = scene.level or party_level
-            target = dc_for(level, chosen.band)
+            target = chosen.dc or dc_for(level, chosen.band)
             rolled = table.check(intent.slot, chosen.skill, target)
             won = rolled.success
         leaving = bool(chosen.leads_to) and won
@@ -811,7 +811,10 @@ def _recall(playing: Playing, table: Table, actors: list[Actor],
         if row.once and key in playing.asked:
             continue
         playing.asked.add(key)
-        target = dc_for(playing.scene.level or party_level, row.band)
+        # **The page's number first.** A band is the fallback for a module
+        # that did not state one, and it is lossy -- this adventure prints
+        # 15s that no band equals.
+        target = row.dc or dc_for(playing.scene.level or party_level, row.band)
         knew: list[tuple[int, str]] = []
         mine = False
         for actor in actors:

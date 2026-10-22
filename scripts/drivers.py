@@ -28620,6 +28620,72 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"nobody knew it in {nobody} of {len(hard)} campaigns",
     )
 
+    # **A stated DC wins over the band, and the band is lossy.** Page 11
+    # of the adventure prints a ladder of 8, 12, 15 and 19; the bands at
+    # level 1 are 8, 12 and 19, so both 15s had been rounded up to hard --
+    # two facts made materially harder than the author set them.
+    stated = mod.parse({
+        "id": "probe7", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "lore": [
+                {"fact": "the stated one", "skill": "history", "dc": 15},
+                {"fact": "the banded one", "skill": "history",
+                 "band": "hard"},
+            ]}]}, Path("<driver>")).scene("t")
+    board = tbl.lay(party, seed=15)
+    try:
+        rolled = bt.one_beat(
+            bt.Playing(scene=stated), board, actors,
+            bt.Director(scripted=True), ask_human=bt.silent, party_level=1)
+    finally:
+        board.strike()
+    got = {r.fact: r.dc for r in rolled.recalled}
+    out.that(
+        got.get("the stated one") == 15,
+        "a lore row rolls against the DC the page printed",
+        f"rolled against {got.get('the stated one')}",
+    )
+    out.that(
+        got.get("the banded one") == 19,
+        "and against its band when the page stated none",
+        f"rolled against {got.get('the banded one')}",
+    )
+
+    # Same rule for an affordance, whose checks the source also numbers.
+    numbered = mod.parse({
+        "id": "probe8", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "affordances": [{
+                "id": "bend", "what": "bend the bars off the window",
+                "skill": "athletics", "band": "easy", "dc": 19,
+                "win": "the bars come away", "lose": "they hold"}]}]},
+        Path("<driver>")).scene("t")
+
+    class Bends(bt.Director):
+        def match(self, playing: bt.Playing,
+                  intents: list[bt.Intent]) -> dict:
+            del playing
+            return {i.slot: "bend" for i in intents[:1]}
+
+    board = tbl.lay(party, seed=16)
+    try:
+        bent = bt.one_beat(
+            bt.Playing(scene=numbered), board, actors, Bends(scripted=True),
+            ask_human=bt.silent, party_level=1)
+    finally:
+        board.strike()
+    tried = next(r for r in bent.rulings if r.affordance == "bend")
+    out.that(
+        tried.dc == 19,
+        "an affordance does the same, not its band",
+        f"rolled against {tried.dc}, band easy would be 8",
+    )
+
     # Rolled once per campaign: walking back in does not re-decide it.
     board = tbl.lay(party, seed=9)
     try:
@@ -28994,6 +29060,70 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
 
 
 
+def a_garbled_module_is_refused_with_every_problem_at_once(out: Result) -> None:
+    """The validator's refusals, which nothing asserted.
+
+    `module.py` collects problems rather than raising on the first, and the
+    refusals carry carefully worded messages -- and **no driver read any of
+    them.** Breaking the `dc` type check to coerce a nonsense value instead
+    of refusing it left the whole suite green, which is what a refusal
+    nobody tests looks like.
+
+    The three asserted here are the ones whose absence is silent: a module
+    that validates and then plays wrong. A `dc` of `"hard"` would fall back
+    to the band and look like it worked; a `lore` row with no skill would
+    arrive every scene for everybody; an `unseen` naming nothing leaves a
+    character out of the adventure for good.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import module as mod
+
+    def problems(scene: dict) -> list[str]:
+        raw = {"id": "p", "party_level": 1, "party_size": 2, "start": "t",
+               "scenes": [{"id": "t", "kind": "roleplay", "name": "T",
+                           "sets": "x", "exits": [], **scene}]}
+        try:
+            mod.parse(raw, Path("<driver>"))
+        except mod.ModuleError as exc:
+            return [str(exc)]
+        return []
+
+    said = problems({"npcs": [{"name": "h"}],
+                     "lore": [{"fact": "f", "skill": "history",
+                               "dc": "hard"}]})
+    out.that(
+        bool(said) and "positive integer" in said[0],
+        "a dc that is not a number is refused, not quietly ignored",
+        f"{said}",
+    )
+
+    said = problems({"npcs": [{"name": "h"}], "lore": [{"fact": "f"}]})
+    out.that(
+        bool(said) and "needs a skill" in said[0],
+        "and lore with no skill to recall it by is refused",
+        f"{said}",
+    )
+
+    said = problems({"npcs": [{"name": "h", "unseen": "nope"}],
+                     "affordances": [{"id": "a", "what": "w"}]})
+    out.that(
+        bool(said) and "not an affordance here" in said[0],
+        "and an npc unseen until an affordance that does not exist",
+        f"{said}",
+    )
+
+    # The control: a module with none of those faults is not refused.
+    out.that(
+        not problems({
+            "npcs": [{"name": "h", "unseen": "a"}],
+            "affordances": [{"id": "a", "what": "w"}],
+            "lore": [{"fact": "f", "skill": "history", "dc": 15}]}),
+        "while a module with none of those faults passes",
+        "a sound module was refused",
+    )
+
+
 def a_model_matches_an_intent_to_the_right_affordance(out: Result) -> None:
     """The bet the whole story layer rests on, asked of whatever is serving.
 
@@ -29066,6 +29196,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "module_refusals": (
+        a_garbled_module_is_refused_with_every_problem_at_once,
+        "the validator's refusals, which nothing asserted",
     ),
     "scene_audience": (
         a_scene_shows_the_player_less_than_it_tells_the_dm,

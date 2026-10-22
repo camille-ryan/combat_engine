@@ -19,7 +19,7 @@ between all of them. The combat engine is a thing this drives.
 | `table.py` | a board with nobody to fight on it, so a conversation can roll. |
 | `challenge.py` | successes against three failures. |
 | `dc.py` | what a check has to beat, by level and band. |
-| `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what it changes. |
+| `beat.py` | a roleplay scene, one exchange at a time: who speaks, what they try, what they already know, what it changes. |
 | `llm.py` | the model. A `Role` per job, two backends, a URL that can be a Tailscale host. |
 | `dm.py` | the Anthropic DM. Predates `llm.py` and is **unexercised live** (#794). |
 | `maker.py` | a character built by answering questions instead of being dealt. |
@@ -170,6 +170,27 @@ Two things to know before pointing a role at a reasoning model:
   **3m26s**; warm it is 5-6s. Do not read a first-call timing as the
   model's speed, in either direction.
 
+## A band cannot keep a secret, and a printed number beats both
+
+Two measurements that settled the design of `Lore` and are worth not
+re-deriving.
+
+**Five characters rolling makes a band a router, not a gate.** At level 1,
+real party, real modifiers: an easy check is passed by somebody **100%** of
+the time, a moderate one 97-100%, and only hard is a real question at
+52-89% depending on the skill. So the band decides *who* tells the player,
+which is the useful output -- and **a fact that must stay unavailable gets
+no `Lore` row at all.** It belongs to an NPC's `knows`, or behind an
+affordance. Over 60 campaigns delivery split 41% companion / 38% the player
+/ 22% nobody.
+
+**A stated DC wins over a band, because bands are lossy.** The adventure in
+hand prints a ladder of 8, 12, 15 and 19; the bands at level 1 are 8, 12
+and 19, so **15 has no band** and both rows carrying it were rounded up to
+hard -- two facts made materially harder than the author set them. `dc` on
+`Lore` and on `Affordance`, with the band as the fallback for a page that
+stated nothing.
+
 ## The name is tried first, and that is the measurement to keep
 
 `cast_list` resolves a module's own word for a creature against the
@@ -203,11 +224,11 @@ uv run scripts/play.py --validate <module>        every problem at once
 uv run scripts/play.py --play <module> --seed 7   a whole adventure
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
-    beat_loop scene_audience affordance_match
+    beat_loop scene_audience module_refusals affordance_match
 uv run scripts/check.py --only play,drivers
 ```
 
-Nine drivers cover this component and **each was proven by breaking what it
+Ten drivers cover this component and **each was proven by breaking what it
 watches** — the retype, the word grant, the three-failure cap, the refusal of
 an unlisted skill, the read of `Skills.trained`, the arming-is-not-spending
 rule, the `once` rule, the scene ending, whose text becomes a fact, and both
@@ -215,6 +236,14 @@ halves of the brief/sets split. All went red.
 
 `affordance_match` is the one that needs a model and **skips** when none is
 serving; the rest run offline.
+
+**`module_refusals` exists because nothing read the validator's messages.**
+`module.py` collects every problem and refuses with carefully worded text,
+and no driver asserted a single one -- so breaking the `dc` type check to
+coerce a nonsense value instead of refusing it left the whole suite green.
+A refusal nobody tests is a refusal that can be deleted by accident. The
+three it covers are the silent ones: a module that validates and then plays
+wrong.
 
 **Clear `__pycache__` between a break and its restore.** A restore that
 lands in the same second as the `.pyc` does not invalidate it, so the tree

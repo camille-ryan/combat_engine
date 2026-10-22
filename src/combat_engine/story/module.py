@@ -205,6 +205,20 @@ class Affordance:
     what: str = ""
     skill: str = ""
     band: str = "moderate"
+    #: The number the page printed, which **wins over `band`**. Zero means
+    #: the module did not state one and the band is used.
+    #:
+    #: A band is a translation and translations lose. The adventure in hand
+    #: prints 8, 12, 15 and 19 on its knowledge ladder; at level 1 the bands
+    #: are 8, 12 and 19, so **15 has no band** and both rows carrying it had
+    #: to be rounded up to hard -- making two facts meaningfully harder than
+    #: the author set them. There is no reason to guess when the page says
+    #: the number.
+    #:
+    #: It does not scale with the party's level, and that is the point: the
+    #: module stated a number for the adventure it is. A band is what to
+    #: reach for when it did not.
+    dc: int = 0
     win: str = ""
     lose: str = ""
     #: Once each, like a challenge's secondary skills, so a party cannot
@@ -254,6 +268,21 @@ class Lore:
     fact: str
     skill: str
     band: str = "moderate"
+    #: The number the page printed, which **wins over `band`**. Zero means
+    #: the module did not state one and the band is used.
+    #:
+    #: A band is a translation and translations lose. The adventure in hand
+    #: prints 8, 12, 15 and 19 on its knowledge ladder; at level 1 the bands
+    #: are 8, 12 and 19, so **15 has no band** and both rows carrying it had
+    #: to be rounded up to hard -- making two facts meaningfully harder than
+    #: the author set them. There is no reason to guess when the page says
+    #: the number.
+    #:
+    #: It does not scale with the party's level, and that is the point: the
+    #: module stated a number for the adventure it is. A band is what to
+    #: reach for when it did not.
+    dc: int = 0
+
     #: Rolled once per campaign rather than once per visit. A thing you
     #: either know or do not is not re-rolled because you walked back in.
     once: bool = True
@@ -486,6 +515,26 @@ def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
     )
 
 
+def _stated_dc(raw: Any, where: str, what: str,
+               problems: list[str]) -> int:
+    """The DC the page printed, or 0. One reader for both callers.
+
+    A negative or non-integer DC is refused rather than coerced: a module
+    carrying `"dc": "hard"` has made a category mistake, and silently
+    reading it as 0 would fall back to the band and look like it worked.
+    """
+    got = raw.get("dc", 0)
+    if got in (0, None, ""):
+        return 0
+    if not isinstance(got, int) or isinstance(got, bool) or got < 1:
+        problems.append(
+            f"{where}: {what} has dc {got!r}; a stated DC is a positive "
+            "integer, or leave it out and the band is used"
+        )
+        return 0
+    return got
+
+
 def _as_lore(raw: Any, where: str, problems: list[str]) -> Lore | None:
     if not isinstance(raw, dict):
         problems.append(f"{where}: a lore entry must be an object")
@@ -514,6 +563,7 @@ def _as_lore(raw: Any, where: str, problems: list[str]) -> Lore | None:
         )
         band = "moderate"
     return Lore(fact=fact, skill=skill, band=band,
+                dc=_stated_dc(raw, where, f"lore {fact[:30]!r}", problems),
                 once=bool(raw.get("once", True)))
 
 
@@ -558,6 +608,7 @@ def _as_affordance(raw: Any, where: str, problems: list[str]) -> Affordance | No
         )
     return Affordance(
         id=aid, what=what, skill=skill, band=band,
+        dc=_stated_dc(raw, where, f"affordance {aid!r}", problems),
         win=str(raw.get("win", "")).strip(),
         lose=str(raw.get("lose", "")).strip(),
         once=bool(raw.get("once", True)),

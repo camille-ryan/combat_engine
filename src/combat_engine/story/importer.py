@@ -517,6 +517,40 @@ more". `skill` only where there is real uncertainty; a thing a character can
 simply do gets no skill and still belongs in the list, because it tells the
 model that doing it is a thing this scene supports.
 
+`lore` is what a character may **already know**, rolled for when the scene
+opens. Nobody declares it; everyone rolls their own check and whoever passes
+learns it -- the player hears it directly, a companion tells them.
+
+    {{"fact": "the jewel was stolen from the temple long ago",
+      "skill": "history", "dc": 15}}
+
+**This is the single easiest thing to harvest and the page has it in bulk.**
+An adventure writes a skill heading and hangs numbered facts off it:
+
+    History
+      DC 12: <fact>
+      DC 15: <fact>
+      DC 19: <fact>
+
+Measured on the module in hand: **78 of its 143 DC sites gate a fact** like
+this rather than an action, and most are in exactly that ladder form. Copy
+the sentence, take the skill from the heading above, take the number.
+
+**Use the printed DC, not a band.** `dc` wins; `band` is the fallback for a
+page that stated no number. Bands are lossy -- this adventure prints 15s,
+and at level 1 the bands are 8, 12 and 19, so translating cost two facts a
+rounding up to hard.
+
+A fact is read out to a player, so write it as the thing that is true, not
+as the page's instruction to the DM. The page says *"the character discovers
+that Benwick has a stellar reputation"*; the fact is *"Benwick has a stellar
+reputation"*.
+
+**And nothing you need withheld goes here.** With five characters rolling,
+an easy row is known 100% of the time and a moderate one 97-100%; only hard
+is a real question. A band cannot keep a secret. A fact that must stay out
+of reach belongs to an NPC's `knows`, or behind an affordance.
+
 `leads_to` on an affordance ends the scene and goes there -- use it for the
 one that moves the story on. `max_beats` (default 6) is the backstop when
 nothing does.
