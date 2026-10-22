@@ -623,7 +623,7 @@ def m1659a4(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.conjure(defences_of=)", "c.pass_on(attack=)"),
+    todo=("c.conjure(defences_of=)", "Health.shared_with"),
 )
 def m1659a5(c: Cast) -> None:
     """The creature shares its hit points with an object: attacking either hurts
@@ -638,8 +638,11 @@ def m1659a5(c: Cast) -> None:
     because `blocked.py` resolves a parameter name it can see on the
     signature as existing and would report this row ready.
 
-    The other is unchanged: nothing routes an attack that landed on one
-    creature into another's `Health`, which is the shared-hit-points half
+    **The second symbol is re-pointed**: it was `c.pass_on(attack=)`,
+    which landed and re-aims a swing the triggering power has not yet
+    rolled. That is not this clause. Nothing routes damage that landed on
+    one creature into another's `Health`, which is the shared-hit-points
+    half
     and the reason the whole thing is `todo=` rather than `dropped=`."""
 
 

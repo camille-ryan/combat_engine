@@ -1638,13 +1638,22 @@ def p16048(c: Cast) -> None:
         both(targets_me, either(by_melee, by_ranged)),
         "an enemy attacks you",
     ),
-    dropped=("c.pass_on(attack=)",),
+    dropped=("c.pass_on(after_the_roll=)",),
 )
 def p16049(c: Cast) -> None:
     """Declared on `AttackDeclared` so the four points are in before the
-    roll, which is what an interrupt buys. Handing a miss on to a creature
-    you have swapped with is a re-aim of an attack already resolved, and
-    `c.redirect` only re-aims one still being declared."""
+    roll, which is what an interrupt buys.
+
+    **Re-pointed, because the symbol was serving three different needs.**
+    `c.pass_on(attack=)` landed and re-aims a swing the triggering power
+    has **not yet rolled** -- that is `m82a5`'s and `m1742a5`'s "or
+    secondary attacks", and it works by assigning `ev.target` in the
+    `AttackDeclared` BEFORE window.
+
+    This card is the other direction in time: handing a **miss** on to a
+    creature you swapped with is a re-aim of an attack **already
+    resolved**, so there is no declaration left to move. Nothing in the
+    tree does that, and it is not what the verb just gained."""
     if not [who for who in c.within(1, of=c.me) if who != c.me]:
         return
     for d in (AC, FORT, REF, WILL):

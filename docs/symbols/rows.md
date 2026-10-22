@@ -36,7 +36,7 @@ Handing a row over, taking one away, replacing a clause, and asking somebody to 
   - Run whatever this use substituted for this clause, or the clause.
 - `c.instead_of_now(self, what: 'str', default: 'Callable[[], Any]', *, on: 'int | None' = None) -> 'Any'`
   - Offer a registered substitution **at the clause**, and run what is
-- `c.pass_on(self, ev: 'Any' = None, *, to: 'int | None' = None) -> 'Effect | None'`
+- `c.pass_on(self, ev: 'Any' = None, *, to: 'int | None' = None, attack: 'bool' = False) -> 'Effect | None'`
   - Whatever conditions the attack being answered would apply, land
 - `c.pre_empt(self, ref: 'str', what: 'str', clause: 'Callable[[Any], Any]', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "When you use <row>, you can X **instead of** Y."

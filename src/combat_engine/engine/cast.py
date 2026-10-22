@@ -12833,7 +12833,9 @@ class Cast:
 
     # -- a hold changing hands -----------------------------------------------
 
-    def pass_on(self, ev: Any = None, *, to: int | None = None) -> Effect | None:
+    def pass_on(
+        self, ev: Any = None, *, to: int | None = None, attack: bool = False
+    ) -> Effect | None:
         """Whatever conditions the attack being answered would apply, land
         on somebody else instead.
 
@@ -12851,8 +12853,35 @@ class Cast:
 
         It inherits `c.transfer`'s one refusal: a hold carrying a relation
         -- a mark, a grab -- is left where it landed rather than half moved.
+
+        **`attack=True` passes the triggering power's *later attack rolls*
+        on as well**, which is the "or secondary attacks" half two monster
+        rows print and which a condition watch cannot reach: a second
+        attack line is not a condition.
+
+        The premise those rows carried -- *"nothing re-aims an attack roll
+        a resolving body is about to make"* -- is false, and the thing that
+        makes it false is already written down a few hundred lines away in
+        `resolve.roll`:
+
+            # Read back off the event, because an interrupt may have moved
+            # the attack. [...] and the closure captured the parameters
+            # instead, so assigning `ev.target` did nothing at all and
+            # failed silently.
+
+        So the re-aim is one assignment. **The window is the whole trick**
+        and is why this looked impossible: `roll` is the callback `emit`
+        runs, so a listener in the default AFTER window fires after the
+        attack has already been rolled and changes nothing. Measured, with
+        the identical listener in each window: AFTER leaves the roll
+        against the original target, BEFORE moves it.
+
+        Bounded exactly as the condition half is -- same swinger, same
+        power's resolution, stood down by the next `PowerUsed` -- so a
+        creature does not go on deflecting every attack for the rest of
+        the turn.
         """
-        from .events import ConditionApplied
+        from .events import AttackDeclared, ConditionApplied, Window
 
         victim = self._who(to)
         mine = self.me
@@ -12886,6 +12915,32 @@ class Cast:
                 label=f"{self.ref} passed on",
             )
         )
+
+        if attack:
+            def re_aim(declared: AttackDeclared) -> None:
+                if any(isinstance(e, PowerUsed)
+                       for e in self.world.bus.log[start:]):
+                    return
+                if declared.target != mine:
+                    return
+                if swinger is not None and declared.attacker != swinger:
+                    return
+                declared.target = victim
+
+            # **`Window.BEFORE`, and the default would be silently inert.**
+            # `resolve.attack` passes its `roll` to `emit` as the callback,
+            # so an AFTER listener runs once the attack has already been
+            # rolled against the original target.
+            armed.append(
+                self.watch(
+                    AttackDeclared,
+                    re_aim,
+                    until=When.EOT,
+                    window=Window.BEFORE,
+                    on=mine,
+                    label=f"{self.ref} passed on the swing",
+                )
+            )
         return armed[0]
 
     def transfer(

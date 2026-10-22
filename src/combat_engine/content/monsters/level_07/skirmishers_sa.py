@@ -880,7 +880,6 @@ def _struck_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger=_M1742_STRUCK,
     on=Trigger(Hit, when=_struck_with_a_copy_to_hand, text=_M1742_STRUCK),
-    dropped=("c.pass_on(attack=)",),
 )
 def m1742a5(c: Cast) -> None:
     """The copy takes the blow instead, and takes it as psychic.
@@ -902,10 +901,18 @@ def m1742a5(c: Cast) -> None:
     log and by the event rather than by a clock, so it stands down the
     moment another power is used.
 
-    **Still dropped: "or secondary attacks".** A second attack line is not a
-    condition, so `pass_on` cannot carry it, and nothing re-aims an attack
-    roll a resolving body is about to make. `c.pass_on(attack=)` is the
-    symbol two other rows already wait on.
+    **"Or secondary attacks" is written now, and the premise that blocked
+    it was false.** The note this replaces said "nothing re-aims an attack
+    roll a resolving body is about to make". `resolve.roll` reads its
+    target back off the `AttackDeclared` it is handed, and has done since
+    a commit whose own comment says the closure capturing the parameters
+    instead "did nothing at all and failed silently".
+
+    `c.pass_on(attack=True)` makes that assignment. The window was the
+    whole of why it looked impossible -- `roll` is the callback `emit`
+    runs, so a default AFTER listener fires once the attack has already
+    been rolled. `m82a5` is the same card one tier up and carries the
+    measurement.
     """
     me = c.me
     pack = _copies(c)
@@ -927,7 +934,7 @@ def m1742a5(c: Cast) -> None:
             label=f"{c.ref} deflect",
         )
     )
-    c.pass_on(c.trigger, to=dup)
+    c.pass_on(c.trigger, to=dup, attack=True)
     c.note(f"{c.ref}: the blow is turned onto a copy")
 
 

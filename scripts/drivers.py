@@ -22887,6 +22887,98 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def a_swing_is_passed_on(out: Result) -> None:
+    """`c.pass_on(attack=True)` re-aims the triggering power's later attack
+    rolls, through the verb and not through a hand-rolled listener.
+
+    Two monster rows printed "or secondary attacks" and both carried the
+    premise *"nothing re-aims an attack roll a resolving body is about to
+    make"*. It is false, and what makes it false has been written down in
+    `resolve.roll` for longer than the marker existed -- it reads its
+    target back off the `AttackDeclared` it is handed, because *"the
+    closure captured the parameters instead, so assigning `ev.target` did
+    nothing at all and failed silently"*.
+
+    **The window is the trap.** `resolve.attack` hands its `roll` to `emit`
+    as the callback, so a watch in the default AFTER window fires once the
+    attack has already been rolled and changes nothing, silently.
+
+    **A first version of this rule registered its own `bus.on` listener and
+    proved the engine rather than the verb.** Both plants walked through
+    it: dropping `window=Window.BEFORE` from `c.pass_on` left every
+    assertion green, because nothing here called `c.pass_on`. It goes
+    through the verb now, which is the only version that can fail when the
+    verb is wrong.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import Defense
+
+    AC = Defense.AC
+
+    class _Blow:
+        """The least a `pass_on` trigger has to be: it reads `.attacker`."""
+
+        def __init__(self, attacker: int) -> None:
+            self.attacker = attacker
+
+    def swing(pass_it: bool, same_swinger: bool = True) -> tuple:
+        """Arm `pass_on` if asked, then have somebody swing at the caster."""
+        world, me, _ = audit_board("m82a5", 1)
+        foes = enemies(world, me)
+        if len(foes) < 3:
+            return None, None, None
+        swinger, dup, other = foes[0], foes[1], foes[2]
+        if pass_it:
+            arm = Cast(world=world, me=me, ref="drivers:passon")
+            arm.pass_on(_Blow(swinger), to=dup, attack=True)
+        hit: list[int] = []
+        world.bus.on(AttackRolled, lambda ev: hit.append(ev.target))
+        world.rng.loaded = 10
+        # **`c.attack`, not `c.basic`, and the reason is the verb's own
+        # bound.** `pass_on` stands the deflection down as soon as another
+        # `PowerUsed` goes by, which is right -- "applied by the triggering
+        # attack" is one power's resolution. `c.basic` *starts a power*, so
+        # posing the secondary swing that way trips the guard and the verb
+        # correctly does nothing. In play the second attack line happens
+        # while the triggering power is still resolving, with no new
+        # `PowerUsed` between. The raw roll is how that is posed.
+        who = swinger if same_swinger else other
+        use = Cast(world=world, me=who, ref="drivers:passon")
+        use.target = me
+        use.attack(5, AC, on=me)
+        return (hit[0] if hit else None), me, dup
+
+    plain, me, dup = swing(pass_it=False)
+    if plain is None:
+        out.skip("three enemies, for a swing and somewhere to pass it")
+        return
+    out.that(plain == me,
+             "with nothing armed the swing lands on the creature it was"
+             " declared against -- the control",
+             f"declared at {me}, rolled against {plain}")
+
+    passed, _, _ = swing(pass_it=True)
+    out.that(passed == dup,
+             "**and `c.pass_on(attack=True)` moves it**, which the two rows"
+             " printing 'or secondary attacks' were told was impossible."
+             " Removing `window=Window.BEFORE` from the verb reddens this"
+             " and nothing else, which is the point: an AFTER watch fires"
+             " after `resolve.attack` has already rolled",
+             f"moved from {me} to {passed}")
+
+    elsewhere, _, _ = swing(pass_it=True, same_swinger=False)
+    out.that(elsewhere == me,
+             "and a swing from somebody other than the creature that"
+             " triggered it is left alone -- the bound `pass_on` keeps on"
+             " both halves, so a deflection does not catch the whole"
+             " table's attacks",
+             f"the other attacker's swing landed on {elsewhere}")
+
+
 def a_damage_die_is_pinned(out: Result) -> None:
     """A floor on a damage die's face is not a reroll of it, and a set is
     not a floor (#742).
@@ -29594,6 +29686,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "passed_swing": (
+        a_swing_is_passed_on,
+        "a triggering power's later swing re-aimed, and the window that"
+        " made it look impossible",
     ),
     "pinned_die": (
         a_damage_die_is_pinned,

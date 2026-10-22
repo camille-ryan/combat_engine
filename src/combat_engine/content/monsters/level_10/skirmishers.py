@@ -1252,7 +1252,7 @@ def _hit_with_a_copy_to_hand(world: World, me: int, ev: Hit) -> bool:
     keywords=[Keyword.PSYCHIC],
     trigger=_M82_STRUCK,
     on=Trigger(Hit, when=_hit_with_a_copy_to_hand, text=_M82_STRUCK),
-    dropped=("c.pass_on(attack=)",),
+
 )
 def m82a5(c: Cast) -> None:
     """The copy takes it instead.
@@ -1273,14 +1273,19 @@ def m82a5(c: Cast) -> None:
     intact, saving throw and all, and it stands down as soon as another
     power is used.
 
-    **Still dropped: "or secondary attacks".** A second attack line is not
-    a condition, so `pass_on` cannot carry it, and nothing re-aims an
-    attack roll a resolving body is about to make. The symbol is
-    `c.pass_on(attack=)`, shared with `m1742a5` -- the same card one tier
-    down -- and with two rows that already wait on it.
+    **"Or secondary attacks" is written now, and the premise that blocked
+    it was false.** The note this replaces said "nothing re-aims an attack
+    roll a resolving body is about to make". `resolve.roll` reads its
+    target back off the `AttackDeclared` it is given, and has done since a
+    commit whose comment says the closure capturing the parameters instead
+    "did nothing at all and failed silently". So the re-aim is one
+    assignment, and `c.pass_on(attack=True)` makes it.
 
-    A docstring that confesses a missing clause the marker tuple does not
-    list is a shape worth watching for: no instrument reads prose.
+    The window was the whole of why it looked impossible: `roll` is the
+    callback `emit` runs, so a listener in the default AFTER window fires
+    after the attack has already been rolled. Measured both ways with the
+    same listener -- AFTER leaves the roll on the original target, BEFORE
+    moves it.
     """
     me = c.me
     pack = _duplicates(c)
@@ -1302,5 +1307,5 @@ def m82a5(c: Cast) -> None:
             label=f"{c.ref} deflect",
         )
     )
-    c.pass_on(c.trigger, to=dup)
+    c.pass_on(c.trigger, to=dup, attack=True)
     c.note("m82a5: the blow is turned onto a duplicate")
