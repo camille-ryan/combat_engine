@@ -13625,7 +13625,13 @@ class Cast:
         return holding(self.world, who, what) if who is not None else []
 
     def weapon_dice(
-        self, dice: str, *, group: str = "", ref: str = "", on: int | None = None
+        self,
+        dice: str,
+        *,
+        group: str = "",
+        ref: str = "",
+        held: bool = False,
+        on: int | None = None,
     ) -> int:
         """Set the damage die of that creature's own weapons. Returns how many.
 
@@ -13663,7 +13669,8 @@ class Cast:
 
         changed = 0
         for weapon in gear.weapons:
-            if (group and weapon.group == group) or (ref and weapon.ref == ref):
+            if (group and weapon.group == group) or (ref and weapon.ref == ref) \
+                    or (held and weapon.ref not in gear.stowed):
                 if weapon.damage != dice:
                     self.world.bus.emit(WeaponChanged(
                         actor=who, weapon=weapon.ref,
@@ -13680,6 +13687,7 @@ class Cast:
         group: str = "",
         ref: str = "",
         every: bool = False,
+        held: bool = False,
         on: int | None = None,
     ) -> int:
         """Lay a printed weapon property on that creature's weapons. Returns how many.
@@ -13694,6 +13702,18 @@ class Cast:
         warhammer satisfies a card asking for a light blade" and changes no
         weapon; this one changes the weapon. One symbol serving both would
         go green for either need and be right for only one.
+
+        **`held=True` is "the weapon in your hand"**, which none of the
+        other selectors could say: `ref=` and `group=` both name a *kind*
+        of weapon, and a row printed on a glove or a cloak has no weapon
+        ref of its own to name. `c.my_weapon` looks like that door and is
+        not -- it matches `Weapon.item == <this block's item>`, so for
+        anything but a weapon or implement block it returns None, which is
+        what left `i1151p1` marked. On all five writers. #841.
+
+        Resolved against `Gear.stowed` rather than `Gear.held`: `held` is
+        a derived list and `in` on a dataclass compares **fields**, so two
+        identical weapons would both match where only one is in hand.
 
         `group` matches a whole group, `ref` names one weapon, and `every`
         is the printed "weapons you wield" -- a blanket that `weapon_dice`
@@ -13721,6 +13741,7 @@ class Cast:
                 every
                 or (group and weapon.group == group)
                 or (ref and weapon.ref == ref)
+                or (held and weapon.ref not in gear.stowed)
             ):
                 had = weapon.properties
                 weapon.properties = weapon.properties | {prop}
@@ -13743,6 +13764,7 @@ class Cast:
         thrown: tuple[int, int] | None = None,
         group: str = "",
         ref: str = "",
+        held: bool = False,
         on: int | None = None,
     ) -> int:
         """Give that creature's weapons a printed range. Returns how many.
@@ -13786,7 +13808,8 @@ class Cast:
         changed = 0
         for weapon in gear.weapons:
             if not ((group and weapon.group == group)
-                    or (ref and weapon.ref == ref)):
+                    or (ref and weapon.ref == ref)
+                    or (held and weapon.ref not in gear.stowed)):
                 continue
             changed += 1
             # `named`, not `field`: `dataclasses.field` is imported at the
@@ -13808,6 +13831,7 @@ class Cast:
         group: str = "",
         ref: str = "",
         every: bool = False,
+        held: bool = False,
         on: int | None = None,
     ) -> int:
         """Re-file what a weapon *is*, so a group-gated row will take it.
@@ -13866,7 +13890,8 @@ class Cast:
         out = []
         for weapon in gear.weapons:
             wanted = every or (group and weapon.group == group) or (
-                ref and weapon.ref == ref)
+                ref and weapon.ref == ref) or (
+                held and weapon.ref not in gear.stowed)
             if not wanted or weapon.group == becomes:
                 out.append(weapon)
                 continue
@@ -13886,6 +13911,7 @@ class Cast:
         group: str = "",
         ref: str = "",
         every: bool = False,
+        held: bool = False,
         on: int | None = None,
     ) -> int:
         """"You treat slings as having a +3 proficiency bonus." Returns how
@@ -13926,7 +13952,8 @@ class Cast:
         set_ = 0
         for weapon in gear.weapons:
             wanted = every or (group and weapon.group == group) or (
-                ref and weapon.ref == ref)
+                ref and weapon.ref == ref) or (
+                held and weapon.ref not in gear.stowed)
             if not wanted or weapon.proficiency == bonus:
                 continue
             self.world.bus.emit(WeaponChanged(

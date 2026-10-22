@@ -1403,12 +1403,28 @@ def i1151x1(c: Cast) -> None:
 
 @power("i1151p1", level=10, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
        reach=Ranged(10), target=ONE_CREATURE, attack=Attack(STR, vs=AC),
-       dropped=("c.make_thrown()",))
+       dropped=("c.gains_property(until=)",))
 def i1151p1(c: Cast) -> None:
     """Rolled here rather than through `c.basic(ranged=True)`, which asks
     for a ranged basic the wielder of a sword does not have -- the whole
     point of the row is that the melee weapon is the one being thrown.
-    Making it *count* as a heavy thrown weapon is the missing half."""
+
+    **Re-pointed, and the selector was only half of it.** The old marker
+    was `c.make_thrown()`, and the last thing missing looked like a way to
+    name "the weapon in my hand" -- `ref=` and `group=` both name a *kind*
+    of weapon, and a hands-slot block has no weapon ref of its own.
+    `held=True` is that, on all five weapon writers now (#841).
+
+    What is actually left is a **duration**. The card says the weapon
+    counts as heavy thrown for *this attack*, and `c.gains_property`
+    writes the field and leaves it there -- so a sword thrown once would
+    read as heavy thrown for the rest of the fight, which `i1151x1`'s own
+    `_throwing` gate and `i1756p1`'s `_is_thrown` would both believe. That
+    is wider than print in a way another row pays out on, so the clause
+    stays marked rather than being written and apologised for.
+
+    #676's title already named this -- *"one of them wants a duration on
+    it"* -- and this is the row it meant."""
     if c.strike():
         c.damage(c.w(), c.str_mod)
 

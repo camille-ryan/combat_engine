@@ -23030,6 +23030,28 @@ def a_weapon_is_re_filed(out: Result) -> None:
         got = getattr(seen[0], "result", None) if seen else None
         return got.total if got is not None else None
 
+    # -- held=True selects what is in hand, and only that (#841) ----------
+    world, me, _ = audit_board("f1277", 1)
+    gear = world.get(me, Gear)
+    if gear is None or len(gear.weapons) < 2 or not gear.held:
+        out.skip("a character carrying more than it holds, for held=")
+    else:
+        in_hand = {w.ref for w in gear.held}
+        on_belt = set(gear.stowed)
+        n = Cast(world=world, me=me, ref="drivers:held").gains_property(
+            "silvered", held=True, on=me)
+        after = world.get(me, Gear)
+        got = {w.ref for w in after.weapons if "silvered" in w.properties}
+        out.that(n == len(in_hand) and got == in_hand,
+                 "`held=True` lays the property on exactly what is in hand"
+                 " -- the selector `ref=` and `group=` could not spell,"
+                 " since a hands-slot block has no weapon ref of its own",
+                 f"held {sorted(in_hand)}, laid on {sorted(got)}")
+        out.that(not (got & on_belt),
+                 "and on nothing that is on the belt, which is the half a"
+                 " selector reaching every carried weapon would get wrong",
+                 f"stowed {sorted(on_belt)}, laid on {sorted(got)}")
+
     two, three = total_with(2), total_with(3)
     if two is None or three is None:
         out.skip("a held weapon to measure a proficiency set through")
