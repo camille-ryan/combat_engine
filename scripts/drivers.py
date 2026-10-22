@@ -3217,6 +3217,120 @@ def rough_ground_that_knows_who_made_it(out: Result) -> None:
     )
 
 
+def a_weapon_write_rebuilds_the_weapon(out: Result) -> None:
+    """Three weapon writers mutated a `Weapon` in place and skipped its own
+    post-init, which is the thing that keeps `hands` and `properties` saying
+    the same word.
+
+    `Weapon.__post_init__` exists for that mirroring and an attribute
+    assignment on a live object never runs it, so `c.weapon_dice`,
+    `c.gains_property` and `c.weapon_range` could leave the two fields
+    disagreeing. `c.as_implement` and `c.weapon_group` already used
+    `replace` with a write-back; these three now do. #842.
+
+    **The mirroring only fills a blank**, and knowing that is what makes
+    this rule discriminating. It reads
+
+        if not self.hands:
+            for word in _HAND_COUNTS: ...
+
+    so a weapon that already prints a hand count is untouched by the fix,
+    and posing one would assert nothing -- the first version of this probe
+    did exactly that and showed a longbow carrying *both* "two-handed" and
+    "one-handed" with `hands` unchanged, which is an author laying a
+    contradictory word and a different complaint. The reachable case is a
+    weapon with **no** printed hand count, which is the 38 hand-written ones
+    the post-init's own docstring is about.
+
+    Measured at both shas on that case:
+
+        before   hands ''            properties ['two-handed']   disagree
+        after    hands 'two-handed'  properties ['two-handed']    agree
+
+    **And a control for the other way to get this wrong.** A conversion to
+    `replace` that forgets to write the new object back into `gear.weapons`
+    loses the change in silence -- the issue's own comment flags it, because
+    `c.as_implement` rebuilds the list by identity (`w is arm`) and a reader
+    that misses that keeps the old object. So each of the three is asserted
+    to be **visible afterwards**, which is the half a mirroring assertion
+    cannot see.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear, Weapon
+
+    def armed(**kw):  # noqa: ANN003, ANN202
+        """A board whose character holds exactly one hand-written weapon."""
+        world, me, _ = _posed("f1873", 1)
+        gear = world.need(me, Gear)
+        blade = Weapon(ref="w0000", damage="1d8", group="club", **kw)
+        gear.weapons = [blade]
+        gear.stowed = set()
+        return world, me, gear, blade
+
+    # -- the bug: a blank hand count must follow the property -------------
+    world, me, gear, blade = armed()
+    out.that(blade.hands == "" and not blade.properties,
+             "a hand-written weapon starts with no printed hand count --"
+             " the case the mirroring exists for and the only one it can"
+             " reach",
+             f"hands {blade.hands!r}, props {sorted(blade.properties)}")
+    laid = Cast(world=world, me=me, ref="f1873").gains_property(
+        "two-handed", every=True, on=me)
+    now = gear.weapons[0]
+    out.that(laid == 1 and "two-handed" in now.properties,
+             "laying the property reports one weapon and the property is"
+             " **visible on the weapon in `gear.weapons`** -- the control"
+             " for a `replace` whose result was never written back, which"
+             " loses the change in silence",
+             f"{laid} laid, props {sorted(now.properties)}")
+    out.that(now.hands == "two-handed",
+             "**and `hands` followed it**, which is the whole of #842: the"
+             " post-init mirrors the two fields and an in-place write never"
+             " ran it, so `hands` stayed empty while `properties` said"
+             " two-handed",
+             f"hands {now.hands!r}")
+    out.that(now is not blade,
+             "by rebuilding the weapon rather than editing it -- the"
+             " identity change is what proves the post-init ran at all",
+             f"{now is not blade}")
+
+    # -- a weapon that already prints one is left alone -------------------
+    world, me, gear, blade = armed(hands="one-handed",
+                                   properties=frozenset({"one-handed"}))
+    Cast(world=world, me=me, ref="f1873").gains_property(
+        "light blade", every=True, on=me)
+    now = gear.weapons[0]
+    out.that(now.hands == "one-handed" and "light blade" in now.properties,
+             "a weapon that already prints a hand count keeps it while"
+             " gaining an ordinary property -- the mirroring fills a blank"
+             " and does not overwrite a printed answer",
+             f"hands {now.hands!r}, props {sorted(now.properties)}")
+
+    # -- the other two writers: visible afterwards ------------------------
+    world, me, gear, blade = armed()
+    moved = Cast(world=world, me=me, ref="f1873").weapon_dice(
+        "2d6", ref="w0000", on=me)
+    out.that(moved == 1 and gear.weapons[0].damage == "2d6",
+             "c.weapon_dice's new die is visible on the weapon afterwards",
+             f"{moved}, {gear.weapons[0].damage}")
+    out.that(gear.weapons[0] is not blade,
+             "and it rebuilt rather than edited", f"{gear.weapons[0] is not blade}")
+
+    world, me, gear, blade = armed()
+    reach = Cast(world=world, me=me, ref="f1873").weapon_range(
+        ranged=(10, 20), ref="w0000", on=me)
+    now = gear.weapons[0]
+    out.that(reach == 1 and now.ranged == (10, 20),
+             "and c.weapon_range's new range is too. Both numbers go into"
+             " **one** `replace`: two in a row would run the post-init twice"
+             " and throw the first answer away",
+             f"{reach}, {now.ranged}")
+    out.that(now is not blade,
+             "rebuilt, not edited", f"{now is not blade}")
+
+
 def a_basic_attack_that_becomes_a_burst(out: Result) -> None:
     """*"The next ranged basic attack you make with this weapon before the
     end of your turn becomes a burst 1 centered on the target. Use your
@@ -17064,8 +17178,18 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              f"{was}")
     out.that(c.weapon_range(ranged=(10, 20), ref=held.ref, on=me) == 1,
              "one weapon is re-ranged when asked by ref")
-    out.that(held.ranged == (10, 20),
-             f"and the field says so ({was} -> {held.ranged})")
+    # **Re-read from `gear.weapons`, not through the object captured above.**
+    # This line used to assert `held.ranged`, which only ever worked because
+    # the verb mutated the weapon in place -- so the assertion was coupled to
+    # the mechanism rather than to the behaviour, and #842's conversion to
+    # `replace` turned it red while the verb was working correctly. The
+    # stale object is exactly the hazard that issue's comment flags, and the
+    # caller it caught was this driver.
+    now = next((w for w in gear.weapons if w.ref == held.ref), None)
+    out.that(now is not None and now.ranged == (10, 20),
+             f"and the field says so ({was} -> "
+             f"{now.ranged if now else None}), read off the creature's gear"
+             " rather than off the object the verb replaced")
 
     # **No blanket, unlike `gains_property`.** A property only adds; a range
     # replaces, so an `every=` would shorten a bow to make a dagger
@@ -17076,6 +17200,12 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              " property only adds")
     out.that(c.weapon_range(ref=held.ref, on=me) == 0,
              "asking for neither field is a no-op rather than an error")
+    out.that(next((w for w in gear.weapons if w.ref == held.ref), None)
+             is now,
+             "and a no-op leaves the weapon object alone rather than"
+             " rebuilding it, so nothing downstream sees a new one for"
+             " nothing",
+             f"{next((w for w in gear.weapons if w.ref == held.ref), None) is now}")
 
     # -- the two rows that are range rows --------------------------------
     out.that(REGISTRY["f1277"].unfinished == (),
@@ -31201,6 +31331,9 @@ DRIVERS = {
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,
                        "an aura can be difficult ground, waived for a side"),
+    "weapon_rebuilt": (a_weapon_write_rebuilds_the_weapon,
+                       "a weapon write rebuilds the weapon so its post-init"
+                       " runs, and the change is visible after (#842)"),
     "becomes_burst": (a_basic_attack_that_becomes_a_burst,
                       "a basic attack rewritten into a burst: shape,"
                       " defence and damage together (#712)"),

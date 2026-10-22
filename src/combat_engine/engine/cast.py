@@ -14406,7 +14406,13 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             return 0
         from .events import WeaponChanged
 
+        # **`replace` and a write-back, never a mutation in place.**
+        # `Weapon.__post_init__` is what keeps `hands` and `properties`
+        # saying the same thing, and an attribute assignment on an existing
+        # object does not run it. #842, which #643's body warned about and
+        # then cited this very method as the good example -- it was not one.
         changed = 0
+        out: list[Any] = []
         for weapon in gear.weapons:
             if (group and weapon.group == group) or (ref and weapon.ref == ref) \
                     or (held and weapon.ref not in gear.stowed):
@@ -14415,8 +14421,11 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                         actor=who, weapon=weapon.ref,
                         field="damage", what=dice,
                     ))
-                weapon.damage = dice
+                out.append(replace(weapon, damage=dice))
                 changed += 1
+            else:
+                out.append(weapon)
+        gear.weapons = out
         return changed
 
     def gains_property(
@@ -14474,7 +14483,12 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             return 0
         from .events import WeaponChanged
 
+        # `replace` and a write-back -- see `weapon_dice` above for why, and
+        # note that this is the method where it matters most: the mirroring
+        # `__post_init__` does covers exactly the hand-count words, which are
+        # properties and are laid through here. #842.
         laid = 0
+        out: list[Any] = []
         for weapon in gear.weapons:
             if (
                 every
@@ -14483,7 +14497,8 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                 or (held and weapon.ref not in gear.stowed)
             ):
                 had = weapon.properties
-                weapon.properties = weapon.properties | {prop}
+                weapon = replace(weapon, properties=had | {prop})
+                out.append(weapon)
                 laid += 1
                 # Announced because the write needs no reader and therefore
                 # had no witness -- `ZoneResized`'s argument exactly. Only
@@ -14494,6 +14509,9 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
                         actor=who, weapon=weapon.ref,
                         field="properties", what=prop,
                     ))
+            else:
+                out.append(weapon)
+        gear.weapons = out
         return laid
 
     def weapon_range(
@@ -14544,23 +14562,31 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
             return 0
         from .events import WeaponChanged
 
+        # `replace` and a write-back -- see `weapon_dice` above. Both fields
+        # go into **one** `replace`: two in a row would run the post-init
+        # twice and throw the first answer away. #842.
         changed = 0
+        out: list[Any] = []
         for weapon in gear.weapons:
             if not ((group and weapon.group == group)
                     or (ref and weapon.ref == ref)
                     or (held and weapon.ref not in gear.stowed)):
+                out.append(weapon)
                 continue
             changed += 1
             # `named`, not `field`: `dataclasses.field` is imported at the
             # top of this module and a loop variable would shadow it.
+            edits: dict[str, Any] = {}
             for named, want in (("ranged", ranged), ("thrown", thrown)):
                 if want is None or getattr(weapon, named) == want:
                     continue
-                setattr(weapon, named, want)
+                edits[named] = want
                 self.world.bus.emit(WeaponChanged(
                     actor=who, weapon=weapon.ref,
                     field=named, what=f"{want[0]}/{want[1]}",
                 ))
+            out.append(replace(weapon, **edits) if edits else weapon)
+        gear.weapons = out
         return changed
 
     def weapon_group(
