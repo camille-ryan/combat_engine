@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-"""Close the content issues whose work is actually finished.
+"""Carry the tree's own answer about an issue to GitHub, instead of remembering.
 
-    uv run scripts/issues.py            what would happen, and nothing else
+    uv run scripts/issues.py            content buckets: what would close
     uv run scripts/issues.py --close    do it
+    uv run scripts/issues.py --stale    any open issue whose premise the tree
+                                        has since falsified. Reports only.
 
 Work is tracked as one issue per class per level for powers and one per
 level for monsters. Whether a bucket is *done* is a question `coverage.py`
@@ -27,6 +29,62 @@ skipped used to live in a wave's report, and the tree did not know it.
 
 A comment is only posted when the remaining set has *changed* since the last
 one, so a bucket that has not moved does not accumulate identical notes.
+
+## `--stale`: the same idea over the whole backlog
+
+The bucket pass above covers the ~69 issues whose title matches a coverage
+key. The other ~110 get nothing, and they go stale the same way -- #666 sat
+open asking whether an adventuring day was in scope while `World.milestones`
+was built and **no row named `c.milestone()` any more**. It was found by
+hand, in a session that was looking for something else.
+
+So `--stale` asks the one question the tree can answer about any issue:
+**does a single row still want the symbol this issue is about?** Two
+independent readings, which is what makes it worth trusting:
+
+* `exists` -- the verb is a public member of `Cast` today;
+* `waiting` -- how many declared rows carry it in `unfinished`.
+
+`exists and not waiting` means the facility was built *and* the demand is
+gone. That is as close to "finished" as this instrument can see.
+
+**It reports and never closes, and that is deliberate.** `triage.py`'s rule
+applies and for the same reason: *"a number that is wrong 70% of the time
+cannot be a gate"*, so this ranks and a human confirms.
+
+### The measured precision is 1 in 31, and the first estimate was 1 in 2
+
+Worth writing down at length, because the honest number is much worse than
+the one this was built on and the gap is instructive.
+
+Calibrating on **two** candidates gave one real (`#615`) and one false
+(`#823`, a browser-flake issue that merely *quotes* a commit named after a
+verb) -- so "about one in two" went into this docstring. Reading **all 31**
+gave exactly **one** confirmed close, which is `#615`.
+
+The reason is a class of issue the signal cannot distinguish from a spent
+one, and it turns out to be most of them: **an issue about code that should
+start using a verb which now exists.** `#843` ("six content sites hand-roll
+two weapon verbs that now exist") and `#838` are live work, and from here
+they look identical to `#615` -- the verb is on `Cast`, no row carries the
+marker, and the issue names it. The marker set answers "does a *row* want
+this", and a great many issues are about `content/`, `scripts/` or `etl/`
+sites instead, which no marker tracks.
+
+`#814` is the sharpest case: it is titled *"`c.class_feature()` is at zero
+rows but 16 files still define its marker constant"*. Being at zero rows is
+its **premise**, not its resolution, and the strong tier flagged it anyway.
+
+So the finding from the first full run is not the one close. **It is that
+this backlog is not stale** -- 180 issues, well-evidenced, and the two
+spent ones (`#666`, `#615`) were the same symbol. Anyone reaching for a
+bigger reconciliation pass should read that result first.
+
+Two things it deliberately does not see, so nobody reads a clean run as
+proof: an issue naming **no** symbol at all (110 of 180 -- most of the
+backlog, and the honest limit of this approach), and an issue whose census
+has drifted rather than whose symbol has gone. `#214`'s 1,177-that-was-808
+is the second kind and needs a different probe.
 """
 
 from __future__ import annotations
@@ -49,7 +107,12 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--close", action="store_true", help="actually close them")
+    ap.add_argument("--stale", action="store_true",
+                    help="any open issue whose premise the tree has falsified")
     args = ap.parse_args()
+
+    if args.stale:
+        return _stale()
 
     powers, monsters, missing, unfinished = _coverage()
     issues = _open_issues()
@@ -91,6 +154,112 @@ def main() -> int:
     elif args.close:
         print(f"\nclosed {len(done)}, left {len(partial)} open with work remaining")
     return 0
+
+
+#: A symbol as an issue writes one: `c.foo()`, `chargen.bar()`,
+#: `etl.monster.baz()`.
+#:
+#: **The backtick is optional and that is load-bearing.** The first version
+#: required one, on the reasoning that the tree's issues quote every symbol.
+#: Bodies do. **Titles do not** -- `#615` is titled `c.milestone(): the 6
+#: rows need an adventuring day`, with no backticks anywhere -- so the title
+#: tier, which is the whole point of the split, matched nothing and reported
+#: a confident zero. A gate every instance of which is False reads exactly
+#: like a passing one.
+#:
+#: The trailing `(` is what keeps this honest without the backtick: it is
+#: the call syntax, so ordinary prose about a class or a file does not match.
+SYMBOL = re.compile(r"\b((?:c|chargen|etl|query|spec|expect)\.[\w.]+?)\(")
+
+
+def _wanted() -> dict[str, int]:
+    """Every symbol a declared row still waits on, and how many want it.
+
+    `unfinished` is the authority rather than `todo`/`dropped` read
+    separately: it is what `coverage.py` and the bucket pass above already
+    count, so a row cannot be finished here and unfinished there.
+    """
+    counts: dict[str, int] = defaultdict(int)
+    for power in declared().values():
+        for symbol in power.unfinished or ():
+            counts[symbol.strip().split("(")[0]] += 1
+    return dict(counts)
+
+
+def _cast_surface() -> set[str]:
+    """What `Cast` actually offers today, as `c.`-prefixed names.
+
+    `vocab.py` is the documented authority on this surface; it is read by
+    introspecting the same class, so this asks the class directly rather
+    than shelling out to parse a report.
+    """
+    from combat_engine.engine.cast import Cast
+
+    return {f"c.{name}" for name in dir(Cast) if not name.startswith("_")}
+
+
+def _stale() -> int:
+    """Rank open issues by whether the tree still wants what they name."""
+    wanted, surface = _wanted(), _cast_surface()
+    issues = _issue_bodies()
+    if not issues:
+        print("# could not read the open issues")
+        return 0
+
+    strong, weak, silent = [], [], 0
+    for number, title, body in issues:
+        in_title = {m.group(1) for m in SYMBOL.finditer(title)}
+        in_body = {m.group(1) for m in SYMBOL.finditer(body)} - in_title
+        if not (in_title or in_body):
+            silent += 1
+            continue
+        # A symbol with even one row behind it means the issue has live
+        # demand, wherever it was named -- so the whole issue is live.
+        if any(wanted.get(s, 0) for s in in_title | in_body):
+            continue
+        row = (number, title, sorted(in_title or in_body),
+               [s for s in in_title | in_body if s in surface])
+        (strong if in_title else weak).append(row)
+
+    print(f"# {len(issues)} open issues; {len(wanted)} symbols still wanted by a row\n")
+    _say_stale("named in the TITLE, and no row wants it", strong, surface)
+    _say_stale("named only in the body -- weaker, reads commit refs too", weak, surface)
+    print(f"\n{len(strong)} strong, {len(weak)} weak, "
+          f"{silent} name no symbol at all and this cannot see them.")
+    print("Reports only -- confirm each by hand. Measured precision: 1 of 31 "
+          "candidates on the first full run was really closeable.")
+    print("Most of the rest are live issues about a site that should *start* "
+          "using a verb that now exists; see the docstring.")
+    return 0
+
+
+def _say_stale(heading: str, rows: list, surface: set[str]) -> None:
+    print(f"## {heading}  ({len(rows)})")
+    if not rows:
+        print("   none\n")
+        return
+    for number, title, symbols, built in sorted(rows):
+        # `built` is the second reading: the verb is there and nothing wants
+        # it, which is the pair that means finished rather than abandoned.
+        mark = "built" if built else "gone "
+        print(f"  {mark} #{number:<4} {', '.join(symbols)[:38]:38} {title[:58]}")
+    print()
+
+
+def _issue_bodies() -> list[tuple[int, str, str]]:
+    done = subprocess.run(
+        ["gh", "issue", "list", "--state", "open", "--limit", "400",
+         "--json", "number,title,body,comments"],
+        capture_output=True, text=True,
+    )
+    if done.returncode != 0:
+        return []
+    out = []
+    for r in json.loads(done.stdout or "[]"):
+        text = (r["body"] or "") + "\n" + "\n".join(
+            c.get("body") or "" for c in r.get("comments", ()))
+        out.append((r["number"], r["title"], text))
+    return out
 
 
 def _key_of(title: str) -> object:
