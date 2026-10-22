@@ -1336,6 +1336,29 @@ def can_walk(world: World, eid: int) -> bool:
     return not (mods is not None and mods.items and mods.total("no_walk", {}) > 0)
 
 
+def can_run(world: World, eid: int) -> bool:
+    """"It cannot run", with the walk left alone.
+
+    The run-only mirror of `can_walk`, and the reason it is a separate
+    reader rather than a flag inside that one: `c.no_walk` is documented
+    as *"it cannot use move actions to walk **or** run"*, so the only
+    prohibition this engine had took both. `m5452a2`'s whole card is a
+    move action spelled out -- it walks its speed and cannot run -- so
+    taking the walk away is not an option there. The walk **is** the row.
+
+    Refuses whatever `can_walk` refuses, because a creature that cannot
+    walk cannot run either; `no_run` is the extra bar on top. The same
+    relationship `c.cannot_shift` has to `c.no_walk`, and this file's own
+    note on that pair gives the reason it matters: *"a row printing only
+    one half was being written as the stronger card or dropped"*, which is
+    exactly what had happened. #670.
+    """
+    if not can_walk(world, eid):
+        return False
+    mods = world.get(eid, Mods)
+    return not (mods is not None and mods.items and mods.total("no_run", {}) > 0)
+
+
 # -- combat advantage -------------------------------------------------------
 
 

@@ -13297,6 +13297,26 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         """
         return self.bonus("no_walk", 1, on=on, until=until, kind="untyped")
 
+    def no_run(self, *, until: When = When.EONT, on: int | None = None) -> Effect | None:
+        """"It cannot run." The walk is left alone.
+
+        The run-only mirror of `c.no_walk`, which is documented as *"it
+        cannot use move actions to walk **or** run"* -- so before this the
+        only prohibition available took both, and a card printing the
+        narrow one had to be written as the stronger card or dropped.
+
+        `m5452a2` is why the distinction is not academic: its whole card is
+        a move action spelled out -- it walks its speed and cannot run --
+        so `c.no_walk` would have deleted the row's own content.
+
+        A modifier rather than a condition, exactly as `c.no_walk` is:
+        nothing else about the creature changes. `query.can_run` reads it
+        and the run branch of `actions._movement` gates on that, so the
+        menu stops offering the run and a policy cannot pick one either.
+        #670.
+        """
+        return self.bonus("no_run", 1, on=on, until=until, kind="untyped")
+
     def regain_surge(self, count: int = 1, *, on: int | None = None) -> int:
         """"Each target regains a healing surge." Returns how many it now has.
 

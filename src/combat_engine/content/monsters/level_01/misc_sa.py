@@ -185,7 +185,6 @@ def m5452a1(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("c.no_run()",),
 )
 def m5452a2(c: Cast) -> None:
     """A conjuration's whole move action, printed out because it has none of
@@ -193,18 +192,28 @@ def m5452a2(c: Cast) -> None:
     and the only one worth offering a policy; standing, crawling and shifting
     are already in the action menu for anything that can move at all.
 
-    **"It cannot run" is re-pointed rather than written, and the old note
-    was wrong about why.** It said "nothing forbids a run", and something
-    does: `c.no_walk`. The trouble is that its own docstring says it takes
-    "walk **or** run", and walking its speed is what this row is *for*. So
-    the gap is a run-only prohibition, `c.no_run()`, which is #670.
+    **"It cannot run" is written now**, and the diagnosis that got it here
+    was the row's own: `c.no_walk` exists but its docstring says it takes
+    "walk **or** run", and walking its speed is what this row is *for*, so
+    the gap was a run-only prohibition. `c.no_run` is that, read by
+    `query.can_run`, which the run branch of `actions._movement` now gates
+    on instead of `can_walk`. #670.
 
-    Not built, and the reason is a measurement rather than an opinion:
-    `m5452` is in `loader.UNUSABLE` -- "stat line parsed to all zeroes,
-    including hit points" -- so nothing may field this creature and the verb
-    would have no fieldable row behind it. The marker is what makes this
-    findable the day a second card prints the clause.
+    **This creature still cannot be fielded, and that is said rather than
+    glossed.** `m5452` is one of three entries in `content.loader.UNUSABLE`
+    -- "stat line parsed to all zeroes, including hit points" -- so the
+    clause cannot be exercised in play and nothing on a board will ever
+    read it. The row's previous note used that to argue the verb should
+    wait for a second card, which was a fair call; what changed is that
+    the asymmetry is a fault in the engine on its own terms --
+    `query.can_walk`'s own docstring says the pair exists "because a row
+    printing only one half was being written as the stronger card or
+    dropped" -- and this was the half with no mirror.
+
+    So the verb is proved in `drivers.run_only_bar` rather than by this
+    creature, which the board cannot stand up.
     """
+    c.no_run(on=c.me, until=When.ENCOUNTER)
     c.move(c.speed_of())
 
 

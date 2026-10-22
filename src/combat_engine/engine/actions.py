@@ -594,7 +594,7 @@ def _burst_origins(world: World, actor: int, p, augment: int = 0) -> list[Square
 
 
 def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
-    from .query import can_move, can_walk, speed
+    from .query import can_move, can_run, can_walk, speed
 
     out: list[Action] = []
     if is_(world, actor, Condition.PRONE):
@@ -619,7 +619,10 @@ def _movement(world: World, encounter: Encounter, actor: int) -> list[Action]:
     # `c.bonus("run")` is read here so a stance can print a longer one:
     # the ranger's is speed + 4 and grants nothing, which is a change to
     # this menu rather than a power with a body.
-    if encounter.can_spend(actor, ActionType.MOVE) and can_walk(world, actor):
+    # **`can_run`, not `can_walk`.** This gated on the walk, so the only way
+    # to stop a creature running was `c.no_walk`, which stops it walking
+    # too -- and `m5452a2`'s card is a walk that cannot be run. #670.
+    if encounter.can_spend(actor, ActionType.MOVE) and can_run(world, actor):
         extra = 2 + _mods(world, actor, "run", {})
         far = speed(world, actor) + extra
         # Priced as a run, because `execute` walks it as one. Offering

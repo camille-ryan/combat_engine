@@ -22889,6 +22889,80 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def run_only_bar(out: Result) -> None:
+    """`c.no_run` stops the run and leaves the walk, which `c.no_walk` could
+    not (#670).
+
+    `c.no_walk` is documented as *"it cannot use move actions to walk **or**
+    run"*, and `actions._movement` gated the run on `query.can_walk` -- so
+    the only prohibition this engine had took both. `m5452a2`'s whole card
+    is a move action spelled out, it walks its speed and cannot run, and
+    `c.no_walk` would have deleted the row's own content.
+
+    `query.can_walk`'s docstring already names the cost of a missing half:
+    the pair with `c.cannot_shift` exists *"because a row printing only one
+    half was being written as the stronger card or dropped"*. This was that
+    half, with no mirror.
+
+    **The middle assertion is the one that matters.** Barring the run is
+    easy; barring it *without* taking the walk is the whole card, and a
+    verb that reached for `no_walk` internally would pass the first and
+    third assertions and fail only this one.
+
+    **The one row cannot be fielded**, and that is said here as well as in
+    the row: `m5452` is one of three entries in `content.loader.UNUSABLE`
+    -- a stat line parsed to all zeroes -- so nothing stands it up on a
+    board. The verb is proved here instead.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.actions import legal
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import can_run, can_walk
+
+    def kinds(lay: str = "") -> tuple:
+        world, me, _ = audit_board("m145a0", 1)
+        c = Cast(world=world, me=me, ref="drivers:norun")
+        if lay == "run":
+            c.no_run(on=me, until=When.ENCOUNTER)
+        elif lay == "walk":
+            c.no_walk(on=me, until=When.ENCOUNTER)
+        enc = world.encounter
+        offered = ({a.kind for a in legal(world, enc, me)}
+                   if enc is not None else set())
+        return offered, can_walk(world, me), can_run(world, me)
+
+    plain, w0, r0 = kinds()
+    out.that("run" in plain and w0 and r0,
+             "a creature with nothing laid on it is offered the run -- the"
+             " control, without which the next two prove nothing",
+             f"can_walk={w0} can_run={r0} offered={'run' in plain}")
+
+    barred, w1, r1 = kinds("run")
+    out.that("run" not in barred and not r1,
+             "`c.no_run` takes the run off the menu, so a policy cannot"
+             " pick one either",
+             f"can_run={r1}, run offered={'run' in barred}")
+    # `kind="move"` is the walk -- `actions._movement` names it that, and
+    # "walk" is only the word the cards use. A first pass asserted on
+    # `"walk"`, which is in no menu, and read as the walk having been taken
+    # away by a verb that had not touched it.
+    out.that(w1 and "move" in barred,
+             "**and leaves the walk**, which is the whole of the card and"
+             " the half `c.no_walk` could not give. A verb reaching for"
+             " `no_walk` internally would pass the assertion above and"
+             " fail this one",
+             f"can_walk={w1}, move offered={'move' in barred}")
+
+    both, w2, r2 = kinds("walk")
+    out.that(not w2 and not r2 and "run" not in both,
+             "and `c.no_walk` still takes both, which is what its own"
+             " docstring promises -- the new verb narrows nothing that was"
+             " already there",
+             f"can_walk={w2} can_run={r2}")
+
+
 def was_an_attack_behind_it(out: Result) -> None:
     """`c.by_attack` is "an attack's damage line", which `from_attack` is not
     and could never have been (#731).
@@ -30082,6 +30156,10 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "run_only": (
+        run_only_bar,
+        "a run barred with the walk left alone (#670)",
     ),
     "was_an_attack": (
         was_an_attack_behind_it,

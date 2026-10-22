@@ -161,6 +161,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.can_react(world: 'World', eid: 'int', *, ignoring: 'Condition | None' = None) -> 'bool'`
   - Can this creature spend an immediate action?
+- `query.can_run(world: 'World', eid: 'int') -> 'bool'`
+  - "It cannot run", with the walk left alone.
 - `query.can_shift(world: 'World', eid: 'int') -> 'bool'`
   - A shift is barred separately from a walk, and by different powers.
 - `query.can_walk(world: 'World', eid: 'int') -> 'bool'`

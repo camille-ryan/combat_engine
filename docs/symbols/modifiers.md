@@ -142,6 +142,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - "The creature cannot heal."
 - `c.no_provoke(self, *, from_: 'int | None' = None, on: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Walking away from that creature does not give it an opening.
+- `c.no_run(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
+  - "It cannot run." The walk is left alone.
 - `c.no_surges(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "The target cannot spend healing surges."
 - `c.waive(self, condition: 'Condition', *what: 'str', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
