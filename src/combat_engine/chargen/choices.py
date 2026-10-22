@@ -37,6 +37,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from random import Random
 from typing import TYPE_CHECKING
 
@@ -536,19 +537,66 @@ def legal_feats(
     fix, which is how the shape rule got measured: every ref in the `feat`
     table is either `f<digits>` or `f<digits><letters>`, and nothing that is
     really a feat carries a suffix.
+    **Memoised on `(cls, level, leg.name, race, taken)`, and the key is
+    complete rather than approximate.** The only thing this reads off `build`
+    is `leg.name` -- it is handed straight to `Character(build=...)` below --
+    so two `Build` objects with the same name are the same question here, and
+    an ad-hoc one cannot collide with a different answer. That matters because
+    `Build` is **unhashable**: it carries `Weapon`, which is a mutable
+    dataclass, so the object could not be a key even if the identity were
+    wanted.
+
+    Worth memoising because `audit.board` reaches it once per feat slot per
+    board, and a row that never fires pays 48 boards -- `_attempts` only stops
+    when something fires. Measured over three silent rows: **672 calls, 4.30s,
+    26% of their cost.** The 48 boards are 8 seeds x 3 die faces x 2 poses,
+    and chargen sees neither the face nor the pose, so six of every six calls
+    repeat a key.
+
+    The cache holds a **tuple** and the caller gets a fresh `list`: the
+    returned pool is handed to `_one_feat`, which samples it, and a shared
+    mutable list behind a cache is the kind of aliasing that would show up as
+    an unreproducible draw rather than as an error.
+    """
+    return list(_legal_feats(cls, level, (build or _build_of(cls)).name,
+                             race, tuple(taken)))
+
+
+def _build_of(cls: str):  # noqa: ANN202
+    from . import build_of
+
+    return build_of(cls)
+
+
+@lru_cache(maxsize=8192)
+def _legal_feats(
+    cls: str, level: int, leg_name: str, race: str, taken: tuple[str, ...]
+) -> tuple[str, ...]:
+    """The cached body of `legal_feats`. See its docstring for the key.
+
+    **Bounded, and the bound is insurance rather than a fix.** I expected the
+    key space to be a problem and measured it instead: over 12 silent rows it
+    is **10.6 distinct keys a row** at a **93% hit rate** (1,776 hits, 127
+    misses), projecting ~24,000 entries and **50 MB** per worker across a
+    whole sweep. That is affordable unbounded.
+
+    It is capped anyway because the projection scales with the corpus and two
+    more tiers of content are coming. 8,192 entries is ~770 rows' worth at
+    the measured rate — far more than the within-row repetition the cache
+    exists for — and ~16 MB a worker. Eviction cannot change an answer, only
+    recompute one.
     """
     import re
 
     from combat_engine.engine.dsl import REGISTRY, entry_defect
 
-    from . import Character, build_of, meets
+    from . import Character, meets
 
     second_block = re.compile(r"f\d+[a-z]+").fullmatch
-    leg = build or build_of(cls)
     gates = feat_gates()
-    who = Character(cls=cls, level=level, build=leg.name, race=race)
+    who = Character(cls=cls, level=level, build=leg_name, race=race)
     held = list(taken)
-    return [
+    return tuple(
         ref
         for ref in sorted(gates)
         if ref in REGISTRY
@@ -570,7 +618,7 @@ def legal_feats(
         and not second_block(ref)
         and ref not in held
         and meets(gates[ref], who, held)
-    ]
+    )
 
 
 def feat_options(

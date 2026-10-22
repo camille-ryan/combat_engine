@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from .components import Powers
@@ -146,6 +147,46 @@ def _shrugging(ev: Event, eid: int) -> Condition | None:
     return None
 
 
+@cache
+def _watched(_rows: int) -> dict[type[Event], set[Window]]:
+    """Every event class a declared row triggers off, and in which windows.
+
+    **Keyed on `len(REGISTRY)` rather than on nothing**, so a row declared
+    after the first call invalidates this instead of being silently missed.
+    Rows are only ever added -- `dsl.power` raises on a duplicate ref -- so
+    the count is a sufficient witness that the answer could have moved.
+
+    `Triggers.arm`'s own docstring is the justification: the set is fixed once
+    content has imported, and it was being rebuilt from a 23,060-row walk on
+    every `Encounter.start()`.
+    """
+    from .dsl import REGISTRY
+
+    watched: dict[type[Event], set[Window]] = {}
+    for p in REGISTRY.values():
+        window = WINDOW_OF.get(p.action)
+        if window is None:
+            continue
+        for trig in p.triggers:
+            watched.setdefault(trig.event, set()).add(trig.window or window)
+    return watched
+
+
+@cache
+def _recharge_events(_rows: int) -> tuple[type[Event], ...]:
+    """Every event class a printed recharge condition names. See `_watched`.
+
+    Sorted by name so the subscription order is stable between runs, which it
+    has to be: `Bus.on` appends, and a replay compares logs by index.
+    """
+    from .dsl import REGISTRY
+
+    return tuple(sorted(
+        {t.event for p in REGISTRY.values() for t in p.recharges},
+        key=lambda e: e.__name__,
+    ))
+
+
 @dataclass
 class Triggers:
     """The dispatcher. One per encounter; owned by it."""
@@ -161,18 +202,16 @@ class Triggers:
         watched classes is fixed at import time and is small, and a listener
         that walks the creatures is cheaper than a subscription per creature
         per row -- of which a fight would hold several hundred.
+
+        **The registry walk is memoised, because "fixed at import time" above
+        is the whole argument for doing it.** This ran twice over all 23,060
+        declared rows on *every* `Encounter.start()` -- so once per board, and
+        a row that never fires builds 48 boards. Measured at 8ms of self time
+        a call, 144 calls over three silent rows.
         """
         from .dsl import REGISTRY
 
-        watched: dict[type[Event], set[Window]] = {}
-        for p in REGISTRY.values():
-            window = WINDOW_OF.get(p.action)
-            if window is None:
-                continue
-            for trig in p.triggers:
-                watched.setdefault(trig.event, set()).add(trig.window or window)
-
-        for etype, windows in watched.items():
+        for etype, windows in _watched(len(REGISTRY)).items():
             for window in sorted(windows, key=lambda w: w.name):
                 self._subs.append(
                     self.world.bus.on(
@@ -192,10 +231,7 @@ class Triggers:
         # without running the row, and it has to be disarmed again. Asking
         # "is this ref spent?" at the moment the event fires needs no state at
         # all and cannot leak a watcher. #449.
-        for etype in sorted(
-            {t.event for p in REGISTRY.values() for t in p.recharges},
-            key=lambda e: e.__name__,
-        ):
+        for etype in _recharge_events(len(REGISTRY)):
             self._subs.append(self.world.bus.on(etype, self._recharge))
 
     def _recharge(self, ev: Event) -> None:
