@@ -913,6 +913,7 @@ def deal_damage(
     weapon: str = "",
     roll: Roll | None = None,
     reprice: Callable[[int], int] | None = None,
+    by_attack: bool = False,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1109,6 +1110,17 @@ def deal_damage(
     # reader that wanted the post-listener split would have to ask after
     # the emit, which no printed card does.
     announce.parts = tuple(parts)  # ty: ignore[unresolved-attribute]
+    # **"Was an attack behind this blow", which `from_attack` is not.**
+    # That flag means "offered damage modifiers": it is `True` by default
+    # and only `Cast.absorb` and `falling` pass `False`, so a trait's flat
+    # payout and an ongoing tick both arrive with it set. Two content rows
+    # depend on that reading and argue it explicitly, so narrowing it would
+    # silently drop five feature cards' riders.
+    #
+    # This is the other fact, and the three rows waiting wanted **opposite
+    # values** of it -- which is what makes it discriminating where
+    # `from_attack` is not. #731.
+    announce.by_attack = by_attack  # ty: ignore[unresolved-attribute]
     rolled = world.bus.emit(announce)
     if rolled.cancelled:
         return 0
@@ -1334,6 +1346,11 @@ def deal_damage(
         dtypes=types if len(types) > 1 else (),
         resisted=resisted,
     )
+    # **The same provenance on the applied event**, because that is the one
+    # the three rows of #731 watch: the printed trigger is damage that
+    # *landed*, and a blow a resistance ate whole is not it. Attaching it
+    # only to `DamageRolled` would have left all three unable to read it.
+    landed_ev.by_attack = by_attack  # ty: ignore[unresolved-attribute]
     # An attribute, not a field -- see `DamageApplied.weapon`. A field
     # reached every replay fixture and all seven diverged.
     landed_ev.weapon = weapon  # ty: ignore[unresolved-attribute]

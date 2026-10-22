@@ -968,7 +968,7 @@ def f2194(c: Cast) -> None:
 
 @power("f2195", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("DamageApplied.from_attack",))
+       )
 def f2195(c: Cast) -> None:
     """A second creature burns whenever a named row's fire lands.
 
@@ -977,23 +977,33 @@ def f2195(c: Cast) -> None:
     ordinary watch. `c.flat` here carries this feat's own ref, so the
     splash cannot feed itself.
 
-    "Because you took damage" is dropped. That row pays twice -- once on
-    the hit and once more when the warlock is hurt -- and both arrive as
-    the same event with the same `detail`. Nothing on `DamageApplied`
-    says which half of a row dealt it, so the splash also fires on the
-    first payment, which is one extra 5 fire damage per use.
+    **"Because you took damage" is written now.** That row pays twice --
+    once on the hit and once more when the warlock is hurt -- and both
+    used to arrive as the same event with the same `detail`, so the splash
+    fired on the first payment too: one extra 5 fire damage per use.
 
-    Re-read and still dropped. `from_attack` is an **argument** to
-    `resolve.deal_damage` and is not a field on the event it emits, so
-    there is nothing for a content row to read; i1826x1 holds the same
-    marker for the same two blows. This is a one-field widening of
-    `DamageApplied`, not a row that can be written today.
+    **`c.by_attack()` is the fact, and it is not `from_attack`.** That flag
+    means "offered damage modifiers": it is `True` by default and only
+    `Cast.absorb` and `falling` pass `False`, so a trait's payout and an
+    ongoing tick both arrive with it set. Widening the event with it would
+    have exposed a field true for almost every blow in the game. #731.
+
+    `p1458` deals its hit with `c.damage` and its rebound with `c.flat`,
+    and `c.by_attack()` is False for the second -- which is why `c.flat`
+    does **not** claim its cast's attack even inside an attack body. The
+    rebound runs from a `c.watch` closure that captured the same `Cast`,
+    so reading `self.result` there would have answered True for both
+    blows and told these two rows apart not at all.
+
+    `i1826x1` is the item side of the same pair and closes with it.
     """
     me = c.me
 
     def splash(ev: DamageApplied) -> None:
         if ev.source != me or ev.detail != "p1458" or ev.amount <= 0:
             return
+        if c.by_attack(ev=ev):
+            return      # the hit itself, not the "because you took damage" half
         pool = [
             foe for foe in c.within(5, of=ev.target, side="enemy")
             if foe != ev.target

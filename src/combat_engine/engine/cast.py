@@ -3296,6 +3296,7 @@ class Cast:
             self.world, self.me, who, amount, dtype, detail or self.ref,
             dtypes=dtypes,
             roll=roll, reprice=_reprice if roll is not None else None,
+            by_attack=bool(self.result and self.result.hit),
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via, crit=self.crit,
             # Which weapon the blow came through. `detail` says which row
@@ -3354,6 +3355,7 @@ class Cast:
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
             dtypes=dtypes,
             roll=roll, reprice=_reprice if roll is not None else None,
+            by_attack=bool(self.result and self.result.hit),
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via, miss=True,
         )
@@ -12695,6 +12697,56 @@ class Cast:
                 if head == "brutal" and tail.strip().isdigit():
                     best = max(best, int(tail.strip()) + 1)
         return best
+
+    def by_attack(self, *, ev: Any = None) -> bool:
+        """Was an attack behind the blow being announced?
+
+        **Not `from_attack`**, and that distinction is the whole of #731.
+        That flag means *"offered damage modifiers"*: it is `True` by
+        default and only `Cast.absorb` and `falling` pass `False`, so a
+        trait's flat payout and an ongoing tick both arrive with it set.
+        Widening the event with it would have exposed a field that is
+        `True` for almost every blow in the game, and none of the three
+        rows waiting could have used it.
+
+        Two content rows (`f3166`, `f2589`) depend on that reading and say
+        so outright, so narrowing `from_attack` is not a correction either
+        -- it would silently drop five feature cards' riders.
+
+        This is the other fact, and the rows wanted **opposite values** of
+        it, which is what makes it discriminating:
+
+        * `p15844` -- "takes damage from an attack that hits it", so an
+          ongoing tick must not fire it: wants `True`.
+        * `f2195` and `i1826x1` -- the rebound half, damage taken *because
+          you took damage*, which is not an attack's: want `False`.
+
+True for `c.damage` and `c.half_damage` -- an attack's **damage
+        line** -- when that cast rolled an attack that hit. False for
+        `c.flat`, for a trait's payout and for an ongoing tick.
+
+        **`c.flat` is False even inside an attack body, and that is the
+        load-bearing choice.** `p1458` deals its hit with `c.damage` and
+        its rebound with `c.flat` **on the same `Cast`**: the rebound runs
+        from a `c.watch` closure that captured it, so `self.result` is
+        still the landed attack's. A rule that read `self.result` in
+        `c.flat` would come back True for both blows, which is precisely
+        the pair `f2195` and `i1826x1` exist to tell apart -- *"identical
+        on every field the event carries"*.
+
+        It is also the right reading of the cards rather than a
+        convenience: splash laid with `c.flat` is damage the attack did
+        not *hit that creature* with, and "takes damage from an attack
+        that hits it" is what `p15844` prints.
+
+        A miss-half blow comes back `False` for the same reason.
+
+        False when the event carries nothing, which is every blow
+        announced before this landed.
+        """
+        if ev is None:
+            ev = self.trigger
+        return bool(getattr(ev, "by_attack", False))
 
     def part_of(self, dtype: DamageType, *, ev: Any = None) -> int:
         """How much of the blow being announced is of that damage type.

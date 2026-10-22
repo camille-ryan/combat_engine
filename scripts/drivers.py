@@ -22889,6 +22889,114 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def was_an_attack_behind_it(out: Result) -> None:
+    """`c.by_attack` is "an attack's damage line", which `from_attack` is not
+    and could never have been (#731).
+
+    `from_attack` means *"offered damage modifiers"*: it is `True` by
+    default and only `Cast.absorb` and `falling` pass `False`, so a trait's
+    flat payout and an ongoing tick both arrive with it set. Widening the
+    event with it would have exposed a field true for almost every blow in
+    the game, and none of the three rows waiting could have used it. Two
+    content rows (`f3166`, `f2589`) also depend on that reading and say so,
+    so narrowing it is not a correction either -- it would silently drop
+    five feature cards' riders.
+
+    **The load-bearing choice is that `c.flat` does NOT claim its cast's
+    attack**, even inside an attack body. `p1458` deals its hit with
+    `c.damage` and its rebound with `c.flat` **on the same `Cast`** -- the
+    rebound runs from a `c.watch` closure that captured it, so
+    `self.result` is still the landed attack's. A rule reading
+    `self.result` in `c.flat` answers True for both blows, which is exactly
+    the pair `f2195` and `i1826x1` exist to tell apart: *"identical on
+    every field the event carries"*. The first draft did that and the probe
+    caught it.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import DamageApplied, DamageRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = audit_board("p15844", 1)
+    foes = enemies(world, me)
+    if not foes:
+        out.skip("an enemy to deal damage to")
+        return
+    foe = foes[0]
+    seen: list[tuple[str, bool]] = []
+
+    def note(ev: DamageRolled) -> None:
+        seen.append((ev.detail, bool(getattr(ev, "by_attack", False))))
+
+    world.bus.on(DamageRolled, note)
+
+    Cast(world=world, me=me, ref="trait:flat").flat(5, on=foe)
+    world.rng.loaded = 19
+    hit = Cast(world=world, me=me, ref="p1000")
+    hit.target = foe
+    hit.bonus("attack", 40, on=me, kind="drivers")
+    landed = hit.strike(on=foe)
+    if landed:
+        hit.damage("1d6", on=foe)
+        hit.flat(2, on=foe)
+    world.damage(me, foe, 3, DamageType.UNTYPED, detail="ongoing:drivers")
+
+    got = dict()
+    for detail, flag in seen:
+        got.setdefault(detail, []).append(flag)
+
+    out.that(got.get("trait:flat") == [False],
+             "a trait's flat payout, with no attack rolled at all, is not"
+             " from an attack -- and `from_attack` is True for it, which is"
+             " why that flag could not be the field",
+             f"{got.get('trait:flat')}")
+    if not landed:
+        out.skip("a landed attack, for the damage-line half")
+    else:
+        out.that(got.get("p1000", [None])[0] is True,
+                 "an attack's **damage line** is from an attack",
+                 f"{got.get('p1000')}")
+        out.that(got.get("p1000", [None, None])[1:] == [False],
+                 "**and a `c.flat` splash in the same body is not**, which"
+                 " is the assertion the whole design turns on: `p1458`"
+                 " rebounds through `c.flat` on the same `Cast`, so reading"
+                 " `self.result` there would answer True for both of its"
+                 " blows and `f2195`/`i1826x1` could not be written",
+                 f"{got.get('p1000')}")
+    out.that(got.get("ongoing:drivers") == [False],
+             "and an ongoing tick is not, which is the case `p15844`'s card"
+             " excludes -- 'takes damage from an attack that hits it'",
+             f"{got.get('ongoing:drivers')}")
+
+    # -- and the applied event carries it too, which is what rows watch ---
+    # **Asserted on a blow that is True**, and the first version used a
+    # flat payout -- which is False either way, so a missing attribute read
+    # the same as a present one through `getattr(..., False)` and the plant
+    # that removed it walked straight through.
+    world2, me2, _ = audit_board("p15844", 1)
+    foe2 = enemies(world2, me2)[0]
+    applied: list[bool] = []
+    world2.bus.on(DamageApplied,
+                  lambda ev: applied.append(bool(getattr(ev, "by_attack", False))))
+    world2.rng.loaded = 19
+    swing = Cast(world=world2, me=me2, ref="p1000")
+    swing.target = foe2
+    swing.bonus("attack", 40, on=me2, kind="drivers")
+    if not swing.strike(on=foe2):
+        out.skip("a landed attack, for the applied-event half")
+    else:
+        swing.damage("1d6", on=foe2)
+        out.that(applied and applied[0] is True,
+                 "`DamageApplied` carries it as well as `DamageRolled` --"
+                 " all three rows watch the **applied** event, because the"
+                 " printed trigger is damage that *landed*, so attaching it"
+                 " to one event only would have left every one of them"
+                 " unable to read it",
+                 f"{applied}")
+
+
 def a_prohibition_the_actor_consults(out: Result) -> None:
     """Two refusals recorded on the creature they protect, because the verb
     that would act has nowhere else to ask (#764, #740).
@@ -29974,6 +30082,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "was_an_attack": (
+        was_an_attack_behind_it,
+        "an attack's damage line told from a trait payout and an ongoing"
+        " tick (#731)",
     ),
     "actor_asks": (
         a_prohibition_the_actor_consults,

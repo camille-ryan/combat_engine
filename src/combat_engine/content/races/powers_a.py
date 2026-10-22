@@ -1127,24 +1127,30 @@ def p16658(c: Cast) -> None:
         Trigger(Healed, _subject_within(10), "a creature nearby is healed"),
         Trigger(DamageApplied, _subject_within(10), "a creature nearby is damaged"),
     ),
-    dropped=("DamageApplied.from_attack",),
 )
 def p15844(c: Cast) -> None:
     """Which half pays out is decided by which event was answered, so the
     body reads the trigger rather than asking the board anything.
 
     `DamageApplied`, not `DamageRolled`: the printed trigger is damage that
-    landed, and a blow a resistance ate whole is not it. Neither event
-    records whether an attack was behind the blow -- `from_attack` is an
-    argument to `resolve.deal_damage` and reaches nothing -- so the
-    ongoing-damage case fires this too."""
+    landed, and a blow a resistance ate whole is not it.
+
+    **`c.by_attack()` is the fact, and it is not `from_attack`.** That flag
+    means "offered damage modifiers": it is `True` by default and only
+    `Cast.absorb` and `falling` pass `False`, so a trait's payout and an
+    ongoing tick both arrive with it set. Widening the event with it would
+    have exposed a field true for almost every blow in the game. #731.
+
+    The card says "takes damage **from an attack that hits it**", so an
+    ongoing tick must not fire this -- and it did, because nothing on the
+    event said which was which."""
     ev = c.trigger
     who = ev.target if ev is not None else c.target
     if who is None:
         return
     if isinstance(ev, Healed):
         c.heal(c.roll("2d6"), on=who)
-    else:
+    elif c.by_attack(ev=ev):
         c.damage("2d6", on=who)
 
 

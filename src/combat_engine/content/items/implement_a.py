@@ -2461,20 +2461,47 @@ def i1824p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("DamageApplied.from_attack",),
 )
 def i1826x1(c: Cast) -> None:
     """Re-aimed: the ref is `p1333`'s neighbour `p1458`, read off this
     item's other block, so the naming gap is closed and was never the
     hold.
 
-    What holds it is telling that row's two blows apart. It deals its
-    hit with `c.damage` and its rebound with `c.flat`, both as
-    `DamageApplied(source=me, target=victim, dtype=FIRE,
-    detail="p1458")` -- identical on every field the event carries. Only
-    the rebound is "damage from attacking you", and splashing both would
-    give the at-will a second area it does not print. The damage context
-    knows `from_attack`; the event does not carry it."""
+    **What held it was telling that row's two blows apart, and the event
+    says which now.** `p1458` deals its hit with `c.damage` and its
+    rebound with `c.flat`, both as `DamageApplied(source=me,
+    target=victim, dtype=FIRE, detail="p1458")` -- identical on every
+    field the event used to carry. `c.by_attack()` is the field that
+    differs: True for the hit's damage line, False for the rebound.
+
+    Only the rebound is "damage from attacking you", and splashing both
+    would give the at-will a second area it does not print -- which is
+    what the old note said and is exactly what the gate now prevents.
+
+    **Not `from_attack`.** That flag means "offered damage modifiers", is
+    `True` by default, and is set for a `c.flat` payout as much as for an
+    attack's -- so it could not have told these two blows apart either.
+    #731.
+
+    `f2195` is the feat side of the same pair and closes with it."""
+    me = c.me
+
+    def splash(ev: Any) -> None:
+        if ev.source != me or ev.detail != "p1458" or ev.amount <= 0:
+            return
+        if c.by_attack(ev=ev):
+            return      # the hit itself, not the "because you took damage" half
+        pool = [
+            foe for foe in c.within(5, of=ev.target, side="enemy")
+            if foe != ev.target
+        ]
+        if not pool:
+            return
+        other = c.choose(pool, f"{c.ref}: who else catches the fire")
+        if other is not None:
+            c.flat(5, dtype=DamageType.FIRE, on=other)
+
+    c.watch(DamageApplied, splash, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(
