@@ -423,6 +423,13 @@ rather than a title. Correct `exits`: the draft chains scenes in document
 order, which is right for a linear adventure and wrong wherever the adventure
 branches.
 
+**Describe every recurring character with `looks`.** Scene text does not
+travel: the adventure described one NPC in the opening read-aloud, and three
+scenes later the DM saw only that scene's prose -- somebody else's speech --
+so it had nothing to go on and wrote *"Venn nodded slightly, her eyes
+downcast"*, twice, for a man the player had read described one scene
+earlier. `voice` is how they speak and was never meant to carry this.
+
 **One name per character, and the page's own.** A character who appears in
 two scenes must carry the same `name` in both, taken from the adventure's
 text. Written with role words instead -- "the friar", "the spy" -- a player

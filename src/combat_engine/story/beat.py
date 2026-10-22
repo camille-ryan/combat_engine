@@ -487,7 +487,9 @@ class Director:
             )
         scene = playing.scene
         who = [
-            f"{n.name} -- {n.voice or 'speaking plainly'}"
+            f"{n.name}"
+            + (f", {n.looks}" if n.looks else "")
+            + f" -- {n.voice or 'speaking plainly'}"
             for n in playing.cast()
         ]
         told = [f"The scene: {scene.seen}"]
@@ -584,6 +586,7 @@ class Director:
         scene = playing.scene
         who = [
             f"{n.name}: wants {n.wants}."
+            + (f" Is {n.looks}." if n.looks else "")
             + (f" Speaks {n.voice}." if n.voice else "")
             + ("" if not n.knows else " May say: " + "; ".join(n.knows))
             for n in playing.cast()

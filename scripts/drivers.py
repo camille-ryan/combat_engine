@@ -29127,6 +29127,42 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         f"{after[:90]!r}",
     )
 
+    # **A recurring character's description reaches both prompts.** Scene
+    # text does not travel: the adventure describes one NPC in the opening
+    # read-aloud, and three scenes later the DM sees only that scene's
+    # prose, so it had nothing and invented -- "Venn nodded slightly, her
+    # eyes downcast", twice, for a man the player had read about.
+    described = mod.parse({
+        "id": "probeC", "party_level": 1, "party_size": 2, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "Venn", "wants": "to serve",
+                      "looks": "a thin, bald human friar, a man"}]}]},
+        Path("<driver>")).scene("t")
+    asked.clear()
+    llm.chat = tap2  # ty: ignore[invalid-assignment]
+    try:
+        seen_scene = bt.Playing(scene=described)
+        bt.Director(roles=llm.ROLES).react(seen_scene, [], [])
+        dm_sees = asked[-1]
+        bt.Director(roles=llm.ROLES).declare(
+            bt.Actor(0, "Sela", "cleric"), seen_scene, "A room.")
+        pal_sees = asked[-1]
+    finally:
+        llm.chat = real
+
+    out.that(
+        "thin, bald" in dm_sees,
+        "the DM is told who a recurring character physically is",
+        f"{dm_sees[:110]!r}",
+    )
+    out.that(
+        "thin, bald" in pal_sees,
+        "and so is a companion, who also has to talk to them",
+        f"{pal_sees[:110]!r}",
+    )
+
     # **An intent that matched nothing is marked as attempted.** Whether
     # the model then obeys is a prompt question and is measured separately;
     # this asserts the only half that is code, which is that the DM is told

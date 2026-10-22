@@ -318,6 +318,20 @@ class Npc:
     knows: tuple[str, ...] = ()
     hides: tuple[str, ...] = ()
     voice: str = ""
+    #: Who they physically are, in the page's own words. **Because scene
+    #: text does not travel and a recurring character does.**
+    #:
+    #: The adventure introduces one as *"a thin, bald human friar named
+    #: Venn"* -- in the opening scene's read-aloud. Three scenes later the
+    #: DM sees only that scene's text, which is somebody else's speech, so
+    #: it had nothing about Venn and guessed: *"Venn nodded slightly, her
+    #: eyes downcast"*, twice in one scene, for a character the player had
+    #: read described as a man one scene earlier.
+    #:
+    #: `voice` is how they speak and was never meant to carry this. A
+    #: description belongs on the person, not in the prose of whichever
+    #: scene happened to introduce them.
+    looks: str = ""
     #: The affordance that has to be **won** before this person is in the
     #: scene at all. Empty means they are there from the first beat, which
     #: is almost everybody.
@@ -525,6 +539,7 @@ def _as_npc(raw: Any, where: str, problems: list[str]) -> Npc | None:
         name=name, wants=str(raw.get("wants", "")).strip(),
         knows=lines("knows"), hides=lines("hides"),
         voice=str(raw.get("voice", "")).strip(),
+        looks=str(raw.get("looks", "")).strip(),
         unseen=str(raw.get("unseen", "")).strip(),
     )
 
