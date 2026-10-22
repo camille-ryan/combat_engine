@@ -174,6 +174,104 @@ def against_the_book(only: str = "") -> tuple[list[str], int]:
     return wrong, mapped
 
 
+#: Classes that already deal **two named chassis** of level-0 class features
+#: to every character, with the count each, as measured at `1f0a455`.
+#:
+#: A per-class baseline that may shrink and never grow, which is the shape
+#: `audit.audited.json`, `localise.KNOWN_LABEL_DRIFT` and `cards.KNOWN` all
+#: use, and for the reason `scripts/CLAUDE.md` gives: a bare allowance
+#: cannot tell a fixed entry from a new one.
+DOUBLE_CHASSIS = {
+    # The wizard holds the arcanist's ten *and* the sha'ir's three, so every
+    # wizard is dealt two sub-classes' features at once. That is #319's
+    # bladespell fault surviving in a second place, and it is recorded rather
+    # than fixed because `cf:wizard-sha-ir-f1` is live -- `scripts/fight.py`
+    # exercises it every run ("cf:wizard-sha-ir-f1:familiar 5/5"), so
+    # dropping it needs a decision about which chassis a plain wizard has
+    # rather than a quiet edit. #851.
+    "wizard": 2,
+}
+
+
+def _slug(name: str) -> str:
+    """The ref spelling of a printed build name.
+
+    Mirrors `etl/build._slug`, which is the function that minted these refs
+    in the first place -- `cf:{class}-{slug}` at `etl/build.py:1781`. Copied
+    rather than imported because importing it drags the whole ETL in for one
+    regex, and because `scripts/` reaching into `etl/` for a helper is a seam
+    the `.importlinter` contracts would rather not have to waive.
+    """
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def chassis_clash() -> tuple[list[str], dict[str, int]]:
+    """Does any class deal more than one named feature chassis at once?
+
+    **The gate #642's 529 rows need, and the reason it is here.** `loadout`
+    deals every `level == 0` row of a class to every character of that class
+    (`chargen/__init__.py:1823`), and its only sub-class discriminator is a
+    single hardcoded keyword test. `class_feature.build` is what separates a
+    chassis from the class-wide rows: `''` means every character of the
+    class has it, a name means it belongs to one sub-class.
+
+    So declaring a second named chassis for a class -- which is exactly what
+    #642 is 529 rows of -- silently deals **both** to every character of it.
+    One cleric would carry the templar's four features and the warpriest's
+    101. Nothing would fail; the character would simply be two sub-classes
+    at once, which is #319's fault at 17x the size.
+
+    This makes that moment loud instead. Measured when written: 23 of 25
+    classes deal exactly one chassis, and the two that do not are the
+    sorcerer -- which is `''` plus one name, and therefore correct, the
+    class-wide rows plus a chassis -- and the wizard, which is two names and
+    is in `DOUBLE_CHASSIS` above.
+
+    A ref the `class_feature` table does not list is a **hand-coined** one
+    (`cf:barbarian-aura`, `cf:rogue-tactic-club`, and two more), described
+    only in the class's own page as `content/features/__init__.py` says. It
+    belongs to no chassis and is counted against none.
+    """
+    import combat_engine.content  # noqa: F401  registers the rows
+    from combat_engine.db import game
+    from combat_engine.engine.dsl import REGISTRY
+
+    chassis = {r["ref"]: r["build"]
+               for r in game().execute("SELECT ref, build FROM class_feature")}
+    named: dict[str, set[str]] = collections.defaultdict(set)
+    for ref, power in REGISTRY.items():
+        if not ref.startswith("cf:") or power.level != 0:
+            continue
+        # Absent from the table, or blank: class-wide, not a chassis.
+        if chassis.get(ref):
+            named[power.cls].add(chassis[ref])
+
+    counts = {cls: len(names) for cls, names in named.items() if len(names) > 1}
+    out: list[str] = []
+    for cls, how_many in sorted(counts.items()):
+        allowed = DOUBLE_CHASSIS.get(cls)
+        # **The ref's spelling, not the column's.** `class_feature.build`
+        # holds the printed sub-class name with printed punctuation -- the
+        # typographic apostrophe in one of the wizard's two is the giveaway
+        # -- and this line goes to a terminal on every `check.py`. The ref
+        # stem is the sanitised form of the same thing and is already in
+        # tracked files, so it is what gets printed.
+        names = ", ".join(_slug(n) for n in sorted(named[cls]))
+        if allowed is None:
+            out.append(f"  {cls:12} deals {how_many} chassis at once: {names}"
+                       f"   <-- NEW. Every {cls} is now two sub-classes. #851")
+        elif how_many > allowed:
+            out.append(f"  {cls:12} deals {how_many} chassis, was {allowed}: {names}"
+                       f"   <-- GREW")
+    for cls, allowed in sorted(DOUBLE_CHASSIS.items()):
+        if counts.get(cls, 1) < allowed:
+            out.append(f"  {cls:12} now deals {counts.get(cls, 1)}, baseline {allowed}"
+                       f"   <-- improved, lower DOUBLE_CHASSIS to match")
+    return out, counts
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--class", dest="cls", help="only this class")
@@ -217,7 +315,15 @@ def main() -> int:
     print(f"{len(wrong)} mapped legs disagree with the page they came off; "
           f"{mapped} legs carry a printed entry"
           + (f"   <-- WAS {MAPPED}. A leg stopped being joinable." if shrunk else ""))
-    return 1 if dead or wrong or shrunk else 0
+
+    clashes, counts = chassis_clash()
+    if clashes:
+        print()
+        for line in clashes:
+            print(line)
+    print(f"{len(counts)} class(es) deal more than one named feature chassis, "
+          f"{len(DOUBLE_CHASSIS)} of them expected")
+    return 1 if dead or wrong or shrunk or clashes else 0
 
 
 if __name__ == "__main__":
