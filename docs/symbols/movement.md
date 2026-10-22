@@ -60,6 +60,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - "You can bull rush targets of any size."
 - `c.blocks_entry(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "An enemy cannot enter this creature's space by any means."
+- `c.difficult_for(self, on: 'int | None' = None, *, zone: 'int | None' = None, until: 'When' = <When.EOTNT: "end of target's next turn">) -> 'Effect | None'`
+  - Make ground cost double for **one creature**, nobody else.
 - `c.extend_every(self, kind: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - Lengthen **every move of a kind**. `c.extend_every("shift", 1)`.
 - `c.extend_move(self, ref: 'str', squares_: 'int', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
