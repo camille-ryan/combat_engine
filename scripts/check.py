@@ -24,7 +24,9 @@ import json
 import re
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -425,10 +427,21 @@ def main() -> int:
     # the same reason; measured by watching a green `--all` refuse to clear
     # the marker it had just earned. See `_clear_red`.
     began_clean = _tree_clean()
+    # **Run them concurrently, report them in order.** The futures are
+    # resolved in `wanted` order below, so the output still reads top to
+    # bottom exactly as it did -- which it has to: these lines are read by
+    # eye and diffed between runs, and a list that reshuffles is the thing
+    # `audit._run_all` chose `pool.map` over `as_completed` to avoid.
+    #
+    # Threads rather than processes: each one only waits on a
+    # `subprocess.run`, so there is nothing for the GIL to hold up.
+    # Not a `with` block: its exit waits for every future, which would hold
+    # all the output back to the end of the run instead of printing each
+    # verdict as it lands.
+    pool = ThreadPoolExecutor(max_workers=_LANES)
+    flight = {c.name: pool.submit(_run_one, c) for c in _submit_order(wanted)}
     for c in wanted:
-        started = time.monotonic()
-        done = subprocess.run(c.argv, cwd=ROOT, capture_output=True, text=True)
-        took = time.monotonic() - started
+        took, done = flight[c.name].result()
         tail = _summary(done.stdout) or _summary(done.stderr)
         mark = "ok  " if done.returncode == 0 else "FAIL"
         print(f"  {mark}  {c.name:{width}}  {took:5.1f}s  {tail}")
@@ -495,6 +508,8 @@ def main() -> int:
                         print("\n".join(f"          {x[:110]}" for x in kept))
         if args.verbose:
             print("\n".join(f"          {x}" for x in done.stdout.splitlines()[-25:]))
+
+    pool.shutdown(wait=True)
 
     print()
     for line in _nightly_state():
@@ -830,6 +845,127 @@ def _scope(text: str) -> tuple[int, int] | None:
     return (int(found.group(1)), int(found.group(2))) if found else None
 
 
+#: How many instruments may be in flight at once. The loop was a plain `for`
+#: with a blocking `subprocess.run`, so 21 instruments ran strictly one after
+#: another on a ten-core machine where sixteen of them are single-process.
+#: Measured: the twenty non-audit instruments are a stable **480s wide, 464s
+#: narrow**, and the longest single one is `drivers` at ~140s -- so the floor
+#: is the longest member, not the sum.
+#:
+#: Four rather than ten, deliberately. `audit` already runs ten worker
+#: processes of its own (`audit._run_all`), so a wide run has every core busy
+#: for most of its length and more lanes would mostly take cores away from
+#: it. Four collapses the 480s to roughly `drivers`' own 140s without
+#: oversubscribing.
+_LANES = 4
+
+#: Instruments that must not run beside each other, by group.
+#:
+#: **`audit` and `verdicts` are the same script.** `audit.py --changed`
+#: rewrites `fixtures/audited.json` at the end of a full clean run and
+#: `audit.py --verdicts` reads that baseline, so letting them overlap means
+#: `verdicts` can read a file mid-write. Nothing had to care while the loop
+#: was serial.
+#:
+#: **`api` and `browser` each start a uvicorn.** They pick their own free
+#: port, so they would not collide on one -- but both pay a cold `uv run`
+#: plus a full `combat_engine` import before a 20-second health poll, and two
+#: of those at once on a loaded machine is how that poll starts timing out.
+#: `scripts/CLAUDE.md` already records what server bookkeeping costs when it
+#: goes wrong: 69 orphaned uvicorns over three and a half days.
+_EXCLUSIVE: tuple[frozenset[str], ...] = (
+    frozenset({"audit", "verdicts"}),
+    frozenset({"api", "browser"}),
+)
+
+#: Instruments that need the machine to themselves.
+#:
+#: `browser.py` drives real Chromium and several of its checks are about
+#: **timing** -- "enemy tokens animate", "the button is gone while that fight
+#: is being played". An animation has a wall-clock duration, so no amount of
+#: waiting on a condition makes those robust to a loaded box: they were
+#: calibrated on a quiet one.
+#:
+#: Measured, and this is why the entry exists: putting the loop on four lanes
+#: turned "enemy tokens animate (0 of them slid)" red on its first full run,
+#: a *different* assertion from the one #847 is about. Two load-sensitive
+#: checks in one instrument is a pattern, not a coincidence.
+#:
+#: Costs almost nothing. `browser` is last in `CHECKS`, so by the time its
+#: turn comes the other lanes have largely drained; the full run measured
+#: 195s with it parallel and the same within noise with it solo.
+_SOLO: frozenset[str] = frozenset({"browser"})
+
+_LOCKS: dict[frozenset[str], threading.Lock] = {
+    group: threading.Lock() for group in _EXCLUSIVE
+}
+
+#: One permit a lane. A `_SOLO` instrument takes every permit, so nothing
+#: else is running while it does; everything else takes one.
+_GATE = threading.Semaphore(_LANES)
+#: So two solo instruments could not each hold some permits and wait for the
+#: rest. There is one today; the guard is for when there are two.
+_SOLO_TURN = threading.Lock()
+
+
+def _run_one(c: Instrument) -> tuple[float, subprocess.CompletedProcess]:
+    """One instrument, timed, held out of its exclusion group's way.
+
+    The locks are taken in `_EXCLUSIVE`'s own order so that an instrument in
+    two groups -- none is today -- could not deadlock against one in the
+    other order.
+    """
+    solo = c.name in _SOLO
+    if solo:
+        _SOLO_TURN.acquire()
+        for _ in range(_LANES):
+            _GATE.acquire()
+    else:
+        _GATE.acquire()
+    held = [_LOCKS[g] for g in _EXCLUSIVE if c.name in g]
+    for lock in held:
+        lock.acquire()
+    try:
+        started = time.monotonic()
+        done = subprocess.run(c.argv, cwd=ROOT, capture_output=True, text=True)
+        return time.monotonic() - started, done
+    finally:
+        for lock in reversed(held):
+            lock.release()
+        if solo:
+            for _ in range(_LANES):
+                _GATE.release()
+            _SOLO_TURN.release()
+        else:
+            _GATE.release()
+
+
+def _submit_order(wanted: list[Instrument]) -> list[Instrument]:
+    """`wanted`, reordered so no lane blocks early on a group-mate.
+
+    A thread waiting for its exclusion group holds a lane while doing
+    nothing, and the queue is FIFO -- so with `audit` and `verdicts`
+    adjacent in `CHECKS`, `verdicts` would take a lane and sit on it for the
+    whole 1,300-second audit. The second and later members of each group go
+    to the back instead.
+
+    Reporting order is unaffected: the caller resolves futures by name in
+    `wanted` order.
+    """
+    claimed: set[frozenset[str]] = set()
+    head: list[Instrument] = []
+    tail: list[Instrument] = []
+    for c in wanted:
+        group = next((g for g in _EXCLUSIVE if c.name in g), None)
+        if group is not None and group in claimed:
+            tail.append(c)
+            continue
+        if group is not None:
+            claimed.add(group)
+        head.append(c)
+    return head + tail
+
+
 def _record(name: str, seconds: float, ok: bool, at: str,
             scope: tuple[int, int] | None = None) -> None:
     try:
@@ -837,6 +973,12 @@ def _record(name: str, seconds: float, ok: bool, at: str,
         row = {
             "when": datetime.now(tz=UTC).isoformat(timespec="seconds"),
             "name": name, "seconds": round(seconds, 2), "ok": ok, "commit": at,
+            # **How many instruments were in flight**, because without it the
+            # seconds stop being comparable across this change. A serial run
+            # and a four-lane run measure different things -- the second
+            # includes contention -- and `history`'s medians span both. 1 is
+            # the old behaviour.
+            "lanes": _LANES,
         }
         # **Only when the instrument said**, so a missing field means "this run
         # did not report its scope" and never "it covered nothing". `history`
