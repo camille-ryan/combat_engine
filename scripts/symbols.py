@@ -274,6 +274,7 @@ CATEGORIES: dict[str, dict] = {
             ]),
             ("rerolls", [
                 "reroll_attack", "reroll_check", "reroll_damage",
+                "reroll_faces",
                 "reroll_initiative", "reroll_ones", "reroll_save",
             ]),
             ("resistance and vulnerability", [

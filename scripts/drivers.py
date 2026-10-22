@@ -22884,6 +22884,266 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def reroll_after_the_roll(out: Result) -> None:
+    """`c.reroll_faces` rerolls a damage die after the roll, and the two rows
+    that print it gate on the blow rather than on themselves (#703).
+
+    The other half of #703. Its first half landed `c.reroll_ones(below=,
+    pick=)`, a **hold** read while the dice are being rolled, and four rows
+    could not use it because their clause answers a roll that has already
+    happened -- a no-action daily spent *because* you disliked the number,
+    which is a decision nobody can make before seeing it.
+
+    What was missing was not a verb but the dice: `DamageRolled` carried a
+    total with nothing behind it. `rng.Roll` had held the faces all along --
+    `_rolled_pick` writes into `roll.dice` in place -- so they were never
+    discarded, only summed one call too early. The roll now rides on the
+    event as a **plain attribute**, which is the arrangement `AttackResult`
+    already has on `Hit` and for the identical reason: a field would reach
+    the wire and move all 290 `DamageRolled` lines in the seven fixtures.
+
+    **Asserted through the two rows' bodies, not through the verb.** Calling
+    `c.reroll_faces` here would prove the mechanism and say nothing about
+    either row -- the failure this suite has been bitten by repeatedly. Both
+    cards gate on a property of *the blow* ("damage for an arcane attack
+    power", "a melee weapon attack"), read off the damage context, so each
+    row gets a positive and a negative control and the negative ones are
+    where a too-generous gate shows up.
+
+    **The means, not a face.** A reroll changes a distribution, not a
+    number, so one roll of 3d6 proves nothing either way.
+
+    **The last two assertions are the subtle ones and they are why
+    `reprice` exists.** The dice and the amount are not the same quantity:
+    `c.half_damage` halves the dice before anything is announced. So a row
+    reading "+4 on a die means +4 damage" over-pays by exactly double on
+    every miss-half blow, and the event carries a recipe from the place that
+    did the arithmetic rather than a raw delta.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import deals_half, enemies
+
+    # Chosen by asking `resolve._is_ranged` and the keyword set, which are
+    # the two things the rows' gates actually read -- not by eye.
+    ARCANE, PLAIN = "p10069", "p10"
+    WEAPON_MELEE, WEAPON_RANGED = "p1000", "p10190"
+
+    def react(blow: str, row: str, dice: str = "3d6", seed: int = 11,
+              half: bool = False) -> list[tuple[int, int]]:
+        """Deal one blow attributed to `blow`, run `row` against it, and
+        report every (before, after) the row produced."""
+        world, me, _ = audit_board("f1378b", seed)
+        foe = enemies(world, me)[0]
+        moved: list[tuple[int, int]] = []
+
+        def fire(ev: DamageRolled) -> None:
+            before = ev.amount
+            use = Cast(world=world, me=me, ref=row)
+            use.trigger = ev
+            use.target = me
+            REGISTRY[row].body(use)
+            moved.append((before, ev.amount))
+
+        world.bus.on(DamageRolled, fire)
+        hit = Cast(world=world, me=me, ref=blow)
+        if half:
+            hit.half_damage(dice, on=foe)
+        else:
+            hit.damage(dice, on=foe)
+        return moved
+
+    def gain(blow: str, row: str, tries: int = 250) -> float:
+        """The mean points the row adds over `tries` separate boards."""
+        deltas = [a - b
+                  for k in range(tries)
+                  for b, a in react(blow, row, seed=600 + k)]
+        return sum(deltas) / len(deltas) if deltas else 0.0
+
+    def ever_moved(blow: str, row: str, tries: int = 250) -> int:
+        """How many of `tries` boards the row changed the amount on.
+
+        **Over many boards, for the same reason `gain` is a mean**, and this
+        half was a single roll first. Deleting the gate out of either row
+        left both negative controls green, because one roll of 3d6 often
+        has no die below par and a row rerolling nothing looks identical to
+        a row refusing to act. The plants are what said so.
+        """
+        return sum(1
+                   for k in range(tries)
+                   for b, a in react(blow, row, seed=600 + k)
+                   if a != b)
+
+    # -- p16373: as many dice as you like, for an arcane attack power -------
+    arcane = gain(ARCANE, "p16373")
+    out.that(arcane > 0.8,
+             "p16373 rerolls the poor dice of an **arcane** blow and is"
+             " worth better than a point on 3d6 -- the whole row was inert"
+             " while the event carried no dice",
+             f"{arcane:+.2f} points on average")
+    plain = ever_moved(PLAIN, "p16373")
+    out.that(plain == 0,
+             "and over 250 boards touches a blow from a power **without**"
+             " the keyword not once -- the half that a gate read off the row"
+             " instead of off the blow would get wrong",
+             f"it moved {plain} of 250")
+
+    # -- i1756p1: one die, after a melee weapon attack ---------------------
+    melee = gain(WEAPON_MELEE, "i1756p1")
+    out.that(melee > 0.3,
+             "i1756p1 rerolls **one** die of a melee weapon blow, so it is"
+             " worth less than p16373 and more than nothing",
+             f"{melee:+.2f} points on average")
+    out.that(melee < arcane,
+             "and strictly less than rerolling as many as you like, which is"
+             " the ordering the two cards print",
+             f"one die {melee:+.2f} against every die {arcane:+.2f}")
+    ranged = ever_moved(WEAPON_RANGED, "i1756p1")
+    out.that(ranged == 0,
+             "and over 250 boards does nothing after a **ranged** weapon"
+             " attack, which the card excludes and `ctx['ranged']` answers",
+             f"it moved {ranged} of 250")
+    # **A melee blow that is not a weapon attack**, which is the only shape
+    # that isolates the keyword half. Planting the keyword gate away left
+    # the assertion above green, because the ranged control is caught by
+    # the melee gate first and never reaches the keyword test at all.
+    unarmed = ever_moved(PLAIN, "i1756p1")
+    out.that(unarmed == 0,
+             "and nothing after a **melee** blow that is not a weapon"
+             " attack -- the keyword half of the same sentence, which the"
+             " ranged control cannot reach",
+             f"it moved {unarmed} of 250")
+
+    # -- the recipe, which is the part a raw delta gets wrong ---------------
+    world, me, _ = audit_board("f1378b", 3)
+    foe = enemies(world, me)[0]
+    seen: list[DamageRolled] = []
+    world.bus.on(DamageRolled, lambda ev: seen.append(ev))
+    Cast(world=world, me=me, ref=WEAPON_MELEE).half_damage("4d8", on=foe)
+    ev = seen[0] if seen else None
+    roll = getattr(ev, "roll", None)
+    price = getattr(ev, "reprice", None)
+    if ev is None or roll is None or price is None or not roll.dice:
+        out.skip("a half-damage blow carrying its dice and its recipe")
+        return
+    out.that(price(roll.total) == ev.amount,
+             "the recipe on a half-damage blow reproduces the amount that"
+             " was announced, which is the invariant that makes it usable"
+             " at all",
+             f"reprice says {price(roll.total)}, the event says {ev.amount}")
+    raw = ev.amount
+    roll.dice[0] += 4
+    out.that(price(roll.total) - raw == 2,
+             "and a face four higher is worth **two** more on a halved"
+             " blow, not four -- a row applying the dice delta straight to"
+             " `ev.amount` would pay double on every miss",
+             f"the recipe says {price(roll.total) - raw:+d}, a raw delta"
+             " would say +4")
+
+    # -- the OTHER halving, which is resolve's own and was dead here --------
+    #
+    # Found by a plant that refused to go red. Removing the `halved` branch
+    # from `deal_damage`'s composed recipe left every assertion above green,
+    # and the reason is that it was never reached: `deals_half` is a
+    # property of the *dealer*, and nobody on this board is weakened. So the
+    # assertions above exercise `c.half_damage`'s halving, inside `Cast`,
+    # and say nothing about the one in `resolve`.
+    #
+    # A weakened attacker is what poses it. Both halvings have to be in the
+    # recipe or a reroll pays double on exactly one of the two cases, which
+    # is the sort of thing no row's author would ever see.
+    world, me, _ = audit_board("f1378b", 9)
+    foe = enemies(world, me)[0]
+    Cast(world=world, me=me, ref="drivers:reroll").weakened(on=me)
+    if not deals_half(world, me):
+        out.skip("a weakened dealer, for resolve's own halving")
+    else:
+        weak: list[DamageRolled] = []
+        world.bus.on(DamageRolled, lambda ev: weak.append(ev))
+        Cast(world=world, me=me, ref=WEAPON_MELEE).damage("4d8", on=foe)
+        wev = weak[0] if weak else None
+        wroll = getattr(wev, "roll", None)
+        wprice = getattr(wev, "reprice", None)
+        if wev is None or wroll is None or wprice is None or not wroll.dice:
+            out.skip("a weakened dealer's blow carrying its dice")
+        else:
+            out.that(wprice(wroll.total) == wev.amount,
+                     "a weakened dealer's blow is halved by `resolve` rather"
+                     " than by `Cast`, and the recipe reproduces that amount"
+                     " too -- a second halving in a different place",
+                     f"reprice says {wprice(wroll.total)}, the event says"
+                     f" {wev.amount}")
+            was_w = wev.amount
+            wroll.dice[0] += 4
+            out.that(wprice(wroll.total) - was_w == 2,
+                     "and a face four higher is worth two more there as"
+                     " well, which is the assertion a plant on the `halved`"
+                     " branch now reddens",
+                     f"{wprice(wroll.total) - was_w:+d}, not +4")
+
+    # -- and the reroll must not eat an earlier listener's work -------------
+    #
+    # `ev.amount` is a `Decision` field that damage reduction subtracts
+    # from, so a reroll assigning `reprice(...)` outright would silently
+    # undo whoever ran first. The verb adds the recipe's *difference* for
+    # this reason and nothing else asserts it.
+    world, me, _ = audit_board("f1378b", 5)
+    foe = enemies(world, me)[0]
+    trail: list[int] = []
+    last_roll: list[object] = []
+    prices: list[object] = []
+
+    def note_announced(ev: DamageRolled) -> None:
+        trail.append(ev.amount)
+        got = getattr(ev, "roll", None)
+        fn = getattr(ev, "reprice", None)
+        if got is not None and fn is not None:
+            last_roll.append(got)
+            prices.append(fn)
+
+    def price_of(got: object) -> int | None:
+        if not prices:
+            return None
+        return prices[0](got.total)  # type: ignore[operator,union-attr]
+
+    world.bus.on(DamageRolled, note_announced)
+
+    def reduce_then_reroll(ev: DamageRolled) -> None:
+        ev.amount -= 5
+        trail.append(ev.amount)
+        Cast(world=world, me=me, ref="drivers:reroll").reroll_faces(
+            ev=ev, pick=1, below=99)
+        trail.append(ev.amount)
+
+    world.bus.on(DamageRolled, reduce_then_reroll)
+    Cast(world=world, me=me, ref=WEAPON_MELEE).damage("4d8", on=foe)
+    if len(trail) < 3:
+        out.skip("a blow with two listeners on it")
+        return
+    announced, reduced, after = trail[0], trail[1], trail[2]
+    # **Exact, not a bound.** `after <= reduced + 7` was the first spelling
+    # and the plant walked straight through it: assigning the recipe's
+    # answer instead of its difference hands the 5 back, and on 4d8 the
+    # reroll's own gain is often small enough that the sum still fits under
+    # a loose ceiling. The discriminating question is what the amount is
+    # *relative to the recipe* -- one reading sits 5 below it, the other
+    # sits exactly on it.
+    now = price_of(last_roll[0]) if last_roll else None
+    out.that(reduced == announced - 5,
+             "an earlier listener takes 5 off the announced amount, which is"
+             " the setup the next assertion needs",
+             f"announced {announced}, reduced to {reduced}")
+    out.that(now is not None and after == now - 5,
+             "and after the reroll the amount is still exactly 5 under what"
+             " the recipe prices the new dice at -- it added the recipe's"
+             " *difference*. Assigning the answer would land on the recipe"
+             " exactly and hand the 5 back",
+             f"after {after}, the recipe prices the new dice at {now}")
+
+
 def dice_rerolled_where_the_card_prints_no_threshold(out: Result) -> None:
     """Eight rows, five symbols, one mechanism -- and one copied line.
 
@@ -28871,6 +29131,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "reroll_after": (
+        reroll_after_the_roll,
+        "a damage die rerolled after the roll, by the two rows that print"
+        " it (#703)",
     ),
     "lent_reroll": (
         a_reroll_handed_to_somebody_else,

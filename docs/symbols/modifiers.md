@@ -46,6 +46,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - Roll a skill check again. `keep` is new, best or worst.
 - `c.reroll_damage(self, *, keyword: 'Keyword | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - "Roll the damage twice and use the higher result."
+- `c.reroll_faces(self, *, ev: 'Any' = None, pick: 'int' = 1, below: 'int' = 0) -> 'int'`
+  - Reroll faces of a damage roll **already made**, keeping the second
 - `c.reroll_initiative(self, *, on: 'int | None' = None) -> 'int'`
   - Take a new initiative check and move in the order. Returns the roll.
 - `c.reroll_ones(self, *, below: 'int' = 2, pick: 'int' = 0, keyword: 'Keyword | None' = None, ref: 'str' = '', on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`

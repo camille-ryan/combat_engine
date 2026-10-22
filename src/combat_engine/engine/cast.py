@@ -41,7 +41,7 @@ from .query import (
     squares,
 )
 from .resolve import AttackResult, attack, deal_damage, heal, temp_hp
-from .rng import average
+from .rng import Roll, average
 from .types import (
     DEFENCES,
     Ability,
@@ -3240,11 +3240,32 @@ class Cast:
         who = self._who(on)
         if who is None:
             return 0
+        roll: Roll | None = None
         if self.crit:
             amount = _max_of(dice) + bonus + self._high_crit()
+        elif dice:
+            amount, roll = self._roll_damage_dice(dice)
+            amount += bonus
         else:
-            amount = self._roll_damage(dice) + bonus if dice else bonus
-        amount += self._enhancement()
+            amount = bonus
+        enh = self._enhancement()
+        amount += enh
+
+        # **What the blow is worth if one of its dice shows a different
+        # face**, handed to `deal_damage` so it can ride on `DamageRolled`
+        # for a row that answers the roll afterwards (#703).
+        #
+        # A recipe rather than a delta, because the relation between the
+        # dice and the amount is **not** the identity and a row applying
+        # `new - old` to `ev.amount` would be wrong by a factor of two on
+        # half the blows in the game. `c.half_damage` halves the dice
+        # *inside this class* before anything is announced, and `resolve`
+        # halves again for a creature whose damage is halved -- so the one
+        # place that can price a changed face is the place that did the
+        # arithmetic in the first place. `resolve` composes its own share
+        # onto this.
+        def _reprice(total: int, _b: int = bonus, _e: int = enh) -> int:
+            return total + _b + _e
         # A card naming two types has said what it deals, so the weapon's
         # own type gets no vote -- the rule `_typed` already applies to one
         # named type. A *standing* retype of two types answers here, and
@@ -3255,6 +3276,7 @@ class Cast:
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, detail or self.ref,
             dtypes=dtypes,
+            roll=roll, reprice=_reprice if roll is not None else None,
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via, crit=self.crit,
             # Which weapon the blow came through. `detail` says which row
@@ -3293,14 +3315,26 @@ class Cast:
         who = self._who(on)
         if who is None:
             return 0
-        full = self._roll_damage(dice) + bonus if dice else bonus
-        amount = (full + self._enhancement()) // 2
+        roll: Roll | None = None
+        if dice:
+            full, roll = self._roll_damage_dice(dice)
+            full += bonus
+        else:
+            full = bonus
+        enh = self._enhancement()
+        amount = (full + enh) // 2
+
+        # The halving is **inside the recipe**, which is the whole reason
+        # this is a recipe. See `c.damage` above.
+        def _reprice(total: int, _b: int = bonus, _e: int = enh) -> int:
+            return (total + _b + _e) // 2
         if not dtypes:
             dtype, *rest = self._typed(dtype)
             dtypes = (dtype, *rest) if rest else ()
         dealt = deal_damage(
             self.world, self.me, who, amount, dtype, f"{self.ref} (half)",
             dtypes=dtypes,
+            roll=roll, reprice=_reprice if roll is not None else None,
             opportunity=self.opportunity, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via, miss=True,
         )
@@ -11876,11 +11910,29 @@ class Cast:
             "damage_twice_lower", 1, on=who, until=until, kind=self.ref,
         )
 
-    def _roll_damage(self, dice: str | int) -> int:
+    def _roll_damage_dice(self, dice: str | int) -> tuple[int, Roll | None]:
         """The dice of a damage roll, honouring "rolls twice and uses the
         lower roll" and its opposite -- both properties of the roller rather
         than of the blow, which is why they are read here and not passed in.
-        The worse of the two wins when a creature somehow carries both."""
+        The worse of the two wins when a creature somehow carries both.
+
+        **Hands back the live `Roll` beside the amount, and `None` where
+        there is not one.** `rng.Roll` has held the individual faces all
+        along and `_rolled_above`/`_rolled_pick` already write into
+        `roll.dice` in place -- the dice were never discarded, they were
+        summed one call too early. Carrying the object out is what lets
+        `DamageRolled` announce the faces behind its total, which four rows
+        waited on (#703).
+
+        `None` means there is nothing to reroll rather than an error, and
+        two branches mean it: a critical maximises every face, and a
+        "deals maximum damage" hold does the same, so in neither case was a
+        die rolled and no second result exists. A flat damage line gives a
+        `Roll` with an empty `dice` list, which reads the same way to a
+        caller that checks before touching it.
+
+        `_roll_damage` stays as the thin wrapper for the two callers that
+        only ever wanted the number."""
         # Maximum comes first, and is read **here** rather than topped up on
         # `DamageRolled`. The listener version looked the dice up from the
         # rolling row's *header* damage line -- which only a monster has,
@@ -11889,10 +11941,11 @@ class Cast:
         # character row that prints it. Two agents flagged it and neither
         # fixed it; the dice are in hand at this point and nowhere else.
         if self._take_maximum():
-            return _max_of(dice)
+            return _max_of(dice), None
         floor = self._reroll_floor()
         if floor > 1:
-            return self._rolled_above(dice, floor)
+            rolled = self._rolled_above(dice, floor)
+            return rolled.total, rolled
         # **After the loop and never beside it.** "Reroll each die that shows
         # a 1 *until it shows a different number*" is strictly stronger than
         # "pick one of them, reroll it, and use the new result", so a
@@ -11904,15 +11957,32 @@ class Cast:
         # wielder, so a mage holding both is reachable and not theoretical.
         pick_floor, pick_n = self._reroll_pick()
         if pick_floor > 1 and pick_n > 0:
-            return self._rolled_pick(dice, pick_floor, pick_n)
-        first = self.world.rng.roll(dice).total
+            picked = self._rolled_pick(dice, pick_floor, pick_n)
+            return picked.total, picked
+        first = self.world.rng.roll(dice)
+        # **Both rolls still happen**, in the same order, so the random
+        # stream is untouched -- `min(first, rng.roll(dice).total)` always
+        # evaluated its second argument too. What changes is that the
+        # *winner* is carried out as a `Roll` rather than collapsed to its
+        # total, because a row answering `DamageRolled` has to reroll a
+        # face of the roll that actually counted.
         if self.total("damage_twice_lower") > 0:
-            return min(first, self.world.rng.roll(dice).total)
+            second = self.world.rng.roll(dice)
+            worse = first if first.total <= second.total else second
+            return worse.total, worse
         if self._rolls_twice_higher():
-            return max(first, self.world.rng.roll(dice).total)
-        return first
+            second = self.world.rng.roll(dice)
+            better = first if first.total >= second.total else second
+            return better.total, better
+        return first.total, first
 
-    def _rolled_above(self, dice: str | int, floor: int) -> int:
+    def _roll_damage(self, dice: str | int) -> int:
+        """The amount of a damage roll, discarding the dice behind it.
+
+        `_roll_damage_dice` is the one that keeps them."""
+        return self._roll_damage_dice(dice)[0]
+
+    def _rolled_above(self, dice: str | int, floor: int) -> Roll:
         """Roll, then replace each die under `floor` until it is not.
 
         Per die rather than per expression: the card says "reroll each die
@@ -11934,14 +12004,14 @@ class Cast:
         rolled = self.world.rng.roll(dice)
         faces = _faces_of(dice)
         if faces <= 1 or floor > faces:
-            return rolled.total
+            return rolled
         for i, face in enumerate(rolled.dice):
             tries = 0
             while face < floor and tries < 10:
                 face = self.world.rng.die(faces)
                 tries += 1
             rolled.dice[i] = face
-        return rolled.total
+        return rolled
 
     def _take_maximum(self) -> bool:
         """Is a "deals maximum damage" hold waiting, and spend it if so.
@@ -12329,6 +12399,92 @@ class Cast:
         return self.bonus(what, below, on=who, until=until, stacks=False,
                           when=when)
 
+    def reroll_faces(
+        self,
+        *,
+        ev: Any = None,
+        pick: int = 1,
+        below: int = 0,
+    ) -> int:
+        """Reroll faces of a damage roll **already made**, keeping the second
+        result. Returns how many dice were rerolled.
+
+        The reactive sibling of `c.reroll_ones`, on the `instead_of` /
+        `instead_of_now` pattern, and the two are not interchangeable:
+
+        * **`c.reroll_ones`** lays a *hold*, read inside `_roll_damage_dice`
+          while the dice are being rolled. That is right for a standing
+          property -- a weapon that always rerolls its ones.
+        * **`c.reroll_faces`** answers a `DamageRolled` that has already
+          happened. That is right for a no-action daily spent *because* you
+          disliked the number, which is a decision nobody can make before
+          seeing it.
+        * **`c.reroll_damage`** is neither: it rolls the whole expression a
+          second time and keeps the **higher**, which is a different and
+          stronger card.
+
+        Reads the live `Roll` off the event, which `resolve` attaches there
+        beside `ev.ctx` -- the same arrangement `c.boost_roll(ev=)` uses to
+        reach a live `AttackResult`, and the one the waiting rows were told
+        to copy. `0` and no change when the event carries no dice, which is
+        every critical and every flat damage line: a critical maximised
+        every face, so there is no second result to take.
+
+        **`below` defaults to 0, meaning "the card printed no threshold",
+        where the standing verb defaults to 2.** Not an inconsistency --
+        every card printing this reactive shape prints no threshold at all
+        ("as many of the damage dice as you like"), where almost every card
+        printing the standing one says "a 1". 0 and `ANY_FACE` are read the
+        same way here, as the die's own break-even, exactly as
+        `_rolled_pick` reads `ANY_FACE`: rerolling a 6 blind throws away a
+        6, and `_rolled_pick`'s docstring has the measurement.
+
+        It is spelled 0 rather than `ANY_FACE` only because `ANY_FACE` is
+        defined below this class and a default is evaluated at class
+        definition time. Passing `below=ANY_FACE` explicitly is the same
+        thing.
+
+        **`pick` defaults to 1** -- one die, the commoner card -- and
+        `pick=EVERY_DIE` is "as many as you like". Lowest face first, the
+        same policy decision `_rolled_pick` documents and for the same
+        reason.
+
+        **It applies the recipe's difference, not the recipe's answer**, and
+        that is the one subtle line. `ev.amount` is a `Decision` field other
+        listeners mutate freely -- damage reduction subtracts from it -- so
+        assigning `reprice(...)` outright would silently undo whatever ran
+        before this. Adding `after - before` keeps their work and is exact.
+
+        The recipe is needed at all because the dice and the amount are not
+        the same quantity: `c.half_damage` halves the dice before anything
+        is announced, so on a miss-half blow a raw "+4 on a die means +4
+        damage" over-pays by **exactly double** -- measured, 3 against the
+        true 5 on one board and 10 against 12 on another. #703.
+        """
+        if ev is None:
+            ev = self.trigger
+        roll = getattr(ev, "roll", None)
+        if roll is None or not roll.dice:
+            return 0
+        faces = _faces_of(roll.expr)
+        if faces <= 1:
+            return 0
+        floor = faces // 2 + 1 if below <= 0 or below >= ANY_FACE else below
+        low = sorted(
+            (face, i) for i, face in enumerate(roll.dice) if face < floor
+        )
+        count = len(roll.dice) if pick >= EVERY_DIE else max(0, pick)
+        chosen = low[:count]
+        if not chosen:
+            return 0
+        price = getattr(ev, "reprice", None)
+        was = price(roll.total) if price is not None else 0
+        for _face, i in chosen:
+            roll.dice[i] = self.world.rng.die(faces)
+        if price is not None:
+            ev.amount += price(roll.total) - was
+        return len(chosen)
+
     def _reroll_floor(self) -> int:
         """The threshold under which a damage die is rerolled, for *this* row.
 
@@ -12422,7 +12578,7 @@ class Cast:
                                           ctx=seen))
         return floor, got
 
-    def _rolled_pick(self, dice: str | int, floor: int, count: int) -> int:
+    def _rolled_pick(self, dice: str | int, floor: int, count: int) -> Roll:
         """Reroll at most `count` of the dice under `floor`, **once each**.
 
         The difference from `_rolled_above` is the whole of the card: that
@@ -12467,7 +12623,7 @@ class Cast:
         rolled = self.world.rng.roll(dice)
         faces = _faces_of(dice)
         if faces <= 1:
-            return rolled.total
+            return rolled
         if floor >= ANY_FACE:
             floor = faces // 2 + 1
         low = sorted(
@@ -12475,7 +12631,7 @@ class Cast:
         )
         for _face, i in low[:count]:
             rolled.dice[i] = self.world.rng.die(faces)
-        return rolled.total
+        return rolled
 
     def _rolls_twice_higher(self) -> bool:
         """Does this roller take the better of two, for *this* row?

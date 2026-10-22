@@ -799,21 +799,34 @@ def i1698p1(c: Cast) -> None:
 
 
 @power("i1756p1", level=6, cls=ITEM, usage=ENCOUNTER, action=FREE,
-       reach=PERSONAL, target=SELF, todo=("events.DamageRolled.dice",))
+       reach=PERSONAL, target=SELF,
+       on=Trigger(DamageRolled, by_me, "after you make a damage roll"))
 def i1756p1(c: Cast) -> None:
     """`c.reroll_damage` rolls the whole expression again and keeps the
-    higher; this rerolls one die and keeps the second result.
-    **Re-pointed, and the symbol was the bug.** Five spellings were filed
-    across eight rows for one printed mechanism (#703) and the verb is
-    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
-    now. What stops this one is **the moment, not the dice**: its clause
-    answers a damage roll that has already happened, and
-    `events.DamageRolled` carries a total with no dice behind it. The hold
-    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
-    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
-    names for an attack roll, where the event does carry its live
-    `AttackResult`.
-"""
+    higher; this rerolls one die and keeps the second result **even if it is
+    lower**, which is why it is not that verb.
+
+    What stopped it was the moment rather than the dice: the clause answers
+    a damage roll that has already happened, and `c.reroll_ones` lays a hold
+    read *while* the dice are in hand. `c.reroll_faces` is the reactive
+    sibling, reading the live `Roll` off the event -- the same split
+    `c.boost_roll(ev=)` names for an attack roll. #703.
+
+    **A declared trigger, which this row did not have.** "Use this power
+    after you make a damage roll" is a printed trigger, and without one the
+    body was armed at the start of the fight and ran against no roll at all.
+
+    `pick=1` is "one damage die", and the melee-weapon gate is read off the
+    damage context: `ranged` says which it was, and the keyword comes from
+    the row that rolled. The `Level 16:` line raising it to two dice is out
+    of the heroic band and is not marked."""
+    ctx = getattr(c.trigger, "ctx", None) or {}
+    if ctx.get("ranged", False):
+        return
+    rolled = get(str(ctx.get("power", "")))
+    if rolled is None or Keyword.WEAPON not in rolled.keywords:
+        return
+    c.reroll_faces(pick=1)
 
 
 @power("i2134x1", level=6, cls=ITEM, action=ActionType.NONE,

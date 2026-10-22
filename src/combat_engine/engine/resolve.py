@@ -14,7 +14,7 @@ Two deliberate seams for triggered effects to reach into:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +50,7 @@ from .query import (
     light_concealment,
     takes_half,
 )
+from .rng import Roll
 from .types import Condition, DamageType, Defense, Relation
 
 if TYPE_CHECKING:
@@ -910,6 +911,8 @@ def deal_damage(
     dtypes: Sequence[DamageType] = (),
     unpreventable: bool = False,
     weapon: str = "",
+    roll: Roll | None = None,
+    reprice: Callable[[int], int] | None = None,
 ) -> int:
     """Apply damage, honouring weakened, resistance, vulnerability and temp hp.
 
@@ -1047,7 +1050,12 @@ def deal_damage(
     if crit:
         parts = _add_mods(parts, _split_mods(world, source, "crit_damage", dmg_ctx))
         amount = sum(v for _, v in parts)
+    # The amount with every modifier in it and before *this* function's
+    # halving, which is the quantity a changed die has to be priced against.
+    whole = amount
+    halved = False
     if from_attack and deals_half(world, source):
+        halved = True
         amount = amount // 2
         parts = _rescale(parts, amount)
 
@@ -1062,6 +1070,27 @@ def deal_damage(
     # roll carries its own: `c.bonus(once=True)` decides whether the bonus
     # it is watching applied, and it was rebuilding a two-key context here.
     announce.ctx = dmg_ctx
+    # **The dice behind the total, and what a changed face is worth.** Both
+    # plain attributes, never fields: `Event.wire()` ships every declared
+    # field, so a field here would reach the page and move all 290
+    # `DamageRolled` lines across the seven replay fixtures. `AttackResult`
+    # rides on `Hit` the same way and for the same reason, and that is the
+    # precedent a row answering a damage roll was told to copy. #703.
+    if roll is not None and reprice is not None:
+        # `reprice` prices the dice as *the caller* did -- bonus,
+        # enhancement, and `c.half_damage`'s own halving. Everything this
+        # function added on top is independent of the faces, so it is one
+        # constant, and the composition is exact rather than a
+        # re-rolled approximation: re-running `_add_mods` would roll a
+        # critical rider's "+1d6" a second time.
+        extra = whole - reprice(roll.total)
+
+        def _priced(total: int, _r: object = reprice, _x: int = extra) -> int:
+            got = _r(total) + _x  # type: ignore[operator]
+            return got // 2 if halved else got
+
+        announce.roll = roll
+        announce.reprice = _priced
     rolled = world.bus.emit(announce)
     if rolled.cancelled:
         return 0

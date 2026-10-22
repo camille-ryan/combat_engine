@@ -30,6 +30,7 @@ from combat_engine.engine import (
     DEFENCES,
     EACH_OTHER,
     ENCOUNTER,
+    EVERY_DIE,
     FORT,
     FREE,
     INTERRUPT,
@@ -1618,7 +1619,6 @@ def p16372(c: Cast) -> None:
     keywords=[Keyword.ARCANE],
     trigger="you roll damage for an arcane attack power and dislike the result",
     on=Trigger(DamageRolled, by_me, "you roll damage"),
-    todo=("events.DamageRolled.dice",),
 )
 def p16373(c: Cast) -> None:
     """"As many of the damage dice as you like, and you must use the second
@@ -1626,12 +1626,27 @@ def p16373(c: Cast) -> None:
     the higher, and using it here would be a strictly better power.
 
     `c.reroll_ones(below=)` is not it either, for two reasons that are both
-    about *when*: it is a standing hold read inside `_roll_damage`, and this
-    is a no-action daily answering a roll already made. Its own docstring
-    names the hole -- "`DamageRolled` carries a total with no dice behind
-    it" -- so there is nothing on the event to reroll, whatever the
-    threshold. What the row wants is the faces on the event and a reactive
-    door onto them."""
+    about *when*: it is a standing hold read inside `_roll_damage_dice`, and
+    this is a no-action daily answering a roll already made. What the row
+    wanted was the faces on the event and a reactive door onto them, and
+    `c.reroll_faces` is that door -- the dice now ride on `DamageRolled` as
+    a plain attribute, the way a live `AttackResult` rides on `Hit`. #703.
+
+    `pick=EVERY_DIE` is "as many as you like". It does not mean every die
+    blindly: the floor is each die's own break-even, so a 6 on a d6 is left
+    alone, because rerolling it would throw it away. `_rolled_pick` has the
+    measurement that settled this.
+
+    **The arcane gate is read off the blow, not off this row.** "Damage for
+    an arcane attack power" is a property of whatever rolled, so the ref
+    comes from the damage context -- the same `ctx["power"]` the file's own
+    `p16372` already asks about two rows up. Gated here rather than in the
+    `Trigger` because the predicate is handed the event and not the
+    context."""
+    ctx = getattr(c.trigger, "ctx", None) or {}
+    if not _arcane_power(str(ctx.get("power", ""))):
+        return
+    c.reroll_faces(pick=EVERY_DIE)
 
 
 # -- x7_986: the underdark hand ----------------------------------------------

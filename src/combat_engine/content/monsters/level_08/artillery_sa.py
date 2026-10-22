@@ -2026,28 +2026,26 @@ def _by_me_attack_roll(world: World, me: int, ev: AttackRolled) -> bool:
     target=NO_TARGET,
     trigger=_M6361_ROLL,
     on=Trigger(AttackRolled, _by_me_attack_roll, _M6361_ROLL),
-    dropped=("events.DamageRolled.dice",),
+    dropped=("dsl.Trigger(either=)",),
 )
 def m6361a4(c: Cast) -> None:
     """Only the attack-roll half of "an attack roll or a damage roll" is
-    declared: `c.reroll_damage` rerolls every matching roll until a
-    duration runs out, not the one roll this trigger names, and there is no
-    one-shot form. Confirmed absent: `grep -n "def reroll_damage"
-    cast.py` shows only the standing form, and `vocab.py --brief` lists no
-    other. "Cannot be reduced in any way" is why this reaches for
+    declared. "Cannot be reduced in any way" is why this reaches for
     `c.flat`, which does not run the resistance pipeline `c.damage` does.
-    
-    **Re-pointed, and the symbol was the bug.** Five spellings were filed
-    across eight rows for one printed mechanism (#703) and the verb is
-    `c.reroll_ones(below=ANY_FACE, pick=...)`; four of the eight are written
-    now. What stops this one is **the moment, not the dice**: its clause
-    answers a damage roll that has already happened, and
-    `events.DamageRolled` carries a total with no dice behind it. The hold
-    `c.reroll_ones` lays is read *while* the dice are in hand, which a row
-    triggered afterwards cannot reach -- the same split `c.boost_roll(ev=)`
-    names for an attack roll, where the event does carry its live
-    `AttackResult`.
-"""
+
+    **Re-pointed: the one-shot damage reroll exists now and the residue is
+    the trigger.** The old note said there was no one-shot form, and
+    `c.reroll_faces` is one -- it rerolls faces of a `DamageRolled` that has
+    already happened rather than laying a standing hold (#703). So the
+    damage half is writable.
+
+    What is not is holding **both** printed occasions on one row. A row
+    carries one declared `Trigger`, this one is on `AttackRolled`, and the
+    card offers the creature a choice of two moments. Hanging a
+    `c.watch(DamageRolled, ...)` beside it would fire on both rather than
+    letting one use pick, and this is a RECHARGE row with a single use. So
+    the gap is a trigger that stands for either of two events, with the use
+    spent on whichever fires first."""
     _recharge_when_bloodied(c)
     c.reroll_attack(keep="new")
     for mate in c.allies():
