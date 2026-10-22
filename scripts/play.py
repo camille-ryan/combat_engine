@@ -263,7 +263,8 @@ def new_character(party_name: str, *, level: int, seed: int, cls: str) -> int:
 
 def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
          with_dm: bool = False, party_name: str = "", solo: bool = False,
-         everyone: bool = False, no_llm: bool = False) -> int:
+         everyone: bool = False, no_llm: bool = False,
+         god: bool = False) -> int:
     """Play a module from the start, or pick one up where it was left."""
     if resume:
         campaign = save_mod.load(resume)
@@ -335,6 +336,11 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
                 except llm.NoModel as exc:
                     print(f"\n{exc}")
                     return 2
+        if god:
+            # Loud, and above the party line. A session whose victories were
+            # free has to say so every time, or a transcript of it reads as
+            # evidence that the fights work.
+            print("   GOD MODE: every fight is won without being played")
         played = sum(1 for i in range(len(campaign.party.sheets))
                      if campaign.controls(i) == "ai")
         print(f"   playing: {len(campaign.party.sheets) - played} human, {played} model")
@@ -380,6 +386,7 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
             director=director, ask_human=declare,
             narrate=(lambda line: print(f"   {line}", flush=True))
             if live else None,
+            god=god,
         )
         played += 1
         _print_step(made, quiet=quiet, narrated=bool(narrator),
@@ -388,6 +395,18 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
             narrator.narrate(scene, made)
         if made.scene.kind == "combat" and made.outcome in ("won", "lost"):
             fights += 1
+            # **God mode checks its own promise.** The flag is read in
+            # `run.step`, and a driver that calls `step` directly cannot
+            # tell whether `argparse` ever got it there -- breaking the
+            # hand-off left every check green, because the fixture happens
+            # to survive its own fights. A played fight under god mode is a
+            # broken promise, so it is an error rather than a surprise.
+            if god and made.rounds:
+                raise SystemExit(
+                    f"god mode was asked for and {made.scene.id} was "
+                    f"played anyway, for {made.rounds} round(s). The flag "
+                    "is not reaching run.step."
+                )
             rounds += made.rounds
         print(f"   {run_mod.party_line(campaign)}")
         print()
@@ -397,7 +416,11 @@ def play(path: str, *, seed: int, save_as: str, quiet: bool, resume: str = "",
 
     print("=== " + ("finished" if campaign.finished else "stopped") + " ===")
     print(f"  scenes played   {played}")
-    if fights:
+    if fights and god:
+        # "2 fights, 0.0 rounds on average" reads as a suspiciously quick
+        # campaign rather than as no campaign at all.
+        print(f"  fights          {fights} skipped by god mode, none played")
+    elif fights:
         print(f"  fights          {fights}, {rounds / fights:.1f} rounds on average")
     alive = sum(1 for s in campaign.party.sheets if not s.down)
     print(f"  party           {alive} of {len(campaign.party.sheets)} standing")
@@ -486,6 +509,12 @@ def main() -> int:
         help="you play everybody. The same loop; only who is asked changes",
     )
     ap.add_argument(
+        "--god-mode", dest="god", action="store_true",
+        help="the party wins every fight without one being played. For "
+        "working on the story half without the combat half in the way; "
+        "nothing it prints is evidence about combat",
+    )
+    ap.add_argument(
         "--no-llm", dest="no_llm", action="store_true",
         help="run the story loop with no model at all, from canned lines. "
         "What check.py uses: an instrument that needs a model is an "
@@ -536,7 +565,7 @@ def main() -> int:
             args.play, seed=args.seed, save_as=args.save,
             quiet=args.quiet, resume=args.resume or "", with_dm=args.dm,
             party_name=args.party_name, solo=args.solo, everyone=args.everyone,
-            no_llm=args.no_llm,
+            no_llm=args.no_llm, god=args.god,
         )
     ap.print_help()
     return 0

@@ -182,6 +182,20 @@ CHECKS = (
                         "scripts/fixtures/modules/sunken-mill.json",
                         "--seed", "7", "--quiet", "--solo", "--no-llm"),
                "a whole adventure runs, carrying the party between scenes"),
+    Instrument("play-god", ("uv", "run", "scripts/play.py", "--play",
+                           "scripts/fixtures/modules/sunken-mill.json",
+                           "--seed", "7", "--quiet", "--solo", "--no-llm",
+                           "--god-mode"),
+               "the whole scene graph, with the fights handed over"),
+    # **Covers the CLI wiring that the driver cannot.**
+    # `drivers.py god_mode` calls `run.step(god=...)` directly, so breaking
+    # the flag on its way from `argparse` to `step` left it green -- the
+    # mechanism was asserted and its one caller was not. This entry is the
+    # only thing that would catch `god=False` being passed by mistake.
+    #
+    # It is also the cheapest pass over the whole module graph there is,
+    # since no fight is fielded: every scene, every transition, seconds.
+    #
     # **`--solo --no-llm` and not just `--play`.** Without `--solo` every
     # character defaults to human, nobody declares, and the beat loop spins
     # four empty exchanges -- so the roleplay half would have been *driven*

@@ -29197,6 +29197,68 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
 
 
 
+def god_mode_hands_over_the_fight_without_playing_it(out: Result) -> None:
+    """The party wins and the board is never built. With the control.
+
+    **For working on the story half without the combat half in the way.**
+    A campaign that loses a fight in chapter 1 stops, so reading four
+    scenes of conversation was costing four fights and often ending early.
+
+    The control is the one that matters: god mode must be **off** unless
+    asked for. A flag that silently stays on is the quietly-weaker party
+    inverted, and a transcript whose victories were free would read as
+    evidence that combat works.
+    """
+    from pathlib import Path
+
+    from combat_engine.story import beat as bt
+    from combat_engine.story import module as mod
+    from combat_engine.story import run as run_mod
+
+    fight = mod.parse({
+        "id": "godprobe", "party_level": 1, "party_size": 4, "start": "f",
+        "scenes": [{
+            "id": "f", "kind": "combat", "name": "F",
+            "sets": "A cellar.", "exits": [], "difficulty": "standard",
+            "foes": [{"count": 3, "name": "sluice crawlers",
+                      "words": ["beast", "natural"], "role": "skirmisher",
+                      "rank": "standard"}]}]}, Path("<driver>"))
+
+    def one(god: bool) -> tuple:
+        camp = run_mod.begin(fight, seed=5)
+        made = run_mod.step(camp, fight, record=False, god=god,
+                            director=bt.Director(scripted=True))
+        sheets = tuple((s.hp, s.surges, len(s.spent or ()))
+                       for s in camp.party.sheets)
+        return made, sheets
+
+    blessed, after = one(god=True)
+    out.that(
+        blessed.outcome == "won" and blessed.rounds == 0,
+        "god mode wins the fight in no rounds at all",
+        f"{blessed.outcome!r} in {blessed.rounds} round(s)",
+    )
+    out.that(
+        any("GOD MODE" in n for n in blessed.notes),
+        "and says so where the CLI prints it",
+        f"{blessed.notes}",
+    )
+    out.that(
+        all(hp is None for hp, _, _ in after),
+        "and never builds a board, so nothing is harvested from one",
+        f"{after}",
+    )
+
+    # The control. Without the flag the fight is fielded and played, so the
+    # party comes out of it with real numbers on their sheets.
+    played, worn = one(god=False)
+    out.that(
+        played.rounds > 0 and any(hp is not None for hp, _, _ in worn),
+        "while without the flag the fight is played for real",
+        f"{played.outcome!r} in {played.rounds} round(s), sheets {worn}",
+    )
+
+
 def a_garbled_module_is_refused_with_every_problem_at_once(out: Result) -> None:
     """The validator's refusals, which nothing asserted.
 
@@ -29333,6 +29395,10 @@ DRIVERS = {
     "beat_loop": (
         a_beat_rolls_once_per_affordance_and_leaves_when_told,
         "the once rule, the rolls and the ending of a beat, with no model (#800)",
+    ),
+    "god_mode": (
+        god_mode_hands_over_the_fight_without_playing_it,
+        "the party wins every fight without one being played",
     ),
     "module_refusals": (
         a_garbled_module_is_refused_with_every_problem_at_once,

@@ -83,6 +83,14 @@ when nothing happened is the bug.
   list at all. A 7B told a secret and told not to tell it is one unlucky
   sample from telling it -- and the field *beside* a guarded one is where
   this has actually gone wrong (#805).
+* **`--god-mode` hands over every fight and says so, every time.** It
+  exists because the AI policy is the weak half right now and a campaign
+  that loses in chapter 1 stops, so reading four scenes of conversation was
+  costing four fights. No board is built -- which is the point and not a
+  shortcut, because a fast fake fight would still spend powers and surges
+  through `harvest` and the party would reach the next conversation quietly
+  weaker. Nothing a god-mode run prints is evidence about combat, and the
+  banner, the scene line and `Step.notes` all say so.
 * **A clamp is printed.** When the budget cuts a module's stated count, or a
   creature is deferred for being out of tier, it goes in `Step.notes` and the
   CLI prints it. `scripts/CLAUDE.md`: a silent cap reads as "covered
@@ -246,6 +254,7 @@ elegance of what replaced it.
 ```
 uv run scripts/play.py --validate <module>        every problem at once
 uv run scripts/play.py --play <module> --seed 7   a whole adventure
+uv run scripts/play.py --play <module> --god-mode  the story half, no fights
 uv run scripts/drivers.py reflavour_retype reflavour_words skill_challenge \
     challenge_refusal training_bonus challenge_costs_nothing \
     beat_loop scene_audience module_refusals affordance_match

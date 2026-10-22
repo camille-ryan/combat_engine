@@ -227,6 +227,36 @@ def _enemy_eids(world: object) -> list[int]:
     )
 
 
+def _win(scene: Scene, step: Step) -> None:
+    """Hand the party the fight without playing it. God mode.
+
+    **For testing the story half without the combat half in the way.** The
+    AI policy is the weak part of the engine right now, and a campaign that
+    loses a fight in chapter 1 stops -- so every attempt to read four
+    scenes of conversation was costing four fights and often ending early.
+
+    Nothing is fielded, nothing is rolled, nothing is harvested: the board
+    is never built. That is the point of it rather than a shortcut -- a fast
+    fake fight would still spend powers and surges through `harvest`, and
+    the party would arrive at the next conversation quietly weaker, which
+    is the exact failure this component is warned about.
+
+    **It is loud.** The note goes in `Step.notes`, which the CLI prints, and
+    `play.py` says so in its banner. A silent god mode is the quietly-weaker
+    party inverted, and a transcript that does not admit its victories were
+    free is worse than no transcript.
+    """
+    step.outcome = "won"
+    step.rounds = 0
+    called = sum(f.count for f in scene.foes)
+    step.say(f"God mode: {called} foe(s) not fielded. The party wins.")
+    step.notes.append(
+        f"{scene.id}: GOD MODE -- the fight was skipped, not played. "
+        "No damage, no powers spent, no surges. Nothing here is evidence "
+        "about combat."
+    )
+
+
 def _fight(
     campaign: Campaign, module: Module, scene: Scene, step: Step,
     *, record: bool = True,
@@ -446,6 +476,7 @@ def step(
     director: beat_mod.Director | None = None,
     ask_human: beat_mod.AskHuman = beat_mod.silent,
     narrate: Callable[[str], None] | None = None,
+    god: bool = False,
 ) -> Step:
     """Play the scene the campaign is on and advance it.
 
@@ -469,7 +500,10 @@ def step(
     if scene.kind == "roleplay":
         _roleplay(campaign, module, scene, made, director, ask_human)
     elif scene.kind == "combat":
-        _fight(campaign, module, scene, made, record=record)
+        if god:
+            _win(scene, made)
+        else:
+            _fight(campaign, module, scene, made, record=record)
     elif scene.kind == "skill_challenge":
         _challenge(campaign, module, scene, made, choose)
     elif scene.kind == "rest":
