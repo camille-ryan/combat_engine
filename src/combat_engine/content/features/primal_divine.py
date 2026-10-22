@@ -407,10 +407,7 @@ def druid_shape_grant(c: Cast) -> None:
     keywords=[Keyword.MARTIAL],
     requires=on_leg("arena"),
     requires_text=_NOT_MY_OPTION,
-    dropped=(
-        "c.improvised()",
-        "Weapon.proficiency",
-    ),
+    dropped=("c.improvised()",),
 )
 def fighter_talent_arena(c: Cast) -> None:
     """The talent that fights with whatever is to hand.
@@ -425,8 +422,14 @@ def fighter_talent_arena(c: Cast) -> None:
     * A weapon the wielder is not proficient with counts as improvised, and
       an improvised weapon deals 1d8 or 1d10 with a +2 to hit. There is no
       improvised weapon at all -- `c.improvised()` is already the symbol
-      other rows wait on -- and `Weapon.proficiency` is a column, not
-      something a feature can raise.
+      other rows wait on -- and that is the whole of what blocks this
+      clause now.
+
+      **`Weapon.proficiency` is no longer one of them**, and the sentence
+      that used to sit here -- *"a column, not something a feature can
+      raise"* -- is false: `c.weapon_proficiency` sets it per character and
+      the figure reaches the swing, measured. One gap, not two, so the
+      marker names only the one that is real.
     * Two chosen weapons become proficient. `c.chosen_weapon_group()` is the
       standing request for "a weapon this character picked at build time",
       and it is a **chargen** gap rather than a reader one: `Build.choices`

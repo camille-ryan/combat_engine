@@ -122,8 +122,12 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Hunker down: +2 to every defence until the start of your next turn.
 - `c.weapon_dice(self, dice: 'str', *, group: 'str' = '', ref: 'str' = '', on: 'int | None' = None) -> 'int'`
   - Set the damage die of that creature's own weapons. Returns how many.
+- `c.weapon_group(self, becomes: 'str', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, on: 'int | None' = None) -> 'int'`
+  - Re-file what a weapon *is*, so a group-gated row will take it.
 - `c.weapon_of(self, ev: 'Any' = None) -> 'Weapon | None'`
   - Which weapon the attack behind this event was swung with.
+- `c.weapon_proficiency(self, bonus: 'int', *, group: 'str' = '', ref: 'str' = '', every: 'bool' = False, on: 'int | None' = None) -> 'int'`
+  - "You treat slings as having a +3 proficiency bonus." Returns how
 - `c.weapon_range(self, *, ranged: 'tuple[int, int] | None' = None, thrown: 'tuple[int, int] | None' = None, group: 'str' = '', ref: 'str' = '', on: 'int | None' = None) -> 'int'`
   - Give that creature's weapons a printed range. Returns how many.
 - `c.wearing(self, prop: 'str', *, on: 'int | None' = None) -> 'bool'`

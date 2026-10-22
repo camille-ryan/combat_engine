@@ -13801,6 +13801,142 @@ class Cast:
                 ))
         return changed
 
+    def weapon_group(
+        self,
+        becomes: str,
+        *,
+        group: str = "",
+        ref: str = "",
+        every: bool = False,
+        on: int | None = None,
+    ) -> int:
+        """Re-file what a weapon *is*, so a group-gated row will take it.
+        Returns how many weapons were re-filed.
+
+        The fourth per-character weapon writer, beside `c.weapon_dice`,
+        `c.gains_property` and `c.weapon_range`, and the one field of the
+        four that had no writer at all. `Weapon.group` is load-bearing
+        rather than decorative: `query.holding` matches on it, and
+        `Weapon.is_light_blade` is literally `self.group == "light blade"`,
+        which `Cast.wielding` reads to enforce a printed Requirement. So a
+        card saying "you may use this with any power that takes a crossbow"
+        is asking for this and nothing else will do.
+
+        **It keeps the old group as a property**, which is `c.as_implement`'s
+        shape three thousand lines up and is what "counts as" means: the
+        weapon answers to both words afterwards, because `query.holding`
+        asks `what in w.properties or w.group == what`. Replacing the group
+        outright would make the thing stop being what it is, and every
+        printed line here adds an identity rather than trading one.
+
+        **`replace`, written back by identity**, again following
+        `as_implement`. The three sibling writers mutate in place and
+        thereby skip `Weapon.__post_init__`, which keeps `hands` and
+        `properties` saying the same thing -- latent for them, because none
+        of their callers lays a hand-count word, and not worth inheriting
+        here. `Gear.weapons` holds `replace(w)` copies made per character by
+        `chargen.spawn`, so this cannot reach anybody else's weapon.
+
+        **Not `c.counts_as`**, which waives a Requirement without touching
+        the weapon, and not `c.gains_property`, which adds a word without
+        changing what the thing is filed under. One symbol over all three
+        would go green for any of the needs and be right for one.
+
+        `becomes` is the new group; `group=` and `ref=` are the selectors,
+        the same way round as the siblings, and `every` is the printed
+        "weapons you wield".
+
+        **The class half of a printed "if you are a rogue" is not enforced**,
+        which is `as_implement`'s call and reasoning: nothing in `query`
+        answers what class a creature is, and the clause only bites on a row
+        that is group-gated in the first place. Said in the rows that use
+        it rather than silently.
+        """
+        who = self._who(on)
+        if who is None or not becomes:
+            return 0
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return 0
+        from dataclasses import replace as _replace
+
+        from .events import WeaponChanged
+
+        filed = 0
+        out = []
+        for weapon in gear.weapons:
+            wanted = every or (group and weapon.group == group) or (
+                ref and weapon.ref == ref)
+            if not wanted or weapon.group == becomes:
+                out.append(weapon)
+                continue
+            self.world.bus.emit(WeaponChanged(
+                actor=who, weapon=weapon.ref, field="group", what=becomes,
+            ))
+            keep = weapon.properties | ({weapon.group} if weapon.group else set())
+            out.append(_replace(weapon, group=becomes, properties=frozenset(keep)))
+            filed += 1
+        gear.weapons = out
+        return filed
+
+    def weapon_proficiency(
+        self,
+        bonus: int,
+        *,
+        group: str = "",
+        ref: str = "",
+        every: bool = False,
+        on: int | None = None,
+    ) -> int:
+        """"You treat slings as having a +3 proficiency bonus." Returns how
+        many weapons were set.
+
+        **A set, not a bonus, and that is the whole of the design.** The
+        figure is already added to every swing the weapon makes, so
+        `c.bonus("attack", 3, kind="proficiency")` would pay 3 *on top* of
+        whatever the weapon prints -- the failure that is too generous
+        rather than inert, which is the kind nothing notices.
+
+        Measured through a real swing on `w3612`, forcing a natural 10:
+
+            proficiency  0  ->  total 17
+            proficiency  2  ->  total 19
+            proficiency  3  ->  total 20
+            proficiency  5  ->  total 22
+
+        One point of attack per point of proficiency, live, mid-fight. Worth
+        recording because the field is also read by `chargen` at build time
+        and a reader grepping `engine/` for it finds only comments -- so the
+        obvious conclusion is that an encounter-time write buys nothing, and
+        the obvious conclusion is wrong.
+
+        Selectors and `every` as the siblings have them. In place rather
+        than through `replace`, matching those three: `proficiency` is not
+        one of the fields `Weapon.__post_init__` mirrors, so there is
+        nothing to skip.
+        """
+        who = self._who(on)
+        if who is None:
+            return 0
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return 0
+        from .events import WeaponChanged
+
+        set_ = 0
+        for weapon in gear.weapons:
+            wanted = every or (group and weapon.group == group) or (
+                ref and weapon.ref == ref)
+            if not wanted or weapon.proficiency == bonus:
+                continue
+            self.world.bus.emit(WeaponChanged(
+                actor=who, weapon=weapon.ref,
+                field="proficiency", what=str(bonus),
+            ))
+            weapon.proficiency = bonus
+            set_ += 1
+        return set_
+
     def struck_by_property(self, prop: str, ev: Any = None) -> bool:
         """Did the attack behind this event use a weapon with that property?
 

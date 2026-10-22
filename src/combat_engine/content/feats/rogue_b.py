@@ -1122,11 +1122,10 @@ def f2074(c: Cast) -> None:
 
 
 @power("f2405", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("Weapon.proficiency",))
+       reach=PERSONAL, target=SELF)
 def f2405(c: Cast) -> None:
     """Slings gain the high crit property, and print a better proficiency
-    bonus. One of the two is writable and the row plays now.
+    bonus. Both halves are written.
 
     **"Any way to rewrite the weapon a character is holding" exists**, and
     the premise under that note -- `Weapon` being "read off the item rather
@@ -1134,20 +1133,26 @@ def f2405(c: Cast) -> None:
     carrying `replace(w)` copies. `c.gains_property` is the writer and
     `_high_crit` is the reader. #676.
 
-    **The proficiency half is not a bonus and that is why it is still
-    marked.** The card says "treat slings as having a +3 proficiency bonus";
-    `w3628` prints **2**, and `cast.py:1748` already adds the held weapon's
-    printed figure to the attack. Measured through a swing: proficiency
-    0/2/3/5 gives +5/+7/+8/+10. So `c.bonus("attack", 3,
-    kind="proficiency")` would pay 3 on top of the 2 already there, and the
-    honest shape is a **set** -- a third weapon-field writer beside
-    `c.gains_property` and `c.weapon_dice`, which is what
-    `Weapon.proficiency` names.
+    **The proficiency half is a set and not a bonus**, which is the whole
+    reason it waited for a writer rather than being spelled with
+    `c.bonus`. The card says "treat slings as having a +3 proficiency
+    bonus"; `w3628` prints **2**, and the held weapon's printed figure is
+    already added to every swing. Measured again on `w3612`, forcing a
+    natural 10: proficiency 0/2/3/5 gives totals 17/19/20/22, one point of
+    attack per point. So `c.bonus("attack", 3, kind="proficiency")` would
+    pay 3 on top of the 2 already there -- too generous rather than inert,
+    which is the kind nothing notices. `c.weapon_proficiency` sets it.
+
+    The old note here pointed at `cast.py:1748` for the reader. That line
+    is in the middle of an unrelated docstring now; the measurement above
+    is what establishes the reader, and it is the honest form of the
+    claim.
 
     `f3784` lays a flat +2 for unarmed and is right, because unarmed prints
     0: there the delta and the printed figure coincide, which is why it
     does not settle this case."""
     c.gains_property("high crit", group="sling", on=c.me)
+    c.weapon_proficiency(3, group="sling", on=c.me)
 
 
 @power("f2429", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,

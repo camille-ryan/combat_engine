@@ -16684,8 +16684,11 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              "asking for neither field is a no-op rather than an error")
 
     # -- the two rows that are range rows --------------------------------
-    out.that(REGISTRY["f1277"].unfinished == ("c.weapon_group()",),
-             "f1277 is down to its third rewrite, re-filing the group",
+    out.that(REGISTRY["f1277"].unfinished == (),
+             "f1277 waits on nothing: the range, the property and the"
+             " group re-file have all landed, which is what the row's own"
+             " note predicted would be left when a range verb arrived"
+             " (#837)",
              f"{REGISTRY['f1277'].unfinished}")
     out.that(REGISTRY["f2099"].unfinished == ("Weapon.brutal",),
              "and f2099 to a property with no reader, which is the gap worth"
@@ -22884,6 +22887,161 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def a_weapon_is_re_filed(out: Result) -> None:
+    """`c.weapon_group` makes a weapon count as another group without ceasing
+    to be its own, and `c.weapon_proficiency` sets a figure the swing reads
+    (#837, #839).
+
+    The last two of the four per-character weapon writers. `Weapon.group`
+    had no writer at all, and it is the field with teeth:
+    `Weapon.is_light_blade` is literally `self.group == "light blade"` and
+    `Cast.wielding` reads it to enforce a printed Requirement, so a card
+    saying "use this with any power that takes a light blade" can be said
+    no other way.
+
+    **Asserted through `f1277` and `f1288`'s bodies**, not through the
+    verbs, and the interesting half is the *negative* one: a re-file that
+    threw the old group away would pass every "the new word answers"
+    assertion while quietly stopping the weapon being what it is.
+
+    `c.weapon_proficiency` gets a measurement rather than a field read,
+    because the point of it being a **set** and not a bonus is that the
+    figure is already in the swing -- so the assertion that matters is how
+    much the attack total moves.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled
+    from combat_engine.engine.query import enemies, holding
+
+    def wielding(ref: str, weapon: str):  # noqa: ANN202
+        """A board for `ref` with `weapon` in hand **and back to print**.
+
+        Two board facts had to be handled and each one broke a first pass:
+
+        * `Gear.held` is `weapons` minus `stowed`, so a *carried* weapon is
+          not a held one and `query.holding` -- which filters to held first
+          -- answers nothing about it. `gear.wield` is the door, and without
+          it the rule read as "the verb does nothing".
+        * **`turns.arm_traits` arms the row at the start of the fight**, so
+          by the time a rule looks, the clause under test has already run
+          and the "before" is really an "after". Both control assertions
+          failed that way, reporting the *fixed* state as the starting one.
+
+        So the weapon is restored to the printed row from `chargen.PRINTED`
+        before anything is asserted. That makes the control state its own
+        premise instead of inheriting whatever the harness did, which is
+        the only version of this that cannot quietly pass.
+        """
+        from dataclasses import replace as _replace
+
+        from combat_engine.chargen import PRINTED
+
+        world, me, _ = audit_board(ref, 1)
+        gear = world.get(me, Gear)
+        if gear is None or weapon not in PRINTED:
+            return None, None, None
+        if not any(w.ref == weapon for w in gear.weapons):
+            return None, None, None
+        fresh = _replace(PRINTED[weapon])
+        gear.weapons = [fresh if w.ref == weapon else w for w in gear.weapons]
+        gear.wield(fresh)
+        return world, me, fresh
+
+    # -- f1277: a blowgun that answers to a crossbow, and still to itself --
+    world, me, arm = wielding("f1277", "w3662")
+    if world is None:
+        out.skip("a board carrying w3662, for f1277's re-file")
+    else:
+        before_new = [w.ref for w in holding(world, me, "crossbow")]
+        before_own = [w.ref for w in holding(world, me, "blowgun")]
+        out.that(before_new == [] and before_own == ["w3662"],
+                 "before the row runs, the weapon answers to its own group"
+                 " and not to the one the card borrows -- the control, and"
+                 " the half that makes the next assertion mean something",
+                 f"crossbow {before_new}, blowgun {before_own}")
+        REGISTRY["f1277"].body(Cast(world=world, me=me, ref="f1277"))
+        after_new = [w.ref for w in holding(world, me, "crossbow")]
+        after_own = [w.ref for w in holding(world, me, "blowgun")]
+        out.that(after_new == ["w3662"],
+                 "and afterwards a crossbow-gated row takes it, which is"
+                 " what `Weapon.group` is read for",
+                 f"crossbow {after_new}")
+        kept = next(w for w in world.get(me, Gear).weapons
+                    if w.ref == "w3662")
+        out.that("blowgun" in kept.properties,
+                 "**and the old group is carried across as a property**,"
+                 " because every printed line here adds an identity rather"
+                 " than trading one. Asserted on the field and *not*"
+                 " through `query.holding`: that reader also matches"
+                 " `w.slug`, so it answers to the old word whatever the"
+                 " group says -- planting the carry-across away left a"
+                 " `holding` assertion green, which is the whole reason"
+                 " this one reads the weapon instead",
+                 f"properties {sorted(kept.properties)}")
+        out.that(after_own == ["w3662"],
+                 "and a row asking for the weapon by its own name still"
+                 " finds it, which is the behaviour a player would notice",
+                 f"blowgun {after_own}")
+        others = [w.group for w in world.get(me, Gear).weapons
+                  if w.ref != "w3662"]
+        out.that("crossbow" not in others,
+                 "and no other weapon the character carries was touched,"
+                 " since the row names one ref",
+                 f"the rest are {others}")
+
+    # -- f1288: the reader with teeth --------------------------------------
+    world, me, arm = wielding("f1288", "w3663")
+    if world is None:
+        out.skip("a board carrying w3663, for f1288's light-blade clause")
+    else:
+        out.that(not arm.is_light_blade,
+                 "f1288's weapon is not a light blade to begin with --"
+                 " `Weapon.is_light_blade` is `group == 'light blade'`, so"
+                 " this is the field the card has to move",
+                 f"group {arm.group!r}")
+        REGISTRY["f1288"].body(Cast(world=world, me=me, ref="f1288"))
+        now = next(w for w in world.get(me, Gear).weapons
+                   if w.ref == "w3663")
+        out.that(now.is_light_blade,
+                 "and it is afterwards, which is what `Cast.wielding` reads"
+                 " to let a light-blade-gated row be used at all",
+                 f"group {now.group!r}, properties keep {sorted(now.properties)[:3]}")
+
+    # -- the proficiency set, measured through a swing ---------------------
+    def total_with(prof: int) -> int | None:
+        world, me, _ = audit_board("f1277", 1)
+        gear = world.get(me, Gear)
+        arm = gear.main
+        if arm is None:
+            return None
+        Cast(world=world, me=me, ref="drivers:prof").weapon_proficiency(
+            prof, ref=arm.ref, on=me)
+        foe = enemies(world, me)[0]
+        seen: list[Any] = []
+        world.bus.on(AttackRolled, lambda ev: seen.append(ev))
+        world.rng.loaded = 10
+        use = Cast(world=world, me=me, ref="drivers:prof")
+        use.target = foe
+        use.basic(on=foe)
+        got = getattr(seen[0], "result", None) if seen else None
+        return got.total if got is not None else None
+
+    two, three = total_with(2), total_with(3)
+    if two is None or three is None:
+        out.skip("a held weapon to measure a proficiency set through")
+    else:
+        out.that(three - two == 1,
+                 "raising the printed proficiency by one is worth exactly"
+                 " one point of attack, measured through a swing on a"
+                 " forced natural 10 -- which is why the verb **sets** the"
+                 " figure instead of adding a bonus beside it",
+                 f"proficiency 2 -> total {two}, proficiency 3 -> {three}")
+
+
 def every_swing_is_recorded(out: Result) -> None:
     """`PowerResolved.rolls` carries one entry per **swing**, not per target,
     and a RELIABLE daily that hit is not refunded (#810).
@@ -26447,11 +26605,32 @@ def a_weapon_the_build_chose(out: Result) -> None:
     world, me, c = built("fighter", "arena")
     gear = world.need(me, Gear)
     chosen = c.chosen_weapons()
-    out.that(chosen == {w.ref for w in gear.held},
-             "the arms held at spawn are exactly what the build chose",
-             f"chosen={sorted(chosen)} held={[w.ref for w in gear.held]}")
-    out.that(chosen.isdisjoint(gear.stowed) or not gear.stowed,
-             "and nothing on the belt is in the set",
+    # **These two used to assert that the held set *equals* the chosen set
+    # and that nothing chosen is stowed, and both are false the moment a
+    # build chooses a two-handed weapon.** Nothing had, until `f1277` came
+    # off its marker: that feat carries `proficiency=("w3662",)` and
+    # `w3662` is two-handed, so the arena fighter now chooses a one-handed
+    # `w3610` *and* a two-handed `w3662` and no creature can hold both.
+    # `Gear.wield` stows the other, correctly.
+    #
+    # So the old pair conflated **owning** with **holding** and passed only
+    # because it had never met the case. Corrected rather than loosened:
+    # the record is that every chosen weapon is carried, and the hands are
+    # the separate invariant -- which is strictly more than the old pair
+    # said, since neither of them checked legality at all.
+    out.that(chosen <= {w.ref for w in gear.weapons},
+             "every weapon the build chose is carried, which is #719's"
+             " record doing its job",
+             f"chosen={sorted(chosen)} carried="
+             f"{sorted(w.ref for w in gear.weapons)}")
+    two_handed = [w.ref for w in gear.held if w.two_handed]
+    out.that(len(gear.held) == 1 if two_handed else True,
+             "and what is in hand is hand-legal: a two-handed weapon is"
+             " held alone, which is why the chosen set and the held set are"
+             " not the same thing and must not be asserted equal",
+             f"held={[w.ref for w in gear.held]} two-handed={two_handed}")
+    out.that(set(gear.stowed) <= {w.ref for w in gear.weapons},
+             "and the belt only holds things the character actually owns",
              f"stowed={sorted(gear.stowed)}")
     out.that(all(f"chose:{ref}" in world.need(me, Build).choices
                  for ref in chosen),
@@ -26578,8 +26757,13 @@ def a_weapon_the_build_chose(out: Result) -> None:
         ("f3181", ()),
         ("f3202", ()),
         ("f3142", ()),
-        ("cf:fighter-weaponmaster-f3s0",
-         ("c.improvised()", "Weapon.proficiency")),
+        # `Weapon.proficiency` left this tuple when `c.weapon_proficiency`
+        # landed (#839). The row's own note had said the field was "a
+        # column, not something a feature can raise", which stopped being
+        # true; `c.improvised()` is the one gap that remains, and a row
+        # naming two symbols for one clause cannot go green correctly for
+        # either.
+        ("cf:fighter-weaponmaster-f3s0", ("c.improvised()",)),
     ):
         out.that(REGISTRY[ref].unfinished == want_marks,
                  f"{ref} waits on {want_marks or 'nothing'}",
@@ -29253,6 +29437,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "weapon_refiled": (
+        a_weapon_is_re_filed,
+        "a weapon re-filed under another group, and a proficiency set"
+        " (#837, #839)",
     ),
     "every_swing": (
         every_swing_is_recorded,

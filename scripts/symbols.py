@@ -344,7 +344,8 @@ CATEGORIES: dict[str, dict] = {
                 "ability_for", "b_mod", "cha_", "cha_mod", "con_", "con_mod",
                 "dex_", "dex_mod", "int_", "int_mod", "level", "mod",
                 "primary", "primary_mod", "score", "stats", "str_", "str_mod",
-                "total", "total_defence", "weapon_dice", "weapon_of",
+                "total", "total_defence", "weapon_dice", "weapon_group",
+                "weapon_of", "weapon_proficiency",
                 "weapon_range", "wearing", "wielding", "wis_", "wis_mod",
             ]),
             # `c.chosen_weapons` and `c.with_a_chosen_weapon` are here and

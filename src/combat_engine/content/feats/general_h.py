@@ -660,8 +660,7 @@ def f1255b(c: Cast) -> None:
     c.on_sustain(hold, lambda: c.damage(c.w(), on=victim))
 
 
-@_trait("f1277", dropped=("c.weapon_group()",),
-        proficiency=("w3662",))
+@_trait("f1277", proficiency=("w3662",))
 def f1277(c: Cast) -> None:
     """Two of the three rewrites land. The proficiency always did.
 
@@ -678,16 +677,33 @@ def f1277(c: Cast) -> None:
     these rows against it. `"high crit"` is a property with a live reader,
     `Cast._high_crit`, so that clause is not merely written but consulted.
 
-    What is left is the third: **re-filing the weapon's group**, which is
-    the one field with no writer. It is also the one with teeth here --
-    `cf:rogue-scoundrel-f4` and the rogue's group-gated rows are what the
-    card is really buying -- so `dropped=` and a symbol for that alone.
+The third has landed too: `c.weapon_group` re-files the
+    weapon, which is the field that had no writer.
+
+    **Two words, and only one of them can be the group.** The card names
+    the powers that take a crossbow *or* a sling, so the first becomes the
+    group and the second is laid as a property -- which costs nothing,
+    because `query.holding` asks `what in w.properties or w.group == what`
+    and answers to either. The weapon also keeps its own word, since
+    `c.weapon_group` carries the old group across as a property for exactly
+    this reason: measured, `holding("blowgun")` and `holding("crossbow")`
+    both return it afterwards where only the first did before.
+
+    **The "if you are a rogue" half is not enforced**, which is
+    `c.as_implement`'s call on the identical sentence shape and its
+    reasoning: nothing in `query` answers what class a creature is. The
+    exposure is narrower than it sounds -- the clause only bites on a row
+    that is group-gated in the first place -- but it is wider than print
+    for a non-rogue holding a crossbow-gated power, and that is said here
+    rather than left for somebody to find.
 
     The free-action reload is still not marked: nothing in the engine makes
     this weapon cost an action to load, so there is no cost to remove."""
     me = c.me
     c.weapon_range(ranged=(10, 20), ref="w3662", on=me)
     c.gains_property("high crit", ref="w3662", on=me)
+    c.weapon_group("crossbow", ref="w3662", on=me)
+    c.gains_property("sling", ref="w3662", on=me)
 
 
 _swap("f1276", "f1276b")
@@ -750,8 +766,7 @@ def f1279b(c: Cast) -> None:
         c.dazed(until=When.SAVE_ENDS)
 
 
-@_trait("f1288", usage=AT_WILL, proficiency=("w3663",),
-        dropped=("c.weapon_group()",))
+@_trait("f1288", usage=AT_WILL, proficiency=("w3663",))
 def f1288(c: Cast) -> None:
     """The proficiency lands and the penalty hangs on the grab being made
     while that weapon is in hand -- `RelationSet` is the only event that
@@ -789,14 +804,23 @@ def f1288(c: Cast) -> None:
     nothing else is in them, and every weapon attack made while the gate
     holds is made with it.
 
-    Still dropped: the light-blade clause, which re-files the weapon's
-    group so `cf:rogue-scoundrel-f4` and the rogue's group-gated rows take
-    it. `Weapon.group` has no writer, and `c.counts_as(satisfies=,
-    holding=)` is not it -- that waives a printed weapon *Requirement*,
-    read by `wielding`, where what the card buys is what
-    `Weapon.is_light_blade` answers. `f1277` is the sibling with the same
-    clause and the same marker."""
+    The light-blade clause lands now. It re-files the weapon's group so
+    `cf:rogue-scoundrel-f4` and the rogue's group-gated rows take it, which
+    is `c.weapon_group` -- and **not** `c.counts_as(satisfies=, holding=)`,
+    which waives a printed weapon *Requirement* read by `wielding`, where
+    what this card buys is what `Weapon.is_light_blade` answers. That
+    reader is literally `self.group == "light blade"`, so the group is the
+    only field that can say it.
+
+    The weapon keeps its own word too: `c.weapon_group` carries the old
+    group across as a property, so a row asking for either answers.
+
+    **The "if you are a rogue" half is not enforced**, for the reason
+    `c.as_implement` gives on the identical sentence shape -- nothing in
+    `query` answers a creature's class. `f1277` is the sibling with the
+    same clause and the same caveat."""
     me = c.me
+    c.weapon_group("light blade", ref="w3663", on=me)
 
     def garrote_in_both_hands() -> bool:
         return any(w.ref == "w3663" and w.two_handed for w in c.held(on=me))
