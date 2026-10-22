@@ -193,6 +193,8 @@ Readers. None of these change anything, so a row whose whole body is one of them
   - Whoever put that zone or conjuration on the board.
 - `c.missing(self, on: 'int | None' = None) -> 'int'`
   - How many hit points this creature is down. 0 when untouched.
+- `c.part_of(self, dtype: 'DamageType', *, ev: 'Any' = None) -> 'int'`
+  - How much of the blow being announced is of that damage type.
 - `c.passive(self, skill: 'str', *, of: 'int | None' = None) -> 'int'`
   - 10 plus a creature's check modifier -- what it notices unbidden.
 - `c.quarry(self, *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

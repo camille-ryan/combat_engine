@@ -22887,6 +22887,106 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def a_riders_own_amount(out: Result) -> None:
+    """`c.part_of` answers how much of a blow is one damage type, which is a
+    component of somebody else's roll (#619's densest successor).
+
+    Four feats print "the extra **necrotic** damage" from a racial power
+    that makes no attack -- it lays a typed rider on the next blow the
+    character lands. `DamageRolled` carried one total, so as `f1640`'s note
+    put it the clause wanted *"a component of a roll rather than the
+    roll"*.
+
+    `resolve.deal_damage` has split the blow by type all along: `parts[0]`
+    is what the power rolled and every part after it is a rider that named
+    a type of its own, because those points meet resistance whether or not
+    the sword does. That split now rides on the event as a plain attribute
+    -- #703's arrangement, so no field, no wire, no fixture.
+
+    **Typed, not attributed, and that is the correction.** The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed.
+    `Mods.split` keys its result by `tuple[DamageType, ...]` with no ref in
+    it, so attribution is a larger change -- and no card asks for it. The
+    cost is stated in all three rows: any necrotic the character deals
+    answers, not only that power's rider.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import DamageRolled
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType
+
+    kept: dict = {}
+
+    def blow(rider: int, run_row: str = "") -> tuple:
+        """Land a 2d6 blow with an optional typed necrotic rider."""
+        world, me, _ = audit_board("f1640", 1)
+        kept["world"] = world
+        foe = enemies(world, me)[0]
+        if run_row:
+            use = Cast(world=world, me=me, ref=run_row)
+            use.target = me
+            REGISTRY[run_row].body(use)
+        if rider:
+            lay = Cast(world=world, me=me, ref="p8278")
+            lay.bonus("damage", rider, on=me, until=When.EONT, once=True,
+                      dtype=DamageType.NECROTIC)
+        seen: list[DamageRolled] = []
+        world.bus.on(DamageRolled, lambda ev: seen.append(ev))
+        before = world.need(me, Health).temp
+        Cast(world=world, me=me, ref="p1000").damage("2d6", on=foe)
+        after = world.need(me, Health).temp
+        return (seen[0] if seen else None), me, before, after
+
+    ev, me, _, _ = blow(rider=7)
+    if ev is None:
+        out.skip("a blow to read a typed split off")
+        return
+    reader = Cast(world=kept["world"], me=me, ref="f1640")
+    reader.trigger = ev
+    out.that(reader.part_of(DamageType.NECROTIC) == 7,
+             "the rider's **own** amount comes back, not the whole blow --"
+             " which is the component four cards read and `DamageRolled`"
+             " could not give",
+             f"blow {ev.amount}, necrotic part"
+             f" {reader.part_of(DamageType.NECROTIC)}, rider was 7")
+    out.that(reader.part_of(DamageType.FIRE) == 0,
+             "and a type the blow is not comes back 0 rather than the"
+             " total, which is the half a reader returning `ev.amount` on"
+             " a miss would get wrong",
+             f"fire part {reader.part_of(DamageType.FIRE)}")
+
+    # -- f1640's body: temp hit points equal to that component -----------
+    _, _, before, after = blow(rider=7, run_row="f1640")
+    out.that(after - before == 7,
+             "f1640 pays temporary hit points equal to the necrotic"
+             " component, through its own body",
+             f"temp {before} -> {after}, rider was 7")
+    _, _, b2, a2 = blow(rider=0, run_row="f1640")
+    out.that(a2 == b2,
+             "and pays nothing when the blow carries no necrotic rider --"
+             " the control, and the half a body reading `ev.amount` would"
+             " pay out on every hit",
+             f"temp {b2} -> {a2}")
+
+    # -- the two sibling sets are not the same set -----------------------
+    import inspect
+    cursed = inspect.getsource(REGISTRY["f1641"].body)
+    marked = inspect.getsource(REGISTRY["f1662"].body)
+    out.that("c.cursed(" in cursed and "c.marked(" not in cursed,
+             "f1641 reads the **cursed** set, which is what its card names",
+             "c.cursed present, c.marked absent")
+    out.that("c.marked(" in marked and "c.cursed(" not in marked,
+             "and f1662 reads the **marked** set -- two cards one word"
+             " apart, and reading the same set for both would be wrong for"
+             " one of them in every fight",
+             "c.marked present, c.cursed absent")
+
+
 def a_swing_is_passed_on(out: Result) -> None:
     """`c.pass_on(attack=True)` re-aims the triggering power's later attack
     rolls, through the verb and not through a hand-rolled listener.
@@ -29686,6 +29786,10 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "rider_amount": (
+        a_riders_own_amount,
+        "a typed rider's own amount, read off the blow it rides (#619)",
     ),
     "passed_swing": (
         a_swing_is_passed_on,

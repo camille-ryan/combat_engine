@@ -12550,6 +12550,47 @@ class Cast:
                            self.total(f"reroll_damage_below:{k.value}", ctx=seen))
         return best
 
+    def part_of(self, dtype: DamageType, *, ev: Any = None) -> int:
+        """How much of the blow being announced is of that damage type.
+
+        "Temporary hit points equal to the **extra necrotic damage**
+        dealt", and three siblings that trigger on the moment that extra
+        is dealt rather than on its amount. All four read a *component* of
+        somebody else's blow, and `DamageRolled` carried one total: as
+        `f1640`'s note put it, *"a component of a roll rather than the
+        roll"*.
+
+        `resolve.deal_damage` has split the blow by type all along --
+        `parts[0]` is what the power itself rolled and every part after it
+        is a rider that named a type of its own, because those points meet
+        the target's resistance whether or not the sword does. That split
+        now rides on the event as a plain attribute, so this reads it.
+
+        **Typed, not attributed to the row that laid it**, and that is the
+        correction the old symbol needed. `c.rider_from(ref)` asked for the
+        amount a *named row* contributed, and `Mods.split` keys its result
+        by `tuple[DamageType, ...]` with no ref in it -- so attribution
+        would have been a different and larger change. None of the four
+        cards asks for it: every one of them says "the extra **necrotic**
+        damage", which is a type.
+
+        0 when the event carries no split, which is every blow announced
+        before this landed and every path that does not go through
+        `deal_damage`.
+
+        Counts a part whose types *include* `dtype`, so a blow that is
+        "lightning and thunder" answers for either -- the same rule
+        `DamageRolled.types()` already applies, and for the same reason: a
+        gate meaning "is there any necrotic in this" must not be silently
+        false for a two-type rider.
+        """
+        if ev is None:
+            ev = self.trigger
+        parts = getattr(ev, "parts", None)
+        if not parts:
+            return 0
+        return sum(value for types, value in parts if dtype in types)
+
     def set_damage_faces(self, face: int, *, ev: Any = None) -> int:
         """"All damage dice rolled for the triggering attack are considered
         to have a result of 1." Sets every face of a roll already made.

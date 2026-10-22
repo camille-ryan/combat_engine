@@ -1089,8 +1089,26 @@ def deal_damage(
             got = _r(total) + _x  # type: ignore[operator]
             return got // 2 if halved else got
 
-        announce.roll = roll
-        announce.reprice = _priced
+        announce.roll = roll  # ty: ignore[unresolved-attribute]
+        announce.reprice = _priced  # ty: ignore[unresolved-attribute]
+    # **What the blow is made of, by type.** `parts[0]` is what the power
+    # itself rolled and every part after it is a rider that named a type of
+    # its own -- which is the only place a rider's *amount* exists. Four
+    # feats print "the extra necrotic damage" and read it off nothing:
+    # `DamageRolled` carries one total, so a component of it could not be
+    # picked out.
+    #
+    # A plain attribute and a tuple, for #703's reasons: a field would reach
+    # the page and every replay fixture, and a tuple cannot be edited by a
+    # listener into something `_rescale` would then disagree with.
+    #
+    # **It is the split as announced, before any listener moves
+    # `ev.amount`.** A reader asking "how much of this is necrotic" wants
+    # the blow as rolled; the redistribution below is what keeps the typed
+    # parts consistent with whatever a listener did to the total, and a
+    # reader that wanted the post-listener split would have to ask after
+    # the emit, which no printed card does.
+    announce.parts = tuple(parts)  # ty: ignore[unresolved-attribute]
     rolled = world.bus.emit(announce)
     if rolled.cancelled:
         return 0

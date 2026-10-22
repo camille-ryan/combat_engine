@@ -1474,15 +1474,42 @@ def f1639(c: Cast) -> None:
 
 
 @power("f1640", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF)
 def f1640(c: Cast) -> None:
-    """Pays out "the extra necrotic damage dealt", which is a component
-    of a roll rather than the roll. `DamageApplied` carries the total and
-    no power, so the component cannot be picked out of it."""
+    """Temporary hit points equal to the extra necrotic damage dealt.
+
+    **Reads a type, not an attribution, and that is the whole of why this
+    waited.** `c.part_of(DamageType.NECROTIC)` answers how much of the
+    blow being announced is necrotic, off the typed split `deal_damage`
+    has always built and now puts on the event. The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed,
+    which `Mods.split` cannot give -- it keys by type with no ref in it.
+    No card here asks for the ref: all four print "the extra **necrotic**
+    damage".
+
+    **Wider than print by one case, and it is stated rather than hidden**:
+    any necrotic this character deals answers, not only `p8278`'s rider.
+    For an `r47` character those nearly coincide, and narrowing it would
+    need the attribution the cards do not ask for. If a second necrotic
+    source ever reaches one of these, that is the issue to file.
+
+    The old note was exactly right about the shape -- *"a component of a
+    roll rather than the roll"* -- and that component is now on the event.
+    """
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me:
+            return
+        extra = c.part_of(DamageType.NECROTIC, ev=ev)
+        if extra > 0:
+            c.temp_hp(extra, on=me)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me)
 
 
 @power("f1641", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF)
 def f1641(c: Cast) -> None:
     """**Unwritten, and it was worse than a marked row.** It was declared
     on `Trigger(Hit, ...)` gated on `ev.power == "p8278"`, and `p8278`
@@ -1496,8 +1523,36 @@ def f1641(c: Cast) -> None:
     modifier and is not the problem; the moment is. `DamageRolled`
     carries the blow, and the part a modifier contributed is not on it.
 
-    The body it had, kept for whoever closes that: on the hit, every
-    other creature this caster has cursed takes `c.con_mod` necrotic."""
+    **Written now.** `c.part_of(DamageType.NECROTIC)` answers how much of
+    the blow being announced is necrotic, off the typed split
+    `deal_damage` has always built and now puts on the event -- so the
+    moment is the rider paying out, which is exactly what the card names.
+
+    The set is the **cursed** one, not the marked one: `c.cursed(foe)`
+    asks whether *this* caster has cursed that creature, which is what
+    "also under your cf:warlock-f4" means. `f1662` is the sibling that
+    reads the marked set instead, and the two must not be confused.
+
+    **Reads a type, not an attribution.** The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed,
+    which `Mods.split` cannot give -- it keys by type with no ref in it.
+    No card here asks for the ref: all four print "the extra **necrotic**
+    damage".
+
+    **Wider than print by one case, stated rather than hidden**: any
+    necrotic this character deals answers, not only `p8278`'s rider. For
+    an `r47` character those nearly coincide, and narrowing it would need
+    the attribution the cards do not ask for."""
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me or c.part_of(DamageType.NECROTIC, ev=ev) <= 0:
+            return
+        for foe in c.enemies():
+            if foe != ev.target and c.cursed(foe):
+                c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=foe)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me)
 
 
 @power("f1642", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1633,7 +1688,7 @@ def f1646(c: Cast) -> None:
 
 
 @power("f1652", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF, todo=("c.raise_rider(ref, by)",))
 def f1652(c: Cast) -> None:
     """**Unwritten, and it was silently false.** It laid a damage bonus
     gated on `ctx["power"] == "p8278"`, and the damage context's `power`
@@ -1641,9 +1696,15 @@ def f1652(c: Cast) -> None:
     rolls one -- it lays a rider on the next blow the character lands --
     so the gate was false in every fight and the bonus was never read.
 
-    "+2 to the damage dealt by `p8278`" means +2 on that rider, and the
-    rider is a part of somebody else's blow with no identity on the
-    event."""
+    "+2 to the damage dealt by `p8278`" means +2 **on that rider**, and
+    that is why this row is the one of the four that is still marked.
+
+    **Re-pointed.** `c.part_of` landed and gave its three siblings the
+    typed split off the event, so they read how much of a blow is
+    necrotic. That is a *read*. This card has to raise another row's
+    modifier before it pays, which is a write against a `Mod` the laying
+    row owns -- a different mechanism, and the one gap left of the four.
+    `c.raise_rider(ref, by)` names it."""
 
 
 @power("f1656", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
@@ -1676,12 +1737,40 @@ def f1660(c: Cast) -> None:
 
 
 @power("f1662", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=EXTRA)
+       reach=PERSONAL, target=SELF)
 def f1662(c: Cast) -> None:
-    """The same dead trigger as f1641 and unwritten for the same reason:
-    `Trigger(Hit, ev.power == "p8278")` names a hit that `p8278` never
-    makes. The payout it wanted, once the moment exists, is `c.con_mod`
-    necrotic onto every other enemy this caster has marked."""
+    """Every other enemy this caster has marked takes necrotic equal to
+    its Constitution modifier when the extra necrotic lands.
+
+    The old note was right that `Trigger(Hit, ev.power == "p8278")` names
+    a hit that power never makes -- it is a free action laying a rider.
+    The moment is the rider paying out, which the typed split now says.
+
+    **Reads a type, not an attribution, and that is the whole of why this
+    waited.** `c.part_of(DamageType.NECROTIC)` answers how much of the
+    blow being announced is necrotic, off the typed split `deal_damage`
+    has always built and now puts on the event. The old symbol
+    `c.rider_from(ref)` asked for the amount a *named row* contributed,
+    which `Mods.split` cannot give -- it keys by type with no ref in it.
+    No card here asks for the ref: all four print "the extra **necrotic**
+    damage".
+
+    **Wider than print by one case, and it is stated rather than hidden**:
+    any necrotic this character deals answers, not only `p8278`'s rider.
+    For an `r47` character those nearly coincide, and narrowing it would
+    need the attribution the cards do not ask for. If a second necrotic
+    source ever reaches one of these, that is the issue to file.
+    """
+    me = c.me
+
+    def paid(ev: Any) -> None:
+        if ev.source != me or c.part_of(DamageType.NECROTIC, ev=ev) <= 0:
+            return
+        for foe in c.enemies():
+            if foe != ev.target and c.marked(foe, by=me):
+                c.flat(c.con_mod, dtype=DamageType.NECROTIC, on=foe)
+
+    c.watch(DamageRolled, paid, until=When.ENCOUNTER, on=me)
 
 
 @power("f1663", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

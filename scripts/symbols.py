@@ -380,8 +380,8 @@ CATEGORIES: dict[str, dict] = {
                 # `query.since_turn_ended` is the boundary all three share.
                 # #757.
                 "attacked_me_since", "floored_me_since", "hurt_me_since",
-                "passive", "quarry", "race_of", "reach", "result",
-                "swings", "turn_of",
+                "part_of", "passive", "quarry", "race_of", "reach",
+                "result", "swings", "turn_of",
                 "with_a_chosen_weapon", "wounded",
             ]),
             # `c.telepathy` is the odd one here and is here on purpose.
