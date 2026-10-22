@@ -306,6 +306,21 @@ class Cast:
     origin: Square | None = None
     #: The most recent attack this cast rolled. `c.landed` reads off it.
     result: AttackResult | None = None
+    #: **Every** attack this body has rolled for the current target, in
+    #: order, where `result` is only the last one.
+    #:
+    #: `dsl.use` cleared `result` per target and sampled it after the body
+    #: ran, so a body that swings twice reported one roll and `rolls` on
+    #: `PowerResolved` was one entry per *target* rather than per swing --
+    #: which is not what its docstring promised and not what "reroll every
+    #: attack roll you made with this power" can be written against.
+    #:
+    #: Worse, `landed` came off the same sampled field, and a RELIABLE
+    #: power is refunded when nothing landed. So a daily whose first swing
+    #: **hit** and whose second missed was handed back: `cast.result` ended
+    #: as the miss. Appending here rather than sampling there is the fix.
+    #: #810.
+    swings: list[AttackResult] = field(default_factory=list)
     #: The event this row was offered in answer to, for a triggered power.
     #: None for everything used on its own turn.
     trigger: Any = None
@@ -3141,6 +3156,10 @@ class Cast:
         # hit and a different one took the damage.
         if on is None and self.result.target and self.result.target != who:
             self.target = self.result.target
+        # Recorded here because this is the single funnel every attack roll
+        # passes through, which is exactly why sampling `result` afterwards
+        # could not see the first of two. #810.
+        self.swings.append(self.result)
         return self.result
 
     @property

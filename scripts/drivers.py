@@ -22884,6 +22884,128 @@ def a_row_that_stands_in_for_a_basic_on_its_own_card(out: Result) -> None:
              f"{plain}")
 
 
+def every_swing_is_recorded(out: Result) -> None:
+    """`PowerResolved.rolls` carries one entry per **swing**, not per target,
+    and a RELIABLE daily that hit is not refunded (#810).
+
+    `dsl.use` cleared `cast.result` per target, ran the body, and sampled the
+    field afterwards. `cast.result` is written in `Cast.attack` -- the single
+    funnel every attack roll passes through -- so a body with two roll sites
+    overwrote the first and one entry was recorded for two swings.
+
+    **The half that reached a player is `landed`**, which came off the same
+    sampled field. A RELIABLE power is refunded when nothing landed, so a
+    daily whose primary *hit* and whose later swing missed was handed back
+    free.
+
+    Four cells, and the one that always passed is why a single happy-path
+    assertion would not have found this: when the **off-hand** is the hit, it
+    is also the last roll, so it survives the clobbering. Only the
+    primary-hits-and-the-rest-miss cell is wrong, which is a quarter of the
+    table and invisible in aggregate.
+
+    Posed by moving the two defences apart with `c.bonus` and loading a
+    middling face -- board setup, not a patched method, so the row's own body
+    decides both outcomes.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as audit_board
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.dsl import use
+    from combat_engine.engine.query import enemies
+
+    RELIABLE_TWO_ARMS = "p10478"
+    TWO_SWINGS = "p87"
+
+    def reliable(primary_hits: bool, offhand_hits: bool) -> int | None:
+        """Spend `p10478` with each arm's outcome forced. Uses spent, or None
+        if the board cannot stand two enemies next to the caster."""
+        world, me, _ = audit_board(RELIABLE_TWO_ARMS, 1)
+        foes = sorted(e for e in enemies(world, me) if world.get(e, Health))
+        if len(foes) < 2:
+            return None
+        primary, second = foes[0], foes[1]
+        here = world.need(me, Position).square
+        for foe, dest in ((primary, (here[0] + 1, here[1])),
+                          (second, (here[0] + 1, here[1] + 1))):
+            world.grid.lift(foe)
+            world.need(foe, Position).square = dest
+            world.grid.place(foe, frozenset({dest}))
+        rig = Cast(world=world, me=me, ref="drivers:swings")
+        rig.bonus("ac", -40 if primary_hits else 40, kind="probe", on=primary)
+        rig.bonus("ac", -40 if offhand_hits else 40, kind="probe", on=second)
+        world.rng.loaded = 10
+        powers = world.need(me, Powers)
+        use(world, me, RELIABLE_TWO_ARMS, targets=[primary], spend=True)
+        return powers.times(RELIABLE_TWO_ARMS)
+
+    both = reliable(True, True)
+    if both is None:
+        out.skip("two enemies standing beside the caster, for p10478's arms")
+    else:
+        primary_only = reliable(True, False)
+        offhand_only = reliable(False, True)
+        neither = reliable(False, False)
+        out.that(both == 1,
+                 "a RELIABLE daily is spent when both its arms hit -- the"
+                 " control, and the cell that was always right",
+                 f"uses spent {both}")
+        out.that(primary_only == 1,
+                 "and spent when the **primary** hits and the off-hand"
+                 " misses. This is the bug: the off-hand miss was the last"
+                 " roll, so `landed` read False and the daily was refunded"
+                 " after landing a hit",
+                 f"uses spent {primary_only}, expected 1")
+        out.that(offhand_only == 1,
+                 "and spent when only the off-hand hits -- which passed"
+                 " before the fix too, because there the hit is the last"
+                 " roll and survives. Kept so the pair above cannot be"
+                 " satisfied by a change that just always spends",
+                 f"uses spent {offhand_only}")
+        out.that(neither == 0,
+                 "and **not** spent when nothing landed, which is the whole"
+                 " point of the word and must still hold",
+                 f"uses spent {neither}, expected 0")
+
+    # -- one entry per swing, and still one per swing when there is one ----
+    def rolls_and_swings(ref: str, targets: int) -> tuple[int, int] | None:
+        world, me, _ = audit_board(ref, 1)
+        foes = [e for e in enemies(world, me) if world.get(e, Health)]
+        if len(foes) < targets:
+            return None
+        before = len(world.bus.log)
+        use(world, me, ref, targets=foes[:targets], spend=True)
+        fresh = world.bus.log[before:]
+        rolled = len([e for e in fresh if e.kind == "AttackRolled"
+                      and getattr(e, "attacker", None) == me])
+        got = [e for e in fresh if e.kind == "PowerResolved"
+               and getattr(e, "power", "") == ref]
+        return rolled, (len(got[0].rolls) if got else -1)
+
+    pair = rolls_and_swings(TWO_SWINGS, 1)
+    if pair is None:
+        out.skip("a reachable enemy for a two-swing power")
+    else:
+        rolled, recorded = pair
+        out.that(rolled == 2 and recorded == rolled,
+                 "a power that swings twice at **one** target records both"
+                 " rolls -- the event promises every AttackResult the use"
+                 " produced, and it said one",
+                 f"{rolled} rolls on the bus, {recorded} on the event")
+
+    solo = rolls_and_swings(TWO_SWINGS, 2)
+    if solo is None:
+        out.skip("two reachable enemies, for the per-target control")
+    else:
+        rolled, recorded = solo
+        out.that(recorded == rolled,
+                 "and the count still tracks the swings when the targets"
+                 " outnumber the roll sites -- the negative control against"
+                 " a fix that simply appends twice",
+                 f"{rolled} rolls on the bus, {recorded} on the event")
+
+
 def reroll_after_the_roll(out: Result) -> None:
     """`c.reroll_faces` rerolls a damage die after the roll, and the two rows
     that print it gate on the blow rather than on themselves (#703).
@@ -29131,6 +29253,11 @@ DRIVERS = {
     "reroll_dice": (
         dice_rerolled_where_the_card_prints_no_threshold,
         "dice rerolled where the card prints no threshold (#703)",
+    ),
+    "every_swing": (
+        every_swing_is_recorded,
+        "every swing is on PowerResolved.rolls, and a RELIABLE daily that"
+        " hit is not refunded (#810)",
     ),
     "reroll_after": (
         reroll_after_the_roll,

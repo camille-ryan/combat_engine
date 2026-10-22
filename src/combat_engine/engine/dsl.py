@@ -3607,10 +3607,39 @@ def use(
                 continue
             cast.target = t
             cast.result = None
+            del cast.swings[:]
             p.body(cast)
-            if cast.result is not None:
-                rolls.append(cast.result)
-            landed = landed or bool(cast.result and cast.result.hit)
+            # **Every swing the body made, not the last one it happened to
+            # leave behind.** `cast.result` is written by `Cast.attack`, the
+            # single funnel every attack roll goes through, so a body with
+            # two roll sites overwrote the first and this sampled one entry
+            # for two swings.
+            #
+            # `rolls` then said one result per *target*, where
+            # `PowerResolved.rolls` is documented as every `AttackResult`
+            # the use produced -- which is what "reroll every attack roll
+            # you made with this power" has to be handed. Measured on a
+            # two-swing power: two `AttackRolled` on the bus, one entry
+            # here.
+            #
+            # And `landed` came off the same field, which is the part that
+            # reached a player: a RELIABLE power is refunded below when
+            # nothing landed, so a daily whose primary **hit** and whose
+            # off-hand missed was handed back, because the miss was what
+            # `result` ended as. Reproduced in all four cells; the one that
+            # passed was "primary misses, off-hand hits", because there the
+            # hit is last and survives. #810.
+            made = list(cast.swings)
+            if not made and cast.result is not None:
+                # `c.use_power` sets `result` off the inner use's
+                # `PowerResolved` without going through `Cast.attack`, so
+                # it leaves no swing here. Kept as the fallback rather than
+                # also appending there: those rolls belong to the inner
+                # use's own announcement, and folding them into this one
+                # would be a second change wearing this one's clothes.
+                made = [cast.result]
+            rolls.extend(made)
+            landed = landed or any(r.hit for r in made)
     finally:
         _RUNNING.pop()
         if fresh:
