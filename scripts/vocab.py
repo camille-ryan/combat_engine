@@ -297,6 +297,10 @@ CONTEXT = {
     "ref": "this row's own id.",
     "result": "the last `AttackResult`, or None. `.advantage` is whether the "
               "attack had combat advantage; asking again is too late.",
+    "swings": "every `AttackResult` this body has rolled for the current "
+              "target, in order, where `result` is only the last. Read it "
+              "when a clause says *every* attack roll you made; `result` "
+              "answers \"did that one hit\". #810.",
     "trigger": "the event being answered, on an interrupt or reaction.",
     "origin": "the square an area was aimed at.",
     "charge": "is this use a charge?",
