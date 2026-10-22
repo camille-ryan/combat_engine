@@ -266,6 +266,24 @@ class Grid:
     #: recorded separately. **Movement only**: `movement.reachable` is the
     #: only reader, so nothing measures a reach or an area through one.
     links: dict[Square, frozenset[Square]] = field(default_factory=dict)
+    #: Where `dsl.aim_points` remembers the squares an area may be centred
+    #: on. Measured on six area rows: 1,615 calls, **11 distinct answers**,
+    #: and each call drives about 200 `line_of_effect` calls -- 331,927
+    #: across those six, of which 329,873 were repeats.
+    #:
+    #: **Keyed on its own inputs rather than on a version counter**, which
+    #: is what makes it safe: `blocking` above is a bare `set` that `c.wall`
+    #: and the zone writers mutate in place, so a counter would have to be
+    #: bumped at every write site and a missed one would let rows aim
+    #: *through a wall* while every timing still looked green. A key holding
+    #: the blocking set itself cannot go stale -- a mutation simply misses.
+    #:
+    #: Per-`Grid` and not global, so it dies with the board. `audit.py`
+    #: builds a fresh `World` per row and "shares nothing with any other",
+    #: and a cache outliving one board is the sweep flake that rule exists
+    #: to prevent.
+    aims: dict[object, tuple[Square, ...]] = field(
+        default_factory=dict, compare=False, repr=False)
 
     def floor(self, sq: Square) -> int:
         if sq in self.bridged:

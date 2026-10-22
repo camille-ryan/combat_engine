@@ -79,6 +79,34 @@ CHECKS = (
     # six verbs that exist marked missing by four agents in one afternoon.
     Instrument("symbols", ("uv", "run", "scripts/symbols.py"),
                "docs/symbols/ is current, and no gate reads an unknown key"),
+    # **Five claims the root `CLAUDE.md` makes in prose, and nothing checked
+    # them.** `grimp` builds the import graph, `import-linter` asserts
+    # contracts over it, and `.importlinter` holds the five: the ETL does not
+    # reach content, the kernel imports neither the ETL nor the wire, no
+    # package module imports the wire, `db.py` imports nothing from the
+    # package, and `engine -> content` stays at its known sites.
+    #
+    # Writing the file found **two of the five claims wrong**, which is the
+    # argument for having it:
+    #
+    # * `engine -> content` was documented as "five sites" at five line
+    #   numbers, all stale. It is four, at `query.py:675` and
+    #   `cast.py:7965,8132,8154`.
+    # * "nothing imports `api/` in Python at all" is false --
+    #   `drivers.py:14196,14245` imports `api.day` to play the day mode,
+    #   legitimately. The claim holds of the *package*, so that is what the
+    #   contract says.
+    #
+    # Scoped to **direct** imports (`allow_indirect_imports`), because that
+    # is what the prose claims -- a call site in a file. The transitive
+    # picture is a separate and more alarming finding, recorded in #852.
+    #
+    # Seconds, and proven load-bearing by planting a sixth
+    # `from combat_engine.content import loader` in `engine/grid.py`: the
+    # contract went BROKEN naming the file and line.
+    Instrument("seams", ("uv", "run", "--group", "dev", "lint-imports",
+                         "--config", ".importlinter"),
+               "the five component seams CLAUDE.md claims in prose"),
     Instrument("audit", ("uv", "run", "scripts/audit.py", "--changed"),
                "every declared row fires, and does something"),
     # **The instrument that says whether the one above means anything**, and it
@@ -586,6 +614,15 @@ def _clear_red(whole_tree: bool, any_failed: bool, started_at: str,
         return []
     if any_failed or not whole_tree:
         return []
+    if IN_WORKTREE:
+        # **A fifth guard, and it arrived with the directory fix.** The
+        # marker now resolves to the *main* checkout (#848), so without this
+        # a green `--all` on a worktree branch would delete a red verdict
+        # about a commit that is not even on this branch. A sweep certifies
+        # the tree it read; this one did not read that one.
+        return ["         logs/NIGHTLY-FAILED left alone: this is a worktree,"
+                f" and the marker belongs to {MAIN.name}, which this run did"
+                " not sweep"]
     if not began_clean:
         return ["         logs/NIGHTLY-FAILED left alone: the tree was dirty"
                 " when this run started, so the sweep certifies no commit"]
@@ -607,15 +644,61 @@ def _clear_red(whole_tree: bool, any_failed: bool, started_at: str,
 WATERMARK = ROOT / "scripts" / "fixtures" / "audited.json"
 
 
+def _main_checkout() -> Path:
+    """The working tree the nightly actually runs in.
+
+    **`ROOT` is the wrong place to look from a worktree, and reading it
+    there reported a stale manual run as the schedule for days.** #848.
+
+    `nightly.sh` is installed with the *main* checkout as its
+    `WorkingDirectory`, so it writes its log and its marker into that
+    checkout's `logs/`. A worktree has its own `logs/`, git-ignored and
+    usually holding whatever a session last redirected there by hand -- so
+    `ROOT / "logs"` answers a different question than the one being asked,
+    and answers it confidently.
+
+    What that cost, measured on 2026-10-22: this worktree's `logs/` held a
+    manual sweep from `2026-10-21 09:33`, so every `check.py` here printed
+    `last run 2026-10-21 09:33 clean`. The real schedule had **SKIPPED at
+    03:07 on both the 21st and the 22nd** on a dirty tree, and
+    `NIGHTLY-FAILED` still read `FAILED at 81f5229` from the 20th. That is
+    exactly #543's trap -- a non-verdict leaving a real one standing --
+    re-entered through the directory rather than the marker, and the
+    function written to catch it could not see it.
+
+    `--git-common-dir` is the main `.git` from anywhere in the repository,
+    including from a worktree, so its parent is the main working tree. Falls
+    back to `ROOT` rather than raising: a missing git is a reason to report
+    less, not to fail the suite.
+    """
+    done = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=ROOT,
+                          capture_output=True, text=True)
+    if done.returncode != 0 or not done.stdout.strip():
+        return ROOT
+    common = Path(done.stdout.strip())
+    if not common.is_absolute():
+        common = (ROOT / common).resolve()
+    return common.parent
+
+
+#: The checkout the nightly writes into, which is this one unless we are in
+#: a worktree.
+MAIN = _main_checkout()
+#: True when `ROOT` is a worktree and so owes its own `--all`: the schedule
+#: cannot reach this branch at all. The judgement in the plan for #848 is
+#: that a worktree pays for itself rather than the nightly sweeping every
+#: live branch in turn, which multiplies a long run by the branch count.
+IN_WORKTREE = MAIN.resolve() != ROOT.resolve()
+
 #: What the nightly leaves behind. `NIGHTLY-FAILED` is written on a red run
 #: and removed on a green one; `nightly-latest.log` is copied on every run
 #: **including a skip**, which is the asymmetry this reads.
-NIGHTLY_RED = ROOT / "logs" / "NIGHTLY-FAILED"
-NIGHTLY_LOG = ROOT / "logs" / "nightly-latest.log"
+NIGHTLY_RED = MAIN / "logs" / "NIGHTLY-FAILED"
+NIGHTLY_LOG = MAIN / "logs" / "nightly-latest.log"
 
 
 def _nightly_state() -> list[str]:
-    """What the 02:07 net last did, said where the decision to trust it is made.
+    """What the 03:07 net last did, said where the decision to trust it is made.
 
     **#543: a nightly that never ran is indistinguishable from one that
     passed.** The documented signal was `logs/NIGHTLY-FAILED` existing, and
@@ -653,10 +736,16 @@ def _nightly_state() -> list[str]:
     has, so the file says when it ran; mtime is the fallback for a log
     from some older shape of the script.
     """
+    # Say which tree this came from when it is not ours. The old line was
+    # indistinguishable from a reading of our own `logs/`, which is how it
+    # went two days unnoticed -- so the fix is not only to read the right
+    # directory but to name it.
+    whose = f" (from {MAIN.name}; this worktree owes its own --all)" if IN_WORKTREE else ""
     try:
         head = NIGHTLY_LOG.read_text()[:400]
     except OSError:
-        return ["nightly: no run on record -- `uv run bash scripts/nightly.sh`"]
+        return [f"nightly: no run on record{whose}"
+                " -- `uv run bash scripts/nightly.sh`"]
 
     stamped = re.search(r"(\d{4}-\d\d-\d\d) (\d\d:\d\d):\d\d", head)
     if stamped:
@@ -673,7 +762,7 @@ def _nightly_state() -> list[str]:
         # is reported the same way and the marker is read with the same
         # suspicion. The difference is only when the obstacle arrived: a
         # dirty tree is seen before the run, commits landing are seen after.
-        out = [f"nightly: last attempt {when} MOVED{old} -- commits landed"
+        out = [f"nightly: last attempt {when} MOVED{old}{whose} -- commits landed"
                f" mid-sweep, so it certifies nothing"]
         if NIGHTLY_RED.exists():
             out.append(f"         logs/NIGHTLY-FAILED is from BEFORE that"
@@ -681,7 +770,7 @@ def _nightly_state() -> list[str]:
         return [*out, *_stale_net()]
     if head.lstrip().startswith("SKIPPED"):
         why = "a check.py was running" if "already running" in head else "a dirty tree"
-        out = [f"nightly: last attempt {when} SKIPPED -- {why}{old}"]
+        out = [f"nightly: last attempt {when} SKIPPED -- {why}{old}{whose}"]
         if NIGHTLY_RED.exists():
             # The trap this function exists for: the marker is from an
             # earlier run and the protocol reads it as the current one.
@@ -690,8 +779,8 @@ def _nightly_state() -> list[str]:
         return [*out, *_stale_net()]
     if NIGHTLY_RED.exists():
         why = NIGHTLY_RED.read_text().splitlines()[0]
-        return [f"nightly: last run {when} RED{old} -- {why}", *_stale_net()]
-    return [f"nightly: last run {when} clean{old}", *_stale_net()]
+        return [f"nightly: last run {when} RED{old}{whose} -- {why}", *_stale_net()]
+    return [f"nightly: last run {when} clean{old}{whose}", *_stale_net()]
 
 
 

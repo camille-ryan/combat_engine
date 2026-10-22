@@ -184,14 +184,34 @@ say so in the commit.
 | Database | `src/combat_engine/db.py` | where `game.db` and the localisation are, and how to read them. Below every component; imports nothing from the package. |
 | Instruments | `scripts/` | belongs to no component. |
 
-Measured seams, so a claim about them can be checked: `etl` → `content` is
-**zero** imports (content reads the built database). `engine` → `content` is
-**five** sites and is a known leak. Nothing imports `api/` in Python at all
-— `web/` reaches it over HTTP, which is the cleanest boundary here. And
-**nothing imports `etl/` to read the database**: `game()` lives in `db.py`,
-which imports nothing from the package, so five readers reach a sqlite file
-without reaching through each other. `scripts/build.py` calling `build()` is
-the one import of ETL from outside it. #334.
+**These seams are now a gate, not a paragraph.** `.importlinter` holds five
+contracts and `check.py`'s `seams` instrument asserts them in seconds, so
+what follows is checked on every run rather than believed. Making it a gate
+corrected two of the five claims, which is why the prose below reads
+differently from how it did:
+
+* `etl` → `content` is **zero direct imports** (content reads the built
+  database).
+* `engine` → `content` is **four** sites and is a known leak:
+  `query.py:675` and `cast.py:7965, 8132, 8154`, all function-local to dodge
+  the import cycle. It was documented as five, at five line numbers, none of
+  which were right.
+* **The package imports nothing from `api/`** — `web/` reaches it over HTTP,
+  which is the cleanest boundary here. This used to say *nothing* imports it
+  in Python at all, and that was false: `scripts/drivers.py:14196,14245`
+  imports `api.day` to play the day mode, which is an instrument doing its
+  job rather than a breach.
+* **Nothing imports `etl/` to read the database**: `game()` lives in
+  `db.py`, which imports nothing from the package, so five readers reach a
+  sqlite file without reaching through each other. `scripts/build.py`
+  calling `build()` is the one import of ETL from outside it.
+
+All five are scoped to **direct** imports, because a call site in a file is
+what each claim is about. **Transitively the picture is worse and `#852` is
+it**: `engine/skills.py:263` imports `chargen`, a sixth relationship this
+table never mentioned, and through it `etl.build → engine.skills → chargen
+→ content` makes the first bullet false as a statement about the graph.
+867 files, 5,393 dependencies. #334.
 
 ## Checking
 
@@ -203,18 +223,42 @@ uv run scripts/check.py --all     audit every row, not only changed ones
 
 **Cadence, which is the thing that was actually costing.** Wide audit sweeps
 were 36% of everything this suite had ever cost, at 12x the per-catch price of
-a narrow run — so the rule is *rare, not fast*:
+a narrow run — so the rule was *rare, not fast*. **It is now both**, measured
+2026-10-22:
+
+```
+narrow check.py   ~465s -> 222s      --fast  ~342s -> 120s
+the wide audit    2,592s -> 1,279s   a whole --all run, 43-54 min -> 25 min
+```
+
+Four memoisations and a parallel instrument loop, each verified by an
+`audited.json` identical across the change but for its sha. So "once before
+a push" below is a cheaper instruction than it was, and the per-commit run
+is no longer worth routing around.
 
 * **`check.py` per commit.** Narrow; seconds to a couple of minutes.
 * **`check.py --all` once before a push**, not once per commit. It is the only
   invocation that settles the whole-tree debt, and `check.py` now names that
   debt and **withholds "all instruments clean"** until it is paid.
+* **A worktree owes its own `--all` before it merges.** The nightly cannot
+  reach one: `nightly.sh` is installed against the main checkout, so a
+  worktree branch is never swept at all. The judgement is that a branch pays
+  for itself rather than the schedule sweeping every live worktree in turn,
+  which multiplies a long run by the branch count. #848.
 * **Or let the nightly pay it.** `scripts/nightly.sh` runs the wide sweep at
-  02:07 (`scripts/combat-engine-nightly.plist`, installed once with
+  **03:07** (`scripts/combat-engine-nightly.plist`, installed once with
   `launchctl bootstrap`). The sweep is a **net, not a gate** — everything that
   catches a regression in *seconds* already runs per commit — so a regression
-  that lands at 10am being found at 2am is the right trade against a
-  43-minute gate people route around.
+  that lands at 10am being found at 3am is the right trade against a
+  gate people route around.
+
+  **And it loses to a dirty tree, silently, for days.** It refuses to start
+  on uncommitted edits — rightly, since a sweep over them certifies no
+  commit — so one stray modified file stops the net indefinitely. On
+  2026-10-22 a single uncommitted `.gitignore` line had skipped the 21st and
+  the 22nd, leaving `NIGHTLY-FAILED` describing a red run from the 20th with
+  two non-verdicts after it. If the nightly line says SKIPPED, check
+  `git status` in the **main** checkout first.
 
   **Read the result without being asked to**: the next `check.py` in any
   session stops printing `wide sweep owed since <sha>` once a nightly has paid

@@ -2644,12 +2644,29 @@ def aim_points(world: World, actor: int, p: Power, augment: int = 0) -> list[Squ
     if reach.kind in ("area_burst", "wall"):
         far = within_of(world, actor, reach,
                         {"power": p.ref, "range_kind": reach.kind})
-        return sorted(
-            sq
-            for sq in spread(mine, far)
-            if world.grid.inside(sq)
-            and any(world.grid.line_of_effect(src, sq) for src in mine)
-        )
+        # **`reach_of` and `within_of` still run every time.** They are where
+        # every state-dependent answer is -- a reshape, a switched size, a
+        # modifier that lengthens the `within` -- and the comment above is
+        # the history of getting that wrong. Only the square enumeration
+        # below is remembered, and its key holds everything it reads:
+        # `mine`, `far`, the board's bounds (`inside`) and the blocking set
+        # (`line_of_effect`). Nothing else enters the comprehension.
+        grid = world.grid
+        mine_key = frozenset(mine)
+        key = (mine_key, far, grid.width, grid.height, frozenset(grid.blocking))
+        hit = grid.aims.get(key)
+        if hit is None:
+            hit = tuple(sorted(
+                sq
+                for sq in spread(mine, far)
+                if grid.inside(sq)
+                and any(grid.line_of_effect(src, sq) for src in mine)
+            ))
+            grid.aims[key] = hit
+        # A fresh list, because callers get a mutable one today and
+        # `actions.aimed` sorts and slices it. Handing out the cached tuple
+        # would make one caller's edit the next caller's answer.
+        return list(hit)
     return []
 
 

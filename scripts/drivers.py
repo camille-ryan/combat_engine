@@ -30691,7 +30691,99 @@ def what_happened_since_your_turn_ended(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
+    """Where an area may be centred must follow the walls, not a stale answer.
+
+    `dsl.aim_points` remembers its square enumeration on `Grid.aims`,
+    because six area rows made **1,615 calls with 11 distinct answers** and
+    each call drives about 200 `line_of_effect` calls -- 331,927 across the
+    six, 99% of them repeats. Caching it took those to 2,125.
+
+    **This rule exists because the failure mode is silent and serious.**
+    `Grid.blocking` is a bare `set` that `c.wall` and the zone writers
+    mutate in place, so a cache keyed on anything but the set's own contents
+    can answer from before the wall -- and a row would then be offered a
+    placement *through* a wall while every timing and every row count still
+    looked green. No other instrument asks this question: the audit fires
+    rows on a board that mostly has no walls on it.
+
+    Asserted through `aim_points`, the reader a row actually reaches, rather
+    than at `Grid.line_of_effect` one level down -- so the rule still holds
+    if the cache moves or is taken out again.
+
+    Proven by planting: dropping `frozenset(grid.blocking)` from the key
+    leaves a boxed-in caster reporting **121 aimable squares instead of 9**,
+    and this rule goes red on it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY, aim_points
+
+    ref = "p10188"
+    p = REGISTRY[ref]
+    # The premise, stated so a row that stops being an area burst turns this
+    # red instead of quietly making every assertion below vacuous.
+    kind = p.reach.kind if p.reach else None
+    out.that(kind == "area_burst",
+             f"`{ref}` is still an area burst, so it has placements to cache",
+             f"reach kind is {kind!r}")
+    if kind != "area_burst":
+        out.skip(f"{ref} is no longer an area burst; nothing to assert")
+        return
+
+    world, me, _foe = _posed(ref, 1)
+    here = world.need(me, Position).square
+
+    clear = aim_points(world, me, p)
+    # Positive control: the reader answers at all. A rule whose later halves
+    # compare two empty lists would pass on a function that returned nothing.
+    out.that(len(clear) > 0,
+             "an area burst has somewhere to be centred on an open board",
+             f"{len(clear)} squares from {here}")
+
+    again = aim_points(world, me, p)
+    out.that(again == clear and len(world.grid.aims) >= 1,
+             "asking twice with nothing moved gives the same answer, from the memo",
+             f"{len(clear)} then {len(again)}, {len(world.grid.aims)} memo entry")
+
+    # Box the caster in. Every neighbour solid, so only its own square and
+    # what it can still see past the corners survive.
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if (dx, dy) != (0, 0):
+                world.grid.blocking.add((here[0] + dx, here[1] + dy))
+    walled = aim_points(world, me, p)
+    out.that(len(walled) < len(clear),
+             "**a wall laid after the first answer narrows the next one**",
+             f"{len(clear)} aimable before, {len(walled)} after being boxed in")
+
+    # Negative control, and the one an additive-only key would fail: taking
+    # the walls away must give back *exactly* the original set, not merely a
+    # different one. A key that only ever grew would pass the assertion
+    # above and fail this.
+    world.grid.blocking.difference_update(
+        {(here[0] + dx, here[1] + dy)
+         for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)})
+    back = aim_points(world, me, p)
+    out.that(back == clear,
+             "and taking the wall away gives back the first answer exactly",
+             f"{len(clear)} -> {len(walled)} -> {len(back)}")
+
+    # The list/tuple boundary: callers get a mutable list and `actions.aimed`
+    # sorts and slices it, so handing out the stored tuple would make one
+    # caller's edit the next caller's answer.
+    borrowed = aim_points(world, me, p)
+    borrowed.clear()
+    out.that(len(aim_points(world, me, p)) == len(clear),
+             "a caller emptying the list it was handed cannot empty the memo",
+             f"{len(aim_points(world, me, p))} still offered")
+
+
 DRIVERS = {
+    "aim_cache": (
+        an_area_stops_being_aimable_when_a_wall_arrives,
+        "where an area may be centred follows the walls, not a stale memo",
+    ),
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
         "a tome lending a card and charging for it, as one walk (#704)",
