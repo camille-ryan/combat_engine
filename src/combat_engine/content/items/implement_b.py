@@ -4892,9 +4892,22 @@ def i3436x1(c: Cast) -> None:
     on=Trigger(
         Hit, both(by_me, by_keyword(Keyword.ARCANE)), "you hit with an arcane power"
     ),
-    todo=("c.difficult_for()",),
 )
 def i3436p1(c: Cast) -> None:
-    """Difficult terrain is a property of ground, not of a creature:
-    `c.zone` roughs up squares and nothing makes the whole board cost one
-    creature double."""
+    """Difficult terrain was a property of ground and not of a creature:
+    `c.zone` roughs up squares, and until #831 nothing made the whole board
+    cost one creature double. `c.difficult_for` is that, and this is the one
+    row in its family with **no geometry** -- "all squares" is the board, so
+    it takes the bare call rather than an area.
+
+    `c.trigger.target` and not `c.target`: the card says "each enemy that
+    you hit", and the enemy is the one named by the `Hit` that fired this,
+    which for an area power is one firing per enemy.
+
+    Save ends, which is what the card prints, and the save is the burdened
+    creature's -- so `When.SAVE_ENDS` is already measured against the right
+    creature and needs no second argument."""
+    foe = getattr(c.trigger, "target", None)
+    if foe is None:
+        return
+    c.difficult_for(on=foe, until=When.SAVE_ENDS)

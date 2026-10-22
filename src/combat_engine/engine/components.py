@@ -296,6 +296,28 @@ class Movement:
     #: once -- a forest square with a swarm standing in it is still forest.
     #: #659.
     ignores_made_by: frozenset[str] = frozenset()
+    #: **The whole board costs this creature double**, which is what "treats
+    #: all squares as difficult terrain" prints.
+    #:
+    #: **The first additive entry here, and that was the gap.** The three
+    #: fields above are all waivers, and the filter in `World.difficult`
+    #: only ever *removes* squares, so rough ground could be made easier for
+    #: one creature and never harder. Three heroic rows print the other
+    #: direction and none could be written.
+    #:
+    #: A flag and not a square set. The two other rows in that family name
+    #: an **area** -- "squares in the aura", "all squares adjacent to you" --
+    #: and an area that is described relative to a creature follows it, so
+    #: those belong on `Zone.difficult_for`, where `Zones.refresh` already
+    #: re-centres the squares every round. A snapshot taken here would have
+    #: been the lesser reading of both cards; this field is for the one case
+    #: with no geometry to follow.
+    #:
+    #: Materialised in `World.difficult` rather than written out as squares,
+    #: so a board where nothing imposed it pays nothing -- that function is
+    #: called once per square examined during a move search. Written by
+    #: `c.difficult_for`. #831.
+    harder_everywhere: bool = False
     #: How the creature is moving **right now**, or "" between moves.
     #:
     #: `modes` says what it *can* do and never what it *is* doing, so

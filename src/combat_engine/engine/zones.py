@@ -80,6 +80,34 @@ class Zone:
     #:
     #: Read by `query._blinding_squares`, which already knows the looker.
     exempt: frozenset[int] = frozenset()
+    #: Creatures these squares are difficult terrain **for, and for nobody
+    #: else** -- the narrowing `difficult` above cannot express, since that
+    #: flag is terrain and roughs the ground for everyone standing on it.
+    #:
+    #: Two heroic cards need exactly this and neither can be said any other
+    #: way: "whenever an enemy in the aura is hit, squares in the aura are
+    #: difficult terrain **for that enemy**" must leave the other enemies in
+    #: its own aura on ordinary ground, and "that enemy treats all squares
+    #: adjacent to you as difficult terrain" names one creature where the
+    #: existing waiver is per *side* -- so laying the area flat and exempting
+    #: the caster's team is wider than the card by the whole opposing side.
+    #:
+    #: **On the zone rather than on the creature, because the area follows.**
+    #: Both cards describe their squares relative to a creature -- an aura,
+    #: and "adjacent to you" -- and `Zones.refresh` already re-centres an
+    #: aura's squares every round. A set of squares copied onto the burdened
+    #: creature would have been a snapshot, exact for the turn after the hit
+    #: and stale afterwards. `Movement.harder_everywhere` is the sibling for
+    #: the one card with no geometry to follow.
+    #:
+    #: **Mutable, unlike `exempt`, and that is what carries the durations.**
+    #: One aura serves every enemy in it, but each enemy's burden runs on its
+    #: own clock -- "until the end of **its** next turn" -- so an id goes in
+    #: with an `Effect` whose `on_suspend` takes that id back out. The zone
+    #: outlives all of them.
+    #:
+    #: Written by `c.difficult_for`, read in `World.difficult`. #831.
+    difficult_for: set[int] = field(default_factory=set)
     #: The effect whose duration this zone lives on.
     effect: Effect | None = field(default=None, repr=False)
 

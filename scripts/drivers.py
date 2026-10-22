@@ -3217,6 +3217,191 @@ def rough_ground_that_knows_who_made_it(out: Result) -> None:
     )
 
 
+def ground_made_harder_for_one_creature(out: Result) -> None:
+    """*"Each enemy that you hit treats all squares as difficult terrain."*
+
+    Three heroic rows print difficult terrain imposed on **one creature**,
+    and `Movement` carried three waivers and no adder -- `World.difficult`'s
+    per-creature branch only ever *removed* squares, so rough ground could
+    be made easier for one creature and never harder. #831.
+
+    **Two shapes, because the cards come in two, and the split is the
+    finding.** The issue specified one square set on the creature for all
+    three. That is the lesser reading of two of them: "squares in the aura"
+    and "all squares adjacent to you" describe their area relative to a
+    creature, and `Zones.refresh` re-centres an aura every round, so a
+    snapshot would be exact for the turn after the hit and stale once
+    anybody moved. So the area cards burden a **zone** by id
+    (`Zone.difficult_for`) and only the board-wide card sits on the creature
+    (`Movement.harder_everywhere`).
+
+    The assertion that earns the split is the one that moves the character
+    and checks the rough ground moved with them.
+
+    **And the narrowing is the other half of the point.** m115822a0's aura
+    holds six enemies on this board and exactly one of them is burdened --
+    `c.zone(difficult=)` would have roughed the ground for all six, which
+    is the card inverted.
+    """
+    import combat_engine.content  # noqa: F401
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import enemies
+
+    def posed(ref: str):  # noqa: ANN202
+        world, me, _ = _posed(ref, 1)
+        return world, me, sorted(enemies(world, me))
+
+    def hit(world, me: int, foe: int, power: str = "x") -> None:  # noqa: ANN001
+        world.bus.emit(Hit(attacker=me, target=foe, power=power, critical=False))
+
+    # -- i3436p1: the whole board, and nobody else's -----------------------
+    world, me, foes = posed("i3436p1")
+    foe, spare = foes[0], foes[1]
+    away = world.need(foe, Position).square
+    probe = (away[0] + 3, away[1])
+    out.that(probe not in world.difficult(foe),
+             "an ordinary square is not difficult for anybody -- the control"
+             " for the three lines below",
+             f"{probe}")
+    c = Cast(world=world, me=me, ref="i3436p1")
+    c.trigger = Hit(attacker=me, target=foe, power="x", critical=False)
+    REGISTRY["i3436p1"].body(c)
+    out.that(probe in world.difficult(foe),
+             "and is difficult for the enemy i3436p1 hit: the card says"
+             ' "all squares", so the burden has no geometry and sits on the'
+             " creature",
+             f"{probe}")
+    out.that(probe not in world.difficult(spare),
+             "**not for another enemy**, which is the whole of what this"
+             " verb adds -- `c.zone(difficult=)` roughs ground for everyone"
+             " standing on it and could not say this at all",
+             f"{spare}")
+    out.that(probe not in world.difficult(me),
+             "and not for the character who laid it", f"{me}")
+
+    # -- f1341: an area that follows the creature it is described from -----
+    world, me, foes = posed("f1341")
+    foe, spare = foes[0], foes[1]
+    arcane = next(
+        d.ref for d in REGISTRY.values()
+        if d.usage.name == "AT_WILL" and d.attack is not None
+        and "arcane" in str(d.keywords).lower()
+    )
+    c = Cast(world=world, me=me, ref="f1341")
+    REGISTRY["f1341"].body(c)
+    mine = world.need(me, Position).square
+    beside = (mine[0] + 1, mine[1])
+    out.that(beside not in world.difficult(foe),
+             "laying f1341's aura burdens nobody by itself -- the ground is"
+             " ordinary until a hit names a creature",
+             f"{beside}")
+    hit(world, me, foe, arcane)
+    out.that(beside in world.difficult(foe),
+             "and the square beside the character is difficult for the enemy"
+             " just hit with an arcane at-will",
+             f"{beside}")
+    out.that(beside not in world.difficult(spare)
+             and beside not in world.difficult(me),
+             "for that enemy and for nobody else -- not the other enemy in"
+             " the same square, and not the character",
+             f"spare {beside in world.difficult(spare)},"
+             f" me {beside in world.difficult(me)}")
+    far = (mine[0] + 6, mine[1])
+    out.that(far not in world.difficult(foe),
+             "and only where the card says: a square six off is adjacent to"
+             " nothing and stays ordinary",
+             f"{far}")
+
+    # **The assertion the design turns on.** A square set copied onto the
+    # enemy would pass everything above and fail this.
+    world.grid.lift(me)
+    moved = (mine[0] + 4, mine[1])
+    world.need(me, Position).square = moved
+    world.grid.place(me, frozenset({moved}))
+    world.zones.refresh()
+    out.that(beside not in world.difficult(foe),
+             "**and the rough ground follows the character.** Four squares"
+             " on, the old adjacent square is ordinary again",
+             f"{beside}")
+    out.that((moved[0] + 1, moved[1]) in world.difficult(foe),
+             "while the square now beside them is difficult. Four squares"
+             " and not two, because at two the old square is still adjacent"
+             " to the new position and a snapshot passes either way",
+             f"{(moved[0] + 1, moved[1])}")
+
+    # -- f1341's gate: the keyword and the usage both --------------------
+    world, me, foes = posed("f1341")
+    foe = foes[0]
+    REGISTRY["f1341"].body(Cast(world=world, me=me, ref="f1341"))
+    mine = world.need(me, Position).square
+    beside = (mine[0] + 1, mine[1])
+    daily = next(
+        d.ref for d in REGISTRY.values()
+        if d.usage.name == "DAILY" and d.attack is not None
+        and "arcane" in str(d.keywords).lower()
+    )
+    hit(world, me, foe, daily)
+    out.that(beside not in world.difficult(foe),
+             "an arcane power that is NOT at-will arms nothing -- the card"
+             " names a keyword and a usage and the gate reads both",
+             f"{daily}")
+
+    # -- m115822a0: one enemy in an aura of six --------------------------
+    world, me, foes = posed("m115822a0")
+    c = Cast(world=world, me=me, ref="m115822a0")
+    REGISTRY["m115822a0"].body(c)
+    centre = world.need(me, Position).square
+
+    def within(f: int) -> bool:
+        there = world.need(f, Position).square
+        return max(abs(a - b) for a, b in zip(there, centre, strict=True)) <= 5
+
+    inside = [f for f in foes if within(f)]
+    out.that(len(inside) >= 2,
+             "the aura holds at least two enemies, or the narrowing below"
+             " cannot be posed at all",
+             f"{len(inside)} of {len(foes)}")
+    burdened, untouched = inside[0], inside[1:]
+    out.that(centre not in world.difficult(burdened),
+             "the aura is ordinary ground before anybody is hit in it")
+    hit(world, me, burdened)
+    out.that(centre in world.difficult(burdened),
+             "and difficult for the enemy hit inside it")
+    out.that(all(centre not in world.difficult(f) for f in untouched),
+             "**and ordinary for the other enemies standing in the same"
+             " aura**, all of them. This is the card the per-ground flag"
+             " inverts: it would have roughed the floor for every one",
+             f"{len(untouched)} others, "
+             f"{sum(centre in world.difficult(f) for f in untouched)} rough")
+
+    # -- the ruling: a blanket waiver beats the imposition ---------------
+    world, me, foes = posed("i3436p1")
+    foe = foes[0]
+    c = Cast(world=world, me=me, ref="i3436p1")
+    c.trigger = Hit(attacker=me, target=foe, power="x", critical=False)
+    REGISTRY["i3436p1"].body(c)
+    away = world.need(foe, Position).square
+    probe = (away[0] + 3, away[1])
+    out.that(probe in world.difficult(foe), "the burden is standing")
+    world.need(foe, Movement).ignores.add("*")
+    out.that(probe not in world.difficult(foe),
+             "and a creature that ignores difficult terrain outright"
+             " ignores this too -- stated in `World.difficult` as a ruling,"
+             " because the alternative is the newest verb in the engine"
+             " quietly beating every sure-footed feat in it",
+             f"{probe}")
+
+    for ref in ("i3436p1", "f1341", "m115822a0"):
+        out.that(not REGISTRY[ref].unfinished,
+                 f"{ref} waits on nothing: the three symbols #831 found for"
+                 " one gap are all at zero",
+                 f"{REGISTRY[ref].unfinished}")
+
+
 def a_target_line_about_standing_on_the_floor(out: Result) -> None:
     """"Targets enemies in the burst **touching the ground**", and three more.
 
@@ -30799,6 +30984,9 @@ DRIVERS = {
                    "bull rush, grab and aid another, electable by anybody"),
     "difficult_aura": (difficult_aura,
                        "an aura can be difficult ground, waived for a side"),
+    "harder_for_one": (ground_made_harder_for_one_creature,
+                       "rough ground imposed on one creature, and it"
+                       " follows the creature it is measured from (#831)"),
     "compelled_walk": (compelled_walk,
                        "a compulsion moves; the creature does not choose"),
     "fell_might": (fell_might,

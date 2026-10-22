@@ -2247,7 +2247,7 @@ def f1340(c: Cast) -> None:
     c.watch(Hit, on_hit, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1341", todo=("c.ignores_difficult_in(who=)",))
+@_trait("f1341")
 def f1341(c: Cast) -> None:
     """"That enemy treats all squares adjacent to you as difficult terrain
     until the end of your next turn."
@@ -2264,8 +2264,35 @@ def f1341(c: Cast) -> None:
     card by the whole opposing side.
 
     Three theme powers print "for enemies" and are written with the pair;
-    this is the one that names a creature, and it waits on the waiver taking
-    one."""
+    this is the one that names a creature, and `c.difficult_for(zone=)` is
+    that -- the burden goes on the zone by id, so the other enemies standing
+    in the same squares are on ordinary ground. #831.
+
+    **An aura 1, because "adjacent to you" follows you.** `Zones.refresh`
+    re-centres it every round, so the rough squares move with the character
+    for as long as the clause is live -- which matters here, since the
+    duration runs to the end of the character's *next* turn and the
+    character acts inside it. A set of squares taken at the moment of the
+    hit would have been right until they moved.
+
+    The aura is laid once and stands for the encounter; what the hit does is
+    add one enemy to it by name. So two hits on two enemies burden both
+    independently, each on the same clock, and the aura is not re-laid.
+
+    `_arcane_at_will` is the gate and was already in this file -- the card
+    says "an arcane at-will attack power", which is a keyword and a usage."""
+    me = c.me
+    aura = c.aura(1, label=c.ref, on=me)
+
+    def underfoot(hit: Hit) -> None:
+        if hit.attacker != me or not _arcane_at_will(getattr(hit, "power", "")):
+            return
+        foe = getattr(hit, "target", None)
+        if foe is None or foe not in c.enemies():
+            return
+        c.difficult_for(on=foe, zone=aura, until=When.EONT)
+
+    c.watch(Hit, underfoot, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @_trait("f1342")

@@ -201,7 +201,16 @@ class World:
             return set(rough)
         ignored = moves.ignores | moves.ignores_when.get(kind, set())
         if "*" in ignored:
+            # **A blanket waiver takes the imposed squares with it**, and
+            # that is a ruling rather than an accident of line order. A
+            # creature that crosses difficult terrain for nothing crosses
+            # *this* for nothing: what a row imposes through
+            # `Movement.harder` is difficult terrain, and the waiver is
+            # written against the category and not against a cause. Reading
+            # it the other way would make the newest verb in the engine
+            # quietly beat every sure-footed feat in it. #831.
             return set()
+        imposed = self._imposed_on(for_, moves)
         # **Provenance, which is a different question from the label.** Five
         # rows print "ignores difficult terrain related to <a sort of
         # creature>" -- its own kind, or anybody's spider. A shared square
@@ -211,7 +220,7 @@ class World:
         # `forest` and is still difficult for the forest's reason. #659.
         made = self._shared_by() if moves.ignores_made_by else {}
         if not ignored and not made:
-            return set(rough)
+            return set(rough) | imposed
         return {
             sq
             for sq, kind_ in rough.items()
@@ -222,7 +231,41 @@ class World:
                     made.get(sq), moves.ignores_made_by
                 )
             )
-        }
+        } | imposed
+
+    def _imposed_on(self, for_: int, moves: Any) -> set[Any]:
+        """Squares that are rough for this creature and for nobody else.
+
+        Two sources, because the cards come in two shapes:
+
+        * `Movement.harder_everywhere` -- "treats **all squares** as
+          difficult terrain". Materialised here rather than at write time so
+          a board where nothing imposed it pays nothing; `difficult` is
+          called once per square examined during a move search.
+        * a live `Zone` naming this creature in `difficult_for` -- "squares
+          in the aura are difficult terrain **for that enemy**". On the zone
+          because the area follows a creature and `Zones.refresh` already
+          re-centres it, where a square set copied onto the burdened
+          creature would be a snapshot.
+
+        **Added after the waiver filter and never through it.** The filter
+        asks what sort of going each square is, and an imposed square is
+        rough for no reason the ground knows -- so a narrow waiver like
+        "ignores difficult terrain that is mud" has nothing to match on and
+        correctly does not touch it. Only the blanket `"*"` waiver reaches
+        it, and that is settled by its caller. #831.
+        """
+        out: set[Any] = set()
+        for _eid, zone in self.zones.all():
+            if for_ in zone.difficult_for:
+                out |= zone.squares
+        if moves.harder_everywhere:
+            out |= {
+                (x, y)
+                for x in range(self.grid.width)
+                for y in range(self.grid.height)
+            }
+        return out
 
     # -- shorthands the rest of the engine and every power body call ---------
 

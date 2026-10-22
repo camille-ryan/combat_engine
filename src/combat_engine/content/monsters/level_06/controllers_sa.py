@@ -812,13 +812,48 @@ def m1059a5(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    todo=("c.difficult_for()",),
 )
 def m115822a0(c: Cast) -> None:
     """"Squares in the aura are difficult terrain for that enemy" is terrain
-    keyed to one creature rather than to the ground -- `c.zone(difficult=)`
-    makes an area difficult for everybody, and there is no per-creature
-    form of it. Nothing here works yet."""
+    keyed to one creature rather than to the ground. `c.zone(difficult=)`
+    roughs an area for everybody standing in it, which on this card would
+    catch **the other enemies in the same aura** -- so the aura is laid
+    ordinary and each hit enemy is burdened inside it by name. #831.
+
+    **One aura, not one per enemy**, and the per-enemy clock rides on the
+    effect rather than on the zone: `c.difficult_for(zone=)` puts the id in
+    `Zone.difficult_for` and takes it out at the end of that creature's next
+    turn, which is the duration the card prints. The aura outlives every
+    one of them and `Zones.refresh` keeps its squares centred as the
+    creature moves -- which is why this is a zone and not a set of squares
+    copied onto the enemy.
+
+    **The trait is armed rather than declared, so it carries the watch.**
+    `turns.arm_traits` runs an `action=NONE` row with no declared trigger at
+    the start of the fight, which is the moment the aura should go down;
+    "whenever an enemy in the aura is hit" is then a `Hit` watch with the
+    aura membership asked at the moment of the hit, because an enemy outside
+    it takes nothing."""
+    from combat_engine.engine.zones import Zone
+
+    me = c.me
+    aura = c.aura(5, label=c.ref, on=me)
+
+    def burdened(hit: Any) -> None:
+        """Only an enemy, and only one standing in the aura when it was hit.
+
+        The attacker is not asked about: the card says "is hit by an
+        attack" and not "by this creature", so an enemy struck by its own
+        ally's blast is caught too -- which is the printed line.
+        """
+        foe = getattr(hit, "target", None)
+        if foe is None or foe not in c.enemies():
+            return
+        if not (squares(c.world, foe) & c.world.need(aura, Zone).squares):
+            return
+        c.difficult_for(on=foe, zone=aura, until=When.EOTNT)
+
+    c.watch(Hit, burdened, until=When.ENCOUNTER, on=me, label=c.ref)
 
 
 @power(

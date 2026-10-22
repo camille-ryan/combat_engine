@@ -1796,6 +1796,100 @@ class Cast:
         target = self._who(who)
         return target is not None and is_trap(self.world, target)
 
+    def difficult_for(
+        self,
+        on: int | None = None,
+        *,
+        zone: int | None = None,
+        until: When = When.EOTNT,
+    ) -> Effect | None:
+        """Make ground cost double for **one creature**, nobody else.
+
+        The mirror of `c.ignores_difficult`, and the direction the engine
+        could not say: `Movement` carried three waivers and no adder, so
+        terrain could be made easier for one creature and never harder.
+
+        `on` is whose ground it is, defaulting to the target like everything
+        else here -- and that default is the point of the verb, since all
+        three printed lines name the creature just hit.
+
+        **`zone` names the area, and with none it is the whole board.** Two
+        shapes because the cards come in two:
+
+        * no `zone` -- "treats all squares as difficult terrain", a burden
+          on the creature with no geometry to it;
+        * a `zone` -- "squares in the aura are difficult terrain for that
+          enemy", "all squares adjacent to you". Both describe their squares
+          relative to a creature, so lay an **aura** and pass it here: the
+          id goes into `Zone.difficult_for` and `Zones.refresh` re-centres
+          the squares as the owner moves. A snapshot of squares would have
+          been exact for the turn after the hit and stale after it.
+
+        **Not `c.zone(difficult=)`, which is the per-ground form.** That
+        flag is terrain: it roughs the squares for everybody standing in
+        them. The twelve-row idiom beside it -- `c.zone(difficult=c.ref)`
+        with `c.ignores_difficult(c.ref)` -- waives per *side*, so it is
+        wider than either of these cards by the whole opposing side, and
+        one of them must leave the other enemies in its own aura on
+        ordinary ground. #831.
+
+        **A blanket `c.ignores_difficult()` beats this**, deliberately: see
+        `World.difficult`, where the ruling lives.
+        """
+        from .components import Movement
+
+        who = on if on is not None else self.target
+        if who is None:
+            return None
+        if zone is not None:
+            return self._difficult_in_zone(zone, who, until)
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            # A creature with no `Movement` cannot be charged for a square
+            # it has no way of entering. Silent rather than raising, which
+            # is what the waiver beneath does with the same case.
+            return None
+        if moves.harder_everywhere:
+            return None
+        moves.harder_everywhere = True
+
+        def _off() -> None:
+            moves.harder_everywhere = False
+
+        def _on() -> None:
+            moves.harder_everywhere = True
+
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} heavy going",
+            on_suspend=[_off], on_resume=[_on], by=self.ref,
+        )
+
+    def _difficult_in_zone(
+        self, zone: int, who: int, until: When
+    ) -> Effect | None:
+        """The `zone=` half: one creature burdened inside an existing area.
+
+        The zone outlives the burden and usually outlives several of them --
+        one aura serves every enemy that steps into it -- so the id goes in
+        and an effect takes it back out on that creature's own clock.
+
+        **`on_suspend`, not `on_end`**, for the reason `c.ignores_difficult`
+        records: `Effects._lift` runs it for an expiry *and* for a
+        suspension, so the id comes off exactly once either way.
+        """
+        from .zones import Zone
+
+        area = self.world.get(zone, Zone)
+        if area is None or who in area.difficult_for:
+            return None
+        area.difficult_for.add(who)
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} heavy going",
+            on_suspend=[lambda: area.difficult_for.discard(who)],
+            on_resume=[lambda: area.difficult_for.add(who)],
+            by=self.ref,
+        )
+
     def ignores_difficult(
         self,
         kind: str = "",
