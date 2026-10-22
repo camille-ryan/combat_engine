@@ -381,9 +381,27 @@ def _roleplay(campaign: Campaign, module: Module, scene: Scene, step: Step,
         # The dice after the prose, not before it: a roll is the result of
         # the moment and reads as one. Before, it pre-announced the outcome
         # of a paragraph nobody had read yet.
+        #
+        # **And the fact beside the roll, because the DM is not a reliable
+        # courier.** Playing it found the single successful roll of a scene
+        # earning "nobody here has been in the keep long, and that looks
+        # less like coincidence than selection" -- which reached the DM and
+        # not the player, who saw a passed Insight check and a paragraph of
+        # pleasantries. #809 measured that at 6 facts in 20 across the
+        # board; in play it eats the ones the dice paid for, which are the
+        # only ones a player is owed.
+        #
+        # So an earned fact is printed, exactly as the player's own lore
+        # recall already is, and for the same reason: a fact routed through
+        # a model arrives paraphrased, in somebody else's mouth, or not at
+        # all. The DM's paragraph is colour on top. That makes delivery
+        # true by construction rather than by prompt, and the worst case
+        # becomes a harmless restatement instead of a lost payoff.
         for ruling in made.rulings:
             if ruling.affordance != "none":
                 step.say(str(ruling))
+                if ruling.fact and not ruling.exit:
+                    step.say(f"    {ruling.fact}")
         # After the reaction, because it is the scene closing rather than
         # anybody answering. The DM is not given it -- #807.
         if made.exit_line:

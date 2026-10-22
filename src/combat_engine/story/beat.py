@@ -668,9 +668,11 @@ class Director:
         # somebody did.
         facts = [r.fact for r in rulings if r.fact and not r.exit]
         told.append(
-            "NOTES ON WHAT IS NOW TRUE. Things the people here say or do, "
-            "never things a party member does. Cover every note, in their "
-            "voices, in your own words. Add nothing beyond them:\n"
+            "WHAT IS NOW TRUE. **The player has already been shown these "
+            "in plain words.** Do not restate them and do not explain "
+            "them. Write what the people here say and do in the light of "
+            "them -- a reaction, a change of manner, what somebody does "
+            "next. Add nothing beyond them:\n"
             + "\n".join(f"- {f}" for f in facts)
             if facts else
             "NOTHING NEW IS TRUE. Nobody learnt anything; react only."
@@ -733,6 +735,19 @@ def one_beat(
     for intent in beat.intents:
         wanted = picks.get(intent.slot, "none")
         chosen = scene.affordance(wanted) if wanted != "none" else None
+        if (chosen is not None and chosen.leads_to and intent.played):
+            # **A companion does not decide the party leaves.** Playing solo,
+            # both transitions in a scene were taken by model-played
+            # characters -- the wizard decided we would stop asking
+            # questions and the ranger accepted the job -- while the person
+            # at the keyboard was mid-conversation. The scene is theirs to
+            # drive; a companion saying "let us get on with it" is a line,
+            # not a decision.
+            #
+            # Costs nothing in `--party`, where every slot is human. And
+            # the fallback is unchanged: a scene nobody exits runs to
+            # `max_beats` and takes its first exit.
+            chosen = None
         if chosen is not None and chosen.once and chosen.id in playing.spent:
             # **Once means once, including twice in the same beat.** The
             # first version computed the open list before matching and only

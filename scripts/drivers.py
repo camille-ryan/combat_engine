@@ -28424,9 +28424,13 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
             return {intents[0].slot: "out", **{
                 i.slot: "none" for i in intents[1:]}}
 
+    # Human-controlled, because a companion may no longer end a scene --
+    # see the assertion below. This one is about `leads_to` working at all.
+    at_keyboard = [bt.Actor(a.slot, a.name, a.cls, "human") for a in actors]
     table = tbl.lay(party, seed=6)
-    playing = bt.play_scene(scene, table, actors, Leaving(scripted=True),
-                            ask_human=bt.silent, party_level=2)
+    playing = bt.play_scene(scene, table, at_keyboard, Leaving(scripted=True),
+                            ask_human=lambda a, _s: ("", "leaves"),
+                            party_level=2)
     out.that(
         playing.leads_to == "away" and len(playing.beats) == 1,
         "an affordance that leads somewhere ends the scene on the spot",
@@ -28499,6 +28503,39 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         len(spoke(bt.Director(scripted=True), 15)) == len(actors),
         "while scripted turns to everyone, so an instrument sees it all",
         f"{spoke(bt.Director(scripted=True), 16)}",
+    )
+
+    # **A companion cannot end the scene.** Playing solo, both transitions
+    # in one scene were taken by model-played characters while the person
+    # at the keyboard was mid-conversation.
+    class Leaves(bt.Director):
+        def match(self, playing: bt.Playing,
+                  intents: list[bt.Intent]) -> dict:
+            del playing
+            return {i.slot: "out" for i in intents}
+
+    def who_can_leave(control: str) -> str:
+        board = tbl.lay(party, seed=21)
+        try:
+            cast = [bt.Actor(slot=a.slot, name=a.name, cls=a.cls,
+                             control=control) for a in actors]
+            live = bt.Playing(scene=scene)
+            made = bt.one_beat(live, board, cast, Leaves(scripted=True),
+                               ask_human=lambda a, _s: ("", "leaves"),
+                               party_level=2)
+            return made.leads_to
+        finally:
+            board.strike()
+
+    out.that(
+        not who_can_leave("ai"),
+        "a model-played companion taking the exit does not end the scene",
+        f"a companion sent the party to {who_can_leave('ai')!r}",
+    )
+    out.that(
+        who_can_leave("human") == "away",
+        "and the person at the keyboard taking it does",
+        f"the human got {who_can_leave('human')!r}",
     )
 
     # **A person who is not noticed yet is not in the prompt.** `hides`
@@ -29029,6 +29066,63 @@ def a_scene_shows_the_player_less_than_it_tells_the_dm(out: Result) -> None:
         bool(knew) and "You know: the jewel was stolen from a temple" in lines2,
         "what the player recalls is told to them in their own words",
         f"{made2.lines}",
+    )
+
+    # **A fact a roll earned is printed, not left to the DM to carry.**
+    # Playing it found the one successful check in a scene earning a fact
+    # that reached the DM and not the player, who saw a passed Insight and
+    # a paragraph of pleasantries. Delivery is true by construction now.
+    earned = mod.parse({
+        "id": "probe9", "party_level": 1, "party_size": 2, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "affordances": [{
+                "id": "look", "what": "study the room", "skill": "insight",
+                "band": "easy", "dc": 1,
+                "win": "the guests were chosen, not gathered",
+                "lose": "a pleasant evening"}]}]},
+        Path("<driver>"))
+
+    class Looks2(bt.Director):
+        """Takes the affordance, and says nothing about the fact.
+
+        **The scripted DM's reaction *is* the joined facts**, so with it
+        the fact reaches the page whether or not the printed line exists,
+        and the break stayed green twice. Overriding `react` with a fixed
+        sentence leaves the printed line as the only route -- which is the
+        thing under test.
+        """
+
+        def match(self, playing: bt.Playing,
+                  intents: list[bt.Intent]) -> dict:
+            del playing
+            return {i.slot: "look" for i in intents[:1]}
+
+        def react(self, playing: bt.Playing, intents: list[bt.Intent],
+                  rulings: list[bt.Ruling],
+                  recalled: list[bt.Recalled] | None = None) -> str:
+            del playing, intents, rulings, recalled
+            return "The host refills a cup."
+
+    camp3 = run_mod.begin(earned, seed=7)
+    camp3.control = ["human"] * len(camp3.party.sheets)
+    made3 = run_mod.step(camp3, earned, record=False,
+                         director=Looks2(scripted=True),
+                         ask_human=lambda a, _s: ("", "studies the room"))
+    won = [r for b in (made3.played.beats if made3.played else [])
+           for r in b.rulings if r.won and r.fact and not r.exit]
+    # **On its own line, not anywhere in the output.** The scripted DM's
+    # reaction *is* the joined facts, so searching the whole step finds it
+    # either way and the break stayed green -- the same trap as searching
+    # a prompt for a marker the prompt also explains.
+    own_line = [ln.strip() for ln in made3.lines]
+    out.that(
+        bool(won) and all(r.fact in own_line for r in won),
+        "a fact a roll earned reaches the page in the module's own words",
+        f"{len(won)} earned, "
+        f"{sum(r.fact in own_line for r in won)} on a line of their own",
     )
 
     llm.chat = tap2  # ty: ignore[invalid-assignment]
