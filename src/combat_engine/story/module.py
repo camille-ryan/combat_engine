@@ -286,6 +286,20 @@ class Lore:
     #: Rolled once per campaign rather than once per visit. A thing you
     #: either know or do not is not re-rolled because you walked back in.
     once: bool = True
+    #: The affordance that has to be **won** before this is even rolled for.
+    #: Empty means it fires when the scene opens, which is most of it.
+    #:
+    #: **For knowledge the module gates behind doing something**, which it
+    #: routinely does: the adventure's tavern ladder is introduced as
+    #: *"checks around the taverns that evening"*, so those eight facts are
+    #: what you learn by going and asking, not what you walk into dinner
+    #: knowing. Authored without this, all eight fired in the opening beat
+    #: as a stack of eight "You know:" lines before the player had typed a
+    #: word -- an exposition dump, and mistimed on top.
+    #:
+    #: Same shape and same reason as `Npc.unseen`: the gate is an affordance
+    #: that must be *won*, because a failed check reveals nothing.
+    after: str = ""
 
 
 @dataclass(frozen=True)
@@ -564,7 +578,8 @@ def _as_lore(raw: Any, where: str, problems: list[str]) -> Lore | None:
         band = "moderate"
     return Lore(fact=fact, skill=skill, band=band,
                 dc=_stated_dc(raw, where, f"lore {fact[:30]!r}", problems),
-                once=bool(raw.get("once", True)))
+                once=bool(raw.get("once", True)),
+                after=str(raw.get("after", "")).strip())
 
 
 def _as_affordance(raw: Any, where: str, problems: list[str]) -> Affordance | None:
@@ -714,6 +729,12 @@ def _as_scene(raw: Any, index: int, problems: list[str]) -> Scene | None:
     # **An `unseen` naming nothing leaves the person out of the scene for
     # good**, silently -- the worst shape of bug this file can emit, since
     # the scene plays and the character simply never appears.
+    for row in lore:
+        if row.after and row.after not in seen_ids:
+            problems.append(
+                f"{where}: lore {row.fact[:40]!r} waits on {row.after!r}, "
+                "which is not an affordance here"
+            )
     for person in npcs:
         if person.unseen and person.unseen not in seen_ids:
             problems.append(

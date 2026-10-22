@@ -536,6 +536,18 @@ Measured on the module in hand: **78 of its 143 DC sites gate a fact** like
 this rather than an action, and most are in exactly that ladder form. Copy
 the sentence, take the skill from the heading above, take the number.
 
+**Gate it with `after` when the page gates it.** An adventure usually says
+how knowledge is come by -- *"checks around the taverns that evening"* -- and
+that is a condition, not decoration. Name the affordance that earns it:
+
+    {{"fact": "...", "skill": "streetwise", "dc": 12,
+      "after": "check-his-reputation"}}
+
+Without it, every row fires the moment the scene opens. Authored that way,
+the eight tavern facts arrived as eight stacked "You know:" lines before the
+player had typed a word -- an exposition dump, and in the wrong place, since
+the party had not gone anywhere to ask.
+
 **Use the printed DC, not a band.** `dc` wins; `band` is the fallback for a
 page that stated no number. Bands are lossy -- this adventure prints 15s,
 and at level 1 the bands are 8, 12 and 19, so translating cost two facts a

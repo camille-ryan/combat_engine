@@ -192,6 +192,14 @@ no `Lore` row at all.** It belongs to an NPC's `knows`, or behind an
 affordance. Over 60 campaigns delivery split 41% companion / 38% the player
 / 22% nobody.
 
+**Knowledge the module gates behind doing something uses `Lore.after`.**
+The tavern ladder is introduced as *"checks around the taverns that
+evening"*; ungated, all eight facts fired on the opening beat before the
+player had spoken. Won, not attempted -- a failed check unlocks nothing,
+and with a gate the party always passes `found` and `spent` are the same
+set, so that distinction needs an unreachable DC to test and the break
+stayed green until it got one.
+
 **A stated DC wins over a band, because bands are lossy.** The adventure in
 hand prints a ladder of 8, 12, 15 and 19; the bands at level 1 are 8, 12
 and 19, so **15 has no band** and both rows carrying it were rounded up to

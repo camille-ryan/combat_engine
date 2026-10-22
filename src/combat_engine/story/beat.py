@@ -731,6 +731,8 @@ def one_beat(
 
     # -- what the party already knows. First beat only: this is "what do you
     # know walking in", not something re-rolled each exchange.
+    # Rows that fire on arrival, when the scene opens. A row waiting on an
+    # affordance is rolled further down, the moment that affordance lands.
     if not playing.beats:
         beat.recalled = _recall(playing, table, actors, party_level)
         playing.learnt += [r.fact for r in beat.recalled if r.knew]
@@ -846,6 +848,15 @@ def one_beat(
     # Won, not merely attempted: a failed Perception reveals nobody.
     playing.found |= {r.affordance for r in beat.rulings if r.won}
 
+    # **Knowledge the module gated behind doing something, now that it is
+    # done.** The adventure introduces its tavern ladder as "checks around
+    # the taverns that evening", so those facts arrive when the party has
+    # actually gone and asked -- not stacked on the opening beat before
+    # anybody has spoken.
+    opened = _recall(playing, table, actors, party_level, unlocked=True)
+    beat.recalled += opened
+    playing.learnt += [r.fact for r in opened if r.knew]
+
     # -- react
     beat.reaction = director.react(playing, beat.intents, beat.rulings,
                                    beat.recalled)
@@ -856,7 +867,7 @@ def one_beat(
 
 
 def _recall(playing: Playing, table: Table, actors: list[Actor],
-            party_level: int) -> list[Recalled]:
+            party_level: int, *, unlocked: bool = False) -> list[Recalled]:
     """Everybody rolls what they might know. Whoever passes, knows it.
 
     **Every character rolls their own**, rather than one roll for the party
@@ -872,6 +883,13 @@ def _recall(playing: Playing, table: Table, actors: list[Actor],
     """
     out: list[Recalled] = []
     for row in playing.scene.lore:
+        # On arrival, the rows with no gate; after a win, only the rows
+        # that gate on something now in `found`.
+        if unlocked:
+            if not row.after or row.after not in playing.found:
+                continue
+        elif row.after:
+            continue
         key = f"{playing.scene.id}:{row.fact}"
         if row.once and key in playing.asked:
             continue

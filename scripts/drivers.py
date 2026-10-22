@@ -28700,6 +28700,94 @@ def a_beat_rolls_once_per_affordance_and_leaves_when_told(out: Result) -> None:
         f"nobody knew it in {nobody} of {len(hard)} campaigns",
     )
 
+    # **Lore the module gates behind doing something waits for it.** The
+    # adventure introduces its tavern ladder as "checks around the taverns
+    # that evening", and authored without a gate all eight facts fired on
+    # the opening beat as a stack of "You know:" lines before the player
+    # had typed a word.
+    gated = mod.parse({
+        "id": "probeA", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 2,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "affordances": [{
+                "id": "ask-around", "what": "ask around the taverns",
+                "skill": "streetwise", "band": "easy", "dc": 1,
+                "win": "people here like him", "lose": "nothing"}],
+            "lore": [
+                {"fact": "open from the start", "skill": "history",
+                 "band": "easy", "dc": 1},
+                {"fact": "only once you have asked", "skill": "history",
+                 "band": "easy", "dc": 1, "after": "ask-around"},
+            ]}]}, Path("<driver>")).scene("t")
+
+    class Asks(bt.Director):
+        taking = True
+
+        def match(self, playing: bt.Playing,
+                  intents: list[bt.Intent]) -> dict:
+            del playing
+            if not self.taking:
+                return {i.slot: "none" for i in intents}
+            return {i.slot: ("ask-around" if n == 0 else "none")
+                    for n, i in enumerate(intents)}
+
+    def facts(taking: bool) -> set[str]:
+        board = tbl.lay(party, seed=17)
+        try:
+            d = Asks(scripted=True)
+            d.taking = taking
+            live = bt.Playing(scene=gated)
+            made = bt.one_beat(live, board, actors, d,
+                               ask_human=bt.silent, party_level=1)
+            return {r.fact for r in made.recalled if r.knew}
+        finally:
+            board.strike()
+
+    out.that(
+        facts(taking=False) == {"open from the start"},
+        "a gated lore row does not fire until its affordance is won",
+        f"{facts(taking=False)}",
+    )
+    out.that(
+        facts(taking=True) == {"open from the start", "only once you have asked"},
+        "and arrives in the beat the party earns it",
+        f"{facts(taking=True)}",
+    )
+
+    # **Won, not merely attempted.** With a gate the party always passes,
+    # `found` and `spent` are the same set and swapping one for the other
+    # is invisible -- the break stayed green. An unreachable DC separates
+    # them: the affordance is spent and not found, and the fact must stay
+    # locked.
+    hopeless = mod.parse({
+        "id": "probeB", "party_level": 1, "party_size": 5, "start": "t",
+        "scenes": [{
+            "id": "t", "kind": "roleplay", "name": "T", "sets": "A room.",
+            "exits": [], "max_beats": 1,
+            "npcs": [{"name": "the host", "wants": "to pour"}],
+            "affordances": [{
+                "id": "ask-around", "what": "ask around the taverns",
+                "skill": "streetwise", "dc": 99,
+                "win": "people here like him", "lose": "nobody will say"}],
+            "lore": [{"fact": "only once you have asked", "skill": "history",
+                      "band": "easy", "dc": 1, "after": "ask-around"}]}]},
+        Path("<driver>")).scene("t")
+    board = tbl.lay(party, seed=18)
+    try:
+        d = Asks(scripted=True)
+        tried = bt.Playing(scene=hopeless)
+        failed = bt.one_beat(tried, board, actors, d,
+                             ask_human=bt.silent, party_level=1)
+    finally:
+        board.strike()
+    out.that(
+        "ask-around" in tried.spent and not failed.recalled,
+        "while failing the check spends the affordance and unlocks nothing",
+        f"spent={sorted(tried.spent)} recalled={len(failed.recalled)}",
+    )
+
     # **A stated DC wins over the band, and the band is lossy.** Page 11
     # of the adventure prints a ladder of 8, 12, 15 and 19; the bands at
     # level 1 are 8, 12 and 19, so both 15s had been rounded up to hard --
@@ -29301,6 +29389,16 @@ def a_garbled_module_is_refused_with_every_problem_at_once(out: Result) -> None:
     out.that(
         bool(said) and "needs a skill" in said[0],
         "and lore with no skill to recall it by is refused",
+        f"{said}",
+    )
+
+    said = problems({"npcs": [{"name": "h"}],
+                     "affordances": [{"id": "a", "what": "w"}],
+                     "lore": [{"fact": "f", "skill": "history",
+                               "after": "nope"}]})
+    out.that(
+        bool(said) and "not an affordance here" in said[0],
+        "and lore waiting on an affordance that does not exist",
         f"{said}",
     )
 
