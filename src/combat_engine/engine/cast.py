@@ -14514,6 +14514,90 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         gear.weapons = out
         return laid
 
+    def loses_property(
+        self,
+        prop: str,
+        *,
+        group: str = "",
+        ref: str = "",
+        every: bool = False,
+        held: bool = False,
+        on: int | None = None,
+    ) -> int:
+        """Take a weapon property back off. Returns how many weapons changed.
+
+        `gains_property` run backwards, with the same five selectors, because
+        a row that lends a property for one attack has to be able to name the
+        same weapons it lent it to.
+
+        **This is what `i1151p1` wanted, and it is deliberately not a
+        duration.** That row's card is "make a ranged basic attack with your
+        melee weapon *as if the weapon had the heavy thrown property*", and it
+        was marked `dropped=("c.gains_property(until=)",)` -- #844 proposed
+        `until: When` laying an `Effect` that removes the word when it
+        expires. Reading the row settled it the other way:
+
+        * **The window is the row's own body.** `i1151p1` rolls its own
+          attack -- `if c.strike(): c.damage(...)` -- so "for this attack"
+          begins and ends between two statements the row already writes. No
+          clock has to be consulted and no rung has to exist.
+        * **The consumers read it lazily, inside that window.** `i1151x1`
+          gates its damage with `when=lambda ctx: ranged(ctx) and
+          _throwing(c)`, evaluated at the moment the damage is rolled, which
+          happens inside `c.damage` in the body above. So a property laid
+          before the strike and removed after it is seen by exactly the rows
+          the card means and by nothing afterwards.
+        * **And a duration would have cost the family its whole argument.**
+          `weapon_dice`'s docstring makes "it needs no reader" the case for
+          writing `replace(w)` copies at all; an `until=` drags the three
+          writers into `Effects`/`durations` for one parameter on one row.
+
+        `When` has no rung for "this attack" either (`INSTANT` means resolved
+        now and never held), so the timed reading would have needed a new rung
+        as well as new machinery -- for a window the body already brackets.
+
+        The one thing a pair cannot do that an effect could is survive a raise
+        between the two calls. That is the honest cost, and it is bounded:
+        `audit.py` fails on a raise, so a row that leaves a property behind is
+        a red instrument rather than a quiet over-grant.
+
+        Removing a property a weapon never had changes nothing and announces
+        nothing, which is what makes the pair safe to write unconditionally.
+        """
+        who = self._who(on)
+        if who is None:
+            return 0
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return 0
+        from .events import WeaponChanged
+
+        took = 0
+        out: list[Any] = []
+        for weapon in gear.weapons:
+            if (
+                every
+                or (group and weapon.group == group)
+                or (ref and weapon.ref == ref)
+                or (held and weapon.ref not in gear.stowed)
+            ):
+                had = weapon.properties
+                weapon = replace(weapon, properties=had - {prop})
+                out.append(weapon)
+                took += 1
+                # Only when it changed something -- the same rule the writer
+                # keeps, so taking off a property that was never there says
+                # nothing rather than saying it falsely.
+                if weapon.properties != had:
+                    self.world.bus.emit(WeaponChanged(
+                        actor=who, weapon=weapon.ref,
+                        field="properties", what=prop, gone=True,
+                    ))
+            else:
+                out.append(weapon)
+        gear.weapons = out
+        return took
+
     def weapon_range(
         self,
         *,

@@ -1499,12 +1499,20 @@ class WeaponChanged(Event):
     `field` is which one moved -- `"properties"`, `"damage"`, `"range"` --
     and `what` is the value laid, so a listener can tell a silvered blade
     from a high-crit one without re-reading the weapon.
+
+    **`gone=True` is the same write run backwards**: the property named in
+    `what` was taken *off*. It defaults False, so every existing emitter and
+    reader means what it meant. The flag exists because `what` alone cannot
+    tell a grant from a revocation, and one row grants a property for the
+    length of a single attack and then removes it -- which would otherwise
+    announce itself twice in identical words. #844.
     """
 
     actor: int
     weapon: str
     field: str
     what: str = ""
+    gone: bool = False
 
 
 @dataclass

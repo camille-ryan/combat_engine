@@ -30909,6 +30909,97 @@ def the_caster_is_not_its_own_ally(out: Result) -> None:
              f"offered {offered}, Moved for {seen}, caster {me2}")
 
 
+def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
+    """"As if the weapon had the heavy thrown property" -- for that attack.
+
+    `i1151p1` throws a melee weapon, and its card lends the weapon a property
+    for the one swing. It sat `dropped=("c.gains_property(until=)",)` because
+    `gains_property` writes `Weapon.properties` and leaves it written, and
+    **the over-grant is not harmless**: two sibling rows consume the word.
+    `i1151x1`'s `_throwing` gate and `i1756p1`'s `_is_thrown` would both
+    believe a sword was heavy thrown for the rest of the encounter.
+
+    #844 proposed a duration. The row wanted a **bracket**: it rolls its own
+    attack, so "this attack" is the span between two of its own statements,
+    and `c.loses_property` closes it. No clock, and no new `When` rung -- of
+    the eleven, none means "this attack".
+
+    **Three assertions and the middle one is the point.** A pair that laid and
+    removed the property without the attack seeing it would satisfy the first
+    and third and be useless, so this reads the weapon *from inside the
+    damage event* -- the moment `i1151x1`'s own `when=` gate is evaluated.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied
+    from combat_engine.engine.query import enemies
+
+    # `board`'s third value is the set of events the encounter emitted while
+    # starting, **not** a foe -- a trap I walked into: passing it as a target
+    # reaches `world.get(eid, Health)` and dies on `unhashable type: 'set'`.
+    world, me, _started = _posed("i1151p1", 1)
+    foe = enemies(world, me)[0]
+    gear = world.get(me, Gear)
+    held = [w for w in gear.weapons if w.ref not in gear.stowed]
+
+    out.that(bool(held),
+             "the thrower has a weapon in hand -- the premise, and with none"
+             " every assertion below would pass vacuously",
+             f"held {[w.ref for w in held]}")
+    out.that(not any("heavy thrown" in w.properties for w in held),
+             "and it does not already print heavy thrown, so the row is"
+             " lending something rather than agreeing with the table",
+             f"props {[sorted(w.properties) for w in held]}")
+
+    # Read the weapon from inside the blow, which is when the consuming rows
+    # evaluate their `when=` gates.
+    during: list[bool] = []
+
+    def peek(_ev: object) -> None:
+        now = world.get(me, Gear)
+        during.append(any(
+            "heavy thrown" in w.properties
+            for w in now.weapons if w.ref not in now.stowed))
+
+    world.bus.on(DamageApplied, peek)
+    REGISTRY["i1151p1"].body(
+        Cast(world=world, me=me, ref="i1151p1", target=foe))
+
+    out.that(during and all(during),
+             "**the weapon reads heavy thrown while the blow is landing** --"
+             " the window the card means, and what a lay-then-remove pair"
+             " would miss if it bracketed the wrong statements",
+             f"seen during {during}")
+
+    after = world.get(me, Gear)
+    out.that(not any("heavy thrown" in w.properties
+                     for w in after.weapons if w.ref not in after.stowed),
+             "and it is **not** heavy thrown once the row is done -- the"
+             " over-grant that kept this row marked, which `i1151x1` and"
+             " `i1756p1` would have paid out on for the rest of the fight",
+             f"props {[sorted(w.properties) for w in after.weapons if w.ref not in after.stowed]}")
+
+    # The removal must not strip a property the weapon printed for itself.
+    world2, me2, _again = _posed("i1151p1", 1)
+    gear2 = world2.get(me2, Gear)
+    own = sorted(
+        p for w in gear2.weapons if w.ref not in gear2.stowed
+        for p in w.properties)
+    Cast(world=world2, me=me2, ref="drivers:lend").loses_property(
+        "heavy thrown", held=True, on=me2)
+    left = sorted(
+        p for w in world2.get(me2, Gear).weapons
+        if w.ref not in world2.get(me2, Gear).stowed
+        for p in w.properties)
+    out.that(left == own,
+             "and taking off a property the weapon never had leaves its own"
+             " printed ones alone -- the control for a remover that rebuilt"
+             " the set instead of subtracting from it",
+             f"{own} -> {left}")
+
+
 def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     """A class's second feature ladder belongs to whoever took it, nobody else.
 
@@ -31084,6 +31175,10 @@ DRIVERS = {
     "own_ally": (
         the_caster_is_not_its_own_ally,
         "a caster is not in its own ally pool, and is in its team pool (#364)",
+    ),
+    "lent_property": (
+        a_lent_property_lasts_exactly_one_attack,
+        "a property lent for one attack is gone after it (#844)",
     ),
     "chassis": (
         a_character_has_one_feature_chassis_and_not_two,

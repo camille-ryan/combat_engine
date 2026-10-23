@@ -1402,31 +1402,39 @@ def i1151x1(c: Cast) -> None:
 
 
 @power("i1151p1", level=10, cls=ITEM, usage=ENCOUNTER, action=STANDARD,
-       reach=Ranged(10), target=ONE_CREATURE, attack=Attack(STR, vs=AC),
-       dropped=("c.gains_property(until=)",))
+       reach=Ranged(10), target=ONE_CREATURE, attack=Attack(STR, vs=AC))
 def i1151p1(c: Cast) -> None:
     """Rolled here rather than through `c.basic(ranged=True)`, which asks
     for a ranged basic the wielder of a sword does not have -- the whole
     point of the row is that the melee weapon is the one being thrown.
 
-    **Re-pointed, and the selector was only half of it.** The old marker
-    was `c.make_thrown()`, and the last thing missing looked like a way to
-    name "the weapon in my hand" -- `ref=` and `group=` both name a *kind*
-    of weapon, and a hands-slot block has no weapon ref of its own.
-    `held=True` is that, on all five weapon writers now (#841).
+    **Re-pointed twice, and the second marker was wrong about its own
+    shape.** The first was `c.make_thrown()`, closed by `held=True` on all
+    five weapon writers (#841) -- `ref=` and `group=` both name a *kind* of
+    weapon and a hands-slot block has no weapon ref of its own. The second
+    was `c.gains_property(until=)`, on the reading that "as if the weapon
+    had the heavy thrown property" needs a duration.
 
-    What is actually left is a **duration**. The card says the weapon
-    counts as heavy thrown for *this attack*, and `c.gains_property`
-    writes the field and leaves it there -- so a sword thrown once would
-    read as heavy thrown for the rest of the fight, which `i1151x1`'s own
-    `_throwing` gate and `i1756p1`'s `_is_thrown` would both believe. That
-    is wider than print in a way another row pays out on, so the clause
-    stays marked rather than being written and apologised for.
+    It does not. **The window is these three lines.** The card says the
+    property holds for *this attack*, and this row rolls its own attack, so
+    the window begins and ends inside the body -- no clock, and no `When`
+    rung, which is as well since none of the eleven means "this attack"
+    (`INSTANT` means resolved now and never held).
 
-    #676's title already named this -- *"one of them wants a duration on
-    it"* -- and this is the row it meant."""
+    The over-grant the old note feared was real and is why the pair is
+    bracketed tightly: `i1151x1`'s `_throwing` gate and `i1756p1`'s
+    `_is_thrown` both believe the word, so a sword left heavy thrown would
+    pay those out for the rest of the fight. Both read it **lazily** --
+    `i1151x1` gates on `when=lambda ctx: ranged(ctx) and _throwing(c)`,
+    evaluated when the damage is rolled, which happens in `c.damage` below
+    -- so they see it for exactly the attack the card means.
+
+    #844, which is also where the argument against `until=` is written down
+    beside `c.loses_property`."""
+    c.gains_property("heavy thrown", held=True, on=c.me)
     if c.strike():
         c.damage(c.w(), c.str_mod)
+    c.loses_property("heavy thrown", held=True, on=c.me)
 
 
 @power("i1380p1", level=10, cls=ITEM, usage=AT_WILL, action=MINOR,
