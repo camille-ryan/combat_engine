@@ -91,6 +91,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     Attack,
     Budget,
@@ -1538,7 +1539,7 @@ def m3306a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def m3306a2(c: Cast) -> None:
     mate = c.target

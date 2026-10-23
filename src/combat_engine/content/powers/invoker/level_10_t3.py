@@ -40,8 +40,9 @@ ROLLED = "you roll initiative"
     on=Trigger(InitiativeRolled, about_me, ROLLED),
 )
 def p7191(c: Cast) -> None:
-    """"You and one ally" -- `ONE_ALLY`'s pool includes the caster, so the
-    invoker's own half is written explicitly on the first (and only) target.
+    """"You and one ally" -- `"team"` is the side including the caster, so
+    the invoker's own half is written explicitly on the first (and only)
+    target.
 
     "Neither target is surprised" is both halves of the sentence: the
     condition is taken off whoever already has it and refused for the rest

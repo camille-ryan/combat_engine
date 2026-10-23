@@ -48,7 +48,6 @@ from combat_engine.engine import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REACTION,
     REF,
@@ -484,11 +483,11 @@ def m3012a2(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
 )
 def m3012a3(c: Cast) -> None:
     """"One ally in the burst" excludes the m3012 itself, which is what
-    `ONE_OTHER_ALLY` is for. The step is printed as the ally's own choice of
+    `ONE_ALLY` is for. The step is printed as the ally's own choice of
     before or after, so it is offered as one."""
     friend = c.target
     if friend is None:
@@ -510,7 +509,7 @@ def m3012a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
 )
 def m3012a4(c: Cast) -> None:
     """A whole power handed to somebody else, not just a basic attack.

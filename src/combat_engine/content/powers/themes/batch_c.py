@@ -103,7 +103,7 @@ if TYPE_CHECKING:
 #: advantage to you", "of your size or smaller", "adjacent to your familiar".
 FILTER = ("Target.filter()",)
 
-ONE_OTHER_ALLY = Target("other_ally", 1)
+ONE_ALLY = Target("ally", 1)
 ANY_CREATURE = Target("any", 1)
 
 
@@ -331,9 +331,9 @@ def p11793(c: Cast) -> None:
        trigger="you are hit by an attack",
        on=Trigger(Hit, targets_me, "you are hit by an attack"))
 def p11796(c: Cast) -> None:
-    """`ONE_ALLY` is "you or one ally" -- the pool includes the caster -- so
-    the two printed halves are one target line and a test on who was
-    picked."""
+    """`YOU_OR_ONE_ALLY` is "you or one ally" -- one target out of the
+    caster and the allies together -- so the two printed halves are one
+    target line and a test on who was picked."""
     if c.target == c.me:
         c.spend_surge(on=c.me)
         c.temp_hp(c.surge_value(of=c.me), on=c.me)
@@ -795,7 +795,7 @@ def p15941(c: Cast) -> None:
 
 
 @power("p15942", level=6, cls="x7_924", usage=ENCOUNTER, action=INTERRUPT,
-       reach=Melee(1), target=ONE_OTHER_ALLY, keywords=[Keyword.MARTIAL],
+       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.MARTIAL],
        trigger="an enemy hits you with a melee or a ranged attack",
        on=Trigger(Hit, both(targets_me, either(by_melee, by_ranged)),
                   "an enemy hits you with a melee or ranged attack"))
@@ -811,7 +811,7 @@ def p15942(c: Cast) -> None:
 
 
 @power("p15943", level=10, cls="x7_924", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_OTHER_ALLY,
+       reach=Melee(1), target=ONE_ALLY,
        keywords=[Keyword.MARTIAL, Keyword.HEALING])
 def p15943(c: Cast) -> None:
     """The ally *loses* the surge rather than spending it, so it is
@@ -1450,7 +1450,7 @@ def p14365(c: Cast) -> None:
 
 
 @power("p16566", level=2, cls="x7_999", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_OTHER_ALLY, keywords=[Keyword.DIVINE],
+       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.DIVINE],
        dropped=FILTER)
 def p16566(c: Cast) -> None:
     """The temporary hit points arrive either way -- the card says so for

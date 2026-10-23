@@ -59,8 +59,8 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REF,
     SELF,
@@ -1231,7 +1231,7 @@ def _with_a_melee_row(ctx: dict[str, Any]) -> bool:
     usage=AT_WILL,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.FIRE],
 )
 def m4839a3(c: Cast) -> None:

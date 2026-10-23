@@ -34,8 +34,8 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     SELF,
     STANDARD,
@@ -231,7 +231,7 @@ def p13927(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=[Keyword.DIVINE, Keyword.FIRE, Keyword.RADIANT],
 )
 def p2834(c: Cast) -> None:
@@ -423,7 +423,7 @@ def p7409(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE,
 )
 def p9985(c: Cast) -> None:

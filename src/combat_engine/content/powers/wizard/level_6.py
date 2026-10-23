@@ -411,8 +411,9 @@ def p14554(c: Cast) -> None:
     on=Trigger(TurnEnd, enemy_within(5), "an enemy ends its turn within 5 squares of you"),
 )
 def p14555(c: Cast) -> None:
-    """The ally pool includes the caster, which is "you and each ally" exactly.
-    The shift is offered, not taken: the printed line says *can*."""
+    """`YOU_AND_EACH_ALLY` is the caster and the allies together, which is
+    "you and each ally" exactly. The shift is offered, not taken: the printed
+    line says *can*."""
     if c.target is not None and c.may("shift 1 square"):
         c.shift(1, who=c.target)
 
@@ -429,8 +430,8 @@ def p14555(c: Cast) -> None:
 )
 def p14556(c: Cast) -> None:
     """Removed outright rather than saved against: the printed line rolls
-    nothing. `ONE_ALLY`'s pool already includes the caster, which is "you or
-    one ally"."""
+    nothing. `YOU_OR_ONE_ALLY` is one target out of the caster and the
+    allies together, which is "you or one ally"."""
     who = c.target
     if who is None:
         return

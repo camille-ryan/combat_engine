@@ -532,7 +532,7 @@ def p2451(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=[Keyword.MARTIAL],
 )
 def p2530(c: Cast) -> None:

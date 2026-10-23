@@ -31,7 +31,6 @@ from combat_engine.engine import (
     INTERRUPT,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     REACTION,
     REF,
     STANDARD,
@@ -722,7 +721,7 @@ def p7398(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL_WEAPON,
 )
 def p11603(c: Cast) -> None:

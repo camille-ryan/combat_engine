@@ -381,9 +381,8 @@ def m3042a2(c: Cast) -> None:
 def m3042a3(c: Cast) -> None:
     """It shakes its own out of whatever holds them.
 
-    `EACH_ALLY` includes the caster -- "ally" is the side, and a creature is
-    on its own side -- so the m3042 is let past here, which is what "allies
-    in the burst" means. The saving throw is the target's own with the
+    `EACH_ALLY` is the side minus the creature, so the m3042 is passed over
+    here, which is what "allies in the burst" means. The saving throw is the target's own with the
     printed power bonus on top.
     """
     if c.target is None or c.target == c.me:

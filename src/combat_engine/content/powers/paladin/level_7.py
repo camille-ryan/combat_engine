@@ -28,8 +28,8 @@ from combat_engine.engine import (
     ENCOUNTER,
     FORT,
     INTERRUPT,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     REF,
     STANDARD,
     STR,
@@ -145,7 +145,7 @@ def p1244(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[*DIVINE_WEAPON, Keyword.TELEPORTATION],
     attack=Attack(CHA, vs=AC),
 )

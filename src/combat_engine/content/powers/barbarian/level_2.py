@@ -140,7 +140,7 @@ def p1145(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(2),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=PRIMAL,
     trigger=_I_SPEND_A_SURGE,
     on=Trigger(SurgeSpent, about_me, _I_SPEND_A_SURGE),

@@ -30823,7 +30823,7 @@ def the_caster_is_not_its_own_ally(out: Result) -> None:
     import dataclasses
 
     from audit import board as _posed
-    from combat_engine.engine.dsl import REGISTRY, candidates
+    from combat_engine.engine.dsl import REGISTRY, Target, candidates
 
     ref = next(r for r, p in sorted(REGISTRY.items())
                if getattr(getattr(p, "target", None), "side", None) == "ally"
@@ -30836,7 +30836,7 @@ def the_caster_is_not_its_own_ally(out: Result) -> None:
             power, target=dataclasses.replace(power.target, side=side))
         return candidates(world, me, variant)
 
-    allies_only, whole_team, other = pool("ally"), pool("team"), pool("other_ally")
+    allies_only, whole_team = pool("ally"), pool("team")
 
     out.that(len(allies_only) > 0,
              f"`{ref}` has allies to aim at, so the rest of this means something",
@@ -30853,9 +30853,60 @@ def the_caster_is_not_its_own_ally(out: Result) -> None:
     out.that(set(whole_team) - set(allies_only) == {me},
              "and team is exactly ally plus the caster, nothing else",
              f"team-ally = {sorted(set(whole_team) - set(allies_only))}")
-    out.that(other == allies_only,
-             "`other_ally` now says the same thing as `ally`, which is why it retires",
-             f"other_ally {other} vs ally {allies_only}")
+
+    # `other_ally` was a second spelling of `ally`, kept while #364's flip
+    # landed and retired by #858. The guard is the `@power` decorator's
+    # `_SIDES` check, so it is refused when a row *declares* it -- which is
+    # the moment an author would meet it.
+    #
+    # Asserted through `power()` and not through `Target("other_ally", 1)`:
+    # a bare Target constructs happily, and the first draft of this rule
+    # asserted that it raised. It appeared to, because the probe printed the
+    # Target and `__str__` is where the KeyError came from -- the identical
+    # trap #364 hit with `team`, which was known to `_SIDES` and unknown to
+    # `__str__`. A pool is wrong in three places or none.
+    from combat_engine.engine.dsl import power as _declare
+
+    try:
+        _declare("zz_probe", target=Target("other_ally", 1))(lambda c: None)
+    except ValueError as refused:
+        why = str(refused)
+    else:
+        why = ""
+    out.that("other_ally" in why and "not one of" in why,
+             "declaring `other_ally` is refused at import, not silently an alias",
+             f"power() said {why[:70]!r}" if why else "power() accepted it")
+
+    # #858: the other half of the same word. A card naming the creature
+    # *beside* its allies -- "the m115788 and each ally adjacent" -- needs the
+    # pool that includes the caster, and `m115788a3`'s body has a branch for
+    # exactly that case which #364 left unreachable. Run the body with the
+    # caster as the target and require the creature to move: a pool assertion
+    # alone passed while the branch was dead.
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.events import Moved
+
+    world2, me2, _ = _posed("m115788a3", 1)
+    offered = candidates(world2, me2, REGISTRY["m115788a3"])
+    out.that(me2 in offered,
+             "`m115788a3` offers the creature itself, which its card names first",
+             f"pool {offered}, caster {me2}")
+    seen: list[int] = []
+    world2.bus.on(Moved, lambda ev: seen.append(getattr(ev, "actor", -1)))
+    # Driven from `offered`, **not** from a hardcoded `target=me2`. The first
+    # draft passed the caster in directly, and the plant proved that useless:
+    # reverting the declaration to the casterless pool turned the assertion
+    # above red and left this one green, because handing the body the caster
+    # tests the branch in isolation and never asks whether the row would ever
+    # be *given* that target. Running the pool is what makes it the row's
+    # behaviour rather than the branch's.
+    for whom in offered:
+        REGISTRY["m115788a3"].body(
+            Cast(world=world2, me=me2, ref="m115788a3", target=whom))
+    out.that(me2 in seen,
+             "and firing it on the targets it offers actually shifts the"
+             " creature -- the branch #364 made dead",
+             f"offered {offered}, Moved for {seen}, caster {me2}")
 
 
 def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:

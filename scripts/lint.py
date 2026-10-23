@@ -250,6 +250,10 @@ def main() -> int:
         )
         faults += 1
 
+    for where, why in _caster_is_a_printed_target():
+        print(f"{where}: {why}")
+        faults += 1
+
     for where, why in _bloodied_about_itself():
         print(
             f"{where}: {why}. Pass `on=c.me`. #621, where eight rows had"
@@ -1858,6 +1862,163 @@ def _bloodied_about_itself() -> list[tuple[str, str]]:
                     " the phrase is about the creature -- but a bare"
                     " `c.bloodied()` reads the TARGET's hit points",
                 ))
+    return out
+
+
+#: Pools that are the side **without** the caster. `"team"` is the one that
+#: includes it, and `"self"` is the caster alone.
+_CASTERLESS = ("ally", "other_ally")
+
+
+def _caster_is_a_printed_target() -> list[tuple[str, str]]:
+    """A row whose card names the creature beside its allies, declaring `ally`.
+
+    `#364` flipped `candidates` so the `"ally"` pool no longer holds the
+    caster, which was right -- the two pools had been the same list and one of
+    them was a lie. What it could not do in the same pass was find every row
+    that had been *relying* on the old meaning, and its own closing comment
+    says why the obvious signal failed:
+
+        "114 bodies guard `c.target == c.me`." Measured: 16. That signal is
+        not the classifier the thread treated it as.
+
+    The classifier is the **card**, not the body. A targeting clause that
+    names the creature itself beside its allies -- "m6064 or one ally in the
+    burst", "You and one ally" -- cannot be a pool that excludes the creature.
+    So this asks the printed text and the declared side, and reports where
+    they disagree.
+
+    Two things keep it honest, both learned by getting them wrong first:
+
+    * **The *Trigger* line is not targeting.** "Trigger: You or an ally within
+      5 squares uses second wind" sits above "Target: One ally", and the row is
+      correct -- the trigger says who can set it off, the target says who it
+      lands on. Taking the whole card flagged 29 rows of which only 11 were
+      real; cutting the trigger clause out is what separates them.
+    * **"X *and* one ally" is usually already right**, because the verb
+      carries the caster. `c.swap(c.target)` is both of them by definition,
+      and the rest hand the caster its share under `c.first`. Nine sound rows
+      do this, so a body that names `c.me` or calls a reciprocal verb is not
+      reported -- flagging them would have condemned more correct rows than
+      the check caught broken ones.
+
+    What is left is the shape that cannot be written around: **"X *or* one
+    ally"**, one target chosen from the creature and its allies together. If
+    the pool excludes the creature, the first half of the printed "or" is
+    unreachable and nothing at runtime says so -- the row fires, hits an ally,
+    and `audit` is satisfied. All 11 are fixed, so a green result here is a
+    regression guard. #858, #364, #219.
+    """
+    import ast as _ast
+    import re as _re
+    import sys as _sys
+
+    _sys.argv = _sys.argv[:1]
+    from combat_engine.db import game
+
+    cards: dict[str, str] = {}
+    for table in ("monster_power", "power", "feat", "item", "class_feature"):
+        try:
+            rows = game().execute(f"select ref, spec from {table}")
+        except Exception:
+            continue
+        for ref, spec in rows:
+            if spec and ref not in cards:
+                cards[ref] = " ".join(str(spec).split())
+
+    #: Everything from a Trigger up to the next labelled line. A trigger names
+    #: who may set the row off, which is a different question from who it
+    #: lands on, and five correct rows say "you or an ally" there.
+    trigger = _re.compile(
+        r"\btrigger\s*:.*?(?=\b(?:target|effect|attack|hit|miss)\s*:|$)",
+        _re.I | _re.S)
+
+    #: "<the creature> **or** ... ally" -- one target drawn from the caster and
+    #: the allies together. `or`, not `and`: see the docstring.
+    #:
+    #: Compiled per row, because a player card says "You or one ally" and a
+    #: monster card says its **own ref** -- "m6064 or one ally in the burst".
+    #: A fixed pattern matching only "you" sees none of the monster rows,
+    #: which is where 9 of the 11 faults were.
+    either_or = (r"\b(?:%s)\b[^.;:]{0,40}?\bor\b"
+                 r"[^.;:]{0,30}?\ball(?:y|ies)\b")
+
+    #: A pool that leaves the caster out, however it is spelled. **Word
+    #: boundaries matter more than they look**: `YOU_OR_ONE_ALLY` contains the
+    #: substring `ONE_ALLY`, so a plain `in` test flagged 60-odd rows that had
+    #: just been corrected *to* the right pool and reported them as the bug.
+    #: `_` is a word character, so `\bONE_ALLY\b` does not match inside
+    #: `YOU_OR_ONE_ALLY` and the two spellings stay distinguishable.
+    casterless = _re.compile(
+        r"""\b(?:ONE|EACH)_(?:%s)\b|["'](?:%s)["']"""
+        % ("|".join(p.upper() for p in _CASTERLESS),
+           "|".join(_CASTERLESS)))
+
+    out = []
+    for path in _asked_for():
+        if "/content/" not in str(path):
+            continue
+        try:
+            tree = _ast.parse(path.read_text())
+        except (SyntaxError, OSError):
+            continue
+        source = path.read_text()
+        for fn in _ast.walk(tree):
+            if not isinstance(fn, _ast.FunctionDef):
+                continue
+            ref, side = "", ""
+            for dec in fn.decorator_list:
+                if not (isinstance(dec, _ast.Call) and dec.args
+                        and isinstance(dec.args[0], _ast.Constant)):
+                    continue
+                ref = str(dec.args[0].value)
+                for kw in dec.keywords:
+                    if kw.arg != "target":
+                        continue
+                    # `ONE_ALLY`, `EACH_ALLY`, `Target("ally", ...)`,
+                    # `UpTo(2, side="ally")` -- the spelling varies, the pool
+                    # is what matters, so read the text of the expression.
+                    try:
+                        shown = _ast.get_source_segment(source, kw.value) or ""
+                    except Exception:
+                        shown = ""
+                    if casterless.search(shown):
+                        side = shown
+            if not ref or not side:
+                continue
+            card = cards.get(ref, "")
+            if not card:
+                continue
+            targeting = trigger.sub(" ", card)
+            # A monster card names its own **stat block**, not the ability:
+            # `m6064a3` is printed as "m6064". Everything else says "you".
+            #
+            # Strip only the `aN` ability suffix, and only from an `m` ref.
+            # The first version stripped `pN` too, which for a player power
+            # *is the whole ref* -- so `base` came out empty, the alternation
+            # became `\b(?:you|)\b`, and an empty branch matches at every word
+            # boundary. It reported 10 rows whose cards say "One **or** two
+            # allies" -- an "or" between counts, not between the caster and an
+            # ally -- and every one was sound.
+            who = [r"you"]
+            if _re.fullmatch(r"m\d+a\d+", ref):
+                who.append(_re.escape(_re.sub(r"a\d+$", "", ref)))
+            mine = either_or % "|".join(who)
+            if not _re.search(mine, targeting, _re.I):
+                continue
+            # The body may name the caster itself, which is how the "and"
+            # family is legitimately written. Reciprocal verbs imply it.
+            body = _ast.get_source_segment(source, fn) or ""
+            if "c.me" in body or "c.swap(" in body or "c.first" in body:
+                continue
+            out.append((
+                f"{ref} ({path}:{fn.lineno})",
+                f"its card offers the creature **or** an ally as the one"
+                f" target -- {' '.join(targeting.split())[:90]!r} -- but"
+                f" `target={' '.join(side.split())}` is the side *without*"
+                f" the creature, so the printed first half can never be"
+                f" chosen. `\"team\"` is the pool that includes the caster",
+            ))
     return out
 
 

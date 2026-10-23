@@ -236,7 +236,7 @@ def p10950(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=HEALING_MARTIAL,
 )
 def p10951(c: Cast) -> None:
@@ -342,7 +342,7 @@ def p2566(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label="Each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="Each ally in the burst"),
     keywords=HEALING_MARTIAL,
 )
 def p4573(c: Cast) -> None:

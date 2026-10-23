@@ -405,7 +405,7 @@ def m1222a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+    target=Target("ally", 99, everyone=True, label=_RALLY,
                   ident="own"),
 )
 def m1222a2(c: Cast) -> None:
@@ -631,7 +631,7 @@ def m3331a1(c: Cast) -> None:
     recharge=5,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
     keywords=[Keyword.NECROTIC],
 )
 def m3331a2(c: Cast) -> None:
@@ -1003,7 +1003,7 @@ def m4513a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+    target=Target("ally", 99, everyone=True, label=_RALLY,
                   ident="own"),
 )
 def m4513a2(c: Cast) -> None:
@@ -2220,7 +2220,7 @@ def m906a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+    target=Target("ally", 99, everyone=True, label=_RALLY,
                   kinds=frozenset({"kobold"}), ident="own", kind_or_ident=True),
 )
 def m906a2(c: Cast) -> None:
@@ -2322,7 +2322,7 @@ def m913a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label=_RALLY,
+    target=Target("ally", 99, everyone=True, label=_RALLY,
                   ident="own"),
 )
 def m913a2(c: Cast) -> None:

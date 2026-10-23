@@ -75,7 +75,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -94,6 +93,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -502,13 +502,18 @@ def m115788a2(c: Cast) -> None:
     usage=AT_WILL,
     action=MOVE,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def m115788a3(c: Cast) -> None:
-    """`EACH_ALLY` includes the caster in the targeting path (#364), which is
-    right here -- the card moves the creature too -- so the only branch is
-    whose step has a destination named for it. "The allies must end adjacent"
-    is a square rather than a distance, which is what `to=` is for."""
+    """The card moves the creature too, so the pool has to be the side
+    *including* self: `YOU_AND_EACH_ALLY`. This said `EACH_ALLY` and leaned on
+    that pool holding the caster, which #364 made false -- leaving the
+    `c.target == c.me` branch below unreachable and the creature standing
+    still. The branch is the right shape and was the evidence: a guard that
+    can never be taken. #858.
+
+    "The allies must end adjacent" is a square rather than a distance, which
+    is what `to=` is for."""
     if c.target == c.me:
         c.shift(1)
         return

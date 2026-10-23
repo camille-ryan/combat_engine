@@ -33,8 +33,8 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REF,
     SELF,
@@ -205,7 +205,7 @@ def p13943(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
@@ -600,7 +600,7 @@ def _at_an_enemy_of(c: Cast, friend: int) -> Any:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE,
 )
 def p14273(c: Cast) -> None:
@@ -673,7 +673,7 @@ def _both_flank(c: Cast, foe: int, me: int, friend: int) -> Any:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION, Keyword.CHANNEL_DIVINITY],
     requires=_next_to_an_enemy,
     requires_text="you must be adjacent to an enemy",

@@ -37,8 +37,8 @@ from combat_engine.engine import (
     AC,
     DAILY,
     EACH_ENEMY,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     RANGED,
     REACTION,
     STANDARD,
@@ -162,7 +162,7 @@ def _reach_weapon(world: World, eid: int) -> bool:
     usage=DAILY,
     action=REACTION,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger=_YOU_ARE_BLOODIED,
     on=Trigger(Bloodied, when=about_me, text=_YOU_ARE_BLOODIED),
@@ -403,7 +403,7 @@ def _back_off(c: Cast, friend: int, foe: int) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=UpTo(2, "other_ally"),
+    target=UpTo(2, "ally"),
     keywords=MARTIAL_WEAPON,
 )
 def p11614(c: Cast) -> None:
@@ -642,7 +642,7 @@ def _spent_encounter_attacks(world: World, who: int, cls: str = "") -> list[str]
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
 )
 def p4572(c: Cast) -> None:

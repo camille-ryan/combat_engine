@@ -787,7 +787,7 @@ class Target:
                     else f"You or up to {self.count} allies")
         who = {
             "enemy": "creature", "ally": "ally", "any": "creature",
-            "other": "creature", "other_ally": "ally", "object": "object",
+            "other": "creature", "object": "object",
         }[self.side]
         if self.everyone:
             return f"Each {who} in the area"
@@ -799,7 +799,7 @@ class Target:
 #: guard and the pool cannot drift apart -- the guard exists because they
 #: could, and `KeyError: 'creature'` is what that looked like.
 _SIDES = frozenset({
-    "self", "enemy", "ally", "any", "other", "other_ally", "team", "object",
+    "self", "enemy", "ally", "any", "other", "team", "object",
 })
 
 ONE_CREATURE = Target("enemy", 1)
@@ -816,9 +816,6 @@ ANY_CREATURE = Target("any", 1)
 #: word. #364 flipped the pool; a row that means you as well now says
 #: `YOU_OR_ONE_ALLY`.
 ONE_ALLY = Target("ally", 1)
-#: Identical to `ONE_ALLY` since #364, and kept only because 73 rows name
-#: it. It drew the distinction `ally` itself now carries.
-ONE_OTHER_ALLY = Target("other_ally", 1)
 SELF = Target("self", 1)
 EACH_ENEMY = Target("enemy", 99, everyone=True)
 EACH_CREATURE = Target("any", 99, everyone=True)
@@ -2871,13 +2868,14 @@ def candidates(
         "ally": allies(world, actor),
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
-        # Now identical to `"ally"` above, and kept only because 73 rows
-        # declare it. It exists to say "the printed line excludes you" at a
-        # time when `ally` did not -- a distinction that has no content left.
-        # Retiring the 73 declarations into `ONE_ALLY`/`EACH_ALLY` is
-        # behaviour-neutral tidying and is deliberately not bundled with
-        # this flip. #364.
-        "other_ally": allies(world, actor),
+        # **`"other_ally"` is gone**, and its absence is the point. It
+        # existed to say "the printed line excludes you" at a time when
+        # `"ally"` did not; #364 made `"ally"` mean exactly that, so the two
+        # were the same list and one of them was a trap -- a second spelling
+        # of a settled question, which is what `vocab.py` warns near-synonyms
+        # cost. 73 declarations retired into `ONE_ALLY`/`EACH_ALLY`, and
+        # `_SIDES` no longer lists it so a row naming it raises at import
+        # rather than quietly working.
         # **`"team"` was missing here entirely**, so a row declaring it
         # raised `KeyError` at targeting and no row in the tree used it --
         # which is why `_side`'s note that "a card meaning you as well says

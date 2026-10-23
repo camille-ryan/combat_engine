@@ -490,7 +490,8 @@ def p16033(c: Cast) -> None:
     target=YOU_OR_ONE_ALLY,
 )
 def p2474(c: Cast) -> None:
-    """"You or one ally" is the ally pool, which includes the caster."""
+    """"You or one ally" is `YOU_OR_ONE_ALLY` -- one target out of the
+    caster and the allies together."""
     c.mode("fly", 5, on=c.target, until=When.EOT)
     c.move(5, who=c.target)
 
@@ -502,7 +503,7 @@ def p2474(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
 )
 def p15839(c: Cast) -> None:
     c.mode("fly", 6, on=c.target, until=When.EOTNT)

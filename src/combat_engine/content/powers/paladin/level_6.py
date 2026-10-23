@@ -24,7 +24,6 @@ from combat_engine.engine import (
     MOVE,
     NO_TARGET,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REF,
     SELF,
@@ -302,7 +301,7 @@ def p3285(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE,
 )
 def p356(c: Cast) -> None:

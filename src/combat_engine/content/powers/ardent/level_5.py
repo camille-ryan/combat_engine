@@ -7,8 +7,8 @@ from combat_engine.engine import (
     CHA,
     DAILY,
     EACH_ENEMY,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     STANDARD,
     WILL,
     Attack,
@@ -77,7 +77,7 @@ def p10283(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.HEALING, Keyword.TELEPORTATION],
 )
 def p10284(c: Cast) -> None:

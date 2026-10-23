@@ -90,8 +90,8 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REF,
     STANDARD,
@@ -249,7 +249,7 @@ def m167a1(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m167a2(c: Cast) -> None:
@@ -300,8 +300,9 @@ def m167a3(c: Cast) -> None:
     keywords=[Keyword.TELEPORTATION],
 )
 def m167a4(c: Cast) -> None:
-    """`EACH_ALLY` includes the caster, and "allies" does not, so the m167
-    is passed over. "Willing" is the ally's own answer, which is what
+    """`EACH_ALLY` is the side minus the caster, which is what "willing
+    allies only" names, so the m167 is passed over. "Willing" is the ally's
+    own answer, which is what
     `c.may(who=)` asks; the safe unoccupied square is what `c.teleport`
     offers already, and the line of sight is noted."""
     who = c.target

@@ -423,7 +423,7 @@ class Triggers:
             who = getattr(ev, "attacker", None) or getattr(ev, "actor", None)
             if who == eid:
                 who = getattr(ev, "target", None)
-        elif side in ("ally", "other_ally", "any", "other"):
+        elif side in ("ally", "any", "other"):
             who = getattr(ev, "target", None) or getattr(ev, "actor", None)
         else:
             return None

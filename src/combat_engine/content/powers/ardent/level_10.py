@@ -15,7 +15,6 @@ from combat_engine.engine import (
     INTERRUPT,
     MINOR,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     REACTION,
     REF,
     SELF,
@@ -277,7 +276,7 @@ def p12966(c: Cast) -> None:
     usage=ENCOUNTER,
     action=REACTION,
     reach=Ranged(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.TELEPORTATION],
     trigger="an ally within 5 squares becomes bloodied or drops to 0 hit points",
     on=[

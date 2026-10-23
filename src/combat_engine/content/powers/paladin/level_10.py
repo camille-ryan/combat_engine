@@ -350,8 +350,9 @@ def p1446(c: Cast) -> None:
     keywords=DIVINE,
 )
 def p31(c: Cast) -> None:
-    """The `"ally"` pool includes the caster, which is "you or one ally"
-    exactly; `ONE_ALLY` is the same thing under a card that reads wrong."""
+    """`"team"` is the side including the caster, which is "you or one ally"
+    exactly. The `"ally"` pool read the same way until #364 and does not
+    now."""
     c.save(on=c.target, bonus=2)
 
 

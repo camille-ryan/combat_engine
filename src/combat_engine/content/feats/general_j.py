@@ -112,8 +112,8 @@ DIVINE_HEAL = [Keyword.DIVINE, Keyword.HEALING]
 DEFENCES = (AC, FORT, REF, WILL)
 
 #: "You or one ally", which the ally pool already includes the caster in.
-ONE_OTHER_ALLY = Target("other_ally", 1)
-EACH_OTHER_ALLY = Target("other_ally", 99, everyone=True)
+ONE_ALLY = Target("ally", 1)
+EACH_ALLY = Target("ally", 99, everyone=True)
 
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
@@ -798,7 +798,7 @@ _granted("f1466", "f1466b")
 
 
 @power("f1466b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=ONE_OTHER_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1466b(c: Cast) -> None:
     """"Its next damage roll", so the modifier is spent on one roll."""
@@ -904,7 +904,7 @@ _granted("f1479", "f1479b")
 
 
 @power("f1479b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Melee(1), target=ONE_OTHER_ALLY, keywords=DIVINE,
+       reach=Melee(1), target=ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1479b(c: Cast) -> None:
     """The surge is spent for nothing and the temporary hit points are
@@ -937,7 +937,7 @@ _granted("f1483", "f1483b")
 
 
 @power("f1483b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_OTHER_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1483b(c: Cast) -> None:
     """"Each ally", not "you and each ally" -- the penalty half is why

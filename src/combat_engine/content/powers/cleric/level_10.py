@@ -28,7 +28,6 @@ from combat_engine.engine import (
     INTERRUPT,
     NO_TARGET,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     STANDARD,
     YOU_AND_EACH_ALLY,
     AttackRolled,
@@ -114,7 +113,7 @@ def p152(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p955(c: Cast) -> None:

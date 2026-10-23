@@ -1273,15 +1273,18 @@ def m3546a3(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("ally", 1, label="the creature or one of its allies"),
+    target=Target("team", 1, label="the creature or one of its allies"),
     keywords=[Keyword.HEALING],
     defect="the printed attack line names no defence",
 )
 def m3546a4(c: Cast) -> None:
     """The compendium prints an attack line with no defence behind it (#360),
     so there is no roll to make and none is invented; the heal and the step
-    are the printed Hit and they are paid. `Target("ally")` rather than
-    `other_ally` because the card names the creature itself first."""
+    are the printed Hit and they are paid. The card names the creature itself
+    first -- "m3546 **or** one of her allies" -- so the pool is `"team"`, which
+    is the side including self. It read `"ally"` back when that pool held the
+    caster; #364 emptied it of her and the label went on saying otherwise.
+    #858."""
     mate = c.target
     if mate is None:
         return
@@ -1864,7 +1867,7 @@ _M4620_ORDER: list[Effect] = []
     usage=AT_WILL,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 1, label="one ally in line of sight"),
+    target=Target("ally", 1, label="one ally in line of sight"),
 )
 def m4620a4(c: Cast) -> None:
     """"Until he uses this power again" is one standing pair at a time, so the
@@ -2092,13 +2095,14 @@ def m4644a2(c: Cast) -> None:
     recharge=4,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label="each ally in the burst"),
+    target=Target("ally", 99, everyone=True, label="each ally in the burst"),
     once_per_round=True,
 )
 def m4644a3(c: Cast) -> None:
-    """`other_ally` and not `EACH_ALLY`: the card says "all allies" and the
-    latter's pool includes the caster (#364), which reads as "you or your
-    allies" and is a different sentence."""
+    """`EACH_ALLY`: the card says "all allies", and since #364 that pool is
+    the side minus the creature, which is the same sentence. It used to say
+    `other_ally`, a second spelling of this pool that existed only while
+    `EACH_ALLY` meant "you and your allies"; #858 retired it."""
     # Untyped: the card prints "+5 speed" and names no bonus type anywhere.
     c.bonus("speed", 5, on=c.target, until=When.EONT)
 
@@ -2110,7 +2114,7 @@ def m4644a3(c: Cast) -> None:
     action=STANDARD,
     reach=CloseBurst(5),
     target=Target(
-        "other_ally", 99, everyone=True,
+        "ally", 99, everyone=True,
         label="bloodied allies in the burst",
         bloodied=True,
     ),
@@ -2172,7 +2176,7 @@ def m4687a1(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=Target("other_ally", 4, ident=_M4687_ROTTER,
+    target=Target("ally", 4, ident=_M4687_ROTTER,
                   label="up to four allies of one lesser kind"),
 )
 def m4687a2(c: Cast) -> None:
@@ -2314,7 +2318,7 @@ def _dull_beast(c: Cast, who: int) -> bool:
     action=MINOR,
     reach=Melee(1),
     target=Target(
-        "other_ally", 1,
+        "ally", 1,
         label="one adjacent dull beast or spider ally",
         kinds=frozenset({"beast", "spider"}),
     ),
@@ -2836,7 +2840,7 @@ def m5415a1(c: Cast) -> None:
     usage=AT_WILL,
     action=MINOR,
     reach=CloseBurst(6),
-    target=Target("other_ally", 1, label="one ally within 6 squares"),
+    target=Target("ally", 1, label="one ally within 6 squares"),
     once_per_round=True,
     requires=lambda world, eid: not _is_bloodied(world, eid),
     requires_text="the creature must not be bloodied",
@@ -3490,7 +3494,7 @@ def m6397a4(c: Cast) -> None:
     action=MINOR,
     reach=Ranged(5),
     target=Target(
-        "other_ally", 1,
+        "ally", 1,
         label="one spider ally or drow ally",
         kinds=frozenset({"spider", "drow"}),
     ),

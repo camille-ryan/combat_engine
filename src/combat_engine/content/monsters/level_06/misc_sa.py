@@ -49,6 +49,7 @@ from combat_engine.engine import (
     PERSONAL,
     REF,
     STANDARD,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -701,7 +702,7 @@ def m6347a3(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m6347a4(c: Cast) -> None:

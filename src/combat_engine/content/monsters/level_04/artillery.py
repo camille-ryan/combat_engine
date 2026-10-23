@@ -43,8 +43,8 @@ from combat_engine.engine import (
     FREE,
     MINOR,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REF,
     STANDARD,
@@ -635,11 +635,11 @@ def m5027a3(c: Cast) -> None:
     action=MINOR,
     once_per_round=True,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
 )
 def m5027a4(c: Cast) -> None:
     """"One ally within 5 squares" excludes the m5027 itself, which is what
-    `ONE_OTHER_ALLY` is for; the duration is the ally's next turn, not the
+    `ONE_ALLY` is for; the duration is the ally's next turn, not the
     leader's."""
     c.bonus("attack", 2, until=When.EOTNT, kind="power")
 

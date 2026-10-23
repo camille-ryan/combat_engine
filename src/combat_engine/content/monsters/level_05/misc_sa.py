@@ -61,6 +61,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -352,13 +353,16 @@ def m6064a2(c: Cast) -> None:
     uses=2,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING],
 )
 def m6064a3(c: Cast) -> None:
-    """"The m6064 **or** one ally in the burst" is exactly `ONE_ALLY`, whose
-    pool includes the caster. `c.surge` spends the target's own surge and heals
-    it, and the extra die is paid on top with `bonus=`."""
+    """"The m6064 **or** one ally in the burst" is one target drawn from the
+    creature and its allies together, which is `YOU_OR_ONE_ALLY`. It was
+    `ONE_ALLY`, whose pool held the caster until #364 and does not now, so the
+    first half of the printed "or" had gone unreachable. `c.surge` spends the
+    target's own surge and heals it, and the extra die is paid on top with
+    `bonus=`. #858."""
     c.surge(bonus=c.roll("1d6"))
 
 

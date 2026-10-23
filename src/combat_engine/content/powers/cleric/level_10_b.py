@@ -48,7 +48,6 @@ from combat_engine.engine import (
     MOVE,
     NO_TARGET,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     STANDARD,
     YOU_AND_EACH_ALLY,
     YOU_OR_ONE_ALLY,
@@ -332,7 +331,7 @@ def p13931(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Ranged(20),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
 )
 def p3683(c: Cast) -> None:
@@ -357,7 +356,7 @@ def p3683(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE,
 )
 def p7101(c: Cast) -> None:
@@ -395,7 +394,7 @@ def p7101(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=DIVINE_HEALING,
     requires=_not_bloodied,
     requires_text="you must not be bloodied",

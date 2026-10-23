@@ -140,7 +140,7 @@ DEFENCES = (AC, FORT, REF, WILL)
 #: "Each ally in the burst", which leaves the caster out. `EACH_ALLY` is
 #: `side="ally"`, and a `Target`'s "ally" pool puts the actor back in -- the
 #: word does not mean here what it means on `c.within`.
-EACH_OTHER_ALLY = Target(side="other_ally", count=99, everyone=True)
+EACH_ALLY = Target(side="ally", count=99, everyone=True)
 
 
 # -- the vocabulary this file needs ------------------------------------------
@@ -578,7 +578,7 @@ def p12322(c: Cast) -> None:
 
 @power(
     "p12323", level=10, cls=X7_664, usage=DAILY, action=MINOR,
-    reach=CloseBurst(5), target=EACH_OTHER_ALLY,
+    reach=CloseBurst(5), target=EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p12323(c: Cast) -> None:
@@ -1438,7 +1438,7 @@ def p16367(c: Cast) -> None:
 
 @power(
     "p16368", level=6, cls=X7_973, usage=ENCOUNTER, action=MOVE,
-    reach=CloseBurst(5), target=EACH_OTHER_ALLY, keywords=[Keyword.MARTIAL],
+    reach=CloseBurst(5), target=EACH_ALLY, keywords=[Keyword.MARTIAL],
 )
 def p16368(c: Cast) -> None:
     """Your move happens once and before any of the shifts, which is what

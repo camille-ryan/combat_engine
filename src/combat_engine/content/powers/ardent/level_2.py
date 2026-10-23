@@ -16,7 +16,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     ONE_ALLY,
-    ONE_OTHER_ALLY,
     REACTION,
     REF,
     WILL,
@@ -49,7 +48,7 @@ def _friends(c: Cast, radius: int, *, mine: bool = False) -> list[int]:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.TELEPORTATION],
 )
 def p10279(c: Cast) -> None:
@@ -148,7 +147,7 @@ def p12941(c: Cast) -> None:
     usage=DAILY,
     action=REACTION,
     reach=Ranged(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.HEALING],
     trigger="an ally within 5 squares of you spends a healing surge",
     on=Trigger(

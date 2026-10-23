@@ -1537,12 +1537,12 @@ def m2240a1(c: Cast) -> None:
     recharge=5,
     action=MOVE,
     reach=CloseBurst(5),
-    target=Target(side="other_ally", everyone=True),
+    target=Target(side="ally", everyone=True),
 )
 def m2240a2(c: Cast) -> None:
-    """`side="other_ally"` and not `EACH_ALLY`: the card says "each ally" and
-    the wider pool includes the caster, which would hand this creature its own
-    bonus. "Its next attack roll" is `once=True` -- the modifier is spent by
+    """`side="ally"` is everyone on this creature's side except the creature,
+    which is the printed "each ally" -- it does not hand itself the bonus.
+    "Its next attack roll" is `once=True` -- the modifier is spent by
     the first roll that reads it."""
     mate = c.target
     if mate is None:
@@ -3869,7 +3869,7 @@ def m857a0(c: Cast) -> None:
     recharge=5,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target(side="other_ally", everyone=True),
+    target=Target(side="ally", everyone=True),
     defect="the printed attack line names no defence",
 )
 def m857a1(c: Cast) -> None:

@@ -1036,9 +1036,8 @@ def m456a3(c: Cast) -> None:
     once_per_round=True,
 )
 def m456a4(c: Cast) -> None:
-    """`EACH_ALLY` includes the caster -- the "ally" pool is the side, not
-    the side minus you -- and the printed line says allies, so the m456 is
-    left out here."""
+    """`EACH_ALLY` is the side minus the caster, and the printed line says
+    allies, so the m456 is left out here."""
     if c.target != c.me:
         c.bonus("speed", 5, until=When.EONT)
 

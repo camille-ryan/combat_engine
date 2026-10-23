@@ -43,7 +43,6 @@ from .dsl import (
     NO_TARGET,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     PERSONAL,
     REGISTRY,
     SELF,

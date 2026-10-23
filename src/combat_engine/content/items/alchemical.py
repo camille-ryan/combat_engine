@@ -425,8 +425,9 @@ def i521p1(c: Cast) -> None:
 @power("i898p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
        reach=CloseBurst(1), target=YOU_OR_ONE_ALLY)
 def i898p1(c: Cast) -> None:
-    """`ONE_ALLY`'s pool includes the caster, which is "you or an adjacent
-    ally" exactly. The source's level is not a gate the save can ask."""
+    """`YOU_OR_ONE_ALLY` is one target out of the caster and the allies
+    together, which is "you or an adjacent ally" exactly. The source's level
+    is not a gate the save can ask."""
     if c.save(against="blinded"):
         return
     c.save(against="deafened")

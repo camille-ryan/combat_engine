@@ -402,7 +402,8 @@ def p10516(c: Cast) -> None:
     keywords=[Keyword.MARTIAL, Keyword.HEALING],
 )
 def p12678(c: Cast) -> None:
-    """"You or one ally": the ally pool already has the caster in it."""
+    """"You or one ally" is one target drawn from the caster and the allies
+    together, which is `YOU_OR_ONE_ALLY`."""
     who = c.target
     if who is not None and c.may("spend a surge", who=who):
         c.surge(on=who)

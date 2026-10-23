@@ -41,7 +41,7 @@ def p3121(c: Cast) -> None:
     """`about_me` is right here where it usually is not: `InitiativeRolled`
     names its subject `actor`, so the caster's own roll is what arms it.
 
-    `EACH_ALLY`'s pool includes the caster, so "you and each ally" needs no
-    second line for the bard.
+    `YOU_AND_EACH_ALLY` is the caster and the allies together, so "you and
+    each ally" needs no second line for the caster.
     """
     c.initiative(5)

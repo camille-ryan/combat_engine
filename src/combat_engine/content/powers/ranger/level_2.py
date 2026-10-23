@@ -391,8 +391,8 @@ def p13624(c: Cast) -> None:
     keywords=PRIMAL,
 )
 def p13625(c: Cast) -> None:
-    """`EACH_ALLY`'s pool includes the caster, which is "you and each ally"
-    exactly."""
+    """`YOU_AND_EACH_ALLY` is the caster and the allies together, which is
+    "you and each ally" exactly."""
     c.ignores_difficult(on=c.target, until=When.ENCOUNTER)
     c.bonus("speed", 2, on=c.target, until=When.ENCOUNTER, kind="power")
 

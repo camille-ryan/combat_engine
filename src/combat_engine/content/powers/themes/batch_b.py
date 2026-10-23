@@ -37,8 +37,8 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
+    ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     OPPORTUNITY,
     PERSONAL,
     REACTION,
@@ -1005,7 +1005,7 @@ def p14211(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(3),
-    target=Target("other_ally", 2),
+    target=Target("ally", 2),
     keywords=MARTIAL,
 )
 def p14159(c: Cast) -> None:
@@ -1050,7 +1050,7 @@ def _my_save_succeeded(world: World, me: int, ev: SavingThrow) -> bool:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger="you succeed on a saving throw",
     on=Trigger(SavingThrow, _my_save_succeeded, "you succeed on a saving throw"),
@@ -1077,7 +1077,7 @@ def _ally_rolled_lower(world: World, me: int, ev: InitiativeRolled) -> bool:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger="an ally rolls a lower initiative check than yours",
     on=Trigger(InitiativeRolled, _ally_rolled_lower, "an ally rolls lower"),
@@ -1550,7 +1550,7 @@ def p15937(c: Cast) -> None:
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=SHADOW,
     trigger="you make an attack roll and dislike the result",
     on=Trigger(
@@ -1606,7 +1606,7 @@ def p16047(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger="a creature hits or misses you with a melee or a ranged attack",
     on=(
@@ -1667,7 +1667,7 @@ def p16049(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=[Keyword.MARTIAL, Keyword.WEAPON],
 )
 def p16050(c: Cast) -> None:
@@ -1865,7 +1865,7 @@ def p16404(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(2),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
     keywords=MARTIAL,
     requires=_bloodied,
     requires_text="you must be bloodied",
@@ -2499,7 +2499,7 @@ def p16558(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("other_ally", 99, everyone=True),
+    target=Target("ally", 99, everyone=True),
     keywords=MARTIAL,
 )
 def p16559(c: Cast) -> None:

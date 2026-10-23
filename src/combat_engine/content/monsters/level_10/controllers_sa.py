@@ -92,6 +92,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -910,7 +911,7 @@ def m1522a0(c: Cast) -> None:
     usage=AT_WILL,
     action=STANDARD,
     reach=Ranged(10),
-    target=UpTo(2, side="ally"),
+    target=UpTo(2, side="team"),
     keywords=[Keyword.TELEPORTATION, Keyword.RANGED],
     defect="the printed attack line names no defence",
 )
@@ -1591,7 +1592,7 @@ def m2507a4(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING, Keyword.CLOSE],
 )
 def m2507a5(c: Cast) -> None:

@@ -483,7 +483,7 @@ def m304a4(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(10),
-    target=Target("other_ally", 99, everyone=True, label="Allies in the burst"),
+    target=Target("ally", 99, everyone=True, label="Allies in the burst"),
 )
 def m304a5(c: Cast) -> None:
     """The shift is the ally's own free action, so it is offered rather

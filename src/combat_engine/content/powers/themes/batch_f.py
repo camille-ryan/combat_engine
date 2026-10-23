@@ -1007,10 +1007,10 @@ def p14149(c: Cast) -> None:
     keywords=MARTIAL,
 )
 def p14151(c: Cast) -> None:
-    """"You and one ally" is two targets from the `"ally"` pool, which in a
-    *target line* is the one that already includes the caster -- `dsl` and
-    `c.within` spell that side differently and only the latter leaves you
-    out."""
+    """"You and one ally" is two targets from `"team"`, the side including
+    the caster. The `"ally"` pool is the side *without* it -- the two spelled
+    the same side until #364 and no longer do, so a target line that means to
+    catch the caster has to say `"team"`."""
     for defence in ALL_DEFENCES:
         c.bonus(defence, 2, until=When.EONT, kind="power")
     c.no_advantage(on=c.target, until=When.EONT)

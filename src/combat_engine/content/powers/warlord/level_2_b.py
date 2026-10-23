@@ -33,9 +33,9 @@ from combat_engine.engine import (
     MOVE,
     ONE_ALLY,
     ONE_CREATURE,
-    ONE_OTHER_ALLY,
     REF,
     WILL,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     Condition,
@@ -69,7 +69,7 @@ MARTIAL_HEALING = [Keyword.HEALING, Keyword.MARTIAL]
 
 #: Everyone on your side in the area except you, for a line that names the
 #: caster separately.
-EACH_OTHER_ALLY = Target("other_ally", 99, everyone=True, label="Each ally in the burst")
+EACH_ALLY = Target("ally", 99, everyone=True, label="Each ally in the burst")
 
 #: What `actions.perform` labels the effect a second wind installs. It is
 #: the one thing on the bus that tells a second wind from any other spent
@@ -253,7 +253,7 @@ _HIT_IN_MELEE = "you hit an enemy with a melee attack"
     usage=ENCOUNTER,
     action=FREE,
     reach=Melee(1),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger=_HIT_IN_MELEE,
     on=Trigger(Hit, when=both(by_me, by_melee), text=_HIT_IN_MELEE),
@@ -369,7 +369,7 @@ def _bloodied(world: World, eid: int) -> bool:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=EACH_OTHER_ALLY,
+    target=EACH_ALLY,
     keywords=MARTIAL,
     requires=_bloodied,
     requires_text="you must be bloodied",
@@ -458,12 +458,18 @@ def p4552(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=MARTIAL,
 )
 def p4554(c: Cast) -> None:
-    """"You if you're bloodied or one bloodied ally": the ally pool already
-    has the caster in it, which is the whole of the first half."""
+    """"You if you're bloodied or one bloodied ally" is one target out of you
+    and your allies together, which is `YOU_OR_ONE_ALLY`. This row said the
+    ally pool "already has the caster in it, which is the whole of the first
+    half" -- true when it was written and made false by #364, which left the
+    printed "you" with no way to be chosen. #858.
+
+    The bloodied gate on either half is not modelled here: `c.temp_hp` is paid
+    to whoever was offered, and the offer is not narrowed to the bloodied."""
     c.temp_hp(5 + c.cha_mod)
 
 
@@ -474,7 +480,7 @@ def p4554(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(5),
-    target=ONE_OTHER_ALLY,
+    target=ONE_ALLY,
     keywords=MARTIAL,
     trigger=_SECOND_WIND_NEARBY,
     on=Trigger(EffectApplied, when=_second_wind_within(5), text=_SECOND_WIND_NEARBY),
