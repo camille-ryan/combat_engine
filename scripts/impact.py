@@ -285,6 +285,12 @@ def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
         print("# no worker wrote any coverage data. Nothing recorded.")
         return 1
 
+    # The combined data is left on disk: it is the only way to re-derive the
+    # map without re-sweeping for 83 minutes. **Reading it back needs
+    # `Coverage.load()`** -- a fresh `Coverage` over an existing data file
+    # that is asked for `get_data()` without loading first initialises an
+    # empty one and can overwrite the file, which is how 87MB of this run's
+    # data was destroyed by a probe that only meant to read it.
     cov = coverage.Coverage(data_file=str(base))
     cov.combine(strict=True, keep=False)
     cov.save()
@@ -410,7 +416,38 @@ def _changed_lines() -> dict[str, set[int]]:
 
 
 def select() -> int:
-    """Print the refs a change needs audited, or `WIDE`."""
+    """Print the refs a change needs audited, or `WIDE`.
+
+    **Proven by a plant, on `Cast.crit_becomes`.** A comment edited inside
+    that method selects **71 rows of 23,062** (0.3%). Making the method
+    `raise` instead, and auditing three sets of refs:
+
+        the 71 selected                     70 of 70 raise
+        the 15 rows that *name* the verb
+          and were not selected              0 raise, 13/15 still fire
+        71 random unselected rows            0 raise
+
+    So every row the selection names does execute the changed function, and
+    neither control is disturbed. The negative control is drawn at the
+    positive's size on purpose -- a smaller one proves nothing.
+
+    **The disagreement with `--calls` is real and favours the map**, which
+    was not what I expected when the two sets came out sharing only three
+    refs. `audit.py --calls 'c.crit_becomes'` finds 18 rows naming the verb
+    in their source or a marker; 15 of those never reach it on the audit
+    board, so a change to it cannot move their verdict and auditing them
+    proves nothing. The map names 71 and **all 70 posable ones** are
+    exercised. Narrower *and* more complete.
+
+    `--calls` keeps its job, which is a different one: a brand-new verb has
+    no recorded history, and a marker naming a symbol is a static fact.
+
+    What neither instrument can see is a row that does **not** reach the
+    function today and **would** after the change -- coverage-based
+    selection's documented blind spot, and the reason the 03:07 wide sweep
+    stays the backstop. #866 states that limit; #865 is what keeps the map
+    close enough to the tree for it to be a small one.
+    """
     got = _load()
     changed = _changed_lines()
     if not changed:

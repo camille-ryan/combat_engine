@@ -212,7 +212,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--cited`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
-| `impact.py` | which rows actually execute a given engine function; `--record`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt |
+| `impact.py` | which rows actually execute a given engine function; `--record`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt. Proven by a plant: a comment inside one `cast.py` method selects 71 rows of 23,062 and **70 of 70 raise** when that method is broken, with two equal-size controls undisturbed |
 | `written.py` | written / not written / half-written on purpose. **Was `coverage.py`** and renamed in #853: `scripts/` is first on `sys.path`, so that name shadowed the real `coverage` library and stopped `impact.py` pooling its recording |
 | `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |
 | `cards.py` | does a monster ability's header say the numbers its stat block prints — attack, defence, damage, range, usage |
