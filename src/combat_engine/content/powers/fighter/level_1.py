@@ -391,7 +391,7 @@ def p1758(c: Cast) -> None:
     `f1102` and six others also name this row in other categories and
     stack legitimately.
     """
-    arena = c.declare("Arena Fighting", "f978", "f985")
+    arena = c.declare("Arena Fighting", "f978", "f985", "f981")
     if not c.strike():
         return
     c.damage(c.w(2 if c.level >= 21 else 1))
@@ -416,6 +416,12 @@ def p1758(c: Cast) -> None:
             c.flat(weapon.proficiency, on=c.target)
     elif arena == "f985" and c.wielding("shield"):
         c.bonus(AC, 1, on=c.me, until=When.EONT, kind="feat")
+    elif arena == "f981" and c.hurt_me_since():
+        # "If the target dealt you damage since the end of your last turn."
+        # `c.hurt_me_since` with no argument asks about `c.target`, and reads
+        # the bus log rather than a remembered set -- which is why this
+        # branch can live here at all. See the docstring.
+        c.flat(c.wis_mod, on=c.target)
 
 
 def _has_shield(world: object, eid: int) -> bool:

@@ -18401,7 +18401,11 @@ def feat_clause_exclusivity(out: Result) -> None:
 #: A chain of fewer than two is nothing to assert and is left out.
 MIGRATED = {
     "p704": {"Arena Fighting": ("f972", "f3188", "f3234")},
-    "p1758": {"Arena Fighting": ("f978", "f985")},
+    # `f981` joined the chain in #556. Adding it here is the half that
+    # matters: emptying `STILL_RIDERS` only stops the skip, and a skip
+    # removed without the rule covering the case would be the instrument
+    # loosened to make a number look better.
+    "p1758": {"Arena Fighting": ("f978", "f985", "f981")},
 }
 
 #: Rows migrated under #550 that have **no** chain yet to assert on, with
@@ -18423,19 +18427,28 @@ NO_CHAIN_YET = {
 #: printed rule says they must not.
 #:
 #: **This exists so the gap is in the instrument and not only in a
-#: docstring.** `p1758` is the first row where the convention could not
-#: deliver its own main argument: `f981`'s clause asks whether the target
-#: has hurt the character since the end of their last turn, which is a
-#: *memory* that has to be armed before the blow it remembers. `_riders`
-#: arms it through `setup=` at the start of the fight; a body runs far too
-#: late and would build an empty set, which is exactly how the first
-#: attempt at that memory failed silently.
+#: docstring.** A chain that looks complete and is not is the worst of the
+#: three states, so every entry here is reported as a skip.
 #:
-#: A chain that looks complete and is not is the worst of the three states,
-#: so every entry here is reported as a skip. #556.
-STILL_RIDERS = {
-    "p1758": ("f981",),
-}
+#: **Empty since #556, and `p1758` is why it existed.** That row was the
+#: first place #550's convention could not deliver its own main argument:
+#: `f981`'s clause asks whether the target has hurt the character since the
+#: end of their last turn, and that was a *memory* -- a set filled by
+#: watchers, armed by `_riders` through `setup=` at the start of the fight.
+#: A body runs far too late to build it, so the clause stayed a rider and
+#: stacked with whichever of `f978`/`f985` paid.
+#:
+#: `c.hurt_me_since` answers the same question off `world.bus.log`, through
+#: `query.damaged_since`, with `since_turn_ended` as the boundary. **There
+#: is nothing to arm**, so a body is no longer too late and `f981` moved
+#: into the chain. The whole memory apparatus in `feats/exploits.py` went
+#: with it -- the watchers, the per-creature set, and the `#262` id-reuse
+#: hazard its note was written about.
+#:
+#: Kept rather than deleted: the next migrated row that cannot move a feat
+#: belongs here, and an empty dict says "none known" where a missing one
+#: would say nothing at all.
+STILL_RIDERS: dict[str, tuple[str, ...]] = {}
 
 
 def at_most_one_applies(out: Result) -> None:
@@ -31318,6 +31331,72 @@ def concealment_is_modelled_and_ten_rows_said_it_was_not(out: Result) -> None:
              f"{lying}")
 
 
+def f981s_branch_on_p1758_pays_when_the_target_hurt_you(out: Result) -> None:
+    """The branch #556 moved, proven through `p1758`'s body.
+
+    `at_most_one_applies` proves the *exclusivity* over all three Arena
+    Fighting feats now, but it cannot **pose** `f981`'s branch: that one
+    asks whether the target has damaged the character since their last turn
+    ended, which is board history rather than a Cast reader, so the generic
+    rule reports "2 of 3 branches posed" and says so. This poses it.
+
+    Why the branch could not live in the body at all before #556: the clause
+    was answered from a per-creature *set*, filled by watchers and armed by
+    `_riders` through `setup=` at the start of the fight. A body runs long
+    after the damage it asks about, so a set built there is empty by
+    construction -- which is how the first attempt failed silently.
+    `c.hurt_me_since` reads `world.bus.log` through `query.damaged_since`,
+    bounded by `since_turn_ended`, so **there is nothing to arm**.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, TurnEnd
+    from combat_engine.engine.query import damaged_since, enemies
+
+    world, me, _started = _posed("p1758", 1)
+    foe = enemies(world, me)[0]
+    known = world.get(me, Powers)
+    if known is not None:
+        known.known[:] = [*known.known, "f981"]
+    world.decider = (
+        lambda actor, kind, options, prompt="":
+        "f981" if "f981" in options else options[0])
+
+    out.that(not damaged_since(world, me, foe),
+             "the foe has not hurt the character yet -- the premise, and"
+             " without it the branch would pay for the wrong reason",
+             f"{damaged_since(world, me, foe)}")
+
+    # The history the clause asks about: a blow, then the character's turn
+    # ending, so the window the card names ("since the end of your last
+    # turn") is open and the blow is inside it.
+    world.bus.emit(TurnEnd(actor=me, round=world.round))
+    from combat_engine.engine.types import DamageType
+
+    world.bus.emit(DamageApplied(
+        source=foe, target=me, amount=5, dtype=DamageType.UNTYPED,
+        absorbed=0, hp=20))
+    out.that(damaged_since(world, me, foe),
+             "and after a blow from it, the reader says so -- read off the"
+             " bus log, with nothing armed beforehand",
+             f"{damaged_since(world, me, foe)}")
+
+    paid: list[int] = []
+    world.bus.on(DamageApplied, lambda ev: paid.append(
+        getattr(ev, "amount", 0)) if getattr(ev, "target", None) == foe
+        else None)
+    world.rng.loaded = 20
+    REGISTRY["p1758"].body(
+        Cast(world=world, me=me, ref="p1758", target=foe))
+    out.that(len(paid) >= 2,
+             "**and firing the row pays a second helping of damage** -- the"
+             " weapon damage and `f981`'s Wisdom modifier on top, which is"
+             " the clause that used to stack from a rider instead",
+             f"damage applied to the foe: {paid}")
+
+
 def the_dc_table_matches_what_the_compendium_prints(out: Result) -> None:
     """The Skill Check DC table, against the page it was read from.
 
@@ -31683,6 +31762,10 @@ DRIVERS = {
     "concealment": (
         concealment_is_modelled_and_ten_rows_said_it_was_not,
         "concealment laid on a creature, in a zone, and denied (#860)",
+    ),
+    "f981_branch": (
+        f981s_branch_on_p1758_pays_when_the_target_hurt_you,
+        "f981's branch on p1758 pays when the target hurt you (#556)",
     ),
     "dc_table": (
         the_dc_table_matches_what_the_compendium_prints,
