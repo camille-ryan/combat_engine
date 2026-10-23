@@ -292,11 +292,29 @@ def p805(c: Cast) -> None:
     power is used again, and `Relation.MARKED_BY` already allows a creature
     only one marker. What the mark costs is radiant damage the first time
     each round the target attacks somebody else.
+
+    **The card prints a second way for the mark to end, and this row armed
+    nothing for it until #859:**
+
+        The mark also ends at the end of your turn if you didn't engage the
+        target, meaning you neither attacked it during your turn nor are
+        adjacent to it at the end of your turn.
+
+    So the mark held for the whole encounter whatever the paladin then did --
+    marking a creature across the room and walking away kept it. That is a
+    benefit the card does not give, on an at-will class feature every paladin
+    has, so it was in play in every fight a paladin was in. The paragraph
+    above quotes only the sentence before it, which is true and incomplete,
+    and is left standing because it is what made the omission easy to miss.
+
+    `lapses=True` is the lapse; `or_adjacent=True` is the printed "engage",
+    wider than the attack-only test `p16374` prints, which is why it is a
+    parameter rather than a change to that flag.
     """
     me, mark = c.me, c.target
     if mark is None:
         return
-    c.mark(until=When.ENCOUNTER)
+    c.mark(until=When.ENCOUNTER, lapses=True, or_adjacent=True)
     struck: dict[int, int] = {}
 
     def on_attack(ev: AttackDeclared) -> None:

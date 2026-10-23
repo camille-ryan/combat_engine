@@ -14965,16 +14965,22 @@ def a_mark_that_lapses(out: Result) -> None:
 
     MEDIUM = "m3210a0"
 
-    def run(lapses: bool, swing: bool):  # noqa: ANN202
+    def run(lapses: bool, swing: bool, *, or_adjacent: bool = False,  # noqa: ANN202
+            near: bool = True):
         world, me, _armed = _posed(MEDIUM, 1)
         foe = sorted(enemies(world, me))[0]
         here = world.need(me, Position).square
-        dest = (here[0] + 1, here[1])
+        # `near` is the #859 axis: the printed "engage" counts standing next
+        # to the creature as well as swinging at it, so the two have to be
+        # separable. The original setup was adjacent-only, which would make
+        # every `or_adjacent` arm hold and prove nothing.
+        dest = (here[0] + 1, here[1]) if near else (here[0] + 8, here[1])
         world.grid.lift(foe)
         world.need(foe, Position).square = dest
         world.grid.place(foe, frozenset({dest}))
         Cast(world=world, me=me, ref="drivers:lapse").mark(
-            on=foe, until=When.ENCOUNTER, lapses=lapses)
+            on=foe, until=When.ENCOUNTER, lapses=lapses,
+            or_adjacent=or_adjacent)
         before = world.relations.holds(Relation.MARKED_BY, me, foe)
         # a fresh turn of the MARKER's, so the lay-turn guard is past
         world.bus.emit(TurnStart(actor=me, round=world.round + 1))
@@ -15013,13 +15019,74 @@ def a_mark_that_lapses(out: Result) -> None:
             why = (" -- swinging at it keeps the mark, which is what makes"
                    " the lapse a rule rather than a timer")
         elif not lapses:
-            why = (" -- `i2762p1`'s exception is this flag left off, so a"
-                   " lapse that fired regardless would break the item while"
-                   " passing every assertion about `p16374`")
+            why = (" -- the flag off is a mark that never ends early, so a"
+                   " lapse that fired regardless would break every row that"
+                   " leaves it off while passing every assertion about"
+                   " `p16374`. This used to read `i2762p1`'s exception as"
+                   " being this flag left off; #859 showed that was the"
+                   " wrong diagnosis -- `p805` had armed no lapse at all,"
+                   " which is why the item's clause had nothing to prevent")
         out.that(after is want,
                  f"lapses={lapses} swing={swing}: marked afterwards is"
                  f" {want}{why}",
                  f"it was {after}")
+
+    # -- #859: the printed "engage" is wider than the attack test --------
+    #
+    # The card: "the mark also ends at the end of your turn if you didn't
+    # engage the target, meaning you neither attacked it during your turn
+    # nor are adjacent to it at the end of your turn." `p805` prints this
+    # and is the only row in the tree that does.
+    _b, stayed_near, _h, _s = run(True, False, or_adjacent=True, near=True)
+    out.that(stayed_near,
+             "`or_adjacent`: standing next to it **is** engaging it, so a"
+             " turn with no swing keeps the mark -- the half the attack-only"
+             " test gets wrong",
+             f"marked afterwards: {stayed_near}")
+
+    _b, went_far, _h, _s = run(True, False, or_adjacent=True, near=False)
+    out.that(not went_far,
+             "and walking away still drops it -- without this the parameter"
+             " would be a mark that never lapses, which is the bug it was"
+             " added to fix rather than a fix for it",
+             f"marked afterwards: {went_far}")
+
+    # The control that separates the two modes. Adjacent and no swing:
+    # plain `lapses=True` must STILL end the mark, or `or_adjacent` is
+    # indistinguishable from it and every assertion above passes either way.
+    _b, plain_near, _h, _s = run(True, False, or_adjacent=False, near=True)
+    out.that(not plain_near,
+             "**and plain `lapses=True` drops it even while adjacent** --"
+             " the control, since `p16374` prints the attack-only test and"
+             " must not quietly gain the wider one",
+             f"marked afterwards: {plain_near}")
+
+    # -- and the ROW arms it, which is the fault #859 was ----------------
+    #
+    # Everything above runs `c.mark` through a probe ref, which proves the
+    # verb and not the row. `p805` armed no lapse at all and every assertion
+    # above would have passed anyway, so this one goes through its body.
+    from combat_engine.engine.dsl import REGISTRY as _ROWS
+
+    world, me, _armed = _posed(MEDIUM, 1)
+    foe = sorted(enemies(world, me))[0]
+    here = world.need(me, Position).square
+    away = (here[0] + 8, here[1])
+    world.grid.lift(foe)
+    world.need(foe, Position).square = away
+    world.grid.place(foe, frozenset({away}))
+    _ROWS["p805"].body(Cast(world=world, me=me, ref="p805", target=foe))
+    out.that(world.relations.holds(Relation.MARKED_BY, me, foe),
+             "`p805` lays its mark -- the premise",
+             f"{world.relations.holds(Relation.MARKED_BY, me, foe)}")
+    world.bus.emit(TurnStart(actor=me, round=world.round + 1))
+    world.bus.emit(TurnEnd(actor=me, round=world.round + 1))
+    out.that(not world.relations.holds(Relation.MARKED_BY, me, foe),
+             "**and a turn spent neither swinging at it nor standing beside"
+             " it ends the mark** -- the printed sentence the row had never"
+             " armed, so a paladin marked across the room and kept it for"
+             " the encounter",
+             f"still marked: {world.relations.holds(Relation.MARKED_BY, me, foe)}")
 
     # -- and neither row waits on the symbol -----------------------------
     from combat_engine.engine.dsl import REGISTRY

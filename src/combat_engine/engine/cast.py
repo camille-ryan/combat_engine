@@ -6624,6 +6624,7 @@ class Cast:
         on: int | None = None,
         by: int | None = None,
         lapses: bool = False,
+        or_adjacent: bool = False,
     ) -> Effect | None:
         """Mark the target -- for you, or for somebody else.
 
@@ -6635,21 +6636,36 @@ class Cast:
         it".** A mark laid for the encounter never ended early, which is
         what `p16374` needed.
 
-        **It does not close `i2762p1`, and this docstring used to say it
-        did.** The claim here was that the exception -- *"your divine
-        challenge remains in effect ... even if it would normally end"* --
-        *"is simply this flag left off, which is why both rows close on one
-        parameter"*. That row's own note is later than this paragraph and
-        refutes it: `p805` lays its mark `until=When.ENCOUNTER` and
-        deliberately does **not** use the lapse, because its card reads
-        "the mark lasts until the power is used again". So leaving the flag
-        off changes nothing about a mark that was never going to lapse, and
-        what the clause wants is a way to **suppress** a lapse for a while
-        -- `c.mark(keeps=)`, which does not exist. #834.
+        **`or_adjacent=True` widens what counts as engaging**, which is
+        the printed condition on `p805` and on no other row in the tree:
 
-        Worth keeping as a warning rather than deleting: a verb's docstring
-        written while its second caller was still marked can outlive the
-        diagnosis, and the row is the thing that gets re-read.
+            The mark also ends at the end of your turn if you didn't engage
+            the target, meaning you neither attacked it during your turn
+            nor are adjacent to it at the end of your turn.
+
+        So the lapse has two shapes and they are both printed somewhere.
+        `lapses=True` alone is `p16374`'s -- *"until you end your turn
+        without hitting or missing it with an attack"*, which is
+        `attacked_since` exactly. Measured over every row calling this verb:
+        **`p805` is the only card printing the engage rule**, so this is a
+        second thing a lapse can be rather than a correction to the first.
+        `lapses=True` keeps its meaning and `p16374` is untouched.
+
+        **Two paragraphs that used to live here were wrong and are worth the
+        space.** The first claimed `lapses` closed `i2762p1` too; the second
+        corrected that but concluded `p805` *"deliberately does not use the
+        lapse, because its card reads 'the mark lasts until the power is
+        used again'"*. Both read only the first sentence of that card. The
+        second one is the one it printed next, `p805` armed no lapse at all,
+        and a paladin's mark therefore held for a whole encounter however it
+        behaved -- an at-will class feature, in play in every fight a paladin
+        is in. #859.
+
+        That is why `i2762p1`'s *"even if it would normally end"* had
+        nothing to prevent: not because the mark was meant never to lapse,
+        but because the lapse was missing. #834 is behind #859 for that
+        reason, and a `keeps=` built first would have suppressed a lapse
+        nobody armed.
 
         Watched on the **marker's** turn ending, not the marked creature's:
         the sentence is about what the marker did with its turn.
@@ -6674,13 +6690,20 @@ class Cast:
             by=self.ref,
         )
         if held is not None and lapses:
-            self._mark_lapses(held, marker, who)
+            self._mark_lapses(held, marker, who, or_adjacent=or_adjacent)
         return held
 
-    def _mark_lapses(self, held: Effect, marker: int, who: int) -> None:
-        """End `held` at the end of a turn of `marker`'s that spared `who`."""
+    def _mark_lapses(self, held: Effect, marker: int, who: int, *,
+                     or_adjacent: bool = False) -> None:
+        """End `held` at the end of a turn of `marker`'s that spared `who`.
+
+        `or_adjacent` is the printed "engage": standing next to the creature
+        counts as well as swinging at it. Read **at the end of the turn**,
+        which is what the card says and is not the same as having been
+        adjacent at any point during it.
+        """
         from .events import TurnEnd
-        from .query import attacked_since
+        from .query import adjacent, attacked_since
 
         # **The turn, not the turn's actor.** Comparing `ev.actor` against
         # `world.turn` suppressed every later turn of the marker's too, not
@@ -6693,8 +6716,11 @@ class Cast:
                 return
             if (ev.actor, getattr(ev, "round", -1)) == laid_on:
                 return
-            if not attacked_since(self.world, who, marker,
-                                  since=self._turn_began(marker)):
+            engaged = attacked_since(self.world, who, marker,
+                                      since=self._turn_began(marker))
+            if not engaged and or_adjacent:
+                engaged = adjacent(self.world, marker, who)
+            if not engaged:
                 self.world.effects.end(held, "the mark lapsed")
 
         self.watch(TurnEnd, at_the_end, until=held.when, on=marker,
