@@ -444,7 +444,8 @@ CATEGORIES: dict[str, dict] = {
             # `actions._picking_up` -- the adjacency version of the same
             # question -- is what it was written against. #736.
             ("cards and carried things", [
-                "draw", "draws_free", "give", "recall_weapon", "stow",
+                "draw", "draws_free", "give", "loads_free", "recall_weapon",
+                "stow",
             ]),
         ],
     },
@@ -673,7 +674,7 @@ READERS: dict[str, list[str]] = {
     "what a creature may do": [
         "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",
         "granted_actions", "held_by", "holding", "holds_somebody",
-        "immune_to",
+        "immune_to", "needs_loading", "ready_to_fire",
     ],
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",

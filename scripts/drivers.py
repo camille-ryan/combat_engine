@@ -4328,20 +4328,27 @@ def a_trait_credited_through_one_event(out: Result) -> None:
     # is inverted rather than deleted: the same four rows, the same shape,
     # and now none of them is silent.
     #
-    # `f396` is not in the set. It was silent for the same *reason* and its
-    # body names no weapon ref at all -- `_wanted_weapon` reads
-    # `ref="wNNNN"` out of the source -- so the axis cannot reach it and
-    # saying so here is the honest half of the count.
+    # `f396` was outside the set and pinned as **still silent**, because it
+    # names no weapon ref for `_wanted_weapon`'s axis to read. That was the
+    # honest limit of #663's fix and it is no longer why the row behaves as
+    # it does: `f396` had an empty body, because loading a weapon was not a
+    # cost the engine charged and there was nothing for the row to say.
+    # #725 made it a cost, the row now calls `c.loads_free`, and it is not
+    # silent for a reason that has nothing to do with the weapon axis.
+    #
+    # Inverted rather than deleted, which is what the paragraph above did to
+    # its own predecessor and for the same reason: the row, the shape and
+    # the count stay visible, and a regression in either direction shows.
     armed = {ref: A.audit(ref).silent for ref in ("f3785", "f2099", "f2400", "f621")}
     out.that(not any(armed.values()),
              "the four rows that name a weapon in their body are credited"
              " now, where every one of them used to be silent for want of"
              " gear -- #663's third axis",
              f"{armed}")
-    out.that(A.audit("f396").silent,
-             "and `f396` is still silent, because it names no weapon ref for"
-             " the axis to read -- the limit of the fix, stated rather than"
-             " rounded off",
+    out.that(not A.audit("f396").silent,
+             "and `f396` is no longer silent either -- not because the weapon"
+             " axis reached it, which it still cannot, but because loading is"
+             " a cost now and the row has a body to spend it. #725",
              f"{A.audit('f396').events}")
 
 
