@@ -68,6 +68,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -422,7 +423,7 @@ def i521p1(c: Cast) -> None:
 
 
 @power("i898p1", level=1, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(1), target=ONE_ALLY)
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY)
 def i898p1(c: Cast) -> None:
     """`ONE_ALLY`'s pool includes the caster, which is "you or an adjacent
     ally" exactly. The source's level is not a gate the save can ask."""
@@ -600,7 +601,7 @@ def i2854p1(c: Cast) -> None:
 
 
 @power("i3093p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.HEALING])
+       reach=Melee(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.HEALING])
 def i3093p1(c: Cast) -> None:
     """`SurgeSpent` is announced after the surge has paid out, so the
     extra hit points are simply healed on top of it."""
@@ -751,7 +752,7 @@ def i715p1(c: Cast) -> None:
 
 
 @power("i803p1", level=3, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(1), target=ONE_ALLY)
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY)
 def i803p1(c: Cast) -> None:
     c.save(against="fear")
 
@@ -1340,7 +1341,7 @@ def i1691p1(c: Cast) -> None:
 
 
 @power("i2382p1", level=8, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Melee(1), target=ONE_ALLY, dropped=("c.bonus(instead=)",))
+       reach=Melee(1), target=YOU_OR_ONE_ALLY, dropped=("c.bonus(instead=)",))
 def i2382p1(c: Cast) -> None:
     """Aimed at the escape attempt rather than at Acrobatics generally,
     which is what the card narrows it to. Still a bonus rather than the

@@ -807,10 +807,17 @@ ONE_CREATURE = Target("enemy", 1)
 #: beneficial row pointed at it is unusable on the only creatures it is ever
 #: meant for.
 ANY_CREATURE = Target("any", 1)
+#: "One ally", and the caster is **not** one of its own allies -- the printed
+#: word, and what `Cast._side` has always answered on the body path.
+#:
+#: This comment used to say the opposite ("`ONE_ALLY`'s pool includes the
+#: caster, which reads as 'you or one ally'"), and it was accurately
+#: describing `candidates`, which disagreed with `_side` about the same
+#: word. #364 flipped the pool; a row that means you as well now says
+#: `YOU_OR_ONE_ALLY`.
 ONE_ALLY = Target("ally", 1)
-#: "One ally" where the printed line excludes you. `ONE_ALLY`'s pool
-#: includes the caster, which reads as "you or one ally" -- right for most
-#: rows and wrong for the ones that say otherwise.
+#: Identical to `ONE_ALLY` since #364, and kept only because 73 rows name
+#: it. It drew the distinction `ally` itself now carries.
 ONE_OTHER_ALLY = Target("other_ally", 1)
 SELF = Target("self", 1)
 EACH_ENEMY = Target("enemy", 99, everyone=True)
@@ -2835,9 +2842,29 @@ def candidates(
         return [actor]
     pool = {
         "enemy": enemies(world, actor),
-        "ally": [*allies(world, actor), actor],
+        # **The caster is not its own ally**, which is the printed word and
+        # is what `Cast._side` has always answered on the body path. This
+        # line said `[*allies(world, actor), actor]`, so the two halves of
+        # the engine disagreed about one word and the targeting half -- the
+        # one a player sees -- was the wrong one. A row printing "each ally
+        # in the burst shifts 1" moved the creature that is not a target,
+        # and because the row fired and emitted events the audit called it
+        # working. #364.
+        #
+        # A card that means you as well says "you and each ally", and that
+        # is `"team"` below. 185 rows declare it now; before this flip they
+        # could not, because `"team"` was absent from this dict and from
+        # `Target.__str__`, so they were declared `ally` and were correct
+        # only by the accident this line fixes.
+        "ally": allies(world, actor),
         "any": creatures(world),
         "other": [c for c in creatures(world) if c != actor],
+        # Now identical to `"ally"` above, and kept only because 73 rows
+        # declare it. It exists to say "the printed line excludes you" at a
+        # time when `ally` did not -- a distinction that has no content left.
+        # Retiring the 73 declarations into `ONE_ALLY`/`EACH_ALLY` is
+        # behaviour-neutral tidying and is deliberately not bundled with
+        # this flip. #364.
         "other_ally": allies(world, actor),
         # **`"team"` was missing here entirely**, so a row declaring it
         # raised `KeyError` at targeting and no row in the tree used it --

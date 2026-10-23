@@ -72,6 +72,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionPointSpent,
     ActionType,
     AreaBurst,
@@ -1618,7 +1619,7 @@ def i3284p1(c: Cast) -> None:
 
 
 @power("i3296p1", level=8, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.ILLUSION])
+       reach=Melee(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.ILLUSION])
 def i3296p1(c: Cast) -> None:
     """"Until he or she moves or attacks" is two ends and neither is a
     `When`, so the encounter clock is the outer bound and both are taken
@@ -2249,7 +2250,7 @@ def i3337p1(c: Cast) -> None:
 
 
 @power("i3588p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=Ranged(10), target=ONE_ALLY)
+       reach=Ranged(10), target=YOU_OR_ONE_ALLY)
 def i3588p1(c: Cast) -> None:
     """"Until the end of 1d4 of its turns" is counted, not clocked, and
     `When` has no turn count -- so the hold runs on the encounter and a

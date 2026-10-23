@@ -78,6 +78,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Attack,
     Budget,
@@ -2975,7 +2976,7 @@ def m897a3(c: Cast) -> None:
 
 @power(
     "m897a4", level=7, usage=Usage.RECHARGE, recharge=6, action=MINOR,
-    reach=Melee(1), target=ONE_ALLY, keywords=[Keyword.FIRE, Keyword.HEALING],
+    reach=Melee(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.FIRE, Keyword.HEALING],
 )
 def m897a4(c: Cast) -> None:
     mate = c.target if c.target is not None else c.me

@@ -31,7 +31,6 @@ from combat_engine.engine import (
     INTERRUPT,
     MINOR,
     MOVE,
-    ONE_ALLY,
     PERSONAL,
     REF,
     SELF,
@@ -238,7 +237,7 @@ def p16123(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
     trigger="you or an ally within 10 squares of you is pulled, pushed, or slid",
     on=Trigger(

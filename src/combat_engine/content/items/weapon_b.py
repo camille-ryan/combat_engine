@@ -6055,7 +6055,7 @@ def i2359x1(c: Cast) -> None:
     usage=DAILY,
     action=MOVE,
     reach=CloseBurst(5),
-    target=Target(side="ally", count=2),
+    target=Target(side="team", count=2),
     keywords=[Keyword.TELEPORTATION],
 )
 def i2359p1(c: Cast) -> None:

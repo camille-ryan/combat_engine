@@ -30691,6 +30691,73 @@ def what_happened_since_your_turn_ended(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def the_caster_is_not_its_own_ally(out: Result) -> None:
+    """"Each ally in the burst" does not mean the creature at the centre.
+
+    `Cast._side` excluded the caster from an ally list; `dsl.candidates`
+    included it. One word, two meanings, and the targeting path -- the one a
+    player sees and the one the AI chooses from -- was the wrong one. So a
+    row printing "each ally in the burst shifts 1" moved the creature that is
+    **not** a target, and because the row fired and emitted events the audit
+    reported it working. 548 rows declared that pool. #364.
+
+    **The recorded fixtures contained the fault**, which is the sharpest
+    evidence that it was not theoretical:
+
+        recorded: PowerUsed(actor=2, power='p7885', targets=[1, 3, 4, 2])
+        now:      PowerUsed(actor=2, power='p7885', targets=[1, 3, 4])
+
+    `p7885`'s printed line is "Each bloodied ally in the burst", and its
+    effect text distinguishes the two in so many words -- "Each target can
+    spend a healing surge. **You** are weakened" -- so the caster was never
+    a target and had been one in every recorded run.
+
+    A card that means you as well says "you and each ally", which is the
+    `team` pool and 185 rows now declare it.
+
+    Asserted through `candidates`, the reader both the page and
+    `policy/` call, on a real row rather than a fake: the first draft of this
+    used a stub Power and died on `reach_of`, which is the kind of thing a
+    stub hides.
+    """
+    import dataclasses
+
+    from audit import board as _posed
+    from combat_engine.engine.dsl import REGISTRY, candidates
+
+    ref = next(r for r, p in sorted(REGISTRY.items())
+               if getattr(getattr(p, "target", None), "side", None) == "ally"
+               and getattr(p.target, "everyone", False))
+    power = REGISTRY[ref]
+    world, me, _foe = _posed(ref, 1)
+
+    def pool(side: str) -> list[int]:
+        variant = dataclasses.replace(
+            power, target=dataclasses.replace(power.target, side=side))
+        return candidates(world, me, variant)
+
+    allies_only, whole_team, other = pool("ally"), pool("team"), pool("other_ally")
+
+    out.that(len(allies_only) > 0,
+             f"`{ref}` has allies to aim at, so the rest of this means something",
+             f"ally pool {allies_only}, caster {me}")
+    out.that(me not in allies_only,
+             "**the caster is not in its own ally pool**",
+             f"ally pool {allies_only}, caster {me}")
+    out.that(me in whole_team,
+             "and it *is* in the team pool, which is what 'you and each ally' needs",
+             f"team pool {whole_team}")
+    # The negative control: the two pools must actually differ. Before #364
+    # they were the same list, so a rule asserting only the second line above
+    # would have passed on the bug.
+    out.that(set(whole_team) - set(allies_only) == {me},
+             "and team is exactly ally plus the caster, nothing else",
+             f"team-ally = {sorted(set(whole_team) - set(allies_only))}")
+    out.that(other == allies_only,
+             "`other_ally` now says the same thing as `ally`, which is why it retires",
+             f"other_ally {other} vs ally {allies_only}")
+
+
 def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
     """A class's second feature ladder belongs to whoever took it, nobody else.
 
@@ -30859,6 +30926,10 @@ def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
 
 
 DRIVERS = {
+    "own_ally": (
+        the_caster_is_not_its_own_ally,
+        "a caster is not in its own ally pool, and is in its team pool (#364)",
+    ),
     "chassis": (
         a_character_has_one_feature_chassis_and_not_two,
         "a class's second feature ladder goes to whoever took it (#851)",

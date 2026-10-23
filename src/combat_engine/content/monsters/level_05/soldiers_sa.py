@@ -822,7 +822,7 @@ def m1138a3(c: Cast) -> None:
     reach=Melee(1),
     # "an orc ally or one of its own kind" -- the union, which one
     # field cannot say. `ONE_ALLY` plus the two tests. #570.
-    target=Target(side="ally", count=1, kinds=frozenset({"orc"}),
+    target=Target(side="team", count=1, kinds=frozenset({"orc"}),
                   ident="own", kind_or_ident=True),
 )
 def m1138a4(c: Cast) -> None:

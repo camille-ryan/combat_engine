@@ -201,7 +201,7 @@ def p12618(c: Cast) -> None:
     usage=DAILY,
     action=INTERRUPT,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=DIVINE,
     trigger=_MY_SIDE_HURT,
     on=Trigger(DamageRolled, when=_my_side_hurt(5), text=_MY_SIDE_HURT),

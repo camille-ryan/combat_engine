@@ -1069,7 +1069,7 @@ _granted("f1444", "f1444b")
 
 
 @power("f1444b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=Ranged(5), target=ONE_ALLY, keywords=DIVINE,
+       reach=Ranged(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY, out_of_combat=True)
 def f1444b(c: Cast) -> None:
     """Rerolls a knowledge check. A check, not a fight."""

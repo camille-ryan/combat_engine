@@ -713,7 +713,7 @@ _granted("f1458", "f1458b")
 
 
 @power("f1458b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY,
        trigger="you or an ally within 5 squares uses his or her second wind",
        on=Trigger(SecondWind, either(about_me, ally_within(5)),
@@ -735,7 +735,7 @@ _granted("f1460", "f1460b")
 
 @power("f1460b", level=1, cls="", usage=ENCOUNTER,
        action=ActionType.IMMEDIATE_REACTION, reach=CloseBurst(10),
-       target=ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
+       target=YOU_OR_ONE_ALLY, keywords=DIVINE, group=CHANNEL_DIVINITY,
        trigger="you or an ally within 10 squares is pushed, pulled or slid",
        on=Trigger(ForcedMove, lambda w, me, ev: _ours(w, me, ev.target, 10),
                   "one of ours is moved against its will"))
