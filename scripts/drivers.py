@@ -13265,7 +13265,7 @@ def shield_penalty_waived(out: Result) -> None:
     survive: the card waives the shield and says nothing about plate.
     """
     import combat_engine.content  # noqa: F401  -- fills the registry
-    from combat_engine.chargen import ARMOUR_CHECK, SHIELD_CHECK
+    from combat_engine.armour import ARMOUR_CHECK, SHIELD_CHECK
     from combat_engine.engine import skills
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.components import Gear

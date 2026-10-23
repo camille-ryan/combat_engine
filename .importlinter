@@ -87,3 +87,24 @@ ignore_imports =
 # Note the granularity: this pins the module pair, not the call site, so a
 # fourth `from combat_engine.content import loader` inside cast.py is
 # invisible to it. That is the honest limit -- grimp works on modules.
+
+[importlinter:contract:engine-does-not-import-chargen]
+name = engine -> chargen is zero
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    combat_engine.engine
+forbidden_modules =
+    combat_engine.chargen
+# This was **one** site -- `engine/skills.py:263`, function-local, importing
+# `ARMOUR_CHECK` and `SHIELD_CHECK` -- and the seam table in `CLAUDE.md` never
+# mentioned the relationship at all. `import-linter` is what found it; grep
+# could not, because the cost was not the edge itself but what it made true
+# further out: `etl.build -> engine.skills -> chargen -> content`, so
+# "etl -> content is zero" was false as a claim about the graph.
+#
+# Fixed by moving rather than by documenting. The two constants are a printed
+# table, not behaviour, and five readers outside chargen wanted them -- so they
+# live in `combat_engine/armour.py` now, below every component, the same place
+# and for the same reason as `db.py`. The edge is gone instead of allow-listed,
+# which is why this contract has no `ignore_imports`. #852.

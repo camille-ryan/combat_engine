@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat_engine.chargen import ARMOUR_SPEED
+from combat_engine.armour import ARMOUR_SPEED
 from combat_engine.engine import (
     AC,
     AT_WILL,

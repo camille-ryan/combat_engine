@@ -182,13 +182,14 @@ say so in the commit.
 | Chargen | `src/combat_engine/chargen/` | builds every character. Persistence does not exist. |
 | Story Engine | `src/combat_engine/story/` | fields an encounter: who is on the board, and where. `docs/STORY_ENGINE.md` is the charter; the rest of it is not built. |
 | Database | `src/combat_engine/db.py` | where `game.db` and the localisation are, and how to read them. Below every component; imports nothing from the package. |
+| Armour table | `src/combat_engine/armour.py` | the printed armour and shield numbers, read once. Below every component; imports only `db.py`. A table, not behaviour. |
 | Instruments | `scripts/` | belongs to no component. |
 
-**These seams are now a gate, not a paragraph.** `.importlinter` holds five
+**These seams are now a gate, not a paragraph.** `.importlinter` holds six
 contracts and `check.py`'s `seams` instrument asserts them in seconds, so
 what follows is checked on every run rather than believed. Making it a gate
-corrected two of the five claims, which is why the prose below reads
-differently from how it did:
+corrected two of the five claims it started with, which is why the prose
+below reads differently from how it did:
 
 * `etl` → `content` is **zero direct imports** (content reads the built
   database).
@@ -205,13 +206,26 @@ differently from how it did:
   `db.py`, which imports nothing from the package, so five readers reach a
   sqlite file without reaching through each other. `scripts/build.py`
   calling `build()` is the one import of ETL from outside it.
+* `engine` → `chargen` is **zero**, and the sixth contract is what keeps it
+  there. It was one site — `skills.py:263`, importing two armour constants —
+  and this table never mentioned the relationship at all.
 
-All five are scoped to **direct** imports, because a call site in a file is
-what each claim is about. **Transitively the picture is worse and `#852` is
-it**: `engine/skills.py:263` imports `chargen`, a sixth relationship this
-table never mentioned, and through it `etl.build → engine.skills → chargen
-→ content` makes the first bullet false as a statement about the graph.
-867 files, 5,393 dependencies. #334.
+All six are scoped to **direct** imports, because a call site in a file is
+what each claim is about.
+
+**The transitive picture was worse, and fixing it is what `#852` came to.**
+`engine/skills.py:263` imported `chargen`, a sixth relationship nothing
+documented, and through it `etl.build → engine.skills → chargen → content`
+made the first bullet false as a statement about the graph. The two
+constants behind that import are a **printed table, not behaviour** — six
+readers across four layers wanted them, four of those imports function-local
+to avoid pulling in the whole of chargen — so they now live in
+`src/combat_engine/armour.py`, below every component, which is the same
+answer and the same reasoning as `db.py` in `#334`. The edge is **gone**
+rather than allow-listed, which is why its contract carries no
+`ignore_imports`.
+
+867 files, 5,393 dependencies. #334, #852.
 
 ## Checking
 

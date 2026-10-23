@@ -260,7 +260,7 @@ def _armour_penalty(world: World, eid: int, skill: str) -> int:
     gear = world.get(eid, Gear)
     if gear is None:
         return 0
-    from combat_engine.chargen import ARMOUR_CHECK, SHIELD_CHECK
+    from combat_engine.armour import ARMOUR_CHECK, SHIELD_CHECK
 
     out = ARMOUR_CHECK.get(gear.armour, 0)
     if gear.shield:

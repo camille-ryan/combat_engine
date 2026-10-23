@@ -596,7 +596,7 @@ def _no_armour_penalty(c: Cast, *, check: bool = False, speed: bool = False) -> 
     penalty", so a heavy shield's -2 goes on being charged; `_armour_penalty`
     adds the two and this cancels one of them.
     """
-    from combat_engine.chargen import ARMOUR_CHECK, ARMOUR_SPEED
+    from combat_engine.armour import ARMOUR_CHECK, ARMOUR_SPEED
     from combat_engine.engine.components import Gear
     from combat_engine.engine.skills import ENCUMBERED
 

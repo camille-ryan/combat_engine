@@ -2197,7 +2197,7 @@ def f3779(c: Cast) -> None:
     column from a weapon -- `ClassLine.shield` is a number -- so there is
     nowhere for a shield a character merely *may* carry to be written.
     """
-    from combat_engine.chargen import SHIELD_CHECK
+    from combat_engine.armour import SHIELD_CHECK
     from combat_engine.engine.skills import ENCUMBERED
 
     me = c.me
