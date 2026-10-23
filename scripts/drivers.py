@@ -30691,6 +30691,99 @@ def what_happened_since_your_turn_ended(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_fired_crossbow_is_empty_until_it_is_reloaded(out: Result) -> None:
+    """A load-minor weapon fires once and then has to be loaded again.
+
+    The weapon `load` property was modelled nowhere: `grep` across
+    `engine/` and `etl/` for a load action, a load property or a
+    loaded state found nothing, so a crossbow fired every round for free
+    and four rows existed only to make that cheaper. #675, #725.
+
+    **The negative control is the whole rule**, and both issues said so:
+    *"a creature with one throwable must get one attack and be refused the
+    second. Asserting the first one works passes today."* So the assertion
+    that matters is the refusal, and the one that keeps it honest is that a
+    longbow -- `load free`, seven weapons like it -- is never refused at
+    all.
+
+    Asserted through `can_branch` and `actions.legal`, the two doors a
+    player and the AI actually come through, rather than at `Gear.unloaded`.
+    """
+    import dataclasses
+
+    from audit import board as _posed
+    from combat_engine import chargen
+    from combat_engine.engine import actions
+    from combat_engine.engine.ammunition import spend_load
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import get
+    from combat_engine.engine.turns import Encounter
+    from combat_engine.engine.types import ActionType
+
+    def armed(ref: str):  # noqa: ANN202
+        world, me, _foe = _posed("p997", 1)
+        gear = world.need(me, Gear)
+        gear.weapons = [*gear.weapons, dataclasses.replace(chargen.PRINTED[ref])]
+        gear.wield(gear.weapons[-1])
+        enc = Encounter(world)
+        enc.start()
+        world.turn = me
+        return world, me, gear, enc
+
+    rba = get("rba")
+
+    # -- the crossbow: load minor, so firing empties it -------------------
+    world, me, gear, enc = armed("w3629")
+    out.that(rba.can_branch(world, me, 0),
+             "a loaded crossbow can be fired",
+             f"unloaded={gear.unloaded or 'nothing'}")
+    out.that(not actions._loading(world, enc, me),
+             "and a loaded one is offered no reload, there being nothing to do",
+             f"{len(actions._loading(world, enc, me))} offered")
+
+    spend_load(world, me, "rba", 0)
+    out.that(not rba.can_branch(world, me, 0),
+             "**a fired crossbow is refused the next shot**",
+             f"unloaded={sorted(gear.unloaded)}")
+    offers = actions._loading(world, enc, me)
+    out.that([str(a.cost) for a in offers] == ["minor"],
+             "and the reload is offered at the printed minor",
+             f"{[(a.ref, str(a.cost)) for a in offers]}")
+
+    actions.perform(world, enc, me, offers[0])
+    out.that(rba.can_branch(world, me, 0) and not gear.unloaded,
+             "reloading makes it fireable again",
+             f"unloaded={gear.unloaded or 'nothing'}")
+
+    # -- the longbow: load free, so none of the above applies -------------
+    #
+    # The control. Without it the rule passes on an implementation that
+    # empties every ranged weapon in the game, which would stop seven of
+    # the ten load-property weapons -- and every bow -- from firing twice.
+    world, me, gear, enc = armed("w3631")
+    spend_load(world, me, "rba", 0)
+    out.that(rba.can_branch(world, me, 0) and not gear.unloaded,
+             "a longbow prints `load free`, so firing it empties nothing",
+             f"unloaded={gear.unloaded or 'nothing'}")
+
+    # -- c.loads_free: once per turn, then back to the printed minor ------
+    world, me, gear, enc = armed("w3629")
+    Cast(world=world, me=me, ref="drivers:loads").loads_free(
+        per_turn=1, only="crossbow")
+    spend_load(world, me, "rba", 0)
+    first = [str(a.cost) for a in actions._loading(world, enc, me)]
+    out.that(first == [ActionType.FREE.value],
+             "`c.loads_free` makes the first reload of the turn free",
+             f"offered at {first}")
+    actions.perform(world, enc, me, actions._loading(world, enc, me)[0])
+    spend_load(world, me, "rba", 0)
+    second = [str(a.cost) for a in actions._loading(world, enc, me)]
+    out.that(second == ["minor"],
+             "and the second this turn costs the printed minor again",
+             f"offered at {second}")
+
+
 def the_caster_is_not_its_own_ally(out: Result) -> None:
     """"Each ally in the burst" does not mean the creature at the centre.
 
@@ -30926,6 +31019,10 @@ def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
 
 
 DRIVERS = {
+    "reload": (
+        a_fired_crossbow_is_empty_until_it_is_reloaded,
+        "a load-minor weapon fires once, then must be reloaded (#675, #725)",
+    ),
     "own_ally": (
         the_caster_is_not_its_own_ally,
         "a caster is not in its own ally pool, and is in its team pool (#364)",

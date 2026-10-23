@@ -1264,7 +1264,7 @@ def f3738(c: Cast) -> None:
 
 
 @power("f3739", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("c.reload()",))
+       reach=PERSONAL, target=SELF)
 def f3739(c: Cast) -> None:
     """Crossbow is a group; a wand is not.
 
@@ -1276,8 +1276,13 @@ def f3739(c: Cast) -> None:
     cheap rate to the one weapon the card names, which is why the rest of
     the character's gear still costs a minor.
 
-    Loading a crossbow is the clause that stays dropped: there is no load
-    at all, so there is no cost to reduce."""
+    **The reload clause lands now, so nothing is dropped.** The old note
+    said "there is no load at all, so there is no cost to reduce", and it
+    was right: firing left a crossbow loaded forever. A `load minor`
+    weapon is empty after it fires and `actions._loading` offers the
+    reload at the printed minor, which is what `c.loads_free` lowers.
+    #675, #725."""
+    c.loads_free(only="crossbow", on=c.me, until=When.ENCOUNTER)
     c.draws_free(per_turn=1, only="w:wand", on=c.me, until=When.ENCOUNTER)
     # "with a crossbow **or a wand**". The wand half had no way to be said:
     # crossbow is a group and a wand is one implement among eight, so this

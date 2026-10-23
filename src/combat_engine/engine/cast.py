@@ -15391,6 +15391,72 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         effect.on_resume.append(rearm)
         return effect
 
+    def loads_free(
+        self,
+        *,
+        cost: ActionType = ActionType.FREE,
+        per_turn: int = -1,
+        only: str = "",
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Make reloading cost less than the printed minor action.
+
+        "You can load a crossbow you're wielding that has the load minor
+        property as a free action." Four rows print a sentence of that
+        shape and every one of them was inert, because loading was not a
+        cost the engine charged -- there was nothing to make cheaper. #675,
+        #725.
+
+        The exact mirror of `draws_free` above, and for the identical
+        reason: the reload itself is offered by `actions._loading`, and
+        what these rows change is what it *costs*, which is a fact about
+        the creature rather than about any row.
+
+        `per_turn=-1` is a card printing no limit; `Gear.loads_left` is
+        refilled at the start of each of this creature's turns.
+
+        `only` narrows the cheap rate and takes a **ref or a group**, which
+        is what these cards need: every one of them says "a crossbow", and
+        crossbow is a group of three. `draw_only` takes a ref because its
+        three rows name one weapon; matching both here follows
+        `Cast.wielding` rather than adding a third way to spell it.
+
+        **Three weapons in the table can ever need it** -- the ones
+        printing `load minor`. A row making a `load free` weapon cheaper is
+        buying out of a cost that was never charged, which is true of the
+        printed rule as well as of this engine.
+        """
+        who = on if on is not None else self.me
+        gear = self.world.get(who, Gear)
+        if gear is None:
+            return None
+        was = (gear.load_cost, gear.loads_left, gear.load_allowance,
+               gear.load_only)
+
+        def restore() -> None:
+            (gear.load_cost, gear.loads_left, gear.load_allowance,
+             gear.load_only) = was
+
+        effect = self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} loads for {cost.value}",
+            by=self.ref,
+        )
+        if effect is None:
+            return None
+        gear.load_cost = cost
+        gear.loads_left = gear.load_allowance = per_turn
+        gear.load_only = only
+        effect.on_suspend.append(restore)
+
+        def rearm() -> None:
+            gear.load_cost = cost
+            gear.loads_left = gear.load_allowance = per_turn
+            gear.load_only = only
+
+        effect.on_resume.append(rearm)
+        return effect
+
     def destroy(self, *, on: int | None = None, weapon: Weapon | None = None) -> bool:
         """Destroy an item a creature is carrying. It does not come back."""
         who = self._who(on)

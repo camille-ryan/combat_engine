@@ -399,6 +399,13 @@ class Encounter:
         gear = self.world.get(eid, Gear)
         if gear is not None and gear.draw_cost is not None and gear.draws_left >= 0:
             gear.draws_left = gear.draw_allowance
+        # **Its own guard, not a line inside the draw's.** The first version
+        # of this sat under `draw_cost is not None`, so a creature with a
+        # cheap reload and an ordinary draw never got its allowance back --
+        # silently, and in exactly the arrangement the four rows create.
+        # "Once per turn" is a turn's worth either way. #725.
+        if gear is not None and gear.load_cost is not None and gear.loads_left >= 0:
+            gear.loads_left = gear.load_allowance
         self.world.bus.emit(TurnStart(actor=eid, round=self.world.round))
 
     def end_turn(self) -> None:

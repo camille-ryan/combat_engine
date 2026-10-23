@@ -1462,6 +1462,22 @@ class WeaponHeld(Event):
 
 
 @dataclass
+class WeaponLoaded(Event):
+    """A weapon that had been fired is ready again.
+
+    Emitted by the reload action rather than inferred from the absence of a
+    ref in `Gear.unloaded`, for the reason this file keeps restating: a
+    reader that has to diff component state to notice something cannot be
+    written by a content row, and four rows are about what a reload costs.
+    #675, #725.
+    """
+
+    actor: int
+    ref: str
+    cost: Any = None
+
+
+@dataclass
 class WeaponChanged(Event):
     """A carried weapon's own fields changed in place.
 

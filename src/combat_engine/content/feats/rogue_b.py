@@ -1071,9 +1071,18 @@ _counts_as(
 
 @power("f826", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=("Gear.off(ranged=)", "c.reload()"))
+       todo=("Gear.off(ranged=)",))
 def f826(c: Cast) -> None:
     """A hand crossbow held in the off hand and reloaded one-handed.
+
+    **`c.reload()` is off this row's marker list, and it was never the
+    blocker.** A reload is a cost the engine charges now (#725) -- but only
+    for the three weapons printing `load minor`, and a hand crossbow
+    prints `load free`. So there is no reload to cheapen here and never
+    was: the one-handed reload this card mentions costs nothing by the
+    printed rule, which is why the rule bothers to say it.
+
+    What remains is the half that is real.
 
     **Re-pointed, not closed.** `Weapon.off_hand_anyway` was the wrong
     symbol and is retired everywhere else: no two-weapon reader consults a

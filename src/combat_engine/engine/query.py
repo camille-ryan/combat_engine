@@ -236,6 +236,47 @@ def enemies(world: World, eid: int) -> list[int]:
     ]
 
 
+#: The one load property the table prices. Seven weapons print `load free`
+#: and three print this; nothing prints a third form. Named rather than
+#: spelled inline at each site, because a misspelling here reads exactly
+#: like a weapon that needs no loading -- the uniformly-dead gate this
+#: repository keeps finding.
+COSTED_LOAD = "load minor"
+
+
+def needs_loading(weapon: Any) -> bool:
+    """Does firing this weapon leave it empty until somebody reloads it?
+
+    True only for the three weapons whose printed properties include
+    `load minor` -- `w3629` crossbow, `w3659` superior-crossbow, `w3662`
+    blowgun. `load free` is a load the rules charge nothing for, so a
+    weapon carrying it is always ready and this answers False; so does
+    every weapon with no load property at all, which is most of them.
+
+    A free function rather than a `Weapon` method because `Weapon` is a
+    data record read by the ETL, the wire and `chargen` alike, and the
+    question is the engine's. #675, #725.
+    """
+    return COSTED_LOAD in (getattr(weapon, "properties", None) or ())
+
+
+def ready_to_fire(world: World, eid: int, weapon: Any) -> bool:
+    """Is this weapon loaded, for a creature that has to load it?
+
+    **A weapon that needs no loading is always ready**, which is the half a
+    caller must not have to remember: asking this about a longbow has to
+    answer True, or every bow in the game stops firing.
+    """
+    from .components import Gear
+
+    if not needs_loading(weapon):
+        return True
+    gear = world.get(eid, Gear)
+    if gear is None:
+        return True
+    return getattr(weapon, "ref", "") not in gear.unloaded
+
+
 def holding(world: World, eid: int, what: str = "") -> list[Any]:
     """What this creature has in hand, filtered by a printed word.
 

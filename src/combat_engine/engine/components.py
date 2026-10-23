@@ -1516,6 +1516,35 @@ class Gear:
     #: weapon, which is what two of the three rows mean; the third is "draw
     #: and attack with a dagger", one weapon and not the rest.
     draw_only: str = ""
+    #: Ranged weapons that have been **fired and not yet reloaded**, by ref.
+    #:
+    #: Only a weapon whose printed properties include a *costed* load can
+    #: ever appear here. The table carries two forms and only one is a cost:
+    #: `load free` on seven weapons, `load minor` on three -- `w3629`
+    #: crossbow, `w3659` superior-crossbow, `w3662` blowgun. #725.
+    #:
+    #: **Spent rather than loaded, and the inversion is deliberate.** Held
+    #: as "which are loaded" it would have to be filled in everywhere a
+    #: creature is built -- `chargen.spawn`, `loader.spawn`, the audit
+    #: board, `story`, every drivers pose -- and one missed site is a
+    #: crossbow that can never fire, which looks exactly like a row that
+    #: does not work. Held as "which are empty" an untouched creature is
+    #: ready, which is both the common case and the safe default.
+    unloaded: set[str] = field(default_factory=set)
+    #: What a reload costs this creature, where `None` is the printed minor.
+    #: The mirror of `draw_cost` above and for the identical reason: four
+    #: rows print "you can load a crossbow as a free action", and what they
+    #: change is what it *costs*, which is a fact about the creature rather
+    #: than about any row. `c.loads_free` is what records it. #675, #725.
+    load_cost: ActionType | None = None
+    #: How many cheap reloads remain this turn. `-1` is unlimited, which is
+    #: what a card printing no limit means.
+    loads_left: int = -1
+    #: What `loads_left` refills to at the start of this creature's turn.
+    load_allowance: int = -1
+    #: Which weapon the cheaper reload applies to, by ref. Empty is every
+    #: weapon.
+    load_only: str = ""
     #: Weapon-requirement waivers: `(holding, satisfies)` pairs.
     #:
     #: "You can use a warhammer with any power that normally requires a

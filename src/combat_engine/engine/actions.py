@@ -132,6 +132,7 @@ def legal(
     out.extend(_sustaining(world, encounter, actor))
     out.extend(_dropping(world, encounter, actor))
     out.extend(_wielding(world, encounter, actor))
+    out.extend(_loading(world, encounter, actor))
     out.extend(_picking_up(world, encounter, actor))
     out.extend(_spending(world, encounter, actor))
     out.extend(_action_points(world, encounter, actor))
@@ -930,6 +931,45 @@ def _wielding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     ]
 
 
+def _loading(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Reloading an emptied weapon, at the printed minor.
+
+    Offered the way `_wielding` offers a draw, and priced the same way: a
+    minor is the rule, `c.loads_free` is what four rows use to buy out of
+    it, and `loads_left` is the "once per turn" half -- spent, the cost
+    goes back to the printed minor rather than the reload going away.
+
+    Only a weapon in hand and actually empty is offered. Three weapons can
+    ever be empty (`query.needs_loading`), so for every other creature in
+    the game this returns `[]` after one set lookup. #675, #725.
+    """
+    from .components import Gear, Weapon
+    from .query import needs_loading
+
+    gear = world.get(actor, Gear)
+    if gear is None or not gear.unloaded:
+        return []
+    cheap = gear.load_cost is not None and gear.loads_left != 0
+
+    def price(w: Weapon) -> ActionType:
+        # **By group as well as by ref**, which `draw_only` does not need
+        # and this does: every card here names "a crossbow", and crossbow
+        # is a group of three. Matched the way `Cast.wielding` matches a
+        # printed word -- ref, then group -- rather than inventing a third
+        # spelling of the same question.
+        named = gear.load_only
+        if cheap and (not named or named in (w.ref, w.group)):
+            return gear.load_cost or ActionType.MINOR
+        return ActionType.MINOR
+
+    return [
+        Action(kind="load", cost=price(w), ref=w.ref)
+        for w in gear.held
+        if w.ref in gear.unloaded and needs_loading(w)
+        and encounter.can_spend(actor, price(w))
+    ]
+
+
 def _spending(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Eating the seed, expending the scroll -- a one-shot in somebody's hand.
 
@@ -1511,6 +1551,23 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
         world.bus.emit(Note(text=f"{eff.label or eff} sustained"))
         return True
 
+    if action.kind == "load":
+        from .components import Gear
+
+        gear = world.get(actor, Gear)
+        if gear is None or not action.ref or action.ref not in gear.unloaded:
+            return False
+        gear.unloaded.discard(action.ref)
+        # Only a reload that actually used the cheap rate spends the
+        # allowance, exactly as a draw does.
+        if gear.load_cost is not None and action.cost == gear.load_cost \
+                and gear.loads_left > 0:
+            gear.loads_left -= 1
+        from .events import WeaponLoaded
+
+        world.bus.emit(WeaponLoaded(actor=actor, ref=action.ref,
+                                    cost=action.cost))
+        return True
     if action.kind == "wield":
         from .components import Gear
 

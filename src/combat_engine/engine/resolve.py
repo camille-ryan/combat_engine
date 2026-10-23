@@ -18,7 +18,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .ammunition import nock
+from .ammunition import nock, spend_load
 from .components import Defences, Health
 from .conditions import DROPPED
 from .durations import When
@@ -220,6 +220,9 @@ def attack(
     # attack using this ammunition" is about *this* shot and there was
     # nothing on the wire that said which one.
     drawn = nock(world, attacker, power, branch)
+    # The same shot, the same gate: a costed loader is empty after it
+    # fires and `actions` offers the reload. #725.
+    spend_load(world, attacker, power, branch)
 
     def roll(declared: AttackDeclared) -> None:
         # Read back off the event, because an interrupt may have moved the

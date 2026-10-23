@@ -76,6 +76,37 @@ def nock(world: World, eid: int, power: str, branch: int = 0) -> str:
     return ""
 
 
+def spend_load(world: World, eid: int, power: str, branch: int = 0) -> str:
+    """Empty the weapon this shot was fired from. Its ref, or "".
+
+    Beside `nock` because it answers the same per-shot question from the
+    same gate: `_is_ranged` decides whether a shot happened at all, and an
+    area burst or an implement attack must empty nothing, exactly as it
+    must spend no ammunition.
+
+    Only a weapon `query.needs_loading` is true of -- the three that print
+    `load minor` -- is recorded. A longbow prints `load free`, which is a
+    load the rules charge nothing for, so it is always ready and nothing is
+    written. #675, #725.
+
+    Returns the ref it emptied so a caller can say so; the refusal lives in
+    `actions`, not here, because by the time a shot resolves it is too late
+    to decline it.
+    """
+    from .query import needs_loading
+    from .resolve import _is_ranged
+
+    if not _is_ranged(power, branch):
+        return ""
+    gear = world.get(eid, Gear)
+    if gear is None or gear.ranged is None:
+        return ""
+    if not needs_loading(gear.ranged):
+        return ""
+    gear.unloaded.add(gear.ranged.ref)
+    return gear.ranged.ref
+
+
 def fired_with(ev: Any, item: str) -> bool:
     """Was the attack behind this event shot from that item?
 

@@ -1649,7 +1649,19 @@ class Power:
         if kind == "ranged":
             # Unless it is thrown by hand, in which case a melee weapon is
             # exactly what it wants.
-            return bool(gear.melee) if self.thrown_by_hand else gear.ranged is not None
+            if self.thrown_by_hand:
+                return bool(gear.melee)
+            if gear.ranged is None:
+                return False
+            # **And it has to be loaded**, which is the half that makes the
+            # load worth modelling at all. Three weapons print `load
+            # minor`; firing one empties it and `actions` offers the
+            # reload. A `load free` weapon and everything without a load
+            # property answer True here always -- `ready_to_fire` carries
+            # that, so this site does not have to remember it. #675, #725.
+            from .query import ready_to_fire
+
+            return ready_to_fire(world, actor, gear.ranged)
         if kind == "melee":
             return bool(gear.melee)
         return True
