@@ -1144,6 +1144,38 @@ class Rerolled(Event):
 
 
 @dataclass
+class CritChanged(Event):
+    """A blow stopped being a critical hit, or started being one.
+
+    **Nineteen rows write this by hand and nothing announced it**, so the
+    three whose whole printed effect is the demotion -- "the attack becomes a
+    normal hit" -- fired, were correct, and reported SILENT for as long as
+    they have existed. The other sixteen demote or promote as a *rider* on
+    something else, so they look credited while this clause of them is
+    equally unobservable: a regression in it alone would show up nowhere.
+
+    The same shape as `Rerolled` one field over, and `audit.py` makes the
+    argument against excusing it in its own words -- *"the real fix is an
+    event, not an excuse"*. Admitting `Rerolled` moved 105 rows. #861.
+
+    `by` is the ref of the row that changed it, which is what a rider would
+    narrow on, for `Rerolled.by`'s reason: "when *your* feat downgrades a
+    crit" must not pay out on somebody else's shield.
+
+    `critical` is the value **after** the change, so a listener reads the
+    new state rather than inferring it from a direction. Both writes happen
+    in `Window.BEFORE` of the `Hit`, before any damage is rolled, which is
+    why demotion changes the dice as well as the riders.
+    """
+
+    attacker: int
+    target: int
+    power: str
+    critical: bool
+    by: str
+
+
+@dataclass
 class InitiativeRolled(Event):
     """A creature's place in the order was decided.
 

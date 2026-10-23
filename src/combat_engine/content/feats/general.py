@@ -656,12 +656,14 @@ def f281b(c: Cast) -> None:
     riders a critical pays. The event's own copy is cleared too, for the
     listeners after this one that read it rather than the result.
 
-    It was marked `c.uncrit()`; nothing was missing.
+    **It was marked `c.uncrit()` and un-marked with "nothing was missing",
+    and that was wrong about one half.** The two writes were there; the
+    *announcement* was not, so this row fired, was correct, and reported
+    SILENT for its whole life -- demoting a crit is its entire printed
+    effect, so there was no second clause to be visible by.
+    `c.crit_becomes` is that door. #861.
     """
-    ev = c.trigger
-    ev.critical = False
-    if ev.result is not None:
-        ev.result.critical = False
+    c.crit_becomes(False)
 
 
 @power("f282", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,

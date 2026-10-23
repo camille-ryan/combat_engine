@@ -335,10 +335,7 @@ def _next_blow_of_mine_crits(c: Cast, victim: int, plus: int) -> None:
     def straight_in(ev: Hit) -> None:
         if ev.target != victim or ev.attacker != me or not by_melee(c.world, me, ev):
             return
-        ev.critical = True
-        result = getattr(ev, "result", None)
-        if result is not None:
-            result.critical = True
+        c.crit_becomes(True, ev=ev)
         spend("the blow went in")
 
     def wasted(ev: Miss) -> None:

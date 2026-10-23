@@ -701,7 +701,7 @@ def m1818a4(c: Cast) -> None:
 
     def upgraded(ev: Hit) -> None:
         if ev.result is state["result"]:
-            ev.result.critical = True
+            c.crit_becomes(True, ev=ev)
 
     c.watch(AttackRolled, boosted, until=When.ENCOUNTER, on=c.me, label=c.ref)
     c.watch(Hit, upgraded, until=When.ENCOUNTER, on=c.me, label=f"{c.ref} crit")

@@ -353,10 +353,7 @@ def f1842(c: Cast) -> None:
         return
     if not c.may("treat the critical hit as a normal hit"):
         return
-    result = getattr(ev, "result", None)
-    if result is not None:
-        result.critical = False
-    ev.critical = False
+    c.crit_becomes(False, ev=ev)
     c.immobilized(on=ev.target, until=When.SONT)
 
 

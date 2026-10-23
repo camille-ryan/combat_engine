@@ -408,10 +408,7 @@ def m227a4(c: Cast) -> None:
     def straight_in(ev: Hit) -> None:
         if ev.target != victim or not by_melee(c.world, me, ev):
             return
-        ev.critical = True
-        result = getattr(ev, "result", None)
-        if result is not None:
-            result.critical = True
+        c.crit_becomes(True, ev=ev)
         spend("the blow went in")
 
     def wasted(ev: Miss) -> None:

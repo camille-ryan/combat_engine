@@ -1202,7 +1202,21 @@ DID_SOMETHING = {
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
+    "CritChanged",
 }  # fmt: skip
+# `CritChanged` is the **seventh** class, and it is the shape the note below
+# names rather than a new one: *a verb that changes a number already on the
+# table*. "The attack becomes a normal hit" rewrites the criticality of a blow
+# already announced, and 19 rows did it by hand at 38 sites with nothing
+# saying so. Three of the 19 -- `f281b`, `i3101p1`, `m6283a4` -- are the rows
+# whose **whole** printed effect is that rewrite, so they had no second clause
+# to be visible by; the other sixteen demote or promote as a rider and looked
+# credited while this clause of them was just as unobservable.
+#
+# `f281b` is the worked case and the warning: it was marked `c.uncrit()` and
+# un-marked with the note *"nothing was missing"*. The writes were there. The
+# announcement was not, and no instrument could tell the difference. #861.
+#
 # `Rerolled` and `Boosted` are the **sixth** class of correct row admitted
 # here one at a time, and they arrived the way the note below predicts --
 # except the shape to watch for turns out to be wider than "a verb that is a

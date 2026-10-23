@@ -1912,8 +1912,7 @@ def i1352x1(c: Cast) -> None:
         if result is None or not _crit_on_me(c.world, c.me, ev):
             return
         if c.roll("1d20") >= 16:
-            result.critical = False
-            ev.critical = False
+            c.crit_becomes(False, ev=ev)
 
     c.watch(Hit, soften, until=When.ENCOUNTER, on=c.me, window=Window.BEFORE)
 
@@ -3097,7 +3096,7 @@ def i1375p1(c: Cast) -> None:
         return
     result = getattr(c.trigger, "result", None)
     if result is not None and result.hit:
-        result.critical = True
+        c.crit_becomes(True)
 
 
 @power("i1615p1", level=6, cls=ITEM, usage=AT_WILL, action=MINOR,

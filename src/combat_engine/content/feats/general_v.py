@@ -1266,10 +1266,7 @@ def f3523(c: Cast) -> None:
     def glancing(ev: Hit) -> None:
         if ev.target != me or not ev.critical or c.roll("1d20") < 10:
             return
-        ev.critical = False
-        result = getattr(ev, "result", None)
-        if result is not None:
-            result.critical = False
+        c.crit_becomes(False, ev=ev)
 
     c.watch(Hit, glancing, until=When.ENCOUNTER, window=Window.BEFORE, on=me,
             label=f"{c.ref} glancing blow")

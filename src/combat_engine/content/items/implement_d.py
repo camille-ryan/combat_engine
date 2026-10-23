@@ -360,8 +360,7 @@ def _first_hit_crits(c: Cast) -> None:
         if ev.attacker != c.me or done or result is None:
             return
         done.append(1)
-        result.critical = True
-        ev.critical = True
+        c.crit_becomes(True, ev=ev)
 
     c.watch(Hit, promote, until=When.EOT)
 
@@ -1906,8 +1905,7 @@ def i1104p1(c: Cast) -> None:
     theirs = getattr(result, "natural", 0)
     mine = c.roll("1d20")
     if mine > theirs and result is not None:
-        result.critical = True
-        c.trigger.critical = True
+        c.crit_becomes(True)
     elif mine < theirs:
         c.penalty("attack", 2, on=c.me, until=When.EONT)
 

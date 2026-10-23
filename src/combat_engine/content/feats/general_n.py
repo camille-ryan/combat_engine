@@ -1854,10 +1854,7 @@ def f2450(c: Cast) -> None:
         if ev.attacker != foe or spent:
             return
         spent.append(True)
-        ev.critical = False
-        result = getattr(ev, "result", None)
-        if result is not None:
-            result.critical = False
+        c.crit_becomes(False, ev=ev)
 
     def missed(ev: Miss) -> None:
         if ev.attacker == foe:

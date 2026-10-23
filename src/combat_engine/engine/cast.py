@@ -3299,6 +3299,76 @@ class Cast:
     def crit(self) -> bool:
         return self.result is not None and self.result.critical
 
+    def crit_becomes(self, critical: bool, *, ev: Any = None) -> bool:
+        """"The attack becomes a normal hit", or becomes a critical one.
+
+        The writer `c.crit` is the reader for, and the one door for a thing
+        **19 rows wrote by hand at 38 sites**: an attack's criticality has
+        two copies -- the announced `Hit` and the live `AttackResult` -- and
+        a row that set one and not the other was half-right, because the
+        riders read the event and the dice read the result.
+
+        **It exists for the announcement, not for the two writes.** `f281b`
+        was marked `c.uncrit()` and un-marked with the note *"nothing was
+        missing"*, which was true of the writes and false of the event: the
+        three rows whose whole printed effect is the demotion fired, were
+        correct, and reported SILENT for as long as they had existed. The
+        other sixteen do it as a rider on something else and so looked
+        credited while this clause of them was equally invisible. #861.
+
+        One verb and a boolean rather than `c.uncrit`/`c.make_crit`, because
+        the boolean *is* the printed difference and the two cards are
+        otherwise the same sentence.
+
+        `ev` defaults to `c.trigger`, which is what all 19 pass: every one
+        of them is an interrupt or a reaction answering the blow it changes.
+        Returns whether anything moved -- `False` when the blow was already
+        that way, so a row can tell "I demoted a crit" from "there was no
+        crit to demote" and the event is not announced for a no-op.
+
+        **Not `c.maximise(critical=True)`**, whose docstring is explicit
+        that setting `critical` there "would pay out every crit rider, which
+        is not what the line says". These rows do want the riders to change
+        sides; that is the whole of them.
+        """
+        from .events import CritChanged
+
+        blow = ev if ev is not None else self.trigger
+        if blow is None:
+            return False
+        result = getattr(blow, "result", None)
+        # The event's own copy and the live result can disagree -- a row that
+        # set only one left the other standing -- so "already that way" means
+        # both are, and either being wrong is a change worth announcing.
+        #
+        # **Only the copies that exist count.** `AttackRolled` carries a
+        # `result` and no `critical` of its own -- `i1375p1` promotes from
+        # that window, because `Hit` is announced with the flag already
+        # copied off the result -- so reading a missing attribute as False
+        # would make every promotion from there look like a change even when
+        # the blow was already critical, and announce a no-op.
+        standing = [
+            bool(getattr(obj, "critical", False))
+            for obj in (blow, result)
+            if obj is not None and hasattr(obj, "critical")
+        ]
+        if standing and all(flag == critical for flag in standing):
+            return False
+        if hasattr(blow, "critical"):
+            blow.critical = critical
+        if result is not None:
+            result.critical = critical
+        self.world.bus.emit(
+            CritChanged(
+                attacker=int(getattr(blow, "attacker", -1)),
+                target=int(getattr(blow, "target", -1)),
+                power=str(getattr(blow, "power", "")),
+                critical=critical,
+                by=self.ref,
+            )
+        )
+        return True
+
     # -- damage and healing --------------------------------------------------
 
     def hit(self, *, on: int | None = None, half: bool = False) -> int:

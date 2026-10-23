@@ -156,10 +156,7 @@ def p2990(c: Cast) -> None:
             return
         if c.roll("1d20") < 10:
             return
-        ev.critical = False
-        res = getattr(ev, "result", None)
-        if res is not None:
-            res.critical = False
+        c.crit_becomes(False, ev=ev)
 
     c.watch(Hit, soften, until=When.ENCOUNTER, on=mate, label="p2990")
 

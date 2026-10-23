@@ -3020,7 +3020,7 @@ def i3555p2(c: Cast) -> None:
     result = getattr(c.trigger, "result", None)
     if result is None:
         return
-    result.critical = True
+    c.crit_becomes(True)
     foe = getattr(c.trigger, "target", None)
 
     def felled(ev: Dropped) -> None:

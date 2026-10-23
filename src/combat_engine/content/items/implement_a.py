@@ -602,10 +602,7 @@ def i1920p1(c: Cast) -> None:
         return
     if not c.may("hit normally and spend a healing surge", who=mate):
         return
-    ev.critical = False
-    result = getattr(ev, "result", None)
-    if result is not None:
-        result.critical = False
+    c.crit_becomes(False, ev=ev)
     c.surge(on=mate)
 
 

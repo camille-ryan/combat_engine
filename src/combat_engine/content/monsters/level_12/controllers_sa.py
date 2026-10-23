@@ -4332,10 +4332,9 @@ def m3804a1(c: Cast) -> None:
             return
         if _reach_kind(ev) != "melee":
             return
-        result = getattr(ev, "result", None)
-        if result is None:
+        if getattr(ev, "result", None) is None:
             return
-        result.critical = True
+        c.crit_becomes(True, ev=ev)
         c.flat(c.roll("1d12"), on=victim)
         c.world.effects.end(hold, "the marked blow landed")
 

@@ -31654,6 +31654,127 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              f"familiar before the fight {before}, after arming {after}")
 
 
+def a_demoted_critical_says_so_out_loud(out: Result) -> None:
+    """"The attack becomes a normal hit" has to be *announced*, not only done.
+
+    Nineteen rows rewrote an attack's criticality by hand at 38 sites and
+    nothing said a crit had stopped being one, so `f281b` and `i3101p1` --
+    whose whole printed effect is the demotion -- fired, were correct, and
+    reported SILENT for their entire lives. `f281b`'s docstring recorded the
+    half-truth that caused it: marked `c.uncrit()`, un-marked with *"nothing
+    was missing"*. The writes were there. #861.
+
+    **Every assertion here is about the announcement**, because the writes
+    were never the bug: a rule reading `result.critical is False` would pass
+    with `CritChanged` deleted, which is exactly the state this fixes.
+    Proven by planting that deletion -- see the commit.
+
+    Driven through `f281b`'s own body rather than by calling the verb, for
+    the standing reason: calling `c.crit_becomes` proves the mechanism and
+    says nothing about whether the row reaches it.
+    """
+    from types import SimpleNamespace
+
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import CritChanged, Hit
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _started = _posed("f281b", 1)
+    foe = enemies(world, me)[0]
+    said: list[CritChanged] = []
+    world.bus.on(CritChanged, said.append)
+
+    def blow(critical: bool) -> Hit:
+        """A landed attack, shaped the way `resolve.attack` hands one over.
+
+        `Hit` declares no `result` field -- `resolve` attaches it, the way
+        `Effect.by` is an attribute -- so posing one means attaching it here
+        too, and a rule that forgot would be testing the `result is None`
+        branch and nothing else.
+        """
+        ev = Hit(attacker=foe, target=me, power="mba", critical=critical)
+        ev.result = AttackResult(hit=True, critical=critical, natural=20)
+        return ev
+
+    # -- the positive: a crit goes in, an announcement comes out ------------
+    crit = blow(True)
+    REGISTRY["f281b"].body(
+        Cast(world=world, me=me, ref="f281b", target=foe, trigger=crit))
+
+    out.that(len(said) == 1,
+             "**demoting a critical announces `CritChanged`** -- the event"
+             " this family had none of, and the whole of why two rows whose"
+             " only printed effect is this reported SILENT while working",
+             f"{len(said)} announcement(s)")
+    out.that(bool(said) and said[0].critical is False,
+             "and it carries the value **after** the change, so a listener"
+             " reads the new state instead of inferring it from a direction",
+             f"critical={said[0].critical if said else '<none>'}")
+    out.that(bool(said) and said[0].by == "f281b",
+             "and `by` is the row that changed it, not the attacker -- what"
+             " a rider narrowing on *your* shield would read, the same"
+             " argument `Rerolled.by` makes",
+             f"by={said[0].by if said else '<none>'!r}")
+    out.that(bool(said) and said[0].attacker == foe and said[0].target == me,
+             "and it names both ends of the blow it is about",
+             f"attacker={said[0].attacker if said else '?'}"
+             f" target={said[0].target if said else '?'}")
+
+    # The writes, which were never missing -- asserted so that a later
+    # change cannot trade the effect away for the announcement.
+    out.that(crit.critical is False and crit.result.critical is False,
+             "and **both** copies are cleared -- the riders read the event,"
+             " the dice read the result, and a row clearing one was half"
+             " right",
+             f"ev={crit.critical} result={crit.result.critical}")
+
+    # -- the negative: nothing to demote, nothing announced -----------------
+    said.clear()
+    plain = blow(False)
+    REGISTRY["f281b"].body(
+        Cast(world=world, me=me, ref="f281b", target=foe, trigger=plain))
+    out.that(not said,
+             "an ordinary hit announces **nothing** -- the control, and the"
+             " reason the verb returns whether anything moved: a row credited"
+             " for demoting a crit that was never one is the audit believing"
+             " a no-op",
+             f"{len(said)} announcement(s) on a non-critical blow")
+
+    # -- the other direction, through a promoting row's own body -----------
+    said.clear()
+    up = blow(False)
+    rising = Cast(world=world, me=me, ref="drivers:promote", trigger=up)
+    rising.crit_becomes(True)
+    out.that(len(said) == 1 and said[0].critical is True,
+             "and a promotion announces the same event pointing the other"
+             " way, so one reader serves both printed sentences",
+             f"{[(e.by, e.critical) for e in said]}")
+
+    # -- the shape that made the no-op test subtle -------------------------
+    # `i1375p1` promotes from the `AttackRolled` window, where the event
+    # carries a `result` and no `critical` of its own. Reading the missing
+    # attribute as False would make every promotion from there look like a
+    # change even when the blow was already critical.
+    said.clear()
+    # A `SimpleNamespace` rather than a local class: `boost_roll`'s rule
+    # already defines a `_Rolled` for the same purpose, and `lint.py`'s
+    # duplicate-`def` walk does not scope by enclosing function, so a second
+    # one reads as a redefinition of the first.
+    already = SimpleNamespace(
+        result=AttackResult(hit=True, critical=True, natural=20))
+    Cast(world=world, me=me, ref="drivers:rolled").crit_becomes(
+        True, ev=already)
+    out.that(not said,
+             "and an event with a `result` but no `critical` of its own --"
+             " `AttackRolled`, which `i1375p1` promotes from -- is judged on"
+             " the copy that exists, so a blow already critical announces"
+             " nothing rather than a change that did not happen",
+             f"{len(said)} announcement(s)")
+
+
 def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
     """Where an area may be centred must follow the walls, not a stale answer.
 
@@ -31782,6 +31903,10 @@ DRIVERS = {
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "crit_announced": (
+        a_demoted_critical_says_so_out_loud,
+        "demoting or promoting a critical hit is announced, not silent (#861)",
     ),
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,
