@@ -275,7 +275,7 @@ def passive(world: World, eid: int, skill: str) -> int:
 
 def check(
     world: World, eid: int, skill: str, dc: int = 0, *, bonus: int = 0,
-    target: int | None = None,
+    target: int | None = None, purpose: str = "",
 ) -> CheckResult:
     """Roll one skill check and announce it.
 
@@ -301,6 +301,19 @@ def check(
         success=False,
         target=target,
     )
+    # **What the check was *for*, as a plain attribute and not a field.**
+    # `#735` is the general version of this and is a scope call; this is the
+    # narrow half Camille ruled in -- the printed in-combat circumstances.
+    # A card can say "a Bluff check to gain combat advantage", which is a
+    # *named action* rather than a vague intent, and without this a row
+    # keyed to it fires on any successful Bluff check against anybody.
+    #
+    # An attribute for the reason `Effect.by` and `Hit.result` are: a
+    # declared field reaches `Event.wire()` and so the page and every
+    # replay fixture, and what the check was for is not a change in how a
+    # fight resolves. Empty for every caller that does not say, which is
+    # all but one today.
+    announced.purpose = purpose
 
     def finish(ev: SkillCheck) -> None:
         ev.bonus += modifier(world, eid, ev.skill, ev.target, ev.natural)

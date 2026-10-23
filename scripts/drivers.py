@@ -31667,6 +31667,156 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              f"familiar before the fight {before}, after arming {after}")
 
 
+def a_feint_is_an_action_and_one_feat_rides_it(out: Result) -> None:
+    """"Make a Bluff check to gain combat advantage against an enemy by feinting."
+
+    The printed action, off the Bluff skill entry rather than remembered:
+
+        Action: Standard action. A creature can take this action only once
+                per encounter.
+        Opposed Check: Against an adjacent target's passive Insight.
+        Success: The feinting creature gains combat advantage against the
+                 target until the end of the feinting creature's next turn.
+
+    **Two things #785 had wrong, both caught by reading the card.** It said
+    the check is "opposed by that enemy's **Insight check**" -- the general
+    Bluff entry offers that for a target actively seeing through a
+    deception, and this sub-entry prints **passive** Insight, which is also
+    what `f2092` already rolls. And it put the once-per-encounter limit on
+    the feat; it belongs to the **action**, so `f946` is at-will and
+    `Powers.charges` holds the use.
+
+    **And one thing I had wrong, which the measurement caught.**
+    `c.gains_advantage` was called bare, and `Cast._who(None)` returns
+    `self.target` -- so the modifier landed on the creature that was
+    fooled. `content/CLAUDE.md` calls that "the commonest single mistake
+    here" and it is committed in engine code: the Bluff check succeeded on
+    three of nine seeds and `has_combat_advantage` was False on all nine.
+    `on=actor` is the fix and the third assertion below is its control.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import actions
+    from combat_engine.engine.components import Health, Position, Powers
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.query import has_combat_advantage as _ca
+    from combat_engine.engine.types import ActionType
+
+    def feint(seed: int, *, bloodied: bool = False):  # noqa: ANN202
+        """A board, a clean adjacent victim, and the feint taken at it.
+
+        **"Clean" means a foe the board has not already handed advantage
+        over**, which it does for its own reasons -- a bare before/after
+        reads True either way and would have passed with the modifier
+        landing on the wrong creature.
+        """
+        world, me, _ = _posed("f946", seed)
+        enc = world.encounter
+        if bloodied:
+            health = world.need(me, Health)
+            health.hp = max(1, health.max_hp // 2 - 1)
+        clean = [f for f in enemies(world, me) if not _ca(world, me, f)]
+        offers = [a for a in actions.legal(world, enc, me)
+                  if a.kind == "feint" and a.targets[0] in clean]
+        if not offers:
+            return None
+        seen: list[SkillCheck] = []
+        world.bus.on(SkillCheck, seen.append)
+        pick = offers[0]
+        victim = pick.targets[0]
+        before = world.need(victim, Position).square
+        actions.perform(world, enc, me, pick)
+        rolled = next((e for e in seen if e.skill == "bluff"), None)
+        return (world, me, victim, rolled, before,
+                world.need(victim, Position).square, clean)
+
+    # -- the action exists and is offered per adjacent enemy ---------------
+    world, me, _ = _posed("f946", 1)
+    offers = [a for a in actions.legal(world, world.encounter, me)
+              if a.kind == "feint"]
+    out.that(bool(offers),
+             "**feinting is an action now** -- it was in no menu at all, so"
+             " `f946`'s trigger had no check in the game to answer",
+             f"{len(offers)} entries")
+    out.that(all(len(a.targets) == 1 for a in offers),
+             "one entry per adjacent enemy, so which creature is fooled is a"
+             " menu choice the policy can weigh rather than a prompt buried"
+             " in the execution",
+             f"targets={[a.targets for a in offers]}")
+    out.that(all(a.cost is ActionType.STANDARD for a in offers),
+             "and it costs a standard action, as printed",
+             f"{sorted({a.cost.value for a in offers})}")
+
+    # -- the contest is against PASSIVE Insight ----------------------------
+    posed = feint(6)
+    if posed is None:
+        out.skip("no clean adjacent foe on this board")
+        return
+    world, me, victim, rolled, _was, _now, clean = posed
+    from combat_engine.engine.cast import Cast
+    passive = Cast(world=world, me=me, ref="drivers:feint").passive(
+        "insight", of=victim)
+    out.that(rolled is not None and rolled.dc == passive,
+             "the contest is against the target's **passive** Insight, not"
+             " an opposed Insight check -- the sub-entry prints passive and"
+             " #785 said otherwise",
+             f"dc={rolled.dc} passive={passive}")
+    out.that(getattr(rolled, "purpose", "") == "combat-advantage",
+             "and the check says what it was **for**, which is what keeps"
+             " `f946` off every other Bluff check in the game. An attribute"
+             " rather than a field, so it reaches no fixture",
+             f"purpose={getattr(rolled, 'purpose', '')!r}")
+
+    # -- the advantage lands on the feinter, against that target only ------
+    out.that(rolled.success and _ca(world, me, victim),
+             "**the feinter gains combat advantage** against the creature it"
+             " fooled -- the assertion that was red while the modifier was"
+             " landing on the victim instead",
+             f"success={rolled.success} advantage={_ca(world, me, victim)}")
+    others = [f for f in clean if f != victim]
+    out.that(all(not _ca(world, me, f) for f in others),
+             "and against **nobody else**, which is why this is"
+             " `gains_advantage` with a gate on the target rather than"
+             " `grants_advantage` laid on the one that was fooled",
+             f"{[(f, _ca(world, me, f)) for f in others]}")
+
+    # -- once per encounter, spent whether or not it lands -----------------
+    out.that(world.need(me, Powers).charges.get("feint:used") == 1,
+             "the use is spent, and spent on a **failure** too -- the limit"
+             " is on taking the action, the way a failed hide still costs"
+             " its minor",
+             f"charges={dict(world.need(me, Powers).charges)}")
+    out.that(not [a for a in actions.legal(world, world.encounter, me)
+                  if a.kind == "feint"],
+             "and it is not offered again this encounter",
+             "no second entry")
+
+    # -- f946, through its own trigger -------------------------------------
+    bled = feint(6, bloodied=True)
+    out.that(bled is not None and bled[4] != bled[5],
+             "**`f946` slides the creature it fooled one square** while"
+             " bloodied -- its own trigger, off the check's `purpose`, with"
+             " `ev.target` naming who to push so there is no search",
+             f"{bled[4]} -> {bled[5]}" if bled else "not posed")
+
+    # -- the negative control: not bloodied, no slide ----------------------
+    whole = feint(6)
+    out.that(whole is not None and whole[3].success and whole[4] == whole[5],
+             "and **not** while at full health, which is the clause the card"
+             " prints and the control for a rider that fires on the check"
+             " alone",
+             f"{whole[4]} -> {whole[5]}" if whole else "not posed")
+
+    # -- and a failed feint grants nothing ---------------------------------
+    missed = feint(4)
+    out.that(missed is not None and not missed[3].success
+             and not _ca(missed[0], missed[1], missed[2]),
+             "a failed feint grants no advantage -- the other control, since"
+             " a check whose result nobody reads would pass every assertion"
+             " above",
+             f"success={missed[3].success if missed else '?'}")
+
+
 def a_rest_clause_is_heard_by_a_row_and_not_only_by_the_bus(out: Result) -> None:
     """A rest has to reach a **row**, which is the half nothing asserted.
 
@@ -32179,6 +32329,10 @@ DRIVERS = {
     "crit_announced": (
         a_demoted_critical_says_so_out_loud,
         "demoting or promoting a critical hit is announced, not silent (#861)",
+    ),
+    "feint": (
+        a_feint_is_an_action_and_one_feat_rides_it,
+        "feinting is an action, and f946 rides its check (#785)",
     ),
     "rest_reaches_a_row": (
         a_rest_clause_is_heard_by_a_row_and_not_only_by_the_bus,

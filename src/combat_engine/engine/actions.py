@@ -138,6 +138,7 @@ def legal(
     out.extend(_action_points(world, encounter, actor))
     out.extend(_manoeuvres(world, encounter, actor))
     out.extend(_hiding(world, encounter, actor))
+    out.extend(_feinting(world, encounter, actor))
     out.extend(_delaying(world, encounter, actor))
     out.append(Action(kind="end", cost=ActionType.NONE))
     return out
@@ -256,6 +257,85 @@ def _hiding(world: World, encounter: Encounter, actor: int) -> list[Action]:
     if not hideable:
         return []
     return [Action(kind="hide", cost=ActionType.MINOR, targets=tuple(hideable))]
+
+#: The feint's once-per-encounter use, held on `Powers.charges`.
+#:
+#: **Not a row's use**, because the feint is not a row -- it is a printed
+#: action like a bull rush, so there is no ref whose `usage` could say
+#: "encounter". `charges` is for exactly this: per-encounter resources that
+#: are not a row's use, cleared with `used` by both rests, which is the
+#: right clock for "only once per encounter".
+FEINT_USE = "feint:used"
+
+#: What the feint's Bluff check is **for**, carried on `SkillCheck.purpose`.
+#:
+#: One card keys off it -- "a successful Bluff check in combat to gain combat
+#: advantage" -- and without it that row fires on any successful Bluff check
+#: against anybody, which is wider than its printed line.
+FEINT_PURPOSE = "combat-advantage"
+
+
+def _feinting(world: World, encounter: Encounter, actor: int) -> list[Action]:
+    """Feinting: a Bluff check to gain combat advantage. Once per encounter.
+
+    The printed action, read off the Bluff skill entry rather than
+    remembered:
+
+        GAIN COMBAT ADVANTAGE
+        Action: Standard action. A creature can take this action only once
+                per encounter.
+        Opposed Check: Against an adjacent target's passive Insight.
+        Success: The feinting creature gains combat advantage against the
+                 target until the end of the feinting creature's next turn.
+
+    **Passive Insight, not an Insight check**, which is the one detail #785
+    had wrong -- it said "opposed by that enemy's Insight check". The
+    general Bluff entry offers both and this sub-entry picks passive, which
+    is also what `c.passive` exists for and what the hide action was
+    corrected to in #784.
+
+    One entry per adjacent enemy, the way `_manoeuvres` offers a bull rush,
+    so the choice of victim is a menu entry rather than a prompt inside the
+    execution -- which is what makes it clickable on the page.
+
+    **The AI is deliberately not taught to want this, on Camille's call:**
+
+        *"feint is generally not a good option. It has very niche use.
+        Rogues who can't sneak attack this turn might be the only ones who'd
+        want to use it."*
+
+    Which is right -- it spends a **standard** action, the most expensive
+    one, for combat advantage against a single target until the end of your
+    next turn, and simply attacking is usually better. So there is no
+    `is_feint` feature in `policy/`, and that is a decision rather than an
+    omission.
+
+    Measured before asking, which is how the question came up: adding the
+    feature at `is_hide`'s weight of 2.0 cost the `rated` policy **10
+    points of win rate at level 10** (+27% -> +17%) with every other row
+    unchanged, and 0.5 cost `scored` 3 points at level 5. Tuning a weight
+    until the harness stopped complaining would have been fitting to the
+    harness rather than to the game.
+
+    `drivers.feint` proves the action by **forcing** it --
+    `actions.perform(world, encounter, actor, action)` takes a chosen
+    `Action` and bypasses the policy entirely -- so nothing about the
+    evidence depends on the AI ever choosing to feint.
+    """
+    from .components import Powers
+    from .query import distance_between, enemies
+
+    if not encounter.can_spend(actor, ActionType.STANDARD):
+        return []
+    known = world.get(actor, Powers)
+    if known is not None and known.charges.get(FEINT_USE, 0):
+        return []
+    return [
+        Action(kind="feint", cost=ActionType.STANDARD, targets=(foe,))
+        for foe in sorted(enemies(world, actor))
+        if alive(world, foe) and distance_between(world, actor, foe) <= 1
+    ]
+
 
 def _action_points(world: World, encounter: Encounter, actor: int) -> list[Action]:
     """Spending an action point for an extra action.
@@ -1480,6 +1560,52 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
                     targets=list(action.targets),
                     target=action.targets[0] if action.targets else None)
         return cast.coup_de_grace()
+
+    if action.kind == "feint":
+        # `_Powers` is aliased: a later branch of this same function imports
+        # `Powers` too, and a bare name assigned in one branch makes it local
+        # to the whole of `execute` -- which ruff's F823 caught as a read
+        # before assignment on that other branch.
+        from .cast import Cast
+        from .components import Powers as _Powers
+        from .skills import check as _check
+
+        if not action.targets:
+            return False
+        victim = action.targets[0]
+        # **No row, so no ref**, the same as a manoeuvre: nothing declares
+        # the feint, so the `Cast` is built on the action's own name and
+        # `c.ref` is what the log and the modifier's label read.
+        cast = Cast(world=world, me=actor, ref="feint",
+                    targets=[victim], target=victim)
+        # Spent whether or not it lands. "Only once per encounter" is about
+        # taking the action, and a failed feint is a spent standard the way
+        # a failed hide is a spent minor.
+        known = world.get(actor, _Powers) or world.add(actor, _Powers())
+        known.charges[FEINT_USE] = 1
+        # Against **passive** Insight, as the sub-entry prints -- not an
+        # opposed Insight check, which is what the general Bluff entry
+        # offers for a target actively trying to see through a deception.
+        rolled = _check(world, actor, "bluff",
+                        dc=cast.passive("insight", of=victim),
+                        target=victim, purpose=FEINT_PURPOSE)
+        if not rolled:
+            return True
+        # **Against that target only**, which is why this is
+        # `gains_advantage` with a gate rather than `grants_advantage` on
+        # the victim: the feinting creature has the advantage, and only
+        # when swinging at the creature it fooled.
+        # **`on=actor`, and the bare call was wrong.** `Cast._who(None)`
+        # returns `self.target`, so without this the modifier lands on the
+        # creature that was fooled -- which is `content/CLAUDE.md`'s
+        # "commonest single mistake", committed here in engine code.
+        # Measured before the fix: the Bluff check succeeded on three of
+        # nine seeds and `has_combat_advantage` was False on all nine.
+        cast.gains_advantage(
+            lambda ctx: ctx.get("target") == victim,
+            until=When.EONT, on=actor,
+        )
+        return True
 
     if action.kind in ("bull_rush", "grab", "aid_attack", "aid_defence"):
         # **No row, so no ref**, the same as a coup de grace: a manoeuvre is
