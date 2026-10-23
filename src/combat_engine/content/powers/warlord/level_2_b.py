@@ -205,7 +205,7 @@ def p10917(c: Cast) -> None:
     usage=DAILY,
     action=FREE,
     reach=CloseBurst(10),
-    target=Target("ally", 99, everyone=True, label="You and each surprised ally"),
+    target=Target("team", 99, everyone=True, label="You and each surprised ally"),
     keywords=MARTIAL,
     trigger=_SURPRISE,
     on=Trigger(RoundStart, when=_surprise_round, text=_SURPRISE),
@@ -230,7 +230,7 @@ def p10918(c: Cast) -> None:
     usage=DAILY,
     action=FREE,
     reach=CloseBurst(10),
-    target=Target("ally", 99, everyone=True, label="You and each ally in the burst"),
+    target=Target("team", 99, everyone=True, label="You and each ally in the burst"),
     keywords=MARTIAL,
     trigger=_ROLLED_INITIATIVE,
     on=Trigger(InitiativeRolled, when=about_me, text=_ROLLED_INITIATIVE),
@@ -318,7 +318,7 @@ def p2531(c: Cast) -> None:
     usage=DAILY,
     action=MOVE,
     reach=CloseBurst(5),
-    target=Target("ally", 99, everyone=True, label="You and each ally in the burst"),
+    target=Target("team", 99, everyone=True, label="You and each ally in the burst"),
     keywords=MARTIAL,
 )
 def p2555(c: Cast) -> None:

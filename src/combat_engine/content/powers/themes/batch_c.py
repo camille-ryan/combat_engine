@@ -36,7 +36,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -45,6 +44,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -327,7 +327,7 @@ def p11793(c: Cast) -> None:
 
 
 @power("p11796", level=10, cls="x7_643", usage=ENCOUNTER, action=INTERRUPT,
-       reach=CloseBurst(1), target=ONE_ALLY, keywords=[Keyword.MARTIAL],
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY, keywords=[Keyword.MARTIAL],
        trigger="you are hit by an attack",
        on=Trigger(Hit, targets_me, "you are hit by an attack"))
 def p11796(c: Cast) -> None:
@@ -928,7 +928,7 @@ def p16109(c: Cast) -> None:
 
 
 @power("p16110", level=2, cls="x7_951", usage=DAILY, action=MINOR,
-       reach=Melee(1), target=ONE_ALLY,
+       reach=Melee(1), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.ELEMENTAL, Keyword.HEALING],
        )
 def p16110(c: Cast) -> None:

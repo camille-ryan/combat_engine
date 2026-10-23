@@ -96,7 +96,11 @@ PSIONIC = [Keyword.PSIONIC]
 OBJECT = Target("object", 1)
 #: "You and each ally in the burst". `Target("ally")`'s pool already puts the
 #: caster in, which is the printed reading here and not in `c.within`.
-YOU_AND_ALLIES = Target("ally", 99, everyone=True)
+#: The printed line is "you and each ally in the burst", and the name said
+#: so while the pool did not: `ally` excludes the caster on the body path
+#: and included it on the targeting path, which is #364. `team` is the
+#: pool that means both.
+YOU_AND_ALLIES = Target("team", 99, everyone=True)
 
 
 # -- wild talent cantrips ----------------------------------------------------

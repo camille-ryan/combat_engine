@@ -48,7 +48,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -56,6 +55,8 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Attack,
     AttackDeclared,
@@ -389,7 +390,7 @@ def p14393(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
 )
 def p13689(c: Cast) -> None:
     """All four printed choices. The skill one does have a key: `skills.py`
@@ -417,7 +418,7 @@ def p13689(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
 )
 def p14389(c: Cast) -> None:
     """"Must end adjacent to each other" is each of the two stepping
@@ -693,7 +694,7 @@ def p16636(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(2),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def p2479(c: Cast) -> None:
     """`c.squares_for` rather than a bare 1, for `p1489`'s reason: a feat

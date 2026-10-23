@@ -24,7 +24,6 @@ from combat_engine.engine import (
     AT_WILL,
     DAILY,
     DEX,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -43,6 +42,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AdjacencyGained,
     AreaBurst,
@@ -1003,7 +1003,7 @@ def p14149(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=Target("ally", 2),
+    target=Target("team", 2),
     keywords=MARTIAL,
 )
 def p14151(c: Cast) -> None:
@@ -1851,7 +1851,7 @@ def p16444(c: Cast) -> None:
     usage=DAILY,
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     todo=("events.HazardTriggered",),
 )
 def p16445(c: Cast) -> None:

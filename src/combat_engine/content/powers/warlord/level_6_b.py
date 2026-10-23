@@ -26,7 +26,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FREE,
     INTERRUPT,
@@ -40,6 +39,8 @@ from combat_engine.engine import (
     REF,
     SELF,
     STANDARD,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AttackDeclared,
     Bloodied,
     Cast,
@@ -236,7 +237,7 @@ def p10126(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
 )
 def p10128(c: Cast) -> None:
@@ -673,7 +674,7 @@ def p4563(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.HEALING, Keyword.MARTIAL],
 )
 def p4564(c: Cast) -> None:
@@ -741,7 +742,7 @@ def p6007(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("ally", 99, everyone=True, label="You and each bloodied ally"),
+    target=Target("team", 99, everyone=True, label="You and each bloodied ally"),
     keywords=MARTIAL,
 )
 def p7386(c: Cast) -> None:

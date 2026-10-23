@@ -28,6 +28,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     ActionPointSpent,
     ActionType,
     Attack,
@@ -724,7 +725,7 @@ def f295(c: Cast) -> None:
 
 
 @power("f295b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(5), target=ONE_ALLY, keywords=DIVINE)
+       reach=Ranged(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE)
 def f295b(c: Cast) -> None:
     c.bonus(WILL, 5, kind="power", until=When.SONT)
 
@@ -753,7 +754,7 @@ def f297(c: Cast) -> None:
 
 
 @power("f297b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(5), target=ONE_ALLY,
+       reach=Ranged(5), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.HEALING])
 def f297b(c: Cast) -> None:
     """Regeneration 2 while bloodied. The 11th and 21st level steps are

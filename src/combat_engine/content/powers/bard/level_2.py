@@ -140,7 +140,7 @@ def p2360(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p2990(c: Cast) -> None:
@@ -171,7 +171,7 @@ def p2990(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p2991(c: Cast) -> None:
@@ -203,7 +203,7 @@ def p3116(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
     out_of_combat=True,
 )
@@ -218,7 +218,7 @@ def p3117(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
     out_of_combat=True,
 )

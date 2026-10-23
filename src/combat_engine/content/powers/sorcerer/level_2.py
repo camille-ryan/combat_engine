@@ -23,13 +23,13 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     REACTION,
     REF,
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AttackDeclared,
     Cast,
@@ -230,7 +230,7 @@ def p16239(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=CloseBurst(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=ARCANE,
 )
 def p3053(c: Cast) -> None:

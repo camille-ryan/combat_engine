@@ -14,7 +14,6 @@ from combat_engine.engine import (
     ENCOUNTER,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     OPPORTUNITY,
     PERSONAL,
@@ -23,6 +22,7 @@ from combat_engine.engine import (
     SELF,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     Attack,
     Cast,
     CloseBurst,
@@ -237,7 +237,7 @@ def p9733(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL, Keyword.HEALING],
 )
 def p3773(c: Cast) -> None:

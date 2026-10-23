@@ -20,6 +20,7 @@ from combat_engine.engine import (
     REACTION,
     REF,
     WILL,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     DamageRolled,
@@ -63,7 +64,7 @@ def p10279(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
 )
 def p10280(c: Cast) -> None:
@@ -80,7 +81,7 @@ def p10280(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
 )
 def p11068(c: Cast) -> None:

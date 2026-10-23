@@ -9,11 +9,11 @@ from combat_engine.engine import (
     INT,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     REACTION,
     REF,
     STANDARD,
+    YOU_OR_ONE_ALLY,
     Attack,
     Cast,
     CloseBurst,
@@ -72,7 +72,7 @@ def p10204(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.IMPLEMENT, Keyword.LIGHTNING],
 )
 def p10205(c: Cast) -> None:

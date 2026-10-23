@@ -42,6 +42,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     Attack,
     AttackDeclared,
     Cast,
@@ -183,7 +184,7 @@ def p13942(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(2),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY, Keyword.SHADOW],
     group=CHANNEL_DIVINITY,
 )

@@ -21,12 +21,12 @@ from combat_engine.engine import (
     FREE,
     MINOR,
     MOVE,
-    ONE_ALLY,
     PERSONAL,
     REACTION,
     SELF,
     STANDARD,
     WILL,
+    YOU_OR_ONE_ALLY,
     Ability,
     Cast,
     CloseBurst,
@@ -123,7 +123,7 @@ def p12834(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13520(c: Cast) -> None:
@@ -139,7 +139,7 @@ def p13520(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13521(c: Cast) -> None:
@@ -156,7 +156,7 @@ def p13521(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13522(c: Cast) -> None:
@@ -171,7 +171,7 @@ def p13522(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p14509(c: Cast) -> None:
@@ -226,7 +226,7 @@ def p16121(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p2730(c: Cast) -> None:

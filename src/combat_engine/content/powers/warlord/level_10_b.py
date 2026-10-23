@@ -30,7 +30,6 @@ from combat_engine.engine import (
     AC,
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -44,6 +43,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -184,7 +184,7 @@ def p10132(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(2),
-    target=Target("ally", 99, everyone=True, label="You and any ally in the burst"),
+    target=Target("team", 99, everyone=True, label="You and any ally in the burst"),
     keywords=MARTIAL,
 )
 def p10133(c: Cast) -> None:
@@ -257,7 +257,7 @@ def p10951(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(3),
-    target=Target("ally", 2, label="You and one ally in the burst"),
+    target=Target("team", 2, label="You and one ally in the burst"),
     keywords=MARTIAL,
 )
 def p10952(c: Cast) -> None:
@@ -404,7 +404,7 @@ def _presence(c: Cast, who: int, pick: str) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
 )
 def p4574(c: Cast) -> None:

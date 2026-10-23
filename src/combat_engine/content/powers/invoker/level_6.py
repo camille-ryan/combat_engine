@@ -10,7 +10,6 @@ from combat_engine.engine import (
     ANY_CREATURE,
     DAILY,
     DEFENCES,
-    EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
     MINOR,
@@ -21,6 +20,7 @@ from combat_engine.engine import (
     PERSONAL,
     SELF,
     STANDARD,
+    YOU_AND_EACH_ALLY,
     AttackDeclared,
     Cast,
     CloseBlast,
@@ -144,7 +144,7 @@ def p2862(c: Cast) -> None:
     usage=DAILY,
     action=MOVE,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
 )
 def p2883(c: Cast) -> None:

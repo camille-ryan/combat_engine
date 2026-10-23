@@ -18,6 +18,7 @@ from combat_engine.engine import (
     ONE_ALLY,
     PERSONAL,
     SELF,
+    YOU_OR_ONE_ALLY,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -65,7 +66,7 @@ def p10194(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p4202(c: Cast) -> None:
@@ -82,7 +83,7 @@ def p4202(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p7642(c: Cast) -> None:
@@ -133,7 +134,7 @@ def p7643(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p7644(c: Cast) -> None:

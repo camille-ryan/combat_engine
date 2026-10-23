@@ -68,6 +68,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_OR_ONE_ALLY,
     Ability,
     ActionPointSpent,
     ActionType,
@@ -2000,7 +2001,7 @@ def _f3771_move(c: Cast, who: int) -> None:
 
 
 @power("f3771b", level=1, cls="", usage=ENCOUNTER, action=MOVE,
-       reach=CloseBurst(1), target=ONE_ALLY,
+       reach=CloseBurst(1), target=YOU_OR_ONE_ALLY,
        keywords=[Keyword.DIVINE, Keyword.TELEPORTATION],
        group=CHANNEL_DIVINITY)
 def f3771b(c: Cast) -> None:

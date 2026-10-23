@@ -24,13 +24,13 @@ from collections.abc import Callable
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
     NO_TARGET,
     ONE_ALLY,
     ONE_OTHER_ALLY,
     STANDARD,
+    YOU_AND_EACH_ALLY,
     AttackRolled,
     Cast,
     CloseBurst,
@@ -98,7 +98,7 @@ def p1411(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE_HEALING,
 )
 def p152(c: Cast) -> None:

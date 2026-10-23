@@ -38,7 +38,6 @@ from combat_engine.content.features import CHANNEL_DIVINITY
 from combat_engine.engine import (
     AC,
     AT_WILL,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -48,6 +47,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
     Ability,
     ActionPointSpent,
     ActionType,
@@ -703,7 +703,7 @@ _grants("f2575", "f2575b")
 
 
 @power("f2575b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f2575b(c: Cast) -> None:
     """"You and each ally in the burst" -- the caster is added on the

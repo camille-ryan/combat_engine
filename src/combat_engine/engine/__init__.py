@@ -47,6 +47,8 @@ from .dsl import (
     PERSONAL,
     REGISTRY,
     SELF,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     AreaBurst,
     Attack,
     Augment,

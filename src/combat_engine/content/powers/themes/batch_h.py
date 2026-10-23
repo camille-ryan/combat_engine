@@ -32,7 +32,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     EACH_OTHER,
@@ -52,6 +51,7 @@ from combat_engine.engine import (
     STANDARD,
     STR,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -919,7 +919,7 @@ def p14138(c: Cast) -> None:
 
 @power(
     "p14139", level=6, cls=X7_854, usage=ENCOUNTER, action=MINOR,
-    reach=CloseBurst(1), target=EACH_ALLY, keywords=[Keyword.ARCANE],
+    reach=CloseBurst(1), target=YOU_AND_EACH_ALLY, keywords=[Keyword.ARCANE],
 )
 def p14139(c: Cast) -> None:
     """One choice for the whole use, so it is made on the first target and

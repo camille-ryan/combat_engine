@@ -49,7 +49,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -58,6 +57,7 @@ from combat_engine.engine import (
     STR,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -487,7 +487,7 @@ def p16033(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
 )
 def p2474(c: Cast) -> None:
     """"You or one ally" is the ally pool, which includes the caster."""
@@ -677,7 +677,7 @@ def p7442(c: Cast) -> None:
     usage=ENCOUNTER,
     action=ActionType.IMMEDIATE_INTERRUPT,
     reach=CloseBurst(5),
-    target=Target("ally", 99, everyone=True),
+    target=Target("team", 99, everyone=True),
     trigger="an enemy hits or misses you with an attack against your Will",
     on=(
         Trigger(Hit, targets_me, "an enemy hits you"),

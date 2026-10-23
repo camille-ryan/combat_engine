@@ -23,6 +23,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Cast,
     CloseBurst,
@@ -91,7 +92,7 @@ def p10285(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PSIONIC, Keyword.HEALING],
 )
 def p10286(c: Cast) -> None:
@@ -106,7 +107,7 @@ def p10286(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
 )
 def p11102(c: Cast) -> None:

@@ -29,7 +29,7 @@ from combat_engine.engine import *
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING, Keyword.RUNIC],
     uses=2,
     once_per_round=True,

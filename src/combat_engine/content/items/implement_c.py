@@ -61,7 +61,6 @@ from combat_engine.engine import (
     CHA,
     CON,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     EACH_OTHER,
     ENCOUNTER,
@@ -80,6 +79,7 @@ from combat_engine.engine import (
     STANDARD,
     WILL,
     WIS,
+    YOU_AND_EACH_ALLY,
     ActionType,
     AreaBurst,
     Attack,
@@ -2198,7 +2198,7 @@ def i2323x1(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=AreaBurst(1, 10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
 )
 def i2323p1(c: Cast) -> None:
     """"You and each ally in the burst": the caster is not an ally of

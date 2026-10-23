@@ -7,11 +7,11 @@ from typing import Any
 from combat_engine.engine import (
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     MINOR,
     MOVE,
     ONE_ALLY,
+    YOU_AND_EACH_ALLY,
     Cast,
     CloseBurst,
     Hit,
@@ -51,7 +51,7 @@ def p11404(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
     out_of_combat=True,
 )
@@ -84,7 +84,7 @@ def p11407(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p11405(c: Cast) -> None:

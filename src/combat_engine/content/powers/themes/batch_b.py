@@ -28,7 +28,6 @@ from combat_engine.engine import (
     AT_WILL,
     CHA,
     DAILY,
-    EACH_ALLY,
     EACH_CREATURE,
     EACH_ENEMY,
     ENCOUNTER,
@@ -38,7 +37,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     ONE_OTHER_ALLY,
     OPPORTUNITY,
@@ -48,6 +46,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AdjacencyGained,
     AreaBurst,
@@ -653,7 +653,7 @@ def p12338(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=ARCANE,
 )
 def p12339(c: Cast) -> None:
@@ -763,7 +763,7 @@ def p12341(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=ARCANE,
 )
 def p12342(c: Cast) -> None:
@@ -1916,7 +1916,7 @@ def p16450(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
 )
 def p16451(c: Cast) -> None:
@@ -2440,7 +2440,7 @@ def p16653(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=MARTIAL,
     dropped=("c.vehicle_speed()",),
 )

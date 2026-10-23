@@ -6,7 +6,6 @@ from typing import Any
 
 from combat_engine.engine import (
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
     MINOR,
@@ -17,6 +16,8 @@ from combat_engine.engine import (
     REACTION,
     SELF,
     STANDARD,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AdjacencyLost,
     AreaBurst,
@@ -151,7 +152,7 @@ def p5394(c: Cast) -> None:
     usage=DAILY,
     action=ActionType.NONE,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
     trigger="you roll initiative at the beginning of an encounter",
     on=Trigger(
@@ -195,7 +196,7 @@ def p11358(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5, from_="companion"),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p12527(c: Cast) -> None:
@@ -273,7 +274,7 @@ def p9744(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(1, from_="companion"),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[*PRIMAL, Keyword.SPIRIT],
 )
 def p9745(c: Cast) -> None:

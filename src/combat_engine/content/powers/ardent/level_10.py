@@ -9,7 +9,6 @@ from __future__ import annotations
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -21,6 +20,8 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     Bloodied,
     Cast,
@@ -113,7 +114,7 @@ def p10291(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PSIONIC,
 )
 def p10292(c: Cast) -> None:
@@ -136,7 +137,7 @@ def p10292(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=CloseBurst(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
     trigger="an attack damages you or an ally",
     on=Trigger(
@@ -196,7 +197,7 @@ def p11122(c: Cast) -> None:
     usage=ENCOUNTER,
     action=ActionType.NONE,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PSIONIC,
     trigger="you succeed on a saving throw",
     on=Trigger(SavingThrow, _saved, "you succeed on a saving throw"),
@@ -213,7 +214,7 @@ def p12964(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PSIONIC,
     trigger=_ALLY_SUCCEEDS,
     on=Trigger(

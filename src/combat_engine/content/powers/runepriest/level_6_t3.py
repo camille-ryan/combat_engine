@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     DAILY,
-    EACH_ALLY,
     FREE,
+    YOU_AND_EACH_ALLY,
     Cast,
     CloseBurst,
     InitiativeRolled,
@@ -30,7 +30,7 @@ ROLLED = "you roll initiative"
     usage=DAILY,
     action=FREE,
     reach=CloseBurst(20),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
     trigger=ROLLED,
     on=Trigger(InitiativeRolled, about_me, ROLLED),

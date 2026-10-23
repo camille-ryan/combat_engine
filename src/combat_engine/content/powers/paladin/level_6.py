@@ -16,7 +16,6 @@ from combat_engine.engine import (
     AC,
     ANY_CREATURE,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -30,6 +29,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
     AttackDeclared,
     Cast,
     CloseBurst,
@@ -158,7 +158,7 @@ def p11050(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE,
 )
 def p1279(c: Cast) -> None:
@@ -172,7 +172,7 @@ def p1279(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(6),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE,
     out_of_combat=True,
 )

@@ -7,7 +7,6 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -19,6 +18,7 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
     AreaBurst,
     AttackDeclared,
     Cast,
@@ -103,7 +103,7 @@ def p9768(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
 )
 def p9769(c: Cast) -> None:

@@ -22,7 +22,6 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     FREE,
@@ -36,6 +35,8 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Ability,
     AreaBurst,
     Cast,
@@ -125,7 +126,7 @@ def p12326(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13513(c: Cast) -> None:
@@ -144,7 +145,7 @@ def p13513(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13514(c: Cast) -> None:
@@ -163,7 +164,7 @@ def p13514(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p13515(c: Cast) -> None:
@@ -329,7 +330,7 @@ def p2726(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=PRIMAL,
 )
 def p5045(c: Cast) -> None:
@@ -368,7 +369,7 @@ def p9644(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=CloseBurst(1),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=PRIMAL,
     trigger="you take cold, fire, lightning, or thunder damage",
     on=Trigger(

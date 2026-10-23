@@ -7,7 +7,6 @@ from typing import Any
 from combat_engine.engine import (
     AC,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FORT,
     MINOR,
@@ -15,6 +14,8 @@ from combat_engine.engine import (
     REF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     DamageRolled,
@@ -62,7 +63,7 @@ def p11390(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
     out_of_combat=True,
 )
@@ -97,7 +98,7 @@ def p11393(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING],
 )
 def p15991(c: Cast) -> None:

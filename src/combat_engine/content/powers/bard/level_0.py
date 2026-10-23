@@ -5,9 +5,9 @@ from __future__ import annotations
 from combat_engine.engine import (
     ENCOUNTER,
     MINOR,
-    ONE_ALLY,
     PERSONAL,
     SELF,
+    YOU_OR_ONE_ALLY,
     Cast,
     CloseBurst,
     Keyword,
@@ -43,7 +43,7 @@ def p15849(c: Cast) -> None:
     once_per_round=True,
     action=MINOR,
     reach=CloseBurst(5),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p2339(c: Cast) -> None:

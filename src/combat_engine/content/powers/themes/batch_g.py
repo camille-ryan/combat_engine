@@ -31,7 +31,6 @@ from combat_engine.engine import (
     AC,
     ANY_CREATURE,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     EACH_OTHER,
     ENCOUNTER,
@@ -41,7 +40,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REACTION,
@@ -49,6 +47,8 @@ from combat_engine.engine import (
     REGISTRY,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     Ability,
     ActionType,
     Attack,
@@ -241,7 +241,7 @@ def p12259(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL],
 )
 def p12260(c: Cast) -> None:
@@ -691,7 +691,7 @@ def p14132(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(2),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE, Keyword.HEALING],
 )
 def p14134(c: Cast) -> None:
@@ -708,7 +708,7 @@ def p14134(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
 )
 def p14135(c: Cast) -> None:
@@ -1887,7 +1887,7 @@ def p16528(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Melee(1),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.PRIMAL, Keyword.BEAST_FORM],
 )
 def p16529(c: Cast) -> None:

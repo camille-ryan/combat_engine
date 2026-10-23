@@ -49,7 +49,6 @@ from combat_engine.engine import (
     AC,
     AT_WILL,
     DAILY,
-    EACH_ALLY,
     EACH_ENEMY,
     ENCOUNTER,
     FORT,
@@ -62,6 +61,8 @@ from combat_engine.engine import (
     REF,
     SELF,
     WILL,
+    YOU_AND_EACH_ALLY,
+    YOU_OR_ONE_ALLY,
     ActionType,
     AreaBurst,
     AttackRolled,
@@ -653,7 +654,7 @@ _granted("f1454", "f1454b")
 
 
 @power("f1454b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=ONE_ALLY, keywords=DIVINE_HEAL,
+       reach=CloseBurst(5), target=YOU_OR_ONE_ALLY, keywords=DIVINE_HEAL,
        group=CHANNEL_DIVINITY)
 def f1454b(c: Cast) -> None:
     """The d8 at the start of each of your turns ends itself either way,
@@ -962,7 +963,7 @@ _granted("f1487", "f1487b")
 
 
 @power("f1487b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY, keywords=DIVINE,
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY)
 def f1487b(c: Cast) -> None:
     """"You and each ally": the ally pool already carries the caster, so

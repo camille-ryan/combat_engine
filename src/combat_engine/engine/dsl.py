@@ -773,6 +773,18 @@ class Target:
             return self.label
         if self.side == "self":
             return "You"
+        # **`"team"` prints the caster, because that is the whole of what
+        # makes it a different pool from `"ally"`.** It was missing from this
+        # dict entirely, so printing a `team` target raised
+        # `KeyError: 'team'` -- the same latent crash `candidates`' pool dict
+        # had, in the second of the three places `"team"` has to be known.
+        # `_SIDES` below listed it the whole time, which is exactly the drift
+        # `_SIDES`' own comment says it exists to prevent and did not.
+        if self.side == "team":
+            if self.everyone:
+                return "You and each ally in the area"
+            return ("You or one ally" if self.count == 1
+                    else f"You or up to {self.count} allies")
         who = {
             "enemy": "creature", "ally": "ally", "any": "creature",
             "other": "creature", "other_ally": "ally", "object": "object",
@@ -808,6 +820,23 @@ EACH_CREATURE = Target("any", 99, everyone=True)
 #: printed reading for some rows and plainly not for others.
 EACH_OTHER = Target("other", 99, everyone=True)
 EACH_ALLY = Target("ally", 99, everyone=True)
+#: **"You or one ally", and "you and each ally".** The `team` pool is allies
+#: *plus* the caster, and these two are the only honest way to declare a card
+#: that prints the word "you" beside the word "ally".
+#:
+#: Named after the printed phrases rather than as `ONE_TEAM`/`EACH_TEAM`,
+#: because the pool name answers "which creatures" and the printed line is
+#: what an author is matching against. `YOU_AND_ALLIES` already existed as a
+#: local constant in one content file, spelled with the `ally` pool, which is
+#: the mistake these exist to stop.
+#:
+#: **Until #364 these could not be written.** `candidates`' pool dict had no
+#: `"team"` key at all, so declaring it raised `KeyError` -- which is why 0
+#: rows used it and why 170 rows printing "you and each ally" were declared
+#: `ally` instead. They were correct only because `candidates` added the
+#: caster to the `ally` pool, which is the disagreement #364 is about.
+YOU_OR_ONE_ALLY = Target("team", 1)
+YOU_AND_EACH_ALLY = Target("team", 99, everyone=True)
 NO_TARGET = Target("self", 0, label="None")
 
 

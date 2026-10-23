@@ -21,7 +21,6 @@ from __future__ import annotations
 from combat_engine.engine import (
     AREA_OR_CLOSE,
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     INTERRUPT,
     MINOR,
@@ -31,6 +30,7 @@ from combat_engine.engine import (
     REACTION,
     SELF,
     STANDARD,
+    YOU_AND_EACH_ALLY,
     AttackDeclared,
     AttackRolled,
     Bloodied,
@@ -302,7 +302,7 @@ def p13826(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.SHADOW],
 )
 def p13827(c: Cast) -> None:
@@ -327,7 +327,7 @@ def p13827(c: Cast) -> None:
     usage=DAILY,
     action=STANDARD,
     reach=CloseBurst(3),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=DIVINE,
 )
 def p1446(c: Cast) -> None:
@@ -346,7 +346,7 @@ def p1446(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=Ranged(5),
-    target=Target("ally", 1, label="You or one ally"),
+    target=Target("team", 1, label="You or one ally"),
     keywords=DIVINE,
 )
 def p31(c: Cast) -> None:
@@ -362,7 +362,7 @@ def p31(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=Target("ally", 2, label="You and one ally in the burst"),
+    target=Target("team", 2, label="You and one ally in the burst"),
     keywords=[*DIVINE, Keyword.HEALING],
 )
 def p3291(c: Cast) -> None:

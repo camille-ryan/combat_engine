@@ -13,7 +13,6 @@ from collections.abc import Callable
 
 from combat_engine.engine import (
     DAILY,
-    EACH_ALLY,
     ENCOUNTER,
     FREE,
     INTERRUPT,
@@ -22,6 +21,7 @@ from combat_engine.engine import (
     PERSONAL,
     REACTION,
     SELF,
+    YOU_AND_EACH_ALLY,
     AttackDeclared,
     Budget,
     Cast,
@@ -76,7 +76,7 @@ def _me_or_adjacent_ally_hurt(world: World, me: int, ev: Event) -> bool:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.HEALING, Keyword.MARTIAL],
 )
 def p1140(c: Cast) -> None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from combat_engine.engine import (
     DAILY,
-    EACH_ALLY,
+    YOU_AND_EACH_ALLY,
     ActionType,
     Cast,
     CloseBurst,
@@ -29,7 +29,7 @@ ROLLED = "you and your allies roll initiative at the beginning of an encounter"
     usage=DAILY,
     action=ActionType.NONE,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.DIVINE],
     trigger=ROLLED,
     on=Trigger(InitiativeRolled, about_me, ROLLED),

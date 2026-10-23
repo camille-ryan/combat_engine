@@ -67,7 +67,7 @@ def p11111(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p14471(c: Cast) -> None:
@@ -97,7 +97,7 @@ def p14471(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.HEALING],
 )
 def p14472(c: Cast) -> None:
@@ -134,7 +134,7 @@ def p2384(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE, Keyword.ILLUSION],
     out_of_combat=True,
 )
@@ -263,7 +263,7 @@ def p5002(c: Cast) -> None:
     usage=DAILY,
     action=MINOR,
     reach=CloseBurst(10),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p5698(c: Cast) -> None:
@@ -277,7 +277,7 @@ def p5698(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(5),
-    target=EACH_ALLY,
+    target=YOU_AND_EACH_ALLY,
     keywords=[Keyword.ARCANE],
 )
 def p5699(c: Cast) -> None:

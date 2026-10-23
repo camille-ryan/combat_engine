@@ -42,6 +42,7 @@ from combat_engine.engine import (
     REACTION,
     REF,
     SELF,
+    YOU_OR_ONE_ALLY,
     AttackRolled,
     Cast,
     CloseBurst,
@@ -491,7 +492,7 @@ def p12696(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MOVE,
     reach=CloseBurst(3),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.MARTIAL, Keyword.ARCANE, Keyword.TELEPORTATION],
 )
 def p13775(c: Cast) -> None:

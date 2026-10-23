@@ -75,6 +75,7 @@ from combat_engine.engine import (
     SELF,
     STANDARD,
     WILL,
+    YOU_AND_EACH_ALLY,
     ActionPointSpent,
     ActionSpent,
     ActionType,
@@ -669,7 +670,7 @@ def i1330p1(c: Cast) -> None:
 
 
 @power("i1713p1", level=2, cls=ITEM, usage=DAILY, action=MINOR,
-       reach=CloseBurst(5), target=EACH_ALLY)
+       reach=CloseBurst(5), target=YOU_AND_EACH_ALLY)
 def i1713p1(c: Cast) -> None:
     """"You and each ally": the caster is not in an ally burst, so the
     once-per-power line pays the caster separately."""

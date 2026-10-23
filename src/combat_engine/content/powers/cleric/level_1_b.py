@@ -47,7 +47,6 @@ from combat_engine.engine import (
     INTERRUPT,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -56,6 +55,7 @@ from combat_engine.engine import (
     STR,
     WILL,
     WIS,
+    YOU_OR_ONE_ALLY,
     Attack,
     AttackDeclared,
     AttackRolled,
@@ -479,7 +479,7 @@ def p12650(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(2),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
@@ -522,7 +522,7 @@ def p13709(c: Cast) -> None:
     usage=ENCOUNTER,
     action=MINOR,
     reach=CloseBurst(2),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[*DIVINE, Keyword.CHANNEL_DIVINITY],
     group=CHANNEL_DIVINITY,
 )
