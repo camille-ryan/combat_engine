@@ -64,6 +64,45 @@ CASES = [
 ]
 
 
+#: `frozenset({...})` inside an event's repr, with its members captured.
+#: No nesting to worry about: the members are scalars and enum reprs like
+#: `<Keyword.MARTIAL: 'martial'>`, neither of which carries a brace.
+_FROZEN = re.compile(r"frozenset\(\{([^{}]*)\}\)")
+
+
+def _settled(line: str) -> str:
+    """One event's repr, with every `frozenset` put in a fixed order.
+
+    **The regression net was flaky and nobody had caught it.** A `frozenset`
+    reprs in hash order, `str` hashes are **salted per process**, and the
+    line this file records is `str(event)` -- so any event carrying a
+    multi-member frozenset recorded in one order and verified in another,
+    at random, per run. Measured on `level-10-full`: three consecutive
+    `verify` runs over an unchanged tree gave ok / DIVERGED / DIVERGED, all
+    at event 1912, on
+
+        recorded: keywords=frozenset({MARTIAL, RELIABLE, WEAPON})
+        now:      keywords=frozenset({MARTIAL, WEAPON, RELIABLE})
+
+    -- the same set, printed two ways. A spurious divergence on the
+    regression net costs what a spurious `audit` raise costs, and for the
+    same reason: it is the one number here that is supposed to be
+    inviolable.
+
+    Sorting the members rather than pinning `PYTHONHASHSEED`, because the
+    seed would have to be set by every caller -- `check.py`, the nightly,
+    a session running this by hand -- and a fixture recorded under one
+    seed would be unverifiable without it. Normalising the text needs
+    nothing from the environment.
+    """
+    return _FROZEN.sub(
+        lambda m: "frozenset({"
+        + ", ".join(sorted(p.strip() for p in m.group(1).split(",") if p.strip()))
+        + "})",
+        line,
+    )
+
+
 def play(case: dict) -> list[str]:
     world, encounter = build(
         case["seed"], case["level"], case["scaling"],
@@ -79,7 +118,7 @@ def play(case: dict) -> list[str]:
             break
         take_turn(world, encounter, actor, policy)
         encounter.advance()
-    return [str(e) for e in world.bus.log]
+    return [_settled(str(e)) for e in world.bus.log]
 
 
 def _drawn(case: dict) -> dict[str, list[str]]:
