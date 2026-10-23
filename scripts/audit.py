@@ -233,31 +233,23 @@ KNOWN_SILENT = {
               " the blow being arcane -- proved in drivers.reroll_after",
     "i1756p1": "answers a DamageRolled the board never poses, and gates on"
                " a melee weapon attack -- proved in drivers.reroll_after",
-    # **Correct code, silenced by the chargen draw moving.** This fired and
-    # did something at `81f5229a1` and is quiet at `00429a9e4`, and the
-    # cause is #783 rather than anything in the row: its body returns early
-    # unless the wearer knows `f650b`, and 63 rows left the refused set over
-    # those 28 commits, which re-rolls every draw.
+    # `p10044` was excused here -- "an interrupt on taking damage, and the
+    # board poses no incoming blow" -- and the premise is **false now**.
+    # Measured across its own attempt: **10 `DamageRolled` events**, the
+    # board having gained ongoing-damage poses since the excuse was
+    # written. So the entry is removed rather than reworded: its stated
+    # reason is the thing that expired.
     #
-    # Measured at both shas in a throwaway worktree, **same seed**:
+    # **But it is not this list that proves the row works, and the
+    # difference matters.** The event that makes it un-silent is a `TempHP`
+    # from a sibling racial trait on the same board, not its own
+    # `c.set_damage_faces` -- the attribution question #690 and #697 are
+    # about. What proves the clause is `drivers.pinned_die`, which the old
+    # entry already pointed at: every face of an incoming 4d8 set to 1, a
+    # blow the caster is *dealing* left alone, and both halves plant red.
     #
-    #   81f5229a1  seed 1: f650b known? True   (38 rows)
-    #   00429a9e4  seed 1: f650b known? False  (37 rows)
-    #
-    # So this is the documented un-marking effect, not a regression. It will
-    # come back on its own the next time the draw moves, which is the reason
-    # the entry says what to re-check rather than claiming the row is wrong.
-    # **Written and quiet, and the board is why.** `p10044` is an
-    # immediate interrupt declared on `Trigger(DamageRolled, targets_me)`,
-    # so it needs somebody to hit the caster with a dice-rolled blow. The
-    # auditor fires a row on its own; `_provoke` poses attacks the row
-    # *makes*, not ones it takes, so the trigger never comes.
-    #
-    # Proved in `drivers.pinned_die` instead, which deals the blow itself:
-    # every face of an incoming 4d8 is set to 1, and a blow the caster is
-    # *dealing* is left alone. Both halves plant red.
-    "p10044": "an interrupt on taking damage, and the board poses no"
-              " incoming blow -- proved in drivers.pinned_die",
+    # So the row is covered either way, and by the instrument that can
+    # actually see it. Losing the excuse loses nothing.
     "i3036p1": "returns early unless the wearer knows f650b, and the draw"
                " stopped dealing it between 81f5229a1 and 00429a9e4 -- #783",
     # **Became usable and is still quiet, which is two different facts.** At
