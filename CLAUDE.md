@@ -259,6 +259,14 @@ is no longer worth routing around.
   worktree branch is never swept at all. The judgement is that a branch pays
   for itself rather than the schedule sweeping every live worktree in turn,
   which multiplies a long run by the branch count. #848.
+* **And a worktree must not rebuild the database. ETL work happens on
+  `master`, or after the branch merges.** In a worktree `data/game.db` is a
+  symlink into the main checkout, and `etl.build` opens by deleting its
+  output — so a rebuild here hands `master`'s *old* ETL code a database built
+  by the *new* one, and the 03:07 nightly then sweeps 21,476 rows against
+  data their code does not match. `scripts/build.py` refuses outright now
+  rather than relying on anyone remembering this, with `--force` for the case
+  where it is genuinely wanted. #857.
 * **Or let the nightly pay it.** `scripts/nightly.sh` runs the wide sweep at
   **03:07** (`scripts/combat-engine-nightly.plist`, installed once with
   `launchctl bootstrap`). The sweep is a **net, not a gate** — everything that

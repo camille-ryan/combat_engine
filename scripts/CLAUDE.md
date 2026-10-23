@@ -178,6 +178,15 @@ it improves, red when it regresses, never a bare allowance. #372.
   a rebuild started under a running sweep pulls `data/game.db` out from under
   every worker reading it. Never run the two together.
 
+  **And the same fault reaches across two checkouts, which this warning did
+  not cover** because nobody had both directories at once when it was
+  written. In a worktree `data/game.db` is a symlink into the main checkout,
+  so a rebuild here rewrites `master`'s database while `master`'s working tree
+  still holds the old ETL code — and the 03:07 nightly sweeps there. 21,476
+  rows against data their code does not match, reported as a verdict on
+  `master`. `build.py` refuses from a worktree now (`--force` to override),
+  rather than relying on anyone remembering. #857.
+
 * **A stalled sweep and a slow one look identical, and two obvious diagnostics
   lie.** `audit.py` prints a progress line to stderr every 200 rows for exactly
   this reason (#343). Before reaching for `ps`, know that:
