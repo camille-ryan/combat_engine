@@ -31667,6 +31667,134 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              f"familiar before the fight {before}, after arming {after}")
 
 
+def a_rest_clause_is_heard_by_a_row_and_not_only_by_the_bus(out: Result) -> None:
+    """A rest has to reach a **row**, which is the half nothing asserted.
+
+    `drivers.short_rest` proves the announcement -- once per creature, after
+    the restore, a daily stays spent -- by listening on the bus directly.
+    That is exactly what #498 warned is **not sufficient**: a trait lays its
+    watcher when an encounter arms it, and a rest happens *between*
+    encounters, so a correct `ShortRested` reaches nobody.
+
+    `turns._rest_window` is the fix, and its docstring records the cost of
+    not having it: *"Three class features and five feats had been written
+    against `events.ShortRested`, all audited green, and every one of them
+    was dead in both of `fight.py`'s paths."*
+
+    **And `audit.py` cannot see this class of row at all** -- its board arms
+    traits and then provokes, which is the one arrangement where a rest never
+    happens. So deleting `_rest_window` leaves the wide sweep green, leaves
+    `drivers.short_rest` green, and silently kills every rest-clocked row.
+    This rule is the only thing standing between those two facts.
+
+    Driven through `cf:artificer-f0s0`, whose rest clause banks a reservoir
+    and labels it, so "the row heard the rest" is read off the creature
+    rather than inferred from the bus.
+    """
+    from combat_engine import chargen
+    from combat_engine.content.features.martial_leaders import BANKED_LABEL
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus, ShortRested
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+    from combat_engine.engine.turns import Encounter, arm_traits, short_rest
+
+    # **`fight.py`'s real order**, which is the thing under test: construct
+    # the encounter, rest, *then* start. Poking `world.encounter = None` on
+    # an audit board instead was my first draft and it proved nothing -- the
+    # trait's watcher was already live from arming, so the row banked with
+    # `_rest_window` neutered and the plant stayed green. A plant that will
+    # not go red is the finding, and it is what caught the guard below
+    # having been a no-op since the day it was written.
+    #
+    # **Built by hand rather than from `fight.build`**, because that always
+    # fields cleric/fighter/rogue/wizard whatever the seed -- measured
+    # across five -- and all three rest-clocked features belong to the
+    # artificer and the sorcerer. So `fight.py` could not pose this even
+    # with the guard right, which is worth knowing and is why the blast
+    # radius of the bug is smaller than the row count suggests.
+    world = World(Grid(24, 16), Rng(7), Bus())
+    me = chargen.spawn(world, chargen.Character(cls="artificer", level=5),
+                       (6, 8))
+    encounter = Encounter(world)
+    out.that(world.encounter is not None and not encounter.started,
+             "the premise, and the bug this rule exists for: constructing an"
+             " `Encounter` sets `world.encounter`, while `started` stays"
+             " False. A guard reading the first field fires before any fight"
+             " has begun -- which is `fight.py`'s order exactly",
+             f"encounter set={world.encounter is not None}"
+             f" started={encounter.started}")
+
+    c = Cast(world=world, me=me, ref="drivers:rest")
+    out.that(not c.lingers_label(BANKED_LABEL, on=me),
+             "and nothing is armed yet, so a reservoir appearing below can"
+             " only have come from the rest",
+             f"carrying={c.lingers_label(BANKED_LABEL, on=me)}")
+
+    heard: list[int] = []
+    world.bus.on(ShortRested, lambda ev: heard.append(ev.actor))
+    short_rest(world)
+
+    out.that(me in heard,
+             "the rest announces itself -- repeated from `drivers.short_rest`"
+             " only so that a red below can be told apart from the event not"
+             " firing at all",
+             f"heard={sorted(set(heard))}")
+    out.that(c.lingers_label(BANKED_LABEL, on=me),
+             "**and a row heard it**: `cf:artificer-f0s0` banked its"
+             " reservoir, which it can only do if `_rest_window` re-armed the"
+             " trait *before* the event went out. Deleting that one call"
+             " leaves the assertion above green and this one red, which is"
+             " the whole reason this rule exists",
+             f"carrying={c.lingers_label(BANKED_LABEL, on=me)}")
+
+    # -- the no-op guard, which is a rule and not tidiness -----------------
+    #
+    # **Counting *all* effects was the wrong measure and this rule caught
+    # me.** A rest inside a running encounter does add one, because the
+    # trait's `ShortRested` watcher is still live from arming and the row
+    # banks for real -- which is correct. What `_rest_window` must not do is
+    # **re-arm**, and the tell for that is a *duplicate* of something arming
+    # lays, not a changed total.
+    world2 = World(Grid(24, 16), Rng(7), Bus())
+    me2 = chargen.spawn(world2, chargen.Character(cls="artificer", level=5),
+                        (6, 8))
+    Encounter(world2).start()
+
+    def banked(world, who: int) -> int:  # noqa: ANN001
+        return sum(1 for e in world.effects.of(who) if e.label == BANKED_LABEL)
+
+    short_rest(world2)              # an encounter IS running here
+    out.that(banked(world2, me2) <= 1,
+             "a rest **inside** a running encounter lays no *second* copy of"
+             " what arming already laid -- arming twice duplicates every"
+             " standing modifier, which is `_arm_traits`' seventy-one-watchers"
+             " bug in one step rather than over seven rounds",
+             f"{banked(world2, me2)} copies of the reservoir")
+    out.that(world2.encounter is not None,
+             "and the premise of that guard held: the encounter really was"
+             " still running, so `_rest_window`'s early return is what was"
+             " under test",
+             f"encounter running={world2.encounter is not None}")
+
+    # -- and the control that tells a red apart from a broken row ----------
+    world3 = World(Grid(24, 16), Rng(7), Bus())
+    me3 = chargen.spawn(world3, chargen.Character(cls="artificer", level=5),
+                        (6, 8))
+    for eff in list(world3.effects.of(me3)):
+        if eff.label == BANKED_LABEL:
+            world3.effects.end(eff, "drivers: cleared")
+    arm_traits(world3, me3)
+    world3.bus.emit(ShortRested(actor=me3))
+    out.that(Cast(world=world3, me=me3, ref="drivers:rest")
+             .lingers_label(BANKED_LABEL, on=me3),
+             "arm by hand, emit by hand, and the row still banks -- so a red"
+             " above is `_rest_window` not being called, and not `arm_traits`"
+             " or the row itself being broken",
+             "armed and emitted by hand")
+
+
 def hiding_is_a_check_and_moving_fast_makes_it_harder(out: Result) -> None:
     """"A Stealth check at the end of a move action: -5 past two squares, -10 if you ran."
 
@@ -32051,6 +32179,10 @@ DRIVERS = {
     "crit_announced": (
         a_demoted_critical_says_so_out_loud,
         "demoting or promoting a critical hit is announced, not silent (#861)",
+    ),
+    "rest_reaches_a_row": (
+        a_rest_clause_is_heard_by_a_row_and_not_only_by_the_bus,
+        "a rest reaches a row, not only the bus -- the half audit cannot see (#498)",
     ),
     "stealth_moved": (
         hiding_is_a_check_and_moving_fast_makes_it_harder,

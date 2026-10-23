@@ -677,8 +677,31 @@ def _rest_window(world: World, rested: list[int]) -> None:
     step rather than over seven rounds. A rest mid-fight is not a printed
     situation; the audit board is where it happens, and that board arms
     first.
+
+    **`started`, not the mere existence of an `Encounter`, and that
+    distinction was the whole of this function being a no-op.** The guard
+    read `world.encounter is not None`, and `Encounter.__init__` sets that
+    field -- so it was true from the moment the object was constructed,
+    before any fight had begun. `scripts/fight.py` builds the encounter and
+    *then* rests:
+
+        world, encounter = build(...)   # <- world.encounter is set here
+        short_rest(world)               # <- so this armed nothing
+        encounter.start(caught)
+
+    Measured in that exact order: **0** `arm_traits` calls during the rest,
+    against **14** with the field cleared by hand. So the fix this function
+    is documented as being had never run in the one path it was written for,
+    and the eight rows its own note says were dead stayed dead -- including
+    through the sweep, because the audit board arms before it provokes and
+    so cannot pose a rest at all.
+
+    Found because a `drivers` plant refused to go red: neutering this
+    function changed nothing, which is the tell that it was already doing
+    nothing. #498.
     """
-    if world.encounter is not None:
+    running = world.encounter is not None and world.encounter.started
+    if running:
         return
     for eid in rested:
         arm_traits(world, eid)
