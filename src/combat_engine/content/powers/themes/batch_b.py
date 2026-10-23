@@ -1638,26 +1638,60 @@ def p16048(c: Cast) -> None:
         both(targets_me, either(by_melee, by_ranged)),
         "an enemy attacks you",
     ),
-    dropped=("c.pass_on(after_the_roll=)",),
 )
 def p16049(c: Cast) -> None:
     """Declared on `AttackDeclared` so the four points are in before the
-    roll, which is what an interrupt buys.
+    roll, which is what an interrupt buys. The second half waits for the
+    outcome and is hung on `Miss`.
 
-    **Re-pointed, because the symbol was serving three different needs.**
-    `c.pass_on(attack=)` landed and re-aims a swing the triggering power
-    has **not yet rolled** -- that is `m82a5`'s and `m1742a5`'s "or
-    secondary attacks", and it works by assigning `ev.target` in the
-    `AttackDeclared` BEFORE window.
+    **Written, and the marker it carried was wrong about the tree.** It said
+    `c.pass_on(after_the_roll=)`, on the reading that handing a miss on is a
+    *re-aim of an attack already resolved* and that nothing in the tree does
+    that. The card does not ask for a re-aim: it says the enemy **repeats
+    the attack** against the creature you swapped with -- a fresh swing, not
+    the old one pointed elsewhere.
 
-    This card is the other direction in time: handing a **miss** on to a
-    creature you swapped with is a re-aim of an attack **already
-    resolved**, so there is no declaration left to move. Nothing in the
-    tree does that, and it is not what the verb just gained."""
+    That is `c.grant_attack(..., reentrant=True)`, whose own docstring calls
+    `reentrant` *"the target repeats the attack"*, and two rows already say
+    this sentence -- `p12198` and `p11725`, both handing the swing on with
+    `ref=getattr(ev, "power", "")`. So the only thing missing was the
+    pairing: lay the bonus in the interrupt, then catch the miss of that
+    same attack.
+
+    `once=True` and the two identity gates are what keep it to the
+    triggering attack: without them the watcher would hand on the next miss
+    of the encounter, by anybody, against anybody. #845."""
     if not [who for who in c.within(1, of=c.me) if who != c.me]:
         return
     for d in (AC, FORT, REF, WILL):
         c.bonus(d, 4, kind="power", on=c.me, until=When.EOT)
+
+    foe = getattr(c.trigger, "attacker", None)
+    if foe is None:
+        return
+
+    def handed(ev: Any) -> None:
+        # The *triggering* attack, and no other: this creature's swing, at
+        # me. `c.watch` cannot say "that one", so the handler says it.
+        if getattr(ev, "attacker", None) != foe:
+            return
+        if getattr(ev, "target", None) != c.me:
+            return
+        # "Other than the triggering enemy" is printed, and the foe would
+        # not be adjacent to me by accident -- a reach weapon puts it
+        # further out, so the exclusion is doing real work only sometimes
+        # and is written because the card writes it.
+        pool = [
+            who for who in c.within(1, of=c.me)
+            if who != c.me and who != foe
+        ]
+        mate = c.choose(pool, "who you trade places with")
+        if mate is None or not c.swap(mate):
+            return
+        c.grant_attack(
+            foe, on=mate, ref=getattr(ev, "power", ""), reentrant=True)
+
+    c.watch(Miss, handed, until=When.EOT, once=True)
 
 
 @power(

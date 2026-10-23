@@ -30909,6 +30909,131 @@ def the_caster_is_not_its_own_ally(out: Result) -> None:
              f"offered {offered}, Moved for {seen}, caster {me2}")
 
 
+def a_missed_attack_is_repeated_against_the_one_you_swapped_with(
+        out: Result) -> None:
+    """"If the attack misses you, you swap places and the enemy repeats it."
+
+    `p16049` carried `dropped=("c.pass_on(after_the_roll=)",)` on the reading
+    that this is a **re-aim of an attack already resolved** and that nothing
+    in the tree does that. The card asks for something else and cheaper: the
+    enemy *repeats* the attack -- a fresh swing at a new creature, not the old
+    swing pointed elsewhere. `c.grant_attack(..., reentrant=True)` is that,
+    and its docstring already called `reentrant` "the target repeats the
+    attack". `p12198` and `p11725` both say the sentence; neither had a rule.
+
+    **The audit cannot see any of this**, which is why the rule exists: the
+    row fires on `AttackDeclared`, so the board credits it with the four
+    defence points and never produces the *miss* the second half hangs on.
+    `ok p16049 ConditionApplied, EffectApplied` is the bonus and nothing else.
+
+    Two negative controls, because a watcher bounded only by `until=` would
+    hand on the next miss of the encounter by anybody against anybody -- and
+    would still have passed the positive case.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared, Miss
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.types import Defense
+
+    AC = Defense.AC
+
+    chosen: list[int] = []
+
+    def posed() -> tuple[Any, int, int]:
+        """A caster with the row, and the foe. **No board surgery.**
+
+        The first two drafts rearranged the board so the row's choice was
+        forced, and both were wrong in a way worth recording:
+
+        * asserting against `allies(...)[0]` while the row chose for itself
+          through `c.choose`, which reported the mechanism broken when it
+          was working;
+        * then clearing the board down to one candidate, which teleported a
+          creature that turned out to be the **caster's mount** -- and a
+          mount carries its rider, so the caster came along and the board
+          this rule reasoned about was not the board it had built. There is
+          a chain of them here: 8 is ridden by 1 and 1 is ridden by 7.
+
+        So nothing is moved. A recording decider makes the row's own choice
+        deterministic *and* visible, which is what the assertions needed all
+        along -- the question is whether the swap and the repeat agree about
+        **who**, not who it happens to be.
+        """
+        world, me, _started = _posed("p16049", 1)
+        world.decider = (
+            lambda actor, kind, options, prompt="":
+            chosen.append(options[0]) or options[0]  # type: ignore[func-returns-value]
+            if kind == "choose" else options[0])
+        return world, me, enemies(world, me)[0]
+
+    def fire(world: Any, me: int, foe: int,
+             miss_by: int, miss_at: int) -> list[Any]:
+        """Run the row, then post a miss, and collect the swings that follow."""
+        swings: list[Any] = []
+        c = Cast(world=world, me=me, ref="p16049",
+                 target=me, trigger=AttackDeclared(
+                     attacker=foe, target=me, power="", vs=AC))
+        REGISTRY["p16049"].body(c)
+        world.bus.on(AttackDeclared, lambda ev: swings.append(ev))
+        world.bus.emit(Miss(attacker=miss_by, target=miss_at, power=""))
+        return swings
+
+    # -- the positive case ------------------------------------------------
+    world, me, foe = posed()
+    mine = world.need(me, Position).square
+    swings = fire(world, me, foe, miss_by=foe, miss_at=me)
+
+    out.that(len(chosen) == 1,
+             "the row asked who to trade places with and had somebody to"
+             " offer -- the premise, and an empty pool would make the rest"
+             " of this vacuous",
+             f"chosen {chosen}")
+    mate = chosen[0] if chosen else -1
+    out.that(world.need(me, Position).square != mine,
+             "**the caster leaves the square it was attacked in** -- the"
+             " printed shift, which `c.swap` pays",
+             f"{mine} -> {world.need(me, Position).square}")
+    out.that(world.need(mate, Position).square == mine,
+             "and the creature it chose is standing where the caster was --"
+             " a *trade*, not two independent steps",
+             f"ally now {world.need(mate, Position).square}, caster was {mine}")
+    out.that(any(getattr(s, "attacker", None) == foe
+                 and getattr(s, "target", None) == mate for s in swings),
+             "**and the enemy repeats the attack against that same"
+             " creature** -- a fresh declaration by the foe, which is what"
+             " `reentrant=True` is for, and against the one that was"
+             " swapped rather than anybody convenient",
+             f"swings {[(getattr(s, 'attacker', None),
+                          getattr(s, 'target', None)) for s in swings]},"
+             f" chose {mate}")
+
+    # -- control: a miss by somebody else is not this row's moment --------
+    chosen.clear()
+    world, me, foe = posed()
+    mine = world.need(me, Position).square
+    other = next(w for w in enemies(world, me) if w != foe)
+    swings = fire(world, me, foe, miss_by=other, miss_at=me)
+    out.that(world.need(me, Position).square == mine and not chosen,
+             "a miss by a **different attacker** moves nobody and asks"
+             " nothing -- the control a watcher bounded only by `until=`"
+             " would fail",
+             f"caster still {world.need(me, Position).square}, chosen {chosen}")
+
+    # -- control: a miss against somebody else, likewise ------------------
+    chosen.clear()
+    world, me, foe = posed()
+    mine = world.need(me, Position).square
+    bystander = next(iter(allies(world, me)))
+    swings = fire(world, me, foe, miss_by=foe, miss_at=bystander)
+    out.that(world.need(me, Position).square == mine and not chosen,
+             "and a miss against **somebody else** likewise -- the printed"
+             " trigger is an attack that missed *you*",
+             f"caster still {world.need(me, Position).square}, chosen {chosen}")
+
+
 def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
     """"As if the weapon had the heavy thrown property" -- for that attack.
 
@@ -31175,6 +31300,10 @@ DRIVERS = {
     "own_ally": (
         the_caster_is_not_its_own_ally,
         "a caster is not in its own ally pool, and is in its team pool (#364)",
+    ),
+    "repeat_on_miss": (
+        a_missed_attack_is_repeated_against_the_one_you_swapped_with,
+        "a missed attack is repeated against the one you swapped with (#845)",
     ),
     "lent_property": (
         a_lent_property_lasts_exactly_one_attack,
