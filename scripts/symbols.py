@@ -670,10 +670,15 @@ READERS: dict[str, list[str]] = {
         "sees_through",
         "sheltered_from", "sight_capped", "unseen_by",
     ],
+    # `difficulty` is here with `defence` because both answer "what number
+    # does this have to beat". It is not about attacking, and no section was
+    # a clean fit -- a skill-check DC is the only *non-combat* number in
+    # this file -- so it goes beside the other target numbers rather than
+    # earning a section of one.
     "attacking and defending": [
-        "attack_penalty", "can_flank", "deals_half", "defence", "flanked_by",
-        "flankers", "grants_ca", "has_combat_advantage", "shield_bonus",
-        "takes_half",
+        "attack_penalty", "can_flank", "deals_half", "defence", "difficulty",
+        "flanked_by", "flankers", "grants_ca", "has_combat_advantage",
+        "shield_bonus", "takes_half",
     ],
     "what a creature may do": [
         "can_act", "can_move", "can_react", "can_shift", "can_run", "can_walk",

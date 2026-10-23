@@ -31318,6 +31318,93 @@ def concealment_is_modelled_and_ten_rows_said_it_was_not(out: Result) -> None:
              f"{lying}")
 
 
+def the_dc_table_matches_what_the_compendium_prints(out: Result) -> None:
+    """The Skill Check DC table, against the page it was read from.
+
+    4e prints many checks as a band -- "Athletics check (hard DC)" -- and
+    `terrain.check_band` holds that word on 15 rows with the DC left null,
+    `disease.dc_shape = 'band'` on 8 more. `engine/difficulty.py` is the
+    table and `query.difficulty` the reader. #491.
+
+    **The load-bearing assertion compares the module against the
+    compendium**, because this table's failure mode is not a crash but a
+    wrong number, and it has been got wrong here from memory before. Nothing
+    else in the suite would notice: a DC that is two low makes every such
+    check easier and no row raises.
+
+    The compendium is git-ignored, so that half **skips** when it is absent
+    rather than passing -- `scripts/CLAUDE.md`'s rule that an instrument
+    must not skip itself quietly. The invariants below hold either way.
+    """
+    import re as _re
+    import sqlite3 as _sql
+    from pathlib import Path as _Path
+
+    from combat_engine.engine.difficulty import BANDS, DCS
+    from combat_engine.engine.query import difficulty
+
+    # -- the invariants, which hold with or without the compendium ---------
+    out.that(sorted(DCS) == list(range(1, 31)),
+             "the table covers levels 1-30 and no others -- the printed"
+             " range, and a hole would make `difficulty` clamp into the"
+             " wrong row rather than refuse",
+             f"{len(DCS)} levels, {min(DCS)}-{max(DCS)}")
+    out.that(all(e < m < h for e, m, h in DCS.values()),
+             "and easy < moderate < hard at every level, which is the one"
+             " ordering a transposed column would break",
+             "all 30 ordered")
+    rising = all(
+        DCS[n][i] <= DCS[n + 1][i] for n in range(1, 30) for i in range(3))
+    out.that(rising,
+             "and no band ever falls as the level rises",
+             f"{rising}")
+
+    # -- the reader's refusals ---------------------------------------------
+    out.that(difficulty(3, "hard") == 21 and difficulty(30, "moderate") == 32,
+             "`query.difficulty` reads the printed cell",
+             f"(3, hard)={difficulty(3, 'hard')},"
+             f" (30, moderate)={difficulty(30, 'moderate')}")
+    out.that(difficulty(12, "Moderate") == difficulty(12, "moderate"),
+             "and is case- and space-insensitive, since the word comes off"
+             " a card",
+             f"{difficulty(12, 'Moderate')}")
+    out.that(difficulty(5, "trivial") is None and difficulty(None, "easy") is None,  # ty: ignore[invalid-argument-type]
+             "**and refuses rather than guessing** -- an unknown band is a"
+             " parse fault upstream, and a null level is what the 8"
+             " band-shaped diseases have, so a number there would be"
+             " invented",
+             f"band={difficulty(5, 'trivial')}, level={difficulty(None, 'easy')}")  # ty: ignore[invalid-argument-type]
+
+    # -- against the page --------------------------------------------------
+    book = _Path("compendium.sqlite")
+    if not book.exists():
+        out.skip("the compendium is git-ignored and absent here, so the"
+                 " table cannot be checked against the page it came from")
+        return
+    txt = _sql.connect(str(book)).execute(
+        "SELECT PlainTxt FROM Glossary WHERE ID='384'").fetchone()
+    printed = {}
+    for line in (txt[0] if txt else "").splitlines():
+        m = _re.fullmatch(r"\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*", line)
+        if m:
+            lvl, *cells = (int(x) for x in m.groups())
+            printed[lvl] = tuple(cells)
+    out.that(len(printed) == 30,
+             "the glossary's rules table parsed into 30 rows -- the floor,"
+             " and parsing nothing would make the comparison vacuous",
+             f"{len(printed)} rows parsed")
+    wrong = {k: (printed[k], DCS.get(k)) for k in printed
+             if DCS.get(k) != printed[k]}
+    out.that(not wrong,
+             "**and every cell matches what the compendium prints** -- the"
+             " assertion this rule exists for, since a wrong DC is silent",
+             f"{len(wrong)} disagreements: {list(wrong.items())[:3]}")
+    out.that(len(BANDS) == 3 and BANDS[0] == "easy",
+             "and the band order matches the table's columns, which is what"
+             " the reader indexes by",
+             f"{BANDS}")
+
+
 def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
     """"As if the weapon had the heavy thrown property" -- for that attack.
 
@@ -31596,6 +31683,10 @@ DRIVERS = {
     "concealment": (
         concealment_is_modelled_and_ten_rows_said_it_was_not,
         "concealment laid on a creature, in a zone, and denied (#860)",
+    ),
+    "dc_table": (
+        the_dc_table_matches_what_the_compendium_prints,
+        "the Skill Check DC table matches the page it came from (#491)",
     ),
     "lent_property": (
         a_lent_property_lasts_exactly_one_attack,

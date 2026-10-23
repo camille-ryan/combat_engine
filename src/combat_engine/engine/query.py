@@ -2610,3 +2610,26 @@ def dropped_since(
         and getattr(e, "actor", None) in who
         for e in world.bus.log
     )
+
+
+def difficulty(level: int, band: str) -> int | None:
+    """The printed DC for a named difficulty at a level. `None` if unknown.
+
+    4e prints many checks as a **band** rather than a number -- "Athletics
+    check (hard DC)" -- against one table of Easy/Moderate/Hard DCs by
+    level. `terrain.check_band` holds that word on 15 rows and
+    `disease.dc_shape = 'band'` on 8, each with the DC left null for want of
+    this. #491.
+
+    The table lives in `engine/difficulty.py`, read off the compendium's
+    `Glossary` entry 384 rather than recalled -- it has been got wrong here
+    from memory before. This is the reader, and it is here because this is
+    where readers live and where `docs/symbols/reading.md` finds them.
+
+    `None` means *unknown*, never "no DC": an unrecognised band is a parse
+    fault upstream, and a null level cannot be resolved at all, which is the
+    case the 8 band-shaped diseases are in -- their `level` is null too.
+    """
+    from .difficulty import difficulty as _dc
+
+    return _dc(level, band)

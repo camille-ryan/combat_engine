@@ -140,6 +140,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - (no docstring)
 - `query.defence(world: 'World', eid: 'int', d: 'Defense', ctx: 'dict | None' = None) -> 'int'`
   - A defence as the attacker sees it: base, level, modifiers, conditions.
+- `query.difficulty(level: 'int', band: 'str') -> 'int | None'`
+  - The printed DC for a named difficulty at a level. `None` if unknown.
 - `query.flanked_by(world: 'World', target: 'int', attacker: 'int') -> 'bool'`
   - Is `target` flanked by `attacker` and one of its allies?
 - `query.flankers(world: 'World', eid: 'int') -> 'list[int]'`
