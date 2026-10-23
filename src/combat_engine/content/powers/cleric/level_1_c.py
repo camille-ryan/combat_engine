@@ -33,7 +33,6 @@ from combat_engine.engine import (
     MINOR,
     MOVE,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     ONE_OTHER_ALLY,
     PERSONAL,
@@ -362,7 +361,7 @@ def p14247(c: Cast) -> None:
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=CloseBurst(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=DIVINE,
     trigger=_SOMEBODY_FAILS,
     on=Trigger(

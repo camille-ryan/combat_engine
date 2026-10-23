@@ -137,6 +137,31 @@ def _corpus() -> list[str]:
 #: the list is short, visible, and has to be argued with, where a check that
 #: could not fire was none of those things.
 KNOWN_SILENT = {
+    # **Both of these were green for the wrong reason until #364**, which is
+    # the only interesting thing about them. Each prints a condition on the
+    # *ally* it heals or helps, and `candidates` used to put the caster in
+    # its own ally list -- so the row acted on itself, the board poses a
+    # bloodied caster, and the effect landed and counted. Excluding the
+    # caster is what the cards say and it is what made them honest.
+    #
+    # Neither row is wrong. Proven by posing the precondition the board does
+    # not:
+    #
+    #     m1585a6  ally bloodied to 67/202 -> Healed, ally 67 -> 82 (+15,
+    #              which is the printed number)
+    #     m5592a5  ally given a save-ends effect -> SavingThrow(actor=2,
+    #              against='e42[probe: slowed, save ends]',
+    #              granted_via='m5592a5')
+    #
+    # So this is a board limit and not an excuse: `audit.board` spawns one
+    # sibling for the caster and it is always at full health and carries
+    # nothing a save can end. Posing an ally's *state* is the general gap --
+    # the same shape as `_provoke`'s poses -- and is filed rather than
+    # bodged here, because widening the board moves every row.
+    "m1585a6": ("heals only a bloodied ally; the board's sibling is always "
+                "at full health. Proven to heal 15 when one is bloodied"),
+    "m5592a5": ("grants a save to an ally carrying a save-ends effect; the "
+                "board's sibling carries none. Proven to roll one when it does"),
     # Summons one of two creatures, chosen by which school benefit the
     # character holds (Camille's ruling, 2026-10-21, #826). It fires 48
     # times and returns on its first gate, because **this board's wizard is

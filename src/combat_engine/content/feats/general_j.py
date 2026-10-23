@@ -55,7 +55,6 @@ from combat_engine.engine import (
     FREE,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     ONE_CREATURE,
     PERSONAL,
     REF,
@@ -1637,7 +1636,7 @@ _granted("f1644", "f1644b")
 
 
 @power("f1644b", level=1, cls="", usage=ENCOUNTER, action=FREE,
-       reach=Ranged(10), target=ONE_ALLY, keywords=DIVINE,
+       reach=Ranged(10), target=YOU_OR_ONE_ALLY, keywords=DIVINE,
        group=CHANNEL_DIVINITY,
        trigger="you or an ally fails a check or a saving throw",
        on=(

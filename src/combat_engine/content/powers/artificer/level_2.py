@@ -15,7 +15,6 @@ from combat_engine.engine import (
     INTERRUPT,
     MINOR,
     NO_TARGET,
-    ONE_ALLY,
     PERSONAL,
     SELF,
     YOU_OR_ONE_ALLY,
@@ -43,7 +42,7 @@ from . import servant_struck
     usage=ENCOUNTER,
     action=INTERRUPT,
     reach=Ranged(10),
-    target=ONE_ALLY,
+    target=YOU_OR_ONE_ALLY,
     keywords=[Keyword.ARCANE],
     trigger="you or an ally are affected by a push, pull, or slide effect",
     on=Trigger(

@@ -158,7 +158,13 @@ def p12952(c: Cast) -> None:
     usage=ENCOUNTER,
     action=FREE,
     reach=CloseBurst(3),
-    target=ONE_ALLY,
+    # **`team`, not `ally`: the triggering creature may be the caster.** The
+    # `on=` below says so already -- `either(by_me, ally_within(3))` -- and
+    # the printed trigger says "you or one ally". Declared `ONE_ALLY` while
+    # `candidates` happened to add the caster back, so it was right by
+    # accident; #364 took the accident away and this row stopped being
+    # usable until the declaration caught up with its own trigger.
+    target=YOU_OR_ONE_ALLY,
     keywords=PSIONIC,
     trigger="you or one ally in the burst misses with an opportunity attack",
     on=Trigger(
