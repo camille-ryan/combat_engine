@@ -1305,6 +1305,102 @@ def build_of(cls: str, name: str = "") -> Build:
     return options[0]
 
 
+@cache
+def _chassis_map() -> dict[str, str]:
+    """Every class-feature ref, beside the chassis it belongs to.
+
+    Read off `class_feature.build`, which is the authority: the ETL mints
+    `cf:{class}-{slug}` from exactly this column (`etl/build.py:1781`), so
+    the column and the ref cannot disagree. Slugged here because the column
+    holds the **printed** sub-class name with printed punctuation, and the
+    ref spelling is the one the tree uses everywhere else.
+
+    A blank means class-wide -- every character of the class has it,
+    whatever chassis it took.
+
+    **A ref absent from the table belongs to no chassis**, and that is not a
+    gap. Four declared level-0 rows are hand-coined for features described
+    only in the class's own page -- `cf:avenger-oath`, `cf:barbarian-aura`,
+    `cf:rogue-tactic-club`, `cf:rogue-tactic-stealth` -- as
+    `content/features/__init__.py` says of `cf:rogue-extra-damage` and its
+    like. They are class-wide by the same rule as a blank.
+
+    Cached on the database, which does not change inside a process. A
+    rebuild is a new process.
+    """
+    from combat_engine.db import game
+
+    return {row["ref"]: _slug_chassis(row["build"])
+            for row in game().execute("SELECT ref, build FROM class_feature")}
+
+
+def _slug_chassis(name: str) -> str:
+    """The ref spelling of a printed chassis name. Mirrors `etl/build._slug`."""
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def chassis_of(cls: str, named: str = "") -> str:
+    """The chassis a character of this class has, defaulting to its first.
+
+    **Only chassis the tree has actually declared are candidates, and
+    getting that wrong broke eight classes in the first draft.** The
+    database lists every chassis the books print, including the 17 nobody
+    has written (#642). Choosing the first of *those* gave a fighter
+    `knight`, which has no declared row at all, so the filter in `loadout`
+    excluded the eight `weaponmaster` features it does have and the fighter
+    came out with no class features whatsoever. Same for the assassin,
+    barbarian, bard, druid, paladin, ranger and warlock. A wizard-only test
+    could not see it; only the whole-corpus control could.
+
+    So the candidates are chassis with a declared level-0 row, which also
+    makes this self-correcting as #642 lands: a chassis becomes choosable
+    exactly when it becomes real.
+
+    **First in ref order, deliberate rather than arbitrary.** 23 of the 25
+    classes declare exactly one chassis, so "first" and "only" are the same
+    string and nothing is being chosen. The sorcerer declares one name plus
+    class-wide rows, which is also unambiguous.
+
+    The wizard is the single class where this is a real choice -- it declares
+    `arcanist` (ten rows) and `sha-ir` (three) and has been dealt **both**,
+    so every wizard carried two sub-classes' features. Ref order picks
+    `arcanist`, which is right on the merits too: the class's main chassis
+    and the larger ladder. `sha-ir` stays reachable by naming it, and
+    `scripts/fight.py` does.
+
+    An unknown name is returned as given rather than corrected. A caller
+    asking for a chassis this class has not got gets a character with no
+    chassis rows, which is louder than silently substituting the default.
+    """
+    if named:
+        return named
+    return _declared_chassis().get(cls, "")
+
+
+@cache
+def _declared_chassis() -> dict[str, str]:
+    """Each class's default chassis: the first it has a declared row for.
+
+    Keyed on the registry rather than the database, for the reason
+    `chassis_of` gives at length. Cached on both, neither of which changes
+    inside a process.
+    """
+    import combat_engine.content
+    from combat_engine.engine.dsl import REGISTRY
+
+    belongs = _chassis_map()
+    found: dict[str, set[str]] = {}
+    for ref, power in REGISTRY.items():
+        if not ref.startswith("cf:") or power.level != 0:
+            continue
+        chassis = belongs.get(ref, "")
+        if chassis:
+            found.setdefault(power.cls, set()).add(chassis)
+    return {cls: sorted(names)[0] for cls, names in found.items()}
+
+
 def scores_for(line: ClassLine, build: Build) -> dict[Ability, int]:
     """The class's own numbers, rearranged so the build's leg is the good one.
 
@@ -1742,6 +1838,25 @@ class Character:
     #: used `race=""` as its raceless control and the control had a race.
     #: #688.
     race: str = ""
+    #: Which **feature chassis** this character has, as the ref spells it --
+    #: `arcanist`, `templar`, `warpriest`. Empty takes the class's first,
+    #: which is `chassis_of`'s business and is the only chassis for 23 of
+    #: the 25 classes.
+    #:
+    #: **A different question from `build` above, and conflating them cost a
+    #: wrong issue.** A build is the ability-score leg a class's own page
+    #: prints -- `two-blade`, `archer` -- and it decides which powers get
+    #: drawn. A chassis is a whole second feature ladder for the same class,
+    #: which is what the Essentials line added. `class_feature.build` is
+    #: where the database keeps it, and the two namespaces share words
+    #: without sharing meaning: a ranger can take the `hunter` *build* and
+    #: the `hunter` *chassis* is a different thing it has never had.
+    #:
+    #: Needed because `loadout` deals every level-0 row of a class to every
+    #: character of it, so a class with two declared chassis deals both at
+    #: once -- one character being two sub-classes. #851, and #319 is the
+    #: same fault at six rows. `legs.chassis_clash` is the gate.
+    chassis: str = ""
 
     @property
     def chosen(self) -> Build:
@@ -1821,7 +1936,8 @@ def second_card(ref: str) -> str:
 
 
 def loadout(
-    cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None
+    cls: str, level: int = 1, build: Build | None = None, rng: Random | None = None,
+    who_chassis: str = "",
 ) -> list[str]:
     """What one character knows, drawn from the leg of the fork it took.
 
@@ -1864,10 +1980,29 @@ def loadout(
     # belong to has no leg to gate on: `BUILDS["wizard"]` holds two, and neither is
     # it. When one is added this becomes "unless the build is that one", and the
     # keyword is what it will ask.
+    # **And the general form of the same fault, which the keyword test above
+    # is one hand-cut instance of.** A class's level-0 rows are its *feature
+    # chassis*, and the Essentials line gave most classes a second one --
+    # 529 rows of it, #642. Dealing every level-0 row deals every chassis, so
+    # a cleric would hold the templar's four features and the warpriest's
+    # 101 at once, being two sub-classes. Harmless-looking: nothing fails, the
+    # character simply has twice what it should.
+    #
+    # It was already live for the wizard, which held the arcanist's ten *and*
+    # the sha'ir's three. `legs.chassis_clash` is the gate that catches the
+    # next one; this is the fix. #851.
+    #
+    # A blank chassis, or a ref the `class_feature` table does not list, is
+    # class-wide and belongs to every character of the class -- see
+    # `_chassis_map`.
     from combat_engine.engine.types import Keyword as _Kw
 
+    chassis = chassis_of(cls, who_chassis)
+    belongs = _chassis_map()
     out = sorted(p.ref for p in mine
-                 if p.level == 0 and _Kw.BLADESPELL not in (p.keywords or ()))
+                 if p.level == 0
+                 and _Kw.BLADESPELL not in (p.keywords or ())
+                 and belongs.get(p.ref, "") in ("", chassis))
     # Not already dealt: a class whose heal is itself a level-0 row was
     # handed it twice, so `Powers.known` carried the ref twice over. The
     # bard and the ardent are the two.
@@ -1904,7 +2039,7 @@ def loadout(
 
 
 def dealt_hand(seed: int | str, cls: str, level: int,
-               build: Build) -> list[str]:
+               build: Build, who_chassis: str = "") -> list[str]:
     """The hand a seed deals this class, **before** `power_swap` takes its
     card back. One derivation, for everybody who needs to predict it.
 
@@ -1926,7 +2061,8 @@ def dealt_hand(seed: int | str, cls: str, level: int,
     every time. Pinning the pre-swap hand lets the single swap in `spawn` run
     exactly as it always has, which is what makes the pin behaviour-neutral.
     """
-    return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"))
+    return loadout(cls, level, build, Random(f"{seed}:{cls}:{build.name}"),
+                   who_chassis=who_chassis)
 
 
 def _best_of(
@@ -2914,7 +3050,7 @@ def spawn(world: World, who: Character, square: tuple[int, int]) -> int:
     # same seed deals the same character, and off a stream of its own, so
     # dealing one does not move the dice the fight is about to roll.
     powers = who.powers or dealt_hand(
-        world.rng.seed, who.cls, who.level, build
+        world.rng.seed, who.cls, who.level, build, who_chassis=who.chassis
     )
     # Its own stream, like the loadout's and for the same reason: dealing
     # a character's feats must not move the dice the fight is about to

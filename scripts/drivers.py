@@ -30691,6 +30691,85 @@ def what_happened_since_your_turn_ended(out: Result) -> None:
                  f"{REGISTRY[ref].unfinished}")
 
 
+def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
+    """A class's second feature ladder belongs to whoever took it, nobody else.
+
+    `loadout` deals every `level == 0` row of a class to every character of
+    it, so a class with two declared chassis dealt **both** -- one character
+    being two sub-classes, with nothing failing to say so. The wizard was
+    live proof: the arcanist's ten features *and* the sha'ir's three. #851,
+    and #319 is the same fault at six rows and one hardcoded keyword.
+
+    `Character.chassis` is the fix and `chassis_of` picks the default. This
+    asserts through `chargen.spawn`, the door every character comes through,
+    rather than at `loadout` -- so it still holds if the filter moves.
+
+    **It also carries the end-to-end familiar evidence that used to be
+    incidental.** `scripts/fight.py` happened to print
+    `cf:wizard-sha-ir-f1:familiar 5/5` only because the default party wizard
+    was dealt the sha'ir's rows by the bug. With the bug fixed the default
+    wizard is an arcanist and that line is gone, so the familiar arriving in
+    a real fight is asserted here deliberately instead of observed by
+    accident.
+
+    The negative control is the half that matters: a default wizard must
+    hold the arcanist's ten and **no** sha'ir row. A rule asserting only
+    that naming a chassis works would pass on the old code, which gave
+    everybody everything.
+    """
+    from combat_engine import chargen
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.ecs import World
+    from combat_engine.engine.events import Bus
+    from combat_engine.engine.grid import Grid
+    from combat_engine.engine.rng import Rng
+
+    def features(cls: str, chassis: str = "") -> list[str]:
+        world = World(Grid(24, 16), Rng(1), Bus())
+        who = chargen.Character(cls=cls, level=1, chassis=chassis)
+        eid = chargen.spawn(world, who, (6, 8))
+        held = world.need(eid, Powers).known
+        return sorted(r for r in held if r.startswith("cf:"))
+
+    default = features("wizard")
+    asked = features("wizard", "sha-ir")
+
+    out.that(any("arcanist" in r for r in default),
+             "a wizard naming no chassis gets the class's first one",
+             f"{len(default)} rows, {sum('arcanist' in r for r in default)} arcanist")
+    out.that(not any("sha-ir" in r for r in default),
+             "**and not the other chassis's rows, which is the whole fault**",
+             f"sha-ir rows dealt to a default wizard: "
+             f"{[r for r in default if 'sha-ir' in r] or 'none'}")
+    out.that(any("sha-ir" in r for r in asked) and not any("arcanist" in r for r in asked),
+             "a wizard that names the second chassis gets it, and only it",
+             f"{len(asked)} rows: {asked}")
+
+    # Every class keeps its features. The first draft of `chassis_of` chose
+    # from every chassis the *books* print rather than the ones the tree has
+    # declared, which handed a fighter an undeclared chassis and left it
+    # with no class features at all -- eight classes like it. A wizard-only
+    # assertion could not see that; this is the control that does.
+    empty = [cls for cls in sorted(chargen.CLASSES) if not features(cls)]
+    out.that(not empty,
+             "no class is left with zero class features by the chassis filter",
+             f"classes with none: {empty or 'none'}")
+
+    # And the familiar, which is what a sha'ir chassis is for.
+    world = World(Grid(24, 16), Rng(1), Bus())
+    who = chargen.Character(cls="wizard", level=1, chassis="sha-ir")
+    eid = chargen.spawn(world, who, (6, 8))
+    from combat_engine.engine.query import familiar_of
+    from combat_engine.engine.turns import Encounter
+
+    before = familiar_of(world, eid)
+    Encounter(world).start()
+    after = familiar_of(world, eid)
+    out.that(before is None and after is not None,
+             "arming a sha'ir wizard puts its familiar on the board",
+             f"familiar before the fight {before}, after arming {after}")
+
+
 def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
     """Where an area may be centred must follow the walls, not a stale answer.
 
@@ -30780,6 +30859,10 @@ def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
 
 
 DRIVERS = {
+    "chassis": (
+        a_character_has_one_feature_chassis_and_not_two,
+        "a class's second feature ladder goes to whoever took it (#851)",
+    ),
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",

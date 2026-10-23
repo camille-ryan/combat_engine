@@ -174,23 +174,23 @@ def against_the_book(only: str = "") -> tuple[list[str], int]:
     return wrong, mapped
 
 
-#: Classes that already deal **two named chassis** of level-0 class features
-#: to every character, with the count each, as measured at `1f0a455`.
+#: **This was a gate for about an hour and is now a census, deliberately.**
 #:
-#: A per-class baseline that may shrink and never grow, which is the shape
-#: `audit.audited.json`, `localise.KNOWN_LABEL_DRIFT` and `cards.KNOWN` all
-#: use, and for the reason `scripts/CLAUDE.md` gives: a bare allowance
-#: cannot tell a fixed entry from a new one.
-DOUBLE_CHASSIS = {
-    # The wizard holds the arcanist's ten *and* the sha'ir's three, so every
-    # wizard is dealt two sub-classes' features at once. That is #319's
-    # bladespell fault surviving in a second place, and it is recorded rather
-    # than fixed because `cf:wizard-sha-ir-f1` is live -- `scripts/fight.py`
-    # exercises it every run ("cf:wizard-sha-ir-f1:familiar 5/5"), so
-    # dropping it needs a decision about which chassis a plain wizard has
-    # rather than a quiet edit. #851.
-    "wizard": 2,
-}
+#: It was added in `8761879` to catch the moment a class gained a second
+#: declared feature chassis, because `loadout` then dealt *both* to every
+#: character of the class -- one character being two sub-classes, with
+#: nothing failing to say so. The wizard was live proof.
+#:
+#: `chargen.chassis_of` fixed that in the commit after, so declaring a
+#: second chassis is now safe and #642 is about to do it seventeen more
+#: times. A gate that reddens on the intended future state is one people
+#: route around, which `scripts/CLAUDE.md` is explicit about -- so what is
+#: left is the number, printed, with the invariant asserted where it can
+#: actually be asserted: `drivers.chassis` spawns characters and checks that
+#: each gets one ladder and not two.
+#:
+#: Kept rather than deleted because the count is worth watching as #642
+#: lands: it should climb from 2 towards 25.
 
 
 def _slug(name: str) -> str:
@@ -207,27 +207,24 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
-def chassis_clash() -> tuple[list[str], dict[str, int]]:
-    """Does any class deal more than one named feature chassis at once?
+def chassis_census() -> tuple[list[str], dict[str, int]]:
+    """How many feature chassis each class declares. A number, not a verdict.
 
-    **The gate #642's 529 rows need, and the reason it is here.** `loadout`
-    deals every `level == 0` row of a class to every character of that class
-    (`chargen/__init__.py:1823`), and its only sub-class discriminator is a
-    single hardcoded keyword test. `class_feature.build` is what separates a
-    chassis from the class-wide rows: `''` means every character of the
-    class has it, a name means it belongs to one sub-class.
+    `class_feature.build` separates a chassis from the class-wide rows:
+    blank means every character of the class has it, a name means it belongs
+    to one sub-class. The Essentials line gave most classes a second ladder,
+    which is what #642's 529 rows are.
 
-    So declaring a second named chassis for a class -- which is exactly what
-    #642 is 529 rows of -- silently deals **both** to every character of it.
-    One cleric would carry the templar's four features and the warpriest's
-    101. Nothing would fail; the character would simply be two sub-classes
-    at once, which is #319's fault at 17x the size.
+    This counted as a **gate** for one commit, because `loadout` dealt every
+    level-0 row of a class to every character of it -- so a class with two
+    declared chassis dealt both, and one character was two sub-classes with
+    nothing failing to say so. `chargen.chassis_of` fixed that, and the
+    invariant now lives in `drivers.chassis`, which spawns characters and
+    checks each gets one ladder. See this module's note above `_slug`.
 
-    This makes that moment loud instead. Measured when written: 23 of 25
-    classes deal exactly one chassis, and the two that do not are the
-    sorcerer -- which is `''` plus one name, and therefore correct, the
-    class-wide rows plus a chassis -- and the wizard, which is two names and
-    is in `DOUBLE_CHASSIS` above.
+    What is left is worth printing as #642 lands: the count should climb from
+    2 towards 25, and a class dropping *back* to one would mean a declared
+    chassis had been lost.
 
     A ref the `class_feature` table does not list is a **hand-coined** one
     (`cf:barbarian-aura`, `cf:rogue-tactic-club`, and two more), described
@@ -251,7 +248,6 @@ def chassis_clash() -> tuple[list[str], dict[str, int]]:
     counts = {cls: len(names) for cls, names in named.items() if len(names) > 1}
     out: list[str] = []
     for cls, how_many in sorted(counts.items()):
-        allowed = DOUBLE_CHASSIS.get(cls)
         # **The ref's spelling, not the column's.** `class_feature.build`
         # holds the printed sub-class name with printed punctuation -- the
         # typographic apostrophe in one of the wizard's two is the giveaway
@@ -259,16 +255,7 @@ def chassis_clash() -> tuple[list[str], dict[str, int]]:
         # stem is the sanitised form of the same thing and is already in
         # tracked files, so it is what gets printed.
         names = ", ".join(_slug(n) for n in sorted(named[cls]))
-        if allowed is None:
-            out.append(f"  {cls:12} deals {how_many} chassis at once: {names}"
-                       f"   <-- NEW. Every {cls} is now two sub-classes. #851")
-        elif how_many > allowed:
-            out.append(f"  {cls:12} deals {how_many} chassis, was {allowed}: {names}"
-                       f"   <-- GREW")
-    for cls, allowed in sorted(DOUBLE_CHASSIS.items()):
-        if counts.get(cls, 1) < allowed:
-            out.append(f"  {cls:12} now deals {counts.get(cls, 1)}, baseline {allowed}"
-                       f"   <-- improved, lower DOUBLE_CHASSIS to match")
+        out.append(f"  {cls:12} declares {how_many} chassis: {names}")
     return out, counts
 
 
@@ -316,14 +303,14 @@ def main() -> int:
           f"{mapped} legs carry a printed entry"
           + (f"   <-- WAS {MAPPED}. A leg stopped being joinable." if shrunk else ""))
 
-    clashes, counts = chassis_clash()
-    if clashes:
+    census, counts = chassis_census()
+    if census:
         print()
-        for line in clashes:
+        for line in census:
             print(line)
-    print(f"{len(counts)} class(es) deal more than one named feature chassis, "
-          f"{len(DOUBLE_CHASSIS)} of them expected")
-    return 1 if dead or wrong or shrunk or clashes else 0
+    print(f"{len(counts)} class(es) declare more than one feature chassis; "
+          f"`drivers.chassis` is what asserts a character gets only one")
+    return 1 if dead or wrong or shrunk else 0
 
 
 if __name__ == "__main__":
