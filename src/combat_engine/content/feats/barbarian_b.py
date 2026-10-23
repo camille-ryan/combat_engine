@@ -69,8 +69,6 @@ def _used_one_of(*refs: str):  # noqa: ANN202
 def _took_the_charge(world, me: int, ev: object) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power == "p4809"
 
-#: A class feature named in prose with no ref.
-FEATURE = ("c.class_feature()",)
 #: "Use it as a heavy thrown weapon, normal range 5 and long range 10":
 #: a change to what the weapon *is*, which nothing in `Gear` rewrites.
 THROWN = ("c.make_thrown()", "c.weapon_range()")

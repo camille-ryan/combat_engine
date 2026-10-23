@@ -69,8 +69,6 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.query import allies, distance_between, enemies
 from combat_engine.engine.types import Forced
 
-#: A class feature named in prose with no ref. Nine rows wait on it.
-FEATURE = ("c.class_feature()",)
 #: A racial power named in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 #: The thirteen racial powers of `r33`, one per elemental

@@ -118,8 +118,6 @@ ASSOCIATED = ("feat.associated_powers",)
 #: split on newlines, so a clause's own commas are read as members.
 #: What arrives is a list of refs and no rules at all.
 CLAUSE = ("spec.associated_clause()",)
-#: A class feature named in prose, with no ref anywhere in the row.
-FEATURE = ("c.class_feature()",)
 
 
 def _under(c: Cast, ref: str) -> bool:

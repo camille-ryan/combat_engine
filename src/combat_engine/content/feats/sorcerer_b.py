@@ -64,10 +64,6 @@ from combat_engine.engine.events import (
 )
 from combat_engine.engine.types import Usage
 
-#: The cosmic cycle and the Guild-Training-shaped features arrive as
-#: printed prose with no ref, which is the gap fifteen rows already name.
-FEATURE = ("c.class_feature()",)
-
 
 def _storm(ctx: dict[str, Any]) -> bool:
     """An arcane power carrying either of the two printed keywords."""

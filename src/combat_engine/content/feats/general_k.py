@@ -115,8 +115,6 @@ R33 = (
 )
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A class feature named in prose with no ref behind it.
-FEATURE = ("c.class_feature()",)
 #: "You can swap one N-level power you know for this one." The card is
 #: handed over; giving a power *up* is a build-time exchange.
 SWAP = ("chargen.power_swap()",)

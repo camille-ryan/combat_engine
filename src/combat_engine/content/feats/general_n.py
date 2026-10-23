@@ -136,8 +136,6 @@ PROFICIENCY = ("chargen.proficiency()",)
 #: "You can swap a power you know for this one." The card is handed over;
 #: giving one up is a build-time exchange.
 SWAP = ("chargen.power_swap()",)
-#: A class feature named in prose with no `cf:` row behind it.
-FEATURE = ("c.class_feature()",)
 #: Another class's feature whose options each refuse themselves off
 #: `c.build`, so handing one to a character of a different class hands
 #: over a row whose body returns on its first line. The grant itself is

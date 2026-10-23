@@ -57,8 +57,6 @@ from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved
 from combat_engine.engine.types import Usage
 
-FEATURE = ("c.class_feature()",)
-
 #: The five the swordmage's own damage feat names. `Keyword.FORCE` is not
 #: among them, which is the one worth saying out loud: the class's signature
 #: damage type is not on the printed list.

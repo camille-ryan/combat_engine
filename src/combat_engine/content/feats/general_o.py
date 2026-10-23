@@ -116,8 +116,6 @@ from combat_engine.engine.query import (
 SWAP = ("chargen.power_swap()",)
 #: Which weapons a character may pick up is settled when it is built.
 PROFICIENCY = ("chargen.proficiency()",)
-#: A class feature named in prose with no ref behind it.
-FEATURE = ("c.class_feature()",)
 #: A racial power or trait the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 #: The three racial powers of `r44`, which the page offers as a choice.

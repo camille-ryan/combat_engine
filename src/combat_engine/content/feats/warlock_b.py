@@ -91,9 +91,6 @@ SHADOW = "cf:warlock-f3"
 #: neither the at-will nor the boon it gates can tell which one it is.
 #: `cf:warlock-f1s6` and its two cards carry the same symbol.
 VESTIGE = ("c.active_vestige()",)
-#: A class feature named in prose with no ref -- the vestiges, which are
-#: a whole subsystem the engine has never heard of.
-FEATURE = ("c.class_feature()",)
 #: "Instead of": a printed swap for half of what a class feature does
 #: inside its own body. Declining that half is the operation nothing has.
 INSTEAD = ("c.pre_empt(ref, clause)",)

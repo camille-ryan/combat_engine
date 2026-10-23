@@ -73,9 +73,6 @@ from combat_engine.engine import (
 from combat_engine.engine.events import ForcedMove, PowerResolved
 from combat_engine.engine.query import alive
 
-#: A class feature the benefit names in prose with no ref -- the covenant's
-#: channelled invocations and its two reactions.
-FEATURE = ("c.class_feature()",)
 #: A racial power the benefit names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
 #: Nothing adds a keyword to a row, or makes one count as another sort.

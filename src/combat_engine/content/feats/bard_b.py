@@ -50,9 +50,6 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import allies, line_of_effect, unseen_by
 
-#: A class feature the benefit names in prose with no ref.
-FEATURE = ("c.class_feature()",)
-
 #: The ref the prerequisite column gives for the heal three rows modify.
 WORD = "p2339"
 

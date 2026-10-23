@@ -72,8 +72,6 @@ from combat_engine.engine.query import (
 OATH = "p3069"
 #: A racial power the benefit line names in prose rather than by ref.
 RACIAL = ("c.on_racial_power()",)
-#: A class feature named in prose with no ref.
-FEATURE = ("c.class_feature()",)
 
 
 def _hit_my_oath(world, me: int, ev: Any) -> bool:  # noqa: ANN001

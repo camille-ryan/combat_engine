@@ -51,9 +51,6 @@ from combat_engine.engine.components import Powers
 from combat_engine.engine.dsl import get
 from combat_engine.engine.events import PowerResolved, ZoneEntered
 
-#: A class feature the benefit names in prose with no ref.
-FEATURE = ("c.class_feature()",)
-
 
 def _keyword(ref: str, *words: Keyword) -> bool:
     p = get(ref)

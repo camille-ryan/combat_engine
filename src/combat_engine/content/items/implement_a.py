@@ -48,8 +48,6 @@ symbol it wants rather than approximated:
 * **`c.as_weapon()`** -- the mirror of `c.as_implement`: a rod that is also
   a mace.
 * **`c.power_range()`** -- lengthen another power's printed range.
-* **`c.class_feature()`** -- ask after, or modify, a class feature that is
-  not a row.
 """
 
 from __future__ import annotations

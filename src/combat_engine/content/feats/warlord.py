@@ -63,7 +63,6 @@ from combat_engine.engine import (
 from combat_engine.engine.dsl import get
 from combat_engine.engine.query import allies, distance_between, team
 
-FEATURE = ("c.class_feature()",)
 #: A `cf:` ref the prerequisite prints and no row in the tree declares.
 #: Not a borrowing -- these are the character's own class's features --
 #: and the two that still carry it are waiting only for the option to
@@ -224,8 +223,14 @@ def f797(c: Cast) -> None:
             label=f"{c.ref} granted attack")
 
 
-def _feature(ref: str, what: str, marker: tuple[str, ...] = FEATURE) -> None:
-    """One of the rows riding on a class feature that has no ref."""
+def _feature(ref: str, what: str, marker: tuple[str, ...]) -> None:
+    """One of the rows riding on a class feature that has no ref.
+
+    `marker` is required. It defaulted to a `FEATURE` constant naming
+    `c.class_feature()`, and **both callers passed `ON_FEATURE` instead**, so
+    the default was never taken -- dead in effect while still being the one
+    syntactic reference that kept the constant alive. #814.
+    """
 
     @power(ref, level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
            reach=PERSONAL, target=SELF, todo=marker)
