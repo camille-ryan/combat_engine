@@ -31102,6 +31102,97 @@ def a_missed_attack_is_repeated_against_the_one_you_swapped_with(
              f"caster still {world.need(me, Position).square}, chosen {chosen}")
 
 
+def one_row_answers_either_of_two_printed_occasions(out: Result) -> None:
+    """"An attack roll **or** a damage roll" -- both declared, one use.
+
+    `m6361a4` carried `dropped=("dsl.Trigger(either=)",)` on the premise that
+    **a row carries one declared `Trigger`**. It does not: `on=` takes one or
+    a sequence, and `Power.triggers` normalises both -- its docstring gives
+    this exact motivation ("pushed, pulled, slid, or knocked prone" being two
+    event classes), and `m5536a5` and `m6567a4` already declare a pair. #836.
+
+    **The marker's objection was the real content and it is answered by the
+    usage, not the trigger.** This is a RECHARGE row with a single use, and
+    the card lets the creature choose which moment to spend it on. A second
+    `c.watch(DamageRolled, ...)` would have fired on *both* occasions, since
+    a watcher is not metered by the row's usage -- strictly stronger than
+    print. Two declared triggers are metered, so whichever arrives first
+    spends the use and the other cannot fire. That is what this asserts, and
+    it is the assertion the issue was really about.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import (
+        AttackRolled,
+        DamageRolled,
+        PowerUsed,
+    )
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.types import DamageType, Defense
+
+    ROW = "m6361a4"
+
+    out.that(len(REGISTRY[ROW].triggers) == 2,
+             "the row declares **both** printed occasions -- the premise, and"
+             " one would make every assertion below about half a card",
+             f"{[t.event.__name__ for t in REGISTRY[ROW].triggers]}")
+
+    def fired(world: object) -> int:
+        return sum(1 for e in world.bus.log
+                   if isinstance(e, PowerUsed)
+                   and getattr(e, "power", "") == ROW)
+
+    def attack_roll(world: object, me: int, foe: int) -> None:
+        world.bus.emit(AttackRolled(
+            attacker=me, target=foe, power="mba", vs=Defense.AC,
+            natural=4, bonus=5, total=9, defence=14, advantage=False))
+
+    def damage_roll(world: object, me: int, foe: int) -> None:
+        # `detail` is the roll's printed expression and is required; "2d6"
+        # is a plain one and nothing in this row reads it.
+        world.bus.emit(DamageRolled(
+            source=me, target=foe, amount=7, dtype=DamageType.NECROTIC,
+            detail="2d6"))
+
+    # -- each occasion fires it on its own ---------------------------------
+    world, me, _started = _posed(ROW, 1)
+    foe = enemies(world, me)[0]
+    before = fired(world)
+    attack_roll(world, me, foe)
+    out.that(fired(world) > before,
+             "an **attack** roll of its own fires it -- the half that was"
+             " always declared",
+             f"PowerUsed count {before} -> {fired(world)}")
+
+    world2, me2, _s2 = _posed(ROW, 1)
+    foe2 = enemies(world2, me2)[0]
+    before2 = fired(world2)
+    damage_roll(world2, me2, foe2)
+    out.that(fired(world2) > before2,
+             "and a **damage** roll of its own fires it too -- the half the"
+             " marker said could not be declared",
+             f"PowerUsed count {before2} -> {fired(world2)}")
+
+    # -- but one use, so not both ------------------------------------------
+    world3, me3, _s3 = _posed(ROW, 1)
+    foe3 = enemies(world3, me3)[0]
+    attack_roll(world3, me3, foe3)
+    once = fired(world3)
+    damage_roll(world3, me3, foe3)
+    twice = fired(world3)
+    out.that(once > 0 and twice == once,
+             "**and the second occasion cannot fire, because the first spent"
+             " the single use** -- which is the creature choosing its moment,"
+             " and is exactly what a `c.watch` beside the trigger would have"
+             " got wrong",
+             f"after the attack roll {once}, after the damage roll {twice}")
+
+    out.that(not (tuple(REGISTRY[ROW].todo or ())
+                  + tuple(REGISTRY[ROW].dropped or ())),
+             "and the row carries no marker any more",
+             f"todo={REGISTRY[ROW].todo} dropped={REGISTRY[ROW].dropped}")
+
+
 def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
     """"As if the weapon had the heavy thrown property" -- for that attack.
 
@@ -31372,6 +31463,10 @@ DRIVERS = {
     "repeat_on_miss": (
         a_missed_attack_is_repeated_against_the_one_you_swapped_with,
         "a missed attack is repeated against the one you swapped with (#845)",
+    ),
+    "either_occasion": (
+        one_row_answers_either_of_two_printed_occasions,
+        "one row answers either of two printed occasions, once (#836)",
     ),
     "lent_property": (
         a_lent_property_lasts_exactly_one_attack,

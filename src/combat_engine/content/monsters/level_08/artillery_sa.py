@@ -90,6 +90,7 @@ from combat_engine.engine.events import (
     AdjacencyGained,
     AttackRolled,
     Bloodied,
+    DamageRolled,
     Hit,
     Miss,
     Moved,
@@ -2016,6 +2017,10 @@ def _by_me_attack_roll(world: World, me: int, ev: AttackRolled) -> bool:
     return ev.attacker == me
 
 
+def _by_me_damage_roll(world: World, me: int, ev: DamageRolled) -> bool:
+    return ev.source == me
+
+
 @power(
     "m6361a4",
     level=8,
@@ -2025,29 +2030,41 @@ def _by_me_attack_roll(world: World, me: int, ev: AttackRolled) -> bool:
     reach=PERSONAL,
     target=NO_TARGET,
     trigger=_M6361_ROLL,
-    on=Trigger(AttackRolled, _by_me_attack_roll, _M6361_ROLL),
-    dropped=("dsl.Trigger(either=)",),
+    on=(
+        Trigger(AttackRolled, _by_me_attack_roll, _M6361_ROLL),
+        Trigger(DamageRolled, _by_me_damage_roll, _M6361_ROLL),
+    ),
 )
 def m6361a4(c: Cast) -> None:
-    """Only the attack-roll half of "an attack roll or a damage roll" is
-    declared. "Cannot be reduced in any way" is why this reaches for
-    `c.flat`, which does not run the resistance pipeline `c.damage` does.
+    """"An attack roll **or** a damage roll", and both are declared.
 
-    **Re-pointed: the one-shot damage reroll exists now and the residue is
-    the trigger.** The old note said there was no one-shot form, and
-    `c.reroll_faces` is one -- it rerolls faces of a `DamageRolled` that has
-    already happened rather than laying a standing hold (#703). So the
-    damage half is writable.
+    "Cannot be reduced in any way" is why this reaches for `c.flat`, which
+    does not run the resistance pipeline `c.damage` does.
 
-    What is not is holding **both** printed occasions on one row. A row
-    carries one declared `Trigger`, this one is on `AttackRolled`, and the
-    card offers the creature a choice of two moments. Hanging a
-    `c.watch(DamageRolled, ...)` beside it would fire on both rather than
-    letting one use pick, and this is a RECHARGE row with a single use. So
-    the gap is a trigger that stands for either of two events, with the use
-    spent on whichever fires first."""
+    **The marker said a row carries one declared `Trigger`. It does not.**
+    `on=` takes one *or a sequence*, and `Power.triggers` normalises both so
+    nothing downstream treats either form specially -- its own docstring
+    gives this exact motivation, that "pushed, pulled, slid, or knocked
+    prone" is a `ForcedMove` and a `ConditionApplied` and declaring one of
+    them "left the row looking finished and quietly missing the rest".
+    `m5536a5` and `m6567a4` already declare a pair. #836.
+
+    The objection in that marker was real and is answered by the usage
+    rather than by the trigger: this is a RECHARGE row with a single use, so
+    whichever occasion arrives first spends it and the other cannot fire.
+    That *is* "the creature picks which moment", and it is why a pair of
+    declared triggers is right here where a second `c.watch` would have been
+    wrong -- a watcher is not metered by the row's usage.
+
+    `c.trigger` says which of the two arrived, and the two moments want
+    different verbs: `c.reroll_attack` for the d20, `c.reroll_faces` for
+    damage dice already rolled (#703)."""
     _recharge_when_bloodied(c)
-    c.reroll_attack(keep="new")
+    ev = c.trigger
+    if isinstance(ev, DamageRolled):
+        c.reroll_faces(ev=ev)
+    else:
+        c.reroll_attack(keep="new", ev=ev)
     for mate in c.allies():
         if distance_between(c.world, c.me, mate) <= 10:
             c.flat(15, dtype=DamageType.NECROTIC, on=mate)
