@@ -75,6 +75,13 @@ def features(
     f["is_second_wind"] = float(action.kind == "second_wind")
     f["is_end"] = float(action.kind == "end")
     f["is_wield"] = float(action.kind == "wield")
+    # Named for the reason the comment below gives, and it was earned the
+    # hard way twice: the reload action landed with nothing here naming it,
+    # so a crossbow rogue fired once and then **abandoned ranged attacks
+    # for the rest of the fight** -- 0 `WeaponLoaded` and 0 ranged basic
+    # attacks across a recorded fight that previously had them. The same
+    # failure as `wield`, one commit apart. #675, #725.
+    f["is_load"] = float(action.kind == "load")
     # Named, because an action kind the scorer does not name scores
     # **zero** -- which beats ending a turn and beats a move, and is how
     # a weapon swap became the AI's idle default twelve times a fight.
@@ -145,6 +152,11 @@ def features(
         # have: swapping while the enemy is already adjacent is a wasted
         # action, and swapping to a bow with nobody in bowshot is worse.
         f["wield_reaches"] = float(_reaches_further(world, actor, action))
+    if action.kind == "load":
+        # Worth a minor only when it buys back a shot. Reloading with
+        # nobody in range is the same wasted action as drawing a bow into
+        # an empty field, which is what `wield_reaches` is about.
+        f["load_buys_a_shot"] = float(_reload_buys_a_shot(world, actor, action))
     f["targets"] = float(len(action.targets))
     # **What the augment cost.** Every other feature here measures what an
     # action buys; this is the only one that measures what it spends, and
@@ -424,6 +436,29 @@ def _attacks_would_provoke(world: World, actor: int) -> bool:
 
 
 
+def _reload_buys_a_shot(world: World, actor: int, action: Action) -> bool:
+    """Would reloading let the creature shoot something it currently cannot?
+
+    Cheap on the same principle as `_reaches_further` below: the exact
+    answer is a menu rebuild per candidate, and the nearest enemy against
+    the weapon's range settles it. An empty crossbow with a foe in bowshot
+    is worth a minor; one with the fight already over, or with every enemy
+    in its face, is not.
+    """
+    from combat_engine.engine.components import Gear
+
+    gear = world.get(actor, Gear)
+    if gear is None or action.ref not in gear.unloaded:
+        return False
+    weapon = next((w for w in gear.held if w.ref == action.ref), None)
+    if weapon is None or weapon.ranged is None:
+        return False
+    foes = [e for e in enemies(world, actor) if alive(world, e)]
+    if not foes:
+        return False
+    return min(distance_between(world, actor, e) for e in foes) <= weapon.ranged[1]
+
+
 def _reaches_further(world: World, actor: int, action: Action) -> bool:
     """Would drawing this weapon let the creature hit something it cannot?
 
@@ -648,6 +683,19 @@ WEIGHTS: dict[str, float] = {
     # `closes_distance`.
     "is_wield": -4.0,
     "wield_reaches": 9.0,
+    # The same bargain as the wield above, and priced the same way: a minor
+    # spent on nothing visible, which has to earn itself. A reload that
+    # buys back a shot nets +5.0, which beats ending a turn and beats a
+    # walk that closes one square; one with nobody in range nets -4.0 and
+    # is correctly never taken.
+    #
+    # **Naming the feature was not enough and that is the lesson.** `is_load`
+    # was named and left unpriced, and `policy.WEIGHTS` prices only the
+    # features it lists -- so the reload still scored zero, and a crossbow
+    # rogue still fired once and spent the rest of the fight in melee. Two
+    # steps, both required: name the kind, then price it.
+    "is_load": -4.0,
+    "load_buys_a_shot": 9.0,
     # Strictly worse than walking: it covers the same ground and hands
     # every enemy combat advantage until your next turn. Worth it only
     # when `closes_distance` is large enough to pay for that.
