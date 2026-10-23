@@ -267,6 +267,34 @@ is no longer worth routing around.
   data their code does not match. `scripts/build.py` refuses outright now
   rather than relying on anyone remembering this, with `--force` for the case
   where it is genuinely wanted. #857.
+* **An engine change no longer selects every row, and this is automatic.**
+  `scripts/impact.py` holds a recorded map of which rows actually execute
+  which engine function, and a plain `check.py` consults it with no flag:
+  an edit inside one `cast.py` method audits the **58-ish rows that were
+  observed to run it**, not 23,062. Measured on `Cast.crit_becomes`: 71 rows,
+  0.3%, and when that method is made to raise **70 of 70 selected rows go
+  red** while two equal-size control sets stay green.
+
+  **It fails open on nine things and says which every time** — no map, an
+  unreadable one, a sampled one, a corpus that moved, untracked Python under
+  `src/`, a changed file absent from the map, an edit at module level, a
+  function too hot to list, or a union over the map's own ceiling. A change
+  under `etl/`, `chargen/` or to `scripts/audit.py` is refused outright,
+  because `audit.WIDE` names those for reasons the map does not speak to.
+  The content half is **unioned in**, never replaced.
+
+  No flag, deliberately, and the asymmetry against `--calls` is the point:
+  `--calls` narrows on a claim nothing checks, so it is opt-in and refuses
+  loudly; the map narrows on a recorded observation, so a forgotten
+  narrowing costs nothing and a flag nobody remembers costs the whole
+  saving.
+
+  **What it cannot see**: a row added or rewritten since the map was
+  recorded, and a row that does not reach the changed function today but
+  would after the change. The 03:07 sweep is the backstop for all of them,
+  which is the same day-long window this file already accepts. `check.py`
+  prints the map's age and corpus on every run so nobody has to ask.
+  #853, #865, #866.
 * **Or let the nightly pay it.** `scripts/nightly.sh` runs the wide sweep at
   **03:07** (`scripts/combat-engine-nightly.plist`, installed once with
   `launchctl bootstrap`). The sweep is a **net, not a gate** — everything that
@@ -288,6 +316,21 @@ is no longer worth routing around.
   nightly's state in words** — `last run <when> clean`, `RED`, or
   `last attempt <when> SKIPPED`, with the age beside it. Read that line; it is
   the first thing to look at before trusting a clean narrow run.
+
+  **And it re-records the impact map after a clean sweep**, which is what
+  keeps the narrowing above honest — a map more than a day old has seen a
+  day of rows it does not hold. Only after a *clean* sweep, at the same
+  HEAD, on a clean tree: a red sweep means rows are raising, and a row that
+  raises records only the lines it reached before raising, so its ref list
+  comes out short in the direction that omits rows. If the tree moves during
+  the 83 minutes the map is **deleted**, because no map audits everything and
+  a misattributed one narrows wrongly. That makes the nightly ~110 minutes.
+
+  `#853` proposed folding the recording into the sweep itself "for the
+  overhead rather than a second sweep". **That premise is false**: recording
+  is ~4.3x, so it is a second 83-minute job either way, and switching the
+  gate's own sweep into a recording run would slow the gate and move every
+  timing it reports.
 
   This file used to say `logs/NIGHTLY-FAILED` **exists if and only if the last
   run was red**, and that was false. A skip leaves the marker alone — rightly,

@@ -86,6 +86,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +115,18 @@ RECORDING = "COMBAT_ENGINE_IMPACT"
 #: Camille is short of disk.
 SOURCE = "COMBAT_ENGINE_IMPACT_SOURCE"
 
+#: **What this cannot see, stated because it is a limit and not a hole.**
+#: The map narrows a *per-commit* run. It is blind to a row added or rewritten
+#: since `recorded_at` -- the first is caught by `_declared_now`, the second is
+#: not -- and blind to a row that does not reach a function today and would
+#: after the change, which is coverage-based selection's documented blind spot.
+#:
+#: The backstop for all three is the 03:07 wide sweep, which is the same
+#: day-long window the root `CLAUDE.md` already accepts for a regression: "a
+#: regression that lands at 10am being found at 3am is the right trade against
+#: a gate people route around". So a row this omits is swept that night, and
+#: `nightly.sh` re-records the map in the same run. #866, #865.
+#:
 #: Only these prefixes are narrowed. `etl/` and `chargen/` are deliberately
 #: absent -- see the fail-open list in the module docstring.
 NARROWABLE = ("src/combat_engine/engine/",)
@@ -225,10 +238,7 @@ def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
     sys.path.insert(0, str(ROOT / "scripts"))
     import audit
 
-    refs = audit._declared_refs() if hasattr(audit, "_declared_refs") else None
-    if refs is None:
-        from combat_engine.content import declared
-        refs = sorted(declared())
+    refs = list(declared_refs())
     whole = len(refs)
     if sample:
         refs = refs[::max(1, whole // sample)][:sample]
@@ -390,7 +400,64 @@ def _load() -> dict | None:
     if GAME.exists() and got.get("game_db_mtime", 0) < GAME.stat().st_mtime:
         print("# map predates the current data/game.db. Selecting everything.")
         return None
+    live = _declared_now()
+    if live and live != got.get("corpus"):
+        print(f"# the corpus moved: {got.get('corpus')} rows when the map was "
+              f"recorded, {live} now. Selecting everything.")
+        return None
     return got
+
+
+@cache
+def declared_refs() -> tuple[str, ...]:
+    """Every ref the tree declares, counted the way the recording counts them.
+
+    **One definition, because two were off by two and the guard below could
+    only ever misfire.** `declared()` answers differently depending on who has
+    imported what: bringing in `audit` registers its test board's own two rows
+    (`dummy:mba`, `dummy:rba`), so the corpus is 23,062 asked from inside the
+    audit and 23,060 asked from outside it. `record` imported `audit` and got
+    the larger number into the map; `_load`'s first draft asked without it and
+    got the smaller one, so **every** run reported "the corpus moved: 23062
+    when the map was recorded, 23060 now" and narrowed nothing. A selector
+    that silently never fires is the same failure as one that fires wrongly,
+    and it would have looked exactly like the fail-open design working.
+
+    So both sides come through here. The import is the load-bearing line, not
+    an accident of ordering.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import audit  # noqa: F401  -- registers the test board's two rows
+    from combat_engine.content import declared
+    return tuple(sorted(declared()))
+
+
+@cache
+def _declared_now() -> int:
+    """How many rows the tree declares right now, or 0 if it cannot be asked.
+
+    **The guard #866 is about, and the half of it that is cheap.** A map's ref
+    lists are only a complete answer for the corpus that was recorded; a row
+    added afterwards is in no list, so `select` would omit it -- and a newly
+    written row is the row most likely to be broken. Counting is one import of
+    `combat_engine.content`, seconds against the twenty minutes the selection
+    exists to save.
+
+    **It does not catch a row rewritten in place**, which may now reach engine
+    functions the recording never saw it reach. That case is a stated limit
+    rather than a hole -- the 03:07 wide sweep is its backstop -- and #865 is
+    what makes the window small enough for the limit to be a small one. Do not
+    read a passing count as "the map is current".
+
+    0 on any failure, which means "cannot tell" and leaves the other guards to
+    speak. Failing *open* here would be wrong in the other direction: an import
+    error would silently widen every run back to 23,062 rows and nobody would
+    notice the selector had stopped working.
+    """
+    try:
+        return len(declared_refs())
+    except Exception:
+        return 0
 
 
 def _changed_lines() -> dict[str, set[int]]:
@@ -413,6 +480,75 @@ def _changed_lines() -> dict[str, set[int]]:
                 continue
             out[current].update(range(first, first + max(span, 1)))
     return dict(out)
+
+
+def selection(got: dict, changed: dict[str, set[int]]
+              ) -> tuple[list[str] | None, list[str]]:
+    """The refs this change needs, or `None` for WIDE, plus lines to print.
+
+    Split out of `select` so `check.py` can ask the question without parsing
+    a subprocess's stdout -- a selector read through a text format is a
+    selector that mis-reads it once and narrows to nothing.
+
+    `None` means **select everything**, and every doubt returns it: a changed
+    file absent from the map, an edit outside any function, a function the
+    recording found too hot to list, or a union that exceeds the map's own
+    ceiling. `[]` means this instrument has no opinion, which is not the same
+    thing -- it is what a content-only change gets, and the caller keeps its
+    present behaviour.
+    """
+    notes: list[str] = []
+    narrowable = [f for f in changed if f.startswith(NARROWABLE)]
+    other = [f for f in changed if f not in narrowable]
+    if other:
+        # Content, instruments, the ETL, chargen: all keep their present
+        # behaviour. `audit.py --changed` already narrows content properly.
+        notes.append(f"# not narrowable here, deferring to audit.py --changed: "
+                     f"{', '.join(sorted(other))}")
+    if not narrowable:
+        notes.append("# nothing under engine/ changed; this instrument has no"
+                     " opinion")
+        return [], notes
+
+    refs: set[str] = set()
+    for rel in sorted(narrowable):
+        table = got["files"].get(rel)
+        if table is None:
+            notes.append(f"# {rel} is not in the map. WIDE.")
+            return None, notes
+        funcs = _functions_of(ROOT / rel)
+        touched = {_enclosing(funcs, line) for line in changed[rel]}
+        if "" in touched:
+            notes.append(f"# {rel} changed outside any function (module level,"
+                         f" a decorator or an import). WIDE.")
+            return None, notes
+        for name in sorted(touched):
+            entry = table.get(name)
+            if entry is None:
+                # **The one place this fails closed**, and it is only sound
+                # because the recording's context control proves the map saw
+                # every row. A function no row executes is a function no row
+                # can depend on. Against a *stale* map it is unsound, which
+                # is #866.
+                notes.append(f"# {rel}:{name} was never executed by any row --"
+                             f" no row can depend on it")
+                continue
+            if entry == "wide":
+                notes.append(f"# {rel}:{name} is reached by more than"
+                             f" {got['ceiling']} rows. WIDE.")
+                return None, notes
+            notes.append(f"# {rel}:{name} -> {len(entry)} rows")
+            refs.update(entry)
+
+    # **A union can exceed what the per-function ceiling allows**, and at that
+    # point narrowing has stopped being a saving: the same 30% rule that sends
+    # one hot function to `wide` sends a wide-enough union there too. Also
+    # keeps the ref list off a command line it could overflow.
+    if len(refs) > got["ceiling"]:
+        notes.append(f"# the union across those functions is {len(refs)} rows,"
+                     f" over the {got['ceiling']} ceiling. WIDE.")
+        return None, notes
+    return sorted(refs), notes
 
 
 def select() -> int:
@@ -465,44 +601,14 @@ def select() -> int:
         print("WIDE")
         return 0
 
-    narrowable = [f for f in changed if f.startswith(NARROWABLE)]
-    other = [f for f in changed if f not in narrowable]
-    if other:
-        # Content, instruments, the ETL, chargen: all keep their present
-        # behaviour. `audit.py --changed` already narrows content properly.
-        print(f"# not narrowable here, deferring to audit.py --changed: "
-              f"{', '.join(sorted(other))}")
-    if not narrowable:
-        print("# nothing under engine/ changed; this instrument has no opinion")
+    refs, notes = selection(got, changed)
+    for note in notes:
+        print(note)
+    if refs is None:
+        print("WIDE")
         return 0
-
-    refs: set[str] = set()
-    for rel in narrowable:
-        table = got["files"].get(rel)
-        if table is None:
-            print(f"# {rel} is not in the map. WIDE.")
-            print("WIDE")
-            return 0
-        funcs = _functions_of(ROOT / rel)
-        touched = {_enclosing(funcs, line) for line in changed[rel]}
-        if "" in touched:
-            print(f"# {rel} changed outside any function (module level,"
-                  f" a decorator or an import). WIDE.")
-            print("WIDE")
-            return 0
-        for name in sorted(touched):
-            entry = table.get(name)
-            if entry is None:
-                print(f"# {rel}:{name} was never executed by any row --"
-                      f" no row can depend on it")
-                continue
-            if entry == "wide":
-                print(f"# {rel}:{name} is reached by more than"
-                      f" {got['ceiling']} rows. WIDE.")
-                print("WIDE")
-                return 0
-            print(f"# {rel}:{name} -> {len(entry)} rows")
-            refs.update(entry)
+    if not refs:
+        return 0
 
     print(f"\n# {len(refs)} rows of {got['corpus']} "
           f"({len(refs) * 100 // max(got['corpus'], 1)}%)")

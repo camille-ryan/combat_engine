@@ -250,4 +250,65 @@ else
     echo "RED at ${AT}; wrote logs/NIGHTLY-FAILED" | tee -a "$LOG"
 fi
 cp "$LOG" logs/nightly-latest.log
+
+# ----------------------------------------------------------------------------
+# Re-record the impact map, which is what lets a session's per-commit run
+# narrow instead of sweeping 23,062 rows. #853, #865.
+#
+# **After the verdict, always.** The marker and the exit code above are the
+# night's product and must not wait 83 minutes behind an artifact, nor be
+# affected if the recording dies. Everything below is additive.
+#
+# **#853 proposed folding this into the sweep itself "for the overhead rather
+# than a second sweep". That premise is false and the measurement is why this
+# is a separate run:** recording is ~4.3x (4.6 rows/s against 19.8), so there
+# is no version of this that rides along free -- it is a second 83-minute job
+# either way, and switching the gate's own sweep into a recording run would
+# slow the gate and move every timing it reports.
+#
+# Three preconditions, each of which would otherwise produce a map that
+# narrows *wrongly* rather than one that is merely stale:
+#
+#   * a clean sweep. A red one means rows are raising, and a row that raises
+#     records only the lines it reached before raising -- so its ref lists
+#     come out short, in the direction that omits rows from a later selection.
+#   * HEAD where the sweep started. `_build_map` parses every engine file from
+#     disk at the end to turn lines into functions, so a tree that moved
+#     attributes this run's coverage to the *new* file's line numbers. Same
+#     fault the MOVED check above exists for, one artifact further on.
+#   * a clean tree, for the reason the dirty-tree refusal at the top gives:
+#     a map attributable to no commit cannot be checked against one.
+#
+# And the same question is asked again afterwards, because 83 minutes is a
+# long window: if the tree moved under the recording, the map is **deleted**
+# rather than left in place. `impact._load` fails open with no map, so
+# deleting costs a night of wide sweeps and keeping a misattributed one costs
+# a silently wrong selection. Not a close call.
+if [ "${1:-}" = "--fast" ]; then
+    echo "map: not recorded -- --fast is the smoke test" | tee -a "$LOG"
+elif [ "$VERDICT" -ne 0 ]; then
+    echo "map: not recorded -- the sweep was red, and rows that raise record" \
+         "short ref lists" | tee -a "$LOG"
+elif [ -n "$(git status --porcelain -- . ":(exclude)$LEDGER")" ]; then
+    echo "map: not recorded -- the tree is dirty beyond the ledger" | tee -a "$LOG"
+else
+    {
+        echo
+        echo "-- impact map --"
+        echo "recording at ${AT} -- about 87 minutes"
+        PYTHONUNBUFFERED=1 uv run scripts/impact.py --record 2>&1 \
+            | grep -Ev '^#   [0-9]+/' || true
+        ENDED=$(git rev-parse --short HEAD)
+        if [ "$ENDED" != "$AT" ]; then
+            rm -f logs/impact.json
+            echo "   DISCARDED -- the tree moved from ${AT} to ${ENDED} during"
+            echo "   the recording, so the line-to-function attribution is"
+            echo "   against files the coverage was not taken from. No map"
+            echo "   means every engine change audits every row, which is the"
+            echo "   safe direction."
+        fi
+    } 2>&1 | tee -a "$LOG"
+    cp "$LOG" logs/nightly-latest.log
+fi
+
 exit "$VERDICT"

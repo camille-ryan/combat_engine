@@ -353,6 +353,118 @@ def _moved_lines(was: str, now: str) -> set[int]:
     return out
 
 
+def _corpus_of_map() -> int:
+    """How many rows the map was recorded over, for the narrowing message."""
+    try:
+        return int(json.loads((ROOT / "logs" / "impact.json").read_text())
+                   .get("corpus", 0))
+    except (OSError, ValueError, TypeError):
+        return 0
+
+
+def _rows_from_map() -> tuple[list[str], list[str]]:
+    """The rows the impact map says this change needs, and what to print.
+
+    **Automatic, not behind a flag**, which is the one design decision here
+    worth arguing. `_verbs_from_diff` makes the case against a flag about
+    itself -- "a flag you have to remember is a flag that gets forgotten, and
+    the one time it is forgotten is the time the wide run mattered" -- and the
+    same reasoning points the other way for a *narrowing* that fails open: a
+    flag nobody remembers means the saving never happens, while a forgotten
+    narrowing costs nothing because every doubt returns the wide run anyway.
+
+    So the asymmetry is the point. `--calls` narrows on a claim this file
+    cannot check (that content calls the changed function by name), so it is
+    opt-in and refuses loudly. The map narrows on a *recorded observation* of
+    which rows executed the changed function, and it is the recording's own
+    context control that makes the observation trustworthy -- so it can be the
+    default, and anything it is unsure about is simply not narrowed.
+
+    Returns `(refs, notes)`. An empty `refs` means no narrowing and the
+    caller's present behaviour stands, with `notes` saying why -- never
+    silently. A short map or a moved corpus is caught in `impact._load`.
+    """
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import impact
+    except Exception as exc:
+        return [], [f"impact map unavailable ({type(exc).__name__}), so the"
+                    f" audit's scope is unchanged"]
+
+    # **Asked in this order so a content-only run says nothing at all.**
+    # `impact._load` reports a stale or missing map by printing, which is
+    # right when the map was about to be used and is nagging on the hundreds
+    # of runs that were never going to use it. So the cheap question -- did
+    # anything narrowable change -- comes first.
+    changed = impact._changed_lines()
+    if not changed or not any(f.startswith(impact.NARROWABLE) for f in changed):
+        return [], []
+
+    # **An untracked file is invisible to `git diff`**, which is what the map
+    # reads, so a brand-new engine module would be narrowed around rather than
+    # audited. `_verbs_from_diff` uses `git status -uall` for its own reasons
+    # and this needs the same breadth.
+    done = subprocess.run(["git", "status", "--porcelain", "-uall"],
+                          cwd=ROOT, capture_output=True, text=True)
+    if done.returncode != 0:
+        return [], ["git status failed, so the audit's scope is unchanged"]
+    paths = [ln[3:].strip() for ln in done.stdout.splitlines() if ln[3:].strip()]
+    untracked = [ln[3:].strip() for ln in done.stdout.splitlines()
+                 if ln.startswith("??") and ln[3:].strip().endswith(".py")
+                 and ln[3:].strip().startswith("src/combat_engine/")]
+    if untracked:
+        return [], [f"untracked Python under src/ ({', '.join(untracked)}),"
+                    f" which no map has seen -- the audit's scope is unchanged"]
+
+    # **The other three things `audit.WIDE` names, which this must not
+    # narrow around.** `WIDE` is `engine/`, `etl/`, `chargen/` and
+    # `scripts/audit.py`; the map speaks for the first and for none of the
+    # rest. A change under `etl/` moves numbers every row reads, `chargen/`
+    # builds every sheet, and a change to the audit itself changes what every
+    # verdict means -- so any of them present is a refusal, not a union.
+    import audit as audit_mod
+
+    loud = [f for f in paths
+            if f.startswith(audit_mod.WIDE) and not f.startswith(impact.NARROWABLE)]
+    if loud:
+        return [], [f"{', '.join(sorted(loud))} changed, which audit.WIDE says"
+                    f" widens on its own -- the audit's scope is unchanged"]
+    if audit_mod._database_moved():
+        return [], ["data/game.db has moved since the last sweep, so every"
+                    " number a row reads may have -- the audit's scope is"
+                    " unchanged"]
+
+    got = impact._load()
+    if got is None:
+        return [], ["the impact map had nothing to say (see the line above),"
+                    " so the audit's scope is unchanged"]
+    if got.get("sampled"):
+        return [], [f"the impact map is a {got['corpus']}-row sample, so most"
+                    f" rows were never observed -- the audit's scope is"
+                    f" unchanged"]
+    refs, notes = impact.selection(got, changed)
+    if refs is None:
+        return [], [*notes, "the impact map says WIDE, so the audit's scope is"
+                            " unchanged"]
+    if not refs:
+        return [], []
+
+    # **The content half is unioned in, not dropped.** `selection` prints
+    # "deferring to audit.py --changed" for a file it does not speak for --
+    # and replacing `--changed` with the map's refs is precisely what stops
+    # that deferral happening. Caught by a probe that edited one `cast.py`
+    # method with three `scripts/` files also modified: it narrowed to the
+    # 71 engine rows and silently dropped the other half of the scope.
+    # `widen=False` is `--calls`' own door for this -- "the content half
+    # only" -- so the two selectors compose instead of overriding.
+    content = audit_mod._changed(widen=False)
+    both = sorted(set(refs) | set(content))
+    if content:
+        notes.append(f"# plus {len(content)} row(s) in changed content files,"
+                     f" which audit.py --changed would have selected")
+    return both, notes
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -415,6 +527,24 @@ def main() -> int:
                 c.catches, c.heavy)
             for c in wanted
         ]
+
+    mapped: list[str] = []
+    if not args.all and args.calls is None:
+        mapped, why = _rows_from_map()
+        for line in why:
+            print(line)
+        if mapped:
+            print(f"the impact map narrows the audit to {len(mapped)} row(s)"
+                  f" of {_corpus_of_map()} -- the rows observed to execute the"
+                  f" functions this change touches")
+            wanted = [
+                Instrument(
+                    c.name,
+                    tuple(a for a in c.argv if a != "--changed") + tuple(mapped)
+                    if c.name == "audit" else c.argv,
+                    c.catches, c.heavy)
+                for c in wanted
+            ]
 
     if args.only:
         keep = {n.strip() for n in args.only.split(",")}
@@ -542,7 +672,19 @@ def main() -> int:
     print()
     for line in _nightly_state():
         print(line)
+    for line in _map_state():
+        print(line)
     owed = _sweep_owed()
+    if mapped and not failed:
+        # **The same arrangement the `--calls` narrowing uses, and for a
+        # stronger reason.** The map's selection is proven sufficient for the
+        # function it names -- break one and every selected row goes red --
+        # but it is blind to a row that does not reach that function today and
+        # would after the change. So every instrument still ran and the
+        # verdict stands; what narrows is the claim.
+        print(f"the audit was narrowed by the impact map to {len(mapped)}"
+              f" row(s) -- evidence those rows work, not that nothing else"
+              f" broke; the wide sweep is still the backstop")
     if narrowed and not failed:
         # **Said even when every instrument is green, and before the verdict
         # line.** A narrowed audit is evidence the named verbs work and is
@@ -554,13 +696,13 @@ def main() -> int:
               f"those verbs work, not that nothing else broke")
     if failed:
         print(f"{len(failed)} unhappy: {', '.join(failed)}")
-    elif owed or narrowed:
+    elif owed or narrowed or mapped:
         # **The one sentence that means "nothing is outstanding" is withheld
         # while something is.** Every instrument still ran and still reported;
         # the verdict is not narrowed, only the claim.
         print(f"{len(wanted)} instruments clean"
               + (f", {owed}" if owed else "")
-              + (", and the audit was narrow" if narrowed else ""))
+              + (", and the audit was narrow" if narrowed or mapped else ""))
     else:
         print(f"all {len(wanted)} instruments clean")
     for line in _clear_red(args.all, bool(failed), at, began_clean):
@@ -857,6 +999,31 @@ def _skipped(log: Path) -> bool:
         return log.read_text()[:200].lstrip().startswith("SKIPPED")
     except OSError:
         return False
+
+
+def _map_state() -> list[str]:
+    """What the impact map holds, in words, on every run.
+
+    Same discipline as the nightly line beside it and for the same reason:
+    this one narrows what the audit looked at, so "how old is it, and is it
+    even being used" must not be a question anybody has to think to ask. A
+    selector nobody can see the state of is a selector that gets trusted
+    after it has stopped working.
+    """
+    path = ROOT / "logs" / "impact.json"
+    if not path.exists():
+        return ["impact map: none recorded -- every engine change audits all"
+                " rows (`impact.py --record`, 87 minutes)"]
+    try:
+        got = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ["impact map: unreadable, so it narrows nothing"]
+    age = (time.time() - path.stat().st_mtime) / 3600
+    when = f"{age:.0f}h ago" if age >= 1 else "under an hour ago"
+    sha = (got.get("recorded_at") or "")[:9] or "an unknown commit"
+    corpus = got.get("corpus", 0)
+    tail = " (a SAMPLE, so it narrows nothing)" if got.get("sampled") else ""
+    return [f"impact map: {corpus} rows recorded {when} at {sha}{tail}"]
 
 
 def _sweep_owed() -> str:
