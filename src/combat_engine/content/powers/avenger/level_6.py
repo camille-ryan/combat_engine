@@ -323,6 +323,7 @@ def p11678(c: Cast) -> None:
     reach=CloseBlast(5),
     target=NO_TARGET,
     keywords=[*DIVINE, Keyword.ZONE],
+    dropped=('c.no_cover_in()',),
 )
 def p11679(c: Cast) -> None:
     """The lit ground is real; what it denies is not. Concealment is not a
@@ -330,7 +331,7 @@ def p11679(c: Cast) -> None:
     moment of an attack -- so the second sentence is noted.
     """
     c.zone(c.area(), until=When.ENCOUNTER)
-    c.note(f"{c.ref}: nothing in the zone draws concealment, and there is none here")
+    c.note(f"{c.ref}: concealment is denied to whoever stands in the zone")
 
 
 @power(
@@ -344,8 +345,15 @@ def p11679(c: Cast) -> None:
     keywords=DIVINE,
 )
 def p11680(c: Cast) -> None:
+    """Both printed halves, and the concealment was never the missing one.
+
+    This row laid the insubstantial and told the player the rest had nowhere
+    to go. `c.conceal` has existed throughout -- `resolve.attack` reads
+    `query.concealment_of` on the line after cover, and takes the larger of
+    the two. #860.
+    """
+    c.conceal(on=c.me, until=When.EONT)
     c.insubstantial(until=When.EONT, on=c.me)
-    c.note(f"{c.ref}: you also have concealment, and there is none here")
 
 
 @power(

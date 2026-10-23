@@ -85,6 +85,7 @@ def p14500(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
     attack=Attack(WIS, vs=FORT),
+    dropped=('c.zone(obscured_for=)',),
 )
 def p14501(c: Cast) -> None:
     """Lightly obscured is partial concealment and there is none in this
@@ -99,7 +100,7 @@ def p14501(c: Cast) -> None:
     area = c.area()
     if area:
         c.zone(area, label=c.ref, until=When.EONT)
-        c.note(f"{c.ref}: the burst is lightly obscured for enemies, and there is none here")
+        c.note(f"{c.ref}: the burst is lightly obscured for your enemies only")
 
 
 @power(

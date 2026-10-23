@@ -444,8 +444,8 @@ def p16278(c: Cast) -> None:
     area = c.area()
     if not area:
         return
-    c.zone(area, label=c.ref, until=When.EONT)
-    c.note(f"{c.ref}: creatures in the zone have partial concealment, and there is none here")
+    glare = c.zone(area, label=c.ref, until=When.EONT)
+    c.conceal_in(glare, side="any")
 
 
 @power(

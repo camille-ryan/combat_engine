@@ -31193,6 +31193,131 @@ def one_row_answers_either_of_two_printed_occasions(out: Result) -> None:
              f"todo={REGISTRY[ROW].todo} dropped={REGISTRY[ROW].dropped}")
 
 
+def concealment_is_modelled_and_ten_rows_said_it_was_not(out: Result) -> None:
+    """Concealment, laid three ways, and read where it is read.
+
+    Ten rows told the player at runtime that a printed concealment clause
+    had nowhere to go -- *"you also have concealment, and there is none
+    here"* -- and two said it in their docstrings as well. It was never
+    true: `c.conceal` writes it, `query.concealment_of` reads it, and
+    `resolve.attack` consults that beside cover and takes the larger. #860,
+    which is #686's shape on a different mechanism.
+
+    **Three shapes, because the ten rows print three different sentences**
+    and a rule on one would have passed while the other two stayed inert:
+
+    * on a creature -- `c.conceal`;
+    * inside a zone -- `c.conceal_in`, taken on entry and given back on
+      leaving, where a plain `c.conceal` would follow the creature out;
+    * denied -- `c.no_cover`, the printed "gains no benefit from".
+
+    Asserted through `query.concealment_of`, which is the reader
+    `resolve.attack` uses, rather than by looking for the modifier -- a
+    write that landed somewhere nothing reads is exactly what these rows
+    claimed was the situation.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.query import (
+        allies,
+        concealment_of,
+        concealment_waived,
+        enemies,
+    )
+    from combat_engine.engine.types import Cover
+
+    # -- on a creature, through the row ------------------------------------
+    world, me, _s = _posed("p11680", 1)
+    out.that(concealment_of(world, me) is Cover.NONE,
+             "the caster starts with no concealment -- the premise, and"
+             " without it a row that laid none would still read concealed",
+             f"{concealment_of(world, me)}")
+    REGISTRY["p11680"].body(Cast(world=world, me=me, ref="p11680", target=me))
+    out.that(concealment_of(world, me) is not Cover.NONE,
+             "**and `p11680` leaves it concealed** -- the clause it used to"
+             " announce as impossible, read through the same function"
+             " `resolve.attack` calls",
+             f"{concealment_of(world, me)}")
+
+    # -- inside a zone, and only inside it ---------------------------------
+    world2, me2, _s2 = _posed("p16278", 1)
+    c2 = Cast(world=world2, me=me2, ref="p16278")
+    here = world2.need(me2, Position).square
+    REGISTRY["p16278"].body(
+        Cast(world=world2, me=me2, ref="p16278", target=None))
+    inside = concealment_of(world2, me2)
+    out.that(inside is not Cover.NONE,
+             "`p16278`'s glare conceals a creature standing in it",
+             f"at {here}: {inside}")
+    # Walk out. `conceal_in` gives it back on leaving, which a plain
+    # `c.conceal` would not -- that is the whole reason the zone form exists.
+    far = (here[0] + 9, here[1])
+    c2.teleport(99, who=me2, to=far)
+    out.that(concealment_of(world2, me2) is Cover.NONE,
+             "**and loses it on walking out** -- the control that separates"
+             " `c.conceal_in` from a plain `c.conceal`, which would have"
+             " followed the creature anywhere for the zone's whole clock",
+             f"at {far}: {concealment_of(world2, me2)}")
+
+    # -- denied ------------------------------------------------------------
+    #
+    # **The subject is an ally and the attacker is the foe**, which is the
+    # other way round from the obvious arrangement and is deliberate. The
+    # first draft concealed an *enemy* and asked what the caster waived --
+    # and the number was already 5 before anything was laid, because the
+    # board's caster knows `p1831`, which puts `no_cover` 5 on enemies. The
+    # test was measuring somebody else's row. A subject nothing has touched
+    # is what makes the move attributable.
+    world3, me3, _s3 = _posed("p2375", 1)
+    foe3 = enemies(world3, me3)[0]
+    mate3 = allies(world3, me3)[0]
+    c3 = Cast(world=world3, me=me3, ref="drivers:conceal")
+    c3.conceal(on=mate3, until=When.ENCOUNTER)
+    out.that(concealment_of(world3, mate3) is not Cover.NONE,
+             "a creature given concealment has it -- the premise for the"
+             " denial, and denying nothing proves nothing",
+             f"{concealment_of(world3, mate3)}")
+    # **Through `concealment_waived`, not `concealment_of`.** The first
+    # draft asserted that `no_cover` zeroed `concealment_of` and went red at
+    # 2: it does not, and should not. `c.no_cover` lays an offsetting
+    # `"no_cover"` modifier worth 2 (partial) or 5 (total), and
+    # `query.concealment_waived` is where the pair is netted at attack time.
+    # The creature is still concealed; the attacker stops caring. My
+    # assertion was reading the wrong half of a two-sided question.
+    before = concealment_waived(world3, foe3, mate3)
+    c3.no_cover(on=mate3, until=When.SAVE_ENDS, partial=True)
+    after = concealment_waived(world3, foe3, mate3)
+    out.that(after >= int(concealment_of(world3, mate3)) and after > before,
+             "**and `c.no_cover` waives it** -- `p2375`'s printed 'gains no"
+             " benefit from concealment', netted against the concealment"
+             " itself so the attack sees none of it",
+             f"waived {before} -> {after}, concealment"
+             f" {int(concealment_of(world3, mate3))}")
+
+    # -- and none of the ten still announces the absence -------------------
+    import inspect as _inspect
+    import re as _re
+
+    TEN = ("p11679", "p11680", "p13983", "p14501", "p16119", "p16278",
+           "p16280", "p2375", "p6995", "p7393")
+    lying = []
+    for ref in TEN:
+        src = _inspect.getsource(REGISTRY[ref].body)
+        notes = " ".join(_re.findall(r"c\.note\((.*?)\)\n", src, _re.S))
+        if "there is none here" in notes:
+            marked = (tuple(REGISTRY[ref].todo or ())
+                      + tuple(REGISTRY[ref].dropped or ()))
+            if not marked:
+                lying.append(ref)
+    out.that(not lying,
+             "and no row still tells the player concealment is absent"
+             " without carrying a marker that says what it is waiting for",
+             f"{lying}")
+
+
 def a_lent_property_lasts_exactly_one_attack(out: Result) -> None:
     """"As if the weapon had the heavy thrown property" -- for that attack.
 
@@ -31467,6 +31592,10 @@ DRIVERS = {
     "either_occasion": (
         one_row_answers_either_of_two_printed_occasions,
         "one row answers either of two printed occasions, once (#836)",
+    ),
+    "concealment": (
+        concealment_is_modelled_and_ten_rows_said_it_was_not,
+        "concealment laid on a creature, in a zone, and denied (#860)",
     ),
     "lent_property": (
         a_lent_property_lasts_exactly_one_attack,

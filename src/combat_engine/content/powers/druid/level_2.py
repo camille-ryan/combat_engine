@@ -243,8 +243,13 @@ def p14504(c: Cast) -> None:
 )
 def p16119(c: Cast) -> None:
     """The aura ends with the form as well as on its clock, which is why the
-    hold is tied to the shape. Partial concealment has nothing to read it.
+    hold is tied to the shape.
+
+    The concealment is laid too. This said *"partial concealment has nothing
+    to read it"* -- `query.concealment_of` is that reader and
+    `resolve.attack` consults it. #860.
     """
+    c.conceal(on=c.me, until=When.EONT)
     ring = c.aura(1, label=c.ref, until=When.EONT)
     foes = set(c.enemies())
 
@@ -261,7 +266,6 @@ def p16119(c: Cast) -> None:
         held.effect if held is not None else None,
         watching,
     )
-    c.note(f"{c.ref}: partial concealment, and there is none here")
 
 
 @power(

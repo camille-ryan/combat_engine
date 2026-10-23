@@ -160,11 +160,18 @@ def p5507(c: Cast) -> None:
     keywords=[*PRIMAL, Keyword.CONJURATION],
 )
 def p7393(c: Cast) -> None:
-    """A wall of five squares, laid in the body. Its concealment half has
-    nothing to read it; the combat advantage half is real, and it reaches
-    one square further than the wall itself -- "while in the wall **or
-    adjacent to it**" -- so the hold is hung on a zone a square wider than
-    the leaves.
+    """A wall of five squares, laid in the body.
+
+    Two zones, because the two printed clauses have different reaches. The
+    concealment is "while in the wall", so it hangs on the leaves --
+    `c.conceal_in`, which takes it on entering and gives it back on
+    leaving, where a plain `c.conceal` would have concealed the team
+    wherever they went. The combat advantage says "while in the wall **or
+    adjacent to it**", so that one is hung on a zone a square wider.
+
+    This said the concealment half had "nothing to read it".
+    `query.concealment_of` is that reader and `resolve.attack` consults it
+    beside cover, taking the larger. #860.
     """
     anchors = sorted(
         sq for sq in spread({c.here}, 10) if c.world.grid.inside(sq) and sq != c.here
@@ -178,7 +185,8 @@ def p7393(c: Cast) -> None:
     leaves = [sq for sq in run if c.world.grid.inside(sq)]
     if not leaves:
         return
-    c.zone(leaves, label=c.ref, until=When.ENCOUNTER)
+    wall = c.zone(leaves, label=c.ref, until=When.ENCOUNTER)
+    c.conceal_in(wall, side="team")
     near = c.zone(spread(leaves, 1), label=f"{c.ref} edge", until=When.ENCOUNTER)
     foes = set(c.enemies())
     zone_hold(
@@ -186,7 +194,6 @@ def p7393(c: Cast) -> None:
         lambda who: who in foes,
         lambda who: c.grants_advantage(on=who, to="team", until=When.ENCOUNTER),
     )
-    c.note(f"{c.ref}: partial concealment inside it, and there is none here")
 
 
 @power(
