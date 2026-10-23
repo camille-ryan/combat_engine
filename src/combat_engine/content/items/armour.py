@@ -1022,10 +1022,21 @@ def i2417p1(c: Cast) -> None:
 
 
 @power("i2441x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.stealth_speed()",))
+       reach=PERSONAL, target=SELF)
 def i2441x1(c: Cast) -> None:
-    """Moving fast while hidden costs a Stealth penalty that is not
-    modelled, so there is no penalty to lift."""
+    """Lifts the Stealth penalty for moving fast while hiding.
+
+    **The penalty is charged now**, so there is something to lift: the hide
+    action rolls Stealth against passive Perception and takes -5 past two
+    squares, -10 for a run. `+5` on `"stealth:moved"` nets it to nothing for
+    the first and halves the second, and `c.hide` clamps the sum at 0 so a
+    waiver can never become a bonus.
+
+    **Its own key, not `skill:stealth`.** A bonus there would apply to every
+    Stealth check this character ever makes, which is not what the card
+    says and is the fault `f3447` refuses to commit. Only `c.hide` reads
+    this key. #784."""
+    c.bonus("stealth:moved", 5, on=c.me, until=When.ENCOUNTER)
 
 
 @power("i2534x1", level=2, cls=ITEM, action=ActionType.NONE,

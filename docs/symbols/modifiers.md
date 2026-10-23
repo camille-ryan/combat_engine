@@ -90,7 +90,7 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - The target grants combat advantage -- to you, an ally, or your side.
 - `c.had_advantage(self, ev: 'Any' = None) -> 'bool'`
   - Did *that* attack have combat advantage? Reads the event.
-- `c.hide(self, *, from_: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+- `c.hide(self, *, from_: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, check: 'bool' = False) -> 'Effect | None'`
   - Go unseen, and stay that way until something gives you away.
 - `c.ignore_cover(self, *, on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, partial: 'bool' = False, once: 'bool' = False, concealment_only: 'bool' = False, when: 'Callable[[dict[str, Any]], bool] | None' = None) -> 'Effect | None'`
   - "You ignore cover and concealment when attacking."

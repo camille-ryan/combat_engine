@@ -559,6 +559,37 @@ def charging(world: World, eid: int) -> bool:
     return mv is not None and mv.charging
 
 
+def moved_this_action(world: World, eid: int) -> int:
+    """How many squares this creature entered during its current move action.
+
+    The number the printed Stealth rule is about -- *"-5 if you moved more
+    than 2 squares during that action"* -- and nothing counted it, so the
+    penalty had no value and four rows that only ever waive it had nothing
+    to waive. #784.
+
+    **Squares, not budget.** `movement.walk` returns a cost that charges 2
+    for a difficult square, so a creature that crossed two squares of rough
+    ground has spent 4 and moved 2. The card counts squares.
+
+    0 between move actions and at the top of a turn, so a creature that has
+    not moved reads 0 rather than whatever it did last turn.
+    """
+    mv = world.get(eid, Movement)
+    return mv.went if mv is not None else 0
+
+
+def ran_this_action(world: World, eid: int) -> bool:
+    """Was this creature's current move action a **run**?
+
+    The other half of the Stealth rule, where running is -10 rather than
+    -5. Off `Movement.went_kind`, which `movement.walk` stamps from the
+    `kind` it was handed -- the same word `MoveStart.kind_` carries and
+    `movement.PRICED_KINDS` prices, so "ran" needed no new bookkeeping.
+    """
+    mv = world.get(eid, Movement)
+    return mv is not None and mv.went_kind == "run"
+
+
 def speed(world: World, eid: int, ctx: dict[str, Any] | None = None) -> int:
     """How far this creature moves, for the kind of move it is making.
 

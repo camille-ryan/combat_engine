@@ -76,12 +76,16 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Where this creature is tethered and how far it may stray, or None.
 - `query.line_of_effect(world: 'World', a: 'int', b: 'int') -> 'bool'`
   - (no docstring)
+- `query.moved_this_action(world: 'World', eid: 'int') -> 'int'`
+  - How many squares this creature entered during its current move action.
 - `query.moving_as(world: 'World', eid: 'int', mode: 'str') -> 'bool'`
   - Is this creature moving that way right now?
 - `query.on_the_ground(world: 'World', eid: 'int') -> 'bool'`
   - Is this creature in contact with the floor?
 - `query.prefers_range(world: 'World', eid: 'int') -> 'bool'`
   - Does this creature want to be *out* of melee?
+- `query.ran_this_action(world: 'World', eid: 'int') -> 'bool'`
+  - Was this creature's current move action a **run**?
 - `query.range_profile(world: 'World', eid: 'int') -> 'str'`
   - What this creature can reach with: melee, ranged, hybrid, or none.
 - `query.sealed(world: 'World', eid: 'int') -> 'bool'`

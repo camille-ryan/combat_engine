@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from .components import Budget, Gear, Health, Initiative, Powers
+from .components import Budget, Gear, Health, Initiative, Movement, Powers
 from .conditions import rules
 from .durations import When
 from .events import (
@@ -391,6 +391,15 @@ class Encounter:
         self.world.turn = eid
         budget = self.world.get(eid, Budget) or self.world.add(eid, Budget())
         budget.refresh()
+        # **How far it has gone this action, cleared with the action economy
+        # itself.** `movement.walk` zeroes this at the top of each move
+        # action, which is what the Stealth rule asks for -- but a creature
+        # that does not move at all would otherwise still be carrying last
+        # turn's number when it hides. #784.
+        mv = self.world.get(eid, Movement)
+        if mv is not None:
+            mv.went = 0
+            mv.went_kind = ""
         # "Once per turn you can draw a weapon as a free action" is an
         # allowance like the action budget beside it, so it refills here
         # rather than from a watcher that would have to be installed per

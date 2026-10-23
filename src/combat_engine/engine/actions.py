@@ -1330,13 +1330,18 @@ def perform(world: World, encounter: Encounter, actor: int, action: Action) -> b
 
     if action.kind == "hide":
         from .cast import Cast
-        from .skills import check
 
-        # Stealth, as printed. A failed check is a spent minor and
-        # nothing else, which is the risk the action carries.
-        rolled = check(world, actor, "stealth", dc=10 + world.round)
-        if rolled.success:
-            Cast(world=world, me=actor, ref="hide").hide()
+        # **The check lives in `c.hide(check=True)` now, and the DC was
+        # invented here.** `dc=10 + world.round` is a number no card prints
+        # and it drifted upward as the fight went on, so hiding got harder
+        # the longer you waited for no printed reason. The printed
+        # arrangement is Stealth against the watchers' **passive
+        # Perception** -- `c.passive` exists for exactly this and says so --
+        # plus the movement penalty, which was charged nowhere. #784.
+        #
+        # A failed check is still a spent minor and nothing else, which is
+        # the risk this action has always carried.
+        Cast(world=world, me=actor, ref="hide").hide(check=True)
         return True
 
     if action.kind == "action_point":

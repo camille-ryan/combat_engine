@@ -543,22 +543,34 @@ def p16467(c: Cast) -> None:
     keywords=SHADOW,
     requires=_beside_ally,
     requires_text="must be adjacent to an ally",
-    dropped=("c.stealth_speed()",),
 )
 def p16545(c: Cast) -> None:
     """Hiding is only offered if the shift ended beside an ally, which is
     the printed condition rather than the entry requirement.
 
-    **The marker is about the card's last line, which this note used to
-    leave out**: "for this check you ignore the -5 penalty for moving more
-    than 2 squares". That penalty is a real 4e rule -- checked at the end of
-    a move action, -5 past two squares and -10 if you ran -- and the engine
-    charges none of it, so there is nothing here to waive. #784, and the
-    gap runs deeper than a missing term: `c.hide` grants the hidden state
-    outright and rolls no check at all."""
+    **The card's last line now has something to waive**: "for this check you
+    ignore the -5 penalty for moving more than 2 squares". The hide here is
+    a real Stealth check against passive Perception, and the shift above is
+    what earns the penalty -- so on any board where it covers more than two
+    squares the waiver is the difference between -5 and nothing.
+
+    **Not "always", which is what I first wrote here.** The shift can cover
+    **0** squares when the creature is boxed in -- measured on the audit
+    board, where four posed creatures leave it nowhere to go, and the
+    waiver is then worth nothing because there is no penalty to waive. That
+    is correct behaviour and worth recording, because a rule asserting the
+    waiver pays out would fail on exactly that board for a reason that has
+    nothing to do with this row.
+
+    **Per use, not standing**, which is what "for this check" means: the
+    waiver is laid `until=When.INSTANT` so it is spent by the one roll
+    below and cannot reach a later hide. The two standing waivers in this
+    family are an item property and a class feature and are right to be
+    standing; this one is not. #784."""
     c.shift(c.speed_of())
     if _beside(c) is not None:
-        c.hide()
+        c.bonus("stealth:moved", 5, on=c.me, until=When.INSTANT)
+        c.hide(check=True)
 
 
 # -- answering an attack ------------------------------------------------------

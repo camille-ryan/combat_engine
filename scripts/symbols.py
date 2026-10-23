@@ -660,7 +660,8 @@ READERS: dict[str, list[str]] = {
     "where, and how far": [
         "adjacent", "charging", "distance_between", "kept_away_from",
         "leash_of", "line_of_effect",
-        "moving_as", "on_the_ground", "prefers_range", "range_profile",
+        "moved_this_action", "moving_as", "on_the_ground", "prefers_range",
+        "ran_this_action", "range_profile",
         "sealed", "speed", "squares", "telepathy_of",
     ],
     "seeing and being seen": [

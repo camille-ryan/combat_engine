@@ -622,10 +622,19 @@ def walk(
     mv = world.get(eid, Movement)
     if mv is not None:
         mv.using = "" if mode == "walk" else mode
+        # **How far this move action goes, for the Stealth rule.** Zeroed
+        # here rather than per turn because the card says "during that
+        # action", so a second move action starts counting again. #784.
+        mv.went = 0
+        mv.went_kind = kind
     for sq in path:
         if not step(world, eid, sq, kind=kind, mode=mode):
             break
         spent += 2 if sq in world.difficult(eid, kind) else 1
+        # Squares entered, not budget spent -- `spent` charges 2 for rough
+        # ground and the printed penalty counts squares.
+        if mv is not None:
+            mv.went += 1
     pos = world.get(eid, Position)
     world.bus.emit(MoveEnd(actor=eid, at=pos.square if pos else (0, 0), kind_=kind))
     return spent

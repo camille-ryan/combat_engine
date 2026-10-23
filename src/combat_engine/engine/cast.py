@@ -1734,7 +1734,13 @@ class Cast:
             by=self.ref,
         )
 
-    def hide(self, *, from_: int | None = None, until: When = When.ENCOUNTER) -> Effect | None:
+    def hide(
+        self,
+        *,
+        from_: int | None = None,
+        until: When = When.ENCOUNTER,
+        check: bool = False,
+    ) -> Effect | None:
         """Go unseen, and stay that way until something gives you away.
 
         The same held state as `c.invisible` and a different duration: being
@@ -1771,7 +1777,74 @@ class Cast:
         the three-watch idiom: take who you were hidden from in BEFORE,
         remember the outcome from the announcement, restore in AFTER.
         #390, #446.
+
+        **`check=True` makes it a Stealth check, and it is off by default on
+        purpose.** The printed rule -- *"make a Stealth check at the end of
+        a move action; -5 past two squares, -10 if you ran"* -- is what a
+        creature **choosing** to hide does, and that is the hide *action*
+        (`actions.execute`, `ref="hide"`). It is **not** what a card saying
+        "it becomes hidden" or "it is invisible until the end of its next
+        turn" does, and there are **85 such call sites in 60 files** -- so
+        rolling for all of them would make every lurker in the game able to
+        fail at its own printed trait. #784.
         """
+        if check:
+            return self._stealth_hide(from_=from_, until=until)
+        return self.invisible(to=from_, until=until)
+
+    def _stealth_hide(
+        self, *, from_: int | None, until: When
+    ) -> Effect | None:
+        """The hide that is a roll: Stealth against what the watchers notice.
+
+        Opposed by **passive** Perception, which is the printed arrangement
+        -- nobody rolls to spot you unless they spend an action on it -- and
+        `c.passive` already answers it rather than a DC being invented here.
+
+        The movement penalty is laid as a modifier on a **key of its own**
+        rather than subtracted inline, so the three rows that waive it can
+        waive *it* and not Stealth in general. `"stealth:moved"` is read
+        here and nowhere else, which is what keeps a waiver from becoming a
+        standing bonus to every Stealth check -- the fault `f3447` refuses
+        to commit.
+
+        Returns `None` when the check fails, so the caller can say so. The
+        creature stays visible: a failed Stealth check is a spent action and
+        no hiding, which is the whole of what this changes about play.
+        """
+        from .events import Note
+        from .query import moved_this_action, ran_this_action
+        from .resolve import _mods
+
+        watchers = [from_] if from_ is not None else self.enemies()
+        watchers = [w for w in watchers if w is not None]
+        if not watchers:
+            return None
+        # The hardest watcher to slip past decides it. One roll against the
+        # best pair of eyes, not a roll per enemy -- the printed check is
+        # one check, and rolling per watcher would hide the creature from
+        # some of a group and not others on a single action.
+        dc = max(self.passive("perception", of=w) for w in watchers)
+        # -10 for a run, -5 for more than two squares, and the two do not
+        # add: running *is* moving more than two, and the card prints the
+        # bigger number as a replacement.
+        if ran_this_action(self.world, self.me):
+            penalty = -10
+        elif moved_this_action(self.world, self.me) > 2:
+            penalty = -5
+        else:
+            penalty = 0
+        waived = _mods(self.world, self.me, "stealth:moved", {}) if penalty else 0
+        # A waiver may not turn the penalty into a bonus. `+5` on a -5 is
+        # "no penalty", not "+0 and then some", and the rogue's feature
+        # carries one +5 for both of its clauses.
+        charged = min(0, penalty + waived)
+        rolled = self.check("stealth", dc, bonus=charged)
+        if not rolled:
+            self.world.bus.emit(
+                Note(text=f"{self.me} failed to go unseen")
+            )
+            return None
         return self.invisible(to=from_, until=until)
 
     def unhide(self) -> None:

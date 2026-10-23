@@ -31654,6 +31654,137 @@ def a_character_has_one_feature_chassis_and_not_two(out: Result) -> None:
              f"familiar before the fight {before}, after arming {after}")
 
 
+def hiding_is_a_check_and_moving_fast_makes_it_harder(out: Result) -> None:
+    """"A Stealth check at the end of a move action: -5 past two squares, -10 if you ran."
+
+    The printed rule, and the engine charged **none** of it -- so four rows
+    whose whole content is *waiving* the penalty had nothing to waive. The
+    gap was two layers deep: nothing counted how far a creature had moved
+    during its action, and the hide rolled against an **invented** DC
+    (`10 + world.round`, in `actions.execute`) rather than against what the
+    watchers passively notice. #784.
+
+    **What is deliberately *not* changed: `c.hide()` itself.** 85 call sites
+    in 60 files say "it becomes hidden" or "it is invisible until the end of
+    its next turn", which are not Stealth checks -- a lurker's printed trait
+    does not fail. Only `check=True` rolls, and the hide **action** is the
+    caller that passes it. A rule that made all 85 roll would be the
+    "weaker than its printed line" fault at the scale of every lurker in the
+    game.
+
+    The waiver rides a **key of its own**, so the two standing rows cannot
+    turn into a bonus on every Stealth check this character ever makes --
+    which is the fault `f3447` refuses to commit, and which the last
+    assertion here is the control for.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import movement
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.durations import When
+    from combat_engine.engine.events import SkillCheck
+    from combat_engine.engine.query import (
+        enemies,
+        moved_this_action,
+        ran_this_action,
+    )
+    from combat_engine.engine.skills import modifier as skill_modifier
+
+    def pose(squares: int, kind: str, waiver: int = 0) -> tuple:
+        """A caster that has moved that far this action, about to hide.
+
+        **The movement is driven here rather than by a row's own shift**,
+        because the audit board boxes the caster in -- three of its four
+        neighbours are posed creatures, so `c.shift(speed)` covers 0 squares
+        and every penalty assertion would pass vacuously. Measured: north is
+        the clear direction on this seed.
+        """
+        world, me, _ = _posed("p16545", 1)
+        seen: list[SkillCheck] = []
+        world.bus.on(SkillCheck, seen.append)
+        if squares:
+            sx, sy = world.need(me, Position).square
+            movement.walk(world, me,
+                          [(sx, sy - i - 1) for i in range(squares)], kind=kind)
+        c = Cast(world=world, me=me, ref="drivers:hide")
+        if waiver:
+            c.bonus("stealth:moved", waiver, on=me, until=When.ENCOUNTER)
+        seen.clear()
+        foe = enemies(world, me)[0]
+        eff = c.hide(from_=foe, check=True)
+        rolled = next((e for e in seen if e.skill == "stealth"), None)
+        return world, me, c, foe, rolled, eff
+
+    # -- layer 1: the counter exists and is per action ---------------------
+    world, me, _c, _foe, rolled, _eff = pose(5, "walk")
+    out.that(moved_this_action(world, me) == 5,
+             "**a five-square walk reads as five squares moved**, which is"
+             " the number the printed penalty is about and which nothing"
+             " counted at all",
+             f"went={moved_this_action(world, me)}")
+
+    sx, sy = world.need(me, Position).square
+    movement.walk(world, me, [(sx, sy - 1)], kind="run")
+    out.that(moved_this_action(world, me) == 1 and ran_this_action(world, me),
+             "and a **second** move action starts the count again -- the"
+             " card says 'during that action', so a creature that walks six"
+             " and then takes another move for one is one square from where"
+             " it checks",
+             f"went={moved_this_action(world, me)} ran={ran_this_action(world, me)}")
+
+    # -- the DC is what the watcher notices, not a number somebody invented -
+    _w, _m, c, foe, rolled, _e = pose(0, "walk")
+    out.that(rolled is not None,
+             "the hide **rolls** -- `check=True` makes it a Stealth check"
+             " rather than a grant",
+             f"{rolled}")
+    out.that(rolled is not None and rolled.dc == c.passive("perception", of=foe),
+             "and it is opposed by the watcher's **passive Perception**,"
+             " where `actions.execute` used to invent `10 + world.round` --"
+             " a number no card prints, which drifted upward as the fight"
+             " went on so hiding got harder the longer you waited",
+             f"dc={rolled.dc if rolled else '?'}"
+             f" passive={c.passive('perception', of=foe)}")
+
+    # -- the penalty table, every line of it against the printed rule ------
+    base = pose(0, "walk")[4].bonus
+    table = [
+        (2, "walk", 0, base, "exactly two squares is **not** more than two"),
+        (3, "walk", 0, base - 5, "past two squares costs -5"),
+        (3, "run", 0, base - 10,
+         "running costs -10, and it **replaces** the -5 rather than adding"
+         " to it -- running is moving more than two, and the card prints the"
+         " bigger number instead"),
+        (3, "walk", 5, base, "a waiver nets the -5 to nothing"),
+        (3, "run", 5, base - 5,
+         "and the same waiver halves the -10, which is why the rogue's two"
+         " printed clauses are one +5 between them"),
+    ]
+    for squares, kind, waiver, want, why in table:
+        got = pose(squares, kind, waiver)[4]
+        out.that(got is not None and got.bonus == want, why,
+                 f"moved {squares} by {kind}, waiver {waiver}:"
+                 f" charged {got.bonus if got else '?'}, wanted {want}")
+
+    # -- the two controls --------------------------------------------------
+    out.that(pose(0, "walk", 5)[4].bonus == base,
+             "**a waiver with no penalty is not a bonus** -- the sum is"
+             " clamped at zero, so a standing waiver on a creature that"
+             " stood still does not make it better at hiding than one that"
+             " never had the feature",
+             f"still {pose(0, 'walk', 5)[4].bonus} against a base of {base}")
+
+    w2, me2, c2, _f2, _r2, _e2 = pose(0, "walk")
+    plain = skill_modifier(w2, me2, "stealth")
+    c2.bonus("stealth:moved", 5, on=me2, until=When.ENCOUNTER)
+    out.that(skill_modifier(w2, me2, "stealth") == plain,
+             "and the waiver **cannot reach an ordinary Stealth check** --"
+             " its own key, read by the hide and by nothing else, which is"
+             " what stops a standing waiver becoming a general bonus",
+             f"skills.modifier('stealth') {plain} -> "
+             f"{skill_modifier(w2, me2, 'stealth')}")
+
+
 def a_demoted_critical_says_so_out_loud(out: Result) -> None:
     """"The attack becomes a normal hit" has to be *announced*, not only done.
 
@@ -31907,6 +32038,10 @@ DRIVERS = {
     "crit_announced": (
         a_demoted_critical_says_so_out_loud,
         "demoting or promoting a critical hit is announced, not silent (#861)",
+    ),
+    "stealth_moved": (
+        hiding_is_a_check_and_moving_fast_makes_it_harder,
+        "hiding is a check, and moving fast makes it harder (#784)",
     ),
     "tome_trade": (
         a_tome_lends_a_card_and_charges_for_it,

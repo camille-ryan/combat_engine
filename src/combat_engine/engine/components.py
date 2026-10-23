@@ -326,6 +326,32 @@ class Movement:
     #: has the speed, which is not the printed sentence. Four rows across two
     #: waves asked for this.
     using: str = ""
+    #: How many squares this creature entered during its **current move
+    #: action**, and which kind of going that action was.
+    #:
+    #: The printed Stealth rule is *"a Stealth check at the end of a move
+    #: action; -5 if you moved more than 2 squares during it, -10 if you
+    #: ran"*, and nothing counted the distance -- so the penalty had no
+    #: number to be and four rows that only ever *waive* it had nothing to
+    #: waive. #784.
+    #:
+    #: **Squares entered, not budget spent.** `movement.walk` already
+    #: returns a cost, which is 2 for a difficult square -- so a creature
+    #: crossing two squares of rough ground has spent 4 and moved 2, and the
+    #: card says squares. Counted off the steps that actually landed.
+    #:
+    #: Reset at the top of each move action rather than per turn, because
+    #: "during that action" is what the rule says: a creature that walks six
+    #: squares, then takes a second move action for one, is 1 away from
+    #: where it checks. `Budget.refresh` clears it too, so a turn with no
+    #: movement reads 0 rather than last turn's number.
+    #:
+    #: Read by `query.moved_this_action` and `query.ran_this_action`; the
+    #: only consumer is the hide **action**, which is the only hide that is
+    #: a Stealth check -- a card reading "it becomes hidden" is not one, and
+    #: there are 85 of those.
+    went: int = 0
+    went_kind: str = ""
 
 
 @dataclass
