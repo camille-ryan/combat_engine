@@ -1949,10 +1949,10 @@ def _caster_is_a_printed_target() -> list[tuple[str, str]]:
     #: just been corrected *to* the right pool and reported them as the bug.
     #: `_` is a word character, so `\bONE_ALLY\b` does not match inside
     #: `YOU_OR_ONE_ALLY` and the two spellings stay distinguishable.
+    named = "|".join(p.upper() for p in _CASTERLESS)
+    quoted = "|".join(_CASTERLESS)
     casterless = _re.compile(
-        r"""\b(?:ONE|EACH)_(?:%s)\b|["'](?:%s)["']"""
-        % ("|".join(p.upper() for p in _CASTERLESS),
-           "|".join(_CASTERLESS)))
+        rf"""\b(?:ONE|EACH)_(?:{named})\b|["'](?:{quoted})["']""")
 
     out = []
     for path in _asked_for():
