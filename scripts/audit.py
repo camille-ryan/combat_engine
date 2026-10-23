@@ -49,11 +49,13 @@ from __future__ import annotations
 import argparse
 import contextlib
 import inspect
+import os
 import re
 import traceback
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from pathlib import Path
+from typing import Any
 
 from combat_engine import chargen
 from combat_engine.content import dummy, loader
@@ -4993,7 +4995,78 @@ def verdicts(refs: tuple[str, ...] = VERDICT_ROWS) -> list[str]:
     return wrong
 
 
+#: Set by `impact.py --record` to the base path for this run's coverage
+#: data. Absent on every ordinary run, which is why the hook below costs one
+#: `os.environ` lookup per row and nothing else.
+IMPACT = "COMBAT_ENGINE_IMPACT"
+
+#: Which directories to measure, `os.pathsep`-joined. `impact.NARROWABLE` is
+#: the authority and hands it over here, so the two cannot drift. Absent
+#: means the whole package, which is only what a hand-run would want.
+IMPACT_SOURCE = "COMBAT_ENGINE_IMPACT_SOURCE"
+
+#: This worker's `Coverage`, started lazily on its first row. One per
+#: process, never shared -- `data_suffix=True` gives each its own file and
+#: `coverage combine` merges them afterwards.
+_RECORDER: Any = None
+
+
+def _label_this_row(ref: str) -> None:
+    """Tag everything this row executes with its ref, while recording.
+
+    **The worker-side half of `impact.py`, and the half that did not exist.**
+    That file declared this environment variable and said `audit.py` reads
+    it; nothing did, so recording could only run in one process -- 1.0
+    rows/s against the pool's 20, which is the 6.4 hours #853 measured.
+    The instrumentation itself costs about 2x per worker; the rest was
+    entirely the serial-ness.
+
+    A measurement context has to be switched **inside the process doing the
+    work**, so it cannot be done from the parent. Started here rather than
+    in a pool `initializer` because `_run_all` runs serially for a small
+    scope and `--jobs 1`, and a lazy start covers both without a second
+    path.
+
+    `atexit` is what saves it: `ProcessPoolExecutor` gives no per-worker
+    teardown, and a worker that exits without saving contributes nothing --
+    silently, which is the failure `impact.record`'s context count is there
+    to catch.
+    """
+    global _RECORDER
+    base = os.environ.get(IMPACT)
+    if not base:
+        return
+    if _RECORDER is None:
+        import atexit
+
+        import coverage
+
+        where = os.environ.get(IMPACT_SOURCE, "")
+        _RECORDER = coverage.Coverage(
+            data_file=base,
+            data_suffix=True,
+            source=(where.split(os.pathsep) if where
+                    else [str(ROOT / "src" / "combat_engine")]),
+            branch=False,
+        )
+        _RECORDER.start()
+        atexit.register(_save_this_worker)
+    _RECORDER.switch_context(ref)
+
+
+def _save_this_worker() -> None:
+    """Stop and write this worker's slice. Registered with `atexit`."""
+    global _RECORDER
+    if _RECORDER is None:
+        return
+    recorder, _RECORDER = _RECORDER, None
+    with contextlib.suppress(Exception):
+        recorder.stop()
+        recorder.save()
+
+
 def audit(ref: str) -> Result:
+    _label_this_row(ref)
     out = Result(ref=ref)
     declared = get(ref)
     # A trait is armed by `Encounter.start`, not taken as an action, so by

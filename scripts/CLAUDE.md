@@ -212,7 +212,8 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--cited`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
-| `coverage.py` | written / not written / half-written on purpose |
+| `impact.py` | which rows actually execute a given engine function; `--record`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt |
+| `written.py` | written / not written / half-written on purpose. **Was `coverage.py`** and renamed in #853: `scripts/` is first on `sys.path`, so that name shadowed the real `coverage` library and stopped `impact.py` pooling its recording |
 | `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |
 | `cards.py` | does a monster ability's header say the numbers its stat block prints — attack, defence, damage, range, usage |
 | `keywords.py` | does a row's header declare the keywords its card printed; a per-ref baseline that may shrink and never grow. `--record` |

@@ -1,12 +1,26 @@
 #!/usr/bin/env python
 """What has been written, what has not, and what is half-written on purpose.
 
-    uv run scripts/coverage.py
-    uv run scripts/coverage.py --class fighter
-    uv run scripts/coverage.py --monsters --max-level 3
-    uv run scripts/coverage.py --kind items
-    uv run scripts/coverage.py --kind feats --class fighter
-    uv run scripts/coverage.py --partial          the rows that said what they lack
+**Named `written.py` and not `coverage.py`, which is not cosmetic.**
+`scripts/` goes first on `sys.path` for anything run as
+`uv run scripts/<name>.py`, and `triage.py`, `refs.py` and `blocked.py` all
+put it there too -- so while this file was called `coverage.py` a plain
+`import coverage` from inside an instrument got **this module** instead of
+the library, silently, and it has a `main()` so it even looked plausible.
+
+That blocked `impact.py` from recording its map on the worker pool, which
+is the one thing that map needs to be affordable: coverage's multiprocessing
+support does the child-side `import coverage` inside the library, where a
+`sys.path` workaround cannot reach. And the failure mode was the dangerous
+one -- a worker importing this file does not crash, it records nothing, and
+a map with rows missing narrows too far. #853.
+
+    uv run scripts/written.py
+    uv run scripts/written.py --class fighter
+    uv run scripts/written.py --monsters --max-level 3
+    uv run scripts/written.py --kind items
+    uv run scripts/written.py --kind feats --class fighter
+    uv run scripts/written.py --partial          the rows that said what they lack
 
 The work list. Every row in `game.db` is in one of three states:
 

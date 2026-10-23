@@ -102,47 +102,54 @@ WIDE_SHARE = 0.30
 #: `os.environ` lookup per row and nothing else.
 RECORDING = "COMBAT_ENGINE_IMPACT"
 
+#: Which directories the worker's recorder measures. `NARROWABLE` is the one
+#: authority for that, and it lives here, so it is handed over rather than
+#: repeated in `audit.py`.
+#:
+#: **Scoping it is not an optimisation, it is what `select` already does.**
+#: That function consults the map only for files under `NARROWABLE`; a
+#: recording of all 783 content modules is tracing nobody reads, and the ref
+#: lists it stores are the bulk of the file -- a function reached by 6,900
+#: rows costs 60KB on its own, and `audited.json`'s note is explicit that
+#: Camille is short of disk.
+SOURCE = "COMBAT_ENGINE_IMPACT_SOURCE"
+
 #: Only these prefixes are narrowed. `etl/` and `chargen/` are deliberately
 #: absent -- see the fail-open list in the module docstring.
 NARROWABLE = ("src/combat_engine/engine/",)
 
 
 def real_coverage():  # noqa: ANN201
-    """Import the `coverage` package, not `scripts/coverage.py`.
+    """Import the `coverage` package, defensively, and say if it is shadowed.
 
-    **`scripts/` shadows it and `scripts/` goes first on `sys.path`.** There
-    is an unrelated instrument called `coverage.py` in this directory --
-    written/not-written/half-written counts -- and `triage.py`, `refs.py` and
-    `blocked.py` all put `scripts/` on the path. So a plain `import coverage`
-    from inside an instrument gets the wrong module, silently, and it has a
-    `main()` so it even looks plausible.
+    **`scripts/` goes first on `sys.path`** -- `triage.py`, `refs.py` and
+    `blocked.py` all put it there -- so any instrument named after a library
+    shadows that library for every other instrument. One was: the
+    written/not-written counter was called `coverage.py`, and since it has a
+    `main()` the wrong module even looked plausible.
 
-    Reaching past it with `PathFinder` alone does **not** work: the package's
-    own `__init__` does `from coverage.control import ...`, which re-resolves
-    `coverage` through the shadowed `sys.modules` entry and dies with
-    "'coverage' is not a package". So the shadow has to come off the path and
-    out of `sys.modules` for the duration of the import, and the caller's
-    existing shadow object is preserved under another key rather than
-    destroyed.
+    It is `written.py` now (#853), because the shadow could not be worked
+    around from here. Reaching past it with `PathFinder` fails -- the
+    package's own `__init__` does `from coverage.control import ...`, which
+    re-resolves `coverage` through `sys.modules` and dies with "'coverage' is
+    not a package" -- and taking it off the path for the duration of *this*
+    import does nothing for the **worker**, because coverage's own
+    multiprocessing support imports itself inside the library, where no
+    `sys.path` tricks of ours are running.
+
+    So the guard that remains is a check, not a workaround: if the name is
+    shadowed again by some future instrument, say so loudly here rather than
+    letting the recording silently measure nothing.
     """
-    scripts = [p for p in sys.path if p.rstrip("/").endswith("scripts")]
-    stashed = {k: v for k, v in sys.modules.items()
-               if k == "coverage" or k.startswith("coverage.")}
-    if stashed and getattr(stashed.get("coverage"), "__file__", "").endswith(
-            "scripts/coverage.py"):
-        for key in list(stashed):
-            del sys.modules[key]
-    else:
-        stashed = {}
-    for path in scripts:
-        sys.path.remove(path)
-    try:
-        import coverage
-        return coverage
-    finally:
-        sys.path[:0] = scripts
-        for key, mod in stashed.items():
-            sys.modules.setdefault(f"_shadowed_{key}", mod)
+    import coverage
+
+    where = getattr(coverage, "__file__", "") or ""
+    if "/scripts/" in where:
+        raise SystemExit(
+            f"`import coverage` resolves to {where}, not the library. An "
+            "instrument in scripts/ is shadowing it -- rename the instrument "
+            "(see #853); this cannot be worked around from the worker side.")
+    return coverage
 
 
 def _functions_of(path: Path) -> list[tuple[int, int, str]]:
@@ -189,14 +196,30 @@ def _enclosing(funcs: list[tuple[int, int, str]], line: int) -> str:
     return best
 
 
-def record(sample: int = 0) -> int:
-    """One sweep under coverage, labelling each row's work with its ref.
+def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
+    """One pooled sweep under coverage, labelling each row's work with its ref.
 
     `sample` records a deterministic slice instead of everything. A sampled
     map is **not** a smaller version of the real one -- a row it never saw is
     a row `--select` must select, so sampling makes selection wider, never
     wrong. It exists to prove the machinery in a minute rather than an hour,
     and `--stats` says which it is holding.
+
+    **This ran serially and that was the whole of #853's cost.** One process
+    managed 1.0 rows/s against the pool's ~20, which is where the 6.4-hour
+    estimate came from; the instrumentation itself is about 2x. The fix is
+    not here but in `audit.py`: a per-ref context has to be switched *inside*
+    the process doing the work, so the recording is started by the worker
+    (`audit._label_this_row`) and this function only sets the environment
+    variable, runs the ordinary parallel sweep, and combines what the workers
+    wrote.
+
+    `data_suffix=True` in the worker is what makes that safe -- every process
+    writes its own file and `combine` merges them -- and it is also the thing
+    that can fail silently, because a worker that never starts its recorder
+    contributes no rows and the map simply narrows too far. Hence the control
+    in `_build_map`, which refuses to write a map whose contexts are not
+    exactly the refs asked for.
     """
     coverage = real_coverage()
     sys.path.insert(0, str(ROOT / "scripts"))
@@ -212,48 +235,93 @@ def record(sample: int = 0) -> int:
     print(f"# recording {len(refs)} of {whole} rows under "
           f"coverage {coverage.__version__}")
 
-    # One process, because a per-ref context has to be switched *inside* the
-    # process doing the work and the pool's children are not ours to
-    # instrument from here. Slower than the parallel sweep by roughly the
-    # worker count -- this is a one-off whose output is reused.
-    os.environ[RECORDING] = "1"
-    data_file = ROOT / "logs" / ".impact-coverage"
-    cov = coverage.Coverage(
-        data_file=str(data_file),
-        source=[str(ROOT / "src" / "combat_engine")],
-        branch=False,
-        concurrency="thread",
-    )
-    cov.start()
+    base = ROOT / "logs" / ".impact-coverage"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    # The suffixed files from any previous run, which `combine` would happily
+    # merge into this one -- a stale ref list is worse than no map.
+    for stale in base.parent.glob(base.name + "*"):
+        stale.unlink()
+
+    if core == "sysmon":
+        # **Measured, and the plan was wrong to recommend it.** `sysmon` is
+        # 3x faster -- 12.5 rows/s against 4.1 on the same 400-row sample --
+        # and it recorded **278 of 400 contexts**, because coverage does not
+        # support dynamic contexts on that core at all. It says so in a
+        # warning that scrolls past in a run printing thousands of lines:
+        # "Dynamic contexts aren't supported with core=sysmon; context data
+        # may be incomplete (no-sysmon-context)".
+        #
+        # So the speedup is real and useless here: a map missing 30% of its
+        # refs narrows those rows to nothing. `_build_map`'s control is what
+        # caught it, which is the clearest evidence in this file that the
+        # control earns its place -- the run looked like a 3x win and
+        # finished clean. Refused up front so nobody pays 90 minutes to
+        # rediscover it.
+        print("# core=sysmon cannot record dynamic contexts "
+              "(coverage: no-sysmon-context). It recorded 278 of 400 refs "
+              "when measured. Refusing.")
+        return 1
+
+    os.environ[RECORDING] = str(base)
+    os.environ[SOURCE] = os.pathsep.join(str(ROOT / rel) for rel in NARROWABLE)
+    if core:
+        # `sys.monitoring` on 3.13 is much cheaper than the trace function,
+        # but it is a different core with its own limits, so it is opt-in and
+        # the context control below is what says whether it worked.
+        os.environ["COVERAGE_CORE"] = core
     started = time.time()
-    done = 0
     try:
-        for ref in refs:
-            cov.switch_context(ref)
-            try:
-                audit.audit(ref)
-            except Exception as exc:
-                # A row that raises still recorded the work it did before
-                # raising, which is the dependency we are after. The audit
-                # itself is what reports raises; this must not.
-                print(f"  {ref} raised {type(exc).__name__}", file=sys.stderr)
-            done += 1
-            if done % 200 == 0:
-                rate = done / (time.time() - started)
-                print(f"  {done}/{len(refs)}  {rate:.1f} rows/s", file=sys.stderr)
+        audit._run_all(refs, jobs=jobs)
     finally:
-        cov.stop()
-        cov.save()
         os.environ.pop(RECORDING, None)
+        os.environ.pop(SOURCE, None)
+        if core:
+            os.environ.pop("COVERAGE_CORE", None)
+    took = time.time() - started
+    wrote = sorted(base.parent.glob(base.name + ".*"))
+    print(f"# swept in {took:.0f}s ({len(refs) / took:.1f} rows/s), "
+          f"{len(wrote)} worker data files")
+    if not wrote:
+        print("# no worker wrote any coverage data. Nothing recorded.")
+        return 1
 
-    return _build_map(cov, len(refs), whole)
+    cov = coverage.Coverage(data_file=str(base))
+    cov.combine(strict=True, keep=False)
+    cov.save()
+    return _build_map(cov, refs, whole)
 
 
-def _build_map(cov, corpus: int, whole: int) -> int:  # noqa: ANN001
-    """Turn per-ref line coverage into `{file: {function: refs | "wide"}}`."""
+def _build_map(cov, asked: list[str], whole: int) -> int:  # noqa: ANN001
+    """Turn per-ref line coverage into `{file: {function: refs | "wide"}}`.
+
+    Refuses to write unless the combined data holds **exactly** the refs
+    that were asked for, which is #853's control and the only thing that
+    can see the failure this design makes possible: a worker whose
+    recorder never started, or whose data file was lost, records nothing
+    for its whole chunk. Every row in that chunk then looks like a row
+    that depends on no engine function at all, so `--select` *omits* it --
+    silently, and in the direction that misses a regression. A map built
+    short is worse than no map, because `_load` fails open and no map
+    selects everything.
+    """
     data = cov.get_data()
     files = list(data.measured_files())
-    print(f"# {len(files)} files measured, {len(data.measured_contexts())} contexts")
+    seen = {c for c in data.measured_contexts() if c}
+    corpus = len(asked)
+    print(f"# {len(files)} files measured, {len(seen)} contexts")
+    missing = sorted(set(asked) - seen)
+    extra = sorted(seen - set(asked))
+    if missing or extra:
+        print(f"# REFUSED: {len(missing)} of {corpus} refs recorded "
+              f"nothing, {len(extra)} contexts were not asked for.")
+        if missing:
+            print(f"#   missing: {', '.join(missing[:10])}"
+                  f"{' ...' if len(missing) > 10 else ''}")
+        if extra:
+            print(f"#   unasked: {', '.join(extra[:10])}"
+                  f"{' ...' if len(extra) > 10 else ''}")
+        print("# no map written. A short map narrows too far, silently.")
+        return 1
 
     funcs_by_file = {f: _functions_of(Path(f)) for f in files}
     hit: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
@@ -442,12 +510,16 @@ def main() -> int:
     ap.add_argument("--record", action="store_true", help="build the map")
     ap.add_argument("--sample", type=int, default=0, metavar="N",
                     help="record a deterministic N-row slice, to prove it works")
+    ap.add_argument("--jobs", type=int, default=0, metavar="N",
+                    help="workers for the recording sweep; 1 is serial")
+    ap.add_argument("--core", default="", metavar="NAME",
+                    help="coverage core: sysmon is cheaper on 3.13, ctrace is the default")
     ap.add_argument("--select", action="store_true", help="refs this change needs")
     ap.add_argument("--why", metavar="REF", help="what one row executes")
     ap.add_argument("--stats", action="store_true", help="what the map holds")
     args = ap.parse_args()
     if args.record:
-        return record(args.sample)
+        return record(args.sample, args.jobs, args.core)
     if args.select:
         return select()
     if args.why:

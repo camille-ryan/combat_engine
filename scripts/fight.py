@@ -81,7 +81,7 @@ def build(
     if not fielded.enemies:
         raise SystemExit(
             "no monster anywhere has all of its abilities written.\n"
-            "Run: uv run scripts/coverage.py --monsters --max-level 3"
+            "Run: uv run scripts/written.py --monsters --max-level 3"
         )
     if fielded.found_at != level:
         print(
