@@ -1002,7 +1002,82 @@ def _ctx_keys() -> list[str]:
     return out
 
 
-EXTRA = {"movement": _modes, "gates": _ctx_keys}
+def _condition_writers() -> list[str]:
+    """Which `Condition` members have a same-named `Cast` member, and what it is.
+
+    **Derived, never listed.** #594 asked for this and the reason it has to
+    be generated is in its own numbers: it says *"12 with a same-named
+    writer, 12 without"*, and measured it is **10 writers, 3 readers and 11
+    with nothing** -- partly because `c.shaped` arrived in #595 the same day,
+    and partly because two of the twelve it counted as writers are readers.
+
+    The writer/reader test is the **return annotation**, not the signature.
+    My first pass looked for `until=` and called `c.prone` a reader: it takes
+    `held=` instead, because prone lasts until the creature stands rather
+    than to a turn boundary, and it plainly writes -- `-> Effect | None`, via
+    `self.condition(Condition.PRONE, ...)`. A document generated on the
+    first test would have stated a falsehood, which is the whole argument
+    against hand-keeping one.
+
+    The three readers are the trap this answers. `c.marked` and `c.shaped`
+    return `bool`, and `c.dying` is a **property** -- so `c.dying` is the
+    state and `c.dying()` is a `TypeError`.
+    """
+    import inspect as _inspect
+
+    from combat_engine.engine.cast import Cast as _Cast
+    from combat_engine.engine.types import Condition as _Cond
+
+    writes: list[str] = []
+    reads: list[str] = []
+    props: list[str] = []
+    none: list[str] = []
+    for member in sorted(_Cond, key=lambda m: m.value):
+        name = member.name.lower()
+        attr = getattr(_Cast, name, None)
+        if attr is None:
+            none.append(name)
+        elif isinstance(attr, property):
+            # Kept apart from the callable readers: the comma-joined line
+            # ran "`c.dying` -- a property, so no parens, `c.marked`" and
+            # read as though the caveat covered the next name too.
+            props.append(f"`c.{name}`")
+        else:
+            try:
+                ret = str(_inspect.signature(attr).return_annotation)
+            except (TypeError, ValueError):
+                ret = ""
+            (writes if "Effect" in ret else reads).append(f"`c.{name}`")
+
+    out = ["## Which conditions have a same-named `Cast` member", ""]
+    out += [
+        "Generated from `Condition` and `Cast` together, so it cannot drift"
+        " from either. A **writer** returns an `Effect`; a **reader** returns"
+        " `bool` or is a property. #594.", "",
+        f"**{len(writes)} write** -- the printed condition, laid by the verb"
+        " named after it:", "",
+        "  " + ", ".join(writes), "",
+        f"**{len(reads) + len(props)} only read** -- these ask, they do"
+        " not lay:", "",
+        "  " + ", ".join(reads), "",
+        "  " + ", ".join(props)
+        + (" -- a **property**" if len(props) == 1 else " -- **properties**")
+        + ", so no parens: `c.dying` is the state and `c.dying()` is"
+          " `TypeError: 'bool' object is not callable`.", "",
+        f"**{len(none)} have no same-named member at all**, and are reached"
+        " three ways -- a differently-named verb that carries a relation too"
+        " (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic"
+        " `c.condition(*conditions, until=)`, or nothing yet:", "",
+        "  " + ", ".join(f"`{n}`" for n in none), "",
+        "So a card naming one of the last group is **not** evidence of a gap:"
+        " check `c.condition()` and the relation verbs before marking a row.",
+        "",
+    ]
+    return out
+
+
+EXTRA = {"movement": _modes, "gates": _ctx_keys,
+         "conditions": _condition_writers}
 
 
 def _without_prose(text: str) -> str:

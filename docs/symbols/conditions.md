@@ -134,6 +134,26 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
 
   `instant`, `end of this turn`, `end of source's next turn`, `start of source's next turn`, `end of target's next turn`, `start of target's next turn`, `save ends`, `end of encounter`, `stance`, `sustain`, `until it escapes`
 
+## Which conditions have a same-named `Cast` member
+
+Generated from `Condition` and `Cast` together, so it cannot drift from either. A **writer** returns an `Effect`; a **reader** returns `bool` or is a property. #594.
+
+**10 write** -- the printed condition, laid by the verb named after it:
+
+  `c.blinded`, `c.cannot_shift`, `c.dazed`, `c.immobilized`, `c.insubstantial`, `c.prone`, `c.slowed`, `c.stunned`, `c.unconscious`, `c.weakened`
+
+**3 only read** -- these ask, they do not lay:
+
+  `c.marked`, `c.shaped`
+
+  `c.dying` -- a **property**, so no parens: `c.dying` is the state and `c.dying()` is `TypeError: 'bool' object is not callable`.
+
+**11 have no same-named member at all**, and are reached three ways -- a differently-named verb that carries a relation too (`c.grab` for `grabbed`, `c.dominate` for `dominated`), the generic `c.condition(*conditions, until=)`, or nothing yet:
+
+  `dead`, `deafened`, `dominated`, `grabbed`, `helpless`, `petrified`, `pinned`, `removed`, `restrained`, `squeezing`, `surprised`
+
+So a card naming one of the last group is **not** evidence of a gap: check `c.condition()` and the relation verbs before marking a row.
+
 ## not here -- look in another file
 
 - `c.gains_advantage` is in [`modifiers.md`](modifiers.md) -- This creature has combat advantage whenever that is true of a swing.
