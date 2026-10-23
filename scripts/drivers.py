@@ -17310,10 +17310,23 @@ def a_weapons_range_is_a_field_a_row_can_write(out: Result) -> None:
              f" reader in `Cast._high_crit` ({sorted(blow.properties)})")
 
     # -- and the three that are not --------------------------------------
-    for ref in ("f1841", "f1843", "f3641"):
+    #
+    # **Two still name the ranged-basic site and one no longer does.** The
+    # gate those two wait on was built and measured and taken back out: it
+    # makes the printed rule true and the AI measurably worse, because a
+    # thrown weapon costs nothing to throw (#520). `f1843` was never waiting
+    # on the gate at all -- it wants an improvised weapon to exist -- and
+    # the shared marker hid that. #838.
+    for ref in ("f1841", "f3641"):
         out.that(REGISTRY[ref].unfinished == ("Gear.ranged(thrown=)",),
-                 f"{ref} names the ranged-basic site, not a weapon field",
+                 f"{ref} names the ranged-basic site, not a weapon field,"
+                 " and is blocked behind #520 giving a throw a cost",
                  f"{REGISTRY[ref].unfinished}")
+    out.that(REGISTRY["f1843"].unfinished == ("chargen.IMPROVISED",),
+             "and f1843 waits on an **improvised weapon existing** instead,"
+             " which is a different gap and was hidden under the shared"
+             " marker -- its card excludes the unarmed one that does exist",
+             f"{REGISTRY['f1843'].unfinished}")
 
 def a_marks_penalty_is_the_markers_to_set(out: Result) -> None:
     """"A -3 penalty instead of the normal -2" -- four feats, one number.

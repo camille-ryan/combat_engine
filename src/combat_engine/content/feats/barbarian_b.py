@@ -69,9 +69,6 @@ def _used_one_of(*refs: str):  # noqa: ANN202
 def _took_the_charge(world, me: int, ev: object) -> bool:  # noqa: ANN001
     return ev.actor == me and ev.power == "p4809"
 
-#: "Use it as a heavy thrown weapon, normal range 5 and long range 10":
-#: a change to what the weapon *is*, which nothing in `Gear` rewrites.
-THROWN = ("c.make_thrown()", "c.weapon_range()")
 #: "Instead of": a printed swap for something a class feature does inside
 #: its own body. The feature has a ref now; declining half of what it does
 #: is the operation nothing has.
@@ -541,6 +538,37 @@ def f2884(c: Cast) -> None:
 def f1841(c: Cast) -> None:
     """Throw an off-hand blade like a handaxe, at 5/10.
 
+    **Re-pointed, and the gate is no longer the story.** The old note said
+    the blocker was `dsl.can_branch` asking `gear.ranged is not None` for a
+    ranged branch, and that `Gear.ranged` means "can be fired". That is
+    accurate, and the compendium does say *"a creature can make a ranged
+    basic attack as long as it has something to throw **or** shoot"* -- so
+    the gate is wrong about the rule and `dsl._reach` has always agreed with
+    the page, substituting a thrown weapon's range *"fired first, then
+    thrown"*.
+
+    **Opening it was built, measured, and taken back out.** With the gate
+    admitting a thrown weapon, the printed rule holds and the AI gets
+    measurably worse, because the engine gives a thrown weapon **no cost**:
+    you throw the dagger and still have it. `scripts/winrate.py`, the smart
+    policies against the chassis baseline:
+
+        level  5 scored   +10% -> +3%
+        level  5 rated    +13% -> +7%
+        level 10 scored   +20% -> -10%     <- worse than the baseline
+        level 10 rated    +27% -> +10%
+
+    and the provocation lines say why: `rba is a ranged power x45` where it
+    had barely appeared, so the policy throws the free infinite dagger and
+    eats opportunity attacks for it. 6 of 7 replay fixtures diverged on the
+    policy taking it over real powers.
+
+    So this waits on **#520** -- "nothing runs out of a thrown weapon or a
+    mundane shot: one net is infinite nets" -- and not on the gate. That
+    issue's fix is counts on a weapon, with the ETL data already recorded
+    (#516); once a throw costs something, the gate can open and this row is
+    two lines. The order of work was the thing that needed finding. #838.
+
     **Half right, and the surviving half is the one that blocks.**
     `c.weapon_dice` proves a body *can* rewrite a `Weapon` -- `Gear.weapons`
     holds per-character copies -- so `thrown=(5, 10)` is writable here and
@@ -578,13 +606,22 @@ def f1841(c: Cast) -> None:
 
 
 @power("f1843", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Gear.ranged(thrown=)",))
+       reach=PERSONAL, target=SELF, todo=("chargen.IMPROVISED",))
 def f1843(c: Cast) -> None:
-    """The same for whatever is lying about, plus a feat bonus when one
-    is thrown. The bonus half cannot stand on its own either: an
-    improvised weapon is not a thing `Gear` holds, so there is nothing
-    for the gate to ask about -- and the throwing half is blocked at the
-    same read site as `f1841`, see there.
+    """"Use improvised melee weapons as heavy thrown weapons", plus a +2
+    feat bonus to attack and damage when you do.
+
+    **Re-pointed: this one never waited on the gate.** An improvised melee
+    weapon is not a thing `Gear` holds, and this card says "not including
+    unarmed attacks", so `chargen.UNARMED` is explicitly not it -- the
+    compendium's Improvised Weapons entry gives a separate line (Prof. --,
+    1d4, group "None or unarmed"). Both halves wait on the same thing: with
+    no improvised weapon in hand there is nothing to give a range to and
+    nothing for the bonus to narrow on. One weapon declared the way
+    `chargen.STAFF` and `chargen.TOME` are, plus a way to pick one up.
+
+    Kept separate from `f1841` deliberately: that row waits on #520, this
+    one does not, and the shared marker hid the difference.
     **Re-pointed: a range *write* landed and is not what this card needs.**
     `c.weapon_range` sets `Weapon.thrown` on this character's own copy, and
     `f1841`'s note was substantially right that it buys nothing here: the

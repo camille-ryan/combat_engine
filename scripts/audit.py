@@ -3986,6 +3986,12 @@ def _rolls_checks(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: A
 _WANTED_WEAPON: dict[str, tuple[str, ...]] = {}
 
 _WEAPON_REF = re.compile(r'"(w[0-9]+|w:[a-z-]+)"')
+#: The cache behind `_wanted_by_word`, the fourth weapon axis. #864.
+_WANTED_BY_WORD: dict[str, tuple[str, ...]] = {}
+#: A quoted lower-case phrase in a body, which is the shape a printed weapon
+#: word takes when a gate names one -- `"heavy blade"`, `"high crit"`.
+#: Matched against the printed vocabulary afterwards, never trusted alone.
+_QUOTED_WORD = re.compile(r'"([a-z][a-z -]{2,20})"')
 
 
 def _required_weapon(row: object) -> list[str]:
@@ -4031,6 +4037,97 @@ def _required_weapon(row: object) -> list[str]:
             if isinstance(word, str) and _WEAPON_REF.fullmatch(f'"{word}"'):
                 out.append(word)
     return out
+
+
+@cache
+def _weapon_vocabulary() -> dict[str, str]:
+    """Every printed weapon word, to **one** weapon ref that carries it.
+
+    The word-to-weapon map `_any_weapon` is, widened in the one direction it
+    was missing: it matched `arm.group` and `arm.category` and not
+    `arm.properties`, so `versatile`, `high crit`, `reach`, `off-hand` and
+    `heavy thrown` resolved to nothing even when the right word was in hand.
+    11 of #864's 27 rows name one of those five.
+
+    **One weapon per word, picked by sorted ref**, which is the whole reason
+    this is a dict rather than a search. A body naming `heavy blade` must not
+    multiply into every heavy blade in the table: the axis below already runs
+    only for a row that showed nothing on every cheaper arrangement, and it
+    costs 3 faces x 2 poses x 8 seeds per weapon. Deterministic so two runs of
+    a seed arm the same thing.
+    """
+    out: dict[str, str] = {}
+    for arm in sorted(chargen.PRINTED.values(), key=lambda a: a.ref):
+        for word in (arm.group, arm.category, *(arm.properties or ())):
+            if word and word not in out:
+                out[word] = arm.ref
+    return out
+
+
+def _wanted_by_word(ref: str) -> tuple[str, ...]:
+    """Weapon refs for the printed weapon **words** this row's body names.
+
+    **The fourth way to arm a weapon, and the three that existed were all
+    blind to a feat.** `_hand_it_the_weapon` reads `requires_text` and
+    `trigger`; `_wields` reads `power.wields`, which has 333 entries and
+    **none** for a feat, because the column is on the `power` table and a
+    feat's card is in `feat`; `_wanted_weapon` reads the body for a *ref*.
+    A feat whose body says `_holding(c, "heavy blade", prop="high crit")`
+    falls through all three, and 27 rows on `silent_refs` are that shape --
+    26 of them feats. #864.
+
+    Matched against the printed vocabulary rather than guessed, so a quoted
+    string that merely looks like a weapon word cannot arm anything.
+
+    **Scored by how many of the row's words one weapon carries, not by
+    picking a weapon per word.** A gate usually names several together --
+    `f1841` says `off-hand` *and* `one-handed`, `f2708` says `heavy blade`
+    *and* `high crit` -- and it wants **one** weapon satisfying the lot. The
+    first draft took the two longest words and mapped each to its own
+    weapon, which handed `f1841` a spear and a club and dropped `off-hand`
+    entirely: the one word its gate turns on came third by length. Scoring
+    finds the weapon the gate would actually accept.
+
+    **Two at most, and they must be two *different* arrangements.** Taking
+    the top two scorers outright gave `f1841` `w3604` and `w3606`, whose
+    matched sets are identical -- both already print `heavy thrown` at 5/10,
+    which is the very thing that row grants, so it correctly changed nothing
+    on either and stayed silent through 144 attempts. The words a gate
+    *reads* and the word a row *writes* both live in this vocabulary and
+    cannot be told apart from the source, so the answer is to offer one
+    weapon per distinct matched set: the best match, and then the best
+    *other* match, which for that row is a weapon carrying `off-hand` and
+    `one-handed` and no throwing range -- one the clause can actually
+    change. 18 weapons are that shape.
+
+    Ties break by ref, so two runs of a seed arm the same thing.
+    """
+    if ref in _WANTED_BY_WORD:
+        return _WANTED_BY_WORD[ref]
+    row = get(ref)
+    src = _source_of(getattr(row, "body", None), ref)
+    vocabulary = _weapon_vocabulary()
+    named = {
+        found for found in _QUOTED_WORD.findall(src) if found in vocabulary
+    }
+    # A ref in the body already arms through `_wanted_weapon`; this axis is
+    # for the rows that name no ref at all, so it stands down rather than
+    # doubling the attempts for a row the other axis covers.
+    if _WEAPON_REF.search(src):
+        named = set()
+    best: dict[frozenset[str], tuple[int, str]] = {}
+    for arm in chargen.PRINTED.values():
+        hit = named & {arm.group, arm.category, *(arm.properties or ())}
+        if not hit:
+            continue
+        key = frozenset(hit)
+        if key not in best or arm.ref < best[key][1]:
+            best[key] = (-len(hit), arm.ref)
+    picked = tuple(
+        ref for _score, ref in sorted(best.values())[:2]
+    ) if named else ()
+    _WANTED_BY_WORD[ref] = tuple(dict.fromkeys(picked))
+    return _WANTED_BY_WORD[ref]
 
 
 def _wanted_weapon(ref: str) -> tuple[str, ...]:
@@ -4687,7 +4784,13 @@ def _attempts(out: Result):  # noqa: ANN202
     # and with the weapon pass pinned to `posed=False` it stayed silent with
     # both halves of its answer built and neither meeting the other. Two
     # axes that each run alone compose for nobody. #708.
-    for held in _wanted_weapon(out.ref):
+    # **The fourth axis**, and the three above it were all blind to a feat:
+    # the header-string path reads `requires_text`/`trigger`, `_wields` has no
+    # entry for any `f...` ref, and `_wanted_weapon` wants a ref. A body that
+    # names a printed weapon *word* fell through all three, which is 27 rows
+    # on `silent_refs`. Last, so a row that shows itself on a cheaper
+    # arrangement is never credited by this one. #864.
+    for held in (*_wanted_weapon(out.ref), *_wanted_by_word(out.ref)):
         for posed in (False, True):
             for face in LOADED:
                 for seed in range(1, TRIES + 1):
