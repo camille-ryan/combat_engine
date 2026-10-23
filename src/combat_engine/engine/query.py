@@ -1286,7 +1286,7 @@ def in_form(world: World, eid: int, *names: str) -> bool:
     return bool(live & wanted) if wanted else True
 
 
-def shifted(world: World, eid: int) -> bool:
+def shaped(world: World, eid: int) -> bool:
     """Has this creature taken a shape that is not its own?
 
     "A +1 bonus to all defences against creatures not in their natural form"
@@ -1294,6 +1294,14 @@ def shifted(world: World, eid: int) -> bool:
     with no arguments: that one is permissive about an unrecorded shape
     because a Requirement should not refuse an attack, where this one has to
     answer *no* for a creature nobody has transformed.
+
+    **Named `shaped` after `Condition.SHAPED`, which is the convention**, and
+    renamed from `shifted` because that was a false friend of `c.shift` --
+    they sat on consecutive lines of an alphabetical dump, so `if
+    c.shifted():` after a `c.shift(2)` read as the obvious way to ask whether
+    the step happened and was always False unless the creature was
+    polymorphed. No row ever called it, which is the only reason the rename
+    costs nothing. #595.
     """
     held = world.get(eid, Shapes)
     return bool(held is not None and held.live)

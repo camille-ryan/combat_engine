@@ -117,14 +117,17 @@ CATEGORIES: dict[str, dict] = {
             "swim, burrow -- is not a verb; see the modes section."
         ),
         "sections": [
-            # **`c.shifted` was in here, beside `c.shift`, and means
+            # **`c.shifted` was in here, beside `c.shift`, and meant
             # shapechanged** -- "Has the creature taken a shape that is not
             # its own?". It is the reader for `c.form`, which is in
             # `effects`, so the writer and its reader were two files apart
             # while the reader sat under a verb it has nothing to do with.
             # The worst false friend found while placing all 397, because
             # `c.shift` is on the line above and `if c.shifted():` after a
-            # shift reads exactly right. #592 is the same shape on `c.held`.
+            # shift read exactly right. **Renamed `c.shaped` in #595**, after
+            # `Condition.SHAPED`; placing all 397 is what made it visible and
+            # the rename is what fixed it. #592 is the same shape on
+            # `c.held`, still open because that one has 40-odd callers.
             #
             # `c.hide`/`c.unhide` went to `modifiers` for a duller reason:
             # both docstrings are about being seen, not about moving.
@@ -247,7 +250,7 @@ CATEGORIES: dict[str, dict] = {
             # in `movement`, under `shift`. It has nothing to do with
             # shifting. See the note in `movement`'s sections.
             ("laid on a creature", [
-                "effect", "form", "in_form", "merge", "shifted", "stance",
+                "effect", "form", "in_form", "merge", "shaped", "stance",
                 "transfer",
             ]),
             ("summoning and companions", [
@@ -680,7 +683,7 @@ READERS: dict[str, list[str]] = {
     "what has already happened": [
         "attacked_since", "bloodied", "damaged_since", "dropped_since",
         "hit_me_this_turn", "in_form", "granted_amount", "lingers",
-        "my_hits_this_turn", "my_misses_this_turn", "shifted",
+        "my_hits_this_turn", "my_misses_this_turn", "shaped",
         "since_turn_began", "since_turn_ended", "surge_value",
         "taking_ongoing",
     ],
@@ -893,10 +896,13 @@ SEE_ALSO: dict[str, list[tuple[str, str]]] = {
         ("cannot_shift", "conditions"),
         ("immobilized", "conditions"),
         ("slowed", "conditions"),
-        # The pointer exists to say "this is not what you think": an author
-        # who has just written `c.shift` and wants to ask whether it
-        # happened will look here, and `c.shifted` is about shapechanging.
-        ("shifted", "effects"),
+        # The pointer survives the rename. An author who has just written
+        # `c.shift` and wants to ask whether it happened still looks here --
+        # and the answer is that no such reader exists, because the engine
+        # does not record it. `c.shaped` is the shapechange reader, and it
+        # was called `c.shifted` until #595 precisely because the name drew
+        # people to the wrong question.
+        ("shaped", "effects"),
         ("hide", "modifiers"),
     ],
     "damage": [

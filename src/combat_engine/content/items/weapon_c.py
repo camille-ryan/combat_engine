@@ -107,7 +107,7 @@ from combat_engine.engine import (
 #: target" can be asked, so it is imported from the module it lives in
 #: rather than approximated off a single `Miss`.
 from combat_engine.engine.events import Boosted, DamageRolled, PowerResolved
-from combat_engine.engine.query import shifted
+from combat_engine.engine.query import shaped
 
 ITEM = "item"
 
@@ -1505,7 +1505,7 @@ def i1880p1(c: Cast) -> None:
 def i2459x1(c: Cast) -> None:
     """+1 to every defence, but only against an attacker wearing a shape.
 
-    `shifted` rather than `in_form`: the card names no shape, it asks whether
+    `shaped` rather than `in_form`: the card names no shape, it asks whether
     the attacker is in its own one or not. A creature that has never changed
     shape answers no, which is the right way round here -- a bonus must not
     pay against everything merely because nothing was recorded.
@@ -1516,7 +1516,7 @@ def i2459x1(c: Cast) -> None:
     """
     for d in _DEFENCES:
         c.bonus(d, 1, on=c.me, until=When.ENCOUNTER,
-                when=lambda ctx: shifted(c.world, ctx.get("attacker", -1)))
+                when=lambda ctx: shaped(c.world, ctx.get("attacker", -1)))
 @power(
     "i2459p1",
     level=9,

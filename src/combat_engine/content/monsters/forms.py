@@ -44,7 +44,7 @@ from collections.abc import Callable
 from combat_engine.engine.cast import Cast
 from combat_engine.engine.durations import When
 from combat_engine.engine.ecs import World
-from combat_engine.engine.query import in_form, shifted
+from combat_engine.engine.query import in_form, shaped
 from combat_engine.engine.types import ActionType
 
 
@@ -74,7 +74,7 @@ def _strictly(*words: str) -> Callable[[World, int], bool]:
     `_shapes` passes when nothing has been recorded, because a Requirement
     should not refuse an attack the stat block never ruled out. A clause that
     *pays out* in a form wants the opposite: it must not pay before the form
-    is taken. `shifted` and `in_form` compose to say so, which is why neither
+    is taken. `shaped` and `in_form` compose to say so, which is why neither
     needs a `strict` keyword.
 
     **This is the distinction the fold had to keep.** Collapsing it into
@@ -84,7 +84,7 @@ def _strictly(*words: str) -> Callable[[World, int], bool]:
     """
 
     def ask(world: World, eid: int) -> bool:
-        return shifted(world, eid) and in_form(world, eid, *words)
+        return shaped(world, eid) and in_form(world, eid, *words)
 
     return ask
 
@@ -97,7 +97,7 @@ def _not_in(*words: str) -> Callable[[World, int], bool]:
     """
 
     def ask(world: World, eid: int) -> bool:
-        return not (shifted(world, eid) and in_form(world, eid, *words))
+        return not (shaped(world, eid) and in_form(world, eid, *words))
 
     return ask
 

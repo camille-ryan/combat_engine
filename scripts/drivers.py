@@ -1296,7 +1296,7 @@ def forms(out: Result) -> None:
     """
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.durations import When
-    from combat_engine.engine.query import in_form, shifted
+    from combat_engine.engine.query import in_form, shaped
 
     world, caster, _ = _board()
     c = Cast(world=world, me=caster, ref="drivers:forms")
@@ -1306,14 +1306,15 @@ def forms(out: Result) -> None:
              "with no shape recorded, a Requirement passes")
     out.that(in_form(world, caster, "beast"),
              "whichever shape it names -- nothing is ruled out")
-    out.that(not shifted(world, caster),
-             "but it has not SHIFTED, which is the other question")
+    out.that(not shaped(world, caster),
+             "but it is not SHAPED, which is the other question -- the"
+             " reader that answers no for a creature nobody transformed")
 
     beast = c.form(until=When.ENCOUNTER, name="beast")
     out.that(in_form(world, caster, "beast"), "once in beast form, beast passes")
     out.that(not in_form(world, caster, "humanoid", "hybrid"),
              "and the shapes it is NOT now refuse -- the gate bites")
-    out.that(shifted(world, caster), "and it counts as shifted")
+    out.that(shaped(world, caster), "and it counts as shaped")
 
     hybrid = c.form(until=When.ENCOUNTER, name="hybrid")
     out.that(in_form(world, caster, "beast") and in_form(world, caster, "hybrid"),
@@ -1328,7 +1329,7 @@ def forms(out: Result) -> None:
     out.that(in_form(world, caster, "hybrid"), "and leaves the other standing")
 
     world.effects.end(hybrid, "driver")
-    out.that(not shifted(world, caster), "with both gone it is itself again")
+    out.that(not shaped(world, caster), "with both gone it is itself again")
     out.that(in_form(world, caster, "beast"),
              "and a Requirement is permissive once more")
 
@@ -1366,17 +1367,17 @@ def forms(out: Result) -> None:
     world, caster, _ = _board()
     c = Cast(world=world, me=caster, ref="drivers:forms")
     held = c.form(until=When.ENCOUNTER, name="beast")
-    out.that(shifted(world, caster), "laid")
+    out.that(shaped(world, caster), "laid")
     world.effects.suspend(held)
-    out.that(not shifted(world, caster), "suspended, the form lifts")
+    out.that(not shaped(world, caster), "suspended, the form lifts")
     world.effects.resume(held)
-    out.that(shifted(world, caster), "and comes back")
+    out.that(shaped(world, caster), "and comes back")
 
     # The negative control: a form laid with no name records nothing, so the
     # name is what does the work.
     world, caster, _ = _board()
     Cast(world=world, me=caster, ref="drivers:forms").form(until=When.ENCOUNTER)
-    out.that(not shifted(world, caster),
+    out.that(not shaped(world, caster),
              "a form laid with no name records no shape at all")
 
     # ---- end to end, through a real grantor row (#477) ------------------
@@ -1393,9 +1394,9 @@ def forms(out: Result) -> None:
     from combat_engine.engine.dsl import use
 
     world, caster, _ = _board("m2812a4", 1)
-    out.that(not shifted(world, caster), "before using it, no shape is recorded")
+    out.that(not shaped(world, caster), "before using it, no shape is recorded")
     use(world, caster, "m2812a4")
-    out.that(shifted(world, caster),
+    out.that(shaped(world, caster),
              "using a real printed polymorph row records a shape -- this is"
              " the rule that catches a grantor which forgot `name=`")
     out.that(in_form(world, caster, "wolf") or in_form(world, caster, "bugbear"),
@@ -9439,26 +9440,26 @@ def class_form(out: Result) -> None:
     from combat_engine.engine.cast import Cast
     from combat_engine.engine.dsl import get
     from combat_engine.engine.durations import When
-    from combat_engine.engine.query import in_form, shifted
+    from combat_engine.engine.query import in_form, shaped
     from combat_engine.engine.types import Keyword
 
     world, caster, _ = _board()
 
     # ---- the state half -------------------------------------------------
-    out.that(not shifted(world, caster), "nobody has changed shape yet")
+    out.that(not shaped(world, caster), "nobody has changed shape yet")
     out.that(in_form(world, caster, "beast"),
              "and the gate is permissive about that, as a Requirement must be")
 
     c = Cast(world=world, me=caster, ref="drivers:form")
     held = c.form(until=When.ENCOUNTER, label="drivers:form", name="beast")
-    out.that(shifted(world, caster), "taking the form records it")
+    out.that(shaped(world, caster), "taking the form records it")
     out.that(in_form(world, caster, "beast"), "and the word is readable")
     out.that(not in_form(world, caster, "guardian"),
              "a DIFFERENT form's word is not -- this is the negative control,"
              " and without it `in_form`'s permissive answer passes everything")
 
     world.effects.end(held, "driver")
-    out.that(not shifted(world, caster), "ending it takes the shape away")
+    out.that(not shaped(world, caster), "ending it takes the shape away")
 
     # ---- the keyword half, which is a different question ----------------
     bf = [r for r in ("p5036", "p16537", "p16539")

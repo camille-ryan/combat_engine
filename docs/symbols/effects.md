@@ -62,7 +62,7 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - Is the creature in one of the named forms? See `query.in_form`.
 - `c.merge(self, into: 'Square | None' = None, *, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
   - Step inside something solid and stop being reachable.
-- `c.shifted(self, *, on: 'int | None' = None) -> 'bool'`
+- `c.shaped(self, *, on: 'int | None' = None) -> 'bool'`
   - Has the creature taken a shape that is not its own?
 - `c.stance(self, *, on: 'int | None' = None, conditions: 'Iterable[Condition]' = (), label: 'str' = '') -> 'Effect'`
   - Assume a stance. Whatever you were in, you are not in it now.

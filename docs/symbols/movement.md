@@ -132,5 +132,5 @@ English sense -- `burrow` leaves the ground and still falls;
 - `c.cannot_shift` is in [`conditions.md`](conditions.md) -- Cannot shift. Still walks, which is why this is not `immobilized`.
 - `c.hide` is in [`modifiers.md`](modifiers.md) -- Go unseen, and stay that way until something gives you away.
 - `c.immobilized` is in [`conditions.md`](conditions.md) -- (no docstring)
-- `c.shifted` is in [`effects.md`](effects.md) -- Has the creature taken a shape that is not its own?
+- `c.shaped` is in [`effects.md`](effects.md) -- Has the creature taken a shape that is not its own?
 - `c.slowed` is in [`conditions.md`](conditions.md) -- (no docstring)

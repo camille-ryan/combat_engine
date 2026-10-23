@@ -11315,12 +11315,20 @@ class Cast:
         who = self._who(on)
         return False if who is None else in_form(self.world, who, *names)
 
-    def shifted(self, *, on: int | None = None) -> bool:
-        """Has the creature taken a shape that is not its own?"""
-        from .query import shifted
+    def shaped(self, *, on: int | None = None) -> bool:
+        """Has the creature taken a shape that is not its own?
+
+        **Not `c.shift`**, which is the step. This was called `c.shifted` and
+        sat directly under it, which made `if c.shifted():` after a
+        `c.shift(2)` read as "did the step happen" -- always False unless the
+        creature was polymorphed, and nothing caught it. Named for
+        `Condition.SHAPED` now, the convention a condition reader follows.
+        See `query.shaped`, and `c.in_form` for the permissive half. #595.
+        """
+        from .query import shaped
 
         who = self._who(on)
-        return False if who is None else shifted(self.world, who)
+        return False if who is None else shaped(self.world, who)
 
     def kill(self, *, on: int | None = None, critical: bool = False) -> bool:
         """Reduce a creature to 0 hit points outright. Returns whether it moved.

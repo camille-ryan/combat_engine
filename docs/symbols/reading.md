@@ -204,7 +204,7 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - Every blow this creature has landed since its own turn began.
 - `query.my_misses_this_turn(world: 'World', eid: 'int') -> 'list[Any]'`
   - Every swing this creature has **missed** with since its turn began.
-- `query.shifted(world: 'World', eid: 'int') -> 'bool'`
+- `query.shaped(world: 'World', eid: 'int') -> 'bool'`
   - Has this creature taken a shape that is not its own?
 - `query.since_turn_began(world: 'World', eid: 'int') -> 'list[Any]'`
   - Everything that has happened since this creature's own turn began.
