@@ -32270,6 +32270,141 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def an_obscuring_zone_can_have_a_side(out: Result) -> None:
+    """"Lightly obscured **for your enemies only**", and the four rows of it.
+
+    #424 built the light model and closed, naming these rows as the case a
+    plain grade cannot say: the obscurity has a **direction**. Setting
+    `obscured=` unconditionally conceals the zone's owner and its allies
+    from each other inside their own fog, which is wrong, and wrong in the
+    monster's favour on three of the four.
+
+    Two directions cover all four cards:
+
+    * `obscured_for="enemies"` -- `p14501` (dim), `m6276a2` and `m6587a2`
+      (dark).
+    * `obscured_for="outside"` -- `m6233a3` (dim).
+
+    Asserted through `p14501`'s own body rather than by laying a zone here,
+    so what is proven is the row and not the kwarg. The pair that matters is
+    an **enemy** and an **ally** looking at the same target in the same
+    zone: the grade is the same, the answer differs, and a non-directional
+    implementation gets both the same.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import (
+        allies,
+        enemies,
+        light_concealment,
+        squares,
+    )
+    from combat_engine.engine.types import Cover
+
+    world, me, _ = _posed("p14501", 1)
+    mates = [a for a in sorted(allies(world, me)) if a != me]
+    foes = sorted(enemies(world, me))
+    if not mates or not foes:
+        return
+
+    # The row lays the zone on its own burst, so a victim has to be standing
+    # in it for the obscurity to be about anybody.
+    c: Any = Cast(world=world, me=me, ref="p14501", target=foes[0])
+    REGISTRY["p14501"].body(c)
+    laid = [z for _, z in world.zones.all() if z.label == "p14501"]
+    out.that(len(laid) == 1,
+             "p14501 lays its zone, which is the setup and not the finding",
+             f"zones={len(laid)}")
+    if not laid:
+        return
+    zone = laid[0]
+    out.that(zone.obscured == "dim" and zone.obscured_for == "enemies",
+             "and it is dim, for enemies only -- read back off the live"
+             " zone rather than from the call",
+             f"obscured={zone.obscured!r} for={zone.obscured_for!r}")
+
+    # Put somebody in the fog and ask two lookers about them.
+    victim = foes[0]
+    from combat_engine.engine.components import Position
+    spot = sorted(zone.squares)[0]
+    pos = world.get(victim, Position)
+    if pos is None:
+        return
+    pos.square = spot
+    world.grid.place(victim, spot)
+    world.zones.refresh()
+
+    other_foe = next((f for f in foes if f != victim), None)
+    if other_foe is None:
+        return
+    out.that(light_concealment(world, other_foe, victim) is Cover.PARTIAL,
+             "**an enemy of the zone's owner sees the target as concealed**"
+             " -- dim light is partial concealment, which is the -2 the card"
+             " is for",
+             f"{light_concealment(world, other_foe, victim)}")
+    out.that(light_concealment(world, me, victim) is Cover.NONE,
+             "while the owner looking at the same target in the same zone"
+             " sees NO concealment -- the control, and the half a plain"
+             " grade gets wrong",
+             f"{light_concealment(world, me, victim)}")
+    out.that(light_concealment(world, mates[0], victim) is Cover.NONE,
+             "and so does the owner's ally, because the side is the team"
+             " and not the caster alone",
+             f"{light_concealment(world, mates[0], victim)}")
+
+    # -- the other direction, on m6233a3's own numbers -----------------
+    world2, mob, _ = _posed("m6233a3", 1)
+    prey = sorted(enemies(world2, mob))
+    if not prey:
+        return
+    d: Any = Cast(world=world2, me=mob, ref="m6233a3", target=prey[0])
+    REGISTRY["m6233a3"].body(d)
+    ring = [z for _, z in world2.zones.all() if z.label == "m6233a3"]
+    if not ring:
+        return
+    out.that(ring[0].obscured_for == "outside",
+             "m6233a3's storm is obscured to creatures OUTSIDE it, which is"
+             " the second direction and the one a frozen set of ids could"
+             " not express",
+             f"for={ring[0].obscured_for!r}")
+    inside = sorted(ring[0].squares)
+    if len(inside) < 2:
+        return
+    watcher = prey[0]
+    target = prey[1] if len(prey) > 1 else None
+    if target is None:
+        return
+    for who, sq in ((watcher, inside[0]), (target, inside[1])):
+        pos = world2.get(who, Position)
+        if pos is None:
+            return
+        pos.square = sq
+        world2.grid.place(who, sq)
+    world2.zones.refresh()
+    out.that(light_concealment(world2, watcher, target) is Cover.NONE,
+             "**two creatures both standing in it see each other plainly**,"
+             " because each is inside -- the clause reads 'to creatures"
+             " outside it' and this is the half that is about position",
+             f"{light_concealment(world2, watcher, target)}")
+    # **Picked by position, not by elimination.** The first version took
+    # "any other enemy, else the owner" and measured 0 -- because this is
+    # an `AreaBurst(2, 10)` of 25 squares and the creature that laid it is
+    # standing *in* its own storm, so the fallback was an insider. Which is
+    # the card working: "obscured to creatures outside it" conceals the
+    # zone's occupants from the owner too, when the owner has walked in.
+    outsider = next(
+        (e for e in [*sorted(enemies(world2, mob)), mob]
+         if not (ring[0].squares & frozenset(squares(world2, e)))), None)
+    if outsider is None:
+        return
+    out.that(light_concealment(world2, outsider, target) is Cover.PARTIAL,
+             "while somebody outside looking in sees concealment -- the"
+             " control for the assertion above, which would otherwise pass"
+             " on a zone that obscured nobody at all",
+             f"{light_concealment(world2, outsider, target)}")
+
+
 def raising_a_defence_withdraws_the_critical_it_no_longer_reaches(out: Result) -> None:
     """`p12245` raises an ally's defence against the blow already measured.
 
@@ -33174,6 +33309,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "obscured_side": (
+        an_obscuring_zone_can_have_a_side,
+        "an obscuring zone can obscure one side and not the other (#424)",
     ),
     "settle_attack": (
         raising_a_defence_withdraws_the_critical_it_no_longer_reaches,

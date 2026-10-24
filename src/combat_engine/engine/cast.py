@@ -11807,6 +11807,7 @@ class Cast:
         difficult: bool | str = False,
         blocks_sight: bool = False,
         obscured: str = "",
+        obscured_for: str = "",
         exempt: frozenset[int] | set[int] | None = None,
         sustain: ActionType | None = None,
     ) -> int:
@@ -11828,11 +11829,30 @@ class Cast:
         A set of ids, not a predicate. An exemption by *sense* or by
         *movement mode* is a different gap and those rows still carry a
         marker; see `Zone.exempt`.
+
+        **`obscured_for` gives the obscurity a side**, which four cards
+        print and a plain grade cannot say:
+
+        * `obscured_for="enemies"` -- *"lightly obscured for your enemies
+          only"*, *"heavily obscured to enemies"*. The owner's own side sees
+          through it.
+        * `obscured_for="outside"` -- *"lightly obscured to creatures
+          outside it"*. Whoever stands in it sees out normally.
+
+        Two words rather than a set of ids, which is the opposite call from
+        `exempt` one line up and is deliberate: `exempt`'s membership is
+        decided when the zone is laid and does not move, while a direction's
+        changes every time somebody steps in or out. Refused at `Zones.
+        create` if it is not one of the two, and refused without
+        `obscured=`, because a direction with no grade darkens nothing and
+        reads exactly like a correct zone. `Zones.obscuring_for` is the
+        reader. #424.
         """
         return self.world.zones.create(
             self.me, label or self.ref, frozenset(area), until,
             difficult=difficult, blocks_sight=blocks_sight,
-            obscured=obscured, exempt=exempt, sustain=sustain,
+            obscured=obscured, obscured_for=obscured_for,
+            exempt=exempt, sustain=sustain,
         )
 
     def aura(

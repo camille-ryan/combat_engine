@@ -1830,6 +1830,14 @@ def light_level(
     answers `BRIGHT` for every square and the attack path's light term is a
     no-op. 13 rows wait on this; it is the model the other seven light
     symbols are written against.
+
+    **This does not read `Zone.obscured_for`**, and the asymmetry is
+    deliberate. A directional obscurity is a fact about who is *looking*,
+    and this function is handed a square and no looker -- so it answers the
+    square's own grade, which is the conservative answer and the one the
+    content readers want ("teleport me somewhere dim" is about the square,
+    not about an onlooker). `light_concealment` has the attacker and asks
+    `Zones.obscuring_for` for a scan already filtered to that looker.
     """
     worst = Light(world.grid.light.get(square, Light.BRIGHT))
     # `dark_zones` is the caller's own scan, passed in so a loop over the
@@ -2021,7 +2029,13 @@ def light_concealment(world: World, attacker: int, target: int) -> Cover:
     if (not world.grid.light and not world.zones.darkening
             and not _anyone_dimming(world)):
         return Cover.NONE
-    dark_zones = world.zones.dark()
+    # **Filtered by who is looking**, which is the one place that can be
+    # done: this function has the attacker and `light_level` does not. Four
+    # rows print an obscurity with a side, and a zone whose side excludes
+    # this attacker is simply not in the scan -- so the whole chain below
+    # reads as if it were not there, rather than every reader learning
+    # about directions.
+    dark_zones = world.zones.obscuring_for(attacker)
 
     # The distance matters: a sense with a printed range stops answering past
     # it, which is the whole of what the range is for.

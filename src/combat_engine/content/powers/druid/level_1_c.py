@@ -85,13 +85,19 @@ def p14500(c: Cast) -> None:
     target=EACH_OTHER,
     keywords=[*PRIMAL_IMPLEMENT, Keyword.CLOSE],
     attack=Attack(WIS, vs=FORT),
-    dropped=('c.zone(obscured_for=)',),
 )
 def p14501(c: Cast) -> None:
-    """Lightly obscured is partial concealment and there is none in this
-    engine -- `blocks_sight` is a wall you cannot see through, which is a
-    different thing. The patch of ground is real, so it is laid; what it does
-    to an attack roll is noted.
+    """"Lightly obscured for your enemies only" -- a dim zone with a side.
+
+    Lightly obscured is partial concealment, which the light model carries
+    as `obscured="dim"`: `query.light_concealment` grades dim at -2 and
+    cancels it for whoever can see in that light. The **side** is the part
+    a grade alone cannot say, and setting it unconditionally would conceal
+    the caster's own allies from each other inside her fog. So the zone
+    names who it obscures and `Zones.obscuring_for` answers per looker.
+
+    Not `blocks_sight`: that is a wall nobody sees through, binary and
+    symmetric, which is a different thing and the wrong one here.
     """
     if c.strike():
         c.damage("2d8", c.wis_mod)
@@ -99,8 +105,8 @@ def p14501(c: Cast) -> None:
         return
     area = c.area()
     if area:
-        c.zone(area, label=c.ref, until=When.EONT)
-        c.note(f"{c.ref}: the burst is lightly obscured for your enemies only")
+        c.zone(area, label=c.ref, until=When.EONT,
+               obscured="dim", obscured_for="enemies")
 
 
 @power(
