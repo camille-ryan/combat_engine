@@ -49,6 +49,8 @@ Making an attack, and what the attack turns out to be.
   - Let somebody else make an attack, now, out of turn.
 - `c.hit(self, *, on: 'int | None' = None, half: 'bool' = False) -> 'int'`
   - Deal the damage the header declared.
+- `c.hit_becomes(self, hit: 'bool', *, ev: 'Any' = None) -> 'bool'`
+  - "The attack misses", or it lands after all.
 - `c.landed`
   - Did the last attack hit? `c.hit()` is the damage; this is the question.
 - `c.provoke(self, attacker: 'int', *, on: 'int | None' = None, why: 'str' = '') -> 'None'`

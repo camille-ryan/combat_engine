@@ -32076,6 +32076,160 @@ def hiding_is_a_check_and_moving_fast_makes_it_harder(out: Result) -> None:
              f"{skill_modifier(w2, me2, 'stealth')}")
 
 
+def a_turned_blow_says_so_and_stays_turned(out: Result) -> None:
+    """"The attack misses" has to be announced, and it has to *stick*.
+
+    Five rows rewrote `AttackResult.hit` by hand and nothing said a landed
+    blow had been turned aside, so `m6283a4` -- whose whole printed effect is
+    that -- fired, was correct, and reported SILENT for as long as it
+    existed. The other four turn a blow aside as a clause of something else
+    and looked credited while this clause of them was invisible. #862.
+
+    **Two windows, and the second is why the engine had to change.** A row
+    answering the `Hit` interrupt can clear `result.hit` and `resolve`'s
+    `confirm` callback turns the announcement into a real `Miss`. A row
+    answering `AttackRolled` is *earlier* than the recompute, so the same
+    write is discarded -- and `m6283a4` used to get around that by setting
+    `natural = 1`, faking the die, which is what `AttackResult.forced` and
+    `.treated` both have docstrings warning against. `turned` is the
+    declarative flag they describe, and the last block here is the one
+    assertion that could not have been written before it: the blow is a
+    `Miss` **even though the roll qualified**.
+
+    Driven through the rows' own bodies, not by calling the verb, for the
+    standing reason: calling `c.hit_becomes` proves the mechanism and says
+    nothing about whether a row reaches it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import BlowTurned, Hit, Miss
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    TURNS = ("m115673a0", "m147a0", "m148a3", "m5565a0", "m6283a4")
+    for ref in TURNS:
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker",
+                 f"{row.unfinished}")
+
+    # -- the `Hit` window: an odd die goes through the image ---------------
+    world, me, _ = _posed("m147a0", 1)
+    foe = enemies(world, me)[0]
+    said: list[BlowTurned] = []
+    world.bus.on(BlowTurned, said.append)
+
+    def blow(natural: int) -> Hit:
+        """A landed attack, shaped the way `resolve.attack` hands one over.
+
+        `Hit` declares no `result` field -- `resolve` attaches it -- so a
+        rule that forgot to attach one here would be testing the
+        `result is None` branch and nothing else.
+        """
+        ev = Hit(attacker=foe, target=me, power="mba", critical=False)
+        ev.result = AttackResult(hit=True, natural=natural, total=25,
+                                 target_defence=10)
+        return ev
+
+    REGISTRY["m147a0"].body(Cast(world=world, me=me, ref="m147a0"))
+    odd = blow(7)
+    world.bus.emit(odd)
+    out.that(len(said) == 1,
+             "**turning a landed blow aside announces `BlowTurned`** -- the"
+             " event this family had none of, and the whole of why the row"
+             " whose only printed effect is this reported SILENT while"
+             " working",
+             f"{len(said)} announcement(s)")
+    out.that(bool(said) and said[0].hit is False and said[0].by == "m147a0",
+             "and it names the new state and the row that turned it, so a"
+             " rider on `your` trait cannot pay out on another veil",
+             f"{said[0] if said else None}")
+    out.that(odd.result.hit is False,
+             "the write is still there as well as the announcement",
+             f"hit={odd.result.hit}")
+
+    # -- the same row, the other branch: an even die is left alone --------
+    said.clear()
+    even = blow(8)
+    world.bus.emit(even)
+    out.that(not said and even.result.hit is True,
+             "an even die is NOT turned aside and announces nothing -- the"
+             " control that a rule asserting only the event would miss",
+             f"{len(said)} said, hit={even.result.hit}")
+
+    # -- a blow that already missed is a no-op, not an announcement -------
+    said.clear()
+    already = Hit(attacker=foe, target=me, power="mba", critical=False)
+    already.result = AttackResult(hit=False, natural=3, total=4,
+                                  target_defence=25)
+    moved = Cast(world=world, me=me, ref="drivers:turned").hit_becomes(
+        False, ev=already)
+    out.that(moved is False and not said,
+             "turning aside a blow that already missed moves nothing and"
+             " announces nothing, which is the guard `m6283a4` used to"
+             " spell out by hand",
+             f"moved={moved}, {len(said)} said")
+
+    # -- the `AttackRolled` window, on the real path ----------------------
+    # Swept rather than pinned to one seed: the row needs an attack that
+    # *would* land and then has to win a skill check against its total, and
+    # which seed does that is not a fact worth freezing.
+    found = None
+    for seed in range(1, 25):
+        w, mine, _ = _posed("m6283a4", seed)
+        REGISTRY["m6283a3"].body(Cast(world=w, me=mine, ref="m6283a3"))
+        heard: list[BlowTurned] = []
+        w.bus.on(BlowTurned, heard.append)
+        for attacker in sorted(enemies(w, mine))[:3]:
+            mark = len(w.bus.log)
+            swing = Cast(world=w, me=attacker, ref="dummy:mba")
+            swing.target = mine
+            swing.basic()
+            tail = w.bus.log[mark:]
+            if heard:
+                found = (seed, attacker, heard[0], tail)
+                break
+        if found:
+            break
+
+    out.that(found is not None,
+             "`m6283a4` turns a blow aside through the **engine's own**"
+             " trigger machinery -- its stance raised, a real attack rolled,"
+             " no synthetic event anywhere",
+             f"swept 24 seeds, found={found[0] if found else None}")
+    if found is not None:
+        _seed, _atk, heard0, tail = found
+        settled = [e for e in tail if isinstance(e, (Hit, Miss))]
+        res = getattr(settled[-1], "result", None) if settled else None
+        out.that(heard0.by == "m6283a4" and heard0.hit is False,
+                 "and announces it in its own name",
+                 f"{heard0}")
+        out.that(bool(settled) and isinstance(settled[-1], Miss),
+                 "the blow settles as a **`Miss`**, so every rider hung on"
+                 " the hit goes with it",
+                 f"{[type(e).__name__ for e in settled]}")
+        # **The assertion that could not exist before `turned`.** The roll
+        # qualified -- it is not a 1 and it reached the defence -- so the
+        # recompute in `resolve.attack` would have re-derived a hit from the
+        # die. It does not, and the die was not touched to achieve it.
+        out.that(res is not None and res.turned is True and res.hit is False
+                 and res.natural != 1
+                 and res.total >= res.target_defence,
+                 "and it stays a miss **through the recompute, with the die"
+                 " left alone**: the roll qualified on its own numbers and"
+                 " the flag outranks it, where the row used to have to write"
+                 " `natural = 1` and lie to every later reader",
+                 f"turned={getattr(res, 'turned', None)}"
+                 f" hit={getattr(res, 'hit', None)}"
+                 f" natural={getattr(res, 'natural', None)}"
+                 f" total={getattr(res, 'total', None)}"
+                 f" vs defence={getattr(res, 'target_defence', None)}")
+        out.that(res is not None and res.critical is False,
+                 "and it is not a critical either, which the stale flag"
+                 " would otherwise have left standing for a rider to read",
+                 f"critical={getattr(res, 'critical', None)}")
+
+
 def a_demoted_critical_says_so_out_loud(out: Result) -> None:
     """"The attack becomes a normal hit" has to be *announced*, not only done.
 
@@ -32325,6 +32479,10 @@ DRIVERS = {
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "blow_turned": (
+        a_turned_blow_says_so_and_stays_turned,
+        "a landed blow turned aside is announced, and stays turned (#862)",
     ),
     "crit_announced": (
         a_demoted_critical_says_so_out_loud,

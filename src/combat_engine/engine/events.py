@@ -1176,6 +1176,37 @@ class CritChanged(Event):
 
 
 @dataclass
+class BlowTurned(Event):
+    """A blow that had landed was turned aside, or one that missed was made
+    to land.
+
+    `CritChanged` one field over, and the same measured shape: **five rows
+    rewrite `AttackResult.hit` by hand and nothing announced it**, so the one
+    whose whole printed effect is that -- the attack misses, through the
+    illusion or turned by a stance -- fired, was correct, and reported SILENT
+    for as long as it had existed. The other four do it as a clause of
+    something else and look credited while this clause of them is equally
+    invisible.
+
+    `by` is the ref of the row that turned it, for `CritChanged.by`'s
+    reason: a rider narrowing on "when your trait turns a blow aside" must
+    not pay out on another creature's veil.
+
+    `hit` is the value **after** the change, so a listener reads the new
+    state rather than inferring a direction from the event's name.
+
+    **There is no `kind` field and there cannot be**: `Event.__init_subclass__`
+    refuses one. `Boosted` is why.
+    """
+
+    attacker: int
+    target: int
+    power: str
+    hit: bool
+    by: str
+
+
+@dataclass
 class InitiativeRolled(Event):
     """A creature's place in the order was decided.
 

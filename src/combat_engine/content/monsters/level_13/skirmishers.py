@@ -316,9 +316,10 @@ def m148a3(c: Cast) -> None:
     distribution -- an attack has to beat the defence and find the creature
     either way -- and it is the only version that can be written at all:
     `resolve.attack` recomputes the outcome after the roll, so a listener on
-    `AttackRolled` has nothing to change, while `result.hit` set to False in
-    the `Hit` interrupt window is turned into a real `Miss` by the engine's
-    own `confirm` callback.
+    `AttackRolled` has nothing to change, while `c.hit_becomes(False)` in the
+    `Hit` interrupt window is turned into a real `Miss` by the engine's own
+    `confirm` callback. That write was hand-rolled here and announced
+    nothing. #862.
 
     Only melee and ranged attacks, which is what the card names, and never a
     critical, which the card exempts. The hold is the veil: the blow that
@@ -340,7 +341,11 @@ def m148a3(c: Cast) -> None:
         if result.critical or _reach_kind(ev) not in ("melee", "ranged"):
             return
         if c.roll("1d2") == 1:
-            result.hit = False
+            c.hit_becomes(False, ev=ev)
+            # **Stays hand-written and stays after the verb.** `blurred` is
+            # not part of turning the blow aside -- it is this creature's own
+            # out-of-band signal, read by a sibling row in this file, and no
+            # engine field carries it.
             result.blurred = True
             return
         for eff in list(c.world.effects.of(me)):

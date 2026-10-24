@@ -3442,6 +3442,72 @@ class Cast:
         )
         return True
 
+    def hit_becomes(self, hit: bool, *, ev: Any = None) -> bool:
+        """"The attack misses", or it lands after all.
+
+        `crit_becomes` one field over, and the same measured shape: **five
+        rows rewrite `AttackResult.hit` by hand** and nothing announced it,
+        so `m6283a4` -- whose whole printed effect is that the blow misses --
+        fired, was correct, and reported SILENT for as long as it existed.
+        The other four turn a blow aside as a clause of something else and
+        look credited while this clause of them is invisible. #862.
+
+        **Two windows, one verb**, which is the part that needed the engine
+        to change rather than just an event. A row answering the `Hit`
+        interrupt can set `result.hit` and the `confirm` callback in
+        `resolve.attack` turns the announcement into a real `Miss`. A row
+        answering `AttackRolled` is *earlier* than the recompute, so the same
+        write is thrown away -- and the one row in that window worked around
+        it by setting `natural = 1`, faking the die so that one disjunct of
+        the recompute came out false. `AttackResult.forced` and `.treated`
+        both have docstrings saying not to do exactly that. So the flag they
+        describe now exists pointed the other way, `turned`, and both
+        windows take the same door.
+
+        `hit=True` is the `forced` half -- "the attack automatically hits" --
+        and clears `turned` with it. It is not the same as `c.auto_crit`,
+        whose docstring is explicit that *"regardless of the roll licenses
+        the critical, not the hit"*.
+
+        `ev` defaults to `c.trigger`: every one of the five is an interrupt
+        or an opportunity answering the blow it changes. Returns whether
+        anything moved, so a row can tell "I turned a blow aside" from
+        "there was nothing to turn", and a no-op is not announced -- which
+        is what `m6283a4`'s own `if not result.hit: return` guard was doing
+        by hand.
+
+        Does **not** touch `natural`, `total` or `rolls`. A row that wants
+        the die itself replaced wants `c.reroll_attack`, and the eight
+        copies of the outcome formula that implies are #868.
+        """
+        from .events import BlowTurned
+
+        blow = ev if ev is not None else self.trigger
+        result = getattr(blow, "result", None) if blow is not None else None
+        if result is None or bool(result.hit) == bool(hit):
+            return False
+        if hit:
+            result.forced = True
+            result.turned = False
+        else:
+            result.turned = True
+            # A turned blow is not a critical either. The recompute says so
+            # too, but a row answering the `Hit` window is past it, and a
+            # rider reading `result.critical` afterwards would see the stale
+            # True.
+            result.critical = False
+        result.hit = hit
+        self.world.bus.emit(
+            BlowTurned(
+                attacker=int(getattr(blow, "attacker", -1)),
+                target=int(getattr(blow, "target", -1)),
+                power=str(getattr(blow, "power", "")),
+                hit=hit,
+                by=self.ref,
+            )
+        )
+        return True
+
     # -- damage and healing --------------------------------------------------
 
     def hit(self, *, on: int | None = None, half: bool = False) -> int:
@@ -4706,7 +4772,10 @@ class Cast:
                 if ctx
                 else 0
             )
-            result.hit = (
+            # `turned` outranks the boost: a blow a row has turned aside is
+            # not rescued by a bonus to the roll. The third copy of this
+            # formula in the tree and the reason #868 wants it to be one.
+            result.hit = not result.turned and (
                 result.forced
                 or result.natural >= floor
                 or (result.natural != 1 and result.total >= result.target_defence)

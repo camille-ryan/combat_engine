@@ -1204,8 +1204,22 @@ DID_SOMETHING = {
     "Bloodied", "Dropped", "Died", "SavingThrow", "SkillCheck", "Summoned",
     "SurgeSpent", "ActionGranted", "ZoneResized", "WeaponChanged",
     "EffectSuspended", "WeaponHeld", "Rerolled", "Boosted", "Cushioned",
-    "CritChanged",
+    "CritChanged", "BlowTurned",
 }  # fmt: skip
+# `BlowTurned` is the **eighth** class and `CritChanged`'s sibling one field
+# over: five rows rewrite `AttackResult.hit` by hand, and `m6283a4` -- whose
+# whole printed effect is that the blow misses -- reported SILENT for as long
+# as it existed, while the other four turn a blow aside as a clause of
+# something else and looked credited.
+#
+# **`m6283a4` is the row that proves the "nearly fits" rule in both
+# directions.** It is also one of `CritChanged`'s 19, because it clears
+# `critical` on the way -- and #861 deliberately did *not* re-point it, on
+# the grounds that crediting it for announcing a crit change would retire it
+# from the silent list on a clause nobody cares about and leave the real gap
+# undetectable. It stayed silent for one more day and is now credited for
+# the thing its card actually says. #862.
+#
 # `CritChanged` is the **seventh** class, and it is the shape the note below
 # names rather than a new one: *a verb that changes a number already on the
 # table*. "The attack becomes a normal hit" rewrites the criticality of a blow

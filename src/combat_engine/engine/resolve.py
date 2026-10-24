@@ -71,6 +71,21 @@ class AttackResult:
     #: from the die after the interrupt window, so a listener setting `hit`
     #: had it thrown away, and rigging `total` would be faking.
     forced: bool = False
+    #: The counterpart of `forced`: set by a row that says a landed blow
+    #: **misses** -- "the attack misses", through the illusion, turned aside.
+    #:
+    #: Needed for the same reason `forced` is, pointed the other way. The
+    #: outcome is recomputed from the die below, so a row in the
+    #: `AttackRolled` window that set `hit = False` had it thrown away --
+    #: and the one row that worked around that rewrote `natural` to 1,
+    #: which is the faking both `forced` and `treated` say not to do. It
+    #: made the die lie to every later reader so that one disjunct of the
+    #: recompute would come out false.
+    #:
+    #: A row in the `Hit` interrupt window can set `hit` directly and the
+    #: `confirm` callback turns it into a real `Miss`; this flag is what
+    #: makes the *earlier* window work too, so one verb serves both. #862.
+    turned: bool = False
     #: Who the blow finally landed on. Usually the creature it was aimed at
     #: -- but an interrupt may move it, and then the body that rolled this
     #: has to be told, or it deals its damage to the one that was missed.
@@ -371,8 +386,13 @@ def attack(
         # every 20 no matter how hopeless the swing.
         #
         # The **hit** is a separate question and is unchanged: a 20 hits.
-        result.critical = natural >= floor and total >= against
-        result.hit = natural >= floor or (natural != 1 and total >= against)
+        # `turned` outranks the die in both, for the reason beside the field:
+        # a blow a row has turned aside neither hits nor crits, whatever was
+        # rolled.
+        result.critical = not result.turned and natural >= floor and total >= against
+        result.hit = not result.turned and (
+            natural >= floor or (natural != 1 and total >= against)
+        )
 
         rolled = AttackRolled(
             attacker=attacker,
@@ -444,9 +464,15 @@ def attack(
         # See the window above: the natural opens the door, the total has to
         # reach the defence. `forced` hits without rolling well and so is not
         # a critical either.
-        result.critical = result.natural >= floor and result.total >= against
-        result.hit = result.forced or result.natural >= floor or (
-            result.natural != 1 and result.total >= against
+        result.critical = (
+            not result.turned
+            and result.natural >= floor
+            and result.total >= against
+        )
+        result.hit = not result.turned and (
+            result.forced
+            or result.natural >= floor
+            or (result.natural != 1 and result.total >= against)
         )
 
         # The `Hit`/`Miss` carries it too, so a row can answer "when it is
