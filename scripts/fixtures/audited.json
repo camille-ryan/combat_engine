@@ -1,7 +1,7 @@
 {
-  "sha": "cc5538bb02e2cd4ce1a989250c49c49e035df5fb",
-  "refs": 21480,
-  "fired": 19793,
+  "sha": "ee8b084f2445bf2f2e723fabf5d8b2cf770376ce",
+  "refs": 21481,
+  "fired": 19794,
   "silent": 619,
   "never": 881,
   "known_quiet": 187,
@@ -1085,7 +1085,6 @@
     "i520x1",
     "i526p1",
     "i526x1",
-    "i540p1",
     "i553p1",
     "i580x1",
     "i660x1",
