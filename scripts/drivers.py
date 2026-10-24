@@ -32139,6 +32139,103 @@ def _rider_blow(attacker: int, target: int, result: Any) -> Any:
     return ev
 
 
+def a_banked_reroll_turns_a_miss_into_a_hit(out: Result) -> None:
+    """"The next ally to miss can reroll" -- and the reroll has to pay.
+
+    `p12934:augment2` was blocked on `c.reroll_attack(ev=)`: the reroll is
+    handed to the next ally who misses, which is a **watcher**, and a
+    watcher has no `c.trigger`, so the roll had to be named rather than
+    inferred.
+
+    **The window is the whole of why this one works and #775's three do
+    not.** A reroll after the power has resolved rewrites a number nobody
+    reads again. This answers the `Miss`, which `resolve.attack` emits
+    inside a loop that re-announces as a `Hit` when `result.hit` changes --
+    so the sequence on the bus is `Miss, Rerolled, Hit, DamageRolled,
+    DamageApplied`, and the riders hung on the hit pay out.
+
+    Swept rather than pinned: the row needs an ally adjacent to a foe and
+    then needs that ally to miss, and which seed does both is not worth
+    freezing. The counts are reported so a future change that quietly stops
+    producing misses cannot read as a pass.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Miss, Rerolled
+    from combat_engine.engine.query import allies, enemies
+
+    row = REGISTRY["p12934"]
+    out.that(not row.unfinished and not row.dropped,
+             "p12934 carries no marker",
+             f"todo={row.unfinished} dropped={row.dropped}")
+
+    def sweep(augment_to: int) -> tuple[int, int, int]:
+        """(misses, rerolls, hits-after-a-reroll) over a fixed seed range."""
+        misses = rerolls = turned = 0
+        for seed in range(1, 30):
+            world, me, _ = _posed("p12934", seed)
+            mates, foes = sorted(allies(world, me)), sorted(enemies(world, me))
+            for ally in mates:
+                probe = Cast(world=world, me=ally, ref="drivers:reach")
+                near = [f for f in foes if probe.distance(f) <= 1]
+                if not near:
+                    continue
+                victim = near[0]
+                c: Any = Cast(world=world, me=me, ref="p12934", target=victim)
+                # **`augment_spend`, not `augment`.** `augment()` reads
+                # `c.augment` only when the header declares `augments=` --
+                # this row does not, because neither augment rewrites its
+                # target line -- so the knob on this path is the held
+                # spend. Setting the wrong one left the control reading
+                # identically to the positive (10 rerolls of 12 misses
+                # either way), which looked like the row ignoring its
+                # augment and was the probe driving nothing.
+                c.augment_spend = augment_to
+                REGISTRY["p12934"].body(c)
+                mark = len(world.bus.log)
+                Cast(world=world, me=ally, ref="dummy:mba",
+                     target=victim).basic()
+                tail = world.bus.log[mark:]
+                if any(isinstance(e, Miss) for e in tail):
+                    misses += 1
+                got = [e for e in tail if isinstance(e, Rerolled)]
+                if got:
+                    rerolls += 1
+                    # The announcement order is the assertion: the Hit has
+                    # to come *after* the Rerolled, or the reroll bought
+                    # nothing.
+                    kinds = [type(e).__name__ for e in tail]
+                    if "Hit" in kinds and kinds.index("Rerolled") < kinds.index("Hit"):
+                        turned += 1
+        return misses, rerolls, turned
+
+    misses, rerolls, turned = sweep(2)
+    out.that(misses > 0,
+             "the sweep produced ally misses to reroll -- without this the"
+             " assertions below would pass on an empty sample",
+             f"{misses} misses across 29 seeds")
+    out.that(rerolls > 0,
+             "**and augment 2 rerolls them**, from inside a watcher, with"
+             " the roll named by `ev=` because a watcher has no trigger",
+             f"{rerolls} rerolls of {misses} misses")
+    out.that(turned > 0,
+             "and at least one reroll is followed by a **`Hit`** -- the"
+             " engine re-announces when `result.hit` flips, so the reroll"
+             " buys the damage and the riders, which is what a reroll after"
+             " `PowerResolved` cannot do (#775)",
+             f"{turned} of {rerolls} rerolls turned the miss into a hit")
+
+    # -- the control: the un-augmented form rerolls nothing ---------------
+    bare_misses, bare_rerolls, _ = sweep(0)
+    out.that(bare_misses > 0 and bare_rerolls == 0,
+             "the **un-augmented** form rerolls nothing on the same seeds --"
+             " augment 2 replaces the ally's +2 rather than adding to it,"
+             " and a rule that only watched for a reroll would pass with the"
+             " augment gate deleted",
+             f"{bare_rerolls} rerolls of {bare_misses} misses")
+
+
 def a_kill_names_the_weapon_that_made_it(out: Result) -> None:
     """"You drop an enemy with a heavy blade" -- which weapon, not which hand.
 
@@ -32719,6 +32816,10 @@ DRIVERS = {
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "banked_reroll": (
+        a_banked_reroll_turns_a_miss_into_a_hit,
+        "a reroll handed to an ally turns their miss into a hit (#775's line)",
     ),
     "kill_weapon": (
         a_kill_names_the_weapon_that_made_it,

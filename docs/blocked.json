@@ -107,10 +107,6 @@
     "wants": "c.revealed(on=) -- clearing Relation.HIDDEN_FROM from the creature being looked at",
     "why": "the clause strips concealment and invisibility; c.no_cover says the first and only c.see_invisible answers the second, and that sits on whoever is looking rather than on the target"
   },
-  "p12934:augment2": {
-    "wants": "c.reroll_attack(ev=) -- rerolling an attack read off a passed event rather than off c.trigger",
-    "why": "the reroll is handed to the next ally who misses, which is a watcher, and a watcher has no c.trigger"
-  },
   "p12947:augment2": {
     "wants": "c.deals_half(when=) -- half damage narrowed to some of a creature's attacks",
     "why": "'deals half damage with any attack that is not a basic attack' is Condition.WEAKENED, which query.deals_half reads off the creature rather than off the attack"
