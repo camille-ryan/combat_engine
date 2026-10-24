@@ -69,6 +69,53 @@ LOG="logs/nightly-${STAMP}.log"
 # way out. A stale file -- a sweep that was killed -- reads as not running,
 # which is the safe direction: the worst case is two sweeps contending,
 # which is loud, against a skip that looks like a clean night.
+# **Is a sweep due?** The schedule fires hourly now, because a calendar time
+# does not survive a closed lid: `StartCalendarInterval` is deferred to the
+# next wake and dropped if there is none, which cost three of seventeen
+# nights outright. #871.
+#
+# So the hour is decided here instead, where it can be reasoned about:
+#
+#   * nothing to do unless the last real sweep is more than 20 hours old;
+#   * normally only between 01:00 and 07:00, so a 110-minute job never starts
+#     in the middle of somebody's working day;
+#   * **unless it is more than 48 hours stale**, which means the overnight
+#     window has already been missed twice and catching up matters more than
+#     the inconvenience.
+#
+# "The last real sweep" is the newest dated log whose first word is not
+# SKIPPED -- a skip is not a verdict, so a run of skips must not read as
+# recency. A `--fast` smoke test passes this gate unconditionally.
+#
+# **A not-due exit writes no dated log**, because 23 of them a day is the
+# noise `--history` exists to avoid -- but it does touch a heartbeat, so
+# "the agent is alive and not due" stays distinguishable from "the agent is
+# not running at all", which is the hole #871 is about.
+if [ "${1:-}" != "--fast" ]; then
+    LAST=0
+    for f in $(ls -t logs/nightly-2*.log 2>/dev/null); do
+        case "$(head -1 "$f" | awk '{print $1}')" in
+            SKIPPED|MOVED) continue ;;
+            *) LAST=$(stat -f %m "$f" 2>/dev/null || echo 0); break ;;
+        esac
+    done
+    NOW=$(date +%s)
+    AGE=$(( (NOW - LAST) / 3600 ))
+    HOUR=$(date +%H)
+    DUE=no
+    if [ "$AGE" -ge 48 ]; then
+        DUE="overdue by ${AGE}h"
+    elif [ "$AGE" -ge 20 ] && [ "$HOUR" -ge 1 ] && [ "$HOUR" -le 7 ]; then
+        DUE="due, ${AGE}h since the last sweep"
+    fi
+    if [ "$DUE" = "no" ]; then
+        printf 'not due %s -- last sweep %sh ago, hour %s\n' \
+               "$(date '+%F %T')" "$AGE" "$HOUR" > logs/nightly-heartbeat
+        exit 0
+    fi
+    echo "${DUE}"
+fi
+
 LOCKFILE="logs/check.pid"
 if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE" 2>/dev/null)" 2>/dev/null; then
     echo "SKIPPED $(date '+%F %T') -- a check.py is already running (pid $(cat "$LOCKFILE"))" | tee "$LOG"

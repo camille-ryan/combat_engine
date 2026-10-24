@@ -1026,7 +1026,25 @@ def _map_state() -> list[str]:
     sha = (got.get("recorded_at") or "")[:9] or "an unknown commit"
     corpus = got.get("corpus", 0)
     tail = " (a SAMPLE, so it narrows nothing)" if got.get("sampled") else ""
-    return [f"impact map: {corpus} rows recorded {when} at {sha}{tail}"]
+    out = [f"impact map: {corpus} rows recorded {when} at {sha}{tail}"]
+    # **Whether the engine has moved since**, which is the one fact that
+    # decides whether to re-record and the one this line did not carry. Age
+    # alone is the wrong question: a week-old map over an untouched engine
+    # is perfectly good, and an hour-old one is wrong about a verb added
+    # since. #866 measured the second case -- a new function is invisible to
+    # the map until the next recording, and `select` then omits its callers.
+    at = got.get("recorded_at") or ""
+    if at:
+        done = subprocess.run(
+            ["git", "diff", "--name-only", at, "HEAD", "--",
+             "src/combat_engine/engine/"],
+            cwd=ROOT, capture_output=True, text=True)
+        moved = [f for f in done.stdout.splitlines() if f.strip()]
+        if done.returncode == 0 and moved:
+            out.append(
+                f"            engine/ has moved in {len(moved)} file(s) since"
+                f" -- `impact.py --record` (87 min), or let the nightly do it")
+    return out
 
 
 def _sweep_owed() -> str:
