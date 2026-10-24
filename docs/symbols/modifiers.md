@@ -31,6 +31,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
   - A negative modifier. **It takes no `kind`, and that is the rule.**
 - `c.rolls_with(self, ref: 'str', ability: 'Ability', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>, when: 'Callable[[Any, int], bool] | None' = None) -> 'Effect | None'`
   - Make a named row attack with a different ability.
+- `c.settle_attack(self, *, ev: 'Any' = None) -> 'bool'`
+  - Judge the attack again from the numbers as they now stand.
 - `c.shield_bonus(self, *, of: 'int | None' = None) -> 'int'`
   - What this creature's shield adds to AC and Reflex. 0 for none.
 - `c.treat_roll_as(self, parity: 'str', *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`

@@ -40,7 +40,7 @@ from .query import (
     line_of_effect,
     squares,
 )
-from .resolve import AttackResult, attack, deal_damage, heal, temp_hp
+from .resolve import AttackResult, attack, deal_damage, heal, settle, temp_hp
 from .rng import Roll, average
 from .types import (
     DEFENCES,
@@ -4702,34 +4702,12 @@ class Cast:
         # window after that recompute, so what is written here is the answer.
         # 18 rows reroll an attack. #868.
         #
-        # 1. **`critical = face == 20` never asked whether the total reached
-        #    the defence**, which is the half `resolve.attack` carries three
-        #    comments about: the die opens the door and the total still has to
-        #    walk through it. A rerolled 20 that fell fourteen short of an AC
-        #    was recorded as a critical and dealt maximum damage. This is the
-        #    bug #868's body opens with, surviving in the one copy that is
-        #    live.
-        # 2. **It read 20 rather than the widened floor**, so a build that
-        #    scores a critical on 19 or 20 lost the widener the moment anything
-        #    rerolled its die -- the mirror of the fault fixed in
-        #    `resolve.attack`, which had the floor on the hit and not the crit.
-        #    The two sites were each wrong about a different half.
-        # 3. **Neither line honoured `turned`.** A blow a row had turned aside
-        #    came back as a hit if anything rerolled it.
-        #
-        # `forced` is here for the same reason it is in the recompute: a row
-        # that said the attack simply hits is not un-hit by a new die.
-        floor = 20 - _mods(self.world, who, "crit_range", ctx)
-        result.critical = (
-            not result.turned
-            and face >= floor
-            and result.total >= result.target_defence
-        )
-        result.hit = not result.turned and (
-            result.forced
-            or face == 20
-            or (face != 1 and result.total >= result.target_defence)
-        )
+        # It wrote the rule out by hand and got three things wrong: the
+        # critical never asked whether the total reached the defence, it read
+        # a bare 20 rather than the widened floor, and neither line honoured
+        # `turned`. All three are gone by not writing it out. #868.
+        settle(result,
+               floor=20 - _mods(self.world, who, "crit_range", ctx))
         # Recorded on the result and announced as a moment, which are two
         # different needs: 14 of the 18 rows hang on the settled outcome
         # ("a damage bonus when the reroll lands") and read the list; the
@@ -4800,6 +4778,7 @@ class Cast:
         never paid out once. #679.
         """
         from .events import SkillCheck
+        from .resolve import _mods
 
         if ev is None:
             ev = self.trigger
@@ -4809,39 +4788,20 @@ class Cast:
         result = getattr(ev, "result", None)
         if result is not None and kind in ("", "attack"):
             result.total += amount
-            # Recomputed from the untouched `natural`, so a 1 stays a miss
-            # and a boost cannot manufacture a critical. `forced` outranks
-            # the arithmetic: a row that said the attack simply hits is not
-            # un-hit by a number.
+            # **Recomputed from the untouched `natural`**, so a 1 stays a
+            # miss: the card adds to the *roll*, not to what the die showed.
             #
-            # **The crit floor is read, not assumed to be 20.** `resolve`
-            # judges a hit as `natural >= 20 - crit_range`, so hard-coding 20
-            # here would judge a boosted roll by a different rule than the
-            # one that settled it.
-            #
-            # **The crit floor it read is gone, and its absence is the
-            # finding.** This block computed `floor` from the attacker's
-            # `crit_range` and then used it for the **hit** -- which was the
-            # bug fixed in `resolve.attack`: a widened range is the
-            # critical's door, not the hit's. Correcting that left `floor`
-            # unused, which says plainly what #868 measured another way:
-            # **a boost never recomputes `critical` at all.** A +2 that
-            # carries a natural 20 over the defence should confirm a
-            # critical and cannot, because nothing here reconsiders it and
-            # nothing downstream does either.
-            #
-            # Left as it is rather than fixed in passing: that is a second
-            # behaviour change in the same hot path and wants its own
-            # measurement. #868.
-            #
-            # `turned` outranks the boost: a blow a row has turned aside is
-            # not rescued by a bonus to the roll. A 20 and only a 20, as in
-            # `resolve.attack`.
-            result.hit = not result.turned and (
-                result.forced
-                or result.natural == 20
-                or (result.natural != 1 and result.total >= result.target_defence)
-            )
+            # **And it recomputes `critical` now, which it never did.** This
+            # block hard-coded the hit and left the critical alone entirely,
+            # so a +2 carrying a natural 20 over the defence confirmed no
+            # critical -- the open half of #868, closed by routing through
+            # the one place that writes both. The floor is read from the
+            # attacker, because a build that crits on 19 still does after a
+            # boost.
+            who = getattr(ev, "attacker", self.me)
+            ctx = getattr(ev, "ctx", None) or {}
+            settle(result,
+                   floor=20 - _mods(self.world, who, "crit_range", ctx))
             # **The announced kind is what was boosted, not what the caller
             # was willing to boost.** `kind=` on the way in is a filter -- a
             # row refusing to fire on the wrong sort of roll -- and passing
@@ -4866,6 +4826,43 @@ class Cast:
                                  getattr(ev, "actor", self.me))
 
         return False
+
+    def settle_attack(self, *, ev: Any = None) -> bool:
+        """Judge the attack again from the numbers as they now stand.
+
+        For a row that changes something the outcome was measured from and
+        then has to re-ask the question: *"the ally gains +2 to the defence
+        against the triggering attack"*, where raising the defence turns a
+        hit that cleared by one into a miss.
+
+        **It is not for adding to a roll** -- `c.boost_roll` does that and
+        re-settles on the way out -- and not for rerolling, which is
+        `c.reroll_attack`. It is for the case where the row's own arithmetic
+        has already landed on the result and only the verdict is stale.
+
+        Three rows were re-settling by hand, each missing a different term:
+        two dropped the automatic hit on a natural 20 and read a `critical`
+        computed before the arithmetic, and the third could not un-crit a
+        hit its own +2 had pushed below the defence. The window is what made
+        them live rather than harmless -- all three answer a `Hit` or a
+        `Miss`, after `resolve.attack`'s own recompute, so what they wrote
+        was the answer. #868.
+
+        Returns False when there is no attack in hand, which is the control:
+        a row of this shape returning success with nothing to settle would
+        look written.
+        """
+        from .resolve import _mods
+
+        ev = ev if ev is not None else self.trigger
+        result = getattr(ev, "result", None) if ev is not None else None
+        if result is None:
+            return False
+        who = getattr(ev, "attacker", self.me)
+        ctx = getattr(ev, "ctx", None) or {}
+        settle(result,
+               floor=20 - _mods(self.world, who, "crit_range", ctx))
+        return True
 
     def _boosted(self, amount: int, kind: str, whose: int) -> bool:
         """Say that a roll already made was added to, and return True.

@@ -279,7 +279,8 @@ CATEGORIES: dict[str, dict] = {
                 "amount_for", "attack_mod", "bonus", "boost_check",
                 "boost_roll", "change_amount", "change_dice", "dice_for",
                 "enhancement", "grants_in", "penalty", "rolls_with",
-                "shield_bonus", "treat_roll_as", "widen_areas",
+                "settle_attack", "shield_bonus", "treat_roll_as",
+                "widen_areas",
             ]),
             ("rerolls", [
                 "reroll_attack", "reroll_check", "reroll_damage",

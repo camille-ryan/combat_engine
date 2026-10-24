@@ -10180,26 +10180,31 @@ def boost_roll(out: Result) -> None:
              " control, and the difference the widener does not reach")
     mods.items[:] = [m for m in mods.items if m.label != "drivers:boost"]
 
-    # **The open half of #868, asserted as the gap it is.** A natural 20
-    # whose total was two short and is boosted over the defence *should*
-    # become a critical -- the die opened the door and the total now walks
-    # through it -- and does not, because nothing in `boost_roll` reconsiders
-    # `critical` and nothing downstream does either.
+    # **This was the open half of #868 and it is closed.** A natural 20
+    # whose total was two short and is boosted over the defence becomes a
+    # critical: the die opened the door and the total now walks through it.
+    # It did not, because this block hard-coded the hit and left `critical`
+    # alone entirely, and nothing downstream reconsidered it either.
     #
     # Posed so the boost is what crosses the defence (17 -> 19 against 18),
-    # since a total that was already over, or still short after, is not a
-    # critical under either reading and would read green on a verb that did
-    # the right thing. The day `boost_roll` recomputes, this assertion goes
-    # red and names itself.
+    # since a total already over, or still short after, is judged the same
+    # way by both readings and would read green on a verb that did nothing.
+    #
+    # This assertion was first written the other way round -- asserting the
+    # gap, with a note saying it would go red and name itself the day the
+    # verb recomputed. It did, in the commit that routed this through
+    # `resolve.settle`, which is the whole value of writing a known gap down
+    # as an assertion rather than a comment.
     res = AttackResult(natural=20, total=17, target_defence=18,
                        hit=False, critical=False)
     c.trigger = _Rolled(res)
     c.trigger.ctx = {"attacker": caster}
     c.boost_roll(2)
-    out.that(res.hit is True and res.critical is False,
-             "a boosted natural 20 carried over the defence hits and is NOT"
-             " recorded as a critical -- the open half of #868, and the"
-             " printed rule says it should be")
+    out.that(res.hit is True and res.critical is True,
+             "a boosted natural 20 carried over the defence hits AND is"
+             " recorded as a critical -- the half of #868 that was open"
+             " until the rule had one home",
+             f"hit={res.hit} critical={res.critical} total={res.total}")
 
     # `kind=` refuses the wrong sort of roll.
     res = AttackResult(natural=14, total=15, target_defence=18)
@@ -32265,6 +32270,98 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def raising_a_defence_withdraws_the_critical_it_no_longer_reaches(out: Result) -> None:
+    """`p12245` raises an ally's defence against the blow already measured.
+
+    Asserted **through the row's body**, not by calling `c.settle_attack`:
+    the verb working is one question and the row using it correctly is the
+    one that matters.
+
+    The clause is "+2 to the defence against the triggering attack", laid on
+    the comparison rather than as a modifier -- a `c.bonus` cannot do it,
+    because the sum was taken when the die landed. An `IMMEDIATE_INTERRUPT`
+    answers in `Window.BEFORE`, which on a `Hit` is before `resolve`'s
+    `confirm` callback, so raising the defence and asking again turns a hit
+    that cleared by one into a `Miss`, announced as one, with every rider on
+    `Hit` skipped.
+
+    **What it could not do was withdraw a critical.** The row re-settled by
+    hand with a formula that wrote `hit` and never touched `critical`, so a
+    critical the +2 had pushed below the defence stayed a critical and dealt
+    maximum damage -- which is the more expensive half, since a critical is
+    maximum damage rather than one hit's worth. #868.
+
+    The natural 20 case is the sharp one: the blow still **hits**, because a
+    20 hits however the defence moves, and is no longer a **critical**,
+    because the total no longer reaches. Any formula that conflates the two
+    gets one of those wrong.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import Hit
+    from combat_engine.engine.query import allies, enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    world = me = None
+    mates: list[int] = []
+    foes: list[int] = []
+    for seed in range(1, 30):
+        world, me, _ = _posed("p12245", seed)
+        mates = [a for a in sorted(allies(world, me)) if a != me]
+        foes = sorted(enemies(world, me))
+        if mates and foes:
+            break
+    if world is None or me is None or not mates or not foes:
+        return
+
+    def interrupt(natural: int, total: int, against: int) -> AttackResult:
+        """Pose the blow, then run `p12245` over it as the interrupt."""
+        res = AttackResult(natural=natural, total=total,
+                           target_defence=against, hit=True,
+                           critical=natural >= 20 and total >= against)
+        ev = Hit(attacker=foes[0], target=me, power="drivers:settle",
+                 critical=res.critical)
+        ev.result = res
+        ev.ctx = {"attacker": foes[0]}
+        c: Any = Cast(world=world, me=me, ref="p12245", target=mates[0])
+        c.trigger = ev
+        REGISTRY["p12245"].body(c)
+        return res
+
+    # -- a critical that cleared by one --------------------------------
+    crit = interrupt(20, 21, 20)
+    out.that(crit.target_defence == 22,
+             "the +2 lands on the defence the blow was measured against,"
+             " which is the setup and not the finding",
+             f"defence={crit.target_defence}")
+    out.that(crit.critical is False,
+             "**the critical is withdrawn**, because a total of 21 no longer"
+             " reaches a defence of 22 -- the row could not do this at all,"
+             " and a critical is maximum damage rather than one hit's worth",
+             f"critical={crit.critical} total={crit.total}"
+             f" vs {crit.target_defence}")
+    out.that(crit.hit is True,
+             "while the blow still HITS, because a natural 20 hits however"
+             " the defence moves -- the control, and the pair any formula"
+             " conflating hit with critical gets one half of wrong")
+
+    # -- an ordinary hit that cleared by one ---------------------------
+    near = interrupt(14, 21, 20)
+    out.that(near.hit is False and near.critical is False,
+             "a 14 that cleared the old defence by one now misses, which is"
+             " the clause's whole purpose",
+             f"hit={near.hit} total={near.total} vs {near.target_defence}")
+
+    # -- the control: +2 does not save you from a comfortable hit ------
+    wide = interrupt(14, 25, 20)
+    out.that(wide.hit is True,
+             "and a blow that cleared by five still lands -- the control,"
+             " without which the assertion above passes on a row that"
+             " turned every triggering attack into a miss",
+             f"hit={wide.hit} total={wide.total} vs {wide.target_defence}")
+
+
 def a_rerolled_die_is_judged_by_the_same_rule_as_the_first(out: Result) -> None:
     """A reroll settles the outcome itself, and settled it three ways wrong.
 
@@ -32311,8 +32408,17 @@ def a_rerolled_die_is_judged_by_the_same_rule_as_the_first(out: Result) -> None:
     world, me, _ = _posed("mba", 1)
     c = Cast(world=world, me=me, ref="drivers:reroll868")
 
-    class _Rolled:
-        """A roll already announced, which is what a banked reroll is handed."""
+    class _Announced:
+        """A roll already announced, which is what a banked reroll is handed.
+
+        Not `_Rolled`: the `boost_roll` rule has a local class of that name
+        and `lint.py`'s duplicate-`def` walk is per *file*, so two
+        function-local classes sharing a name read to it as one class with
+        two `__init__`s. Its message ("Python binds the later") is wrong
+        about this case -- these are separate scopes and both bind -- but
+        two same-named local classes in one file is the ambiguity, so the
+        answer is a different name rather than a looser walk.
+        """
 
         def __init__(self, result: AttackResult) -> None:
             self.result = result
@@ -32326,7 +32432,7 @@ def a_rerolled_die_is_judged_by_the_same_rule_as_the_first(out: Result) -> None:
                            hit=False, critical=False)
         res.turned = turned
         world.rng.loaded = face
-        c.reroll_attack(ev=_Rolled(res))
+        c.reroll_attack(ev=_Announced(res))
         return res
 
     # -- 1. a 20 is not a critical on a hopeless total --------------------
@@ -33068,6 +33174,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "settle_attack": (
+        raising_a_defence_withdraws_the_critical_it_no_longer_reaches,
+        "raising a defence withdraws the critical it no longer reaches (#868)",
     ),
     "reroll_judged": (
         a_rerolled_die_is_judged_by_the_same_rule_as_the_first,

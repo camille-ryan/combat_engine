@@ -222,6 +222,59 @@ def situational_attack(
     return situational
 
 
+def settle(result: AttackResult, *, floor: int = 20) -> None:
+    """**The hit-and-critical rule, in one place.** Reads the result as it
+    stands and writes `hit` and `critical` from it.
+
+    `floor` is the lowest natural that scores a critical -- `20 -
+    crit_range` -- and it belongs to the **critical only**. The automatic
+    hit is tied to the number the rule names: a natural 20 hits, a natural 1
+    misses, and a widener says you *score a critical hit* on 19 or 20, which
+    changes which hits become criticals and says nothing about what hits.
+
+    The other half is that a high roll is not enough on its own: the die
+    opens the door and the total still has to reach the defence, so a 20
+    fourteen short of an AC is a plain hit and not a critical.
+
+    `turned` outranks the die in both -- a blow a row has turned aside
+    neither hits nor crits, whatever was rolled -- and `forced` is the
+    counterpart pointed the other way: a row that said the attack simply
+    hits is not un-hit by arithmetic.
+
+    **`forced` is absent from the critical rather than negated in it**, and
+    the difference is not cosmetic. Omitting it means a forced attack is not
+    *made* a critical by the forcing, which is the whole of what the comment
+    on the old recompute asked for; negating it would additionally stop a
+    forced attack that rolled a natural 20 over the defence from critting,
+    and a row saying "the attack hits" does not say "and the die did not
+    land well". I wrote the negation first.
+
+    **This existed eight times before it existed once, and five of the
+    copies were wrong in four different ways.** Both branches here were
+    wrong about `crit_range` -- in opposite directions, the hit reading the
+    floor and the critical reading a bare 20 -- across `resolve.attack`,
+    `Cast.boost_roll` and `Cast.reroll_attack`; two copies dropped the
+    automatic hit entirely; one read a `critical` computed before the
+    arithmetic it was recomputing after; and three content rows re-settled
+    an outcome by hand after changing it, each missing a different term.
+    Every one of those was a silently wrong number on a live path.
+
+    So the rule has one home and `c.settle_attack()` is the door for a row
+    that changes a number the outcome was judged from. #868.
+    """
+    against = result.target_defence
+    result.critical = (
+        not result.turned
+        and result.natural >= floor
+        and result.total >= against
+    )
+    result.hit = not result.turned and (
+        result.forced
+        or result.natural == 20
+        or (result.natural != 1 and result.total >= against)
+    )
+
+
 def attack(
     world: World,
     attacker: int,
@@ -403,42 +456,14 @@ def attack(
         # high-crit weapons and on solos, and the number was hard-coded in
         # both of the places it is decided.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
-        # **A high roll is not enough on its own.** "If you land a natural 20,
-        # *and* the total of your attack roll is high enough to hit the
-        # target's defence, it's a critical hit" -- so the die opens the door
-        # and the total still has to walk through it. Without the second half
-        # a 20 that fell fourteen short of an AC was dealing maximum damage,
-        # and against anything far above its level a creature was critting on
-        # every 20 no matter how hopeless the swing.
-        #
-        # The **hit** is a separate question: **a 20 hits, and only a 20.**
-        # This comment said exactly that while the line below read
-        # `natural >= floor` -- so a widened crit range widened the automatic
-        # *hit* as well, and a character with any `crit_range` bonus hit on a
-        # natural 19 however far short the total fell. 14 content rows grant
-        # one, two of them monsters, so it was live for anything holding one.
-        #
-        # The rule ties the automatic hit to the number: a natural 20 hits, a
-        # natural 1 misses. A widener says you *score a critical hit* on 19
-        # or 20 -- it changes which hits become criticals, and says nothing
-        # about what hits. Hence `floor` above and the bare 20 here.
-        #
-        # `turned` outranks the die in both, for the reason beside the field:
-        # a blow a row has turned aside neither hits nor crits, whatever was
-        # rolled. #868.
-        #
-        # **Both of these are recomputed below and this pair is only ever read
-        # inside the `AttackRolled` window.** So the `crit_range` rule in
-        # `drivers.py` cannot plant here -- reverting this line alone leaves
-        # every assertion green, because the recompute at `:511` overwrites
-        # it. The plant goes on the recompute; this line is kept correct for
-        # the listener that asks "did it hit" before the window closes, which
-        # is the same reason #868 found four of five such listeners writing
-        # into a value nothing reads afterwards.
-        result.critical = not result.turned and natural >= floor and total >= against
-        result.hit = not result.turned and (
-            natural == 20 or (natural != 1 and total >= against)
-        )
+        # **Only ever read inside the `AttackRolled` window**, because the
+        # recompute below overwrites both values unconditionally. So a plant
+        # here proves nothing -- reverting this call alone leaves every
+        # assertion in `drivers.crit_range` green -- and the plant goes on the
+        # recompute. It is kept correct for the listener that asks "did it
+        # hit" before the window closes, which is the same mechanism that
+        # made four content copies of this rule dead code. #868.
+        settle(result, floor=floor)
 
         rolled = AttackRolled(
             attacker=attacker,
@@ -507,21 +532,14 @@ def attack(
         # the locals threw the new number away and judged the old one. Every
         # reroll row in the tree was inert.
         floor = 20 - _mods(world, attacker, "crit_range", ctx)
-        # See the window above: the natural opens the door, the total has to
-        # reach the defence. `forced` hits without rolling well and so is not
-        # a critical either.
-        result.critical = (
-            not result.turned
-            and result.natural >= floor
-            and result.total >= against
-        )
-        # A 20 and only a 20, as above: the widened range is the critical's
-        # door and not the hit's. #868.
-        result.hit = not result.turned and (
-            result.forced
-            or result.natural == 20
-            or (result.natural != 1 and result.total >= against)
-        )
+        # **This is the authoritative judgement**, and the one a plant must
+        # break: it runs after the interrupt window, re-reads the defence and
+        # recomputes from the result rather than from the locals, because a
+        # listener in that window may have changed the die -- which is the
+        # whole of what `c.reroll_attack` does. Recomputing from the locals
+        # threw the new number away and judged the old one, and every reroll
+        # row in the tree was inert.
+        settle(result, floor=floor)
 
         # The `Hit`/`Miss` carries it too, so a row can answer "when it is
         # hit by an opportunity attack".

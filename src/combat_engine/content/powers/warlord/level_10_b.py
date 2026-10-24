@@ -286,20 +286,23 @@ def p10952(c: Cast) -> None:
 )
 def p2565(c: Cast) -> None:
     """`c.reroll_attack` takes no bonus, so the combat advantage is the two
-    points it is worth on the roll, added afterwards and the outcome
-    recomputed from it -- the two lines `resolve.attack` runs itself once the
-    interrupt window closes. Nothing is added to an attack that already had
+    points it is worth on the roll, added afterwards with `c.boost_roll`,
+    which is the verb for adding to a roll already made and re-settles the
+    outcome on the way out. Nothing is added to an attack that already had
     the advantage; that is one grant, not two.
+
+    This re-settled by hand, and the formula was wrong twice: it dropped the
+    automatic hit on a natural 20, and it read a `critical` computed before
+    the +2 it was recomputing after. Both live, because the row answers a
+    `Miss` -- past `resolve.attack`'s own recompute, so what it wrote was
+    the answer. #868.
     """
     result = getattr(c.trigger, "result", None)
     if result is None or not c.reroll_attack():
         return
     if not result.advantage:
         result.advantage = True
-        result.total += 2
-    result.hit = result.critical or (
-        result.natural != 1 and result.total >= result.target_defence
-    )
+        c.boost_roll(2)
     c.note(f"{c.ref}: the swing is taken again with combat advantage")
 
 

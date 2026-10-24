@@ -227,6 +227,12 @@ def p12245(c: Cast) -> None:
     every rider on `Hit` skipped. A `c.bonus` cannot do it: the sum was
     taken when the die landed.
 
+    The re-settling is `c.settle_attack()`, which is the door for exactly
+    this -- a row that changed a number the outcome was judged from. Written
+    out by hand it could not **un-crit** a hit its own +2 had pushed below
+    the defence, so a critical that no longer reached the defence stayed a
+    critical and dealt maximum damage. #868.
+
     What this row does **not** do is re-measure against the ally's own
     defences. `c.redirect` moves the live result deliberately without
     rolling again, which is the engine's standing simplification and not
@@ -242,9 +248,7 @@ def p12245(c: Cast) -> None:
     if result is None:
         return
     result.target_defence += 2
-    result.hit = result.natural == 20 or (
-        result.natural != 1 and result.total >= result.target_defence
-    )
+    c.settle_attack()
 
 
 @power(

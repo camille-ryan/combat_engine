@@ -1279,9 +1279,14 @@ def m4839a4(c: Cast) -> None:
     changed: `resolve.attack` re-reads the result after this window and
     turns the `Miss` into a `Hit` if the new number lands.
 
-    `c.reroll_attack` takes no bonus, so the printed +2 is added to the
-    total afterwards and the outcome recomputed from it -- the same two
-    lines `resolve` runs once the window closes.
+    `c.reroll_attack` takes no bonus, so the printed +2 goes on with
+    `c.boost_roll`, which is the verb for adding to a roll already made and
+    re-settles the outcome itself.
+
+    This re-settled by hand and the formula dropped the automatic hit on a
+    natural 20 while reading a `critical` computed before the +2. Live, not
+    harmless: the row answers a `Miss`, past the engine's own recompute.
+    #868.
 
     The other half of the printed trigger is a failed skill check, which the
     engine has no event for and so cannot answer.
@@ -1289,10 +1294,7 @@ def m4839a4(c: Cast) -> None:
     result = getattr(c.trigger, "result", None)
     if not c.reroll_attack() or result is None:
         return
-    result.total += 2
-    result.hit = result.critical or (
-        result.natural != 1 and result.total >= result.target_defence
-    )
+    c.boost_roll(2)
 
 
 # --------------------------------------------------------------------------
