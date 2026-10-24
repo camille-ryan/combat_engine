@@ -86,6 +86,28 @@ class AttackResult:
     #: `confirm` callback turns it into a real `Miss`; this flag is what
     #: makes the *earlier* window work too, so one verb serves both. #862.
     turned: bool = False
+    #: **The weapon of record for this attack**, by ref, or `""` for an
+    #: attack that came through none.
+    #:
+    #: Stamped by the swing itself and inherited by every rider that pays
+    #: out inside it, which is the whole point: `Cast._swung_weapon` can
+    #: only answer for a row carrying the **weapon keyword**, and a rider is
+    #: a row of its own with its own `Cast` and no such keyword -- so the
+    #: blow that bloodied on `i1688p1`'s board reported
+    #: `Bloodied(power='f274', weapon='')` while the swing really did come
+    #: through the weapon.
+    #:
+    #: **Set only by a weapon attack**, which is what keeps the gate's other
+    #: direction intact: an implement power whose caster happens to hold a
+    #: sword stamps nothing here, so a rider inside *that* attack inherits
+    #: `""` rather than claiming the sword in the other hand. The negative
+    #: control in `drivers.swung_weapon` is the same assertion from the
+    #: other side.
+    #:
+    #: On the result rather than a world-level "attack in progress" field,
+    #: because this object is already threaded through the whole attack and
+    #: a rider reaches it as `ev.result`. #698, #653.
+    weapon: str = ""
     #: Who the blow finally landed on. Usually the creature it was aimed at
     #: -- but an interrupt may move it, and then the body that rolled this
     #: has to be told, or it deals its damage to the one that was missed.
@@ -220,10 +242,14 @@ def attack(
     keep: str = "",
     hand: str = "main",
     as_: str = "",
+    weapon: str = "",
 ) -> AttackResult:
     """Roll one attack. `bonus` is everything the attacker brings to it;
     everything the *situation* brings is added here."""
     result = AttackResult()
+    # The weapon of record, stamped once at the top so every rider that
+    # pays out inside this attack reads the same answer. See the field.
+    result.weapon = weapon
     # Was this swing bought with an action point? Rides the same road
     # `opportunity` and `charge` do -- in the attack context and on all four
     # attack events -- because two printed rows are about exactly that
@@ -1397,7 +1423,7 @@ def deal_damage(
         crossed = Bloodied(actor=target, source=source, power=detail)
         crossed.weapon = weapon  # ty: ignore[unresolved-attribute]
         world.bus.emit(crossed)
-    _check_down(world, target, health, source, crit, detail)
+    _check_down(world, target, health, source, crit, detail, weapon)
     return landed
 
 
@@ -1508,7 +1534,7 @@ def temp_hp(
 
 def _check_down(world: World, eid: int, health: Health,
                 source: int | None = None, crit: bool = False,
-                power: str = "") -> None:
+                power: str = "", weapon: str = "") -> None:
     from .query import is_
 
     if health.hp > 0:
@@ -1518,7 +1544,7 @@ def _check_down(world: World, eid: int, health: Health,
     # nor for any blow that overshot, which in play is most kills. The
     # printed sentence every row using it carries is "drops to 0 hit points
     # **or fewer**", and those rows were missing almost every death.
-    world.bus.emit(Dropped(
+    went_down = Dropped(
         actor=eid, dead=health.hp <= health.dying_at, source=source,
         # The row that did it. Both callers already know it -- the damage
         # path carries `detail` and `Cast.kill` has `self.ref` -- so this
@@ -1529,7 +1555,17 @@ def _check_down(world: World, eid: int, health: Health,
         # in scope at the one site that calls this, so "but not by a
         # critical hit" costs a parameter rather than a new fact. #428.
         critical=crit,
-    ))
+    )
+    # **The weapon it came through, as an attribute rather than a field.**
+    # Exactly `Bloodied.weapon` one event over and for its reasons: `power`
+    # says which row swung and not which weapon it swung, and three rows
+    # carry `dropped=("Dropped.weapon",)` for want of the difference.
+    #
+    # An attribute, so it stays off `Event.wire()` and out of the fixtures --
+    # the `Effect.by` precedent, which is also why `Bloodied` does it this
+    # way. #698.
+    went_down.weapon = weapon  # ty: ignore[unresolved-attribute]
+    world.bus.emit(went_down)
     # Read hit points again. A row that answers its own `Dropped` by healing
     # itself -- the shape the `dying` flag exists for -- was healed inside
     # the emit and then knocked unconscious, prone and dying regardless,

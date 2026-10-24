@@ -877,6 +877,13 @@ class Dropped(Event):
     carries a source but announces before the creature is down, and a third
     left its row out. `by_me` works on this now.
 
+    **`weapon`** is the weapon the killing blow came through, attached
+    rather than declared -- the `Bloodied.weapon` pattern one event over,
+    which keeps it off `Event.wire()` and so out of the fixtures. `power`
+    says which row swung and not which weapon it swung, and three rows
+    carried `dropped=("Dropped.weapon",)` for want of that difference.
+    Read it with `getattr(ev, "weapon", "")`. #698.
+
     `power` is the row that did it, and seven rows need it: the printed
     line is almost never bare -- "with a melee basic attack", "with a
     ranged attack", "with a melee attack". `""` when nothing named the

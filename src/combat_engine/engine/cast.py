@@ -2423,7 +2423,7 @@ class Cast:
         dice = self._high_crit_dice()
         return self._roll_damage(dice) if dice else 0
 
-    def _swung_weapon(self) -> str:
+    def _swung_weapon(self, *, hand: str = "main") -> str:
         """The weapon this blow came through, by ref, or "" for none.
 
         **Only for a row carrying the weapon keyword**, exactly as
@@ -2437,21 +2437,41 @@ class Cast:
         stamp the new one -- and three rows do not justify a weapon of
         record on the attack. Stated rather than left to be discovered. #653.
 
-        **A rider's extra damage therefore stamps nothing**, and that is the
-        measured limitation rather than a guess: on `i1688p1`'s board the
-        blow that bloodies is `f274`'s rider, not the basic attack, so
+        **A rider's extra damage used to stamp nothing, and now inherits.**
+        That was the measured limitation: on `i1688p1`'s board the blow that
+        bloodies is `f274`'s rider, not the basic attack, so
         `Bloodied.weapon` came back `""` while the swing really did come
-        through the weapon. The rider is a row of its own with its own
-        `Cast` and no weapon keyword, which is exactly the test above. The
-        fix is a weapon of record on the attack, which three rows do not
-        justify; the alternative -- stamping whatever is in hand -- would
-        make an implement power claim the sword in the other one, which is
-        the wrong direction. #698.
+        through the weapon. The rider is a row of its own with no weapon
+        keyword, which is exactly the test above -- so the test still
+        returns early, and then reads `AttackResult.weapon`, the weapon of
+        record the swing stamped.
+
+        **The gate still decides, which is the half worth keeping.** Only a
+        row that passes it writes the stamp, so an implement attack leaves
+        `""` and a rider inside one inherits `""` rather than the sword in
+        the other hand. That direction is preserved by construction rather
+        than by a second test, and `drivers.swung_weapon` asserts both
+        sides. #698, #653.
         """
         p = self._declared()
         if p is None or Keyword.WEAPON not in self.keywords_of(p):
-            return ""
-        weapon = self._swinging()
+            # **A rider falls back to the attack's weapon of record**, which
+            # is what #698 came to. This row has no weapon keyword, so it
+            # cannot answer for itself -- but if it is paying out inside
+            # somebody's attack, that attack stamped `AttackResult.weapon`
+            # and the answer is there.
+            #
+            # The gate above still decides: the stamp is written only by a
+            # row that passed it, so an implement attack leaves `""` and a
+            # rider within it inherits `""` rather than the sword in the
+            # other hand. That is the direction `drivers.swung_weapon`'s
+            # negative control watches, and it is preserved by construction
+            # rather than by a second test here.
+            result = getattr(self.trigger, "result", None) if self.trigger else None
+            if result is None:
+                result = self.result
+            return str(getattr(result, "weapon", "") or "")
+        weapon = self._swinging(hand=hand)
         return getattr(weapon, "ref", "") if weapon is not None else ""
 
     def _high_crit_dice(self) -> str | int:
@@ -3346,6 +3366,11 @@ class Cast:
             ignore_cover=ignore_cover, dying=self.dying, charge=self.charge,
             granted_by=self.granted_by, granted_via=self.granted_via,
             keep=keep, hand=hand, as_=as_,
+            # **Only when this row carries the weapon keyword.** The same
+            # test `_swung_weapon` makes, asked once here instead of at
+            # every payout, so a rider inside the attack inherits it and an
+            # implement power stamps nothing for one to inherit. #698.
+            weapon=self._swung_weapon(hand=hand),
         )
         # An interrupt may have moved the blow onto somebody else. The roll
         # and the `Hit` already name the new target; without this the body's

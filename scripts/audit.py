@@ -275,17 +275,24 @@ KNOWN_SILENT = {
     #   already holds `w3612` with `item='i1159'` from its own kit -- so
     #   `c.my_weapon()` answers None and the gate cannot pass whatever the
     #   blow does. #699.
-    # * the blow that bloodies is a **rider's**, not the basic attack's:
-    #   `Bloodied(source=1, power='f274', weapon='')`. A rider is a row of
-    #   its own with its own `Cast` and no weapon keyword, so it stamps no
-    #   weapon even though the swing came through one. #698.
+    # * ~~the blow that bloodies is a **rider's**~~ -- **fixed, and this
+    #   half of the excuse is retired.** It read `Bloodied(source=1,
+    #   power='f274', weapon='')`, because a rider is a row of its own with
+    #   no weapon keyword and stamped nothing. The swing now stamps
+    #   `AttackResult.weapon` and every rider inside the attack inherits
+    #   it, so a bloodying rider carries the weapon. #698.
+    #
+    #   Kept in the note rather than deleted: an excuse that quietly loses
+    #   a premise is an excuse nobody can re-check, and this one still
+    #   stands on the **first** premise alone.
     #
     # Driven by hand: with `i1688` put on the weapon in hand,
     # `c.my_weapon()` answers it and the row's gate reads the right ref.
     # The row is strictly narrower than it was -- it used to heal on any
     # bloodying this wielder did, which was wider than the card.
-    "i1688p1": "needs the blow to come through its own weapon; the board's"
-               " weapon carries another item and the bloodying blow is a rider's",
+    "i1688p1": "needs the blow to come through its own weapon, and the"
+               " board's weapon carries another item (#699) -- the rider"
+               " half of this is fixed (#698)",
     # "When you use your shifter racial power, the power's benefits extend to
     # one ally wielding a weapon affected by your `cf:artificer-f0s0`." Three
     # board facts have to line up at once and the board gives none of them:

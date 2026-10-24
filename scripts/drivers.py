@@ -26065,6 +26065,49 @@ def which_weapon_the_blow_came_through(out: Result) -> None:
     health = world.get(me, Health)
     out.that(health is not None, "and the board is otherwise intact")
 
+    # -- a rider inside the attack inherits the weapon of record ----------
+    # **#698's half.** `_swung_weapon` can only answer for a row carrying
+    # the weapon keyword, and a rider is a row of its own without one -- so
+    # the blow that bloodied on `i1688p1`'s board reported
+    # `Bloodied(power='f274', weapon='')` while the swing really did come
+    # through the weapon. Asserted through the mechanism rather than a row
+    # because the three rows that want it are still unwritten
+    # (`Dropped.weapon`), and said so here rather than left to look like a
+    # choice.
+    world, me, _ = audit_board("mba", 1)
+    gear = world.get(me, Gear)
+    foe = next(iter(enemies(world, me)), None)
+    if gear is None or not gear.weapons or foe is None:
+        return
+    swung = gear.weapons[0].ref
+    swinger = Cast(world=world, me=me, ref="mba", target=foe)
+    swinger.strike()
+    stamped = getattr(swinger.result, "weapon", "")
+    out.that(stamped == swung,
+             "**an attack stamps its weapon on the result**, which is the"
+             " weapon of record every rider inside it reads",
+             f"{stamped!r} vs the held {swung!r}")
+
+    # A rider: its own `Cast`, no weapon keyword, triggered by that blow.
+    rider: Any = Cast(world=world, me=me, ref="drivers:rider", target=foe)
+    rider.trigger = _rider_blow(me, foe, swinger.result)
+    out.that(rider._swung_weapon() == swung,
+             "and a **rider** -- its own `Cast`, no weapon keyword -- now"
+             " inherits it, where it used to read `''` and a bloodying"
+             " rider looked like a blow through no weapon at all",
+             f"{rider._swung_weapon()!r}")
+
+    # The control, and the one that matters: an attack that stamped nothing
+    # hands a rider nothing, so an implement power's rider cannot claim the
+    # sword in the other hand.
+    bare: Any = Cast(world=world, me=me, ref="drivers:rider", target=foe)
+    bare.trigger = _rider_blow(me, foe, _blank_result())
+    out.that(bare._swung_weapon() == "",
+             "while a rider inside an attack that stamped nothing still"
+             " reads `''` -- the implement control, inherited rather than"
+             " re-tested",
+             f"{bare._swung_weapon()!r}")
+
 def a_tome_lends_a_card_and_charges_for_it(out: Result) -> None:
     """Seven tome rows, one printed sentence, and three faults in the seam.
 
@@ -32074,6 +32117,26 @@ def hiding_is_a_check_and_moving_fast_makes_it_harder(out: Result) -> None:
              " what stops a standing waiver becoming a general bonus",
              f"skills.modifier('stealth') {plain} -> "
              f"{skill_modifier(w2, me2, 'stealth')}")
+
+
+def _blank_result() -> Any:
+    """An `AttackResult` that no weapon attack stamped."""
+    from combat_engine.engine.resolve import AttackResult
+
+    return AttackResult(hit=True, natural=15, total=25, target_defence=10)
+
+
+def _rider_blow(attacker: int, target: int, result: Any) -> Any:
+    """A `Hit` carrying that result, the way `resolve` hands one over.
+
+    `Any`, because `result` is attached rather than declared -- the
+    `Effect.by` pattern, which keeps it off `Event.wire()`.
+    """
+    from combat_engine.engine.events import Hit
+
+    ev: Any = Hit(attacker=attacker, target=target, power="mba", critical=False)
+    ev.result = result
+    return ev
 
 
 def an_object_holds_a_row_and_hands_it_back(out: Result) -> None:
