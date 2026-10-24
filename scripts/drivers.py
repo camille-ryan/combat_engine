@@ -10107,6 +10107,11 @@ def boost_roll(out: Result) -> None:
     class _Rolled:
         def __init__(self, result: AttackResult) -> None:
             self.result = result
+            # Declared rather than assigned onto the instance, which is the
+            # difference `types` can see: three `c.trigger.ctx = ...` lines
+            # below set the attacker so `_mods` can find a `crit_range`
+            # bonus, and each was an `unresolved-attribute` on this stub.
+            self.ctx: dict[str, Any] = {}
 
     # A miss by 3, boosted by 4, becomes a hit. `natural` must not move.
     res = AttackResult(natural=14, total=15, target_defence=18, hit=False)
@@ -10135,11 +10140,26 @@ def boost_roll(out: Result) -> None:
     out.that(res.critical is True and res.hit is True,
              "a critical is not undone by boosting it")
 
-    # **The crit floor is read off the context, not assumed to be 20.**
-    # `resolve` judges a hit as `natural >= 20 - crit_range`, so a verb
-    # hard-coding 20 judges a boosted roll by a different rule than the one
-    # that settled it -- and is wrong only for builds that widen the range,
-    # which is the kind of wrong nothing notices.
+    # **A widened crit range is the critical's door and not the hit's**, so
+    # the automatic hit stays tied to the bare 20 here as it is in
+    # `resolve.attack`.
+    #
+    # This pair used to assert the opposite -- that a boosted natural 19 hits
+    # a defence of 30 when the build widens the range -- on the stated reason
+    # that `resolve` judged it that way and a verb must not judge a boosted
+    # roll by a different rule. The reason was sound and the thing it matched
+    # was wrong: `resolve.attack` read `natural >= floor` for the hit, which
+    # is what #868 fixed, so this rule was pinning the bug in place from the
+    # instrument side.
+    #
+    # **Its own control had stopped being one**, which is the part worth
+    # keeping. "The same 19 with the range back to normal misses" tells a
+    # correct implementation from one that always hits -- it cannot tell a
+    # correct one from one that reads the floor, because under the corrected
+    # rule both halves are a miss and the rule would read green either way.
+    # So the control is now the **20**, which the two implementations
+    # disagree about in the opposite direction: read the floor and the 19
+    # below hits, drop the automatic hit entirely and the 20 does not.
     from combat_engine.engine.components import Mod, Mods
 
     mods = world.get(caster, Mods) or world.add(caster, Mods())
@@ -10148,18 +10168,38 @@ def boost_roll(out: Result) -> None:
     c.trigger = _Rolled(res)
     c.trigger.ctx = {"attacker": caster}
     c.boost_roll(1)
-    out.that(res.hit is True,
-             "a 19 hits a defence of 30 when the build's crit range reaches"
-             " 19 -- the floor is read, not assumed")
-    mods.items[:] = [m for m in mods.items if m.label != "drivers:boost"]
-    res = AttackResult(natural=19, total=5, target_defence=30, hit=False)
+    out.that(res.hit is False,
+             "a boosted natural 19 does NOT hit a defence of 30 it falls 24"
+             " short of, even with the build's crit range reaching 19 (#868)")
+    res = AttackResult(natural=20, total=5, target_defence=30, hit=False)
     c.trigger = _Rolled(res)
     c.trigger.ctx = {"attacker": caster}
     c.boost_roll(1)
-    out.that(res.hit is False,
-             "and with the range back to normal the same 19 misses -- the"
-             " control, without which the assertion above passes on a verb"
-             " that always hits")
+    out.that(res.hit is True,
+             "while a natural 20 hits the same hopeless defence -- the"
+             " control, and the difference the widener does not reach")
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:boost"]
+
+    # **The open half of #868, asserted as the gap it is.** A natural 20
+    # whose total was two short and is boosted over the defence *should*
+    # become a critical -- the die opened the door and the total now walks
+    # through it -- and does not, because nothing in `boost_roll` reconsiders
+    # `critical` and nothing downstream does either.
+    #
+    # Posed so the boost is what crosses the defence (17 -> 19 against 18),
+    # since a total that was already over, or still short after, is not a
+    # critical under either reading and would read green on a verb that did
+    # the right thing. The day `boost_roll` recomputes, this assertion goes
+    # red and names itself.
+    res = AttackResult(natural=20, total=17, target_defence=18,
+                       hit=False, critical=False)
+    c.trigger = _Rolled(res)
+    c.trigger.ctx = {"attacker": caster}
+    c.boost_roll(2)
+    out.that(res.hit is True and res.critical is False,
+             "a boosted natural 20 carried over the defence hits and is NOT"
+             " recorded as a critical -- the open half of #868, and the"
+             " printed rule says it should be")
 
     # `kind=` refuses the wrong sort of roll.
     res = AttackResult(natural=14, total=15, target_defence=18)
@@ -32139,6 +32179,92 @@ def _rider_blow(attacker: int, target: int, result: Any) -> Any:
     return ev
 
 
+def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
+    """"You score a critical hit on a 19 or 20" does not make 19 hit.
+
+    `resolve.attack` read `natural >= floor` for the **hit** as well as the
+    critical, so any `crit_range` bonus made a natural 19 an automatic hit
+    however far short the total fell. **14 content rows grant one**, two of
+    them monsters, so it was live for anything holding one.
+
+    The rule ties the automatic hit to the number -- a natural 20 hits, a
+    natural 1 misses -- and a widener changes which hits become criticals.
+    The comment above the line said exactly that (*"the hit is a separate
+    question and is unchanged: a 20 hits"*) while the code read `floor`, so
+    the intent was documented and never matched. #868.
+
+    Both directions are asserted, because fixing it the lazy way -- dropping
+    `floor` everywhere -- would silently stop the widener working at all.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import AC, When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import attack
+
+    world, me, _ = _posed("mba", 1)
+    foe = next(iter(enemies(world, me)), None)
+    if foe is None:
+        return
+    c = Cast(world=world, me=me, ref="drivers:crit")
+    c.bonus("crit_range", 1, on=me, until=When.ENCOUNTER)
+
+    def swing(face: int, bonus: int) -> Any:
+        """One attack on a loaded die, through `resolve.attack` itself."""
+        world.rng.loaded = face
+        return attack(world, me, foe, bonus, AC, "mba")
+
+    # A defence far above anything the roll plus a tiny bonus can reach, so
+    # "did the die alone carry it" is the only question being asked.
+    hopeless = -40
+
+    nineteen = swing(19, hopeless)
+    out.that(nineteen.hit is False,
+             "**a natural 19 does not hit** on a hopeless total, even with"
+             " the crit range widened -- the bug was that it did, for every"
+             " build and monster carrying a `crit_range` bonus",
+             f"hit={nineteen.hit} natural={nineteen.natural}"
+             f" total={nineteen.total} vs {nineteen.target_defence}")
+    out.that(nineteen.critical is False,
+             "and it is not a critical either, because the total did not"
+             " reach the defence -- the half the engine already had right",
+             f"critical={nineteen.critical}")
+
+    twenty = swing(20, hopeless)
+    out.that(twenty.hit is True,
+             "**a natural 20 still hits** however hopeless the total, which"
+             " is the rule the bare 20 is there to keep",
+             f"hit={twenty.hit} total={twenty.total}"
+             f" vs {twenty.target_defence}")
+    out.that(twenty.critical is False,
+             "and is a plain hit rather than a critical, since the total"
+             " fell short -- a 20 that misses by fourteen deals normal"
+             " damage",
+             f"critical={twenty.critical}")
+
+    # -- and the widener still does its own job ---------------------------
+    easy = 40
+    crit19 = swing(19, easy)
+    out.that(crit19.hit is True and crit19.critical is True,
+             "**a 19 that reaches the defence IS a critical** with the range"
+             " widened -- the control that stops this being 'fixed' by"
+             " deleting `floor` and quietly turning the widener off",
+             f"hit={crit19.hit} critical={crit19.critical}")
+
+    # The same roll without the bonus is a hit and not a critical, which is
+    # what makes the assertion above about the widener rather than the roll.
+    plain, me2, _ = _posed("mba", 1)
+    foe2 = next(iter(enemies(plain, me2)), None)
+    if foe2 is None:
+        return
+    plain.rng.loaded = 19
+    bare = attack(plain, me2, foe2, easy, AC, "mba")
+    out.that(bare.hit is True and bare.critical is False,
+             "while the same 19 with no widener is a hit and NOT a critical,"
+             " so the assertion above is about the bonus and not the die",
+             f"hit={bare.hit} critical={bare.critical}")
+
+
 def a_banked_reroll_turns_a_miss_into_a_hit(out: Result) -> None:
     """"The next ally to miss can reroll" -- and the reroll has to pay.
 
@@ -32816,6 +32942,10 @@ DRIVERS = {
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "crit_range": (
+        a_widened_crit_range_widens_crits_and_not_hits,
+        "a widened crit range widens criticals, not automatic hits (#868)",
     ),
     "banked_reroll": (
         a_banked_reroll_turns_a_miss_into_a_hit,

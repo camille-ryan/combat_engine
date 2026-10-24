@@ -411,13 +411,33 @@ def attack(
         # and against anything far above its level a creature was critting on
         # every 20 no matter how hopeless the swing.
         #
-        # The **hit** is a separate question and is unchanged: a 20 hits.
+        # The **hit** is a separate question: **a 20 hits, and only a 20.**
+        # This comment said exactly that while the line below read
+        # `natural >= floor` -- so a widened crit range widened the automatic
+        # *hit* as well, and a character with any `crit_range` bonus hit on a
+        # natural 19 however far short the total fell. 14 content rows grant
+        # one, two of them monsters, so it was live for anything holding one.
+        #
+        # The rule ties the automatic hit to the number: a natural 20 hits, a
+        # natural 1 misses. A widener says you *score a critical hit* on 19
+        # or 20 -- it changes which hits become criticals, and says nothing
+        # about what hits. Hence `floor` above and the bare 20 here.
+        #
         # `turned` outranks the die in both, for the reason beside the field:
         # a blow a row has turned aside neither hits nor crits, whatever was
-        # rolled.
+        # rolled. #868.
+        #
+        # **Both of these are recomputed below and this pair is only ever read
+        # inside the `AttackRolled` window.** So the `crit_range` rule in
+        # `drivers.py` cannot plant here -- reverting this line alone leaves
+        # every assertion green, because the recompute at `:511` overwrites
+        # it. The plant goes on the recompute; this line is kept correct for
+        # the listener that asks "did it hit" before the window closes, which
+        # is the same reason #868 found four of five such listeners writing
+        # into a value nothing reads afterwards.
         result.critical = not result.turned and natural >= floor and total >= against
         result.hit = not result.turned and (
-            natural >= floor or (natural != 1 and total >= against)
+            natural == 20 or (natural != 1 and total >= against)
         )
 
         rolled = AttackRolled(
@@ -495,9 +515,11 @@ def attack(
             and result.natural >= floor
             and result.total >= against
         )
+        # A 20 and only a 20, as above: the widened range is the critical's
+        # door and not the hit's. #868.
         result.hit = not result.turned and (
             result.forced
-            or result.natural >= floor
+            or result.natural == 20
             or (result.natural != 1 and result.total >= against)
         )
 

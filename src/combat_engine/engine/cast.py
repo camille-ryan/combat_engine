@@ -4786,23 +4786,29 @@ class Cast:
             # **The crit floor is read, not assumed to be 20.** `resolve`
             # judges a hit as `natural >= 20 - crit_range`, so hard-coding 20
             # here would judge a boosted roll by a different rule than the
-            # one that settled it -- wrong for every build that widens the
-            # range, and wrong invisibly. The context rides on the event for
-            # exactly this.
-            from .resolve import _mods
-
-            ctx = getattr(ev, "ctx", None) or {}
-            floor = 20 - (
-                _mods(self.world, ctx.get("attacker", self.me), "crit_range", ctx)
-                if ctx
-                else 0
-            )
+            # one that settled it.
+            #
+            # **The crit floor it read is gone, and its absence is the
+            # finding.** This block computed `floor` from the attacker's
+            # `crit_range` and then used it for the **hit** -- which was the
+            # bug fixed in `resolve.attack`: a widened range is the
+            # critical's door, not the hit's. Correcting that left `floor`
+            # unused, which says plainly what #868 measured another way:
+            # **a boost never recomputes `critical` at all.** A +2 that
+            # carries a natural 20 over the defence should confirm a
+            # critical and cannot, because nothing here reconsiders it and
+            # nothing downstream does either.
+            #
+            # Left as it is rather than fixed in passing: that is a second
+            # behaviour change in the same hot path and wants its own
+            # measurement. #868.
+            #
             # `turned` outranks the boost: a blow a row has turned aside is
-            # not rescued by a bonus to the roll. The third copy of this
-            # formula in the tree and the reason #868 wants it to be one.
+            # not rescued by a bonus to the roll. A 20 and only a 20, as in
+            # `resolve.attack`.
             result.hit = not result.turned and (
                 result.forced
-                or result.natural >= floor
+                or result.natural == 20
                 or (result.natural != 1 and result.total >= result.target_defence)
             )
             # **The announced kind is what was boosted, not what the caller
