@@ -400,12 +400,64 @@ def _load() -> dict | None:
     if GAME.exists() and got.get("game_db_mtime", 0) < GAME.stat().st_mtime:
         print("# map predates the current data/game.db. Selecting everything.")
         return None
+    at = got.get("recorded_at") or ""
+    if at and not _in_history(at):
+        print(f"# map was recorded at {at[:9]}, which is not in this tree's"
+              f" history. Selecting everything.")
+        return None
     live = _declared_now()
     if live and live != got.get("corpus"):
         print(f"# the corpus moved: {got.get('corpus')} rows when the map was "
               f"recorded, {live} now. Selecting everything.")
         return None
     return got
+
+
+@cache
+def _in_history(sha: str) -> bool:
+    """Is this commit an ancestor of HEAD, or HEAD itself?
+
+    **The guard that makes the map safe to carry between trees**, which is
+    what the map is for: `logs/` is git-ignored and per-worktree, so a map
+    recorded on a branch has to be copied to the main checkout to be worth
+    anything -- and copied *before* the branch merges it describes an
+    `engine/` the receiving tree does not have yet. `select` resolves a
+    changed line to its enclosing function by parsing the file **as it is
+    now**, so a name can match a recorded ref list belonging to a different
+    version of that function. The corpus count only notices if the row total
+    also happens to have moved.
+
+    Ancestry answers it exactly. A map is valid for any tree that contains
+    the commit it was recorded at, and for no other: after the merge, used;
+    before it, refused. The same test covers bisecting back past the
+    recording and two branches that each recorded their own.
+
+    True on failure to ask, deliberately -- the other guards still run, and
+    treating an unavailable `git` as "refuse everything" would turn a
+    missing binary into a silent twenty-minute tax.
+    """
+    # **Does the commit exist here at all**, asked first and separately. A
+    # map copied from a tree whose history this one does not share names a
+    # sha that is simply absent, and `merge-base --is-ancestor` reports that
+    # with exit **128** -- the same code it uses for "not a repository". The
+    # first draft folded 128 into "could not ask" and returned True, so a map
+    # from an unrelated repository was accepted: the plant for this guard
+    # passed a sha of forty zeroes and was told it was in history.
+    #
+    # An absent commit is a definite no, not a failure to answer.
+    try:
+        known = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"],
+                               cwd=ROOT, capture_output=True, text=True)
+        if known.returncode != 0:
+            return False
+        done = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+            cwd=ROOT, capture_output=True, text=True)
+    except OSError:
+        return True          # no git to ask; the other guards still run
+    if done.returncode in (0, 1):
+        return done.returncode == 0
+    return True              # it exists but the question could not be put
 
 
 @cache
