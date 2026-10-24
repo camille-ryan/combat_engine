@@ -1159,9 +1159,18 @@ def i3316p1(c: Cast) -> None:
 
 @power("i3320p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Melee(1), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("c.stored_row()",))
+       dropped=("Gear.carried",))
 def i3320p1(c: Cast) -> None:
-    """Re-aimed, and the row now plays.
+    """Re-aimed twice, and the row plays. The missing clause is an
+    inventory, not a slot.
+
+    **Re-marked off `c.stored_row()`, which now exists and does not help.**
+    The slot landed in #720 and this row still cannot be finished: the card
+    has the wielder place *"a volatile alchemical item"* beside the crystal,
+    and nothing records which items a character carries. `Gear.worn` holds
+    **slot names** -- `alchemical`, `armor`, `neck`, `weapon` -- not refs,
+    so there is no set to choose the second item from and nothing to put in
+    the slot. Same gap as `Gear.carried`'s other rows.
 
     The delay is not the gap -- `c.watch(TurnEnd)` counting one turn is
     "at the end of your next turn", the same clock i925p1 uses -- so the
@@ -1485,19 +1494,31 @@ def i3322p1(c: Cast) -> None:
 
 
 @power("i3324x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.store_row(ref)",))
+       reach=PERSONAL, target=SELF, todo=("Gear.carried",))
 def i3324x1(c: Cast) -> None:
-    """Linking one item to another has nothing to hold the link in: an
-    item cannot remember a second item's row."""
+    """**The link has somewhere to live now; what is missing is the other
+    item.**
+
+    `c.store_row(ref)` landed in #720 -- an item can remember a second
+    item's row, which is what this was marked for. It is still unwritable,
+    one step further on: the card links to *"another alchemical item in
+    hand or in an adjacent square"*, and nothing enumerates the items a
+    character carries. `Gear.worn` is a set of **slot names**, so the
+    candidate set for the link is empty on every board. Re-marked at the
+    real blocker rather than left on a symbol that now exists."""
 
 
 @power("i3324p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("c.stored_row()",))
+       todo=("Gear.carried",))
 def i3324p1(c: Cast) -> None:
-    """Re-aimed: `c.use_power` runs somebody else's row now, so the hold
-    is only the link -- nothing records which item this one was tied to,
-    and without that there is no ref to set off."""
+    """The reader exists; the thing it would read does not.
+
+    `c.stored_row()` landed in #720, so "which item this one was tied to"
+    has a place to be recorded and a way to be read back. This row waits on
+    its other half, `i3324x1`, which cannot do the linking: nothing
+    enumerates a character's carried items, so there is never a second item
+    to link to. Re-marked off the symbol that now exists."""
 
 
 @power("i3481p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,

@@ -464,7 +464,8 @@ CATEGORIES: dict[str, dict] = {
         "sections": [
             ("granting and spending a row", [
                 "borrow_row", "borrowed_rows", "expend_row", "expended",
-                "grant_row", "recast", "spellbook", "unspent", "use_power",
+                "grant_row", "recast", "spellbook", "store_row", "stored_row",
+                "unspent", "use_power",
                 "used",
             ]),
             ("changing what a row does", [

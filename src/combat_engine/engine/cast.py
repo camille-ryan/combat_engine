@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from .components import Gear, Health, Mod, Mods, Position, Stats
 from .durations import Effect, When
-from .events import Aided, Boosted, Event, ItemPowerUsed, Note, PowerUsed
+from .events import Aided, Boosted, Event, ItemPowerUsed, Note, PowerUsed, RowStored
 from .grid import Square, spread
 from .grid import distance as _distance
 from .movement import forced, shift, teleport, walk
@@ -14364,6 +14364,63 @@ True for `c.damage` and `c.half_damage` -- an attack's **damage
         from .components import ActionPoints
 
         return self.world.get(who, ActionPoints) or self.world.add(who, ActionPoints())
+
+    def store_row(self, ref: str, *, by: str = "", on: int | None = None) -> bool:
+        """Put a row into this object, for the object to hand back later.
+
+        "You can store one at-will or encounter martial power in your
+        armor"; "you must first link the item to another alchemical item".
+        Three cards print a row held by an **object**, and `c.grant_row` is
+        the near miss: it hands the row to a *creature*, so the power
+        becomes the wielder's for the encounter, where the printed thing is
+        a property of the armour that the wielder then spends an action on.
+
+        `by` is the holder and defaults to this row's own ref, which is what
+        an item's Property wants. Keyed by the holder so an armour storing a
+        power and a flask linked to a second item do not collide.
+
+        Returns whether anything moved, so a row can tell "I stored it" from
+        "it was already there" -- and storing the same ref twice is not an
+        event.
+
+        **Replaces rather than adds**, because every card that prints this
+        also prints "you can have only one power stored at a time". A second
+        store overwrites, and the row does not have to police it.
+
+        See `Powers.stored` for why the slot lives on the wielder. #720.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        powers = self.world.need(who, Powers)
+        key = by or self.ref
+        if powers.stored.get(key, "") == ref:
+            return False
+        powers.stored[key] = ref
+        self.world.bus.emit(
+            RowStored(holder=key, row=ref, actor=who, by=self.ref)
+        )
+        return True
+
+    def stored_row(self, *, of: str = "", on: int | None = None) -> str:
+        """What that object is holding, or `""`.
+
+        `of` is the holder and defaults to this row's own ref. **The two
+        halves of one card are two rows**, so the reader usually names the
+        other half -- `i540p1` asks `of="i540x1"` -- and a row that stores
+        and reads under one ref can leave it out.
+
+        `""` rather than raising, for `chargen.proficiency`'s reason about
+        itself: the honest direction is that the row does nothing and keeps
+        its marker, where an invention would look finished.
+        """
+        from .components import Powers
+
+        who = self.me if on is None else on
+        powers = self.world.get(who, Powers)
+        if powers is None:
+            return ""
+        return powers.stored.get(of or self.ref, "")
 
     def action_points(self, *, of: int | None = None) -> int:
         """How many action points this creature could spend right now."""

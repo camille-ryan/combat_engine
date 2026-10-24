@@ -1743,15 +1743,87 @@ def i533x1(c: Cast) -> None:
 @power("i540x1", level=3, cls=ITEM, action=ActionType.NONE,
        reach=PERSONAL, target=SELF, out_of_combat=True)
 def i540x1(c: Cast) -> None:
-    """Storing a power happens during a rest, and the whole property is
-    the bookkeeping around it."""
+    """One at-will or encounter martial power of the armour's level or
+    lower, stored in the armour until `i540p1` spends it.
+
+    **Settled when the Property arms, which is the start of the fight.**
+    The card says the storing happens during a rest and there is no
+    persistence between encounters, so a rest-time choice and an
+    arming-time choice are the same choice -- the argument
+    `c.borrow_row` already makes about a character-creation one.
+
+    "That you or an ally has" is the candidate set, so allies' known rows
+    count and not merely the wielder's: this armour's whole point is
+    carrying somebody else's trick. Filtered by the three things the card
+    names -- the martial keyword, at-will or encounter, and *"cannot store
+    a power of higher level than the armor"*, which is this row's own
+    level.
+
+    `c.store_row` and not `c.grant_row`: the latter hands the row to the
+    **creature**, which would let the wielder use it as its own power for
+    free, where the print has the armour hold it and charge a standard
+    action and -- for an encounter power -- an action point. #720.
+    """
+    mine = c.world.need(c.me, Powers)
+    seen: dict[str, None] = {}
+    for who in (c.me, *c.within(100, side="ally")):
+        held = c.world.get(who, Powers)
+        if held is None:
+            continue
+        for ref in held.known:
+            seen.setdefault(ref, None)
+    offered = sorted(
+        ref for ref in seen
+        if (row := get(ref)) is not None
+        and not row.unfinished
+        and row.usage in (AT_WILL, ENCOUNTER)
+        and Keyword.MARTIAL in (row.keywords or ())
+        and (row.level or 0) <= 3
+        # **A power, which a passive class feature is not.** `Powers.known`
+        # holds features and traits beside powers, and the first thing this
+        # stored was `cf:fighter-weaponmaster-f0` -- encounter usage, the
+        # martial keyword, level 0, and `action=NONE` with no attack, so
+        # `c.use_power` had nothing to run and `i540p1` spent an action
+        # point on nothing. The card says "power"; in this engine a power
+        # is the thing that costs an action.
+        and row.action is not ActionType.NONE
+    )
+    if not offered:
+        c.note(f"{c.ref}: nothing martial of its level to store")
+        return
+    pick = c.choose(offered, f"{c.ref}: the power stored in the armour")
+    if pick:
+        c.store_row(pick)
+    _ = mine
 
 
 @power("i540p1", level=3, cls=ITEM, usage=DAILY, action=STANDARD,
-       reach=PERSONAL, target=SELF, todo=("c.stored_row()",))
+       reach=PERSONAL, target=SELF)
 def i540p1(c: Cast) -> None:
-    """There is nowhere to put a borrowed row: `c.grant_row` hands one to
-    a creature, not to an object."""
+    """Use the power the armour is holding; an encounter power costs an
+    action point as well.
+
+    `of="i540x1"` because the two halves of this card are two rows and the
+    Property is the one that stored it. Nothing stored is nothing to use --
+    the armour was never armed, or had no legal power to hold -- and the
+    row says so rather than inventing one.
+
+    **The action point is a cost and not a rider**, so a wielder who has
+    none cannot use the stored power at all: `c.action_point` returns False
+    when the pool is empty or the encounter's one has been spent, and the
+    row stops there. Reading the usage off the registry rather than
+    recording it at store time, so that a row re-pointed between the two
+    halves cannot disagree with itself. #720.
+    """
+    ref = c.stored_row(of="i540x1")
+    if not ref:
+        c.note(f"{c.ref}: the armour is holding nothing")
+        return
+    row = get(ref)
+    if row is not None and row.usage is ENCOUNTER and not c.action_point():
+        c.note(f"{c.ref}: no action point to spend on {ref}")
+        return
+    c.use_power(ref, spend=False)
 
 
 @power("i549x1", level=3, cls=ITEM, action=ActionType.NONE,

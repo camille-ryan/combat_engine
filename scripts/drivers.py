@@ -32076,6 +32076,105 @@ def hiding_is_a_check_and_moving_fast_makes_it_harder(out: Result) -> None:
              f"{skill_modifier(w2, me2, 'stealth')}")
 
 
+def an_object_holds_a_row_and_hands_it_back(out: Result) -> None:
+    """"Store one power in your armor", and spend it later.
+
+    Three cards print a row held by an **object** and none could be
+    written. `c.grant_row` is the near miss and is the wrong shape, as
+    `i540p1`'s own note said: it hands the row to a *creature*, so the
+    power becomes the wielder's for the encounter -- where the print has
+    the armour hold it and charge a standard action, plus an action point
+    if what it holds is an encounter power. #720.
+
+    Driven through both halves of the card rather than through the verbs:
+    `i540x1` is the Property that stores and `i540p1` is the power that
+    spends, so a rule calling `c.store_row` itself would prove the slot and
+    say nothing about whether either row reaches it.
+
+    **The filter is the half that went wrong and is asserted hardest.**
+    `Powers.known` holds class features and racial traits beside powers,
+    and the first thing this stored was a passive class feature -- encounter
+    usage, the martial keyword, `action=NONE`, no attack. `c.use_power` had
+    nothing to run, so `i540p1` spent an action point on nothing and the
+    audit called it `ok` on the strength of the `ActionGranted` that spend
+    emitted. A row green on the wrong clause.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import AT_WILL, ENCOUNTER, ActionType, Keyword
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY, get
+    from combat_engine.engine.events import RowStored
+
+    for ref in ("i540x1", "i540p1"):
+        row = REGISTRY[ref]
+        out.that(not row.unfinished, f"{ref} carries no marker",
+                 f"{row.unfinished}")
+
+    world, me, _ = _posed("i540p1", 1)
+    held = world.need(me, Powers).stored
+
+    # -- the Property armed and put something in the armour --------------
+    out.that(bool(held.get("i540x1", "")),
+             "**the armour arrives holding a power**: `i540x1` is an"
+             " `action=NONE` Property, so the board arms it and the store is"
+             " settled when the fight opens -- the model `c.borrow_row`"
+             " argues for, there being no persistence between encounters",
+             f"stored={dict(held)}")
+
+    stored = held.get("i540x1", "")
+    row = get(stored) if stored else None
+    out.that(row is not None,
+             "and what it holds is a row the registry knows",
+             f"{stored!r}")
+    if row is not None:
+        out.that(row.usage in (AT_WILL, ENCOUNTER),
+                 "at-will or encounter, which is what the card allows",
+                 f"{row.usage}")
+        out.that(Keyword.MARTIAL in (row.keywords or ()),
+                 "and martial, which is the other thing it allows",
+                 f"{row.keywords}")
+        out.that((row.level or 0) <= 3,
+                 "and of the armour's level or lower -- *\"cannot store a"
+                 " power of higher level than the armor\"*",
+                 f"level {row.level} vs the armour's 3")
+        # **The assertion the bug would have passed.** A passive feature
+        # satisfies every line above and is still not a power.
+        out.that(row.action is not ActionType.NONE,
+                 "and it is a **power and not a passive feature** -- the one"
+                 " assertion the first version of this failed: a class"
+                 " feature with encounter usage and the martial keyword"
+                 " stored fine and gave `c.use_power` nothing to run",
+                 f"action={row.action}")
+
+    # -- the slot is keyed, overwrites, and no-ops ------------------------
+    c = Cast(world=world, me=me, ref="drivers:stored")
+    said: list[RowStored] = []
+    world.bus.on(RowStored, said.append)
+    out.that(c.store_row("p10469", by="drivers:one") is True,
+             "storing into a fresh holder moves something",
+             "")
+    out.that(c.store_row("p10469", by="drivers:one") is False and len(said) == 1,
+             "storing the **same** row again moves nothing and announces"
+             " nothing, so a Property that re-arms is not an event",
+             f"{len(said)} announced")
+    out.that(c.store_row("p10470", by="drivers:one") is True,
+             "a different row **overwrites** -- every card that prints this"
+             " also prints \"only one at a time\", so the row does not have"
+             " to police it",
+             "")
+    out.that(c.stored_row(of="drivers:one") == "p10470",
+             "and the reader hands back the last one stored",
+             f"{c.stored_row(of='drivers:one')}")
+    out.that(c.stored_row(of="drivers:two") == "",
+             "a holder nothing stored into reads empty, not the other"
+             " holder's row -- which is why the slot is keyed at all",
+             f"{c.stored_row(of='drivers:two')!r}")
+    out.that(c.stored_row(of="i540x1") == stored,
+             "and the armour's own holder is untouched by either of those",
+             f"{c.stored_row(of='i540x1')}")
+
+
 def a_turned_blow_says_so_and_stays_turned(out: Result) -> None:
     """"The attack misses" has to be announced, and it has to *stick*.
 
@@ -32119,14 +32218,20 @@ def a_turned_blow_says_so_and_stays_turned(out: Result) -> None:
     said: list[BlowTurned] = []
     world.bus.on(BlowTurned, said.append)
 
-    def blow(natural: int) -> Hit:
+    def blow(natural: int) -> Any:
         """A landed attack, shaped the way `resolve.attack` hands one over.
 
         `Hit` declares no `result` field -- `resolve` attaches it -- so a
         rule that forgot to attach one here would be testing the
         `result is None` branch and nothing else.
         """
-        ev = Hit(attacker=foe, target=me, power="mba", critical=False)
+        # **`Any`, because `result` is attached by `resolve` rather than
+        # declared on `Hit`** -- the `Effect.by` pattern, which is what
+        # keeps it off `Event.wire()` and so out of the fixtures. Typing the
+        # local as the event's own class makes both the write here and every
+        # read below an error, and `setattr`/`getattr` trade that for a
+        # ruff objection instead. One annotation satisfies both.
+        ev: Any = Hit(attacker=foe, target=me, power="mba", critical=False)
         ev.result = AttackResult(hit=True, natural=natural, total=25,
                                  target_defence=10)
         return ev
@@ -32159,7 +32264,7 @@ def a_turned_blow_says_so_and_stays_turned(out: Result) -> None:
 
     # -- a blow that already missed is a no-op, not an announcement -------
     said.clear()
-    already = Hit(attacker=foe, target=me, power="mba", critical=False)
+    already: Any = Hit(attacker=foe, target=me, power="mba", critical=False)
     already.result = AttackResult(hit=False, natural=3, total=4,
                                   target_defence=25)
     moved = Cast(world=world, me=me, ref="drivers:turned").hit_becomes(
@@ -32479,6 +32584,10 @@ DRIVERS = {
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "stored_row": (
+        an_object_holds_a_row_and_hands_it_back,
+        "an object holds a row and hands it back, keyed per holder (#720)",
     ),
     "blow_turned": (
         a_turned_blow_says_so_and_stays_turned,

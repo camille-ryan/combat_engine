@@ -1218,6 +1218,29 @@ class Powers:
     #: all. Owning and preparing are different states, and a wizard is
     #: mostly the difference between them.
     owned: list[str] = field(default_factory=list)
+    #: **A row held by an object rather than by a creature**, keyed by the
+    #: ref of the row doing the holding -- an item's Property -- and valued
+    #: with the ref it is holding.
+    #:
+    #: Three cards print this and none of them could be written: an armour
+    #: that stores a power until it is used, and two alchemical items that
+    #: link to a second item and set it off. `c.grant_row` is the near miss
+    #: and is the wrong shape, as `i540p1`'s note says: it hands a row to a
+    #: *creature*, so the power becomes the wielder's for the encounter,
+    #: where the printed thing is a property of the armour that the wielder
+    #: then spends an action on.
+    #:
+    #: **Keyed by the holder so two items cannot collide**, which is the
+    #: whole reason this is a dict and not a field: a character can wear an
+    #: armour that stores a power and carry a linked flask at the same time,
+    #: and each has to read back its own.
+    #:
+    #: On the wielder's `Powers` rather than on the item, because an item is
+    #: not an entity and there is no component to hang it on. That is sound
+    #: here precisely because nothing persists between encounters -- the
+    #: store is settled when the Property arms and dies with the fight,
+    #: which is the model `c.borrow_row` already argues for. #720.
+    stored: dict[str, str] = field(default_factory=dict)
 
     def prepare(self, ref: str, *, instead_of: str = "") -> bool:
         """Move a row out of the book and into the prepared list.

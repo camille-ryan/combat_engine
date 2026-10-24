@@ -1207,6 +1207,29 @@ class BlowTurned(Event):
 
 
 @dataclass
+class RowStored(Event):
+    """An object was given a row to hold.
+
+    Announced because the storing **is** the printed effect of two of the
+    three cards that want it: an armour's Property whose whole text is
+    "during a rest you can store one power in it" does nothing else, and a
+    row whose only effect is a write no event reports is the shape
+    `audit.DID_SOMETHING` has had to admit seven times. Cheaper to announce
+    it now than to find it on the silent list later.
+
+    `holder` is the ref of the row doing the holding -- an item's Property --
+    and `row` is what it is holding. `by` is the row that did the storing,
+    which is usually the holder and need not be: a rest-time Property can
+    store on behalf of an item it is linked to.
+    """
+
+    holder: str
+    row: str
+    actor: int
+    by: str
+
+
+@dataclass
 class InitiativeRolled(Event):
     """A creature's place in the order was decided.
 
