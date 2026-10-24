@@ -96,10 +96,6 @@ def _reroll_next_attack(c: Cast) -> None:
         face = c.world.rng.d20().total
         result.total += face - result.natural
         result.natural = face
-        result.critical = face == 20
-        result.hit = face == 20 or (
-            face != 1 and result.total >= result.target_defence
-        )
 
     c.watch(AttackRolled, again, until=When.EOT, on=mine)
 

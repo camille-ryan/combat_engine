@@ -1969,7 +1969,6 @@ def m2788a4(c: Cast) -> None:
         result = getattr(ev, "result", None)
         if result is not None:
             result.total += added
-            result.hit = result.total >= ev.defence
         return
     if isinstance(ev, SavingThrow):
         ev.saved = ev.natural + ev.bonus + added >= 10

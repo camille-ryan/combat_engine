@@ -913,8 +913,14 @@ def i1759p1(c: Cast) -> None:
     plain attribute -- the same thing `c.reroll_attack` reaches for, and
     `resolve.attack` re-announces the outcome until it stops changing, so
     a miss raised past the defence becomes a real `Hit` with its riders.
-    Raising the total is not rerolling: the die is left alone, which is
-    why the critical is not reconsidered."""
+    Raising the total is not rerolling and the die is left alone -- but the
+    critical **is** reconsidered, and by the engine rather than here. This
+    said the opposite, and described behaviour the row does not have:
+    `resolve.attack` recomputes both `hit` and `critical` from the result
+    after this window closes, so a natural 20 whose total this carries over
+    the defence becomes a critical. That is the printed rule -- the die opens
+    the door and the total walks through it -- so the engine is right and
+    the note was wrong about the engine and about itself. #868."""
     ev = c.trigger
     roll = c.roll("1d6")
     if isinstance(ev, SkillCheck):
@@ -926,9 +932,6 @@ def i1759p1(c: Cast) -> None:
         result = getattr(ev, "result", None)
         if result is not None:
             result.total += roll
-            result.hit = (
-                result.natural != 1 and result.total >= result.target_defence
-            )
 
 
 @power("i2032x1", level=4, cls=ITEM, action=ActionType.NONE,
