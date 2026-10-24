@@ -229,6 +229,25 @@ def _holding(c: Cast, *groups: str) -> bool:
     return gear is not None and any(w.group in groups for w in gear.held)
 
 
+def _group_of(c: Cast, ref: str) -> str:
+    """The group of the weapon this ref names, from the wielder's own gear.
+
+    **The ref is not enough on its own.** `Gear.weapons` holds `replace(w)`
+    copies made per character, and a row may have rewritten the group on
+    one of them -- so the group has to come off *this* character's weapon
+    rather than the printed table. Empty when the wielder is not carrying
+    it, which is the honest answer for a blow struck with something since
+    dropped.
+    """
+    gear = c.world.get(c.me, Gear)
+    if gear is None or not ref:
+        return ""
+    for w in gear.weapons:
+        if getattr(w, "ref", "") == ref:
+            return str(getattr(w, "group", "") or "")
+    return ""
+
+
 def _main(c: Cast) -> Any:
     gear = c.world.get(c.me, Gear)
     return gear.main if gear is not None else None
@@ -1177,18 +1196,20 @@ f3612 = _power_strike_rider(
 @power("f3606", level=1, cls="", usage=AT_WILL, action=NONE,
        reach=PERSONAL, target=NO_TARGET,
        trigger="you drop an enemy with a heavy blade",
-       on=Trigger(Dropped, _i_dropped_a_foe, "you drop an enemy"),
-       dropped=("Dropped.weapon",))
+       on=Trigger(Dropped, _i_dropped_a_foe, "you drop an enemy"))
 def f3606(c: Cast) -> None:
-    """Heavy blade is a real group, so this one is written. What is
-    dropped is which *weapon* did it.
+    """Heavy blade is a real group, and the blow now names its weapon.
 
-    **Re-pointed off `Dropped.power`, which landed and is the wrong
-    half.** The event names the row that struck now, and this card asks
-    what *weapon* struck -- a group, which lives on the `Weapon` and not
-    on the row. Reading the weapon in hand is the approximation already
-    here and is not the same question: a character may hold two.
+    **Written off `Dropped.weapon`, which is the half this wanted.** It was
+    re-pointed off `Dropped.power` because the event named the row that
+    struck and the card asks what *weapon* struck -- a group, which lives
+    on the `Weapon`. Reading the weapon **in hand** was the approximation
+    standing here, and it is a different question: a character may hold
+    two, so a kill with the off-hand mace paid out as a heavy blade.
 
+    The group comes off this character's own copy of the weapon rather than
+    the printed table, because a row may have rewritten it -- see
+    `_group_of`. #698.
 
     `c.expend_row` is the printed price and the printed "instead of
     gaining the power's normal benefit" both: the use goes and `p12668`
@@ -1196,7 +1217,7 @@ def f3606(c: Cast) -> None:
     an `ENCOUNTER` header would be a second budget on top of it, and the
     False `c.expend_row` returns is the Requirement."""
     ev = c.trigger
-    if not _holding(c, "heavy blade"):
+    if _group_of(c, str(getattr(ev, "weapon", "") or "")) != "heavy blade":
         return
     others = [e for e in c.within(1, side="enemy") if e != ev.actor]
     if not others or not c.expend_row("p12668"):

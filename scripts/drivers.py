@@ -32139,6 +32139,78 @@ def _rider_blow(attacker: int, target: int, result: Any) -> Any:
     return ev
 
 
+def a_kill_names_the_weapon_that_made_it(out: Result) -> None:
+    """"You drop an enemy with a heavy blade" -- which weapon, not which hand.
+
+    `f3606` read **the weapon in hand** because `Dropped` carried no weapon,
+    and its own docstring said why that is a different question: a character
+    may hold two. Its audit board is the proof -- it deals an **axe and a
+    heavy blade at once** -- so every kill with the axe paid out as a heavy
+    blade. `Dropped.weapon` landed with #698 and the row asks the right
+    question now.
+
+    Both halves are driven through the row's own body with a posed
+    `Dropped`, which is what `resolve._check_down` now emits: the weapon as
+    an attached attribute, so it stays off `Event.wire()`.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Gear
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackDeclared, Dropped
+    from combat_engine.engine.query import enemies
+
+    row = REGISTRY["f3606"]
+    out.that(not row.unfinished and not row.dropped,
+             "f3606 carries no marker and no dropped clause any more",
+             f"todo={row.unfinished} dropped={row.dropped}")
+
+    world, me, _ = _posed("f3606", 1)
+    gear = world.get(me, Gear)
+    if gear is None:
+        return
+    held = {w.group: w.ref for w in gear.weapons}
+    out.that("heavy blade" in held and len(held) > 1,
+             "**the board deals this character two weapons at once**, which"
+             " is what makes the old reading able to fail: a heavy blade and"
+             f" something else ({sorted(held)})",
+             f"{held}")
+    foes = sorted(enemies(world, me))
+    if len(foes) < 2 or "heavy blade" not in held:
+        return
+
+    def kill_with(ref: str) -> list[str]:
+        """Pose the kill `resolve._check_down` would emit, and run the body."""
+        w2, me2, _ = _posed("f3606", 1)
+        swung: list[str] = []
+        w2.bus.on(AttackDeclared, lambda ev: swung.append(getattr(ev, "power", "")))
+        victim = sorted(enemies(w2, me2))[0]
+        ev: Any = Dropped(actor=victim, dead=True, source=me2,
+                          power="mba", critical=False)
+        ev.weapon = ref
+        REGISTRY["f3606"].body(
+            Cast(world=w2, me=me2, ref="f3606", trigger=ev))
+        return swung
+
+    with_blade = kill_with(held["heavy blade"])
+    other = next(r for g, r in held.items() if g != "heavy blade")
+    with_other = kill_with(other)
+
+    out.that(bool(with_blade),
+             "a kill **with the heavy blade** pays out -- the free basic"
+             " attack the card grants",
+             f"{with_blade}")
+    out.that(not with_other,
+             f"and a kill with the other weapon ({other}) pays out"
+             " **nothing**, where reading the hand paid out on both because"
+             " the blade was also being carried",
+             f"{with_other}")
+    out.that(bool(with_blade) and not with_other,
+             "so the row asks which weapon struck, not which it happens to"
+             " be holding",
+             f"blade={with_blade} other={with_other}")
+
+
 def an_object_holds_a_row_and_hands_it_back(out: Result) -> None:
     """"Store one power in your armor", and spend it later.
 
@@ -32647,6 +32719,10 @@ DRIVERS = {
     "aim_cache": (
         an_area_stops_being_aimable_when_a_wall_arrives,
         "where an area may be centred follows the walls, not a stale memo",
+    ),
+    "kill_weapon": (
+        a_kill_names_the_weapon_that_made_it,
+        "a kill names the weapon that made it, not the one in hand (#698)",
     ),
     "stored_row": (
         an_object_holds_a_row_and_hands_it_back,
