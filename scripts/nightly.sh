@@ -106,15 +106,39 @@ fi
 # recording the run. The flag below leaves it exactly where it is: its `sha`
 # is bookkeeping `audit.py` reads for "owed since", never part of the per-ref
 # baseline, so the sweep behaves identically either way.
+# **The tolerance was "the sha alone moved" and it was too narrow to work.**
+# It held only on a night when no row had been declared since the previous
+# committed sweep -- the opposite of the normal case here. The 2026-10-23
+# sweep moved three fields:
+#
+#     sha    81f5229 -> 402e66d
+#     refs    21,405 -> 21,407      two rows declared in between
+#     fired   19,672 -> 19,675
+#
+# so the guard read it as a real edit and 10-24 refused. Over seventeen
+# nights that is **8 of the 11 failures**; the other three never fired at
+# all (#871).
+#
+# **What it is really protecting against is a hand-tuned baseline**, which
+# `nightly.sh` has always said: "a human-edited baseline, or one whose
+# `silent_refs` differ, is a real edit and still blocks". So the test is now
+# that question directly -- the two **per-ref lists** must not have moved --
+# rather than a line count that stands in for it. `sha`, `refs`, `fired`,
+# `never` and `known_quiet` are counts a sweep legitimately rewrites.
+#
+# The sweep still reports what moved in its `-- baseline --` section, so a
+# row changing sides is read by a human either way; this only stops the
+# bookkeeping from gating the next night. #867, #469.
 LEDGER=scripts/fixtures/audited.json
 DIRTY=$(git status --porcelain)
 if [ -n "$DIRTY" ] \
    && [ -z "$(git status --porcelain -- . ":(exclude)$LEDGER")" ] \
-   && [ "$(git diff -U0 -- "$LEDGER" | grep -c '^[-+][^-+]')" = "2" ] \
-   && [ "$(git diff -U0 -- "$LEDGER" | grep -c '^[-+][^-+].*\"sha\"')" = "2" ]; then
-    echo "note: $LEDGER differs from HEAD by its sha alone -- the previous"
-    echo "      sweep's own bookkeeping, not an edit. Sweeping anyway; see"
-    echo "      the comment above this check."
+   && [ -z "$(git diff -U0 -- "$LEDGER" \
+              | grep '^[-+][^-+]' \
+              | grep -E '"(silent_refs|refused_refs)"|^[-+] +"[a-z]+:?[a-z0-9:_-]+",?$')" ]; then
+    echo "note: $LEDGER differs from HEAD only in counts the sweep rewrites"
+    echo "      -- its own bookkeeping, not an edit. The per-ref baseline"
+    echo "      (silent_refs, refused_refs) is unchanged. Sweeping anyway."
     DIRTY=""
 fi
 if [ -n "$DIRTY" ]; then

@@ -604,7 +604,10 @@ def main() -> int:
         mark = "ok  " if done.returncode == 0 else "FAIL"
         print(f"  {mark}  {c.name:{width}}  {took:5.1f}s  {tail}")
         _record(c.name, took, done.returncode == 0, at,
-                _scope(done.stdout))
+                _scope(done.stdout),
+                by=("impact" if mapped and c.name == "audit"
+                    else "calls" if narrowed and c.name == "audit"
+                    else ""))
         if done.returncode != 0:
             failed.append(c.name)
             if not args.verbose:
@@ -1237,7 +1240,7 @@ def _submit_order(wanted: list[Instrument]) -> list[Instrument]:
 
 
 def _record(name: str, seconds: float, ok: bool, at: str,
-            scope: tuple[int, int] | None = None) -> None:
+            scope: tuple[int, int] | None = None, by: str = "") -> None:
     try:
         LEDGER.parent.mkdir(parents=True, exist_ok=True)
         row = {
@@ -1255,6 +1258,13 @@ def _record(name: str, seconds: float, ok: bool, at: str,
         # counts the silent ones out loud rather than averaging over them.
         if scope:
             row["refs"], row["of"] = scope
+        # **Which selector narrowed it**, because `refs < of` alone cannot
+        # say. `--changed`, `--calls` and the impact map all produce narrow
+        # audit runs, and "is the map earning its 87-minute recording" is
+        # not answerable from a count that pools all three. Absent on a run
+        # nothing narrowed, which is what a wide sweep is.
+        if by:
+            row["by"] = by
         with LEDGER.open("a") as fh:
             fh.write(json.dumps(row) + "\n")
     except OSError:
@@ -1265,6 +1275,44 @@ def _commit() -> str:
     done = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                           cwd=ROOT, capture_output=True, text=True)
     return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def _map_history(rows: list[dict]) -> None:
+    """What the impact map has actually bought, against the wide sweep.
+
+    **Measured, not modelled.** The saving is the median narrowed run's
+    seconds against the median *wide* run's on the same ledger -- both real
+    timings from this machine -- rather than a per-row cost multiplied out.
+    A wide sweep is not N times a narrow one: the never-firing tail is 59%
+    of it, so arithmetic from a row count would flatter the map.
+
+    Silent until the map has narrowed something, because a line reading
+    "0 runs" every run is the noise `--history` exists to avoid. The map's
+    *existence* is reported by `_map_state` on every run regardless; this is
+    only the ledger half.
+    """
+    audits = [r for r in rows if r["name"] == "audit" and r.get("of")]
+    mapped = [r for r in audits if r.get("by") == "impact"]
+    if not mapped:
+        return
+    wide = sorted(r["seconds"] for r in audits if r["refs"] >= r["of"])
+    secs = sorted(r["seconds"] for r in mapped)
+    refs = sorted(r["refs"] for r in mapped)
+    med = secs[len(secs) // 2]
+    corpus = mapped[-1]["of"]
+    print(f"\n  the impact map narrowed {len(mapped)} audit run(s): "
+          f"median {refs[len(refs) // 2]} of {corpus} rows, {med:.0f}s")
+    if wide:
+        full = wide[len(wide) // 2]
+        print(f"  against a median wide sweep of {full:.0f}s -- "
+              f"{full - med:.0f}s saved a run, {(full - med) * len(mapped):.0f}s "
+              f"so far, {full / med:.0f}x" if med else "")
+    else:
+        print("  no wide sweep on this ledger to compare against yet")
+    calls = [r for r in audits if r.get("by") == "calls"]
+    if calls:
+        print(f"  (`--calls` narrowed {len(calls)} more, which the map does "
+              f"not account for)")
 
 
 def history() -> int:
@@ -1305,6 +1353,8 @@ def history() -> int:
         last = caught[-1]["when"][:10] if caught else "--"
         print(f"  {name:13} {len(runs):5} {secs[len(secs) // 2]:6.1f}s "
               f"{spent:7.0f}s {len(caught):7} {per:>10}  {last}")
+
+    _map_history(rows)
 
     total = sum(r["seconds"] for r in rows)
     caught = sum(1 for r in rows if not r["ok"])
