@@ -273,7 +273,7 @@ CREATE INDEX item_step_level ON item_step(level);
 -- One Property or one Power off an item's page. **This is the unit of
 -- work**, not the item: 1,877 heroic items carry 2,294 of these between
 -- them and 106 items have more than one Power. Without a ref each,
--- `coverage.py` cannot see a half-written item.
+-- `written.py` cannot see a half-written item.
 CREATE TABLE item_block (
   ref TEXT PRIMARY KEY, item_ref TEXT, idx INTEGER, kind TEXT,
   usage TEXT, action TEXT, keywords TEXT, spec TEXT
@@ -414,7 +414,7 @@ CREATE INDEX race_skill_race ON race_skill(race);
 -- trait's label is an ordinary printed name with an ordinary localisation
 -- entry. The key it was for -- re-pointing content's 94 invented refs -- is
 -- work that finished, and **nothing read the column afterwards**: not
--- `coverage.py`, not `spec.py` (whose `rt:` branch omits it deliberately), not
+-- `written.py`, not `spec.py` (whose `rt:` branch omits it deliberately), not
 -- the ETL. A name kept for a job that is over, one `SELECT *` away from an
 -- author, which is exactly how 15 reward titles reached one from `item.slot`.
 -- Dropped with its index. #433.

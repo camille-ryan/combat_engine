@@ -4,7 +4,7 @@ Its numbers come out of `game.db` by id and are never hand-written -- that is
 the whole division of labour. Its *behaviour* is whichever of its abilities
 somebody has written as a function; anything not yet written simply is not in
 its power list, so the monster fights with what it has and the gap shows up
-in `scripts/coverage.py` rather than in a broken fight.
+in `scripts/written.py` rather than in a broken fight.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@
                                         has since falsified. Reports only.
 
 Work is tracked as one issue per class per level for powers and one per
-level for monsters. Whether a bucket is *done* is a question `coverage.py`
+level for monsters. Whether a bucket is *done* is a question `written.py`
 already answers, so nothing here decides it -- this only carries the answer
 to GitHub.
 
@@ -176,7 +176,7 @@ def _wanted() -> dict[str, int]:
     """Every symbol a declared row still waits on, and how many want it.
 
     `unfinished` is the authority rather than `todo`/`dropped` read
-    separately: it is what `coverage.py` and the bucket pass above already
+    separately: it is what `written.py` and the bucket pass above already
     count, so a row cannot be finished here and unfinished there.
     """
     counts: dict[str, int] = defaultdict(int)
@@ -386,7 +386,7 @@ def _open_issues() -> list[tuple[int, str]]:
 
 def _close(number: int, have: int, want: int) -> None:
     body = (
-        f"Done -- `coverage.py` reports {have}/{want} for this bucket, with no "
+        f"Done -- `written.py` reports {have}/{want} for this bucket, with no "
         "`todo=` left in it, and `audit.py` fires every row.\n\nClosed by "
         "`scripts/issues.py`, which reads coverage rather than anyone's "
         "memory.\n\n— Claude (Camille)"

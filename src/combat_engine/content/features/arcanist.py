@@ -745,7 +745,7 @@ mage_expert_s5 = _expert("cf:wizard-mage-f4s5", "bluff", "intimidate", 5)
 # as well. So the pattern is the *page's*, not a truncation here, and the
 # three it prints are the three written. If `f5s3`-`f5s5` ever appear in a
 # rebuilt database, `symbols.py` will not notice and nothing else will
-# either; `coverage.py` is what would.
+# either; `written.py` is what would.
 #
 # Each pays the identical benefit to its `f4sN` twin, because the card is the
 # same card -- the only difference is which of the character's two schools it

@@ -156,7 +156,7 @@ def _glossary(block: str, own: str) -> str:
 
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did
-#: not. `etl/feat.py` argues it; `coverage.py` asks the same question.
+#: not. `etl/feat.py` argues it; `written.py` asks the same question.
 HEROIC = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
 
 #: The project's scope, and the reason a ladder prints two rungs here and
@@ -386,7 +386,7 @@ def _monsters(db, level: int, role: str | None, book: bool = False) -> list[str]
     scope. It is not: 630 of the 3,130 imported monsters carry a book, and
     those 630 are **exactly the ones already written** -- so the one tool that
     briefs an author could not list a single one of the 10,802 outstanding
-    abilities. `coverage.py` had the same defect and the same fix in #357;
+    abilities. `written.py` had the same defect and the same fix in #357;
     `--mm13` keeps the old view.
 
     The per-ref path was never affected -- naming a ref has always worked --

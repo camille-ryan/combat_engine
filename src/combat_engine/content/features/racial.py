@@ -237,7 +237,7 @@ def _inert(ref: str, why: str, **header: Any) -> None:
 
     Declared rather than left out so that the page is accounted for. The
     flag is what tells `audit.py` to stop expecting the row to do
-    anything and `coverage.py` to count it done.
+    anything and `written.py` to count it done.
     """
 
     def body(c: Cast) -> None:

@@ -103,7 +103,7 @@ def p12305(c: Cast) -> None:
 
     **Marked rather than argued, which is the fix.** The reasoning here was
     right and that was the problem: a docstring explaining a dropped clause is
-    not queryable, so `blocked.py` could not see this and `coverage.py` counted
+    not queryable, so `blocked.py` could not see this and `written.py` counted
     the row done. `docs/AUTHORING.md` says exactly that -- "do not drop a clause
     silently in a docstring" -- and this row was the example. #236.
 

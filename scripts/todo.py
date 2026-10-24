@@ -46,7 +46,7 @@ the thing worth gating, and that is the check above, which stays.
 No ratchet replaced it, and deliberately: "markers must not increase" has the
 same flaw as "markers must stay under a tenth", because any gate that counts
 markers charges a row for being declared and charges nothing for being absent.
-`coverage.py` is what sees an absent row; `blocked.py --group` is the work
+`written.py` is what sees an absent row; `blocked.py --group` is the work
 queue.
 
 **A narrative clause is not a marker and is still listed here.** `narrative=
