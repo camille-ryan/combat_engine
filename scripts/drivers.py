@@ -32265,6 +32265,128 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def a_rerolled_die_is_judged_by_the_same_rule_as_the_first(out: Result) -> None:
+    """A reroll settles the outcome itself, and settled it three ways wrong.
+
+    `c.reroll_attack` is the **live** copy of the hit-and-critical rule.
+    Driven from an `AttackRolled` listener its writes are overwritten by
+    `resolve.attack`'s recompute -- that is why four content copies of the
+    same formula turned out to be dead code -- but a *banked* reroll ("when
+    you dislike the result, you can reroll") fires in the `Hit`/`Miss`
+    window, after the recompute, so what it writes is the answer. 18 rows
+    reroll an attack.
+
+    What it wrote:
+
+    ```python
+    result.critical = face == 20
+    result.hit = face == 20 or (face != 1 and result.total >= ...)
+    ```
+
+    Three faults, each asserted here against a control that fails if the fix
+    is made by deleting the term rather than correcting it:
+
+    1. **The critical never asked whether the total reached the defence.** A
+       rerolled 20 fourteen short of an AC was a critical and dealt maximum
+       damage -- the bug #868's body opens with, surviving in the one copy
+       that is live. `resolve.attack` carries three comments about this half.
+    2. **It read 20 rather than the widened floor**, so a build scoring a
+       critical on 19 or 20 lost the widener as soon as anything rerolled its
+       die. The exact mirror of the fault in `resolve.attack`, which had the
+       floor on the *hit* and not the critical: the two sites were each wrong
+       about a different half of the same rule.
+    3. **Neither line honoured `turned`.** A blow a row turned aside came
+       back as a hit when something rerolled it.
+
+    The window itself is covered by `a_banked_reroll_turns_a_miss_into_a_hit`
+    -- that rule proves the `Miss, Rerolled, Hit` sequence on the bus. This
+    one is about the arithmetic, so it poses the rolls directly rather than
+    hunting a seed that produces each of six shapes.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mod, Mods
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _ = _posed("mba", 1)
+    c = Cast(world=world, me=me, ref="drivers:reroll868")
+
+    class _Rolled:
+        """A roll already announced, which is what a banked reroll is handed."""
+
+        def __init__(self, result: AttackResult) -> None:
+            self.result = result
+            self.attacker = me
+            self.ctx = {"attacker": me}
+
+    def again(face: int, *, total: int, against: int,
+              turned: bool = False) -> AttackResult:
+        """Reroll a d20 that landed on 10 into `face`, and report the result."""
+        res = AttackResult(natural=10, total=total, target_defence=against,
+                           hit=False, critical=False)
+        res.turned = turned
+        world.rng.loaded = face
+        c.reroll_attack(ev=_Rolled(res))
+        return res
+
+    # -- 1. a 20 is not a critical on a hopeless total --------------------
+    # 10 -> 20 carries the total to -10, which no defence of 30 is reached by.
+    hopeless = again(20, total=-20, against=30)
+    out.that(hopeless.critical is False,
+             "**a rerolled 20 is NOT a critical when the total falls short**"
+             " -- the die opens the door and the total still has to walk"
+             " through it (#868)",
+             f"critical={hopeless.critical} total={hopeless.total}"
+             f" vs {hopeless.target_defence}")
+    out.that(hopeless.hit is True,
+             "though it still hits, because a natural 20 hits however"
+             " hopeless the total -- the control, without which the"
+             " assertion above passes on a verb that stopped crediting 20s")
+
+    # -- 2. a 20 that does reach the defence IS a critical ----------------
+    reached = again(20, total=10, against=20)
+    out.that(reached.critical is True and reached.hit is True,
+             "while a rerolled 20 that DOES reach the defence is a critical"
+             " -- the control that stops this being 'fixed' by never"
+             " recomputing a critical at all",
+             f"critical={reached.critical} total={reached.total}"
+             f" vs {reached.target_defence}")
+
+    # -- 3. the widened floor is read ------------------------------------
+    mods = world.get(me, Mods) or world.add(me, Mods())
+    mods.items.append(Mod(what="crit_range", value=1, label="drivers:868"))
+    widened = again(19, total=11, against=20)
+    out.that(widened.critical is True,
+             "**a rerolled 19 that reaches the defence is a critical** when"
+             " the build widens the range -- it read a bare 20, so the"
+             " widener was lost the moment anything rerolled the die",
+             f"critical={widened.critical} total={widened.total}"
+             f" vs {widened.target_defence}")
+    short = again(19, total=-20, against=30)
+    out.that(short.hit is False,
+             "and that same widened 19 does NOT hit on a hopeless total --"
+             " the widener is the critical's door and not the hit's, which"
+             " is the half `resolve.attack` had backwards",
+             f"hit={short.hit} total={short.total}")
+
+    # -- 4. the control for the widener ----------------------------------
+    mods.items[:] = [m for m in mods.items if m.label != "drivers:868"]
+    bare = again(19, total=11, against=20)
+    out.that(bare.critical is False and bare.hit is True,
+             "with the range back to normal the same 19 is a hit and not a"
+             " critical -- the control, and the reason assertion 3 is about"
+             " the bonus rather than the die",
+             f"critical={bare.critical} hit={bare.hit}")
+
+    # -- 5. a turned blow stays turned -----------------------------------
+    aside = again(20, total=10, against=20, turned=True)
+    out.that(aside.hit is False and aside.critical is False,
+             "a blow a row turned aside is still turned after a reroll"
+             " lands a 20 on the defence -- it neither hits nor crits,"
+             " whatever the new die showed",
+             f"hit={aside.hit} critical={aside.critical}")
+
+
 def a_banked_reroll_turns_a_miss_into_a_hit(out: Result) -> None:
     """"The next ally to miss can reroll" -- and the reroll has to pay.
 
@@ -32946,6 +33068,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "reroll_judged": (
+        a_rerolled_die_is_judged_by_the_same_rule_as_the_first,
+        "a rerolled die is judged by the same rule as the first (#868)",
     ),
     "banked_reroll": (
         a_banked_reroll_turns_a_miss_into_a_hit,

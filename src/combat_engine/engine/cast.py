@@ -4684,8 +4684,8 @@ class Cast:
         # reroll-gated modifiers move and the ordinary ones are not counted
         # twice -- they are already in `total`.
         ctx = getattr(ev, "ctx", None) or {}
+        who = ctx.get("attacker", self.me)
         if ctx:
-            who = ctx.get("attacker", self.me)
             # `reroll_by` as well as `reroll`, because the three rows wanting
             # this each narrow to the reroll **their own** racial power
             # forces -- "a penalty on the attack roll `p1452` makes you roll
@@ -4695,16 +4695,47 @@ class Cast:
             result.total += _mods(self.world, who, "attack", again) - _mods(
                 self.world, who, "attack", ctx
             )
-        result.critical = face == 20
-        result.hit = face == 20 or (face != 1 and result.total >= result.target_defence)
+        # **These two lines judged a rerolled die by three wrong rules**, and
+        # they are live: a reroll driven from an `AttackRolled` listener is
+        # overwritten by `resolve.attack`'s recompute, but a *banked* reroll
+        # -- "when you dislike the result, reroll" -- fires in the `Hit`/`Miss`
+        # window after that recompute, so what is written here is the answer.
+        # 18 rows reroll an attack. #868.
+        #
+        # 1. **`critical = face == 20` never asked whether the total reached
+        #    the defence**, which is the half `resolve.attack` carries three
+        #    comments about: the die opens the door and the total still has to
+        #    walk through it. A rerolled 20 that fell fourteen short of an AC
+        #    was recorded as a critical and dealt maximum damage. This is the
+        #    bug #868's body opens with, surviving in the one copy that is
+        #    live.
+        # 2. **It read 20 rather than the widened floor**, so a build that
+        #    scores a critical on 19 or 20 lost the widener the moment anything
+        #    rerolled its die -- the mirror of the fault fixed in
+        #    `resolve.attack`, which had the floor on the hit and not the crit.
+        #    The two sites were each wrong about a different half.
+        # 3. **Neither line honoured `turned`.** A blow a row had turned aside
+        #    came back as a hit if anything rerolled it.
+        #
+        # `forced` is here for the same reason it is in the recompute: a row
+        # that said the attack simply hits is not un-hit by a new die.
+        floor = 20 - _mods(self.world, who, "crit_range", ctx)
+        result.critical = (
+            not result.turned
+            and face >= floor
+            and result.total >= result.target_defence
+        )
+        result.hit = not result.turned and (
+            result.forced
+            or face == 20
+            or (face != 1 and result.total >= result.target_defence)
+        )
         # Recorded on the result and announced as a moment, which are two
         # different needs: 14 of the 18 rows hang on the settled outcome
         # ("a damage bonus when the reroll lands") and read the list; the
         # rest want the moment. #496.
         result.rerolled_by.append(self.ref)
-        self._announce_reroll(
-            "attack", old, face, actor=ctx.get("attacker", self.me)
-        )
+        self._announce_reroll("attack", old, face, actor=who)
         return True
 
     def _announce_reroll(self, roll: str, old: int, new: int, *, actor: int) -> None:
