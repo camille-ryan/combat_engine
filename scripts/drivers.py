@@ -32270,6 +32270,127 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def a_feat_can_thin_the_cloud_its_racial_power_lays(out: Result) -> None:
+    """`f765` chooses the grade `p2473` lays, and drops the blinding with it.
+
+    Written into `p2473` under `implemented_in=`, because a feat that
+    changes one named power is a choice made where that power acts. The
+    marker said *"nothing reaches into a standing zone and changes how
+    thick it is"* -- true, and the wrong thing to want: the card does not
+    thin a zone already laid, it decides what to lay.
+
+    Three outcomes, all asserted, because the middle one is the printed
+    default:
+
+    * no feat -> totally obscuring, `blocks_sight`, occupants blinded;
+    * feat, choosing total -> **identical**, since the card says "you *can*
+      choose" and total is offered first, so the engine's own pick leaves
+      the power alone;
+    * feat, choosing lightly -> a dim zone, no `blocks_sight`, and
+      **nobody blinded**, which is the second half of the printed sentence.
+
+    **The decider is installed deliberately.** `drivers.instead_of_now`
+    records the reason in this same file: with none, `c.choose` takes the
+    head of the list, so an assertion about the softer cloud would pass on
+    a row that never offered a choice at all.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Powers
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, is_, squares
+    from combat_engine.engine.types import Condition
+
+    def cast_it(*, feat: bool, prefer: str | None) -> tuple[Any, Any, list[int]]:
+        """Fire p2473, optionally holding f765 and answering its choice.
+
+        `prefer` names a grade rather than an index, so the decider asks
+        for the *answer* it wants and falls back to the head of the list
+        for any other decision the row makes. An index would couple this
+        to the order of an unrelated menu.
+        """
+        world, me, _ = _posed("p2473", 1)
+        if feat:
+            known = world.get(me, Powers)
+            if known is not None and "f765" not in known.known:
+                known.known.append("f765")
+        if prefer is not None:
+            world.decider = (
+                lambda actor, kind, options, prompt="":
+                prefer if prefer in options else options[0]
+            )
+        c: Any = Cast(world=world, me=me, ref="p2473")
+        REGISTRY["p2473"].body(c)
+        laid = [z for _, z in world.zones.all() if z.label == "p2473"]
+        zone = laid[0] if laid else None
+        inside = [] if zone is None else [
+            f for f in sorted(enemies(world, me))
+            if frozenset(squares(world, f)) & zone.squares
+        ]
+        return world, zone, inside
+
+    # -- the printed power, with no feat -------------------------------
+    world, zone, inside = cast_it(feat=False, prefer=None)
+    out.that(zone is not None and zone.blocks_sight and not zone.obscured,
+             "with no feat the cloud totally obscures -- `blocks_sight` and"
+             " no grade, which is the printed power",
+             f"blocks_sight={zone and zone.blocks_sight}"
+             f" obscured={zone and zone.obscured!r}")
+    out.that(bool(inside),
+             "and an enemy is standing in it, without which every blinding"
+             " assertion below would pass on an empty cloud",
+             f"inside={inside}")
+    if zone is None or not inside:
+        return
+    out.that(all(is_(world, f, Condition.BLINDED) for f in inside),
+             "every creature in the cloud is blinded, which is the clause"
+             " the softer choice is printed to switch off",
+             f"blinded={[is_(world, f, Condition.BLINDED) for f in inside]}")
+
+    # -- **the gate**: no feat, and a decider that would take the dim ---
+    # Without this the rule passes on a row that offers the choice to
+    # everybody, feat or not -- proven by planting exactly that, which
+    # left every other assertion green. The first assertion above cannot
+    # see it, because with no decider `c.choose` takes the head of the
+    # list and the head is total.
+    _, zone_nf, _ = cast_it(feat=False, prefer="dim")
+    out.that(zone_nf is not None and zone_nf.blocks_sight
+             and not zone_nf.obscured,
+             "**without the feat no choice is offered at all** -- a"
+             " decider asking for the dim cloud still gets the total one,"
+             " which is what makes this clause the feat's and not the"
+             " power's",
+             f"blocks_sight={zone_nf and zone_nf.blocks_sight}"
+             f" obscured={zone_nf and zone_nf.obscured!r}")
+
+    # -- the feat, taking the first offer ------------------------------
+    _, zone0, _ = cast_it(feat=True, prefer="")
+    out.that(zone0 is not None and zone0.blocks_sight and not zone0.obscured,
+             "holding the feat and taking the first offer leaves the power"
+             " **unchanged** -- 'you can choose' means total is still the"
+             " default, which is why it is offered first",
+             f"blocks_sight={zone0 and zone0.blocks_sight}"
+             f" obscured={zone0 and zone0.obscured!r}")
+
+    # -- the feat, choosing the lightest -------------------------------
+    world2, zone2, inside2 = cast_it(feat=True, prefer="dim")
+    out.that(zone2 is not None and zone2.obscured == "dim",
+             "**choosing 'lightly obscured' lays a dim zone**, which is"
+             " partial concealment rather than a wall of sight",
+             f"obscured={zone2 and zone2.obscured!r}")
+    out.that(zone2 is not None and not zone2.blocks_sight,
+             "and it stops blocking line of sight -- the softer grades are"
+             " the light model and not terrain")
+    out.that(bool(inside2) and not any(
+                 is_(world2, f, Condition.BLINDED) for f in inside2),
+             "**and nobody in it is blinded**, which is the half of the"
+             " printed sentence a grade alone does not carry: 'if you"
+             " reduce the darkness in this way, creatures inside the cloud"
+             " are not blinded'",
+             f"inside={inside2} blinded="
+             f"{[is_(world2, f, Condition.BLINDED) for f in inside2]}")
+
+
 def a_zone_can_hold_a_condition_and_takes_it_back(out: Result) -> None:
     """"Any enemy within the zone is slowed" -- and un-slowed on leaving.
 
@@ -33388,6 +33509,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "thinner_cloud": (
+        a_feat_can_thin_the_cloud_its_racial_power_lays,
+        "a feat chooses the grade its racial power's cloud lays (#468)",
     ),
     "zone_condition": (
         a_zone_can_hold_a_condition_and_takes_it_back,

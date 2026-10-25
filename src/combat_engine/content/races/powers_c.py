@@ -523,8 +523,40 @@ def p2473(c: Cast) -> None:
     """The cloud blocks sight for everyone, which is terrain and so is a
     zone. "Blinded until they exit" is occupancy and not a sweep at the
     moment it forms, so each creature's blindness is held and ended when
-    it leaves; the caster is exempt either way."""
+    it leaves; the caster is exempt either way.
+
+    **`f765`'s clause is written here**, not in its own row, which is the
+    `implemented_in=` pattern: *"you can choose for it to lightly or
+    heavily obscure its area, instead of totally obscuring it. If you
+    reduce the darkness in this way, creatures inside the cloud are not
+    blinded."* A feat that changes one named power belongs in that power's
+    body -- it is a choice made where the zone is laid, and the feat row
+    has nothing of its own to do.
+
+    The two softer grades are the light model's: "lightly obscured" is
+    `obscured="dim"` and "heavily obscured" is `"dark"`, both graded by
+    `query.light_concealment` (-2 and -5) and both cancelled for whoever
+    can see in that light. Totally obscuring is `blocks_sight`, which is
+    terrain and binds both sides -- which is why the softer choices come
+    with no blinding, exactly as printed.
+
+    **Total is offered first on purpose.** `c.choose` takes the engine's
+    own pick from the head of the list, so the default stays the printed
+    power unmodified: a character holding the feat has an *option*, and
+    whether it is worth taking is `policy/`'s business rather than a
+    default this row should decide."""
     area = c.area()
+    thinner = ""
+    if c.feat("f765"):
+        thinner = c.choose(
+            ["", "dark", "dim"], "how thickly the cloud obscures"
+        ) or ""
+    if thinner:
+        # No blinding, which is the second half of the printed sentence --
+        # so the occupancy watch below is not armed at all rather than
+        # armed and gated.
+        c.zone(area, until=When.EONT, obscured=thinner)
+        return
     c.zone(area, until=When.EONT, blocks_sight=True)
     held: dict[int, Any] = {}
 
