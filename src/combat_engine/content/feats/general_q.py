@@ -154,9 +154,10 @@ from combat_engine.engine.query import (
 #:     class_feature rows mentioning defiling         0
 #:
 #: So the riders are imported -- 9 feat specs and 5 item blocks cite it --
-#: and the power they ride is not. `m5441a5` is named "Arcane Defiling" and
-#: is a **monster ability**, which is the near miss worth not mistaking for
-#: the player's version.
+#: and the power they ride is not. **`m5441a5` is the near miss**: its
+#: printed name is the one the feats say, and it is a *monster* ability, so
+#: a search for the name finds something and it is not the player's version.
+#: Check the ref, not the name.
 #:
 #: `c.on_defiling()` named a hook, and a hook cannot be built for a row that
 #: does not exist: there is nothing to watch and no ref to key it on. The
