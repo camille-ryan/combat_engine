@@ -68,6 +68,32 @@ def _asked_for() -> tuple[Path, ...]:
     return tuple(out)
 
 
+def _asked_for_package() -> tuple[Path, ...]:
+    """Like `_asked_for`, but the whole package when nothing is named.
+
+    **For the checks whose subject is not content.** `_asked_for` returns
+    `content/` only, and that is correct for the reason in its docstring --
+    a parallel agent must lint its own file and nothing else (#388). But a
+    sibling check inheriting that default silently stops covering its own
+    subject, which is #546: the unknown-context-key walk is the one check
+    for *the engine's* signature failure mode -- "a gate on a context key
+    that does not exist", named as such in `engine/CLAUDE.md` -- and it
+    never ran over `engine/` at all. `lint.py` with no arguments printed
+    `All checks passed!` while `lint.py src/combat_engine/engine/cast.py`
+    reported a structural fault in that same file.
+
+    `scripts/CLAUDE.md` already has the rule this breaks, written about
+    `leaks.py`: *"A check that passes over its own subject matter is the one
+    to distrust."*
+
+    **Named paths still win**, so the agent-scoping rule is untouched: this
+    differs from `_asked_for` only in what it does when asked for nothing.
+    """
+    if not _ONLY:
+        return tuple(sorted((ROOT / "src/combat_engine").rglob("*.py")))
+    return _asked_for()
+
+
 def main() -> int:
     global _ONLY
     _ONLY = tuple(Path(a).resolve() for a in sys.argv[1:] if not a.startswith("-"))
@@ -715,7 +741,7 @@ def _unknown_context_keys() -> list[tuple[str, str, str]]:
     wide = _context_keys()
     narrow = {k: _context_keys(v) for k, v in _CONTEXT_OF.items()}
     out = []
-    for path in _asked_for():
+    for path in _asked_for_package():
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError:
