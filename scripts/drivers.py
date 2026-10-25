@@ -32379,8 +32379,17 @@ def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
     world, me, _ = _posed("p15889", 1)
     c: Any = Cast(world=world, me=me, ref="drivers:replace")
 
-    class _Rolled:
-        """A roll already announced, which is what the verb is handed."""
+    class _Swung:
+        """A roll already announced, which is what the verb is handed.
+
+        **Third local class in this file for the same stub, and the third
+        distinct name.** `lint.py`'s duplicate-`def` walk is per *file* and
+        cannot see function scope (#872), so `boost_roll` has `_Rolled` and
+        `reroll_judged` has `_Announced`. I named this one `_Rolled` too and
+        the walk went red -- in the same session that had already renamed
+        once for the same reason, which is the cost of a check whose message
+        is wrong about the cause.
+        """
 
         def __init__(self, result: AttackResult) -> None:
             self.result = result
@@ -32394,7 +32403,7 @@ def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
 
     # -- the die moves, and the total moves with it --------------------
     res = swung(3, 10, 18)
-    out.that(c.replace_roll(19, ev=_Rolled(res)) is True,
+    out.that(c.replace_roll(19, ev=_Swung(res)) is True,
              "it replaces an announced attack roll")
     out.that(res.natural == 19,
              "**the die itself moves** -- 3 becomes 19, which is the whole"
@@ -32408,7 +32417,7 @@ def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
 
     # -- a replaced 20 is a real 20 ------------------------------------
     res = swung(2, 4, 12)
-    c.replace_roll(20, ev=_Rolled(res))
+    c.replace_roll(20, ev=_Swung(res))
     out.that(res.hit is True and res.critical is True,
              "**a replaced 20 over the defence is a critical**, because the"
              " recorded result *is* the roll -- the half `c.boost_roll` is"
@@ -32417,7 +32426,7 @@ def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
 
     # -- and a replaced 1 is a real 1 ----------------------------------
     res = swung(20, 38, 12)
-    c.replace_roll(1, ev=_Rolled(res))
+    c.replace_roll(1, ev=_Swung(res))
     out.that(res.hit is False,
              "while a replaced 1 misses however high the total had been --"
              " the control, and the reason this cannot be written as a"
@@ -32426,7 +32435,7 @@ def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
 
     # -- the boost, beside it, must NOT move the die -------------------
     res = swung(3, 10, 18)
-    c.trigger = _Rolled(res)
+    c.trigger = _Swung(res)
     c.boost_roll(16)
     out.that(res.natural == 3 and res.total == 26,
              "`c.boost_roll` on the same numbers leaves the die at 3 and"
@@ -32435,7 +32444,7 @@ def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
 
     # -- kind= refuses the wrong sort ----------------------------------
     res = swung(3, 10, 18)
-    out.that(c.replace_roll(19, kind="save", ev=_Rolled(res)) is False,
+    out.that(c.replace_roll(19, kind="save", ev=_Swung(res)) is False,
              "kind='save' declines an attack roll, so a row cannot replace"
              " a roll its card never mentions")
     out.that(res.natural == 3,
