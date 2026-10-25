@@ -682,7 +682,7 @@ def p14218(c: Cast) -> None:
     foe = getattr(c.trigger, "attacker", None)
     if foe is None:
         return
-    extra = c.int_mod if c.knows("cf:warlock-f1s3") else 0
+    extra = c.int_mod if c.knows("cf:warlock-f1s3") == c.me else 0
     burn = c.roll("1d6") + extra
     for who in c.within(1, of=foe):
         if who != foe:
@@ -705,7 +705,7 @@ def p14219(c: Cast) -> None:
     c.resist(have + 5 if have else 5, DamageType.FIRE, until=When.STANCE,
              on=c.me,
              when=lambda ctx: int(query.concealment_of(c.world, c.me, ctx)) > 0)
-    if not c.knows("cf:warlock-f1s3"):
+    if c.knows("cf:warlock-f1s3") != c.me:
         return
 
     def boon(ev: Any) -> None:
@@ -754,7 +754,7 @@ def p14220(c: Cast) -> None:
 
     c.watch(AttackDeclared, saw, until=When.SUSTAIN, on=c.me)
     c.watch(TurnEnd, settle, until=When.SUSTAIN, on=c.me)
-    if c.knows("cf:warlock-f1s3"):
+    if c.knows("cf:warlock-f1s3") == c.me:
         c.on_sustain(held, lambda: c.temp_hp(10, on=c.me))
 
 

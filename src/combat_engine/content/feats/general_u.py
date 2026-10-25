@@ -935,7 +935,7 @@ def f3458(c: Cast) -> None:
        on=Trigger(SecondWind, about_me, "you use your second wind"))
 def f3459(c: Cast) -> None:
     """Unexpended is the test, so the row has to be known and not spent."""
-    if c.knows("p2482") is None or "p2482" in c.expended(on=c.me):
+    if c.knows("p2482") != c.me or "p2482" in c.expended(on=c.me):
         return
     c.insubstantial(on=c.me, until=When.SONT)
 

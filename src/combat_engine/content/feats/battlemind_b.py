@@ -502,13 +502,13 @@ def f3304(c: Cast) -> None:
         if ev.actor != me:
             return
         used = getattr(ev, "power", "")
-        if used == _ASPECTS["p7441"] and c.knows("p7441"):
+        if used == _ASPECTS["p7441"] and c.knows("p7441") == c.me:
             c.shift(1, who=me)
 
     def bites(ev: Hit) -> None:
         if ev.attacker != me or getattr(ev, "power", "") != _ASPECTS["p7442"]:
             return
-        if c.knows("p7442") and c.wis_mod > 0:
+        if c.knows("p7442") == c.me and c.wis_mod > 0:
             c.flat(c.wis_mod, on=ev.target)
 
     c.watch(PowerResolved, sharpened, until=When.ENCOUNTER, on=me,

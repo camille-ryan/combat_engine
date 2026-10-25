@@ -1988,7 +1988,7 @@ def p16595(c: Cast) -> None:
     """The Prerequisite is a build-time gate and not this row's to enforce;
     what is checked here is the printed "if it is not expended"."""
     c.shift(c.speed_of())
-    if c.knows("p2473") is not None and "p2473" not in c.expended():
+    if c.knows("p2473") == c.me and "p2473" not in c.expended():
         c.use_power("p2473")
 
 

@@ -520,7 +520,7 @@ def f1556(c: Cast) -> None:
     and the row no longer answers every hit in the fight."""
     if not c.bloodied(on=c.me):
         return
-    mine = [ref for ref in ("p2483", "p2484") if c.knows(ref) is not None]
+    mine = [ref for ref in ("p2483", "p2484") if c.knows(ref) == c.me]
     if not mine:
         return
     chosen = c.choose(mine, "which racial power to use") or mine[0]

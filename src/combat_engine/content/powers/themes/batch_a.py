@@ -1673,7 +1673,7 @@ def p14199(c: Cast) -> None:
     is a mid-fight question and so belongs here rather than in a chargen
     gate. `c.use_power` lends the row if the creature has not got it, which
     is wrong for a Requirement that says it must have it unspent."""
-    if c.knows("p1449") is None or "p1449" in c.expended():
+    if c.knows("p1449") != c.me or "p1449" in c.expended():
         return
     c.use_power("p1449")
 
