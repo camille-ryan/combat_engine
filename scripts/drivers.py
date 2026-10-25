@@ -32270,6 +32270,119 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def training_is_asked_and_can_be_lent(out: Result) -> None:
+    """The two halves of `i3225`, which the same stale premise blocked.
+
+    Both notes said there was no training model. #565 built one --
+    `Skills.trained` holds the set, `class_skill` carries 205 rows across
+    25 classes -- and both markers went stale, which `f1455`'s docstring
+    records happening to the same sentence.
+
+    **`i3225x1` was over-granting, not merely unfinished.** "+1 item bonus
+    to *untrained* skill checks" was written as a blanket `skill` bonus,
+    so it paid on every check including trained ones: strictly better than
+    print. The pair of assertions is one check of each kind on the same
+    character, which is the only shape that can tell a gate from no gate.
+
+    **`i3225p1` lends training with a duration**, which `chargen` cannot:
+    the sheet is made once and this lasts until the end of a turn. Asserted
+    by reading `Skills.trained` before, during and after.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import Skills
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Mods
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.skills import SKILLS
+
+    world, me, _ = _posed("i3225x1", 1)
+    held = world.get(me, Skills)
+    if held is None:
+        return
+    trained = sorted(held.trained)
+    untrained = sorted(set(SKILLS) - set(held.trained))
+    out.that(bool(trained) and bool(untrained),
+             "the character is trained in some skills and not others,"
+             " without which neither assertion below means anything",
+             f"{len(trained)} trained, {len(untrained)} not")
+    if not trained or not untrained:
+        return
+
+    # **Not measured as a before/after around the body.** `audit.board`
+    # arms the creature's rows, and an `action=NONE` item property is one
+    # of them -- so the bonus is already laid before this rule runs, and
+    # running the body again lays a second `kind="item"` entry that does
+    # not stack. The first version of this read `modifier()` either side
+    # and saw 8 -> 8, which looks exactly like a gate answering False.
+    #
+    # So the assertion is on the **keyed read with the gate's own
+    # context**, which is the number `skills.modifier` actually consults
+    # and the only one that can say which skill the bonus applied to.
+    mods = world.get(me, Mods)
+    out.that(mods is not None and any(
+                 m.label == "i3225x1" for m in mods.items),
+             "i3225x1 is armed and its modifier is on the sheet, which is"
+             " the setup and not the finding",
+             f"labels={[m.label for m in (mods.items if mods else [])][-3:]}")
+    if mods is None:
+        return
+
+    def skill_bonus(skill: str) -> int:
+        return mods.total("skill", {"actor": me, "skill": skill,
+                                    "target": None})
+
+    on_un = skill_bonus(untrained[0])
+    on_tr = skill_bonus(trained[0])
+    out.that(on_un == 1,
+             "**the +1 lands on an untrained skill**, which is what the"
+             " card prints",
+             f"{untrained[0]}: blanket skill bonus = {on_un}")
+    out.that(on_tr == 0,
+             "and NOT on a trained one -- the control, and the half the"
+             " row was getting wrong in the player's favour, since it was"
+             " written as a blanket bonus with no gate at all",
+             f"{trained[0]}: blanket skill bonus = {on_tr}")
+
+    # -- the lent training ---------------------------------------------
+    world2, me2, _ = _posed("i3225p1", 1)
+    held2 = world2.get(me2, Skills)
+    if held2 is None:
+        return
+    was = frozenset(held2.trained)
+    d: Any = Cast(world=world2, me=me2, ref="i3225p1")
+    REGISTRY["i3225p1"].body(d)
+    now = frozenset(held2.trained)
+    gained = now - was
+    out.that(len(gained) == 1,
+             "**i3225p1 lends training in exactly one skill**, chosen from"
+             " the ones not already held",
+             f"gained {sorted(gained)}")
+    if len(gained) != 1:
+        return
+    lent = next(iter(gained))
+    out.that(lent not in was,
+             "and it is one the character did not already have -- the"
+             " control, since training a skill twice spends the day's use"
+             " on nothing")
+
+    # Ending the hold gives it back, which is the clause `chargen` cannot
+    # express and the reason this is a board-side grant at all.
+    holds = [e for e in world2.effects.of(me2) if e.label == "i3225p1"]
+    out.that(bool(holds),
+             "the grant is held by an effect, which is what carries the"
+             " duration",
+             f"{[e.label for e in world2.effects.of(me2)][:4]}")
+    if not holds:
+        return
+    world2.effects.end(holds[0], "drivers")
+    out.that(lent not in world2.get(me2, Skills).trained,
+             "**and ending the hold takes the training back**, by"
+             " subtracting rather than restoring a snapshot, so another"
+             " grant laid in between would survive it",
+             f"trained now holds {lent}:"
+             f" {lent in world2.get(me2, Skills).trained}")
+
+
 def an_aura_deals_more_to_the_creature_its_owner_is_grabbing(out: Result) -> None:
     """"6 damage, instead of 2, from the grabbing creature's aura."
 
@@ -33726,6 +33839,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "training": (
+        training_is_asked_and_can_be_lent,
+        "an untrained-only bonus asks, and training can be lent (#468)",
     ),
     "grabbed_aura": (
         an_aura_deals_more_to_the_creature_its_owner_is_grabbing,
