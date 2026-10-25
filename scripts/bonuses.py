@@ -115,29 +115,13 @@ BORROWED = {
     # Two entries because the row lays two calls, attack and damage, and the
     # key is per (ref, kind).
     ("f2149", "feat"),     # borrows f233's and f1032's feat bonuses
-    # **A third shape: the card adds an object's own bonus to a roll.**
-    # "Add the proficiency bonus and enhancement bonus of this weapon to
-    # your attack roll when making a bull rush" names two types, and
-    # `_AS_TYPE` rejects the second of them on purpose -- it wants an
-    # article before "enhancement bonus", because "equal to the
-    # enhancement bonus" is a card pointing at a number rather than
-    # handing a type out, and reading it loosely put `kind="enhancement"`
-    # on two cards that plainly print "item bonus".
-    #
-    # Here the number is being applied *as itself*, to an attack roll
-    # that otherwise gets no weapon terms at all -- so both halves carry
-    # their own type, which is what keeps them from stacking with a
-    # second proficiency or enhancement bonus later. One card, so a
-    # waiver rather than a wider rule: narrowing this reader is how the
-    # file grew its false positives, and the parse is not wrong about the
-    # phrasing it was built for. #523.
-    ("i2842x1", "enhancement"),
-    # **A second card of that third shape**, so it is no longer unique --
-    # "adding the weapon's enhancement bonus to your grab attack", applied
-    # to a roll that gets no weapon terms otherwise. Was written
-    # `kind="item"`, which is a type the card never prints *and* would let
-    # it stack with the weapon's own enhancement on the same roll.
-    ("i1468x1", "enhancement"),
+    # **The third shape is parsed now, so neither waiver is needed.** A
+    # card can name an object's own bonus with no article -- "add the
+    # enhancement bonus of this implement to your will defence" -- and
+    # `_ADDED_TO` reads it, gated on the verb and on the destination being a
+    # roll or a defence. `i2842x1` and `i1468x1` were waived here when the
+    # parse could not; removing the waivers is the tightening, and the
+    # instrument stays clean without them. #523.
     # **A fourth of the extends-another-row shape**, the first three being
     # the racials above. "You gain **additional** temporary hit points
     # from your rt:r36-t1 racial trait equal to your Constitution
@@ -216,6 +200,71 @@ ELSEWHERE = {"f1766b", "f2913", "m915a4", "m970a3", "m2079a5", "m2354a4",
 #: pointed at rather than a type being named.
 _AS_TYPE = r"(?:\ba\b|\ban\b|[+-]?\d+)\s+{t}\s+bonus\b"
 
+#: **The third phrasing, and the word that tells it from the second.** A card
+#: can name an object's own bonus with no article, and whether that is a
+#: *type* or a *magnitude* turns entirely on the verb:
+#:
+#:   add the enhancement bonus of this implement **to** your will defence
+#:       -> applied as itself, so it carries the type
+#:   a penalty to your AC **equal to** the enhancement bonus of this armor
+#:       -> a number the card points at, so it carries no type
+#:
+#: `_AS_TYPE` refuses both, deliberately -- reading them loosely put
+#: `kind="enhancement"` on two cards that plainly print "item bonus", which
+#: would have made the real item bonus worth nothing under the same-type
+#: rule. So this does not widen that gate; it adds the narrower question
+#: beside it, requiring the **verb** and a **destination**.
+#:
+#: Measured before being written, which is what #523 asked for: 4 cards in
+#: the corpus print `the <type> bonus ... of <object>` with no article, and
+#: they split 2 and 2 -- two apply it (`i1964x1`, `i2842x1`) and two are
+#: "equal to" magnitudes, one of them a *distance in squares*. So the
+#: discriminator is not "a type word with no article"; it is this. #523.
+#: **A bonus type only means something on a roll or a defence**, because the
+#: same-type rule is what the type is *for*. The destinations in the corpus
+#: split exactly there, and measuring them is what caught two cards this
+#: branch had wrong:
+#:
+#:   to your attack roll / your grab attack / your will defence  -> a type
+#:   to the range                                                -> a distance
+#:   to the hit points regained                                  -> healing
+#:
+#: The last two are magnitudes with no stacking question, so typing them
+#: would be the same error as reading "equal to the enhancement bonus" as a
+#: type. `i2771x1` and `i2784p1` are those two and both read True until the
+#: destination was constrained. #523.
+#: Braces doubled: this is spliced into `_ADDED_TO`, which goes through
+#: `.format(t=...)`, and a bare `{0,40}` reads as a field name there.
+_DESTINATION = (r"[^.,;]{{0,40}}?"
+                r"\b(?:attacks?|rolls?|defen[cs]e|ac|will|fortitude|reflex)\b")
+
+#: Four phrasings of the same clause, measured rather than guessed:
+#:
+#:   add the enhancement bonus **of** this implement to your will defence
+#:   add the proficiency bonus and enhancement bonus of this weapon to ...
+#:   add the symbol**'s** enhancement bonus to your attack roll
+#:   add**ing** the weapon's enhancement bonus to your grab attack
+#:
+#: so the verb takes `-s`/`-ing` and the object comes either before the type
+#: as a possessive or after it with `of`. Anything reached this way is still
+#: put past `_RETYPED` -- three of the matches say "as a power bonus" or
+#: "as an item bonus", which names a different type and is the whole reason
+#: this gate was tight to begin with.
+_ADDED_TO = (r"\badd(?:s|ing)?\s+(?:the\s+)?(?:"
+             # **Both apostrophes.** The imported text carries a straight
+             # `'` on one card and a typographic U+2019 on another, so a
+             # pattern with either alone silently misses half the
+             # possessives -- which is how this one was missed first time.
+             r"[a-z]+['\u2019]s\s+{t}\s+bonus"
+             r"|(?:[a-z]+\s+bonus\s+and\s+)?{t}\s+bonus\s+of\b"
+             r")[^.]*?\b(?:to|against)\s+" + _DESTINATION)
+
+
+#: `as a[n] <word> bonus` inside an applied clause -- the card naming the
+#: type the figure is handed out as, which is then **that** type and not the
+#: one the magnitude came from.
+_RETYPED = re.compile(r"\bas\s+an?\s+[a-z]+\s+bonus\b")
+
 
 def _names_type(text: str, t: str) -> bool:
     """Does the card name this as a bonus **type**?
@@ -233,7 +282,16 @@ def _names_type(text: str, t: str) -> bool:
     """
     if t != "enhancement":
         return bool(re.search(rf"\b{t}\s+bonus\b", text))
-    return bool(re.search(_AS_TYPE.format(t=t), text))
+    if re.search(_AS_TYPE.format(t=t), text):
+        return True
+    applied = re.search(_ADDED_TO.format(t=t), text)
+    # **"as an item bonus" names the type, and it is not this one.** Both
+    # cards on record as false positives say so outright -- "add the
+    # enhancement bonus of this weapon **as an item bonus** to all your
+    # defences" -- so the enhancement figure is the *magnitude* and `item`
+    # is the type. Reading the verb alone put `kind="enhancement"` back on
+    # both of them, which is the loosening this gate exists to prevent.
+    return bool(applied) and not _RETYPED.search(applied.group(0))
 
 
 #: Calls are found with `ast`, not a regex. The regex here handled one
