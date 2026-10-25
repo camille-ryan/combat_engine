@@ -135,6 +135,35 @@ class Checks:
         self.skipped.append(what)
         print(f"  skip  {what}\n          {why}")
 
+    def note(self, what: str) -> None:
+        """A fact worth printing that is not a check. Touches no count.
+
+        **For a `that(True, ...)`**, which is the third time this file has
+        grown them. `scripts/CLAUDE.md` records the first eight being found
+        -- *"None of that was found by a failing check. It was found by
+        arithmetic"* -- and five more were live when #854 was filed:
+
+            476   a reachable free square is on the board
+            762     {kind} arrived
+            1048  {name} is offered rather than greyed
+            1099  {n} non-creature(s) served
+            1191  a free square is lit in the default mode
+
+        Each incremented `passed` and the headline total while being
+        unfalsifiable, so the pass count overstated the evidence and -- worse
+        -- the `(of N asked)` line could not do its job. That line exists so
+        a vanished check cannot hide behind a plausible headline, and with
+        unfalsifiable entries inside per-occurrence loops, a real check
+        disappearing and an animation kind simply not occurring looked
+        identical from the summary. Eight checks stopped being asked after a
+        chargen change and it took real time to establish nothing was broken.
+
+        So: a fact the control flow has already established is **printed**,
+        and a fact that is genuinely falsifiable is moved inside `that(...)`.
+        Neither is counted twice and neither is counted as nothing.
+        """
+        print(f"  --    {what}")
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(
@@ -473,6 +502,14 @@ def _play(page, check: Checks, problems: list[str], served: list[dict],  # noqa:
             f"route and click checks below have nowhere safe to aim",
         )
     else:
+        # **Kept as a pass deliberately, against #854's own recommendation.**
+        # This is the complement of the `check.skip` above, and the pair is
+        # what keeps `asked` stable: one arm records `skipped`, the other
+        # records `passed`, so the total is the same either way and a change
+        # in it still means a check appeared or vanished. Demoting this to a
+        # `note` would make the total wobble by one depending on the board,
+        # which is the problem #854 is about rather than the fix. It is
+        # unfalsifiable on its own and that is the price. #854.
         check.that(True, "a reachable free square is on the board")
     _press_move(page)  # the row is a toggle; press it again to unpick it
     # Off the action list first. Hovering the Move row is a *preview* of
@@ -758,9 +795,17 @@ def _check_animation(page, check: Checks) -> None:  # noqa: ANN001
     seen = set(kinds)
     check.that(bool(seen & ANIMATED), f"the board got something to play ({len(kinds)} events)",
                f"kinds seen: {sorted(seen)}")
-    for kind in sorted(ANIMATED & seen):
-        check.that(True, f"  {kind} arrived")
+    # **Per-occurrence, so counted as data rather than as checks.** One
+    # `that(True, ...)` per animation kind that happened to occur made the
+    # asked total a function of the board: a chargen change dealt the wizard
+    # different powers and `of 78 asked` became `of 70`, with eight of the
+    # difference being these. A varying total made of unfalsifiable entries
+    # is the one number a reader could have used to notice a check vanish.
+    # The invariant is asserted once, above; the breakdown is printed. #854.
+    arrived = sorted(ANIMATED & seen)
     missing = sorted(ANIMATED - seen)
+    check.note(f"{len(arrived)} of {len(ANIMATED)} animation kind(s) arrived:"
+               f" {arrived}")
     if missing:
         print(f"        not seen this run (may simply not have happened): {missing}")
 
@@ -1041,11 +1086,14 @@ def _check_aimless_area(page, check: Checks, state: dict | None,  # noqa: ANN001
         if row["name"] and row["name"] in buttons.nth(i).inner_text():
             mine = buttons.nth(i)
             break
+    # One check, not a `that(False)` and a `that(True)` for the two arms of
+    # the same question -- which counted the pass twice over and made the
+    # success arm unfalsifiable. #854.
+    check.that(mine is not None,
+               f"{row['name']} is offered in freeform rather than greyed",
+               "greyed or missing -- the 263 rows this check exists for")
     if mine is None:
-        check.that(False, f"{row['name']} has a row in freeform",
-                   "greyed or missing -- the 263 rows this check exists for")
         return
-    check.that(True, f"{row['name']} is offered rather than greyed")
     mine.hover()
     page.wait_for_timeout(300)
     shown = _settled(page, "#highlights .hl-affected", 1)
@@ -1092,12 +1140,14 @@ def _check_things(page, check: Checks, state: dict | None) -> None:  # noqa: ANN
     seed draws has one the party can see.
     """
     things = ((state or {}).get("board") or {}).get("things") or []
+    # Same shape as the freeform row above: one falsifiable check for the
+    # question, and the count printed beside it rather than counted. #854.
+    check.that(bool(things), "the board's non-creatures reached the page",
+               "no trap, scenery or conjuration was served at all")
     if not things:
-        check.that(False, "the board's non-creatures reached the page",
-                   "no trap, scenery or conjuration was served at all")
         return
-    check.that(True, f"{len(things)} non-creature(s) served: "
-                     f"{sorted({t['kind'] for t in things})}")
+    check.note(f"{len(things)} non-creature(s) served: "
+               f"{sorted({t['kind'] for t in things})}")
     drawn = page.locator("#board .thing")
     check.that(
         drawn.count() >= sum(len(t["squares"]) for t in things),
@@ -1188,6 +1238,14 @@ def _check_enumerated_move(page, check: Checks) -> None:  # noqa: ANN001
             f"there is no free square to click -- which is legal play",
         )
     else:
+        # **Kept as a pass deliberately, against #854's own recommendation.**
+        # This is the complement of the `check.skip` above, and the pair is
+        # what keeps `asked` stable: one arm records `skipped`, the other
+        # records `passed`, so the total is the same either way and a change
+        # in it still means a check appeared or vanished. Demoting this to a
+        # `note` would make the total wobble by one depending on the board,
+        # which is the problem #854 is about rather than the fix. It is
+        # unfalsifiable on its own and that is the price. #854.
         check.that(True, "a free square is lit in the default mode")
     if not box:
         return
