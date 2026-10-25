@@ -765,7 +765,8 @@ def i3380p1(c: Cast) -> None:
 
 
 @power("i580x1", level=2, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.on_defiling()",))
+       reach=PERSONAL, target=SELF,
+       todo=("etl.power.arcane_defiling",))
 def i580x1(c: Cast) -> None:
     """Re-aimed at the symbol `weapon.py` already uses for this feature:
     the whole property is a rider on a use of arcane defiling, which is

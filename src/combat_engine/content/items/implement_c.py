@@ -2033,7 +2033,7 @@ def i1941p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("c.on_defiling()",),
+    todo=("etl.power.arcane_defiling",),
 )
 def i1942x1(c: Cast) -> None:
     """Temporary hit points whenever an ally takes necrotic damage from
@@ -2060,7 +2060,7 @@ def i1942x1(c: Cast) -> None:
     reach=Ranged(20),
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
-    todo=("c.on_defiling()",),
+    todo=("etl.power.arcane_defiling",),
 )
 def i1942p1(c: Cast) -> None:
     """The printed trigger is a use of the holder's defiling, which nothing

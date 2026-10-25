@@ -123,7 +123,9 @@ from combat_engine.engine.query import concealment_of, creatures, is_, team, uns
 #: it the old way: that triage predates the ETL resolving the name to `f3529`,
 #: and the `c.in_form()`-or-a-sibling decision it proposes is moot. The
 #: `i1942` pair that shared this symbol was always a different gap and is now
-#: on `c.on_defiling()`, where five other rows already wait.
+#: on `etl.power.arcane_defiling`: the power has no ref in the corpus
+#: at all, so there is nothing for a hook to watch. See
+#: `feats/general_q.py` for the measurement. #878.
 #: A racial power named by its race rather than by a ref.
 RACIAL_POWER = ("c.on_racial_power()",)
 #: **Retired.** It read `c.manifestation()` -- "which of this racial trait's

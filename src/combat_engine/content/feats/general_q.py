@@ -141,9 +141,27 @@ from combat_engine.engine.query import (
 #: marked "the brief prints a name and gives no ref", which is true -- the
 #: compendium holds no row of any kind by that name -- but it is not what
 #: would unblock them. Their clauses ride on the *act* of defiling, and
-#: `c.on_defiling()` is the hook two other rows already wait on. A ref would
-#: not help; the hook would.
-PROSE = ("c.on_defiling()",)
+#: **Re-pointed: the power these ride has no ref anywhere in the corpus.**
+#: Every one of these rows waits on "a use of arcane defiling" being
+#: announced, and the thing to announce was never imported. Measured:
+#:
+#:     localisation names mentioning "defil"        44
+#:       of those, monster refs                     28
+#:       non-monster: 5 feats, 1 item, 2 terrain,
+#:                    6 theme/path/destiny refs
+#:       a ref that IS the player's defiling power    0
+#:     power.spec rows mentioning defiling            0
+#:     class_feature rows mentioning defiling         0
+#:
+#: So the riders are imported -- 9 feat specs and 5 item blocks cite it --
+#: and the power they ride is not. `m5441a5` is named "Arcane Defiling" and
+#: is a **monster ability**, which is the near miss worth not mistaking for
+#: the player's version.
+#:
+#: `c.on_defiling()` named a hook, and a hook cannot be built for a row that
+#: does not exist: there is nothing to watch and no ref to key it on. The
+#: marker names the import instead. #878.
+PROSE = ("etl.power.arcane_defiling",)
 #: A rider on a *set* of powers the card names by category rather than by ref.
 #:
 #: **One row, not two, and the symbol is probably no longer the right one.**

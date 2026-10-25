@@ -417,7 +417,7 @@ def i849x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a melee weapon attack using this weapon",
     on=Trigger(Hit, both(by_me, by_melee), "you hit with this weapon"),
-    todo=("c.store_damage()", "c.on_defiling()"),
+    todo=("c.store_damage()", "etl.power.arcane_defiling"),
 )
 def i1028p1(c: Cast) -> None:
     """The weapon banks the damage dealt and pays it back as temporary hit
