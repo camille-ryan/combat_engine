@@ -1069,19 +1069,53 @@ def _map_state() -> list[str]:
         got = json.loads(path.read_text())
     except (OSError, ValueError):
         return ["impact map: unreadable, so it narrows nothing"]
-    age = (time.time() - path.stat().st_mtime) / 3600
+    # **Age comes from the recorded commit, not the file's mtime**, and the
+    # difference is a lie this line told as soon as the top-up existed: a
+    # per-commit `--record --refs` rewrites the file, so three re-measured
+    # rows made a 9-hour-old full recording report "under an hour ago". That
+    # is the same shape as #543's marker trap -- a fresh write standing in
+    # for a fresh verdict -- so the age is read off `recorded_at`'s own
+    # commit date, which is what the map's *silence* can speak for. Falls
+    # back to the mtime only when git cannot answer, and says which.
+    at = got.get("recorded_at") or ""
+    stamped = got.get("recorded_when") or ""
+    try:
+        age = (datetime.now(tz=UTC)
+               - datetime.fromisoformat(stamped)).total_seconds() / 3600
+        how = ""
+    except (TypeError, ValueError):
+        # No stamp: a map written before the field existed. The file's mtime
+        # is the only remaining answer and it is **wrong in the flattering
+        # direction** once a top-up has rewritten the file, so say so rather
+        # than print a number that reads as a recording time.
+        age = (time.time() - path.stat().st_mtime) / 3600
+        how = " (file age -- this map carries no recording time)"
     when = f"{age:.0f}h ago" if age >= 1 else "under an hour ago"
-    sha = (got.get("recorded_at") or "")[:9] or "an unknown commit"
+    sha = at[:9] or "an unknown commit"
     corpus = got.get("corpus", 0)
     tail = " (a SAMPLE, so it narrows nothing)" if got.get("sampled") else ""
-    out = [f"impact map: {corpus} rows recorded {when} at {sha}{tail}"]
+    out = [f"impact map: {corpus} rows recorded {when} at {sha}{how}{tail}"]
+    # **And the top-ups since, which are the other half of "how fresh".**
+    # They are what keeps a new verb out of the fail-closed branch, so a
+    # line reporting only the full recording's age understates the map.
+    tops = got.get("topped_up") or []
+    if tops:
+        out.append(f"            plus {len(tops)} top-up(s) since, "
+                   f"{sum(len(t.get('rows', ())) for t in tops)} row(s)"
+                   f" re-measured")
     # **Whether the engine has moved since**, which is the one fact that
     # decides whether to re-record and the one this line did not carry. Age
     # alone is the wrong question: a week-old map over an untouched engine
     # is perfectly good, and an hour-old one is wrong about a verb added
     # since. #866 measured the second case -- a new function is invisible to
     # the map until the next recording, and `select` then omits its callers.
-    at = got.get("recorded_at") or ""
+    #
+    # **This no longer asks for an 87-minute re-record**, because a changed
+    # function is now handled where it is read: `selection` widens on any
+    # function whose own lines moved since `recorded_at`, so a moved
+    # `engine/` file is a note about reach rather than a job. What repairs
+    # it cheaply is recording the *rows*, which `--record --refs` does in
+    # seconds and `check.py` now does by itself on a clean commit.
     if at:
         done = subprocess.run(
             ["git", "diff", "--name-only", at, "HEAD", "--",
@@ -1090,8 +1124,9 @@ def _map_state() -> list[str]:
         moved = [f for f in done.stdout.splitlines() if f.strip()]
         if done.returncode == 0 and moved:
             out.append(
-                f"            engine/ has moved in {len(moved)} file(s) since"
-                f" -- `impact.py --record` (87 min), or let the nightly do it")
+                f"            engine/ has moved in {len(moved)} file(s) since,"
+                f" so a function changed in them audits WIDE until its rows"
+                f" are recorded (`impact.py --record --refs`, seconds)")
     return out
 
 
@@ -1370,6 +1405,15 @@ def _top_up_map(red: bool) -> list[str]:
          ",".join(rows)],
         cwd=ROOT, capture_output=True, text=True)
     took = time.time() - began
+    # **The top-up goes in the same ledger as everything else it is traded
+    # against.** Camille asked for the map's usage *and timing* to be
+    # monitored, and the top-up is now a recurring per-commit cost paid to
+    # keep the narrowing available -- so "is the map earning its keep" has
+    # to net it off against the 1,230s a narrowed run saves, not ignore it.
+    # `ok=False` on a failure, so a top-up that stops working shows up as a
+    # red line in `--history` rather than as silence.
+    _record("map-topup", took, done.returncode == 0, _commit(),
+            scope=(len(rows), held.get("corpus") or 0), by="impact")
     if done.returncode:
         why = next((ln for ln in reversed(done.stdout.splitlines())
                     if ln.startswith("#")), "no reason given")
@@ -1525,6 +1569,22 @@ def _map_history(rows: list[dict]) -> None:
     if calls:
         print(f"  (`--calls` narrowed {len(calls)} more, which the map does "
               f"not account for)")
+
+    # **Net the top-up off, because it is the price of the line above.**
+    # Keeping the map fresh costs a few seconds on every clean commit, and
+    # a saving reported gross is the kind of number that makes a mechanism
+    # look better than it is -- which is the one thing `scripts/CLAUDE.md`
+    # forbids outright. Also reports failures separately: a top-up that
+    # quietly stopped working would otherwise show only as the map slowly
+    # ceasing to narrow anything.
+    tops = [r for r in rows if r["name"] == "map-topup"]
+    if tops:
+        paid = sum(r["seconds"] for r in tops)
+        broke = [r for r in tops if not r["ok"]]
+        print(f"  keeping it fresh cost {paid:.0f}s over {len(tops)} top-up(s)"
+              f" ({paid / len(tops):.0f}s each, "
+              f"{sum(r.get('refs', 0) for r in tops)} rows)"
+              + (f" -- {len(broke)} FAILED" if broke else ""))
 
     # **The split and the reasons, which is the half that says what to fix.**
     # "The map narrowed 1 run" is a score; "104 went wide and here is which

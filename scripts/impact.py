@@ -487,6 +487,8 @@ def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
 
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                           capture_output=True, text=True).stdout.strip()
+    stamp = ((merge_into or {}).get("recorded_when") if merge_into is not None
+             else time.strftime("%Y-%m-%dT%H:%M:%S%z"))
     MAP.parent.mkdir(parents=True, exist_ok=True)
     MAP.write_text(json.dumps({
         "corpus": corpus,
@@ -511,6 +513,23 @@ def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
         # by `Cast.replace_roll` still selecting 0 rows after the guard
         # landed. The batch's own sha is kept beside it instead.
         "recorded_at": (merge_into or {}).get("recorded_at") or head,
+        # **When, in wall clock, because neither of the other two answers
+        # it.** `check.py` reported the map's age from the file's mtime,
+        # which a top-up rewrites -- so three re-measured rows made a
+        # 9-hour-old recording read "under an hour ago". Reading the age off
+        # `recorded_at`'s *commit date* instead was no better: the nightly
+        # records at 01:55 against whatever HEAD then is, so a map recorded
+        # 8 hours ago at a 22-hour-old commit reported 22 hours. Only the
+        # recording knows. Preserved across a merge for `recorded_at`'s
+        # reason -- a batch re-measures three rows, not the corpus.
+        #
+        # **A merge that finds no stamp must not invent one**, and the first
+        # version did: topping up a map written before this field existed
+        # wrote `now`, so a 22-hour-old recording reported "under an hour
+        # ago" through the very field added to stop that. Absent stays
+        # absent, and `check.py` says it has no recording time rather than
+        # guessing from the file.
+        **({"recorded_when": stamp} if stamp else {}),
         "topped_up": ([*(merge_into or {}).get("topped_up", []),
                        {"at": head, "rows": sorted(asked)}]
                       if merge_into is not None else []),
