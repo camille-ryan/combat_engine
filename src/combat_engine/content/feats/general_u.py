@@ -811,11 +811,36 @@ def f3451(c: Cast) -> None:
 
 
 @power("f3452", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("c.obscure(level=)",))
+       reach=PERSONAL, target=SELF,
+       todo=("c.concealment_cap(within=, when=)",))
 def f3452(c: Cast) -> None:
-    """Downgrades total concealment to ordinary concealment. `c.conceal`
-    lays concealment on a creature and has no notion of a level on the
-    board to step down from."""
+    """Re-pointed: the gap is a **cap** on the grade, not a level to step.
+
+    The old marker was `c.obscure(level=)`, shared with `f765`, and reading
+    both cards showed one symbol over two unrelated clauses. `f765` chooses
+    what grade a zone is *laid* at and needed no verb at all; this one
+    changes what the holder **sees**, which is the attacker's side of an
+    attack already being measured.
+
+    What the card prints: while the holder is blinded or in darkness,
+    creatures within 2 squares have concealment *rather than total*
+    concealment -- given line of effect, and not if they are invisible for
+    some other reason.
+
+    So it is a ceiling on `resolve`'s `from_concealment`, and the existing
+    reader cannot express it. `concealment_waived` is a **threshold**:
+    `if from_concealment <= concealment_waived(...)` then it goes to zero.
+    Waiving at `PARTIAL` leaves total concealment standing untouched;
+    waiving at `SUPERIOR` clears it altogether and makes the feat far
+    stronger than print. Neither is "-5 becomes -2". That needs a separate
+    `min()` against a cap, read after the waiver, plus the gate -- within
+    2, the holder blinded or in darkness, line of effect to the square.
+
+    A singleton: a census of every marked row whose note mentions total
+    concealment found exactly this one, so it stays marked under #468's
+    >=3 threshold rather than having a modifier key, a reader and a
+    `resolve` branch built for one row. Filed so the shape is not
+    re-derived."""
 
 
 # -- the channel divinity pair ----------------------------------------------
