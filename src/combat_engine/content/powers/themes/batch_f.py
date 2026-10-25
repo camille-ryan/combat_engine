@@ -1734,7 +1734,20 @@ def p16394(c: Cast) -> None:
 #: armour, worn magic and ammunition and has no slot for the rest, so there
 #: is no ref to ask for -- and a printed Requirement is a `requires=` gate,
 #: handed `(world, eid)`, which cannot call a `Cast` method at all.
-KIT = ("Gear.carried",)
+#: **The Requirement these three print is blocked in the ETL, not here.**
+#: *"You must have a trap-making kit on your person"* -- and `game.db`'s
+#: `item` table holds 1,877 rows, every one a **magic** item: the categories
+#: are Implement, Weapon, Armor, Wondrous, Consumable, Alchemical Item and
+#: the slot names, and a query for any category matching gear, mundane,
+#: adventuring or tool returns **0**. Adventuring gear was never imported,
+#: so there is no ref for a trap-making kit and nothing a carried-items list
+#: could hold.
+#:
+#: Re-pointed off `Gear.carried`, which named a component field. Adding the
+#: field first would make this Requirement **permanently unmeetable** --
+#: strictly worse than dropping it, because these three play today and would
+#: stop. #876.
+KIT = ("etl.item.adventuring_gear",)
 
 
 def _enemy_closed(world: Any, me: int, ev: Any) -> bool:

@@ -449,6 +449,21 @@ class Target:
     #: else is a weapon group or property. Without it the row is aimed at
     #: creatures that have nothing for it to do anything to.
     holding: str = ""
+    #: The target must have **something to take away** -- a printed "one
+    #: creature carrying equipment", where the effect animates or ruins what
+    #: it finds.
+    #:
+    #: **Not `holding=""`**, which is the no-filter default: `query.holding`
+    #: answers about what is *in hand*, so a creature in armour with a
+    #: shield and no weapon drawn passes it by being unfiltered rather than
+    #: by qualifying. This asks the wider question.
+    #:
+    #: Armour is deliberately **not** counted on its own: `Gear.armour`
+    #: defaults to `"cloth"` for every creature in the game, so a filter
+    #: that honoured it would pass everybody and read exactly like a filter
+    #: that worked. Weapons in hand, weapons on the belt, and a shield are
+    #: the things a card of this shape does something to.
+    carrying: bool = False
     #: The target must be a creature of **this block**, by ref -- "up to
     #: four of its own kind", "each ally of its own kind".
     #:
@@ -2923,6 +2938,7 @@ def candidates(
         or aim.affected_by
         or aim.only_grabbed
         or aim.holding
+        or aim.carrying
         or aim.max_size is not None
         or aim.loose
         or aim.any_of
@@ -3267,6 +3283,12 @@ def _stands_right(world: World, actor: int, aim: Target, target: int, ref: str =
         from .query import holding
 
         if not holding(world, target, aim.holding):
+            return False
+    if aim.carrying:
+        from .components import Gear
+
+        kit = world.get(target, Gear)
+        if kit is None or not (kit.weapons or kit.stowed or kit.shield):
             return False
     if aim.loose:
         from .components import Scenery

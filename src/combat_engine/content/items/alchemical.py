@@ -1159,7 +1159,7 @@ def i3316p1(c: Cast) -> None:
 
 @power("i3320p1", level=5, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Melee(1), target=NO_TARGET, keywords=[Keyword.ZONE],
-       dropped=("Gear.carried",))
+       dropped=("chargen.deals_consumables",))
 def i3320p1(c: Cast) -> None:
     """Re-aimed twice, and the row plays. The missing clause is an
     inventory, not a slot.
@@ -1170,7 +1170,17 @@ def i3320p1(c: Cast) -> None:
     and nothing records which items a character carries. `Gear.worn` holds
     **slot names** -- `alchemical`, `armor`, `neck`, `weapon` -- not refs,
     so there is no set to choose the second item from and nothing to put in
-    the slot. Same gap as `Gear.carried`'s other rows.
+    the slot.
+
+    **Re-pointed, and it is not the same gap as the trap-kit rows'.** Those
+    want adventuring gear, which the ETL never imported at all. An
+    alchemical item is different: `game.db` carries **75** of them, in a
+    category of their own, so the refs exist and a list could hold them.
+    What does not happen is anybody being given one -- `chargen.loadout`
+    mentions neither "consumable" nor "alchemical" anywhere, so a dealt
+    character carries weapons, armour and a shield and no expendables. The
+    candidate set is empty for want of a dealer, not for want of a field.
+    #877.
 
     The delay is not the gap -- `c.watch(TurnEnd)` counting one turn is
     "at the end of your next turn", the same clock i925p1 uses -- so the
@@ -1494,7 +1504,8 @@ def i3322p1(c: Cast) -> None:
 
 
 @power("i3324x1", level=10, cls=ITEM, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=("Gear.carried",))
+       reach=PERSONAL, target=SELF,
+       todo=("chargen.deals_consumables",))
 def i3324x1(c: Cast) -> None:
     """**The link has somewhere to live now; what is missing is the other
     item.**
@@ -1510,7 +1521,7 @@ def i3324x1(c: Cast) -> None:
 
 @power("i3324p1", level=10, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=PERSONAL, target=NO_TARGET,
-       todo=("Gear.carried",))
+       todo=("chargen.deals_consumables",))
 def i3324p1(c: Cast) -> None:
     """The reader exists; the thing it would read does not.
 

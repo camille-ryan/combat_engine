@@ -32270,6 +32270,101 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def a_target_can_be_narrowed_to_whoever_carries_equipment(out: Result) -> None:
+    """"One creature carrying equipment" -- `m6530a5`, and nobody else.
+
+    The row was offered against **anybody**, on a note saying `Gear`
+    "records weapons, a shield, armour, worn magic and ammunition and
+    nothing for ordinary kit". Re-read against the card, that bar is too
+    high: the printed effect is that *the target's equipment animates*, and
+    a sword, a belt-knife and a shield are exactly what `Gear` records.
+    Ordinary kit is a different card's problem and the ETL has never
+    imported any.
+
+    **Both sides are asserted, because the file says to.** `dsl`'s
+    candidate guard is a hand-kept list of "is any relational field set",
+    and its own comment records what happens when a new field is added to
+    `_stands_right` alone: *"the offer path skips it in silence ... which is
+    #381's disagreement arriving one field at a time. `ident` was written
+    that way and the driver caught it on its first run."* So this asks
+    `candidates()` and the predicate separately.
+
+    Armour is deliberately not counted: `Gear.armour` is `"cloth"` for every
+    creature in the game, so a filter honouring it would pass everybody and
+    read exactly like a filter that worked.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.components import Gear, Position
+    from combat_engine.engine.dsl import REGISTRY, candidates
+    from combat_engine.engine.query import enemies, squares
+
+    world, mob, _ = _posed("m6530a5", 1)
+    foes = sorted(enemies(world, mob))
+    if len(foes) < 2:
+        return
+    row = REGISTRY["m6530a5"]
+    out.that(row.target.carrying is True,
+             "m6530a5 declares `carrying=True`, which is the setup and not"
+             " the finding",
+             f"carrying={row.target.carrying}")
+    out.that(not row.dropped and not row.unfinished,
+             "and carries no marker any more",
+             f"todo={row.unfinished} dropped={row.dropped}")
+
+    armed = [f for f in foes if (world.get(f, Gear) or Gear()).weapons]
+    out.that(len(armed) >= 2,
+             "at least two creatures on the board are armed, which is what"
+             " lets one be stripped and the other stay as the control",
+             f"armed={armed}")
+    if len(armed) < 2:
+        return
+    # **Stripped from the armed set, not from `foes[0]`.** The first version
+    # took any enemy and guarded the restore assertion with "or it had
+    # nothing anyway", which is an escape hatch that cannot fail -- and
+    # ruff's RUF021 is what pointed at the precedence of it.
+    bare = armed[0]
+    kit = world.get(bare, Gear)
+    if kit is None:
+        return
+
+    # **Both of them put in reach first.** This is a `Melee(1)` row, so the
+    # first version's control read `offered=[]` and looked like a filter
+    # that rejected everybody -- it was measuring distance. Placed through
+    # `grid.place` as well as `Position`, or the occupants index keeps the
+    # old square and the board answers about an empty one.
+    mine = sorted(squares(world, mob))[0]
+    for who, step in ((bare, (1, 0)), (armed[1], (0, 1))):
+        spot = (mine[0] + step[0], mine[1] + step[1])
+        pos = world.get(who, Position)
+        if pos is None:
+            return
+        pos.square = spot
+        world.grid.place(who, spot)
+
+    held, stowed, shield = list(kit.weapons), set(kit.stowed), kit.shield
+    kit.weapons, kit.stowed, kit.shield = [], set(), 0
+
+    offered = set(candidates(world, mob, row))
+    out.that(bare not in offered,
+             "**a creature stripped of weapons, belt and shield is not"
+             " offered** -- the row has nothing to animate on it",
+             f"offered={sorted(offered)}")
+    out.that(any(f in offered for f in armed[1:]),
+             "while an armed creature still is -- the control, without"
+             " which this passes on a filter that offered nobody at all",
+             f"armed={armed} offered={sorted(offered)}")
+
+    # Give the kit back and confirm the same creature returns to the menu,
+    # which is the half that says the filter reads the gear rather than the
+    # creature.
+    kit.weapons, kit.stowed, kit.shield = held, stowed, shield
+    again = set(candidates(world, mob, row))
+    out.that(bare in again,
+             "and handing the kit back puts the same creature on the menu"
+             " again, so the filter reads the gear rather than the identity",
+             f"weapons={len(held)} shield={shield} offered={bare in again}")
+
+
 def training_is_asked_and_can_be_lent(out: Result) -> None:
     """The two halves of `i3225`, which the same stale premise blocked.
 
@@ -33839,6 +33934,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "carrying": (
+        a_target_can_be_narrowed_to_whoever_carries_equipment,
+        "a target can be narrowed to whoever carries equipment (#468)",
     ),
     "training": (
         training_is_asked_and_can_be_lent,

@@ -1392,7 +1392,7 @@ def p15842(c: Cast) -> None:
     reach=PERSONAL,
     target=NO_TARGET,
     keywords=[Keyword.CHARM],
-    dropped=("Gear.carried",),
+    dropped=("etl.item.adventuring_gear",),
 )
 def p15845(c: Cast) -> None:
     """Both premises of the old note are false, and the card is roll-twice,

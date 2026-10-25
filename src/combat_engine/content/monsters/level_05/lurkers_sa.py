@@ -2185,16 +2185,28 @@ def m6530a4(c: Cast) -> None:
     recharge=5,
     action=STANDARD,
     reach=Melee(1),
-    target=Target(side="enemy", count=1, label="one creature carrying equipment"),
+    target=Target(side="enemy", count=1, carrying=True,
+                  label="one creature carrying equipment"),
     attack=Attack(vs=REF, printed=8),
     damage=Damage("2d10", 4, kind=LIMITED),
-    dropped=("Gear.carried",),
 )
 def m6530a5(c: Cast) -> None:
-    """"One creature carrying equipment" is not a target line `Target` can
-    narrow: `Gear` records weapons, a shield, armour, worn magic and
-    ammunition and nothing for ordinary kit, so `Gear.carried` is the gap and
-    the row is offered against anybody."""
+    """"One creature carrying equipment" narrows with `Target(carrying=)`.
+
+    **Re-read against the card and the bar was set too high.** The old note
+    said `Gear` "records weapons, a shield, armour, worn magic and
+    ammunition and nothing for ordinary kit, so `Gear.carried` is the gap",
+    and the row was offered against anybody. But the printed effect is that
+    *the target's equipment animates* -- a sword, a shield, a suit of
+    armour -- and `Gear` records exactly those. Ordinary kit is a different
+    card's problem (`p16442` and its siblings need a trap-making kit, which
+    the ETL has never imported) and this one does not need it.
+
+    Not `holding=`, which asks what is **in hand**: a creature with a
+    shield and nothing drawn carries equipment, and `holding=""` is the
+    no-filter default, so it would pass by being unfiltered rather than by
+    qualifying. Armour is left out of the filter deliberately -- see the
+    field's own note, `Gear.armour` is `"cloth"` for everybody."""
     if c.strike():
         c.hit()
         held = c.slowed(until=When.SAVE_ENDS)
