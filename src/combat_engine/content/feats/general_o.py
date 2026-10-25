@@ -565,7 +565,7 @@ def f2944(c: Cast) -> None:
 
 @power("f2945", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       dropped=("c.teleport(within=)",))
+       dropped=("c.area(branch=)",))
 def f2945(c: Cast) -> None:
     """The aiming is written; the teleport's leash is not.
 
@@ -578,17 +578,30 @@ def f2945(c: Cast) -> None:
 
     **The second clause is dropped and is a real gap.** "The square you
     teleport into as part of this power must be within the area of the
-    burst" restricts a *destination set*, and `c.teleport` takes `to=`,
-    `toward=` and `away_from=` -- a named square, or a direction. Naming
-    one square would take the choice off the player, which is the whole
-    point of the clause being a restriction rather than an instruction, so
-    the honest shape is a set the decider picks from.
+    burst" restricts a *destination set*.
 
-    `p11052` is where it would go, per the one-named-power convention: its
-    body teleports `max(1, speed // 2)` unconstrained, and the clause would
-    gate on `c.feat`. Marked rather than half-written, because a teleport
-    that ignores the leash is stronger than the card -- the feat buys reach
-    *and* would keep an unrestricted blink.
+    **Re-pointed off `c.teleport(within=)`, and the note that carried it
+    was stale.** It said `c.teleport` takes `to=`, `toward=` and
+    `away_from=` -- a named square or a direction -- and concluded that
+    "the honest shape is a set the decider picks from" does not exist.
+    `into=` landed in #685 and is exactly that: a `Callable[[Square],
+    bool]` narrowing the destination list before the decider sees it. The
+    enumeration was true when written and nothing connected the two, which
+    is #832 and is what found this.
+
+    What is left is naming **which** squares, and that is #884: `c.area()`
+    passes no branch, so it answers for the printed close burst 1 whatever
+    aiming ran -- and `area_of` resolves a branch through the header-only
+    `Power.reach_of`, which *clamps* an offered index rather than raising.
+    A `c.feat` gate cannot stand in, because the reshape is `optional=True`
+    and a character holding the feat may still aim the printed burst, which
+    restricts nothing.
+
+    `p11052` is where the clause goes, per the one-named-power convention:
+    its body teleports `max(1, speed // 2)` unconstrained. Marked rather
+    than half-written, because a teleport that ignores the leash is
+    stronger than the card -- the feat buys reach *and* would keep an
+    unrestricted blink.
 
     **Re-pointed off `c.recast(reach=)`, which was one symbol over two
     mechanisms.** This row rewrites a *named row's area* -- its size or
