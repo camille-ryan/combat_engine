@@ -1099,6 +1099,47 @@ def _every_py() -> tuple[Path, ...]:
     return tuple(out)
 
 
+def _collect_scopes(node: ast.AST, prefix: str, path: Path,
+                    scopes: dict[tuple[Path, str], dict[str, list[int]]],
+                    ) -> None:
+    """Record every `def` under `node`, keyed by its **qualified** scope.
+
+    **A bare class name is not a scope**, and treating it as one produced a
+    false fault that cost real time to disbelieve. The collection this
+    replaces used `ast.walk` to find class bodies and keyed each by
+    `node.name` -- and `ast.walk` reaches a class defined *inside a
+    function*, so two function-local classes sharing a name, in different
+    functions, pooled their methods and read as one class with two
+    `__init__`s. `drivers.py` had precisely that: two rules each defining a
+    local helper for "a roll already announced". Both classes are bound,
+    neither shadows the other, and the message's claim that "Python binds
+    the later one" was simply false for the case. #872.
+
+    So the key carries the path down: `outer._Rolled` and `other._Rolled`
+    are two scopes, and `_Rolled` nested in a class is distinct from one
+    nested in a function of the same name.
+
+    **Function bodies are scopes too, which they were not before.** The old
+    collection took the module body and class bodies only, so two `def`s
+    binding one name *inside one function* -- the same hazard as at module
+    scope, and the one `ruff`'s F811 goes quiet about when a call sits
+    between them -- were invisible. Now they are a scope like any other.
+
+    The module scope stays exactly `""`: `_unreferenced_defs` keys on
+    `(path, "")` and means module level by it.
+    """
+    seen = scopes.setdefault((path, prefix), {})
+    body = getattr(node, "body", ())
+    for child in body:
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            seen.setdefault(child.name, []).append(child.lineno)
+    for child in body:
+        if isinstance(child, ast.ClassDef | ast.FunctionDef
+                      | ast.AsyncFunctionDef):
+            _collect_scopes(child, f"{prefix}.{child.name}" if prefix
+                            else child.name, path, scopes)
+
+
 @cache
 def _scan() -> dict[str, object]:
     """One parse of the whole tree, for the two walks below.
@@ -1122,15 +1163,21 @@ def _scan() -> dict[str, object]:
                 used[node.attr] += 1
             elif isinstance(node, ast.alias):
                 used[node.name.split(".")[-1]] += 1
-        bodies = [("", tree.body)]
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                bodies.append((node.name, node.body))
-        for scope, body in bodies:
-            seen = scopes.setdefault((path, scope), {})
-            for node in body:
-                if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                    seen.setdefault(node.name, []).append(node.lineno)
+        # **Scopes are qualified, because a bare class name is not a scope.**
+        # This collected class bodies with `ast.walk` and keyed each by
+        # `node.name`, and `ast.walk` reaches a class defined *inside a
+        # function* -- so two function-local classes sharing a name, in
+        # different functions, pooled their methods and read as one class
+        # with two `__init__`s. `drivers.py` had exactly that and the
+        # reported fault was not a fault: both classes are bound, neither
+        # shadows the other, and the message's claim that "Python binds the
+        # later one" was false for the case. It cost ten minutes to
+        # establish that the instrument was the thing that was wrong, which
+        # is the cost #872 was filed to stop the next reader paying.
+        #
+        # The module scope stays exactly `""` -- `_unreferenced_defs` keys
+        # on `(path, "")` and means module level by it.
+        _collect_scopes(tree, "", path, scopes)
     return {"used": used, "scopes": scopes}
 
 
