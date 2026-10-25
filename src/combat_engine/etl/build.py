@@ -1833,7 +1833,21 @@ def _section_rows(
         # leak.
         marks = _sub_marks(body, after_card=True)
         head = body[: marks[0][0]] if marks else body
-        if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
+        # **A section with sub-options is never a power-list heading**, and
+        # leaving that out of the guard cost 94 sections and the 25
+        # sub-option rows under 7 of them. `_POWER_LIST` matches the
+        # *introducing sentence*, so it also ate a genuine feature whose
+        # sentence happens to be phrased "choose ... of the following" --
+        # and the options went with it.
+        #
+        # The tell was that one build's options survived and its near-twin's
+        # did not: half of `f3583`'s candidate list was present and half
+        # absent, the only difference being how the one sentence was worded.
+        # A heading that introduces a printed power list has no sub-marks
+        # and a feature with options always has them, so this makes the
+        # guard's intent testable instead of incidental. #812.
+        if (per_level and not marks
+                and _POWER_LIST.search(" ".join(_plain(head).split()))):
             continue
         ref = f"{stem}-f{ord_}"
         written += _feature_row(out, names, ref, bare, ord_, build,

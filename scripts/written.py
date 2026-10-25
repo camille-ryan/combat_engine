@@ -64,7 +64,7 @@ from combat_engine.db import game
 #: Heroic is `tier` when the page printed one and `min_level` when it did
 #: not -- 758 of the heroic feats print no tier line at all. `etl/feat.py`
 #: argues it; this is the same clause its docstring gives.
-HEROIC = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
+HEROIC = "((tier = 'Heroic' OR tier = '') AND min_level <= 10)"
 
 
 def main() -> int:

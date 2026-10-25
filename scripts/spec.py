@@ -157,7 +157,7 @@ def _glossary(block: str, own: str) -> str:
 
 #: Heroic is `tier` when the page printed one and `min_level` when it did
 #: not. `etl/feat.py` argues it; `written.py` asks the same question.
-HEROIC = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
+HEROIC = "((tier = 'Heroic' OR tier = '') AND min_level <= 10)"
 
 #: The project's scope, and the reason a ladder prints two rungs here and
 #: not six: the paragon and epic ones are recorded but nobody is writing

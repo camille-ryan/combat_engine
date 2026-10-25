@@ -61,7 +61,7 @@ from combat_engine.db import game, localisation
 #: Heroic is `tier` when the page printed one and `min_level` when it did not.
 #: Lifted from `scripts/written.py` deliberately -- one definition, two
 #: readers, so they cannot come to disagree about what heroic means.
-HEROIC_FEAT = "(tier = 'Heroic' OR (tier = '' AND min_level <= 10))"
+HEROIC_FEAT = "((tier = 'Heroic' OR tier = '') AND min_level <= 10)"
 
 #: Character options stop at 10, monsters and traps at 13. A trap is part of an
 #: encounter and an encounter is built at party level +3, which is the same

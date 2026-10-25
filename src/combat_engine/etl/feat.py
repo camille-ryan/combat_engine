@@ -6,7 +6,17 @@ guess would be indistinguishable from a reading. `min_level` comes off the
 prerequisite instead, so "is this a heroic feat" stays a query somebody can
 revisit:
 
-    WHERE tier = 'Heroic' OR (tier = '' AND min_level <= 10)
+    WHERE (tier = 'Heroic' OR tier = '') AND min_level <= 10
+
+**The prerequisite binds, in both arms.** The first version read
+`tier = 'Heroic' OR (tier = '' AND min_level <= 10)`, which checks the
+level only where the tier is silent -- so six feats printing `Heroic` and
+requiring level 11 or 16 were counted as heroic work by everything that
+asks this question. They are finished rows no character this project deals
+can hold, and the cost was in the counting: a coverage figure, a "rows
+remaining" count and an authoring wave's file list each included them. The
+two columns disagree and the prerequisite is the one `chargen.meets`
+honours. #638
 
 **The prerequisite is the whole of the difficulty.** It names classes,
 races, powers, class features, deities and skills in the publisher's prose,
