@@ -273,6 +273,41 @@ def _queue() -> dict[str, list[str]]:
 _TOKENS = re.compile(r"[^\w:-]+")
 
 
+def _moved_since(at: str, ref: str, declared: dict) -> bool:
+    """Have this row's own source lines changed since `at`?
+
+    **The row's lines, not its file.** A content file is edited most days, so
+    "the file moved" would flag nearly every verdict and say nothing; `git
+    log -L<start>,<end>:<file>` asks about the rows themselves, which is what
+    a verdict is about.
+
+    Fails **closed** -- returns False, i.e. "not moved", on any doubt: no
+    source to locate, git unavailable, a path outside the repo. A verdict
+    wrongly called suspect sends a reader to re-judge something that was
+    fine, which is the cost this report exists to avoid; a verdict wrongly
+    left alone is the status quo.
+    """
+    import subprocess
+
+    row = declared.get(ref)
+    fn = getattr(row, "fn", None) or getattr(row, "body", None)
+    if fn is None:
+        return False
+    try:
+        path = inspect.getsourcefile(fn)
+        lines, start = inspect.getsourcelines(fn)
+    except (OSError, TypeError):
+        return False
+    if not path:
+        return False
+    rel = str(Path(path).resolve())
+    done = subprocess.run(
+        ["git", "log", "--format=%H", f"--since={at}",
+         f"-L{start},{start + len(lines) - 1}:{rel}"],
+        cwd=ROOT, capture_output=True, text=True)
+    return done.returncode == 0 and bool(done.stdout.strip())
+
+
 def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
     """Reconcile the recorded verdicts against the tree, and report, not gate.
 
@@ -306,7 +341,8 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
     `triage.py` is not a gate either, for the same reason. A number a session
     can read is the right shape.
     """
-    spent, moved, stale, unapplied = [], [], [], []
+    spent, moved, stale, unapplied, suspect = [], [], [], [], []
+    undated = 0
     for symbol, entry in sorted(judged.items()):
         # `_note` is the fixture's own header, a list of prose lines rather
         # than a verdict. Skipped by shape rather than by name, so a second
@@ -334,6 +370,29 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
         if dead:
             stale.append((symbol, dead))
 
+        # **The fifth question: is the verdict older than the note that
+        # disagrees with it?** The other four cannot see a verdict the row
+        # it describes now *contradicts*, and that is the one that wasted a
+        # session -- it is indistinguishable from an actionable entry until
+        # somebody reads both. Measured: 11 of 11 symbols taken off the
+        # `live and unapplied` queue were unwritable, and **five** of those
+        # were refuted by the waiting row's own later docstring. #777.
+        #
+        # A verdict is suspect when every live ref it names has had its own
+        # source lines move since the verdict was recorded. "Every" rather
+        # than "any", because one row of six being rewritten says nothing
+        # about the symbol -- and `stale rows` above already reports the
+        # refs that lost their marker outright.
+        at = entry.get("at")
+        if not at:
+            undated += 1
+        elif entry.get("corrected_by"):
+            pass  # already re-judged; that is what `corrected_by` records
+        else:
+            live = [r for r in named if declared[r].unfinished]
+            if live and all(_moved_since(at, r, declared) for r in live):
+                suspect.append((symbol, at, sorted(live)[:4]))
+
     print(f"  {len(judged)} verdict(s) recorded, {len(wanted)} symbol(s)"
           f" in the queue today")
     print(f"\n  spent -- no longer blocked, and the verdict earned it:"
@@ -357,6 +416,17 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
     if len(stale) > 20:
         print(f"      ... and {len(stale) - 20} more")
 
+    print(f"\n  suspect -- the rows this verdict names have all been"
+          f" rewritten since it was recorded: {len(suspect)}")
+    for symbol, at, refs in suspect[:20]:
+        print(f"      {symbol:<44} judged {at}, moved since:"
+              f" {', '.join(refs)}")
+    if len(suspect) > 20:
+        print(f"      ... and {len(suspect) - 20} more")
+    if undated:
+        print(f"      ({undated} verdict(s) carry no date and were not asked"
+              f" -- a missing stamp is not evidence either way)")
+
     print(f"\n  live and unapplied -- `mis-marked`, still blocked:"
           f" {len(unapplied)}")
     for symbol, n in sorted(unapplied, key=lambda u: (-u[1], u[0]))[:20]:
@@ -364,8 +434,10 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
     if len(unapplied) > 20:
         print(f"      ... and {len(unapplied) - 20} more")
 
-    print("\n  Read, not gated: every day's work moves all four. The"
-          " unapplied list is the one with rows behind it.")
+    print("\n  Read, not gated: every day's work moves all five. The"
+          " unapplied list is the one with rows behind it -- and cross it"
+          " against `suspect` first, because 5 of 11 checked by hand were"
+          " refuted by the row's own later note.")
     return 0
 
 def main() -> int:
