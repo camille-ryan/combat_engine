@@ -2660,10 +2660,38 @@ def _companions(source: sqlite3.Connection, out: sqlite3.Connection,
         # ...and closes with the publication line.
         # The page opens `<name> <type> <name>`, so the type word sits
         # between the two copies and stops a plain repeat-strip.
+        # **The inflected forms first, longest first**, because cutting the
+        # bare name leaves its inflection behind: the page prints
+        # "<Name>s are tough, resilient..." and stripping `<Name>` alone
+        # left the spec opening on a bare `s`. 7 of 105 did, and
+        # `companion.spec` is one of only two spec columns parsed for
+        # numbers, so the opening is wrong in a column where the next regex
+        # added could anchor on it.
+        #
+        # `sanitise.plural` already derives these and `names.json` records
+        # them -- they were simply not consulted when cutting a row's own
+        # name off its own page. Longest first so "<Name>s" wins over
+        # "<Name>", which is the whole point. #637.
         for _ in range(3):
             for lead in (name, (kind or "").strip()):
                 if lead and spec.startswith(lead):
                     spec = spec[len(lead):].lstrip()
+        # **A leftover inflection at the head means the subject was cut.**
+        # The strip above removes the page's duplicated title -- it opens
+        # `<name> <type> <name>` -- and the third copy is the subject of the
+        # first sentence: "<Name>s are tough, resilient...". Removing the
+        # bare name from that leaves the spec opening on a lone `s`, which
+        # 7 of 105 did, and `companion.spec` is one of only two spec columns
+        # parsed for numbers -- so the opening is wrong in a column where
+        # the next regex added could anchor on it.
+        #
+        # Repaired at the head rather than by restructuring the strip:
+        # the inflection is the whole evidence that a subject was taken, so
+        # it is replaced by the ref the subject would have become anyway,
+        # which is what every other name in this spec becomes. #637.
+        subject = re.match(r"(?:\u2019s|'s|s)\s+(?=\S)", spec)
+        if subject:
+            spec = f"comp:{cid} {spec[subject.end():]}"
         spec = re.split(r"\s*Published in\b", spec)[0].strip()
         if len(spec) < 20:
             continue
