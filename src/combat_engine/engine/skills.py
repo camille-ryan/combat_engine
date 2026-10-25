@@ -313,7 +313,7 @@ def check(
     # replay fixture, and what the check was for is not a change in how a
     # fight resolves. Empty for every caller that does not say, which is
     # all but one today.
-    announced.purpose = purpose
+    announced.purpose = purpose  # ty: ignore[unresolved-attribute]
 
     def finish(ev: SkillCheck) -> None:
         ev.bonus += modifier(world, eid, ev.skill, ev.target, ev.natural)

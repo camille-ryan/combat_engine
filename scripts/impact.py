@@ -472,12 +472,18 @@ def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
                 older = [r for r in entry if r not in batch]
                 if fresh == "wide":
                     continue
-                kept[name] = sorted(set(older) | set(fresh or ()))
+                # `isinstance` rather than `fresh or ()`, because a map
+                # entry is a ref list *or* the string `"wide"` and the
+                # second is handled above -- so anything else here is a
+                # malformed map, and treating a stray string as an iterable
+                # of refs would quietly splice its characters into the list.
+                kept[name] = sorted(set(older) | set(
+                    fresh if isinstance(fresh, list) else ()))
         # Re-apply the ceiling: a merged list can cross it even though
         # neither half did.
         for table in out.values():
             for name, entry in list(table.items()):
-                if entry != "wide" and len(entry) > ceiling:
+                if isinstance(entry, list) and len(entry) > ceiling:
                     table[name] = "wide"
         narrow = sum(1 for tb in out.values() for e in tb.values()
                      if e != "wide")
