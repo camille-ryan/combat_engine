@@ -78,7 +78,6 @@ from combat_engine.engine import (
     Condition,
     DamageApplied,
     DamageType,
-    Defenses,
     Dropped,
     Effect,
     EffectExpired,
@@ -999,13 +998,15 @@ def i925p1(c: Cast) -> None:
     hold: list[Effect] = []
     spent: list[bool] = []
 
+    # **The wall's defences are deliberately zero and stay that way.** This
+    # copied the caster's onto the bomb's body, which undoes the thing
+    # `c.wall` sets them for -- `cast.py`'s comment there says it outright:
+    # "Attacks against it hit automatically, which is a defence of nothing
+    # rather than a special case in the attack." A thrown bomb sitting in a
+    # square is hit by anyone who swings at it, and giving it the thrower's
+    # AC made it as hard to break as the thrower. #825.
     zone = c.wall(1, at=here, hp=1, solid=False, until=When.ENCOUNTER)
     body = c.barrier(zone) if zone else None
-    mine = c.world.get(c.me, Defenses)
-    theirs = c.world.get(body, Defenses) if body is not None else None
-    if mine is not None and theirs is not None:
-        theirs.values.update(mine.values)
-        theirs.scale = mine.scale
 
     def detonate() -> None:
         if spent:
