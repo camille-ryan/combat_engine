@@ -32270,6 +32270,134 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
+    """`c.replace_roll` puts a number you already have on the die.
+
+    The third thing you can do to a die already down. `c.boost_roll` adds
+    to the roll and leaves the die; the `c.reroll_*` family throws a fresh
+    one; neither takes a **number**. `p15889`'s own note said so: *"nothing
+    can substitute a stored face"*.
+
+    **The sharpest assertion is that the die really moves.** A replaced 20
+    is a genuine 20 -- automatic hit and, over the defence, a critical --
+    which is exactly what `c.boost_roll` must never do, and the pair is
+    asserted side by side so a future change cannot quietly make one behave
+    like the other.
+
+    The arithmetic is driven through the verb; the **once** and the banking
+    are driven through `p15889`'s body, because a charge spent twice is a
+    row fault rather than a verb fault.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import AC
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import AttackRolled, SavingThrow
+    from combat_engine.engine.query import enemies
+    from combat_engine.engine.resolve import AttackResult
+
+    world, me, _ = _posed("p15889", 1)
+    c: Any = Cast(world=world, me=me, ref="drivers:replace")
+
+    class _Rolled:
+        """A roll already announced, which is what the verb is handed."""
+
+        def __init__(self, result: AttackResult) -> None:
+            self.result = result
+            self.attacker = me
+            self.ctx: dict[str, Any] = {"attacker": me}
+
+    def swung(natural: int, total: int, against: int) -> AttackResult:
+        return AttackResult(natural=natural, total=total,
+                            target_defence=against, hit=False,
+                            critical=False)
+
+    # -- the die moves, and the total moves with it --------------------
+    res = swung(3, 10, 18)
+    out.that(c.replace_roll(19, ev=_Rolled(res)) is True,
+             "it replaces an announced attack roll")
+    out.that(res.natural == 19,
+             "**the die itself moves** -- 3 becomes 19, which is the whole"
+             " difference from `c.boost_roll`",
+             f"natural={res.natural}")
+    out.that(res.total == 26,
+             "and the total moves by the difference, not by the face --"
+             " 10 + (19 - 3)",
+             f"total={res.total}")
+    out.that(res.hit is True, "so a 10 against 18 becomes a hit")
+
+    # -- a replaced 20 is a real 20 ------------------------------------
+    res = swung(2, 4, 12)
+    c.replace_roll(20, ev=_Rolled(res))
+    out.that(res.hit is True and res.critical is True,
+             "**a replaced 20 over the defence is a critical**, because the"
+             " recorded result *is* the roll -- the half `c.boost_roll` is"
+             " forbidden from doing",
+             f"natural={res.natural} total={res.total} crit={res.critical}")
+
+    # -- and a replaced 1 is a real 1 ----------------------------------
+    res = swung(20, 38, 12)
+    c.replace_roll(1, ev=_Rolled(res))
+    out.that(res.hit is False,
+             "while a replaced 1 misses however high the total had been --"
+             " the control, and the reason this cannot be written as a"
+             " bonus",
+             f"natural={res.natural} total={res.total} hit={res.hit}")
+
+    # -- the boost, beside it, must NOT move the die -------------------
+    res = swung(3, 10, 18)
+    c.trigger = _Rolled(res)
+    c.boost_roll(16)
+    out.that(res.natural == 3 and res.total == 26,
+             "`c.boost_roll` on the same numbers leaves the die at 3 and"
+             " still reaches 26 -- the two verbs are kept apart on purpose",
+             f"natural={res.natural} total={res.total}")
+
+    # -- kind= refuses the wrong sort ----------------------------------
+    res = swung(3, 10, 18)
+    out.that(c.replace_roll(19, kind="save", ev=_Rolled(res)) is False,
+             "kind='save' declines an attack roll, so a row cannot replace"
+             " a roll its card never mentions")
+    out.that(res.natural == 3,
+             "and declining changes nothing -- the control, without which a"
+             " refusal that half-applied would read as a refusal")
+
+    # -- a saving throw -----------------------------------------------
+    save = SavingThrow(actor=me, against="drivers:replace", natural=4,
+                       bonus=0, saved=False)
+    out.that(c.replace_roll(15, ev=save) is True
+             and save.natural == 15 and save.saved is True,
+             "a kept face put on a saving throw re-decides it against the"
+             " 10 the rule prints",
+             f"natural={save.natural} saved={save.saved}")
+
+    # -- the row: banked once, spent once -----------------------------
+    world2, me2, _ = _posed("p15889", 1)
+    d: Any = Cast(world=world2, me=me2, ref="p15889")
+    REGISTRY["p15889"].body(d)
+    foes = sorted(enemies(world2, me2))
+    if not foes:
+        return
+    seen: list[int] = []
+    for _ in range(2):
+        res = swung(5, 12, 18)
+        ev = AttackRolled(attacker=me2, target=foes[0], power="drivers:x",
+                          vs=AC, natural=5, bonus=7, total=12, defence=18,
+                          advantage=False)
+        ev.result = res
+        world2.bus.emit(ev)
+        seen.append(res.natural)
+    out.that(seen[0] != 5,
+             "**p15889 spends its kept face on the first roll it sees** --"
+             " the row banks at arming and the watch is live",
+             f"first attack natural={seen[0]}")
+    out.that(seen[1] == 5,
+             "and the second roll is untouched, because the charge is"
+             " once -- the control that separates a kept d20 from a"
+             " standing rewrite of every die",
+             f"second attack natural={seen[1]}")
+
+
 def a_feat_can_thin_the_cloud_its_racial_power_lays(out: Result) -> None:
     """`f765` chooses the grade `p2473` lays, and drops the blinding with it.
 
@@ -33509,6 +33637,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "replace_roll": (
+        a_kept_d20_is_used_instead_of_rolling_one,
+        "a kept d20 is used instead of rolling one (#468)",
     ),
     "thinner_cloud": (
         a_feat_can_thin_the_cloud_its_racial_power_lays,

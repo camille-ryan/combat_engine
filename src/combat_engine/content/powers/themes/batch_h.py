@@ -614,13 +614,49 @@ def p12323(c: Cast) -> None:
 @power(
     "p15889", level=2, cls=X7_917, usage=ENCOUNTER, action=ActionType.NONE,
     reach=PERSONAL, target=SELF, keywords=[Keyword.ARCANE],
-    todo=("c.replace_roll()",),
 )
 def p15889(c: Cast) -> None:
-    """A d20 rolled at the start of the fight and kept, to be put in place of
-    a later one. Nothing can substitute a stored face: `c.reroll_attack`,
-    `c.reroll_check` and `c.reroll_save` all roll again, and none of them
-    takes a number to use instead."""
+    """A d20 rolled at the start of the fight and kept for a later one.
+
+    `c.replace_roll` is the verb the old marker asked for and did not
+    exist: the three reroll verbs all throw a fresh die and none takes a
+    *number* to use instead. The die really moves, so a kept 20 put on an
+    attack is a genuine 20 -- automatic hit and critical included -- which
+    is the printed reading, because the result *is* the recorded roll.
+
+    **The face lives in this closure and the "once" lives in a charge.**
+    `Powers.charges` counts, and what has to be remembered here is a value;
+    the row is `action=NONE` so `turns.arm_traits` runs it once at the start
+    of the encounter, which is exactly where the card says to roll. So the
+    closure keeps the number and `c.spend_charge` keeps the allowance, which
+    needs no new storage on either side.
+
+    All three kinds of d20 are watched, because the card says "instead of
+    rolling a d20" and names none. `c.may` asks before spending: it is a
+    printed *can*, and whether a kept 11 is worth using on this roll is the
+    policy's judgement and not this row's."""
+    kept = c.roll("1d20")
+
+    def spend(ev: Any, kind: str, *, mine: int) -> None:
+        if mine != c.me or not c.charge_left(f"{c.ref}:kept"):
+            return
+        if not c.may("use the kept d20"):
+            return
+        if c.spend_charge(f"{c.ref}:kept"):
+            c.replace_roll(kept, kind=kind, ev=ev)
+
+    def on_attack(ev: AttackRolled) -> None:
+        spend(ev, "attack", mine=ev.attacker)
+
+    def on_save(ev: SavingThrow) -> None:
+        spend(ev, "save", mine=ev.actor)
+
+    def on_check(ev: SkillCheck) -> None:
+        spend(ev, "check", mine=getattr(ev, "actor", c.me))
+
+    c.watch(AttackRolled, on_attack, until=When.ENCOUNTER, on=c.me)
+    c.watch(SavingThrow, on_save, until=When.ENCOUNTER, on=c.me)
+    c.watch(SkillCheck, on_check, until=When.ENCOUNTER, on=c.me)
 
 
 @power(

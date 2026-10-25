@@ -4864,6 +4864,107 @@ class Cast:
                floor=20 - _mods(self.world, who, "crit_range", ctx))
         return True
 
+    def replace_roll(self, face: int, *, kind: str = "",
+                     ev: Any = None) -> bool:
+        """Use a number you already have **instead of** the one that was
+        rolled. "You can use this d20 roll as your result."
+
+        The third thing you can do to a die that is already down, beside
+        `c.boost_roll` (add to the roll, leave the die) and the `c.reroll_*`
+        family (throw a fresh one). None of those takes a *number*, which is
+        what `p15889`'s note said: *"nothing can substitute a stored face --
+        `c.reroll_attack`, `c.reroll_check` and `c.reroll_save` all roll
+        again, and none of them takes a number to use instead."*
+
+        **The die itself moves**, which is the difference from
+        `c.boost_roll`: a replaced 3 becomes a 19 and a natural 20 off this
+        is a real 20, criticals and automatic hits included. That is the
+        printed reading -- the result *is* the recorded roll -- and it is why
+        this goes through `resolve.settle` rather than touching `hit` and
+        `critical` itself.
+
+        `kind` is `attack`, `save`, `check`, or empty for whatever
+        triggered, exactly as on `c.boost_roll`, so a row can refuse to fire
+        on the wrong sort of roll instead of silently replacing one its card
+        never mentions.
+
+        **Seven content sites write `natural` by hand**, across bard,
+        ranger, avenger and fighter, each redoing the `total += face -
+        natural` arithmetic; `powers/bard/_shared.use_roll` is the local
+        helper two of them share and whose own neighbour says a public verb
+        would retire it. Every one of those sites is also now relying on
+        `resolve.attack`'s recompute to settle the outcome, which is sound
+        only inside the `AttackRolled` window -- the distinction #868 was
+        about. This is the door that gets it right once.
+        """
+        from .events import SkillCheck
+        from .resolve import _mods, settle
+
+        if ev is None:
+            ev = self.trigger
+        if ev is None or not face:
+            return False
+
+        result = getattr(ev, "result", None)
+        if result is not None and kind in ("", "attack"):
+            was = result.natural
+            result.total += face - result.natural
+            result.natural = face
+            who = getattr(ev, "attacker", self.me)
+            ctx = getattr(ev, "ctx", None) or {}
+            settle(result,
+                   floor=20 - _mods(self.world, who, "crit_range", ctx))
+            self._announce_replacement("attack", was, face, actor=who)
+            return True
+
+        if hasattr(ev, "saved") and kind in ("", "save"):
+            was = ev.natural
+            ev.natural = face
+            # The same literal `c.boost_roll` and `c.reroll_save` use: there
+            # is one saving throw DC in the game.
+            ev.saved = ev.natural + ev.bonus >= 10
+            self._announce_replacement(
+                "save", was, face, actor=getattr(ev, "actor", self.me))
+            return True
+
+        if isinstance(ev, SkillCheck) and kind in ("", "check"):
+            was = ev.natural
+            ev.natural = face
+            ev.total = ev.natural + ev.bonus
+            ev.success = ev.dc <= 0 or ev.total >= ev.dc
+            self._announce_replacement(
+                "check", was, face, actor=getattr(ev, "actor", self.me))
+            return True
+
+        return False
+
+    def _announce_replacement(self, roll: str, old: int, new: int, *,
+                              actor: int) -> None:
+        """Say the die changed, on the event every reader already watches.
+
+        **`Rerolled`, with a flag, rather than an event of its own.** The
+        facts are the same four -- which kind of roll, which row, from what
+        to what -- and 18 rows print a rider on that moment. A second event
+        would leave every one of them blind to this one.
+
+        `replaced` rides as a plain attribute, not a field, so it stays off
+        `Event.wire()` and out of the replay fixtures -- the same
+        arrangement `_announce_reroll` uses for `result`, and the pattern
+        `Effect.by` and `Bloodied.weapon` follow. A row that genuinely needs
+        to tell a substitution from a fresh die reads it; the 18 that do not
+        are unaffected.
+
+        **The riders narrow on `by`**, which is this row's ref, and all of
+        them say "the reroll *your racial power* grants" rather than "any
+        reroll" -- so announcing here cannot make somebody else's rider fire.
+        """
+        from .events import Rerolled
+
+        said = Rerolled(actor=actor, roll=roll, by=self.ref, old=old, new=new)
+        said.result = getattr(self.trigger, "result", None)
+        said.replaced = True
+        self.world.bus.emit(said)
+
     def _boosted(self, amount: int, kind: str, whose: int) -> bool:
         """Say that a roll already made was added to, and return True.
 

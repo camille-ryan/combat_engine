@@ -42,6 +42,8 @@ Numbers added to or taken off a roll, and permissions withdrawn. A modifier noth
 
 ## rerolls
 
+- `c.replace_roll(self, face: 'int', *, kind: 'str' = '', ev: 'Any' = None) -> 'bool'`
+  - Use a number you already have **instead of** the one that was
 - `c.reroll_attack(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None) -> 'bool'`
   - Make an attack roll again. `keep` is new, best or worst.
 - `c.reroll_check(self, *, keep: 'str' = 'new', bonus: 'int' = 0, ev: 'Any' = None) -> 'int'`

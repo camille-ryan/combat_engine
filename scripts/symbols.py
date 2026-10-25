@@ -283,6 +283,7 @@ CATEGORIES: dict[str, dict] = {
                 "widen_areas",
             ]),
             ("rerolls", [
+                "replace_roll",
                 "reroll_attack", "reroll_check", "reroll_damage",
                 "reroll_faces",
                 "reroll_initiative", "reroll_ones", "reroll_save",
