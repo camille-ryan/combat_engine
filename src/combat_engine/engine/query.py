@@ -8,7 +8,7 @@ nothing stores it; it is recomputed from the board whenever an attack asks.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import TYPE_CHECKING, Any
 
 from .components import (
@@ -669,6 +669,64 @@ def attack_penalty(world: World, eid: int) -> int:
 
 def deals_half(world: World, eid: int) -> bool:
     return any(rules_for(world, eid, c).weakened for c in active(world, eid))
+
+
+@cache
+def deals_damage(ref: str) -> bool:
+    """Does this power *normally* deal damage -- from either of the two
+    places damage comes from?
+
+    **The header alone is the trap, and `i1560p1`'s own docstring called
+    it.** Several cards end "if the power doesn\'t normally deal damage, no
+    extra damage is dealt", and `get(ref).damage is None` looks like the
+    question. It is not: **3,518** declared rows carry `damage=None` in the
+    header and deal damage in the body through `c.damage`, `p992` among
+    them. A header-only gate would have suppressed the rider on most of the
+    rows that should get it -- which is the fault pointed the other way, and
+    the reason that row carried a symbol instead of a fix.
+
+    So both places are read: the declared expression, or a damage call in
+    the body. `7,015` rows say it in the header, `3,518` only in the body.
+
+    **"Normally" is the row, not the roll.** A power that happens to roll
+    zero still normally deals damage, and one that deals it only through a
+    *rider* does not -- so this reads what the row can do and never the
+    event.
+
+    Cached: the answer is static for a given ref, and it reads source.
+    Unknown ref answers **False**, because a rider cannot pay out on a power
+    nobody declared and the alternative pays on every typo. #782.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from .dsl import get
+
+    row = get(ref)
+    if row is None:
+        return False
+    if row.damage is not None:
+        return True
+    fn = next((getattr(row, a) for a in ("body", "fn", "func")
+               if callable(getattr(row, a, None))), None)
+    if fn is None:
+        return False
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        return False
+    # **`ast`, not a regex over the source.** `inspect.getsource` includes
+    # the docstring, and a row explaining *why* it does not call `c.damage`
+    # would have matched a text search -- a false positive in the direction
+    # that pays the rider on a power the card excludes. A `Call` node cannot
+    # be in a docstring or a comment.
+    return any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr in {"damage", "flat", "ongoing"}
+        for n in ast.walk(tree)
+    )
 
 
 #: Roles whose whole point is to stay out of melee, whatever else they can

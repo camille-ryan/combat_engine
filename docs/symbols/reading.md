@@ -140,6 +140,8 @@ Readers in `combat_engine.engine.query`, which is the other half of what a row c
   - What the attacker's own conditions cost it, before modifiers.
 - `query.can_flank(world: 'World', eid: 'int') -> 'bool'`
   - May this companion stand in the far square and count?
+- `query.deals_damage(ref: 'str') -> 'bool'`
+  - Does this power *normally* deal damage -- from either of the two
 - `query.deals_half(world: 'World', eid: 'int') -> 'bool'`
   - (no docstring)
 - `query.defence(world: 'World', eid: 'int', d: 'Defense', ctx: 'dict | None' = None) -> 'int'`

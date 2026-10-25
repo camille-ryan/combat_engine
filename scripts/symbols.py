@@ -682,7 +682,7 @@ READERS: dict[str, list[str]] = {
     # this file -- so it goes beside the other target numbers rather than
     # earning a section of one.
     "attacking and defending": [
-        "attack_penalty", "can_flank", "deals_half", "defence", "difficulty",
+        "attack_penalty", "can_flank", "deals_damage", "deals_half", "defence", "difficulty",
         "flanked_by", "flankers", "grants_ca", "has_combat_advantage",
         "shield_bonus", "takes_half",
     ],

@@ -34109,6 +34109,71 @@ def an_area_stops_being_aimable_when_a_wall_arrives(out: Result) -> None:
              f"{len(aim_points(world, me, p))} still offered")
 
 
+def deals_damage_gate(out: Result) -> None:
+    """"If the power doesn\'t normally deal damage, no extra damage is dealt."
+
+    `i1560p1` pays an extra 1d6 radiant on the next blow its bearer lands
+    after a divine power. The card\'s last sentence excludes a power that
+    deals no damage, and nothing asked -- so a damageless divine power that
+    hit was paid the 1d6 anyway, a row stronger than its card.
+
+    **The header alone could not answer it, and the row\'s own docstring said
+    so before the fix existed.** `get(ref).damage is None` looks like the
+    question; **3,518** declared rows carry `damage=None` and deal damage in
+    the body, `p992` among them, so a header gate would have suppressed the
+    rider on most of the rows that deserve it. `query.deals_damage` reads the
+    declared expression *or* a damage call in the body.
+
+    Both arms on one board, because the failure to guard against is a gate
+    that answers the same way whatever it is asked: a rider that never pays
+    looks exactly like one that pays correctly if only the excluded case is
+    tried. #782.
+    """
+    # **The registry has to be populated before the first assertion.** The
+    # three reads below do not touch a board, so without this they ran
+    # against an empty `REGISTRY`, `get(ref)` answered None, and
+    # `deals_damage` answered False for everything -- three failures that
+    # looked like the reader being wrong rather than the probe being early.
+    from combat_engine.content import loader  # noqa: F401
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, Hit
+    from combat_engine.engine.query import deals_damage
+
+    deals_damage.cache_clear()
+
+    out.that(not deals_damage("p5331"),
+             "p5331 is a divine power that normally deals no damage")
+    out.that(deals_damage("p5330"),
+             "p5330 is a divine power that does")
+    out.that(deals_damage("p992"),
+             "and p992 counts, though its header says damage=None"
+             " -- the body is the other place damage comes from")
+
+    def radiant_after(power: str) -> int:
+        world, me, _rest = _board()
+        foe = next(e for e in world.entities if e != me)
+        c = Cast(world=world, me=me, ref="i1560p1")
+        row = REGISTRY["i1560p1"]
+        body = next(getattr(row, a) for a in ("body", "fn", "func")
+                    if callable(getattr(row, a, None)))
+        body(c)
+        cursor = len(world.bus.log)
+        world.bus.emit(Hit(attacker=me, target=foe, power=power, critical=False))
+        return sum(
+            1 for e in world.bus.log[cursor:]
+            if isinstance(e, DamageApplied)
+            and "radiant" in str(getattr(e, "dtype", "")).lower()
+        )
+
+    out.that(radiant_after("p5331") == 0,
+             "so the rider pays nothing after a damageless divine power",
+             f"paid {radiant_after('p5331')} time(s)")
+    out.that(radiant_after("p5330") == 1,
+             "and still pays once after one that deals damage",
+             f"paid {radiant_after('p5330')} time(s)")
+
+
 DRIVERS = {
     "reload": (
         a_fired_crossbow_is_empty_until_it_is_reloaded,
@@ -35019,6 +35084,8 @@ DRIVERS = {
     "scoped_vulnerable": (scoped_vulnerable,
                           "vulnerable to some of what reaches you"),
     "dummy": (configured_dummy, "the crash test dummy takes the state a row needs"),
+    "deals_damage_gate": (deals_damage_gate,
+                          "a rider excluded on a damageless power"),
 }
 
 

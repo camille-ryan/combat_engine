@@ -104,6 +104,7 @@ from combat_engine.engine import (
     targets_me,
 )
 from combat_engine.engine.components import Powers as _Powers
+from combat_engine.engine.query import deals_damage
 
 ITEM = "item"
 
@@ -1217,8 +1218,7 @@ def i1486x1(c: Cast) -> None:
        on=Trigger(PowerUsed,
                   lambda world, me, ev: (
                       ev.actor == me and _has_keyword(ev.power, Keyword.DIVINE)),
-                  "you use a divine power"),
-       dropped=("query.deals_damage(ref)",))
+                  "you use a divine power"))
 def i1560p1(c: Cast) -> None:
     """Same shape as `i1362p1` and the same milestone clause: the branch is
     binary -- 1 extra becomes 2 "if you've reached at least one milestone
@@ -1234,17 +1234,24 @@ def i1560p1(c: Cast) -> None:
     paid the 1d6 anyway. A row stronger than its card, which is the
     direction never to leave alone.
 
-    **And the obvious gate is the trap.** `Hit` carries `power`, so
-    `get(ev.power).damage is None` looks like the question -- and it is not:
-    `p992`'s header also reads `damage=None` while its body deals damage
-    through `c.damage`. The header is one of *two* places damage comes from,
-    so "does this power normally deal damage" is not answerable from it, and
-    writing that gate would silently suppress the rider on most of the rows
-    that should get it. Hence a symbol rather than a fix.
+    **The gate reads both places damage comes from**, which is why it took a
+    reader rather than a one-line check. This docstring used to warn that
+    `get(ev.power).damage is None` "looks like the question and is not", and
+    it was right: **3,518** declared rows carry `damage=None` in the header
+    and deal damage in the body, `p992` among them, so a header-only gate
+    would have suppressed the rider on most of the rows that should get it.
+    `query.deals_damage` asks the header *or* the body and is now the
+    question. 10,530 of 23,060 rows normally deal damage. #782.
     """
     _infusion(c, DamageType.RADIANT, _keyword_gate(Keyword.RADIANT))
-    _on_next_hit(
-        c, lambda ev: c.damage("1d6", dtype=DamageType.RADIANT, on=ev.target))
+
+    def extra(ev: Hit) -> None:
+        # "If the power doesn't normally deal damage, no extra damage is
+        # dealt" -- the card's own last sentence, which nothing asked.
+        if deals_damage(ev.power):
+            c.damage("1d6", dtype=DamageType.RADIANT, on=ev.target)
+
+    _on_next_hit(c, extra)
 
 
 @power("i465x1", level=8, cls=ITEM, action=ActionType.NONE,
