@@ -5422,6 +5422,46 @@ def main() -> int:
                     help="worker processes; 0 picks one per core, 1 stays serial")
     args = ap.parse_args()
 
+    # **A ref list and a way of choosing refs are different arguments, and
+    # nothing should be able to be read as both.** `wanted` below is
+    # `args.refs or (...)`, so a positional silently wins and the flag is
+    # discarded -- and every line explaining what a flag selected is guarded
+    # by `not args.refs`, so the run says nothing about having ignored it.
+    #
+    # `--since` is the one that bit, and it bit the way a reader would
+    # naturally use it: the header line prints the watermark sha, so
+    # pasting it back -- `--since 5154dbdb5` -- reads as "since that
+    # commit", and instead the sha went into the ref list, resolved to
+    # nothing, and the run audited **zero rows** under a header announcing
+    # the sweep it was measuring from. `--since` takes no argument by
+    # design; the help says so and the help is not where anybody looks.
+    #
+    # All four selectors, not just that one, because they come through the
+    # same `or` and lose the same way. `--class`, `--level` and
+    # `--monsters` are **filters** -- applied inside the loop over `wanted`
+    # -- so they compose with a ref list correctly and are left alone.
+    #
+    # `check.py` already does the right thing by hand: when the impact map
+    # narrows, it builds the command as
+    # `tuple(a for a in c.argv if a != "--changed") + tuple(mapped)`,
+    # dropping the flag rather than letting the refs shadow it. #881, #544.
+    _selectors = [
+        name for name, on in (("--changed", args.changed),
+                              ("--since", args.since),
+                              ("--sample", args.sample is not None),
+                              ("--calls", bool(args.calls)))
+        if on
+    ]
+    if args.refs and _selectors:
+        ap.error(
+            f"{' and '.join(_selectors)} chooses the rows, and so does a ref "
+            f"list -- {len(args.refs)} given: {' '.join(args.refs[:4])}"
+            + (" ..." if len(args.refs) > 4 else "")
+            + ". The refs would silently win and the flag be discarded. Drop"
+              " one.\n  (--since takes no argument: it reads the watermark."
+              " A sha passed to it is read as a ref.)"
+        )
+
     if args.verdicts:
         wrong = verdicts()
         # **A named baseline, not a bare allowance**, which is what lets this
