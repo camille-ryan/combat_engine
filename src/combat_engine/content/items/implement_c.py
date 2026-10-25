@@ -2033,7 +2033,12 @@ def i1941p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    todo=("etl.power.arcane_defiling",),
+    defect=(
+        "the player's arcane defiling power is not in the"
+        " compendium: 0 Power or ClassFeature rows name it,"
+        " and the 2 Power rows whose names mention defiling"
+        " are paragon powers that consume it (#878)"
+    ),
 )
 def i1942x1(c: Cast) -> None:
     """Temporary hit points whenever an ally takes necrotic damage from
@@ -2060,7 +2065,12 @@ def i1942x1(c: Cast) -> None:
     reach=Ranged(20),
     target=ONE_CREATURE,
     keywords=[Keyword.NECROTIC],
-    todo=("etl.power.arcane_defiling",),
+    defect=(
+        "the player's arcane defiling power is not in the"
+        " compendium: 0 Power or ClassFeature rows name it,"
+        " and the 2 Power rows whose names mention defiling"
+        " are paragon powers that consume it (#878)"
+    ),
 )
 def i1942p1(c: Cast) -> None:
     """The printed trigger is a use of the holder's defiling, which nothing

@@ -160,9 +160,21 @@ from combat_engine.engine.query import (
 #: Check the ref, not the name.
 #:
 #: `c.on_defiling()` named a hook, and a hook cannot be built for a row that
-#: does not exist: there is nothing to watch and no ref to key it on. The
-#: marker names the import instead. #878.
-PROSE = ("etl.power.arcane_defiling",)
+#: does not exist: there is nothing to watch and no ref to key it on.
+#:
+#: **And the import it named cannot happen either**, which is what moved
+#: these three from `todo=` to `defect=`. Read out of the compendium
+#: directly: **0** `Power` or `ClassFeature` rows name the player's arcane
+#: defiling, and the only 2 `Power` rows whose names mention defiling at all
+#: are **paragon** (levels 11 and 12) powers that *consume* it. So there is
+#: nothing for `etl` to read, and a symbol-shaped marker claimed a wait that
+#: no work can end. `defect=` is the marker for exactly that and takes plain
+#: words. #878.
+DEFECT = (
+    "the player's arcane defiling power is not in the compendium: 0 Power or"
+    " ClassFeature rows name it, and the 2 Power rows whose names mention"
+    " defiling are paragon powers that consume it (#878)"
+)
 #: A rider on a *set* of powers the card names by category rather than by ref.
 #:
 #: **One row, not two, and the symbol is probably no longer the right one.**
@@ -651,7 +663,7 @@ def f3189(c: Cast) -> None:
 
 
 @power("f3190", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, defect=DEFECT)
 def f3190(c: Cast) -> None:
     """Lets a named ability ride an action point.
 
@@ -1594,7 +1606,7 @@ def f3235(c: Cast) -> None:
 
 @power("f3237", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
        reach=PERSONAL, target=SELF,
-       todo=PROSE)
+       defect=DEFECT)
 def f3237(c: Cast) -> None:
     """Pays out when a daily is used *without* a named ability, and the
     beneficiary is picked by standing next to a familiar.
@@ -1663,7 +1675,7 @@ def f3243(c: Cast) -> None:
 
 
 @power("f3244", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, todo=PROSE)
+       reach=PERSONAL, target=SELF, defect=DEFECT)
 def f3244(c: Cast) -> None:
     """A defence penalty that rides on a named ability used with a daily.
 

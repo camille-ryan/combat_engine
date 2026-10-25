@@ -417,12 +417,25 @@ def i849x1(c: Cast) -> None:
     target=ONE_CREATURE,
     trigger="you hit an enemy with a melee weapon attack using this weapon",
     on=Trigger(Hit, both(by_me, by_melee), "you hit with this weapon"),
-    todo=("c.store_damage()", "etl.power.arcane_defiling"),
+    defect=(
+        "the player's arcane defiling power is not in the"
+        " compendium: 0 Power or ClassFeature rows name it,"
+        " and the 2 Power rows whose names mention defiling"
+        " are paragon powers that consume it (#878)"
+    ),
 )
 def i1028p1(c: Cast) -> None:
     """The weapon banks the damage dealt and pays it back as temporary hit
     points the first time one particular kind of self-inflicted damage
-    happens. Neither the store nor that damage source exists."""
+    happens. Neither the store nor that damage source exists.
+
+    **`defect=` rather than `todo=`, and it swallows a verb want.** `dsl`
+    refuses the two markers together -- `defect=` says no symbol will ever
+    finish the row -- and that is the true statement here: the damage source
+    is the player's arcane defiling power, which is not in the compendium at
+    all. `c.store_damage()` would still be needed if it were, so the want is
+    recorded here rather than lost: this row is blocked on the source first
+    and on that verb second. #878."""
 
 
 @power(
