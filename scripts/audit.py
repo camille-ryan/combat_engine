@@ -519,20 +519,21 @@ KNOWN_SILENT = {
     # `implement_c._spend_unused`. Silent at every sweep since they were
     # written, and for the same reason as the six above -- now driven, which
     # is what moves them from unexplained to excused. #704.
-    # **A standing retype lays a labelled effect and nothing else**, and the
-    # arming at encounter start spends its own evidence: `board` records
-    # `EffectApplied` in `armed`, so the one event this row class emits is
-    # subtracted as setup noise. `i2339x1`, `i3147x1` and `i3170x1` are
-    # carried silent for exactly this and `i3343x1` joins them the moment it
-    # stops being `todo=`. Admitted here rather than to `silent_refs`, which
-    # may shrink and never grow -- and admitted on evidence, not assumption:
-    # `drivers.retype_two_types` runs this row's own body and reads both
-    # directions of its retype back off `Cast._retyped`. The real fix is for
-    # the harness to credit an effect whose **label** is new rather than
-    # subtracting the event class. Filed.
-    "i3343x1": "lays a standing retype and nothing else; `board` subtracts "
-               "EffectApplied as setup noise. Driven in drivers: fire reads "
-               "back as fire and necrotic, necrotic as necrotic and fire",
+    # **The standing-retype excuse is gone, and `_claimed` is why.** It read:
+    # a retype lays a labelled effect and nothing else, the arming at
+    # encounter start spends its own evidence, so the one event the row class
+    # emits is subtracted as setup noise. True, and the cause was narrower
+    # than "subtracted as noise" -- `c.deals` stamps a **keyed** label
+    # (`deals:fire|implement|...`) rather than a ref, so `_claimed` could not
+    # attribute it to anybody. Keyed labels are credited positionally inside
+    # the row's own bounded slice now, and `i3343x1`, `i3147x1` and `i3170x1`
+    # all do something. #710.
+    #
+    # `i2339x1` was named in the same group and did **not** heal, for an
+    # unrelated reason worth not re-deriving: its body is gated on
+    # `c.element()`, which is `None` on all eight seeds, so it correctly does
+    # nothing on every board the harness can build. It stays on
+    # `silent_refs`. #885.
     "i1098p1": "needs an unused wizard utility power to expend; the printed cost refuses",
     "i1461p1": "needs an unused wizard daily attack power; the printed cost refuses",
     "m1526a2": "resets an adjacent sprung trap; the board fields none",
@@ -3426,8 +3427,14 @@ def _dealt_by(world, refs: tuple[str, ...], cursor: int) -> bool:  # noqa: ANN00
     )
 
 
+#: A label that is a row's ref, which is the convention `_claimed` rests on.
+#: Anything else -- `deals:fire|implement|...` -- is a **keyed** label: a
+#: composite key some verb reads back, carrying no ref at all.
+_REF_LABEL = re.compile(r"(?:[pmifr]\d+[a-z]?\d*|(?:cf|rt):[\w-]+)")
+
+
 def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
-             also: tuple[str, ...] = ()) -> set[str]:
+             also: tuple[str, ...] = (), own: list | None = None) -> set[str]:
     """The `BY_NAME` kinds this row can be shown to have caused.
 
     **Why these are needed at all.** `DID_SOMETHING` had `EffectExpired` and
@@ -3453,6 +3460,29 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
     The cost of the convention is **under**-crediting: a row whose label does
     not begin with its ref reports silent and gets looked at. That is the safe
     direction; over-crediting is what #216 was.
+
+    **And for one row class the under-crediting was total**, which is #710.
+    A standing retype lays a labelled effect and emits nothing else, and
+    `c.deals` stamps a **keyed** label rather than a ref --
+    `deals:fire|implement|fire||||necrotic|` -- because `durations.py`,
+    `dsl.py` and `cast.py` all read that key back and four sites test
+    `label.startswith("deals:")`. So the one event the row class emits
+    carried no ref, `EffectApplied` is in `BY_NAME` and stripped from the
+    window, and the row reported silent while working perfectly. Measured
+    on three rows whose own slice holds exactly one `EffectApplied` and
+    whose `_claimed` came back empty.
+
+    So a keyed label is credited **positionally, inside the row's own
+    bounded slice** -- `own`, from `_its_own_slice`, which ends at this
+    row's own `PowerResolved`. `BY_NAME`'s warning that these "cannot be
+    taken from the window" is about the raw log, where 37 `EffectApplied`
+    land while a board dresses itself; the bounded slice is a different
+    object and only this row runs inside it.
+
+    Narrow in the direction that keeps the convention load-bearing: a label
+    that **is** a ref stays judged by ref, so an effect another row laid is
+    still that row's and not this one's. Only a label naming no row at all
+    -- which no row could ever claim by name -- falls through to position.
     """
     out: set[str] = set()
     # The row's own ref, plus any row it used from inside its own slice --
@@ -3465,6 +3495,12 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
         # `Effects.end` both pass the caller's ref as the reason.
         elif e.kind == "ConditionEnded" and str(getattr(e, "why", "") or "").startswith(names):
             out.add("ConditionEnded")
+    for e in own or ():
+        if e.kind != "EffectApplied":
+            continue
+        label = str(getattr(e, "label", "") or "")
+        if label and not _REF_LABEL.match(label):
+            out.add("EffectApplied")
     return out
 
 
@@ -5183,7 +5219,7 @@ def audit(ref: str) -> Result:
                 out.events |= (mine_now - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt_now else set()
                 ) | _claimed(world, ref, world.fight_cursor,
-                             nested_now) | _own_unbinding(
+                             nested_now, own=own_now) | _own_unbinding(
                     own_now if own_now is not None
                     else world.bus.log[world.fight_cursor:]
                 )
@@ -5247,7 +5283,7 @@ def audit(ref: str) -> Result:
                 # `ok  ConditionApplied, DamageApplied` with its gate false.
                 out.events |= (mine - PROVOKE_NOISE - BY_NAME) | (
                     {"DamageApplied"} if dealt else set()
-                ) | _claimed(world, ref, cursor, nested)
+                ) | _claimed(world, ref, cursor, nested, own=own)
                 # **All three of these read the whole window and credited
                 # the provocation**, which for a row triggered by "you kill
                 # an adjacent creature" is the *caster* walking over and
