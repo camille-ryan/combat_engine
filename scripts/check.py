@@ -497,8 +497,16 @@ def main() -> int:
         # `--changed` is the default because auditing everything is twenty
         # seconds today and minutes once the content is written, and most
         # runs have touched a handful of rows. Before a commit, run the lot.
+        # **`--all` has to reach `types` by adding a flag, not by removing
+        # one.** Every other instrument widens when `--changed` comes off;
+        # `types.py` takes no such flag and defaults to the files git says
+        # moved, so a wide run reported `no changed Python files` on a clean
+        # tree -- the one invocation meant to settle whole-tree debt,
+        # checking nothing. #870.
         wanted = [
-            Instrument(c.name, tuple(a for a in c.argv if a != "--changed"),
+            Instrument(c.name,
+                       tuple(a for a in c.argv if a != "--changed")
+                       + (("--all",) if c.name == "types" else ()),
                        c.catches, c.heavy)
             for c in wanted
         ]
@@ -605,6 +613,9 @@ def main() -> int:
     #: a failure of the change in hand, and apart from the clean count
     #: because it is not evidence either. #466.
     skipped: list[str] = []
+    #: Instruments reporting drift above a recorded baseline -- real, already
+    #: landed, and not this change's fault. #870.
+    drifted: list[str] = []
     width = max(len(c.name) for c in wanted)
     at = _commit()
     # **Captured before anything runs, not after.** A whole-tree sweep
@@ -638,7 +649,14 @@ def main() -> int:
         skipped_run = done.returncode == NOTHING_IN_SCOPE
         if skipped_run:
             skipped.append(c.name)
-        mark = ("SKIP" if skipped_run
+        # **Drift is a fourth outcome**: something is above its baseline, it
+        # happened in an earlier commit, and it is neither clean nor a fault
+        # in the change in hand. Same arrangement as the sweep debt -- said
+        # out loud, withholds "all clean", does not fail the run. #870.
+        drifted_run = done.returncode == TYPE_DRIFT
+        if drifted_run:
+            drifted.append(c.name)
+        mark = ("SKIP" if skipped_run else "DRIFT" if drifted_run
                 else "ok  " if done.returncode == 0 else "FAIL")
         print(f"  {mark}  {c.name:{width}}  {took:5.1f}s  {tail}")
         _record(c.name, took, done.returncode == 0, at,
@@ -654,7 +672,7 @@ def main() -> int:
         # every time. That is the "check that cannot pass" failure
         # `scripts/CLAUDE.md` records, arriving from the other side of the
         # same fix. Three categories means three, not two with a label.
-        if done.returncode != 0 and not skipped_run:
+        if done.returncode != 0 and not skipped_run and not drifted_run:
             failed.append(c.name)
             if not args.verbose:
                 # The failing lines only, which is what is worth reading.
@@ -747,6 +765,10 @@ def main() -> int:
         print(f"WARNING: audit.py's NOTHING_IN_SCOPE no longer matches the"
               f" {NOTHING_IN_SCOPE} this file mirrors, so a skip is being"
               f" read as a pass again -- see #466")
+    if drifted:
+        print(f"{', '.join(drifted)}: a file is above its recorded baseline"
+              f" -- drift that already landed, not this change's fault, and"
+              f" invisible until a wide run asked")
     if skipped:
         # **Said before the headline, like the narrowing lines above.** The
         # instrument that skipped is the one whose silence matters most --
@@ -761,6 +783,10 @@ def main() -> int:
         print(f"{len(wanted) - len(skipped)} of {len(wanted)} instruments"
               f" clean, {len(skipped)} skipped"
               + (f", {owed}" if owed else ""))
+    elif drifted:
+        print(f"{len(wanted) - len(drifted)} of {len(wanted)} instruments"
+              f" clean, {len(drifted)} reporting drift"
+              + (f", {owed}" if owed else ""))
     elif owed or narrowed or mapped:
         # **The one sentence that means "nothing is outstanding" is withheld
         # while something is.** Every instrument still ran and still reported;
@@ -774,7 +800,13 @@ def main() -> int:
         print(line)
     for line in _clear_red(args.all, bool(failed), at, began_clean):
         print(line)
-    for line in _merge_verdict(args.all, bool(failed), mapped, wide_why,
+    # **`--all` is not the same as "a wide sweep ran"**, and conflating them
+    # made `--all --only types` report "a wide sweep just ran and is clean"
+    # having audited nothing. The claim needs the audit to have actually been
+    # among the instruments and to have come back green.
+    swept = (args.all and any(c.name == "audit" for c in wanted)
+             and "audit" not in failed and "audit" not in skipped)
+    for line in _merge_verdict(swept, bool(failed), mapped, wide_why,
                                no_opinion, "audit" in skipped):
         print(line)
     return len(failed)
@@ -1181,6 +1213,10 @@ def _map_state() -> list[str]:
 #: runs them as subprocesses -- and asserted against the real one by
 #: `_skip_code_matches` below, so the two cannot drift apart silently.
 NOTHING_IN_SCOPE = 3
+
+#: `types.py`'s "a file is above its baseline on a whole-tree run" exit.
+#: Mirrored for `NOTHING_IN_SCOPE`'s reason and asserted the same way.
+TYPE_DRIFT = 4
 
 
 def _skip_code_matches() -> bool:

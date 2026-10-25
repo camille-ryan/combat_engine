@@ -66,6 +66,15 @@ def _changed() -> list[str]:
 #: docstring records the cost of.
 BASELINE = ROOT / "scripts" / "fixtures" / "types.json"
 
+#: **Drift above the baseline on a whole-tree run: reported, not failed.**
+#: Distinct from 1, which means "the change in hand put a file over its
+#: baseline" and is a fault in that change. A `--all` run finds drift that
+#: has already landed, often commits ago -- `scripts/drivers.py` was 29 over
+#: before anybody noticed, and the gate then blamed whoever next edited the
+#: file. So the wide run names it and `check.py` withholds "all clean"
+#: without calling the run unhappy. #870.
+DRIFT = 4
+
 
 def _baseline() -> dict[str, int]:
     if not BASELINE.exists():
@@ -285,8 +294,22 @@ def main() -> int:
         print()
         for f, (n, was) in sorted(worse.items()):
             print(f"  {f}: {n} error(s), baseline {was}")
-        print(f"\n{sum(n - w for n, w in worse.values())} error(s) above the baseline")
-        return 0 if args.all else 1
+        print(f"\n{sum(n - w for n, w in worse.values())} error(s) above the"
+              f" baseline in {len(worse)} file(s)")
+        # **`--all` reports drift rather than failing on it, and that is a
+        # different answer from the `return 0` it used to give.** The old
+        # code returned 0 under `--all` on the premise in its own help text
+        # -- "the whole scope, backlog included; expected red" -- which
+        # predates the baseline. With a baseline the backlog is absorbed, so
+        # a file above it is real drift and silence about it is wrong.
+        #
+        # But it is **not a failure of the change in hand**: the drift
+        # happened in whichever commit caused it, and a red that is not
+        # about your work is how red gets ignored -- `_sweep_owed`'s
+        # reasoning, and `scripts/CLAUDE.md`'s record of a check that could
+        # not pass. So a third code, which `check.py` prints and lets
+        # withhold "all clean" without calling the run unhappy. #870.
+        return DRIFT if args.all else 1
     carried = sum(now.values())
     note = f" ({carried} carried, at or below baseline)" if carried else ""
     print(f"ok: {len(targets)} file(s) checked{note}")
