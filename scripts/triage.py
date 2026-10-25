@@ -440,6 +440,105 @@ def _drift(judged: dict, wanted: dict[str, list[str]], declared: dict) -> int:
           " refuted by the row's own later note.")
     return 0
 
+
+def _signatures(show: int) -> int:
+    """Does the verb a `verb(keyword=)` marker names carry arguments the
+    marker's own prose never mentions?
+
+    **The markers are not wrong when written.** They enumerate the signature
+    as it stood that day -- *"`c.teleport` takes `to=`, `toward=` and
+    `away_from=`"* -- and then a verb grows an argument for some other row and
+    nothing connects the two. `c.teleport` has taken `into=` since #685, which
+    is a predicate over squares and so is exactly the *"set the decider picks
+    from"* `f2945`'s note goes on to say is the honest shape of its gap. The
+    prose reads current and is not. #832.
+
+    **The strict half of that question is already a gate and is not here.**
+    A marker naming a keyword the verb *does* accept is stale or mis-worded
+    with no third option, and `todo.py` reds it as ARRIVED through
+    `blocked._params_ok`. So this asks only about the markers that half
+    passes over -- the keyword is genuinely absent, and the question is
+    whether the row is waiting for the wrong one.
+
+    **Ranked, not gated, and the threshold is why.** Asking the bare
+    question -- "has the verb any keyword the prose omits" -- flags **208 of
+    233**, because `on=` and `until=` are plumbing on nearly every verb and
+    no row enumerates them. That is a report nobody reads. The signal is the
+    prose *enumerating*: a note that names two or more of the verb's own
+    keywords is reciting the signature, and what it leaves out is then
+    evidence rather than silence. 4 markers at that band, 34 at one keyword,
+    and a rank is printed rather than a cutoff imposed, because the band is
+    my judgement and not a measurement.
+
+    Candidates, in `triage.py`'s sense: of the 4 sharp ones, **1 is real**
+    (`f2945`), and the other three name a keyword the verb has not grown --
+    `i2762p1` wants a lapse *suppressed*, `f2179` wants a type read off
+    another row's resolved roll. That is the same rate as the rest of this
+    instrument and the reason it is not in `check.py`.
+    """
+    import blocked
+
+    have = blocked._surface()
+    sys.argv = sys.argv[:1]
+    from combat_engine.content import declared
+
+    rows = declared()
+    found: list[tuple[int, str, str, list[str], list[str]]] = []
+    shaped = 0
+    for ref, row in sorted(rows.items()):
+        if not row.unfinished:
+            continue
+        fn = getattr(row, "fn", None) or getattr(row, "body", None)
+        doc = (inspect.getdoc(fn) or "") if callable(fn) else ""
+        for want in row.unfinished:
+            for token in blocked._wants_of(want):
+                head, _, rest = token.partition("(")
+                head = head.strip()
+                asked = [a.split("=")[0].strip()
+                         for a in rest.rstrip(")").split(",") if a.strip()]
+                if not asked:
+                    continue
+                thing = have.get(head)
+                if thing is None and "." in head:
+                    owner, _, attr = head.rpartition(".")
+                    thing = getattr(have.get(owner), attr, None)
+                if not callable(thing):
+                    continue
+                try:
+                    params = inspect.signature(thing).parameters
+                except (TypeError, ValueError):
+                    continue
+                shaped += 1
+                if all(a in params for a in asked):
+                    continue     # todo.py's ARRIVED reds this one
+                kw = [n for n, p in params.items()
+                      if p.default is not inspect.Parameter.empty
+                      and not n.startswith("_")]
+                named = [k for k in kw
+                         if re.search(rf"[`'\"]?\b{re.escape(k)}=", doc)]
+                missed = [k for k in kw if k not in named]
+                if named and missed:
+                    found.append((len(named), ref, token, named, missed))
+
+    found.sort(key=lambda f: (-f[0], f[1]))
+    print(f"  {shaped} parameter-shaped want(s) resolve to a callable;"
+          f" {len(found)} name a verb carrying keywords the note omits\n")
+    for enumerated, ref, token, named, missed in found[:show]:
+        print(f"  {ref:<16} {token}")
+        print(f"      the note recites {enumerated}: "
+              f"{', '.join(k + '=' for k in named)}")
+        print(f"      the verb also takes: "
+              f"{', '.join(k + '=' for k in missed[:10])}")
+    if len(found) > show:
+        print(f"\n  ... and {len(found) - show} more, fewer keywords recited"
+              f" each -- raise --show to see them")
+    print("\n  Candidates, not verdicts: the sharp band is the note that"
+          " recites 2+ keywords,\n  and 1 of those 4 was real when read by"
+          " hand. A verb may have grown a keyword\n  that means something"
+          " else entirely. #832.")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -454,7 +553,13 @@ def main() -> int:
     ap.add_argument("--quiet", action="store_true", help="counts only")
     ap.add_argument("--drift", action="store_true",
                     help="reconcile the recorded verdicts against the tree")
+    ap.add_argument("--signatures", action="store_true",
+                    help="markers whose `verb(keyword=)` note recites a"
+                         " signature the verb has since outgrown")
     args = ap.parse_args()
+
+    if args.signatures:
+        return _signatures(args.show if args.show != 4 else 8)
 
     wanted = _queue()
     judged = json.loads(VERDICTS.read_text()) if VERDICTS.exists() else {}
