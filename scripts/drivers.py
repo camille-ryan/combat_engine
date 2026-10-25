@@ -32270,6 +32270,86 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def an_aura_deals_more_to_the_creature_its_owner_is_grabbing(out: Result) -> None:
+    """"6 damage, instead of 2, from the grabbing creature's aura."
+
+    Two rows and two files. `m3519a0` lays the raise on the **victim** with
+    `c.change_amount("m305a0", 6, on=victim)`; `m305a0`'s aura watcher asks
+    `c.amount_for("m305a0", 2, who=ev.actor)` instead of handing out a bare
+    2. Both halves had to land together -- laying the raise while the aura
+    still printed its own number is a finished-looking no-op, which is what
+    `m3519a0`'s marker refused to write for three revisions.
+
+    **The control is the ungrabbed neighbour**, standing in the same aura
+    on the same turn. Without it an assertion that the grabbed creature
+    takes 6 passes equally on an aura that deals 6 to everybody, which is
+    the shape of over-grant this card is one sentence away from.
+
+    Read off `DamageApplied` rather than off hit points, because the board
+    pre-sets totals and a pooled number cannot say which creature the 6
+    landed on.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.events import DamageApplied, TurnEnd
+    from combat_engine.engine.query import enemies, squares
+
+    world, mob, _ = _posed("m3519a0", 1)
+    foes = sorted(enemies(world, mob))
+    if len(foes) < 2:
+        return
+    victim, bystander = foes[0], foes[1]
+
+    # Both adjacent to the aura's owner, which is what the aura reads.
+    mine = sorted(squares(world, mob))[0]
+    for who, step in ((victim, (1, 0)), (bystander, (0, 1))):
+        spot = (mine[0] + step[0], mine[1] + step[1])
+        pos = world.get(who, Position)
+        if pos is None:
+            return
+        pos.square = spot
+        world.grid.place(who, spot)
+
+    # The aura, then the grab.
+    a: Any = Cast(world=world, me=mob, ref="m305a0")
+    REGISTRY["m305a0"].body(a)
+    # **Through `m3519a0`'s own body**, on a loaded 20 so the claw lands:
+    # the row has to be what grabs and what lays the raise, or this proves
+    # `c.change_amount` works and says nothing about the card.
+    world.rng.loaded = 20
+    g: Any = Cast(world=world, me=mob, ref="m3519a0", target=victim)
+    REGISTRY["m3519a0"].body(g)
+    out.that(victim in g.grabbing(),
+             "the victim is grabbed and the bystander is not, which is the"
+             " setup and not the finding",
+             f"grabbed={sorted(g.grabbing())} bystander={bystander}")
+    if victim not in g.grabbing():
+        return
+
+    def bite(who: int) -> int:
+        """End `who`'s turn inside the aura and report what it dealt."""
+        mark = len(world.bus.log)
+        world.bus.emit(TurnEnd(actor=who, round=1, ghost=False))
+        return sum(
+            ev.amount for ev in world.bus.log[mark:]
+            if isinstance(ev, DamageApplied) and ev.target == who
+        )
+
+    took = bite(victim)
+    out.that(took == 6,
+             "**the grabbed creature takes 6 from the aura**, which is the"
+             " clause the raise and the read together carry",
+             f"dealt {took}")
+    other = bite(bystander)
+    out.that(other == 2,
+             "while the ungrabbed creature standing in the same aura on the"
+             " same turn takes 2 -- the control, without which this passes"
+             " on an aura that simply deals 6",
+             f"dealt {other}")
+
+
 def a_kept_d20_is_used_instead_of_rolling_one(out: Result) -> None:
     """`c.replace_roll` puts a number you already have on the die.
 
@@ -33637,6 +33717,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "grabbed_aura": (
+        an_aura_deals_more_to_the_creature_its_owner_is_grabbing,
+        "an aura deals more to the creature its owner grabs (#468)",
     ),
     "replace_roll": (
         a_kept_d20_is_used_instead_of_rolling_one,

@@ -772,7 +772,6 @@ def m3441a4(c: Cast) -> None:
     target=ONE_CREATURE,
     attack=Attack(vs=AC, printed=7),
     damage=Damage("1d8", 1),
-    dropped=("c.amount_for('m305a0')",),
 )
 def m3519a0(c: Cast) -> None:
     """The hold, the two defences it buys and the narrowed claw all play, and
@@ -788,32 +787,24 @@ def m3519a0(c: Cast) -> None:
     `stacks=False` because the +2 is one standing modifier: untyped bonuses
     add, so clawing three times used to come to +6 to AC.
 
-    What still has nowhere to go is "that target takes 6 damage instead of 2
-    from the aura" -- it edits a *different* block's aura from here.
+    **"6 instead of 2 from the aura" is written, and it was two content
+    lines in two files.** Nothing in `engine/` moved.
+    `c.change_amount("m305a0", 6, on=victim)` appends to the **victim's**
+    `Powers.amounts`, and `m305a0`'s `scour` watcher now asks
+    `c.amount_for("m305a0", 2, who=ev.actor)` instead of handing out a bare
+    2. Laying the raise without the reader was the finished-looking no-op
+    the marker refused to write, which is why this waited for somebody
+    holding both files rather than one file of a parallel wave.
 
-    **Re-aimed off `c.aura_effect()`, which named a verb that is not the
-    blocker.** `c.change_amount("m305a0", 6, on=...)` already exists and is
-    exactly this sentence; it is inert, because `change_amount`'s own
-    docstring says a row must *read* the modifier with `c.amount_for` to be
-    changed by it, and `m305a0`'s aura hands out its number in the clear.
-    Laying the modifier here would be a finished-looking no-op, so the
-    marker names the reader that has to land in `m305a0` instead.
+    `when=` gates it on still holding, the same way the +2 defences below
+    are gated: the card's clause is about the creature *being grabbed*, so
+    it has to lapse when the grab does rather than running to the end of
+    the encounter. Laid on the victim and keyed on the aura's row, so a
+    second creature grabbed later gets its own.
 
-    **Confirmed, and it is two content lines in two files.** Nothing in
-    `engine/` has to move: `c.change_amount(ref, amount, on=, until=,
-    when=)` appends to `Powers.amounts` on whoever it is laid on, and
-    `c.amount_for(ref, default, who=)` reads somebody else's store through
-    `query.granted_amount` -- largest wins, and the default is a fallback
-    rather than a floor. The other line is
-    `content/monsters/level_04/brutes.py`, where `m305a0`'s `scour` watcher
-    ends in a bare `c.flat(2, on=ev.actor)` and has to become
-    `c.flat(c.amount_for("m305a0", 2, who=ev.actor), on=ev.actor)`. Both
-    sites must agree on the key; `m305a0` is the row that hands the number
-    out, where this marker used to say `m305`.
-
-    Left for whoever owns both files: a parallel authoring wave owns one
-    file each, and writing the raise here while the reader is still absent
-    is the no-op the paragraph above refuses.
+    `c.aura_effect()` was the first marker here and named a verb that is
+    not the blocker; the second named the reader, which is what was
+    actually missing.
     """
     victim = c.target
     held = c.grabbing()
@@ -827,6 +818,10 @@ def m3519a0(c: Cast) -> None:
         return
     c.hit(on=victim)
     c.grab(on=victim)
+    c.change_amount(
+        "m305a0", 6, on=victim, until=When.ENCOUNTER,
+        when=lambda ctx: victim in c.grabbing(),
+    )
     for defence in (AC, REF):
         c.bonus(
             defence, 2, on=c.me, until=When.ENCOUNTER, stacks=False,

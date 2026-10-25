@@ -488,7 +488,24 @@ def m2930a4(c: Cast) -> None:
 def m305a0(c: Cast) -> None:
     """An aura 1 for the board to draw, biting at the end of a turn rather
     than the start of one -- `c.hazard` does both ends and entry besides,
-    which this line does not."""
+    which this line does not.
+
+    **The number is read rather than printed**, which is `m3519a0`'s clause
+    and not this card's: *"that target takes 6 damage, instead of 2 damage,
+    from the grabbing creature's aura"*. `c.change_amount` has always been
+    able to say that and was inert, because being changed requires the row
+    handing the number out to **ask** -- and this one handed out a bare 2.
+    So the raise is laid on the victim over in `m3519a0` and read here.
+
+    `who=ev.actor`, not the caster: the store belongs to the creature the
+    number lands on, which is the shape `c.amount_for`'s own note calls
+    "a fact about you that the aider has to find". Both sites key on
+    `m305a0`, the row that hands the number out, where the marker used to
+    say `m305`.
+
+    Costs nothing for an owner that nobody has raised it against: the
+    default is a fallback and not a floor, so an aura with no modifier
+    laid still deals its printed 2."""
     c.aura(1, until=When.ENCOUNTER)
     me = c.me
 
@@ -496,7 +513,7 @@ def m305a0(c: Cast) -> None:
         if ev.ghost or ev.actor == me or ev.actor not in c.enemies():
             return
         if c.distance(ev.actor) <= 1:
-            c.flat(2, on=ev.actor)
+            c.flat(c.amount_for("m305a0", 2, who=ev.actor), on=ev.actor)
 
     c.watch(TurnEnd, scour, until=When.ENCOUNTER, on=me, label="m305a0")
 
