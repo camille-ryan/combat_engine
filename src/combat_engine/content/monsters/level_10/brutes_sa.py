@@ -137,20 +137,42 @@ def _has_mode(c: Cast, who: int | None, mode: str) -> bool:
 
 def _revive_as_undead(c: Cast, label: str) -> None:
     """"Remains standing, gains the undead keyword, continues to fight
-    until the end of its next turn." Stood up inside the `Dropped` window
-    at 1 hit point, the shape `m5193a4` settled; guarded so the second,
-    genuine `Dropped` finds nothing left to do."""
+    until the end of its next turn."
+
+    **Held at 1 hit point inline, not from a watch.** This armed
+    `c.watch(Dropped, rise, ...)` from inside the dispatch of the very
+    `Dropped` that offered the row, so the handler was never called for
+    that event: the row fired, laid its subscription, and the creature died
+    anyway. It audited green because laying the effect counts as doing
+    something.
+
+    `resolve._check_down` reads the hit points **again** after the emit, and
+    its comment says it does so for exactly this shape -- "a row that
+    answers its own `Dropped` by healing itself" -- so the body only has to
+    set them. This is `m2066a3`'s shape, which was working all along.
+
+    The label guard stays and is load-bearing here in a way it is not for
+    `m2066a3`: both callers are `AT_WILL`, so without it the creature would
+    prop itself up again every time it dropped. #815.
+    """
+    from combat_engine.engine import Health
+
     me = c.me
     if any(e.label == label for e in c.world.effects.of(me)):
         return
     c.effect(label, until=When.ENCOUNTER, on=me)
 
-    def rise(ev: Dropped) -> None:
-        if ev.actor == me:
-            c.reanimate(on=me, hp=1)
-            c.set_origin("undead", on=me, until=When.EONT)
+    health = c.world.get(me, Health)
+    if health is not None:
+        health.hp = 1
+    c.set_origin("undead", on=me, until=When.EONT)
 
-    c.watch(Dropped, rise, until=When.ENCOUNTER, on=me, label=f"{label} rise")
+    def expire(ev: TurnEnd) -> None:
+        if ev.actor == me and not ev.ghost:
+            c.flat(999, on=me)
+
+    c.watch(TurnEnd, expire, until=When.EONT, on=me, once=True,
+            label=f"{label} expiry")
 
 
 def _swarm_traits(c: Cast) -> None:
