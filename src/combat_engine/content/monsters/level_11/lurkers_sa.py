@@ -1022,7 +1022,6 @@ def m2545a2(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_hazards()",),
 )
 def m2545a3(c: Cast) -> None:
     """Crossing the stuff it lives in costs it nothing, which is a label the
@@ -1034,6 +1033,7 @@ def m2545a3(c: Cast) -> None:
     creature from one.
     """
     c.ignores_difficult("blood", until=When.ENCOUNTER)
+    c.ignores_hazards("blood", until=When.ENCOUNTER)
 
 
 # ==========================================================================

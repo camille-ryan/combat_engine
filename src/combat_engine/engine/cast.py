@@ -1963,6 +1963,66 @@ class Cast:
             by=self.ref,
         )
 
+    def ignores_hazards(
+        self,
+        kind: str = "",
+        *,
+        on: int | None = None,
+        until: When = When.ENCOUNTER,
+    ) -> Effect | None:
+        """Cross something that hurts, and take none of it.
+
+        The twin of `c.ignores_difficult` and a different question: that one
+        waives the **cost** of rough ground, this waives the **damage** a
+        hazard laid over it deals. Four monster rows print both halves in
+        one sentence -- *"the creature can move through enemy spaces, ignore
+        difficult terrain, and take no damage if the surface it moves across
+        would normally deal damage to it"* -- and only the first was
+        sayable, so each laid the exemption it could and dropped the other.
+
+        `kind` names which sort of going is harmless, from the same
+        `DIFFICULT_LABELS` vocabulary, and the bare call is every sort.
+        **Refused rather than accepted silently** on an unknown word, for
+        the reason `c.ignores_difficult` carries: #598 found 29 calls naming
+        ground no square carries, and each read as a finished row.
+
+        Read by `c.burns`, which is where every hazard's teeth are -- so
+        this covers a zone laid by `c.hazard` and an aura given teeth
+        afterwards alike, and there is one reader rather than one per
+        caller.
+
+        **Not `c.hazard(exempt=)`**, which exists and is a different
+        sentence: that is the *zone owner* carving somebody out of its own
+        cloud, and `Zone.exempt` is documented as the **sight-blocking**
+        waiver. This is a property of the creature doing the crossing, which
+        is what all four cards print.
+        """
+        from .components import Movement
+
+        who = on if on is not None else self.me
+        moves = self.world.get(who, Movement)
+        if moves is None:
+            return None
+        word = kind.lower() or "*"
+        if word != "*" and not _is_terrain_label(word):
+            raise ValueError(
+                f"{self.ref}: c.ignores_hazards({kind!r}) names no sort of"
+                f" going. Known: {', '.join(sorted(DIFFICULT_LABELS))}, or"
+                f" the bare call for every sort."
+            )
+        if word in moves.unharmed:
+            return None
+        moves.unharmed.add(word)
+        # `on_suspend`, not `on_end`, for the reason beside the same line in
+        # `c.ignores_difficult`: `Effects._lift` runs it for an expiry *and*
+        # a suspension, so the token comes off exactly once either way.
+        return self.world.effects.apply(
+            who, self.me, until, label=f"{self.ref} unscathed",
+            on_suspend=[lambda: moves.unharmed.discard(word)],
+            on_resume=[lambda: moves.unharmed.add(word)],
+            by=self.ref,
+        )
+
     def ignores_difficult(
         self,
         kind: str = "",
@@ -12125,6 +12185,21 @@ class Cast:
         def bite(who: int) -> None:
             if struck.get(who) == self.world.round:
                 return
+            # **The one reader of `Movement.unharmed`**, so `c.hazard` and a
+            # bare `c.burns` over somebody else's aura both honour it. A
+            # blanket `"*"` skips any hazard; a labelled exemption skips
+            # only a zone whose own going carries that label, which is the
+            # same token `c.zone(difficult=...)` writes.
+            from .components import Movement
+
+            safe = self.world.get(who, Movement)
+            if safe is not None and safe.unharmed:
+                if "*" in safe.unharmed:
+                    return
+                standing = dict(self.world.zones.all()).get(zone)
+                going = getattr(standing, "difficult", False)
+                if isinstance(going, str) and going.lower() in safe.unharmed:
+                    return
             struck[who] = self.world.round
             # Rolled per bite when it is dice, not once when the zone is
             # made. A flat number stays flat. Several auras print "takes

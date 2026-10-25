@@ -584,13 +584,21 @@ def m1184a4(c: Cast) -> None:
     action=MOVE,
     reach=PERSONAL,
     target=NO_TARGET,
-    dropped=("c.ignores_hazards()",),
 )
 def m1184a5(c: Cast) -> None:
-    """Taking no damage from a surface that would normally deal it has no
-    verb; the shift over ground or liquid, passing through enemy spaces,
-    and ignoring difficult terrain are written."""
+    """All four clauses of the move, and the last one needed a verb.
+
+    *"Take no damage if the surface it moves across would normally deal
+    damage to it"* is `c.ignores_hazards()` -- the twin of the
+    `c.ignores_difficult` on the line above, waiving the damage where that
+    one waives the cost. Both are scoped to this move, which is what
+    `until=When.EOT` says and what the card means by "moves across".
+
+    Blanket rather than labelled, because the card names no sort of
+    ground: whatever the surface is, it does not hurt this creature while
+    it crosses."""
     c.ignores_difficult(on=c.me, until=When.EOT)
+    c.ignores_hazards(on=c.me, until=When.EOT)
     c.phasing(until=When.EOT)
     c.shift(6)
 

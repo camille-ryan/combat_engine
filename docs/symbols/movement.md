@@ -72,6 +72,8 @@ Verbs that move a creature. The **mode** it travels in -- fly, swim, burrow -- i
   - Cross rough ground for nothing. `kind` names which sort, or all.
 - `c.ignores_difficult_in(self, zone: 'int', *, side: 'str' = 'team') -> 'None'`
   - "You and your allies can ignore difficult terrain in the zone."
+- `c.ignores_hazards(self, kind: 'str' = '', *, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`
+  - Cross something that hurts, and take none of it.
 - `c.immovable(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - Cannot be pushed, pulled or slid. The counterpart of `c.no_provoke`.
 - `c.may_enter(self, *, sizes: 'Sequence[Size]' = (), side: 'str' = '', when: 'Callable[[dict[str, Any]], bool] | None' = None, on: 'int | None' = None, until: 'When' = <When.ENCOUNTER: 'end of encounter'>) -> 'Effect | None'`

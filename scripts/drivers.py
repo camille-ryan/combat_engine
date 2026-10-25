@@ -32270,6 +32270,129 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def crossing_a_hazard_can_cost_nothing(out: Result) -> None:
+    """"Ignore difficult terrain, **and** take no damage from the surface."
+
+    Four monster rows print both halves in one sentence and only the first
+    was sayable, so each laid the exemption it could and dropped the other.
+    `c.ignores_hazards` is the twin of `c.ignores_difficult`: that one
+    waives the **cost** of rough ground, this waives the **damage** a
+    hazard laid over it deals.
+
+    **One reader, in `c.burns`**, which is where every hazard's teeth are --
+    so a zone from `c.hazard` and an aura given teeth afterwards both
+    honour it, and a new caller cannot forget to.
+
+    The sharp pair is the labelled form against the blanket one. A token
+    set rather than a bool is what lets `c.ignores_hazards("blood")` ignore
+    a blood hazard and still burn in a fire, which is what the three
+    level-11 rows print -- they are immune to the stuff they live in and to
+    nothing else.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Movement, Position
+    from combat_engine.engine.events import DamageApplied, TurnStart
+    from combat_engine.engine.query import enemies, squares
+    from combat_engine.engine.types import DamageType
+
+    world, me, _ = _posed("mba", 1)
+    foes = sorted(enemies(world, me))
+    if not foes:
+        return
+    victim = foes[0]
+
+    def hazard_of(kind: str) -> tuple[int, tuple[int, int]]:
+        """Lay a hazard under the victim and report the zone and the square."""
+        spot = sorted(squares(world, victim))[0]
+        c: Any = Cast(world=world, me=me, ref="drivers:hazard")
+        zone = c.hazard([spot], 5, DamageType.FIRE, label="drivers:hazard",
+                        until=When.ENCOUNTER, difficult=kind, sustain=None)
+        return zone, spot
+
+    def bitten() -> int:
+        """Start the victim's turn in the zone and report what **it** dealt.
+
+        **Filtered on the zone's own `detail`, not pooled over the victim.**
+        The first version summed every `DamageApplied` aimed at it and read
+        7 where the hazard deals 5: this board has another 2 landing on the
+        same turn, so the pooled total could not say whether the exemption
+        had worked. `c.burns` stamps `detail=f"{ref} zone"`, which is the
+        label to ask about -- the same discipline as reading an effect's
+        label rather than a creature's hit points.
+        """
+        mark = len(world.bus.log)
+        world.bus.emit(TurnStart(actor=victim, round=world.round, ghost=False))
+        return sum(ev.amount for ev in world.bus.log[mark:]
+                   if isinstance(ev, DamageApplied) and ev.target == victim
+                   and "drivers:hazard" in (ev.detail or ""))
+
+    _, spot = hazard_of("blood")
+    pos = world.get(victim, Position)
+    if pos is None:
+        return
+    pos.square = spot
+    world.grid.place(victim, spot)
+    world.zones.refresh()
+
+    # **Each reading taken once into a variable.** `bitten()` emits a
+    # `TurnStart`, so calling it again inside the report string would run a
+    # second turn and the once-per-round latch would answer 0 -- a passing
+    # assertion followed by a contradictory note.
+    plain = bitten()
+    out.that(plain == 5,
+             "an ordinary creature standing in the hazard takes its damage,"
+             " which is the setup and not the finding",
+             f"dealt {plain}")
+
+    # -- the labelled exemption ---------------------------------------
+    world.round += 1
+    guard: Any = Cast(world=world, me=victim, ref="drivers:unscathed")
+    guard.ignores_hazards("blood", until=When.ENCOUNTER)
+    moves = world.get(victim, Movement)
+    out.that(moves is not None and "blood" in moves.unharmed,
+             "the exemption is recorded as a token, not a flag -- which is"
+             " what lets two rows grant one without stepping on each"
+             " other's expiry",
+             f"unharmed={sorted(moves.unharmed) if moves else None}")
+    spared = bitten()
+    out.that(spared == 0,
+             "**and the same creature in the same blood hazard now takes"
+             " nothing**",
+             f"dealt {spared}")
+
+    # -- the control: a different sort of going still burns ------------
+    world.round += 1
+    _, spot2 = hazard_of("ice")
+    pos.square = spot2
+    world.grid.place(victim, spot2)
+    world.zones.refresh()
+    elsewhere = bitten()
+    out.that(elsewhere == 5,
+             "while an **ice** hazard still burns it -- the control, and the"
+             " reason the exemption is a set of tokens rather than a bool:"
+             " these three rows are immune to the stuff they live in and to"
+             " nothing else",
+             f"dealt {elsewhere}")
+
+    # -- **the blanket form, which is the heroic row's shape** ----------
+    # Added because a plant found it missing: disabling the `"*"` branch
+    # left every assertion above green, since all of them pass a label.
+    # `m1184a5` is the bare call -- "take no damage if the surface it moves
+    # across would normally deal damage to it", naming no sort of ground --
+    # so the untested branch was the one row of the four that is heroic.
+    world.round += 1
+    guard.ignores_hazards(until=When.ENCOUNTER)
+    blanket = bitten()
+    out.that(blanket == 0,
+             "**and a bare `c.ignores_hazards()` spares it the ice too**,"
+             " which is the form `m1184a5` prints -- whatever the surface"
+             " is, it does not hurt this creature",
+             f"dealt {blanket}, unharmed="
+             f"{sorted((world.get(victim, Movement) or Movement()).unharmed)}")
+
+
 def a_target_can_be_narrowed_to_whoever_carries_equipment(out: Result) -> None:
     """"One creature carrying equipment" -- `m6530a5`, and nobody else.
 
@@ -33934,6 +34057,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "ignores_hazards": (
+        crossing_a_hazard_can_cost_nothing,
+        "crossing a hazard can cost nothing, by label (#468)",
     ),
     "carrying": (
         a_target_can_be_narrowed_to_whoever_carries_equipment,

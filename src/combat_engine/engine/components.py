@@ -318,6 +318,23 @@ class Movement:
     #: called once per square examined during a move search. Written by
     #: `c.difficult_for`. #831.
     harder_everywhere: bool = False
+    #: What this creature crosses **without taking its damage**, by the same
+    #: tokens `ignores` uses: a `DIFFICULT_LABELS` word, or `"*"` for the
+    #: blanket form.
+    #:
+    #: **The twin of `ignores` and a different question.** That one waives
+    #: the *cost* of rough ground; this waives the *damage* a hazard laid
+    #: over it deals. Four monster rows print both halves in one sentence --
+    #: "ignore difficult terrain, and take no damage if the surface it moves
+    #: across would normally deal damage to it" -- and only the first half
+    #: was sayable, so each of them laid the exemption it could and dropped
+    #: the one it could not.
+    #:
+    #: A **set of tokens rather than a bool**, for `ignores`' reason: two
+    #: rows granting it must not step on each other's expiry, and an effect
+    #: discards exactly the token it added. Read by `Cast.burns`, which is
+    #: where every hazard's teeth are.
+    unharmed: set[str] = field(default_factory=set)
     #: How the creature is moving **right now**, or "" between moves.
     #:
     #: `modes` says what it *can* do and never what it *is* doing, so

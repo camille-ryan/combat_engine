@@ -150,8 +150,8 @@ CATEGORIES: dict[str, dict] = {
             ("how far, and what stops it", [
                 "any_size_manoeuvre", "blocks_entry", "difficult_for",
                 "extend_every",
-                "extend_move", "forces", "ignores_difficult",
-                "ignores_difficult_in", "immovable", "no_walk", "phasing",
+                "extend_move", "forces", "ignores_difficult", "ignores_difficult_in",
+                "ignores_hazards", "immovable", "no_walk", "phasing",
                 "may_enter", "resist_forced", "shares_space",
                 "speed_of", "squares_for", "squeeze_through",
             ]),
