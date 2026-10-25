@@ -32,6 +32,7 @@ static walks and cost a fraction of a second between them.
 from __future__ import annotations
 
 import ast
+import json
 import re
 import subprocess
 import sys
@@ -96,6 +97,29 @@ def _asked_for_package() -> tuple[Path, ...]:
 
 def main() -> int:
     global _ONLY
+    # **An explicit record, never a side effect of checking.** The fixture is
+    # tracked, so writing it during an ordinary run dirties the tree and the
+    # nightly then refuses to sweep. Downward only, which is the same
+    # contract `audited.json` and `types.json` carry: a file with fewer dead
+    # suppressions is progress and gets recorded; one with more is the fault
+    # above and is never absorbed here.
+    if "--record-suppressions" in sys.argv:
+        live = _dead_suppressions()
+        recorded = (json.loads(DEAD_SUPPRESSIONS.read_text())
+                    if DEAD_SUPPRESSIONS.exists() else {})
+        risen = {f: n for f, n in live.items() if n > recorded.get(f, 0)}
+        if risen:
+            for f, n in sorted(risen.items()):
+                print(f"  REFUSED {f}: {recorded.get(f, 0)} -> {n} is worse;"
+                      f" convert it to `# ty: ignore[<rule>]`, do not record it")
+            return 1
+        DEAD_SUPPRESSIONS.parent.mkdir(parents=True, exist_ok=True)
+        DEAD_SUPPRESSIONS.write_text(
+            json.dumps(live, indent=2, sort_keys=True) + "\n")
+        print(f"recorded {len(live)} file(s), {sum(live.values())} dead"
+              f" suppression(s)")
+        return 0
+
     _ONLY = tuple(Path(a).resolve() for a in sys.argv[1:] if not a.startswith("-"))
     targets = [str(p) for p in _ONLY] or ["."]
     done = subprocess.run(["uv", "run", "ruff", "check", *targets], cwd=ROOT)
@@ -189,6 +213,35 @@ def main() -> int:
             f" Use EACH_OTHER unless the card says it includes the user."
         )
         faults += 1
+
+    # **Only ever downward.** A file over its recorded count means a new
+    # inert suppression arrived; a file under it is progress and the record
+    # is tightened in place rather than waiting for a bless, because there
+    # is no judgement in "this file now has fewer dead comments".
+    if DEAD_SUPPRESSIONS.exists():
+        recorded = json.loads(DEAD_SUPPRESSIONS.read_text())
+        live = _dead_suppressions()
+        risen = {f: (recorded.get(f, 0), n) for f, n in live.items()
+                 if n > recorded.get(f, 0)}
+        for f, (was, now) in sorted(risen.items()):
+            print(f"{f}: {now} `# type: ignore` comment(s), recorded {was}."
+                  f" mypy is not configured here and `ty` does not honour"
+                  f" that syntax, so it suppresses nothing -- use"
+                  f" `# ty: ignore[<rule>]`. #883")
+            faults += 1
+        # **Reported, never written here.** The first version rewrote the
+        # baseline whenever a file improved, on the ground that there is no
+        # judgement in "this file has fewer dead comments". True, and still
+        # wrong: this fixture is **tracked**, so an auto-write leaves the
+        # tree dirty after an ordinary `check.py` -- and `nightly.sh`
+        # refuses a dirty tree, which is how one uncommitted line already
+        # cost the net two consecutive nights. An instrument must not make
+        # the tree dirty as a side effect of reporting.
+        tightened = {f: (recorded[f], live.get(f, 0)) for f in recorded
+                     if live.get(f, 0) < recorded[f]}
+        for f, (was, now) in sorted(tightened.items()):
+            print(f"  {f}: {was} -> {now} dead suppression(s) -- record it"
+                  f" with `lint.py --record-suppressions`")
 
     for where, name, scope, first in _duplicate_defs():
         print(
@@ -1097,6 +1150,68 @@ def _every_py() -> tuple[Path, ...]:
     out = sorted((ROOT / "src/combat_engine").rglob("*.py"))
     out += sorted((ROOT / "scripts").rglob("*.py"))
     return tuple(out)
+
+
+#: Per-file counts of `# type: ignore` -- the **mypy** syntax, which the
+#: checker this repo actually runs does not honour. A baseline that may
+#: shrink and must not grow, the contract `fixtures/audited.json` and
+#: `fixtures/types.json` already use.
+DEAD_SUPPRESSIONS = ROOT / "scripts" / "fixtures" / "suppressions.json"
+
+#: What `ty` honours. Anything else in a `# <tool>: ignore` position is
+#: decoration.
+LIVE_SUPPRESSION = "# ty: ignore"
+
+
+def _dead_suppressions() -> dict[str, int]:
+    """Files carrying a suppression that suppresses nothing, and how many.
+
+    **`mypy` is not configured in this repo** -- nothing in `pyproject.toml`
+    or `setup.cfg` mentions it, and `types.py` runs `uvx ty check`. So a
+    `# type: ignore[...]` comment is inert, and 57 of them were sitting in
+    the tree claiming otherwise.
+
+    Proved rather than assumed: `engine/skills.py:316` writes an attached
+    attribute and I marked it `# type: ignore[attr-defined]`, copying
+    `content/powers/druid/forms.py:89`'s identical `check.beast_form = True`.
+    The diagnostic did not move. `# ty: ignore[unresolved-attribute]` on the
+    same line reports clean.
+
+    **The cost is not the count, it is that the site reads as handled.** The
+    next author to hit an attached attribute copies the nearest precedent
+    and gets a comment documenting an intention while the error stays in the
+    file's total -- which is how `drivers.py` reached 34 above its baseline
+    with nobody deciding to let it. #882, #883.
+
+    A baseline rather than a flat refusal, because 57 standing sites would
+    make this a check that cannot pass, and `scripts/CLAUDE.md` records what
+    that costs. It may shrink and must not grow, so the 57 get converted
+    when their files are next read and no new one can arrive.
+
+    **Real comment tokens, not matching lines.** A line scan counted this
+    file at **9**, every one of them a mention of the string inside the
+    docstring you are reading and in the constant that detects it -- a check
+    reporting its own documentation as the fault it looks for. `tokenize`
+    distinguishes a comment from a string; nothing cheaper does.
+    """
+    import io
+    import tokenize
+
+    out: dict[str, int] = {}
+    for path in _every_py():
+        n = 0
+        try:
+            src = path.read_text(errors="ignore")
+            for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+                if (tok.type == tokenize.COMMENT
+                        and "# type: ignore" in tok.string
+                        and LIVE_SUPPRESSION not in tok.string):
+                    n += 1
+        except (tokenize.TokenError, SyntaxError, IndentationError):
+            continue
+        if n:
+            out[str(path.relative_to(ROOT))] = n
+    return out
 
 
 def _collect_scopes(node: ast.AST, prefix: str, path: Path,

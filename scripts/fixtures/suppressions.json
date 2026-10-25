@@ -1,0 +1,23 @@
+{
+  "scripts/blocked.py": 2,
+  "scripts/drivers.py": 7,
+  "scripts/lint.py": 5,
+  "src/combat_engine/content/feats/rogue_b.py": 1,
+  "src/combat_engine/content/monsters/level_01/controllers_sa.py": 1,
+  "src/combat_engine/content/monsters/level_06/lurkers_sa.py": 1,
+  "src/combat_engine/content/monsters/level_06/skirmishers_sa.py": 5,
+  "src/combat_engine/content/monsters/level_07/skirmishers_sa.py": 11,
+  "src/combat_engine/content/monsters/level_08/brutes_sa.py": 1,
+  "src/combat_engine/content/monsters/level_08/controllers_sb.py": 1,
+  "src/combat_engine/content/monsters/level_08/minions_sa.py": 1,
+  "src/combat_engine/content/monsters/level_08/skirmishers_sa.py": 10,
+  "src/combat_engine/content/powers/druid/forms.py": 1,
+  "src/combat_engine/content/powers/fighter/level_1.py": 1,
+  "src/combat_engine/content/powers/paladin/level_0.py": 1,
+  "src/combat_engine/engine/cast.py": 1,
+  "src/combat_engine/engine/components.py": 1,
+  "src/combat_engine/engine/durations.py": 2,
+  "src/combat_engine/engine/query.py": 2,
+  "src/combat_engine/engine/resolve.py": 1,
+  "src/combat_engine/engine/triggers.py": 2
+}
