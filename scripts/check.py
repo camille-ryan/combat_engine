@@ -600,6 +600,11 @@ def main() -> int:
         return 0
 
     failed: list[str] = []
+    #: Instruments that exited `audit.NOTHING_IN_SCOPE` -- they ran and
+    #: checked nothing. Counted apart from `failed` because a skip is not
+    #: a failure of the change in hand, and apart from the clean count
+    #: because it is not evidence either. #466.
+    skipped: list[str] = []
     width = max(len(c.name) for c in wanted)
     at = _commit()
     # **Captured before anything runs, not after.** A whole-tree sweep
@@ -625,7 +630,16 @@ def main() -> int:
     for c in wanted:
         took, done = flight[c.name].result()
         tail = _summary(done.stdout) or _summary(done.stderr)
-        mark = "ok  " if done.returncode == 0 else "FAIL"
+        # **Three outcomes, not two.** An instrument that checked nothing
+        # exits `3` (`audit.NOTHING_IN_SCOPE`) and is marked SKIP, because
+        # reading it as `ok` is how a clean tree produced `ok audit 1.2s`
+        # under "N instruments clean" with no row fired. The skip is counted
+        # separately below, so the headline cannot absorb it. #466.
+        skipped_run = done.returncode == NOTHING_IN_SCOPE
+        if skipped_run:
+            skipped.append(c.name)
+        mark = ("SKIP" if skipped_run
+                else "ok  " if done.returncode == 0 else "FAIL")
         print(f"  {mark}  {c.name:{width}}  {took:5.1f}s  {tail}")
         _record(c.name, took, done.returncode == 0, at,
                 _scope(done.stdout),
@@ -723,8 +737,24 @@ def main() -> int:
         # already uses: every instrument still ran, only the claim narrows.
         print(f"the audit was narrowed to {', '.join(narrowed)} -- evidence "
               f"those verbs work, not that nothing else broke")
+    if not _skip_code_matches():
+        print(f"WARNING: audit.py's NOTHING_IN_SCOPE no longer matches the"
+              f" {NOTHING_IN_SCOPE} this file mirrors, so a skip is being"
+              f" read as a pass again -- see #466")
+    if skipped:
+        # **Said before the headline, like the narrowing lines above.** The
+        # instrument that skipped is the one whose silence matters most --
+        # `audit` is the only one that fires rows -- so "checked nothing" has
+        # to be read before any count of clean ones.
+        print(f"{', '.join(skipped)} checked NOTHING -- a skip, not a pass"
+              f" (clean tree? `audit.py --since` covers everything touched"
+              f" since the last full sweep)")
     if failed:
         print(f"{len(failed)} unhappy: {', '.join(failed)}")
+    elif skipped:
+        print(f"{len(wanted) - len(skipped)} of {len(wanted)} instruments"
+              f" clean, {len(skipped)} skipped"
+              + (f", {owed}" if owed else ""))
     elif owed or narrowed or mapped:
         # **The one sentence that means "nothing is outstanding" is withheld
         # while something is.** Every instrument still ran and still reported;
@@ -1138,6 +1168,29 @@ def _map_state() -> list[str]:
                 f" so a function changed in them audits WIDE until its rows"
                 f" are recorded (`impact.py --record --refs`, seconds)")
     return out
+
+
+#: `audit.py`'s "ran and checked nothing" exit. Mirrored rather than imported
+#: because `check.py` must not import an instrument to read its verdict -- it
+#: runs them as subprocesses -- and asserted against the real one by
+#: `_skip_code_matches` below, so the two cannot drift apart silently.
+NOTHING_IN_SCOPE = 3
+
+
+def _skip_code_matches() -> bool:
+    """Is the mirrored skip code still the one `audit.py` returns?
+
+    A mirrored constant is a second source of truth, which is the shape
+    `#492` is about -- two hand-kept lists and nothing reconciling them. One
+    import of a module-level int settles it, and the cost of being wrong is
+    a skip silently reading as a pass again.
+    """
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import audit as audit_mod
+        return bool(audit_mod.NOTHING_IN_SCOPE == NOTHING_IN_SCOPE)
+    except Exception:
+        return True
 
 
 def _unswept_since(sha: str) -> int:

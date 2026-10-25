@@ -4381,8 +4381,24 @@ WIDE = (
     # wide is the honest answer and saying it outright is better than relying
     # on a path it no longer matches.
     "src/combat_engine/chargen/",
+    # **`story/` fields every board, so it has the property this list is
+    # for.** It decides who is on the board and where they stand, which is
+    # the input to every row's posing, and it was absent -- so a change
+    # there selected **zero** rows by exactly the argument the two comments
+    # above make for `etl/` and `chargen/`. Same shape, third instance: a
+    # package outside `content/` is invisible to the cross-cutting
+    # by-shape test, so it has to be named. #788.
+    "src/combat_engine/story/",
     "scripts/audit.py",
 )
+
+#: **A skip, which is neither a pass nor a failure.** `check.py` read any
+#: zero exit as `ok`, so an empty scope -- the normal state for "commit,
+#: then verify" -- printed `ok audit 1.2s` under a headline of "N
+#: instruments clean" while nothing had been checked. A third code keeps the
+#: decision in the only code that knows the scope was empty, and leaves both
+#: existing codes meaning what they meant. #466.
+NOTHING_IN_SCOPE = 3
 
 #: **Nothing. The exemption deleted itself when the file moved.**
 #:
@@ -5860,6 +5876,21 @@ def main() -> int:
             print("\n  SKIPPED -- no row was in scope, so nothing was checked")
             print("  (`--changed` reads `git status`; on a clean tree use `--since` "
                   "for everything touched since the last full sweep)")
+            # **A skip is not a pass, and returning 0 for one made the suite
+            # claim otherwise.** `check.py` marked `ok` on any zero exit, so
+            # a clean tree -- which is the *normal* state for "commit, then
+            # verify" -- printed `ok audit 1.2s` and a headline of "N
+            # instruments clean" while the row-firing instrument had looked
+            # at nothing. That is `scripts/CLAUDE.md`'s first rule, broken
+            # for the most expensive instrument in the suite.
+            #
+            # The decision belongs here rather than in `check.py` parsing
+            # output: this is the only code that knows the scope was empty.
+            # A third code, so neither existing caller changes meaning --
+            # 0 is still "checked something and it was fine" and 1 is still
+            # "something is wrong". #466.
+            if not awake:
+                return NOTHING_IN_SCOPE
         return 1 if awake else 0
     print(f"\n  {ok} of {len(chosen)} rows fire and do something")
     # **Fires and does something is not the same as finished.** A `dropped=`
