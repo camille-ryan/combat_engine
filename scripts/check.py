@@ -860,10 +860,16 @@ def _main_checkout() -> Path:
 #: The checkout the nightly writes into, which is this one unless we are in
 #: a worktree.
 MAIN = _main_checkout()
-#: True when `ROOT` is a worktree and so owes its own `--all`: the schedule
-#: cannot reach this branch at all. The judgement in the plan for #848 is
-#: that a worktree pays for itself rather than the nightly sweeping every
-#: live branch in turn, which multiplies a long run by the branch count.
+#: True when `ROOT` is a worktree, so the nightly's verdict is about another
+#: tree and the schedule cannot reach this branch at all.
+#:
+#: **It no longer means "owes its own `--all`".** That was #848's judgement
+#: and it was withdrawn by its own measurement: `--all` is wide by
+#: definition, so a per-branch rule made 105 of 106 audit runs wide and the
+#: impact map unusable. A worktree merges *into* `master`, which the nightly
+#: does sweep, so `_merge_verdict` asks the narrower question -- has anything
+#: looked at the rows this change can affect -- and only the map's *refusal*
+#: still owes a wide sweep.
 IN_WORKTREE = MAIN.resolve() != ROOT.resolve()
 
 #: What the nightly leaves behind. `NIGHTLY-FAILED` is written on a red run
@@ -916,7 +922,11 @@ def _nightly_state() -> list[str]:
     # indistinguishable from a reading of our own `logs/`, which is how it
     # went two days unnoticed -- so the fix is not only to read the right
     # directory but to name it.
-    whose = f" (from {MAIN.name}; this worktree owes its own --all)" if IN_WORKTREE else ""
+    # And **not** "this worktree owes its own --all", which this said until
+    # #848's coverage half was withdrawn. Naming the tree is the load-bearing
+    # part; the merge rule is `_merge_verdict`'s to state, on the last line,
+    # where it can say which selector actually looked at the rows.
+    whose = f" (from {MAIN.name}, not this worktree)" if IN_WORKTREE else ""
     try:
         head = NIGHTLY_LOG.read_text()[:400]
     except OSError:
