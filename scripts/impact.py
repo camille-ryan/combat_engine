@@ -534,6 +534,40 @@ def _changed_lines() -> dict[str, set[int]]:
     return dict(out)
 
 
+def _carrying(path: Path, lines: set[int]) -> set[int]:
+    """The changed lines that carry behaviour: not blank, not a comment.
+
+    **This is for the message, not the verdict**, and that is worth saying
+    because it looks like a saving and is not. A single blank line at
+    `cast.py:4804` was what made one batch report *"changed outside any
+    function (module level, a decorator or an import)"* and go WIDE -- so
+    the obvious conclusion is that filtering these buys narrow runs.
+
+    Measured across the six engine batches of 2026-10-24/25: **every verdict
+    is identical with and without this filter.** Each of those commits has a
+    real cause underneath -- a genuinely hot function, a module-level import,
+    a class-level field -- and the inert lines were only the first reason
+    reported, not the operative one.
+
+    So it is kept for one reason: a diagnosis that blames a blank line sends
+    the next reader looking in the wrong place, which cost a session here
+    exactly once. A line past the end of the file is a deletion and carries
+    nothing either.
+    """
+    try:
+        src = path.read_text().splitlines()
+    except OSError:
+        return set(lines)
+    out = set()
+    for line in lines:
+        if not 0 < line <= len(src):
+            continue
+        text = src[line - 1].strip()
+        if text and not text.startswith("#"):
+            out.add(line)
+    return out
+
+
 def selection(got: dict, changed: dict[str, set[int]]
               ) -> tuple[list[str] | None, list[str]]:
     """The refs this change needs, or `None` for WIDE, plus lines to print.
@@ -569,7 +603,11 @@ def selection(got: dict, changed: dict[str, set[int]]
             notes.append(f"# {rel} is not in the map. WIDE.")
             return None, notes
         funcs = _functions_of(ROOT / rel)
-        touched = {_enclosing(funcs, line) for line in changed[rel]}
+        touched = {_enclosing(funcs, line)
+                   for line in _carrying(ROOT / rel, changed[rel])}
+        if not touched:
+            notes.append(f"# {rel} changed only in blank lines and comments")
+            continue
         if "" in touched:
             notes.append(f"# {rel} changed outside any function (module level,"
                          f" a decorator or an import). WIDE.")
