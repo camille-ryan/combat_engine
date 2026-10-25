@@ -529,8 +529,32 @@ def main() -> int:
         ]
 
     mapped: list[str] = []
+    wide_why = ""
+    if args.all:
+        wide_why = "--all was asked for"
+    no_opinion = False
     if not args.all and args.calls is None:
         mapped, why = _rows_from_map()
+        # **Empty notes is the "no opinion" case and not a refusal**, which
+        # the gate below has to tell apart: `_rows_from_map` returns `[], []`
+        # when nothing narrowable changed or `selection` had nothing to say,
+        # and `[], [reasons]` when it refused. Those are opposite merge
+        # answers -- content-only is covered by `audit --changed`, a refusal
+        # means nothing looked at the rows -- and collapsing them is a bug I
+        # shipped in the first draft of `_merge_verdict`.
+        #
+        # Read off the notes rather than a third return value, and the
+        # failure mode is the safe one: a future author who adds a note to
+        # the no-opinion path makes the gate ask for a sweep that was not
+        # needed, never the reverse.
+        no_opinion = not mapped and not why
+        if not mapped:
+            # The first line that says WIDE is the operative one; the rest
+            # are the per-function accounting above it.
+            wide_why = next(
+                (line.strip("# ").strip() for line in why if "WIDE" in line),
+                (why[-1].strip("# ").strip() if why else "no reason given"),
+            )[:120]
         for line in why:
             print(line)
         if mapped:
@@ -607,7 +631,9 @@ def main() -> int:
                 _scope(done.stdout),
                 by=("impact" if mapped and c.name == "audit"
                     else "calls" if narrowed and c.name == "audit"
-                    else ""))
+                    else ""),
+                wide_because=(wide_why if c.name == "audit" and not mapped
+                              and not narrowed else ""))
         if done.returncode != 0:
             failed.append(c.name)
             if not args.verbose:
@@ -708,7 +734,12 @@ def main() -> int:
               + (", and the audit was narrow" if narrowed or mapped else ""))
     else:
         print(f"all {len(wanted)} instruments clean")
+    for line in _top_up_map(bool(failed)):
+        print(line)
     for line in _clear_red(args.all, bool(failed), at, began_clean):
+        print(line)
+    for line in _merge_verdict(args.all, bool(failed), mapped, wide_why,
+                               no_opinion):
         print(line)
     return len(failed)
 
@@ -1274,8 +1305,144 @@ def _submit_order(wanted: list[Instrument]) -> list[Instrument]:
     return head + tail
 
 
+#: Rows a per-commit top-up will record before it declines and says so. The
+#: recording costs ~4.3x an audit of the same rows, so this is a wall-clock
+#: budget rather than a correctness limit: a typical content commit moves a
+#: handful of rows, and a wave that moves hundreds is the nightly's job.
+TOP_UP_CAP = 40
+
+
+def _top_up_map(red: bool) -> list[str]:
+    """Record the rows this commit touched, so the map never goes stale.
+
+    **This is what stops "the map had no entry" being a standing excuse.**
+    A full recording is 83 minutes, so before `--record --refs` existed the
+    only way a row or a verb entered the map was to wait for the nightly --
+    and `selection` fails *closed* on a function it has never seen, so a
+    new verb's own edit selected **0 rows** and the run reported clean.
+    Recording the handful of rows that just changed is seconds and closes
+    that window inside one commit.
+
+    Declines, out loud, on each of the cases where recording would be
+    wrong or not worth it:
+
+    * **a red run**, for the nightly's reason -- a row that raises records
+      only the lines it reached before raising, so its ref list comes out
+      short in the direction that omits rows;
+    * **no map**, or a sampled one, which a top-up cannot repair;
+    * **nothing under `content/` changed**, so there is nothing to record
+      that the map does not already hold;
+    * **more rows than `TOP_UP_CAP`**, which is a content wave rather than
+      a commit.
+
+    It never *widens* anything and never fails the run: the map is a
+    selector that fails open, so a failed top-up costs a wide audit next
+    time and nothing else.
+    """
+    if red:
+        return ["map top-up skipped: the run was red, and a raising row"
+                " records a short ref list"]
+    path = ROOT / "logs" / "impact.json"
+    if not path.exists():
+        return ["map top-up skipped: no map to merge into"]
+    try:
+        held = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ["map top-up skipped: the map is unreadable"]
+    if held.get("sampled"):
+        return ["map top-up skipped: the map is a sample, which a top-up"
+                " cannot repair"]
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import audit as audit_mod
+        rows = audit_mod._changed(widen=False)
+    except Exception as exc:
+        return [f"map top-up skipped: {type(exc).__name__} asking which rows"
+                f" changed"]
+    if not rows:
+        return []
+    if len(rows) > TOP_UP_CAP:
+        return [f"map top-up skipped: {len(rows)} rows changed, over the"
+                f" {TOP_UP_CAP}-row budget -- the nightly re-records"]
+    began = time.time()
+    done = subprocess.run(
+        ["uv", "run", "scripts/impact.py", "--record", "--refs",
+         ",".join(rows)],
+        cwd=ROOT, capture_output=True, text=True)
+    took = time.time() - began
+    if done.returncode:
+        why = next((ln for ln in reversed(done.stdout.splitlines())
+                    if ln.startswith("#")), "no reason given")
+        return [f"map top-up FAILED in {took:.0f}s, so the map still does not"
+                f" hold these {len(rows)} row(s): {why.lstrip('# ')}"]
+    return [f"map topped up with {len(rows)} changed row(s) in {took:.0f}s,"
+            f" so an edit to what they call narrows next run"]
+
+
+def _merge_verdict(wide_run: bool, red: bool, mapped: list[str],
+                   wide_why: str, no_opinion: bool = False) -> list[str]:
+    """Whether this branch may merge on what just ran, and on what grounds.
+
+    **This is the line that decides whether the map is worth having.** The
+    rule it replaces -- *"a worktree owes its own `check.py --all` before it
+    merges"* (#848) -- made every merge pay a wide audit, so of 106 audit
+    runs on this ledger **105 were wide and 1 was narrow**, and the map saved
+    21 minutes against 22 hours spent sweeping. A selector that the gate
+    ignores is a selector nobody uses.
+
+    And the old rule contradicted the cadence it sits beside. `CLAUDE.md`
+    says of the nightly:
+
+        The sweep is a **net, not a gate** -- everything that catches a
+        regression in *seconds* already runs per commit -- so a regression
+        that lands at 10am being found at 3am is the right trade.
+
+    A worktree merges **into master**, which the nightly does sweep. So the
+    pre-merge wide run was buying a few hours against a window the file
+    accepts everywhere else, at 22 minutes a merge.
+
+    So the question the gate asks is narrower and answerable: **has anything
+    looked at the rows this change can affect?**
+
+    * the map **narrowed** -- yes: the rows observed to execute the changed
+      functions were audited, and they are green. Merge; the nightly sweeps
+      master tonight.
+    * the map **refused** -- no. Nothing has looked at the rows, because
+      "wide" means it could not say which they are. The wide sweep is owed
+      before merge, exactly as before.
+    * nothing under `engine/` changed -- `audit --changed` already covers
+      content properly, which is the case this instrument has always had no
+      opinion about.
+
+    Silent outside a worktree and silent on a red run: there is nothing to
+    decide if the branch is the main checkout, and nothing to say about
+    merging while an instrument is unhappy.
+    """
+    if not IN_WORKTREE or red:
+        return []
+    if wide_run:
+        return ["merge-ready: a wide sweep just ran and is clean"]
+    if no_opinion:
+        return ["merge-ready: nothing under engine/ changed, so"
+                " `audit --changed` covered this branch's rows."]
+    if mapped:
+        return [
+            f"merge-ready: the map narrowed the audit to {len(mapped)} row(s)"
+            f" -- the rows observed to execute what this change touched --"
+            f" and they are clean.",
+            "             master's 03:07 sweep is the backstop, which is the"
+            " same net CLAUDE.md accepts for every other regression.",
+        ]
+    return [
+        "wide sweep owed before merge: the map could not narrow this change,"
+        " so nothing has looked at the rows it can reach.",
+        f"             {wide_why or 'no reason recorded'}",
+    ]
+
+
 def _record(name: str, seconds: float, ok: bool, at: str,
-            scope: tuple[int, int] | None = None, by: str = "") -> None:
+            scope: tuple[int, int] | None = None, by: str = "",
+            wide_because: str = "") -> None:
     try:
         LEDGER.parent.mkdir(parents=True, exist_ok=True)
         row = {
@@ -1300,6 +1467,16 @@ def _record(name: str, seconds: float, ok: bool, at: str,
         # nothing narrowed, which is what a wide sweep is.
         if by:
             row["by"] = by
+        # **Why a wide run was wide**, which `by`'s absence cannot say. The
+        # map refuses for six distinguishable reasons -- a genuinely hot
+        # function, a module-level change, an unmapped file, a moved corpus,
+        # a union over the ceiling, an `audit.WIDE` member -- and "is the map
+        # earning its recording" is a different question from "which of those
+        # six is costing us". Counting wide runs told us the first and
+        # nothing about the second, which is how a session spent an hour
+        # inferring the causes from six commits by hand.
+        if wide_because:
+            row["wide_because"] = wide_because
         with LEDGER.open("a") as fh:
             fh.write(json.dumps(row) + "\n")
     except OSError:
@@ -1348,6 +1525,29 @@ def _map_history(rows: list[dict]) -> None:
     if calls:
         print(f"  (`--calls` narrowed {len(calls)} more, which the map does "
               f"not account for)")
+
+    # **The split and the reasons, which is the half that says what to fix.**
+    # "The map narrowed 1 run" is a score; "104 went wide and here is which
+    # cause each time" is a work queue. The six refusal reasons are not
+    # equally addressable -- a genuinely hot function is correct and
+    # permanent, `--all` is a choice, a module-level line is avoidable by
+    # the author, an unmapped file means the map is stale -- so pooling them
+    # hides the only actionable ones.
+    went_wide = [r for r in audits if not r.get("by")]
+    if went_wide:
+        spent = sum(r["seconds"] for r in went_wide)
+        saved = sum(r["seconds"] for r in mapped)
+        print(f"\n  {len(went_wide)} audit run(s) went wide, {spent / 60:.0f} "
+              f"minutes; {len(mapped)} narrowed, {saved / 60:.1f} minutes")
+        why: dict[str, list[float]] = {}
+        for r in went_wide:
+            key = r.get("wide_because") or "(not recorded)"
+            why.setdefault(key, []).append(r["seconds"])
+        for key, took in sorted(why.items(), key=lambda kv: -sum(kv[1])):
+            print(f"    {len(took):3} x {sum(took) / 60:5.0f} min  {key[:76]}")
+        if "(not recorded)" in why:
+            print("    -- `(not recorded)` predates this reporting; it is not"
+                  " an unknown cause, only an unlogged one")
 
 
 def history() -> int:

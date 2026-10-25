@@ -209,7 +209,8 @@ def _enclosing(funcs: list[tuple[int, int, str]], line: int) -> str:
     return best
 
 
-def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
+def record(sample: int = 0, jobs: int = 0, core: str = "",
+           only: list[str] | None = None) -> int:
     """One pooled sweep under coverage, labelling each row's work with its ref.
 
     `sample` records a deterministic slice instead of everything. A sampled
@@ -240,6 +241,53 @@ def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
 
     refs = list(declared_refs())
     whole = len(refs)
+    merge_into = None
+    if only:
+        # **The incremental form, which is what makes the map maintainable.**
+        # A full recording is 83-158 minutes, so the only way a verb written
+        # today entered the map was to wait for the nightly -- and until it
+        # did, every *edit* to that verb went wide. #865.
+        #
+        # Refuses on a map without `seen`, because the merge cannot be sound
+        # without it: a row that executes no engine function appears in no
+        # ref list, so an older map cannot say whether it was recorded and
+        # found nothing or never recorded at all. One full run fixes that
+        # once.
+        merge_into = _load_raw()
+        if merge_into is None:
+            print("# no map to merge into. Record the whole corpus once"
+                  " first: `impact.py --record`.")
+            return 1
+        if "seen" not in merge_into:
+            # **A complete map's `seen` is derivable, so it does not owe a
+            # 2.5-hour re-record to gain one.** `_build_map`'s control
+            # refuses to write unless the combined data holds *exactly* the
+            # refs it asked for, and a full recording asks for the whole
+            # declared corpus -- so for a map whose `corpus` is its
+            # `whole_corpus`, "which rows it saw" is "all of them", and the
+            # only question is whether the corpus has moved since. If it
+            # has, the migration is declined and a full recording is the
+            # honest answer; the map is not edited either way.
+            if (merge_into.get("corpus") == merge_into.get("whole_corpus")
+                    == whole):
+                merge_into["seen"] = sorted(refs)
+                print(f"# this map predates `seen`. It recorded the whole"
+                      f" corpus and the corpus has not moved ({whole} rows),"
+                      f" so `seen` is all of them -- migrated in place.")
+            else:
+                print("# this map predates incremental recording and does"
+                      " not say which rows it saw, so a merge cannot be"
+                      f" sound: it holds {merge_into.get('corpus')} of"
+                      f" {merge_into.get('whole_corpus')} rows against"
+                      f" {whole} declared now. Record the whole corpus"
+                      " once: `impact.py --record`.")
+                return 1
+        known = set(refs)
+        unknown = [r for r in only if r not in known]
+        if unknown:
+            print(f"# not declared rows: {', '.join(unknown[:8])}")
+            return 1
+        refs = sorted(set(only))
     if sample:
         refs = refs[::max(1, whole // sample)][:sample]
     print(f"# recording {len(refs)} of {whole} rows under "
@@ -283,6 +331,16 @@ def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
     try:
         audit._run_all(refs, jobs=jobs)
     finally:
+        # **The parent is a worker too, for a small batch, and nothing saved
+        # it.** `_run_all` runs serially *in this process* for `--jobs 1` or
+        # fewer than 8 refs, so the recorder `_label_this_row` starts belongs
+        # to the parent -- whose `atexit` fires long after `_build_map` has
+        # already combined and judged. A one-ref batch therefore wrote no
+        # data file at all and the control reported the row as recording
+        # nothing, which is exactly the incremental form's normal case. The
+        # same call is a no-op in the pooled case, where `_RECORDER` here is
+        # `None` and each worker saved its own slice.
+        audit._save_this_worker()
         os.environ.pop(RECORDING, None)
         os.environ.pop(SOURCE, None)
         if core:
@@ -304,10 +362,11 @@ def record(sample: int = 0, jobs: int = 0, core: str = "") -> int:
     cov = coverage.Coverage(data_file=str(base))
     cov.combine(strict=True, keep=False)
     cov.save()
-    return _build_map(cov, refs, whole)
+    return _build_map(cov, refs, whole, merge_into=merge_into)
 
 
-def _build_map(cov, asked: list[str], whole: int) -> int:  # noqa: ANN001
+def _build_map(cov, asked: list[str], whole: int,  # noqa: ANN001
+               merge_into: dict | None = None) -> int:
     """Turn per-ref line coverage into `{file: {function: refs | "wide"}}`.
 
     Refuses to write unless the combined data holds **exactly** the refs
@@ -356,7 +415,15 @@ def _build_map(cov, asked: list[str], whole: int) -> int:  # noqa: ANN001
                 if name:
                     hit[rel][name].add(context)
 
-    ceiling = int(corpus * WIDE_SHARE)
+    # **The ceiling is a share of the corpus the map covers, not of this
+    # batch**, and getting that backwards destroyed the map on the first
+    # incremental run: a two-row batch gives `int(2 * 0.30) == 0`, so every
+    # function those two rows touched crossed the ceiling and was recorded
+    # `"wide"` -- 0 narrow, 567 wide, and the merge below cannot recover it
+    # because a fresh `"wide"` is kept wide by design. The merged corpus is
+    # known before any row is classified, so it is computed here.
+    seen = set(asked) | set((merge_into or {}).get("seen", ()))
+    ceiling = int(len(seen) * WIDE_SHARE)
     out: dict[str, dict[str, object]] = {}
     wide = narrow = 0
     for rel, funcs in hit.items():
@@ -369,22 +436,107 @@ def _build_map(cov, asked: list[str], whole: int) -> int:  # noqa: ANN001
                 out[rel][name] = sorted(refs)
                 narrow += 1
 
+    # **A partial recording merges rather than replaces**, and the merge has
+    # one rule that is easy to get backwards: every ref in this batch is
+    # **dropped from every existing list first**, then added where it was
+    # just observed. Adding without dropping would leave a row attributed to
+    # a function it no longer calls -- which is the direction that selects
+    # too few rows, silently, and is exactly what `_build_map`'s control
+    # exists to prevent on a full run.
+    if merge_into is not None:
+        batch = set(asked)
+        for rel, table in merge_into.get("files", {}).items():
+            kept = out.setdefault(rel, {})
+            for name, entry in table.items():
+                if entry == "wide":
+                    # A wide function stays wide: its list was discarded at
+                    # recording time, so there is nothing to subtract from
+                    # and no way to tell whether this batch belongs to it.
+                    # Re-widening is the fail-open direction.
+                    #
+                    # **Assignment, not `setdefault`.** This was
+                    # `kept.setdefault(name, "wide")`, which cannot do what
+                    # the paragraph above says: the fresh batch has already
+                    # written its own list into that slot, and a two-row
+                    # batch is never above the ceiling, so the slot is
+                    # always taken. A merge therefore turned every wide
+                    # function the batch touched into a narrow list holding
+                    # *only the batch's rows* -- `equipment._onto_weapon`,
+                    # reached by most of the corpus, came out naming two.
+                    # That is the silent under-selection this whole file is
+                    # built to avoid, arriving through the one path that
+                    # looked like bookkeeping.
+                    kept[name] = "wide"
+                    continue
+                fresh = kept.get(name)
+                older = [r for r in entry if r not in batch]
+                if fresh == "wide":
+                    continue
+                kept[name] = sorted(set(older) | set(fresh or ()))
+        # Re-apply the ceiling: a merged list can cross it even though
+        # neither half did.
+        for table in out.values():
+            for name, entry in list(table.items()):
+                if entry != "wide" and len(entry) > ceiling:
+                    table[name] = "wide"
+        narrow = sum(1 for tb in out.values() for e in tb.values()
+                     if e != "wide")
+        wide = sum(1 for tb in out.values() for e in tb.values()
+                   if e == "wide")
+        corpus = len(seen)
+
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                          capture_output=True, text=True).stdout.strip()
     MAP.parent.mkdir(parents=True, exist_ok=True)
     MAP.write_text(json.dumps({
         "corpus": corpus,
+        # **Which rows the map has actually looked at**, which `corpus` alone
+        # could not say and an incremental recording cannot do without. A
+        # row that executes no engine function appears in no ref list, so
+        # without this there is no way to tell it from a row that was never
+        # recorded -- and `select()` fails *closed* on an unmapped function,
+        # so guessing wrong omits rows.
+        "seen": sorted(seen),
         "whole_corpus": whole,
         "sampled": corpus != whole,
         "ceiling": ceiling,
         "game_db_mtime": GAME.stat().st_mtime if GAME.exists() else 0,
-        "recorded_at": subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT,
-            capture_output=True, text=True).stdout.strip(),
+        # **A merge must not advance this, and advancing it broke the guard
+        # it exists to feed.** `recorded_at` is the sha whose code the map's
+        # *silence* can speak for -- `selection` reads it to tell a function
+        # written since the recording from a genuinely dead one. An
+        # incremental batch re-measures three rows, not the corpus, so
+        # stamping HEAD on it claims the whole map is current and sends
+        # every new verb straight back into the fail-closed branch. Caught
+        # by `Cast.replace_roll` still selecting 0 rows after the guard
+        # landed. The batch's own sha is kept beside it instead.
+        "recorded_at": (merge_into or {}).get("recorded_at") or head,
+        "topped_up": ([*(merge_into or {}).get("topped_up", []),
+                       {"at": head, "rows": sorted(asked)}]
+                      if merge_into is not None else []),
         "files": out,
     }))
     print(f"# {narrow} functions carry a ref list, {wide} are wide "
           f"(> {ceiling} of {corpus} rows)")
     print(f"# written to {MAP.relative_to(ROOT)}")
     return 0
+
+
+def _load_raw() -> dict | None:
+    """The map as written, with none of `_load`'s freshness refusals.
+
+    `_load` is for *selecting* and so fails open on anything suspicious --
+    a moved corpus, a rebuilt database, a sha outside this history. A merge
+    is the opposite situation: those are the very conditions a re-recording
+    is meant to repair, so refusing to read the file would make the map
+    unrepairable exactly when it needs repairing.
+    """
+    if not MAP.exists():
+        return None
+    try:
+        return json.loads(MAP.read_text())
+    except (OSError, ValueError):
+        return None
 
 
 def _load() -> dict | None:
@@ -534,6 +686,33 @@ def _changed_lines() -> dict[str, set[int]]:
     return dict(out)
 
 
+def _moved_since(sha: str, rel: str) -> set[int] | None:
+    """Lines of `rel` that differ from `sha`, in working-tree coordinates.
+
+    `None` if the question cannot be answered -- no sha recorded, a sha this
+    checkout does not hold, or git failing for any reason -- which the
+    caller must read as "the map's silence is not evidence".
+    """
+    if not sha or not _in_history(sha):
+        return None
+    done = subprocess.run(["git", "diff", "-U0", sha, "--", rel],
+                          cwd=ROOT, capture_output=True, text=True)
+    if done.returncode:
+        return None
+    out: set[int] = set()
+    for line in done.stdout.splitlines():
+        if not line.startswith("@@"):
+            continue
+        try:
+            plus = line.split("+", 1)[1].split(" ", 1)[0]
+            start, _, count = plus.partition(",")
+            first, span = int(start), int(count) if count else 1
+        except (IndexError, ValueError):
+            continue
+        out.update(range(first, first + max(span, 1)))
+    return out
+
+
 def _carrying(path: Path, lines: set[int]) -> set[int]:
     """The changed lines that carry behaviour: not blank, not a comment.
 
@@ -603,6 +782,9 @@ def selection(got: dict, changed: dict[str, set[int]]
             notes.append(f"# {rel} is not in the map. WIDE.")
             return None, notes
         funcs = _functions_of(ROOT / rel)
+        # Which lines of this file the recording never saw, so the branch
+        # below can tell a genuinely dead function from one written since.
+        since = _moved_since(got.get("recorded_at", ""), rel)
         touched = {_enclosing(funcs, line)
                    for line in _carrying(ROOT / rel, changed[rel])}
         if not touched:
@@ -618,8 +800,34 @@ def selection(got: dict, changed: dict[str, set[int]]
                 # **The one place this fails closed**, and it is only sound
                 # because the recording's context control proves the map saw
                 # every row. A function no row executes is a function no row
-                # can depend on. Against a *stale* map it is unsound, which
-                # is #866.
+                # can depend on.
+                #
+                # **But only if the recording could have seen it.** That was
+                # #866 and it is not theoretical: `Cast.replace_roll` was
+                # written hours after the map was recorded, two rows call it,
+                # and an edit inside it selected **0 rows** under the note
+                # "no row can depend on it" -- a brand-new verb, which is the
+                # code most likely to be wrong, audited by nothing and
+                # reported clean. A new *function* is exactly the case this
+                # branch cannot distinguish from a dead one, because both are
+                # simply absent from the table.
+                #
+                # So ask git. If the function's own lines differ from the
+                # recorded sha, the map's silence is about a different
+                # function and says nothing; if the question cannot be
+                # answered at all, the same applies. Only an unchanged
+                # function keeps the fail-closed reading.
+                span = next(((s, e) for s, e, n in funcs if n == name), None)
+                fresh = since is None or (
+                    span is not None
+                    and any(s in since for s in range(span[0], span[1] + 1)))
+                if fresh:
+                    notes.append(
+                        f"# {rel}:{name} is not in the map and has changed"
+                        f" since it was recorded, so the map cannot speak"
+                        f" for it. WIDE. Record it in seconds instead:"
+                        f" `impact.py --record --refs <rows>`.")
+                    return None, notes
                 notes.append(f"# {rel}:{name} was never executed by any row --"
                              f" no row can depend on it")
                 continue
@@ -747,12 +955,22 @@ def main() -> int:
                     help="workers for the recording sweep; 1 is serial")
     ap.add_argument("--core", default="", metavar="NAME",
                     help="coverage core: sysmon is cheaper on 3.13, ctrace is the default")
+    ap.add_argument("--refs", default="", metavar="R1,R2|@FILE",
+                    help="record only these rows and merge into the map")
     ap.add_argument("--select", action="store_true", help="refs this change needs")
     ap.add_argument("--why", metavar="REF", help="what one row executes")
     ap.add_argument("--stats", action="store_true", help="what the map holds")
     args = ap.parse_args()
     if args.record:
-        return record(args.sample, args.jobs, args.core)
+        only: list[str] = []
+        if args.refs:
+            if args.refs.startswith("@"):
+                only = [line.strip() for line
+                        in Path(args.refs[1:]).read_text().split()
+                        if line.strip()]
+            else:
+                only = [r.strip() for r in args.refs.split(",") if r.strip()]
+        return record(args.sample, args.jobs, args.core, only=only)
     if args.select:
         return select()
     if args.why:

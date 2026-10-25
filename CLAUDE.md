@@ -254,11 +254,61 @@ is no longer worth routing around.
 * **`check.py --all` once before a push**, not once per commit. It is the only
   invocation that settles the whole-tree debt, and `check.py` now names that
   debt and **withholds "all instruments clean"** until it is paid.
-* **A worktree owes its own `--all` before it merges.** The nightly cannot
-  reach one: `nightly.sh` is installed against the main checkout, so a
-  worktree branch is never swept at all. The judgement is that a branch pays
-  for itself rather than the schedule sweeping every live worktree in turn,
-  which multiplies a long run by the branch count. #848.
+* **A worktree merges on whatever looked at its rows, and `check.py` says
+  which.** The rule used to be *"a worktree owes its own `--all` before it
+  merges"* (#848), on the ground that `nightly.sh` is installed against the
+  main checkout and never sweeps a branch. That is still true about the
+  branch — and it made **105 of 106** audit runs wide, because `--all` is
+  wide by definition, so the impact map saved 21 minutes against 22 hours
+  spent sweeping. A selector the gate ignores is a selector nobody uses.
+
+  It also contradicted the cadence directly below it. A worktree merges
+  **into master**, which the nightly *does* sweep, so the pre-merge wide run
+  bought a few hours against the same window this file already calls the
+  right trade for every other regression.
+
+  So the gate asks the narrower question — **has anything looked at the rows
+  this change can affect?** — and the last line of every run answers it:
+
+  | what ran | verdict |
+  |---|---|
+  | nothing under `engine/` changed | merge; `audit --changed` covered it |
+  | the map **narrowed** | merge; those rows are green and the 03:07 sweep is the net |
+  | the map **refused** (wide) | the wide sweep is owed first — nothing has looked at the rows |
+  | `--all` already ran clean | merge |
+
+  The refusal case is unchanged from #848 and is the one that matters: a hot
+  function or a module-level edit means the map cannot say which rows are
+  reachable, so nothing has. The other three are evidence.
+
+  **Four things keep this honest rather than convenient.** `check.py` tells
+  a map *refusal* apart from a map with *no opinion* — they are opposite
+  answers and collapsing them was a bug in the first draft. Every wide audit
+  run records **why** it was wide, so `--history` reports the split and the
+  causes rather than a score.
+
+  **A function the map has never seen no longer reads as a dead one.** This
+  was the sharpest hole in the whole mechanism and it was silent:
+  `selection` fails *closed* on a function absent from the map — "never
+  executed by any row, so no row can depend on it" — which is sound for a
+  genuinely dead function and **false for a verb written since the
+  recording**. `Cast.replace_roll` was written hours after the map was
+  recorded, two rows call it, and an edit inside it selected **0 rows** and
+  reported clean: the newest code in the tree, audited by nothing. It now
+  asks git whether the function's own lines have moved since
+  `recorded_at`, and goes WIDE when they have. On `cast.py` that widens 6
+  functions and leaves the other 42 absent-and-unchanged ones failing
+  closed as before. An incremental recording therefore must **not** advance
+  `recorded_at` — it re-measures three rows, not the corpus — and stamping
+  HEAD on it put every new verb straight back into the fail-closed branch.
+
+  **And the map tops itself up, so nobody has to remember.** A clean
+  `check.py` records the rows the commit touched — `impact.py --record
+  --refs`, measured at **9s for two rows** against 83 minutes for the
+  corpus — so a verb is in the map one commit after it is written rather
+  than one nightly. It declines out loud on a red run (a raising row
+  records a short ref list), on a sampled map, and above a 40-row budget,
+  which is a content wave rather than a commit.
 * **And a worktree must not rebuild the database. ETL work happens on
   `master`, or after the branch merges.** In a worktree `data/game.db` is a
   symlink into the main checkout, and `etl.build` opens by deleting its

@@ -122,6 +122,29 @@ it improves, red when it regresses, never a bare allowance. #372.
   is **true for invented names and false for mechanical ones**. The fix was
   `_trusted_vocabulary()` -- the judgement the wide walk already makes --
   rather than a new one: 1,358 waived, 21 left, and all 21 were real.
+* **A selector's bookkeeping is where its unsound bugs live.** Three in one
+  afternoon, all in `impact.py`'s *merge* rather than in anything that
+  measures, and all pointed the same way — selecting too few rows, silently:
+
+  * `kept.setdefault(name, "wide")` cannot keep a function wide, because the
+    fresh batch has already written its list into that slot. Every wide
+    function a two-row batch touched became a list naming **those two rows**
+    — `equipment._onto_weapon`, reached by most of the corpus, came out
+    naming two. The docstring beside it said "a wide function stays wide".
+  * the ceiling was `int(len(batch) * 0.30)`, so a two-row batch gave **0**
+    and classified every function it touched as wide — 0 narrow, 567 wide,
+    the map destroyed in one command.
+  * an incremental record stamped `recorded_at = HEAD`, which claims the
+    whole map is as fresh as the three rows it just measured, and that
+    silently disabled the staleness guard that reads the field.
+
+  The lesson is narrower than "write tests": **a merge must be diffed
+  against the map it merged into**, field by field — wide stayed wide, no
+  ref lost from a list, entries naming no touched row byte-identical. Each
+  of the three was invisible in the run's own summary line and obvious in
+  that diff. And prove the drop half with a **false** plant: the first plant
+  attempt put a ref on a function it genuinely reached, so it "survived"
+  and said nothing.
 * **Measure before optimising.** `audit.py`'s ten minutes were blamed on
   `chunksize`; benchmarking showed the current setting is already the best
   available and repeat runs of the same config vary 15%. The conclusion is in
@@ -212,7 +235,7 @@ it improves, red when it regresses, never a bare allowance. #372.
 | `leaks.py` | has a printed name got into the repo, a spec, a **quoted run in a comment**, a commit message or an issue; `--specs`, `--cited`, `--history`, `--issues`, `--staged` |
 | `blocked.py` | unfinished rows and what each waits on; the work queue |
 | `todo.py` | are the markers still true; fails when a wanted symbol arrives |
-| `impact.py` | which rows actually execute a given engine function; `--record`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt. **`check.py` consults it automatically**, with no flag, and `nightly.sh` re-records it after a clean sweep. Proven by a plant: a comment inside one `cast.py` method selects 71 rows of 23,062 and **70 of 70 raise** when that method is broken, with two equal-size controls undisturbed |
+| `impact.py` | which rows actually execute a given engine function; `--record`, `--record --refs`, `--select`, `--why`, `--stats`. Not a gate — a selector, and it fails open to WIDE on any doubt. **`check.py` consults it automatically**, with no flag, **and tops it up with the rows each clean commit touched** (9s for two rows); `nightly.sh` re-records the whole corpus after a clean sweep. Proven by a plant: a comment inside one `cast.py` method selects 71 rows of 23,062 and **70 of 70 raise** when that method is broken, with two equal-size controls undisturbed |
 | `written.py` | written / not written / half-written on purpose. **Was `coverage.py`** and renamed in #853: `scripts/` is first on `sys.path`, so that name shadowed the real `coverage` library and stopped `impact.py` pooling its recording |
 | `localise.py` | does every heroic row carry the localisation fields it needs; `--freeze`, `--drift`, `--snapshot`, `--rules` |
 | `cards.py` | does a monster ability's header say the numbers its stat block prints — attack, defence, damage, range, usage |
