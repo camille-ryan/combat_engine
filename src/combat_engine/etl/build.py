@@ -1846,8 +1846,7 @@ def _section_rows(
         # A heading that introduces a printed power list has no sub-marks
         # and a feature with options always has them, so this makes the
         # guard's intent testable instead of incidental. #812.
-        if (per_level and not marks
-                and _POWER_LIST.search(" ".join(_plain(head).split()))):
+        if per_level and _POWER_LIST.search(" ".join(_plain(head).split())):
             continue
         ref = f"{stem}-f{ord_}"
         written += _feature_row(out, names, ref, bare, ord_, build,
