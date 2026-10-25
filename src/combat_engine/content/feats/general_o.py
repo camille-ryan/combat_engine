@@ -801,7 +801,8 @@ _granted("f3015", "f3015b")
 
 
 @power("f3015b", level=1, cls="", usage=ENCOUNTER, action=MINOR,
-       reach=Ranged(10), target=Target("object", 1), dropped=("Scenery.kind",))
+       reach=Ranged(10), target=Target("object", 1),
+       dropped=("c.place_scenery(kind=)", "query.wearer_of()"))
 def f3015b(c: Cast) -> None:
     """Re-aimed. `Target("object")` is a real target line -- the pool is
     `query.scenery` and `query.targetable` lets a thing with no hit
@@ -811,8 +812,23 @@ def f3015b(c: Cast) -> None:
 
     The two branches under it are still named: a weapon whose attacks
     lose damage and armour whose wearer loses AC are both about which
-    *kind* of object this is, and `Scenery.kind` is a free word nothing
-    sets to either, with no tie from a worn thing back to its wearer."""
+    *kind* of object this is, with no tie from a worn thing back to its
+    wearer.
+
+    **Re-pointed off `Scenery.kind`, which exists.** `components.Scenery`
+    declares `kind: str = "object"`, so a marker naming the field reported
+    arrived the moment `blocked._surface` could resolve a bare class name
+    (#849) -- while the row is no better off, because **nothing in the tree
+    constructs a `Scenery` at all**: zero `Scenery(` call sites outside its
+    own definition. So the field is not the gap; a writer is, and that is
+    the same finding `c.scenery`'s own history records -- *"`c.scenery` was
+    never the gap: the gap is that nothing puts a piece of scenery on the
+    board"*.
+
+    Two symbols because the docstring names two gaps: nothing places an
+    object of a given kind, and nothing reads back from a worn thing to
+    whoever wears it. `Gear.worn` is that relation pointing the other way
+    -- a creature's items, not an item's creature."""
     c.vulnerable(c.level // 2 + c.int_mod, until=When.EONT)
 
 

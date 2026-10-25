@@ -519,6 +519,7 @@ def _surface() -> dict[str, object]:
     # because the owner it was asked about genuinely does not have that
     # attribute. Silence there is the failure this file exists to break.
     import importlib
+    import inspect
     import pkgutil
 
     import combat_engine.engine as engine_pkg
@@ -582,6 +583,45 @@ def _surface() -> dict[str, object]:
         for n in dir(spec_mod):
             if not n.startswith("_"):
                 have.setdefault(f"spec.{n}", getattr(spec_mod, n))
+
+    # **A class, by its bare name, because that is how the markers spell it.**
+    # A header-field want is written `Target.kind_or_ident`, and nothing in
+    # the index above is keyed that way: the walks key a class as
+    # `dsl.Target`, so `'Target' in have` is False and `_one` could not
+    # answer at all. The resolver already walks two dots --
+    # `dsl.Target.kind_or_ident` resolves -- so the blind spot was purely the
+    # spelling, which is a smaller thing than #570's comment assumed.
+    #
+    # The queue is full of header-field wants (`Target.*`, `Gear.*`,
+    # `Usage.RECHARGE(when=)`, `Scenery.kind`, `Damage(...)`) and the guard's
+    # whole job is this case: `Target.kind_or_ident` landed in `14711d5` and
+    # four rows waiting on `Target.any_of` stayed green for two commits,
+    # because a field arriving under a name four rows wanted satisfied none
+    # of them. It had to be found by reading. #849.
+    #
+    # The resolver changes rather than the markers, deliberately. Making 10
+    # row-slots carry the module would tie a marker to where a class happens
+    # to live -- and `_weapon_reach.Damage` shows that is sometimes a private
+    # implementation detail, which is not a thing a content row should be
+    # naming.
+    #
+    # **Refused when ambiguous, never resolved to whichever came first.** A
+    # bare name meaning two different classes cannot answer, and `setdefault`
+    # would have picked by module iteration order and said nothing. 166
+    # visible today, 0 ambiguous -- so this costs nothing now and stays sound
+    # as the tree grows.
+    seen: dict[str, object] = {}
+    clash: set[str] = set()
+    for key, thing in list(have.items()):
+        if "." not in key or not inspect.isclass(thing):
+            continue
+        bare = key.rpartition(".")[2]
+        if bare in seen and seen[bare] is not thing:
+            clash.add(bare)
+        seen.setdefault(bare, thing)
+    for bare, thing in seen.items():
+        if bare not in clash:
+            have.setdefault(bare, thing)
     return have
 
 
@@ -826,7 +866,7 @@ def _params_ok(head: str, rest: str, have: dict[str, object]) -> bool:
     try:
         params = inspect.signature(have[head]).parameters  # type: ignore[arg-type]
     except (TypeError, ValueError):
-        return True          # not callable: a field on an event, name is all we have
+        return False         # no signature, so it cannot take one -- see `_params_ok_on`
     return all(p in params for p in wanted)
 
 
@@ -850,7 +890,24 @@ def _params_ok_on(thing: object, rest: str) -> bool:
     try:
         params = inspect.signature(thing).parameters  # type: ignore[arg-type]
     except (TypeError, ValueError):
-        return True          # not callable: a field, where the name is all there is
+        # **A thing with no signature cannot take an argument, so the honest
+        # answer is no.** This used to read `return True`, waived as "a
+        # field, where the name is all there is" -- and the waiver is
+        # unreachable for the case it names: a want with no parameter clause
+        # returns True at the top of this function, so the only way here is
+        # a want that *asks* for a keyword, which a field can never grow.
+        #
+        # #849 predicted the consequence and `Gear.ranged(thrown=)` is it:
+        # `Gear.ranged` is a `property`, `inspect.signature` raises on one,
+        # and the want reported **arrived** -- against #838, a real open gap
+        # with 86 callers on the melee/ranged pair. The bare-name index
+        # above is what would have made that reachable, so the two changes
+        # belong in one commit.
+        #
+        # Measured before tightening: **0** markers resolve True through
+        # this branch today, so nothing green goes red and no row's wait is
+        # hidden. #838 is the control and stays unresolved.
+        return False
     return all(p in params for p in wanted)
 
 
