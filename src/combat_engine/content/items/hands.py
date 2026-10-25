@@ -944,7 +944,7 @@ def i806x1(c: Cast) -> None:
        reach=PERSONAL, target=NO_TARGET,
        trigger="you hit with a weapon attack, before you deal damage",
        on=Trigger(Hit, by_me, "you hit with a weapon attack"),
-       dropped=("c.ignore_resistance(save_ends_on=)",))
+       dropped=("durations.save(saver=)",))
 def i806p1(c: Cast) -> None:
     """Re-aimed, and now it plays. "Reduce the resistance the target has
     **against your attack**" is an ignore read off the attacker, and
@@ -972,7 +972,20 @@ def i806p1(c: Cast) -> None:
     and the trick does not transfer.
 
     So it runs to the end of the turn instead, which is the attack the
-    power is used for."""
+    power is used for.
+
+    **Re-pointed off `c.ignore_resistance(save_ends_on=)`**, which named a
+    parameter on this verb when the blocker is one level down and shared:
+    `durations.save` reads `eff.owner` for *all three* of who saves, whose
+    bonus applies, and who the `SavingThrow` is announced for. A parameter
+    here would still hand the throw to the wrong creature. What is missing
+    is a duration that can say **whose save ends it** separately from whose
+    effect it is -- `durations.save(saver=)` -- and that is one change
+    serving every verb with this shape rather than a kwarg per verb.
+
+    A census of marked rows whose note names this mismatch found two, and
+    the other (`m4014a1`) is blocked on a different symbol -- so it is
+    effectively a singleton and stays marked under #468's >=3 threshold."""
     foe = _foe(c)
     if foe is None:
         return
