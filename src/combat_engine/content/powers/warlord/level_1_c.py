@@ -110,19 +110,23 @@ def _granted_hit(c: Cast, who: int, foe: int, ref: str = "") -> bool:
 
 
 def _heavy_thrown(world: World, eid: int) -> bool:
-    """"A heavy thrown weapon."
+    """A heavy thrown weapon, read off the printed property.
 
-    No weapon in the model carries a thrown flag -- what a thrown one has is
-    a `ranged` band on something you also swing, the reading `rogue/
-    level_1_b.py` settled -- and "heavy" is the not-a-light-blade half.
+    **The inference this replaces was false, and both docstrings stated the
+    premise outright**: "no weapon in the model carries a thrown flag -- what
+    a thrown one has is a `ranged` band on something you also swing".
+    `game.db`'s `weapon.properties` carries `heavy thrown` on exactly **9**
+    weapons, which is what `warlord/level_5_b.py` has always read.
 
-    The row is *not* `thrown_by_hand`: that field is for a melee weapon
-    reaching out with no ranged band at all, and it gates on `gear.melee`,
-    which a weapon carrying a band is not in. A javelin is `gear.ranged`.
+    Measured over all 117 weapons: the property is true for 9, `ranged and
+    not a light blade` is true for 21, they agree on 105 and **disagree on
+    12** -- every one the same way, the property saying no and the inference
+    saying yes. All 12 are pure ranged weapons with no melee line at all:
+    bows, crossbows and a sling. So the rows gated this way were offered to
+    an archer holding a weapon nobody throws. #824.
     """
     gear = world.get(eid, Gear)
-    weapon = gear.main if gear else None
-    return bool(weapon and weapon.ranged and not weapon.is_light_blade)
+    return bool(gear and gear.main and "heavy thrown" in gear.main.properties)
 
 
 def _shield(world: World, eid: int) -> bool:
