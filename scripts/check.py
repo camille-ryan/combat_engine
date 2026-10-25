@@ -648,7 +648,13 @@ def main() -> int:
                     else ""),
                 wide_because=(wide_why if c.name == "audit" and not mapped
                               and not narrowed else ""))
-        if done.returncode != 0:
+        # **A skip is not a failure either**, and the first version of this
+        # made it one: exit 3 is non-zero, so `audit` landed in `failed` and
+        # a clean-tree run -- the normal state after a commit -- went red
+        # every time. That is the "check that cannot pass" failure
+        # `scripts/CLAUDE.md` records, arriving from the other side of the
+        # same fix. Three categories means three, not two with a label.
+        if done.returncode != 0 and not skipped_run:
             failed.append(c.name)
             if not args.verbose:
                 # The failing lines only, which is what is worth reading.
@@ -769,7 +775,7 @@ def main() -> int:
     for line in _clear_red(args.all, bool(failed), at, began_clean):
         print(line)
     for line in _merge_verdict(args.all, bool(failed), mapped, wide_why,
-                               no_opinion):
+                               no_opinion, "audit" in skipped):
         print(line)
     return len(failed)
 
@@ -1523,7 +1529,8 @@ def _top_up_map(red: bool) -> list[str]:
 
 
 def _merge_verdict(wide_run: bool, red: bool, mapped: list[str],
-                   wide_why: str, no_opinion: bool = False) -> list[str]:
+                   wide_why: str, no_opinion: bool = False,
+                   audit_skipped: bool = False) -> list[str]:
     """Whether this branch may merge on what just ran, and on what grounds.
 
     **This is the line that decides whether the map is worth having.** The
@@ -1566,6 +1573,18 @@ def _merge_verdict(wide_run: bool, red: bool, mapped: list[str],
     if wide_run:
         return ["merge-ready: a wide sweep just ran and is clean"]
     if no_opinion:
+        # **Unless `audit --changed` checked nothing**, which is the whole
+        # of #466 and would have made this line contradict the one above it
+        # in the same output: `audit checked NOTHING` followed by
+        # "`audit --changed` covered this branch's rows". It covered no
+        # rows. On a clean tree there is nothing uncommitted for it to
+        # cover, so the honest verdict names what actually certifies the
+        # branch -- the last wide sweep, or master's nightly.
+        if audit_skipped:
+            return ["merge-ready, but nothing audited this run: the scope was"
+                    " empty, so this rests on the last wide sweep and"
+                    " master's nightly rather than on anything that just"
+                    " ran."]
         return ["merge-ready: nothing under engine/ changed, so"
                 " `audit --changed` covered this branch's rows."]
     if mapped:
