@@ -950,8 +950,25 @@ def _stale_net() -> list[str]:
     recent one whose first line is not `SKIPPED` is the last time every row
     was actually looked at. Silent when that is recent, so an ordinary
     morning gains no line.
+
+    **`MAIN`, not `ROOT`, and this read had #848's bug after #848 fixed
+    it.** The verdict line above resolves through `--git-common-dir`; this
+    one globbed the *worktree's* `logs/`, which holds whatever manual sweeps
+    were run here. Measured 2026-10-25: a `--all` footer read
+
+        nightly: last run 2026-10-25 01:55 clean
+                 the net last reached a verdict 2026-10-21 09:33, 3d ago
+
+    -- two lines about the same schedule, disagreeing, because the first read
+    the main checkout's three dated logs and the second read this worktree's
+    one. And it is the same stale `2026-10-21 09:33` manual log that the
+    docstring above is written about, reached a second way.
+
+    The direction matters for whether anybody acts on it: this read makes a
+    healthy net look three days unpaid, so the cost is a session going to
+    look for a schedule fault that is not there -- which is what happened.
     """
-    logs = sorted((ROOT / "logs").glob("nightly-20*.log"), reverse=True)
+    logs = sorted((MAIN / "logs").glob("nightly-20*.log"), reverse=True)
     for log in logs:
         try:
             head = log.read_text()[:200]
