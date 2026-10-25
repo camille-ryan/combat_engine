@@ -21,7 +21,7 @@ merged. After it, `master`'s working tree holds the **old** ETL code while
 `audit.py`, `cards.py`, `bonuses.py`, `keywords.py`, `legs.py`, `spec.py` --
 reads the new data through the old code.
 
-**And the 03:07 nightly runs in the main checkout** (#848). It would sweep
+**And the nightly runs in the main checkout** (#848). It would sweep
 21,476 rows against a database their code does not match and report that as a
 verdict on `master`: a green run meaningless, a red one sending the next
 session after a regression that is not in the commit it is blamed on.
@@ -66,7 +66,7 @@ if __name__ == "__main__":
             f"into {main}, which is on `master` and holds the old ETL code.\n"
             f"\n"
             f"A rebuild here deletes and rewrites that checkout's database, so\n"
-            f"its readers -- and the 03:07 nightly -- would run against data\n"
+            f"its readers -- and the nightly -- would run against data\n"
             f"their code does not match. Do ETL work on `master`, or after this\n"
             f"branch merges.\n"
             f"\n"

@@ -273,7 +273,7 @@ is no longer worth routing around.
   | what ran | verdict |
   |---|---|
   | nothing under `engine/` changed | merge; `audit --changed` covered it |
-  | the map **narrowed** | merge; those rows are green and the 03:07 sweep is the net |
+  | the map **narrowed** | merge; those rows are green and the overnight sweep is the net |
   | the map **refused** (wide) | the wide sweep is owed first — nothing has looked at the rows |
   | `--all` already ran clean | merge |
 
@@ -313,7 +313,7 @@ is no longer worth routing around.
   `master`, or after the branch merges.** In a worktree `data/game.db` is a
   symlink into the main checkout, and `etl.build` opens by deleting its
   output — so a rebuild here hands `master`'s *old* ETL code a database built
-  by the *new* one, and the 03:07 nightly then sweeps 21,476 rows against
+  by the *new* one, and the overnight nightly then sweeps 21,476 rows against
   data their code does not match. `scripts/build.py` refuses outright now
   rather than relying on anyone remembering this, with `--force` for the case
   where it is genuinely wanted. #857.
@@ -341,16 +341,35 @@ is no longer worth routing around.
 
   **What it cannot see**: a row added or rewritten since the map was
   recorded, and a row that does not reach the changed function today but
-  would after the change. The 03:07 sweep is the backstop for all of them,
+  would after the change. The overnight sweep is the backstop for all of them,
   which is the same day-long window this file already accepts. `check.py`
   prints the map's age and corpus on every run so nobody has to ask.
   #853, #865, #866.
-* **Or let the nightly pay it.** `scripts/nightly.sh` runs the wide sweep at
-  **03:07** (`scripts/combat-engine-nightly.plist`, installed once with
-  `launchctl bootstrap`). The sweep is a **net, not a gate** — everything that
-  catches a regression in *seconds* already runs per commit — so a regression
-  that lands at 10am being found at 3am is the right trade against a
-  gate people route around.
+* **Or let the nightly pay it.** `scripts/nightly.sh`
+  (`scripts/combat-engine-nightly.plist`, installed once with `launchctl
+  bootstrap`). The sweep is a **net, not a gate** — everything that catches a
+  regression in *seconds* already runs per commit — so a regression that
+  lands at 10am being found overnight is the right trade against a gate
+  people route around.
+
+  **It is an hourly poll, not a clock time, and this file must stop naming
+  one.** A stated hour has gone stale here three times — `02:07` against logs
+  reading `03:07` (#566, #746), then `03:07` after `#871` replaced the
+  calendar entry outright. `StartCalendarInterval` does not survive a closed
+  lid: launchd defers it to the next wake and drops it if there is none, which
+  cost three of seventeen nights. So the plist is `StartInterval 3600` and
+  `nightly.sh`'s `_due` decides:
+
+  * nothing unless the last real sweep is **more than 20 hours old**, and
+    then only between **01:00 and 07:00**;
+  * **unless it is more than 48 hours stale**, when it runs at any hour,
+    because two missed nights beats tidiness.
+
+  A not-due wake writes no dated log — 23 a day is noise — only
+  `logs/nightly-heartbeat`, which keeps "alive and not due" distinguishable
+  from "not running at all". **Read the stamp, never predict it**: every
+  `check.py` prints when the net last reached a verdict, and
+  `uv run scripts/check.py --history` has the attempts.
 
   **And it loses to a dirty tree, silently, for days.** It refuses to start
   on uncommitted edits — rightly, since a sweep over them certifies no

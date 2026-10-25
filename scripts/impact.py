@@ -121,7 +121,7 @@ SOURCE = "COMBAT_ENGINE_IMPACT_SOURCE"
 #: not -- and blind to a row that does not reach a function today and would
 #: after the change, which is coverage-based selection's documented blind spot.
 #:
-#: The backstop for all three is the 03:07 wide sweep, which is the same
+#: The backstop for all three is the overnight wide sweep, which is the same
 #: day-long window the root `CLAUDE.md` already accepts for a regression: "a
 #: regression that lands at 10am being found at 3am is the right trade against
 #: a gate people route around". So a row this omits is swept that night, and
@@ -668,7 +668,7 @@ def _declared_now() -> int:
 
     **It does not catch a row rewritten in place**, which may now reach engine
     functions the recording never saw it reach. That case is a stated limit
-    rather than a hole -- the 03:07 wide sweep is its backstop -- and #865 is
+    rather than a hole -- the overnight wide sweep is its backstop -- and #865 is
     what makes the window small enough for the limit to be a small one. Do not
     read a passing count as "the map is current".
 
@@ -897,7 +897,7 @@ def select() -> int:
 
     What neither instrument can see is a row that does **not** reach the
     function today and **would** after the change -- coverage-based
-    selection's documented blind spot, and the reason the 03:07 wide sweep
+    selection's documented blind spot, and the reason the overnight wide sweep
     stays the backstop. #866 states that limit; #865 is what keeps the map
     close enough to the tree for it to be a small one.
     """

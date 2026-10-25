@@ -205,7 +205,7 @@ it improves, red when it regresses, never a bare allowance. #372.
   not cover** because nobody had both directories at once when it was
   written. In a worktree `data/game.db` is a symlink into the main checkout,
   so a rebuild here rewrites `master`'s database while `master`'s working tree
-  still holds the old ETL code — and the 03:07 nightly sweeps there. 21,476
+  still holds the old ETL code — and the nightly sweeps there. 21,476
   rows against data their code does not match, reported as a verdict on
   `master`. `build.py` refuses from a worktree now (`--force` to override),
   rather than relying on anyone remembering. #857.

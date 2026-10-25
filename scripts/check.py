@@ -880,7 +880,7 @@ NIGHTLY_LOG = MAIN / "logs" / "nightly-latest.log"
 
 
 def _nightly_state() -> list[str]:
-    """What the 03:07 net last did, said where the decision to trust it is made.
+    """What the overnight net last did, said where the trust decision is made.
 
     **#543: a nightly that never ran is indistinguishable from one that
     passed.** The documented signal was `logs/NIGHTLY-FAILED` existing, and
@@ -1140,6 +1140,44 @@ def _map_state() -> list[str]:
     return out
 
 
+def _unswept_since(sha: str) -> int:
+    """Commits after `sha` that a sweep has not covered.
+
+    **A commit whose whole content is the baseline the sweep itself wrote
+    does not count**, which is #519's second half and the reason this is a
+    walk rather than `rev-list --count`. A sweep certifies a sha and writes
+    it into `audited.json`; committing that watermark creates a commit the
+    sweep did not cover, so the debt line had a permanent floor of one and
+    every run said `owed since <sha>, 1 commit(s) back`. A floor nobody can
+    clear is a signal nobody reads -- and this one is the signal the whole
+    narrow-per-commit cadence leans on.
+
+    **Sound rather than convenient**: the tree at a baseline-only commit is
+    byte-identical to the swept one *except* for that file, so there is no
+    code the sweep did not see. It is excluded only when it is the commit's
+    **sole** path -- a commit touching the baseline and anything else still
+    counts, which is what stops this becoming a way to smuggle an unswept
+    edit in beside a re-record. A forged baseline is a different question
+    and `audit.py --verdicts` is what asks it.
+    """
+    done = subprocess.run(["git", "rev-list", f"{sha}..HEAD"],
+                          cwd=ROOT, capture_output=True, text=True)
+    if done.returncode != 0:
+        return 0
+    shas = [s for s in done.stdout.split() if s]
+    count = 0
+    for one in shas:
+        paths = subprocess.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", one],
+            cwd=ROOT, capture_output=True, text=True)
+        touched = {p for p in paths.stdout.split() if p}
+        if paths.returncode == 0 and touched == {str(
+                WATERMARK.relative_to(ROOT))}:
+            continue
+        count += 1
+    return count
+
+
 def _sweep_owed() -> str:
     """Is a whole-tree audit outstanding, and since when?
 
@@ -1174,9 +1212,7 @@ def _sweep_owed() -> str:
     except OSError:
         rebuilt = False
 
-    done = subprocess.run(["git", "rev-list", "--count", f"{sha}..HEAD"],
-                          cwd=ROOT, capture_output=True, text=True)
-    behind = int(done.stdout.strip()) if done.returncode == 0 and done.stdout.strip() else 0
+    behind = _unswept_since(sha)
     if rebuilt:
         return (f"wide sweep owed: the database was rebuilt after {sha[:9]}"
                 f" -- `check.py --all`")
@@ -1484,7 +1520,7 @@ def _merge_verdict(wide_run: bool, red: bool, mapped: list[str],
             f"merge-ready: the map narrowed the audit to {len(mapped)} row(s)"
             f" -- the rows observed to execute what this change touched --"
             f" and they are clean.",
-            "             master's 03:07 sweep is the backstop, which is the"
+            "             master's overnight sweep is the backstop, which is the"
             " same net CLAUDE.md accepts for every other regression.",
         ]
     return [
