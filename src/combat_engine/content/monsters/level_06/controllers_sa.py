@@ -2212,7 +2212,6 @@ def m3440a3(c: Cast) -> None:
         for foe in enemies(world, eid)
     ),
     requires_text="targets a helpless or unconscious creature",
-    dropped=("Defences.insubstantial",),
 )
 def m3440a4(c: Cast) -> None:
     """The coup de grace, the heal, and now the fly speed it pays with.
@@ -2221,9 +2220,18 @@ def m3440a4(c: Cast) -> None:
     `c.mode` the old note said did not exist, and `When.EONT` is the
     printed "until the end of its next turn" with the caster as the loser.
 
-    Still dropped, and now one thing rather than two: `Defences` carries no
-    insubstantial column, so "loses insubstantial" has nothing to take
-    away. The same half `m3437a2` names.
+    **"Loses insubstantial" is written, and nothing here had to change to
+    make it possible.** The old note said *"`Defences` carries no
+    insubstantial flag at all -- the database column does not exist"*, and
+    that stopped being true: `Defences` holds `half_always` (ungated sources,
+    counted), `half_when` (the gated ones) and `half_except`, and
+    `query.takes_half` reads all three.
+
+    So the trait was there to take away and what was missing was the
+    *taking*. `c.suspend_trait` is it, and **not** `c.cure`: curing the
+    condition spends the trait's duration, so an encounter-long
+    insubstantial would be gone for the fight where the card gives it up for
+    a turn. `c.suspend_when` argues the same point for the triggered case.
 
     The body redirects to a qualifying enemy the way the Requirement itself
     asks, since the chooser's pick and the board's answer are not always
@@ -2242,6 +2250,7 @@ def m3440a4(c: Cast) -> None:
     # Paid before the swing, because the card prints the price first and a
     # creature that kills itself on the attack should still have paid it.
     c.lose_mode("fly", until=When.EONT)
+    c.suspend_trait(Condition.INSUBSTANTIAL, on=c.me, until=When.EONT)
     killed = c.coup_de_grace(on=victim)
     if killed:
         health = c.world.get(c.me, Health)

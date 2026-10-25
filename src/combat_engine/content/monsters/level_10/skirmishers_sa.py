@@ -254,7 +254,6 @@ def m1032a0(c: Cast) -> None:
     target=EACH_ENEMY,
     attack=Attack(vs=AC, printed=13),
     damage=Damage("2d6", 5, kind=LIMITED),
-    dropped=("Defences.insubstantial",),
 )
 def m1032a1(c: Cast) -> None:
     """The attack, and two of the three things it costs.
@@ -273,13 +272,26 @@ def m1032a1(c: Cast) -> None:
     Gated on the actor *and* the ref: the event is global, and two of this
     creature on one board is an ordinary encounter.
 
-    Still dropped: `Defences` carries no insubstantial column, the same
-    half `m3437a2` and `m3440a4` name.
+    **All three things it costs are written now.** The old note said
+    *"`Defences` carries no insubstantial column"*, which stopped being
+    true: `half_always`, `half_when` and `half_except` are there and
+    `query.takes_half` reads them. What was missing was the taking, and
+    `c.suspend_trait` is it -- not `c.cure`, which would spend the trait's
+    duration outright where the card hands it back.
+
+    **Its timers join `lost`, which is why the verb returns them.** The
+    losses here do not run out on a clock: they are ended by
+    `PowerRecharged`, and ending a suspension's timer fires the resume. So
+    the trait comes back on the same event as the two movement modes, with
+    one loop over one list, rather than a second watcher that would have to
+    agree with this one.
     """
     me = c.me
     lost = [
         c.lose_mode("fly", until=When.ENCOUNTER),
         c.lose_mode("phasing", until=When.ENCOUNTER),
+        *c.suspend_trait(Condition.INSUBSTANTIAL, on=me,
+                         until=When.ENCOUNTER),
     ]
 
     def recharged(ev: PowerRecharged) -> None:

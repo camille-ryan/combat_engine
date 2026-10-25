@@ -263,7 +263,7 @@ CATEGORIES: dict[str, dict] = {
             ("ending, suspending, watching", [
                 "aftereffect", "arm_trigger", "cancel", "dispel", "end_effect",
                 "endable", "lingers_label", "on_attack", "on_sustain",
-                "suspend_when", "watch",
+                "suspend_when", "watch", "suspend_trait",
             ]),
         ],
     },

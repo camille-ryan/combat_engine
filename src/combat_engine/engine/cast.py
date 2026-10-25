@@ -11878,6 +11878,66 @@ class Cast:
         held.on_end.append(land)
         return held
 
+    def suspend_trait(
+        self,
+        *conditions: Condition,
+        on: int | None = None,
+        until: When = When.EONT,
+        label: str = "",
+    ) -> list[Effect]:
+        """"It loses insubstantial until the end of its next turn."
+
+        The immediate sibling of `c.suspend_when`, which does the same thing
+        on a trigger. Three monster rows print this as a **cost** the attacker
+        pays for a finisher -- the fly speed and the insubstantial trait, both
+        until the end of its next turn -- so there is no event to wait for:
+        the row resolving is the moment.
+
+        **Not `c.cure`, and the distinction is the whole reason this exists.**
+        `c.cure` takes the condition off and leaves the effect; that is right
+        for "remove one condition from the target" and wrong here, because
+        the trait is supposed to **come back**. An encounter-long
+        insubstantial cured once is gone for the fight, where the card gives
+        it up for a turn. `c.suspend_when`'s docstring argues the same point
+        for the triggered case: *"Ending the trait spends its duration."*
+
+        Finds the effects on that creature carrying any of the named
+        conditions, suspends each, and lays one timer per suspension that
+        resumes it. Returns the timers, so a row can cut the arrangement
+        short without touching the traits.
+
+        Already-suspended effects are skipped rather than counted twice: two
+        rows taking the same trait away reach the same deadline, which is
+        the accumulation guard `c.suspend_when` records in the same words.
+
+        The clock runs on the **holder**, which is who the printed duration
+        is about -- "until the end of *its* next turn", said of the creature
+        paying the cost.
+        """
+        who = self._who(on)
+        if who is None:
+            return []
+        wanted = set(conditions)
+        timers: list[Effect] = []
+        for held in list(self.world.effects.of(who)):
+            if held.ended or held.suspended:
+                continue
+            if not (wanted & set(held.conditions)):
+                continue
+            self.world.effects.suspend(held)
+            timer = self.world.effects.apply(
+                who, self.me, until,
+                label=label or f"{self.ref} suspended {held.label}",
+                # `h=held` binds the effect this timer is for. A bare
+                # closure over the loop variable resumes whichever was last,
+                # so two suspended traits would come back as one twice.
+                on_end=[lambda h=held: self.world.effects.resume(h)],
+                by=self.ref,
+            )
+            if timer is not None:
+                timers.append(timer)
+        return timers
+
     def suspend_when(
         self,
         held: Effect | None,

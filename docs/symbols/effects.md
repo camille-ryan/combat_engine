@@ -113,6 +113,8 @@ Things that persist on the board or on a creature, and the windows that fire whi
   - "Whenever that creature attacks..." -- the commonest trigger in 4e.
 - `c.on_sustain(self, effect: 'Effect | None', fn: 'Callable[[], None]') -> 'bool'`
   - What happens each time this effect is sustained.
+- `c.suspend_trait(self, *conditions: 'Condition', on: 'int | None' = None, until: 'When' = <When.EONT: "end of source's next turn">, label: 'str' = '') -> 'list[Effect]'`
+  - "It loses insubstantial until the end of its next turn."
 - `c.suspend_when(self, held: 'Effect | None', event: 'type[Event]', pred: 'Callable[[Any], bool] | None' = None, *, for_: 'When' = <When.SONT: "start of source's next turn">, label: 'str' = '') -> 'Effect | None'`
   - Switch an effect off when something happens, and back on later.
 - `c.watch(self, event: 'type[Event]', fn: 'Callable[[Any], None]', *, until: 'When' = <When.EONT: "end of source's next turn">, window: 'Window' = <Window.AFTER: 2>, on: 'int | None' = None, once: 'bool' = False, label: 'str' = '') -> 'Effect'`

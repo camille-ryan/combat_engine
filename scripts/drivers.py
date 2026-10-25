@@ -32270,6 +32270,102 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def a_trait_given_up_for_a_turn_comes_back(out: Result) -> None:
+    """"It loses insubstantial until the end of its next turn."
+
+    Three monster rows print this as the **price** of a finisher, and all
+    three said the same false thing: *"`Defences` carries no insubstantial
+    flag at all -- the database column does not exist"*. It does now --
+    `half_always`, `half_when`, `half_except`, all read by
+    `query.takes_half` -- so the trait was there to take and the taking was
+    what was missing.
+
+    **The assertion that matters is the third one: it comes back.** Losing
+    it is the easy half and `c.cure` would pass that; what cure cannot do
+    is give it back, because taking the condition off spends the trait's
+    duration -- an encounter-long insubstantial cured once is gone for the
+    fight, where the card lends it for a turn. `c.suspend_when`'s docstring
+    argues the identical point for the triggered case.
+    """
+    from audit import board as _posed
+    from combat_engine.engine import When
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.query import takes_half
+    from combat_engine.engine.types import Condition
+
+    world, me, _ = _posed("mba", 1)
+    c: Any = Cast(world=world, me=me, ref="drivers:suspend")
+    held = c.insubstantial(on=me, until=When.ENCOUNTER)
+    out.that(held is not None and takes_half(world, me),
+             "the creature is insubstantial to begin with, which is the"
+             " setup and not the finding",
+             f"takes_half={takes_half(world, me)}")
+    if held is None:
+        return
+
+    timers = c.suspend_trait(Condition.INSUBSTANTIAL, on=me,
+                             until=When.EONT)
+    out.that(len(timers) == 1,
+             "one timer per suspension, which is what lets a row end the"
+             " arrangement without touching the trait",
+             f"timers={len(timers)}")
+    out.that(not takes_half(world, me),
+             "**and the trait is off** -- the price the card prints",
+             f"takes_half={takes_half(world, me)}")
+    out.that(not held.ended,
+             "while the effect that carried it is NOT ended -- the"
+             " distinction from `c.cure`, and the reason an"
+             " encounter-long trait is not spent by a one-turn loan",
+             f"ended={held.ended} suspended={held.suspended}")
+
+    # -- the half cure cannot do --------------------------------------
+    if timers:
+        world.effects.end(timers[0], "drivers")
+    out.that(takes_half(world, me),
+             "**ending the timer gives the trait back**, which is the"
+             " whole of why this is a suspension and not a removal",
+             f"takes_half={takes_half(world, me)}")
+
+    # -- the control: a second loan is one deadline, not two -----------
+    again = c.suspend_trait(Condition.INSUBSTANTIAL, on=me, until=When.EONT)
+    more = c.suspend_trait(Condition.INSUBSTANTIAL, on=me, until=When.EONT)
+    out.that(len(again) == 1 and more == [],
+             "two rows taking the same trait away lay one timer, not two --"
+             " already-suspended effects are skipped, which is the"
+             " accumulation guard `c.suspend_when` records in the same"
+             " words",
+             f"first={len(again)} second={len(more)}")
+
+    # -- **two effects at once, which is what the `h=held` binding is for**
+    # Added because a plant found it missing: replacing `lambda h=held:` with
+    # a bare closure over the loop variable left every assertion above green,
+    # since all of them suspend exactly one effect. The code comment claimed
+    # a hazard nothing tested.
+    world2, me2, _ = _posed("mba", 1)
+    d: Any = Cast(world=world2, me=me2, ref="drivers:two")
+    first = d.insubstantial(on=me2, until=When.ENCOUNTER)
+    second = Cast(world=world2, me=me2, ref="drivers:two_b").insubstantial(
+        on=me2, until=When.ENCOUNTER)
+    out.that(first is not None and second is not None and first is not second,
+             "two separate effects carry the trait, which is the setup for"
+             " the binding assertion below",
+             f"two={first is not second}")
+    if first is None or second is None or first is second:
+        return
+    pair = d.suspend_trait(Condition.INSUBSTANTIAL, on=me2, until=When.EONT)
+    out.that(len(pair) == 2 and first.suspended and second.suspended,
+             "both are suspended and each gets its own timer",
+             f"timers={len(pair)} a={first.suspended} b={second.suspended}")
+    for timer in pair:
+        world2.effects.end(timer, "drivers")
+    out.that(not first.suspended and not second.suspended,
+             "**and ending both timers resumes BOTH effects** -- a bare"
+             " closure over the loop variable would resume whichever was"
+             " last, twice, and leave the other one off for the rest of the"
+             " fight",
+             f"a={first.suspended} b={second.suspended}")
+
+
 def crossing_a_hazard_can_cost_nothing(out: Result) -> None:
     """"Ignore difficult terrain, **and** take no damage from the surface."
 
@@ -34057,6 +34153,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "suspend_trait": (
+        a_trait_given_up_for_a_turn_comes_back,
+        "a trait given up for a turn comes back (#468)",
     ),
     "ignores_hazards": (
         crossing_a_hazard_can_cost_nothing,
