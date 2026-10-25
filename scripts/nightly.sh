@@ -253,9 +253,47 @@ refused = set(after.get("refused_refs", []))
 left = was - now
 withdrawn, healed = sorted(left & refused), sorted(left - refused)
 fresh = sorted(now - was)
-if not left and not fresh:
+
+# **The refused set was read only to classify a silent departure, so a
+# change to it was invisible.** On 2026-10-18 at `3fba7f0` this printed
+# "only the sha moved -- bookkeeping, nothing to read" while two rows
+# (`f2470`, `f3317`) had stopped carrying `todo=` and become usable in play.
+#
+# That is the change with the widest blast radius in this repo: un-refusing
+# a feat makes it drawable, which re-rolls every chargen draw and moves
+# every audit board, and it has cost a bisect-by-file before. A row
+# *arriving* in the set is worse news -- something that used to play is now
+# refused, either a new marker or a defective entry swallowing a sibling --
+# and the sweep said nothing about either direction. #681.
+was_ref = set(before.get("refused_refs", []))
+now_ref = set(after.get("refused_refs", []))
+un_refused, newly_refused = sorted(was_ref - now_ref), sorted(now_ref - was_ref)
+
+# The counters, printed only when one of them moves, so a bookkeeping run
+# stays quiet. `refs` moving at all means the corpus changed under the
+# sweep, which is worth seeing beside a verdict about it.
+counters = [
+    (k, before.get(k), after.get(k))
+    for k in ("refs", "fired", "never", "silent", "raises")
+    if before.get(k) != after.get(k)
+]
+
+if not left and not fresh and not un_refused and not newly_refused \
+        and not counters:
     print("   only the sha moved -- bookkeeping, nothing to read")
 else:
+    if un_refused:
+        print(f"   {len(un_refused)} row(s) are NO LONGER REFUSED and so are"
+              f" drawable now -- this re-rolls every chargen draw:")
+        print(f"      {' '.join(un_refused)}")
+    if newly_refused:
+        print(f"   {len(newly_refused)} row(s) became REFUSED in play --"
+              f" a new marker, or a defective sibling taking the block:")
+        print(f"      {' '.join(newly_refused)}")
+    if counters:
+        print("   counters that moved:")
+        for k, a, b in counters:
+            print(f"      {k}: {a} -> {b}")
     if healed:
         print(f"   {len(healed)} row(s) DO SOMETHING now, and left the list:")
         print(f"      {' '.join(healed)}")
