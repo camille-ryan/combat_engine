@@ -1742,7 +1742,7 @@ def f1301(c: Cast) -> None:
     c.watch(PowerResolved, shift_after, on=me, until=When.ENCOUNTER)
 
 
-@_trait("f1302", dropped=("query.provoked_by()",))
+@_trait("f1302", dropped=("resolve.ctx.provoked_by",))
 def f1302(c: Cast) -> None:
     """Two of the four clauses are the same sentence on two rows: a
     defence bonus against *the target of* the exploit, which does not

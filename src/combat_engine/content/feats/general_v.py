@@ -1623,7 +1623,7 @@ def f3539b(c: Cast) -> None:
 
 
 @power("f3540", level=1, cls="", usage=AT_WILL, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF, dropped=("query.provoked_by()",))
+       reach=PERSONAL, target=SELF, dropped=("resolve.ctx.provoked_by",))
 def f3540(c: Cast) -> None:
     """The attack context carries `opportunity`, so "against opportunity
     attacks" is a gate. What it does not carry is what the mount was doing

@@ -1092,7 +1092,7 @@ def i2011p1(c: Cast) -> None:
     action=ActionType.NONE,
     reach=PERSONAL,
     target=SELF,
-    dropped=("query.provoked_by()",),
+    dropped=("resolve.ctx.provoked_by",),
 )
 def i2060x1(c: Cast) -> None:
     """The attack context carries `opportunity`, so the defence gate is
@@ -4395,7 +4395,7 @@ def i3056p1(c: Cast) -> None:
     on=Trigger(
         Hit, both(targets_me, by_opportunity), "an opportunity attack hits you"
     ),
-    dropped=("query.provoked_by()",),
+    dropped=("resolve.ctx.provoked_by",),
 )
 def i3085p1(c: Cast) -> None:
     """Which class the provoking row belonged to is `get(ref).cls` and would
