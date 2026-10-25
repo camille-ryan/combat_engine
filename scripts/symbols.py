@@ -180,7 +180,7 @@ CATEGORIES: dict[str, dict] = {
             ("writers -- a condition named after itself", [
                 "blinded", "cannot_shift", "dazed", "immobilized",
                 "insubstantial", "prone", "slowed", "stunned", "unconscious",
-                "weakened",
+                "weakened", "zone_condition",
             ]),
             # `c.cannot_approach` sits beside `c.leash` and not beside
             # `c.cannot_shift` in the same-named-writer list above, which is

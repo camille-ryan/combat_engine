@@ -32270,6 +32270,85 @@ def a_widened_crit_range_widens_crits_and_not_hits(out: Result) -> None:
              f"hit={bare.hit} critical={bare.critical}")
 
 
+def a_zone_can_hold_a_condition_and_takes_it_back(out: Result) -> None:
+    """"Any enemy within the zone is slowed" -- and un-slowed on leaving.
+
+    The fourth of the `_while_inside` family. A zone could already hold a
+    modifier (`c.grants_in`), a resistance (`c.resist_in`) and a
+    vulnerability (`c.vulnerable_in`) on its occupants, and could not hold
+    a **condition** -- so `m4734a3` laid its defence penalty and dropped
+    its slow.
+
+    **The assertion that matters is the second one.** Landing the condition
+    is easy and a plain `c.slowed(until=SAVE_ENDS)` would pass it; what
+    that cannot do is take the slow back when the creature walks out, which
+    is the row's own stated reason for the marker -- *"a save-ends slow
+    laid once would outlive leaving it"*. So this walks a victim out of the
+    zone and asks again.
+
+    Asserted through `m4734a3`'s body, and the side is checked both ways:
+    the card reads "any **enemy** within the zone", so the caster standing
+    in its own zone of horrors must not be slowed by it.
+    """
+    from audit import board as _posed
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import REGISTRY
+    from combat_engine.engine.query import enemies, is_
+    from combat_engine.engine.types import Condition
+
+    world, mob, _ = _posed("m4734a3", 1)
+    foes = sorted(enemies(world, mob))
+    if not foes:
+        return
+    c: Any = Cast(world=world, me=mob, ref="m4734a3")
+    REGISTRY["m4734a3"].body(c)
+    zones = [(eid, z) for eid, z in world.zones.all() if z.label == "m4734a3"]
+    out.that(len(zones) == 1,
+             "m4734a3 lays its zone, which is the setup and not the finding",
+             f"zones={len(zones)}")
+    if not zones:
+        return
+    eid, zone = zones[0]
+
+    inside = [f for f in foes if f in world.zones.occupants(eid)]
+    out.that(bool(inside),
+             "and at least one enemy is standing in it -- without this the"
+             " assertions below would pass on a zone that conditions"
+             " nobody",
+             f"occupants={sorted(world.zones.occupants(eid))}")
+    if not inside:
+        return
+    victim = inside[0]
+
+    out.that(is_(world, victim, Condition.SLOWED),
+             "**an enemy standing in the zone is slowed**, which is the"
+             " clause `m4734a3` dropped")
+    out.that(not is_(world, mob, Condition.SLOWED),
+             "and the zone's owner standing in its own horrors is NOT --"
+             " the card says 'any enemy within', and a default of 'team'"
+             " would slow the caster")
+
+    # -- walk out, which is the half a duration cannot do ---------------
+    far = (zone.squares and max(sorted(zone.squares))[0] + 3, 0)
+    spot = (far[0], 0)
+    pos = world.get(victim, Position)
+    if pos is None:
+        return
+    pos.square = spot
+    world.grid.place(victim, spot)
+    world.zones.refresh()
+    out.that(victim not in world.zones.occupants(eid),
+             "the victim is walked clear of the zone, which is the setup"
+             " for the finding below",
+             f"at {spot}, occupants={sorted(world.zones.occupants(eid))}")
+    out.that(not is_(world, victim, Condition.SLOWED),
+             "**and the slow is gone, because it ran on the geometry and"
+             " not on a clock** -- a `c.slowed(until=SAVE_ENDS)` would"
+             " still be standing here, which is the row's stated reason"
+             " for carrying a marker")
+
+
 def an_obscuring_zone_can_have_a_side(out: Result) -> None:
     """"Lightly obscured **for your enemies only**", and the four rows of it.
 
@@ -33309,6 +33388,10 @@ DRIVERS = {
     "crit_range": (
         a_widened_crit_range_widens_crits_and_not_hits,
         "a widened crit range widens criticals, not automatic hits (#868)",
+    ),
+    "zone_condition": (
+        a_zone_can_hold_a_condition_and_takes_it_back,
+        "a zone holds a condition while you stand in it (#468)",
     ),
     "obscured_side": (
         an_obscuring_zone_can_have_a_side,

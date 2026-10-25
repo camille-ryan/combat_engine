@@ -12178,6 +12178,53 @@ class Cast:
             side,
         )
 
+    def zone_condition(
+        self,
+        zone: int,
+        *conditions: Condition,
+        side: str = "enemy",
+    ) -> None:
+        """"Any enemy within the zone is slowed" -- a condition on standing there.
+
+        The fourth of the `_while_inside` family, beside `c.grants_in`,
+        `c.resist_in` and `c.vulnerable_in`, and it exists for the same
+        reason they do: a zone could hold a modifier, a resistance or a
+        vulnerability on its occupants and could not hold a **condition**.
+
+        **The duration is the geometry, which is the whole point.** The
+        condition is laid `until=When.ENCOUNTER` and taken off the moment
+        the creature steps out -- `_while_inside` does both halves -- so
+        "slowed while in the zone" is not approximated by a clock.
+        `m4734a3`'s own note is the argument: *"a save-ends slow laid once
+        would outlive leaving it"*, which is a creature walking free of a
+        zone of horrors and staying slowed by it across the room.
+
+        Whoever is already standing inside when the zone is made gets it
+        too, since the printed line is about being there rather than about
+        arriving -- the same reading `c.grants_in` takes.
+
+        `side` defaults to **`"enemy"`**, as on `c.vulnerable_in` and for
+        the reason stated there: a zone that hurts prints "any enemy
+        within", and a default of `"team"` would make the commonest call
+        land the condition on the caster.
+
+        **Not for a condition with a save**, and the distinction is the one
+        thing to get right before reaching for this. A printed "(save ends)"
+        is a clock the victim can beat and belongs to `c.condition`; this is
+        for a condition that holds exactly as long as the creature is
+        standing in the squares. A card printing both -- "restrained within
+        the wall (escape DC 20 ends)" -- is asking for neither, because the
+        restraint outlives being in the zone by design; `i1481p1` prints
+        that and is marked for it rather than written with this.
+        """
+        self._while_inside(
+            zone,
+            lambda who: self.condition(
+                *conditions, on=who, until=When.ENCOUNTER
+            ),
+            side,
+        )
+
     def _while_inside(
         self, zone: int, give_one: Any, side: str
     ) -> None:

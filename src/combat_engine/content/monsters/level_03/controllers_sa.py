@@ -2015,15 +2015,17 @@ def m4734a2(c: Cast) -> None:
     reach=AreaBurst(3, 10),
     target=NO_TARGET,
     keywords=[Keyword.FEAR, Keyword.ZONE],
-    dropped=("c.zone_condition()",),
 )
 def m4734a3(c: Cast) -> None:
-    """The defence penalty is held by the zone and ends with the geometry
-    rather than on a clock, which is what `c.grants_in` is for. The slow is
-    the gap: nothing hangs a *condition* on standing in a zone, and a
-    save-ends slow laid once would outlive leaving it."""
+    """Both halves of "any enemy within the zone" end with the geometry
+    rather than on a clock: `c.grants_in` for the defence penalty and
+    `c.zone_condition` for the slow. The second was the gap, and the
+    reason it had to be a zone verb rather than a duration is that a
+    save-ends slow laid once would outlive leaving it -- a creature
+    walking free of the zone and staying slowed by it across the room."""
     zone = _sustained_zone(c, c.area(), 5)
     c.grants_in(zone, WILL, -2, side="enemy", kind="untyped")
+    c.zone_condition(zone, Condition.SLOWED, side="enemy")
     # The card names a *different* creature as the beneficiary, which reads
     # as a printing error rather than a rule -- the zone is this creature's
     # and its own side is the only sane reading.

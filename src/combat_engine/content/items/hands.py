@@ -1309,11 +1309,29 @@ def i1438p2(c: Cast) -> None:
 
 @power("i1481p1", level=9, cls=ITEM, usage=DAILY, action=STANDARD,
        reach=Ranged(10), target=NO_TARGET, keywords=[Keyword.CONJURATION],
-       dropped=("c.zone_condition()",))
+       dropped=("c.zone_toll(check=, fail=)",))
 def i1481p1(c: Cast) -> None:
-    """A wall is raised and made difficult; `c.burns` gives a zone teeth
-    but only damaging ones, so restraining whoever pushes through it is
-    the clause with nowhere to go."""
+    """A wall is raised and made difficult; the thorns are the gap.
+
+    **Re-pointed off `c.zone_condition()`, which now exists and is the
+    wrong verb for this.** That one holds a condition for exactly as long
+    as the creature stands in the squares. This card prints a *toll* on
+    attempting to enter -- a Strength check against a DC -- and on failing
+    it a restraint that **outlives** being in the wall, ended by an escape
+    check and not by stepping out. Writing it with the zone verb would give
+    a creature that walks in a restraint it sheds by walking out, which is
+    the opposite of the printed sentence.
+
+    The three pieces that are missing: a gate on *attempting* to enter a
+    zone's squares (`movement.may_enter` asks only about occupied squares,
+    and `c.burns` is the only thing a zone does to an arrival -- damage),
+    the check against a printed DC at that moment, and a restraint whose
+    end condition is an escape attempt.
+
+    A singleton: a census of every marked row whose note mentions moving
+    through a wall or zone found four, and none of the other three wants
+    this. So it stays marked under #468's >=3 threshold rather than having
+    a mechanism built for one row."""
     c.wall(8, difficult=True, until=When.EONT, sustain=MINOR)
 
 

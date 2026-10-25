@@ -27,6 +27,8 @@ The 24 `Condition` members and the states next to them. Every writer takes a dur
   - (no docstring)
 - `c.weakened(self, *, until: 'When' = <When.EONT: "end of source's next turn">, on: 'int | None' = None) -> 'Effect | None'`
   - (no docstring)
+- `c.zone_condition(self, zone: 'int', *conditions: 'Condition', side: 'str' = 'enemy') -> 'None'`
+  - "Any enemy within the zone is slowed" -- a condition on standing there.
 
 ## writers -- a condition under another name, or the generic
 
