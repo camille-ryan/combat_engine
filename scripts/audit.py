@@ -1200,12 +1200,14 @@ KNOWN_SILENT = {
               "`p1450` and `times` is 0, so `c.restore_use` has nothing "
               "to restore. Reachable since #759's reroll pose, and "
               "correctly silent",
-    "m5466a2": "**unexplained, and #754 is the row.** Fired by hand with "
-               "the foe adjacent and a failed escape handed in, its body "
-               "deals 31 damage; offered 48 times by the harness it shows "
-               "nothing. The trigger, the predicate, the adjacency and the "
-               "immediate-action budget were each ruled out and measured. "
-               "This entry names an observation, not a reason",
+    # **`m5466a2`'s entry is gone and the unexplained thing is explained.**
+    # It read "offered 48 times by the harness it shows nothing", with the
+    # trigger, the predicate, the adjacency and the action budget each ruled
+    # out -- an honest observation and the wrong place to look. The escape
+    # pass forced its *failing* outcome with a loaded 1, and the row a
+    # failed escape provokes is offered **synchronously inside `attempt`**,
+    # so it rolled its own attack against that 1 and missed automatically
+    # every time. The outcome is arranged with a negative bonus now. #754.
     "cf:wizard-arcanist-f0s4": "the board's wizard holds no encounter attack "
                                "power to pay with. Driven on a chargen "
                                "wizard: it borrows one and expends another",
@@ -3893,21 +3895,32 @@ def _does_the_ordinary_things(
                 held = hand.grab(on=victim, by=caster)
                 if held is None:
                     continue
-                was = getattr(world.rng, "loaded", None)
-                world.rng.loaded = face
                 rearm()
-                try:
-                    # **A bonus on the winning pose, not just a loaded 20.**
-                    # The escape is rolled against the grabber's defence, and
-                    # a level-9 brute's beats a 20 outright -- so `m2619a2`,
-                    # whose card wants a creature that *succeeds*, stayed
-                    # UNUSED through a pose that could never let one. The
-                    # bonus is the instrument arranging the outcome the card
-                    # names, the same bargain the loaded die is.
-                    attempt(world, victim,
-                            bonus=50 if face == 20 else 0)
-                finally:
-                    world.rng.loaded = was
+                # **A bonus on both poses, and no loaded die at all.**
+                # The escape is rolled against the grabber's defence, and a
+                # level-9 brute's beats a 20 outright -- so `m2619a2`, whose
+                # card wants a creature that *succeeds*, stayed UNUSED
+                # through a pose that could never let one. The bonus is the
+                # instrument arranging the outcome the card names.
+                #
+                # **The failing pose used to force its outcome with a loaded
+                # 1, and that made one row permanently unhittable.** The row
+                # a failed escape provokes is offered **synchronously inside
+                # `attempt`**, so it rolls its own attack while that 1 is
+                # still loaded -- the `finally` that put the face back ran
+                # afterwards, which is too late. `m5466a2` is an immediate
+                # reaction that swings at the creature which failed: 48
+                # offers, 48 natural 1s, an automatic miss every time.
+                #
+                # Measured at the moment of the offer: `loaded=1`, distance
+                # 1, foe alive at 33 hp, `natural=1` and `total=14` against
+                # a defence of 13 -- so the roll **beat** the defence and the
+                # 1 refused it anyway. Releasing the face and re-rolling the
+                # same three boards: natural 12, 7 and 20, all hits.
+                #
+                # A negative bonus arranges the failure without touching the
+                # die, which is what the success arm was already doing. #754.
+                attempt(world, victim, bonus=50 if face == 20 else -50)
                 # Ended through the effect this pass laid, not by clearing
                 # the relation: the hold *is* the effect, and a failed
                 # escape leaves it standing for every pass below.
