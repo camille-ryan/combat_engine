@@ -960,8 +960,11 @@ KNOWN_SILENT = {
     "m790a5": "changes state without emitting anything for the audit to see (#375)",
     "m4325a5": "changes state without emitting anything for the audit to see (#375)",
     "m5596a7": "changes state without emitting anything for the audit to see (#375)",
-    # Needs an effect a *sibling row* laid and the harness never ran.
-    "m5709a2": "acts on a creature carrying a sibling row's own effect",
+    # **`m5709a2`'s excuse is gone**, and it read: needs an effect a
+    # *sibling row* laid and the harness never ran. True, and the sibling it
+    # waits on is its own creature's other ability -- a shape `_siblings`
+    # had no notion of until `_label_gated` read it off the row's own gate.
+    # #869.
     "m6686a1": "acts on a creature carrying a sibling row's own effect",
     "m3295a3": "acts on a creature carrying a sibling row's own effect",
     "m2784a3": "acts on a creature carrying a sibling row's own effect",
@@ -1464,6 +1467,61 @@ def _associated() -> dict[str, list[str]]:
     return out
 
 
+def _label_gated(ref: str) -> list[str]:
+    """Rows whose **effect label** this one's body tests for, by ref.
+
+    The fourth shape of sibling, and the one `_siblings` had no notion of:
+    a creature's *own other ability*. `m6283a4`'s printed Requirement is
+    that it be in the stance `m6283a3` raises, and its body opens
+
+        if not any(e.label == "m6283a3" for e in c.world.effects.of(me)):
+            return
+
+    `audit.board` starts the fight and arms traits; it does not *use* a
+    row, so the stance is never raised, the body returns at its first line,
+    and the row reports SILENT whatever it does downstream. #869.
+
+    **The ref the body names, not the creature's whole stat block.** Using
+    every `m6283a*` would pose attacks nobody asked for and change the
+    board under every later pass -- and most of them are irrelevant. The
+    body names exactly one thing it is waiting for, so that is what gets
+    posed, which makes this as narrow as the three shapes above it.
+
+    **`ast`, not a text search**, for the reason `query.deals_damage` is an
+    `ast` walk: a ref in a docstring explaining what a row waits for reads
+    identically to a ref in the gate, and several of these rows have such a
+    docstring. A `Compare` against an `Attribute` named `label` cannot sit
+    in prose.
+
+    Measured on the family this finds: 29 rows compare a label against a
+    declared ref, and 10 of them are already reached -- a second card, an
+    item's other block, a feat's named power -- by the shapes above. The
+    rest are the monster pairs.
+    """
+    import ast as _ast
+    import textwrap as _tw
+
+    row = REGISTRY.get(ref)
+    fn = getattr(row, "fn", None) or getattr(row, "body", None)
+    if not callable(fn):
+        return []
+    try:
+        tree = _ast.parse(_tw.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        return []
+    out: list[str] = []
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Compare):
+            continue
+        sides = [node.left, *node.comparators]
+        if not any(isinstance(s, _ast.Attribute) and s.attr == "label"
+                   for s in sides):
+            continue
+        out += [s.value for s in sides
+                if isinstance(s, _ast.Constant) and isinstance(s.value, str)]
+    return out
+
+
 def _siblings(ref: str) -> list[str]:
     """The rows this one is printed beside, and cannot work without.
 
@@ -1489,6 +1547,7 @@ def _siblings(ref: str) -> list[str]:
     found = ITEM_BLOCK.match(ref)
     if found:
         out += _item_blocks().get(found.group(1), [])
+    out += _label_gated(ref)
     seen: list[str] = []
     for other in out:
         if other != ref and other in REGISTRY and other not in seen:
@@ -3641,7 +3700,8 @@ def _revive_everyone(world, except_: int) -> None:  # noqa: ANN001
 #:     Rerolled       4    somebody rolls an attack again
 #:
 #: #755, and #753 is the same shape for a saving throw.
-_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld", "Rerolled")
+_ORDINARY = ("TotalDefence", "Fell", "Escaped", "WeaponHeld",
+              "Rerolled", "TurnEnd")
 
 
 def _does_the_ordinary_things(
@@ -3894,6 +3954,48 @@ def _does_the_ordinary_things(
             hand.disarm(on=victim, catch=True)
             if _fired(world, ref, cursor):
                 return True
+
+    # -- the end of a turn -------------------------------------------------
+    #
+    # **23 rows declare `TurnEnd` and this harness never ended one**, so 21
+    # of them reported UNUSED -- "this row cannot work" rather than "the
+    # board never asked". The two that did fire are the proof the mechanism
+    # works: `TurnEnd` is emitted in exactly one other place, inside the
+    # saving-throw pass, so a predicate loose enough to match that one
+    # incidental emission got offered and the other twenty-one did not.
+    #
+    # `Encounter.end_turn` rather than a bare `bus.emit`, because the
+    # printed moment is more than the announcement: it settles a flyer,
+    # runs `_uncommanded` so a companion its owner ignored acts before the
+    # turn closes, and lets `Encounter._death_saves` run. A hand-rolled
+    # `TurnEnd` would fire the trigger while skipping the half of the
+    # moment some of these rows are about.
+    #
+    # **Three rollers, because the cards split on whose turn it is.** "At
+    # the end of your turn", "at the end of an enemy's turn" and "at the
+    # end of an ally's turn" are all printed, and one roller leaves two
+    # thirds of the family unexercised -- the same reason the escape pass
+    # above runs both outcomes.
+    #
+    # `world.turn` is saved and put back. `end_turn` reads it to decide
+    # whose turn is ending and sets it to `None` on the way out, and every
+    # pass after this one needs the caster's turn to be current -- leaving
+    # it `None` would quietly refuse their actions rather than this one's.
+    if "TurnEnd" in wants:
+        enc = getattr(world, "encounter", None)
+        if enc is not None:
+            for who in (caster, *foes[:1], *_allies_of(world, caster)[:1]):
+                if not alive(world, who):
+                    continue
+                was_turn = world.turn
+                world.turn = who
+                rearm()
+                try:
+                    enc.end_turn()
+                finally:
+                    world.turn = was_turn
+                if _fired(world, ref, cursor):
+                    return True
     return False
 
 
