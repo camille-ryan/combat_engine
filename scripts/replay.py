@@ -30,6 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from combat_engine.engine.turns import extended_rest, short_rest
 from combat_engine.policy import install, take_turn
 from combat_engine.policy.doctrine import DoctrinePolicy
 from fight import build
@@ -61,6 +62,20 @@ CASES = [
     # that bloodies somebody.
     {"name": "level-10-full", "seed": 3, "level": 10, "scaling": "full",
      "enemies": ['m4964', 'm3069', 'm5002', 'm221']},
+    # **The rest window, which had no net at all.** `coverage` reported
+    # `ShortRested` and `ExtendedRested` at zero, and `replay.py`'s own
+    # docstring says what a zero means: *"a rule that no fixture reaches can
+    # be changed freely and nothing will say a word."* Both rests ran only
+    # under `drivers`, which asserts one situation; a fixture compares a
+    # whole fight event by event, which is what catches what nobody thought
+    # to assert.
+    #
+    # Level 1 deliberately, and the same board as `level-1-full`: the fight
+    # half is already proven by that fixture, so what this one adds is the
+    # cheapest possible amount of new ground -- the two rests on a party
+    # that has actually spent something. #525.
+    {"name": "level-1-rested", "seed": 7, "level": 1, "scaling": "full",
+     "enemies": ['m145', 'm264', 'm2998', 'm2978'], "rest": "both"},
 ]
 
 
@@ -107,7 +122,7 @@ def play(case: dict) -> list[str]:
     world, encounter = build(
         case["seed"], case["level"], case["scaling"],
         feats=case.get("feats"), powers=case.get("powers"),
-        enemies=case.get("enemies"),
+        enemies=case.get("enemies"), pcs=case.get("pcs"),
     )
     policy = DoctrinePolicy()
     install(world, encounter, {}, default=policy)
@@ -118,6 +133,23 @@ def play(case: dict) -> list[str]:
             break
         take_turn(world, encounter, actor, policy)
         encounter.advance()
+    # **The rest, after the fight and inside what the log records.** #525
+    # read the single-fight path as unable to cover this -- *"a replay
+    # fixture records one encounter from its start, so the rest happens
+    # outside what is recorded"* -- and that is true of a rest taken
+    # *before* `start()`, which is where `fight.py --rest` puts it. Taken
+    # afterwards it is on the same bus the fixture reads, and it is also the
+    # only place a rest means anything: the party has spent surges and
+    # encounter powers by then, so the refresh has something to refresh.
+    # Measured: 8 `ShortRested` and 8 `ExtendedRested` on a level-5 board.
+    #
+    # A second encounter with the carry between is a bigger thing and is
+    # **not** needed for these events; `api/day.py`'s legs already exercise
+    # the carry, and `api_smoke` asserts it equals the sheets exactly.
+    if case.get("rest") in ("short", "both"):
+        short_rest(world)
+    if case.get("rest") in ("extended", "both"):
+        extended_rest(world)
     return [_settled(str(e)) for e in world.bus.log]
 
 
@@ -219,9 +251,24 @@ def _pinned(case: dict, redraw: bool) -> dict[str, list[str]]:
     return _drawn(case)
 
 
-def record(redraw: bool = False) -> int:
+def record(redraw: bool = False, only: str = "") -> int:
+    """Write the fixtures. `only` names one case.
+
+    **One case at a time matters more than it looks.** Recording is how a
+    real regression rides in unseen, so a run that rewrites seven fixtures
+    to add an eighth is seven chances to bless a divergence nobody read.
+    With `only`, adding a fixture touches exactly the file it adds and the
+    other seven stay available to `verify` as the control. #525.
+    """
     FIXTURES.mkdir(parents=True, exist_ok=True)
-    for case in CASES:
+    chosen = [c for c in CASES if not only or c["name"] == only]
+    if only and not chosen:
+        # `str(...)` because a case dict holds lists as well as strings, so
+        # `c["name"]` is not provably one and `join` refuses the generator.
+        print(f"no case named {only!r}. Have: "
+              f"{', '.join(str(c['name']) for c in CASES)}", file=sys.stderr)
+        return 1
+    for case in chosen:
         pinned = {**case, "feats": _pinned(case, redraw),
                   "powers": _pinned_powers(case, redraw)}
         log = play(pinned)
@@ -307,9 +354,15 @@ def main() -> int:
         action="store_true",
         help="re-deal each fixture's feats instead of keeping the pinned ones",
     )
+    ap.add_argument(
+        "--only",
+        default="",
+        metavar="NAME",
+        help="record just this case, leaving the others as they are",
+    )
     args = ap.parse_args()
     if args.action == "record":
-        return record(args.redraw)
+        return record(args.redraw, args.only)
     return {"verify": verify, "coverage": coverage}[args.action]()
 
 

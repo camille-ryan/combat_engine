@@ -47,6 +47,7 @@ def build(
     feats: dict[str, list[str]] | None = None,
     powers: dict[str, list[str]] | None = None,
     enemies: list[str] | None = None,
+    pcs: list[str] | None = None,
 ) -> tuple[World, Encounter]:
     """One fight, built from a seed.
 
@@ -63,6 +64,14 @@ def build(
     too, so writing a clause into a power could change which powers a
     character was dealt and every choice downstream of that. #783.
 
+    `pcs` names the party's classes, and `story.PARTY`'s four -- fighter,
+    cleric, rogue, wizard -- are the default on **every seed**. Measured
+    across all five fixture seeds: the same four, always. So every event
+    belonging to any other class was unreachable by any fixture, which is
+    how `Boosted` sat at zero with nothing to do about it -- `story`'s
+    `field_encounter` had taken `pcs` the whole time and nothing passed it.
+    #525.
+
     `enemies` pins the opposition, for exactly the same reason one step over.
     Which monsters a seed fields is drawn from every usable monster at the level
     now -- it used to be the first four by ref, the same four every seed -- so
@@ -72,7 +81,7 @@ def build(
 
     fielded = story.field_encounter(
         seed, level, scaling=scaling, math=math, feats=feats, powers=powers,
-        enemies=enemies,
+        enemies=enemies, pcs=pcs,
     )
     world = fielded.world
     # Beside `world.scaling` and `world.monster_math`, which are set the same way
