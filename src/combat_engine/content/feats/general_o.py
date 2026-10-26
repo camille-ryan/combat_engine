@@ -564,10 +564,9 @@ def f2944(c: Cast) -> None:
 
 
 @power("f2945", level=1, cls="", usage=ENCOUNTER, action=ActionType.NONE,
-       reach=PERSONAL, target=SELF,
-       dropped=("c.area(branch=)",))
+       reach=PERSONAL, target=SELF)
 def f2945(c: Cast) -> None:
-    """The aiming is written; the teleport's leash is not.
+    """Both clauses are written.
 
     "Reach is header data the action menu reads before anything runs" was
     the hold, and #614 answered it: `c.reshape_area(optional=True)`
@@ -576,9 +575,18 @@ def f2945(c: Cast) -> None:
     it -- which is what "**instead of**" means on a card that also says
     "you can **choose**".
 
-    **The second clause is dropped and is a real gap.** "The square you
-    teleport into as part of this power must be within the area of the
-    burst" restricts a *destination set*.
+    **The second clause landed with #884.** "The square you teleport into as
+    part of this power must be within the area of the burst" restricts a
+    *destination set*, and it is written in `p11052` -- per the
+    one-named-power convention -- gated on which aiming ran rather than on
+    holding this feat, because the reshape is `optional=True` and the
+    printed aiming restricts nothing.
+
+    What the marker was waiting for was **not** the signature it named.
+    `c.area()` grew no `branch=`; it reads `c.branch`, which is the shape
+    the issue's own comment predicted and warned would leave this marker to
+    be cleared by hand. `blocked._params_ok` can only ask about a
+    signature, so nothing went red. #832.
 
     **Re-pointed off `c.teleport(within=)`, and the note that carried it
     was stale.** It said `c.teleport` takes `to=`, `toward=` and
@@ -589,19 +597,17 @@ def f2945(c: Cast) -> None:
     enumeration was true when written and nothing connected the two, which
     is #832 and is what found this.
 
-    What is left is naming **which** squares, and that is #884: `c.area()`
-    passes no branch, so it answers for the printed close burst 1 whatever
-    aiming ran -- and `area_of` resolves a branch through the header-only
-    `Power.reach_of`, which *clamps* an offered index rather than raising.
-    A `c.feat` gate cannot stand in, because the reshape is `optional=True`
-    and a character holding the feat may still aim the printed burst, which
-    restricts nothing.
+    Naming **which** squares was #884, and it was two faults stacked rather
+    than a missing parameter: `c.area()` passed no branch, so it answered
+    for the printed close burst 1 whatever aiming ran, and `area_of`
+    resolved a branch through the header-only `Power.reach_of`, which
+    *clamps* an offered index. Both read one aiming while another was in
+    use, and `_aimed_shape` is now the one door that resolves it.
 
-    `p11052` is where the clause goes, per the one-named-power convention:
-    its body teleports `max(1, speed // 2)` unconstrained. Marked rather
-    than half-written, because a teleport that ignores the leash is
-    stronger than the card -- the feat buys reach *and* would keep an
-    unrestricted blink.
+    A `c.feat` gate could not have stood in, which is why this waited on
+    the engine rather than being written around: the reshape is
+    `optional=True`, so a character holding this feat may still aim the
+    printed burst, and the printed card restricts the teleport not at all.
 
     **Re-pointed off `c.recast(reach=)`, which was one symbol over two
     mechanisms.** This row rewrites a *named row's area* -- its size or

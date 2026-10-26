@@ -13402,6 +13402,114 @@ def shield_penalty_waived(out: Result) -> None:
              f"{pl_bare} -> {pl_feat}, plate still costs {plate}")
 
 
+def offered_aiming_is_what_area_answers(out: Result) -> None:
+    """`c.area()` answers for the aiming this use chose, not the print. #884.
+
+    `f2945` offers `p11052` an area burst 1 within 5 beside its printed
+    close burst 1, and the feat's second sentence leashes the teleport to
+    *the area of the burst*. Two faults made that unwritable and both read
+    the header where a creature was available:
+
+    * `Cast.area` called `area_of` with four positional arguments, so
+      `branch` was always 0;
+    * `area_of` resolved the branch through `Power.reach_of`, which
+      **clamps** an index past the printed ones rather than raising -- so an
+      offered aiming silently came back as the printed one.
+
+    **The assertion is that the two aimings cover different squares and that
+    the row's own teleport is confined to the one chosen.** A `reach_of`
+    that answers correctly while `c.area()` reports the print is the shape of
+    failure this engine produces: right by inspection, wrong in play -- which
+    is the same argument `both_printed_shapes_offered` makes one row over,
+    for a *printed* pair rather than an offered one.
+
+    Two negative controls, because "the areas differ" can be true for a
+    reason that has nothing to do with the branch:
+
+    * **without the feat, index 1 is not offered and must clamp** -- the
+      fallback is deliberate, not a bug, and this is what says so;
+    * **the printed aiming stays unleashed.** The reshape is `optional=True`
+      so a holder may still aim the print, and the printed card restricts the
+      teleport not at all. A leash applied to both would be the row gating on
+      `c.feat` instead of on the aiming, which is the mistake its docstring
+      is about.
+    """
+    import combat_engine.content  # noqa: F401  -- fills the registry
+    from combat_engine.engine.cast import Cast
+    from combat_engine.engine.components import Position
+    from combat_engine.engine.dsl import (
+        REGISTRY,
+        area_of,
+        branches_for,
+        get,
+        reach_of,
+    )
+
+    p = REGISTRY["p11052"]
+    out.that(p.branches == (0,),
+             "the row prints one aiming, so any index past 0 can only come"
+             " from a reshape offering one",
+             f"{p.branches}")
+    out.that(not REGISTRY["f2945"].unfinished,
+             "and the feat carries no marker now -- it was waiting on a"
+             " `c.area(branch=)` that does not exist, because the fix reads"
+             " `c.branch`",
+             f"{REGISTRY['f2945'].unfinished}")
+
+    # **The negative control first**, so the positive one cannot be read as
+    # "index 1 always differs". Nothing is offered here, and the clamp is
+    # what a caller that guessed an index gets.
+    bare, who, _ = _board("p11052", 1)
+    out.that(branches_for(bare, who, p) == (0,),
+             "with no feat standing, only the printed aiming is offered",
+             f"{branches_for(bare, who, p)}")
+    out.that(area_of(bare, who, p, None, 0) == area_of(bare, who, p, None, 1),
+             "and index 1 CLAMPS to the print rather than raising -- the"
+             " documented fallback, which `can_branch_for` is the guard for",
+             f"{len(area_of(bare, who, p, None, 1))} squares")
+
+    world, me, _ = _board("p11052", 1)
+    must(get("f2945"), "f2945 is declared").body(
+        Cast(world=world, me=me, ref="f2945"))
+    out.that(branches_for(world, me, p) == (0, 1),
+             "the feat contributes a second aiming past the printed one",
+             f"{branches_for(world, me, p)}")
+
+    kinds = (reach_of(world, me, p, 0).kind, reach_of(world, me, p, 1).kind)
+    out.that(kinds == ("close_burst", "area_burst"),
+             "and it is a different KIND of area, not a bigger one -- which"
+             " is why a `blast_size` stretch could not have said it",
+             f"{kinds}")
+
+    here = next(iter(sorted(must(world.get(me, Position), "the caster has a"
+                                 " Position").squares)))
+    far = (here[0] + 4, here[1])
+    a0 = area_of(world, me, p, far, 0)
+    a1 = area_of(world, me, p, far, 1)
+    out.that(far not in a0 and far in a1,
+             "given a chosen origin four squares off, the printed close"
+             " burst does not reach it and the offered area burst is"
+             " centred on it -- the two answer differently",
+             f"{len(a0)} squares against {len(a1)}")
+
+    # **Through `Cast`, which is what a row actually calls.** `area_of`
+    # answering per branch while `c.area()` dropped it is precisely the bug,
+    # so asserting the free function alone would have stayed green through
+    # the whole of it.
+    seen = {}
+    for b in (0, 1):
+        c = Cast(world=world, me=me, ref="p11052", branch=b, origin=far)
+        seen[b] = c.area()
+    out.that(far not in seen[0] and far in seen[1],
+             "and `c.area()` carries the branch through, which is the half"
+             " that was dropped: four positional arguments to `area_of`",
+             f"{len(seen[0])} against {len(seen[1])}")
+
+    out.that(seen[1] == a1,
+             "`c.area()` and `area_of` agree once the branch is passed",
+             f"{len(seen[1])} against {len(a1)}")
+
+
 def both_printed_shapes_offered(out: Result) -> None:
     """"Close blast 3 **or** area burst 3 within 10" -- both, reachable. #614.
 
@@ -35416,6 +35524,10 @@ DRIVERS = {
                                      "a zone or aura confers a"
                                      " vulnerability on whoever stands in"
                                      " it"),
+    "offered_aiming_is_what_area_answers": (
+        offered_aiming_is_what_area_answers,
+        "c.area() answers for the aiming this use chose, and an offered"
+        " index resolves rather than clamping"),
     "both_printed_shapes_offered": (both_printed_shapes_offered,
                                     "a printed \"or\" between two shapes"
                                     " offers both, and the conditional pair"

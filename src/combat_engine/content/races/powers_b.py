@@ -1170,9 +1170,27 @@ def p8278(c: Cast) -> None:
     keywords=[Keyword.TELEPORTATION],
 )
 def p11052(c: Cast) -> None:
+    """`f2945` offers an area burst 1 within 5 beside the printed close burst
+    1, and leashes the teleport to whichever area was aimed: "the square you
+    teleport into as part of this power must be within the area of the
+    burst".
+
+    **Gated on the aiming, not on holding the feat.** The reshape is
+    `optional=True`, so a character who has it may still aim the printed
+    burst -- and the printed card restricts the teleport not at all. A
+    `c.feat("f2945")` gate would leash the printed aiming too, which is the
+    half of this the feat's own note says cannot be written that way.
+
+    This row prints one range, so `c.branch` is 0 for the print and any
+    non-zero index is an offered one. A row with two printed branches would
+    have to ask `dsl.branches_for`; this one does not need to and the
+    distinction is `_aimed_shape`'s. #884.
+    """
     c.grants_advantage(until=When.EONT)
     if c.last:
-        c.teleport(max(1, c.speed_of() // 2))
+        aimed = c.area() if c.branch else None
+        c.teleport(max(1, c.speed_of() // 2),
+                   into=None if aimed is None else aimed.__contains__)
 
 
 # -- r51 --------------------------------------------------------------------

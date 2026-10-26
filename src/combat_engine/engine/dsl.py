@@ -2133,17 +2133,18 @@ def area_of(
     Clipped to the board. A ranged 20 power on a board sixteen squares wide
     otherwise reports a reach that runs off the edge, and an interface that
     highlights what it is given lights up squares that are not there.
+
+    **`branch` is resolved by `_aimed_shape`, not by `Power.reach_of`.** This
+    read the header directly until #884, which made it answer for the printed
+    aiming whatever aiming actually ran: an index past the printed ones
+    *clamped* to the print, and an **optional** reshape was applied to the
+    printed aiming -- the one thing `optional=` exists to prevent. The swap
+    still lands below rather than inside the helper, because the
+    `blast_size` stretch needs the unswapped `kind` first; that ordering is
+    the reason this function does not come through `reach_of`'s door and it
+    is unchanged.
     """
-    r = p.reach_of(branch, augment)
-    # **The state-switched size first, before any stretch or swap.** "Close
-    # burst 2 (5 while bloodied)" is the printed line for this creature
-    # right now, so it is what a stretch adds to and what a reshape
-    # replaces -- the card the feat rewrites is the one the creature is
-    # holding. Applied here as well as in `reach_of`, because this function
-    # deliberately does not come through that door (the stretch needs the
-    # unswapped `kind` first) and a switch honoured at one site and not the
-    # other is `keywords_of`'s trap one field over. #657.
-    r = switched(world, actor, r)
+    r, swap = _aimed_shape(world, actor, p, branch, augment)
     # Every origin, unioned. One companion gives one origin and the same answer
     # as before; two give the area either of them could reach, which is what the
     # printed rule asks for on both of its sentences. See `origins`.
@@ -2165,7 +2166,13 @@ def area_of(
     # says and the opposite of what applying this first would do. No printed
     # pair of these is known; the order is stated so the answer is not an
     # accident of line order. #614.
-    swap = _reshaped(world, actor, {"power": p.ref, "range_kind": r.kind})
+    #
+    # **Whichever reshape this branch names**, settled above: the replacing
+    # one for a printed aiming, and for an index past the printed ones the
+    # *particular* offered reshape that contributed that index. This line
+    # used to ask `_reshaped` for the first match of either kind, so a
+    # character holding an optional reshape had it imposed on the printed
+    # aiming as well as offered beside it. #884.
     if swap is not None:
         r = swap(r)
     if r.kind == "close_burst":
@@ -2341,43 +2348,84 @@ def reach_of(
       is not a thing any of the fifteen cards says, and widening it would
       make a dagger feat refuse the dagger.
 
-    `area_of` consults `_reshaped` itself and keeps doing so: it needs the
-    unswapped `kind` first to decide whether a `blast_size` stretch applies
-    at all, so the order there is stretch-then-swap and is documented on the
-    spot.
+    `area_of` resolves its branch through `_aimed_shape` below, which is this
+    function's first half factored out, and still applies the swap itself: it
+    needs the unswapped `kind` first to decide whether a `blast_size` stretch
+    applies at all, so the order there is stretch-then-swap and is documented
+    on the spot. Before #884 it had a second copy of the resolution that read
+    the header, and the two answered differently.
+    """
+    r, swap = _aimed_shape(world, actor, p, branch, augment)
+    return swap(r) if swap is not None else r
+
+
+def _aimed_shape(
+    world: World, actor: int, p: Power, branch: int = 0, augment: int = 0
+) -> tuple[Range, Callable[[Range], Range] | None]:
+    """The shape a branch names for this creature, and the reshape owed it.
+
+    **One door for branch resolution**, which is the whole of #884.
+    `area_of` had its own copy reading `Power.reach_of` -- header data, which
+    cannot know what this creature was offered -- so an index past the
+    printed ones *clamped* to the print, and `Range.reach_of`'s clamp made
+    that silent rather than loud. Two readings of one index, and the blind
+    one was answering for all 456 `c.area()` call sites.
+
+    Returned as a **pair** rather than a finished `Range` because the two
+    callers need the swap at different moments: `reach_of` applies it at
+    once, `area_of` must measure its stretch against the unswapped `kind`
+    first. Handing back the callable is what lets them share the choice of
+    *which* reshape without sharing the moment it lands.
+
+    `switched` is applied on **every** path, including the extra index and
+    the fallback. It was applied only to the printed branch, which this
+    function's own argument says is wrong: a reshape replaces the line the
+    creature is holding right now, so "close burst 2 (5 while bloodied)"
+    has to be switched *before* the reshape sees it, whichever index asked.
+    No row in the tree is both state-switched and reshaped, so this is
+    inert today and correct rather than measured-as-different.
     """
     printed = p.branches
     if branch in printed:
-        r = p.reach_of(branch, augment)
         # **The state-switched size, before any reshape.** "Close burst 2 (5
         # while bloodied)" is the printed line for this creature right now,
         # and a reshape replaces *that* -- the card the feat is rewriting is
         # the one the creature is actually holding.
-        r = switched(world, actor, r)
+        r = switched(world, actor, p.reach_of(branch, augment))
         # A **replacing** reshape only. An optional one is reached through
         # its own index below, and applying it here as well would impose the
         # alternative on the printed aiming -- which is the whole thing
         # `optional=` exists to avoid.
-        swap = _reshaped(world, actor, {"power": p.ref, "range_kind": r.kind},
-                         optional=False)
-        return swap(r) if swap is not None else r
+        return r, _reshaped(world, actor,
+                            {"power": p.ref, "range_kind": r.kind},
+                            optional=False)
 
     # **An extra index**, contributed by an optional reshape in force for
     # this creature. Derived from the printed count rather than hard-coded:
     # a row with `reach.alt` already owns 0 and 1, so its first extra is 2.
+    #
+    # Applied to the row's **first** printed branch. Every one of the eleven
+    # cards names one alternative to one printed shape; a card offering an
+    # alternative to the *second* branch of a two-range row is not among
+    # them, and inventing a rule for it here would be a second opinion about
+    # what the pages say.
+    base = switched(world, actor, p.reach_of(printed[0], augment))
     extras = _offered(world, actor, p)
     spot = branch - len(printed)
     if 0 <= spot < len(extras):
-        # Applied to the row's **first** printed branch. Every one of the
-        # eleven cards names one alternative to one printed shape; a card
-        # offering an alternative to the *second* branch of a two-range row
-        # is not among them, and inventing a rule for it here would be a
-        # second opinion about what the pages say.
-        return extras[spot](p.reach_of(printed[0], augment))
+        return base, extras[spot]
 
     # A branch nothing offers. The print for branch 0, which is what every
     # caller that guessed an index got before any of this existed.
-    return p.reach_of(printed[0], augment)
+    #
+    # **Still a clamp, and deliberately not a raise.** #884 asked for the
+    # decision: `api.render` hands this an index chosen by the client, so
+    # raising turns a crafted request into a 500, and `turns`/`policy` walk
+    # `branches_for` in a loop where one bad index would stop a whole turn.
+    # The honest guard is the one that already exists a layer up --
+    # `can_branch_for` answers whether an aiming is open to this creature --
+    # and the clamp is what a caller that did not ask gets.
+    return base, None
 
 
 def can_branch_for(world: World, actor: int, p: Power, branch: int = 0) -> bool:

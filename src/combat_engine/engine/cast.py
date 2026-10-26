@@ -12058,11 +12058,20 @@ class Cast:
 
     def area(self) -> frozenset[Square]:
         """The squares this power is covering, for the ones that leave
-        something behind. Empty for a power that has no area."""
+        something behind. Empty for a power that has no area.
+
+        **Answers for the aiming this use chose**, which it did not until
+        #884: `self.branch` was never passed, so a row offered a second
+        aiming got the squares of the printed one. No `branch=` parameter --
+        a body asking "what am I covering" means *this* use, and a caller
+        wanting some other branch's area has `dsl.area_of` and a reason.
+        `f2945` is re-pointed on that reading rather than on a signature.
+        """
         from .dsl import area_of, get
 
         p = get(self.ref)
-        return area_of(self.world, self.me, p, self.origin) if p else frozenset()
+        return (area_of(self.world, self.me, p, self.origin, self.branch)
+                if p else frozenset())
 
     def zone(
         self,
