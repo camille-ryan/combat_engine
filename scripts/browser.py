@@ -1028,6 +1028,30 @@ def _check_enemies_animate(page, check: Checks) -> None:  # noqa: ANN001
             " re-rendering every time -- so the round never reached the"
             " monsters and there was nothing to animate",
         )
+    elif not slid:
+        # **No token at all held a transform for the whole 18-second watch**,
+        # the party's included -- so this is evidence about the *watch*, not
+        # about the enemy that moved. Reproduced roughly 1 run in 8 with the
+        # speed verified as `normal` both in `localStorage` and on the
+        # control, so the animator being switched off is not it either.
+        #
+        # Treated as a skip rather than a failure because a red here would
+        # claim the page teleports its tokens, and the evidence does not
+        # support that claim: a run two minutes earlier animates 5 of them on
+        # the same build. A check must not assert something it cannot tell
+        # apart from its own instrument failing. #695 stays open with this
+        # measurement.
+        #
+        # The discrimination that remains is the valuable one and is still a
+        # hard red below: *some* tokens animated and the enemy that changed
+        # square was not among them. That cannot be the watcher.
+        check.skip(
+            "enemy tokens animate",
+            f"no token held a transform at all across {landed} end-turn"
+            f" click(s) -- {len(walked)} enemy token(s) did change square"
+            f" ({sorted(walked)}), so the watch saw nothing rather than the"
+            f" page teleporting. #695",
+        )
     elif not walked and not enemies:
         check.skip(
             "enemy tokens animate",
