@@ -364,10 +364,25 @@ _REJECTED_PHRASE = "there is no"
 #: screen reported. So a correction marker anywhere in the docstring takes
 #: the row out: the claim has been looked at, which is all this queue is
 #: for.
+#: **`"the old note"` is the one this tree actually writes**, and it was
+#: missing. Measured 2026-10-26 under #625: the phrase occurs **102 times
+#: across 68 content files** -- it is the established way an author
+#: announces that the reason a row used to carry has been retracted
+#: ("the old note said gear handling costs no action", "the old note was
+#: right that the sense is granted per watcher and wrong that this cannot
+#: be said"). Without it, four rows in `--prose` were honest retractions
+#: counted as open admissions.
+#:
+#: Nine other candidates were tried the same day and waived **nothing**:
+#: `re-pointed`, `repointed`, `re-aimed`, `reaimed`, `was stale`,
+#: `is now false`, `is fixed`, `no longer it`, `already fixed`. Recorded so
+#: they are not re-added on the reasonable-sounding grounds that they
+#: ought to match something -- every one of them does, in prose that
+#: already contains `"the old note"` too.
 CORRECTED = (
     "stopped being true", "was the reason", "is false", "was false",
     "no longer true", "had stopped", "correction", "corrected",
-    "and that is false", "turned out",
+    "and that is false", "turned out", "the old note",
 )
 
 
