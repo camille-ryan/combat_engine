@@ -206,8 +206,30 @@ class Server:
 
 
 class Checks:
+    """Counts what it asked as well as what passed.
+
+    **It did not, and seventeen checks went missing without a word.** The
+    day block loops over three legs and stops early when the party loses
+    one, so a run that lost leg 1 asked eleven checks per leg for two legs
+    instead of three -- and the summary read `66 checks passed, 0 failed`
+    against `83 checks passed, 0 failed` the run before. Nothing in that
+    line says coverage fell by a fifth.
+
+    Found the long way round: five runs at 83, then 66, and the cause was
+    `choices.py`'s `carries_a_marker: -3.0` -- un-marking three feats made
+    them three points more attractive, they were drafted, the party changed
+    and it lost the second fight. Legitimate, and invisible.
+
+    `browser.py` had already learned this and says so in its own code: *"a
+    skip, not a pass dressed as one -- `Checks.skip` is counted separately
+    and the summary's `(of N asked)` still reconciles, which is the rule
+    this file's own arithmetic caught eight sites breaking."* This is that
+    class, here.
+    """
+
     def __init__(self) -> None:
         self.failed: list[str] = []
+        self.skipped: list[str] = []
         self.passed = 0
 
     def that(self, ok: bool, what: str, detail: str = "") -> None:
@@ -217,6 +239,11 @@ class Checks:
         else:
             self.failed.append(what)
             print(f"  FAIL  {what}" + (f"\n          {detail}" if detail else ""))
+
+    def skip(self, what: str, why: str) -> None:
+        """A check the run could not ask, counted rather than dropped."""
+        self.skipped.append(what)
+        print(f"  SKIP  {what}\n          {why}")
 
 
 def play(
@@ -393,6 +420,22 @@ def play_day(server: Server, check: Checks, *, show: bool) -> dict:
         worst[leg_no] = (back, full, sum(s["surges"] for s in done["rested"]))
 
         if state["finished"]:
+            # **Say that the rest were not asked.** A day ends early when the
+            # party loses a leg, which is an ordinary outcome -- but the
+            # eleven checks each remaining leg would have run then simply did
+            # not happen, and the summary counted only what it reached. That
+            # is how a fifth of this instrument's coverage disappeared
+            # between two runs with nothing red.
+            left = len(state["legs"]) - (leg_no + 1)
+            if left > 0:
+                check.skip(
+                    f"legs {leg_no + 1}..{len(state['legs']) - 1} of the day",
+                    f"the day ended at leg {leg_no} -- "
+                    f"{(state.get('outcome') or 'the party did not win it').rstrip('.')}."
+                    f" {left} leg(s) and their per-leg checks were never"
+                    f" asked; the carry, the rest and the milestone are"
+                    f" unexercised past this point",
+                )
             break
         check.that(state["awaiting_next"] and not state["encounter"],
                    f"after leg {leg_no} the day waits for the player to walk on"
@@ -718,7 +761,9 @@ def main() -> int:
     print("\nthe same game with CE_NAMES=off")
     check_hosted(check)
 
-    print(f"\n{check.passed} checks passed, {len(check.failed)} failed")
+    asked = check.passed + len(check.failed) + len(check.skipped)
+    print(f"\n{check.passed} checks passed, {len(check.failed)} failed,"
+          f" {len(check.skipped)} skipped  (of {asked} asked)")
     return 1 if check.failed else 0
 
 
