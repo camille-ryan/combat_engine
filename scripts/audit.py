@@ -3263,8 +3263,29 @@ def _provoke(world, caster: int, ref: str, cursor: int) -> bool:  # noqa: ANN001
         offered by the real dispatcher, against its real predicate, with
         its real Requirement.
         """
+        # **"Did it pay out", not "did it go off".** #821: this asked
+        # `_fired`, which is the row's ref appearing on the bus -- its
+        # *trigger* being satisfied and its action budget allowed. The
+        # verdict the sweep reports is whether the row **did** something,
+        # which is a different question, so the first pose that merely fired
+        # the row ended the search and every later pose was never tried --
+        # including one that would have paid.
+        #
+        # Measured before the change: `i2002p1` fired on 4 of 8 attempts and
+        # `i2339p1` on 8 of 8, and neither did anything on any of them. Both
+        # are gated on `Hit` + `Keyword.ARCANE`, and the keyword pass picks
+        # the caster's *owned* arcane at-will first -- rightly -- so the
+        # owned candidate fired the row and the lent ones behind it were
+        # never swung.
+        #
+        # This is `a-driver-rule-must-run-the-rows-body` at the harness
+        # level: firing proves the predicate and the budget, never the
+        # clause. `_payout` is the verdict's own reader, so the two cannot
+        # answer differently.
         if _fired(world, ref, cursor):
-            return True
+            credited, _own, _nested, _dealt = _payout(world, ref, cursor)
+            if credited & DID_SOMETHING:
+                return True
         budget = world.get(caster, Budget)
         if budget is not None:
             budget.immediate_round = -1
@@ -3827,6 +3848,36 @@ def _claimed(world, ref: str, cursor: int,  # noqa: ANN001
         if label and not _REF_LABEL.match(label):
             out.add("EffectApplied")
     return out
+
+
+def _payout(
+    world,  # noqa: ANN001
+    ref: str,
+    cursor: int,
+) -> tuple[set[str], list | None, tuple[str, ...], bool]:
+    """What this row is credited with since `cursor`: `(kinds, own, nested, dealt)`.
+
+    **One reader, because there were about to be two.** The verdict builds
+    this set inline, and `_provoke`'s `probe()` needs *the same answer* --
+    #821 is precisely that it asked a different one. A second copy of the
+    expression would drift from this one, which is the fault this file has
+    paid for more than once (`_SPEC_TABLES`' three copies, `PROVOKE_NOISE`'s
+    two readers).
+
+    Returns the extras as well as the set because the caller needs them:
+    `own` bounds the window every later read uses, `nested` names the rows
+    this one used, and `dealt` is the by-name damage credit.
+    """
+    own = _its_own_slice(world, ref, cursor)
+    if own is None:
+        return set(), None, (), False
+    mine = {e.kind for e in own}
+    nested = _used_inside(own)
+    dealt = _dealt_by(world, (ref, *nested), cursor)
+    kinds = (mine - PROVOKE_NOISE - BY_NAME) | (
+        {"DamageApplied"} if dealt else set()
+    ) | _claimed(world, ref, cursor, nested, own=own)
+    return kinds, own, nested, dealt
 
 
 def _its_own_slice(world, ref: str, cursor: int) -> list | None:  # noqa: ANN001
@@ -5883,8 +5934,7 @@ def audit(ref: str) -> Result:
                 # provocation's damage is not: `PROVOKE_NOISE` drops both
                 # kinds wholesale, so a triggered row whose *whole content*
                 # is damage reported silent however well it worked.
-                own = _its_own_slice(world, ref, cursor)
-                mine = {e.kind for e in own} if own is not None else set()
+                credited, own, _nested, _dealt = _payout(world, ref, cursor)
                 # **Damage this row dealt, by name.** `PROVOKE_NOISE` drops
                 # both damage kinds wholesale -- it has to, the provocation
                 # is an attack -- so a triggered row whose whole content is
@@ -5894,8 +5944,6 @@ def audit(ref: str) -> Result:
                 # **Prefix, not equality.** `half_damage` stamps
                 # `"<ref> (half)"`, `absorb` `"<ref> (absorbed)"` and a zone
                 # burn `"<ref> zone"`, so `== ref` missed every one of them.
-                nested = _used_inside(own)
-                dealt = _dealt_by(world, (ref, *nested), cursor)
                 # Parenthesised. `-` binds tighter than `|`, so the old
                 # `mine - PROVOKE_NOISE | (mine & {"DamageApplied"})` read as
                 # `(mine - PROVOKE_NOISE) | (mine & {"DamageApplied"})` --
@@ -5903,9 +5951,7 @@ def audit(ref: str) -> Result:
                 # dealt it, and making the `detail` test above dead code.
                 # That one line is why #216's `f1305` reported
                 # `ok  ConditionApplied, DamageApplied` with its gate false.
-                out.events |= (mine - PROVOKE_NOISE - BY_NAME) | (
-                    {"DamageApplied"} if dealt else set()
-                ) | _claimed(world, ref, cursor, nested, own=own)
+                out.events |= credited
                 # **All three of these read the whole window and credited
                 # the provocation**, which for a row triggered by "you kill
                 # an adjacent creature" is the *caster* walking over and
