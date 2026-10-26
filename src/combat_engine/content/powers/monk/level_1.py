@@ -257,10 +257,18 @@ def p13126(c: Cast) -> None:
     target=ONE_CREATURE,
     keywords=[*PSIONIC_IMPLEMENT, Keyword.FULL_DISCIPLINE],
     attack=Attack(DEX, vs=FORT),
+    dropped=("c.object_target()",),
 )
 def p13128(c: Cast) -> None:
-    """Unattended objects are not on the board, so the object clause is
-    dropped and only the creature half is written."""
+    """Only the creature half of "one creature or unattended object".
+
+    This said unattended objects "are not on the board", and that is
+    **false**: `_SIDES` has an `"object"` side, `candidates` fills it from
+    `query.scenery`, and the audit board places one. The clause is still
+    unwritable for a narrower reason -- a scenery object carries no
+    `Defences`, so `+X vs FORT` has nothing to roll against -- and that is
+    `c.object_target()`, the symbol `i1145p1` already waits on. #855.
+    """
     if c.strike():
         c.damage("2d8", c.dex_mod)
         if c.str_mod > 0:

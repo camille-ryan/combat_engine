@@ -1652,6 +1652,18 @@ def p16660(c: Cast) -> None:
     on a board ever mints a `Scenery` for a worn thing, so neither was the
     gap either.)
 
+    **So this wants a `label=` and cannot have one**, which is why
+    `scripts/targets.py` lists it and no marker does. The convention for a
+    card naming a thing the engine has no entity for is
+    `Target(side, label=)` -- the pool is the bearer, the label is what the
+    page prints -- and four artificer enchantments render "One weapon or
+    implement" exactly that way. This card's line names a **ref**, and
+    `Target.label` is handed to `render` as raw text: nothing resolves a ref
+    inside it against the localisation, the way `wire.label` does for a
+    creature. So the honest label would print `x_m6564` to a player, which
+    is worse than the generic pool string it replaces. The row stays in
+    `fixtures/targets.json` with this note until a label can carry a ref.
+
     The armour bonus ends when an attack against AC hits the wearer, read
     off the settled `Hit`: it carries the defence as a plain attribute, so
     the old route through `AttackRolled` -- comparing the total to the

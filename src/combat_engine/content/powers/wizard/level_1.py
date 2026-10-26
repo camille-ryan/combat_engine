@@ -254,14 +254,30 @@ def p464(c: Cast) -> None:
     usage=ENCOUNTER,
     action=STANDARD,
     reach=Ranged(20),
-    # Printed as "one creature or object". Objects are not on the board.
     target=ONE_CREATURE,
     keywords=[*ARCANE_IMPLEMENT, Keyword.FORCE, Keyword.EVOCATION],
     attack=Attack(INT, vs=REF),
+    dropped=("c.object_target()",),
 )
 def p465(c: Cast) -> None:
     """The second block is `p465b`. Only on a hit, and only at enemies --
-    unlike p464, which catches everything in the burst."""
+    unlike p464, which catches everything in the burst.
+
+    **"One creature or object", and the object half is dropped.** The note
+    here said "objects are not on the board" and that is **false** -- there
+    is an `"object"` side in `_SIDES`, `candidates` fills it from
+    `query.scenery`, and the audit board places a loose Medium one. What is
+    true is narrower and is why the clause still cannot be written: a
+    scenery object carries **no `Defences` and no `Health`**, so there is
+    nothing for `+X vs REF` to roll against and nothing for 2d8 force to
+    come off.
+
+    `c.object_target()` is the symbol, shared with `i1145p1`, whose own note
+    states the same two halves -- an unattended object as the target, "with
+    its Reflex of 10 + level". Found by `scripts/targets.py`, which had
+    nothing to say about the premise and everything to say about the
+    declaration. #855.
+    """
     primary = c.target
     if not c.strike():
         return
